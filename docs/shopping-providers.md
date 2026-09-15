@@ -1,9 +1,10 @@
 # Shopping providers (Phase 8)
 
-Status: **plan, not implemented.** Research as of 2026-09-15. `api/internal/providers`
-holds only the package comment. This document says what third-party grocery
-services actually allow today, and how DinnerOS should use them, starting with
-Walmart.
+Status: **Phase 8a API implemented** (Walmart cart links without keys; see
+[Implemented in 8a](#implemented-in-8a)). The iOS Shop tab, 8.0 spike, and
+8b–8d are still plans. Research as of 2026-09-15. This document says what
+third-party grocery services actually allow today, and how DinnerOS should use
+them, starting with Walmart.
 
 The goal: take the week's grocery list, put the right products in the
 household's Walmart cart (or an equivalent checkout) with as few taps as
@@ -405,6 +406,51 @@ Walmart.
   purchase (Guideline 3.1.3(e); re-check at submission).
 - **Branding:** use Walmart and Instacart names and logos only as each program's
   brand rules allow. Instacart's are in its design guidelines and CTA specs.
+
+## Implemented in 8a
+
+The API side of 8a is built (decisions #160–168 in
+[architecture.md](architecture.md#decision-log); endpoints in
+[api.md](api.md#shopping); collections in [database.md](database.md#shopping)).
+Nothing fetches Walmart pages, calls a Walmart API, or needs Walmart
+credentials.
+
+- **Packages:** `internal/providers` is pure: `GroceryProvider` (key, name,
+  handoff kind, `ParseProduct`, `ProductURL`, `NormalizeStoreID`,
+  `BuildCartLinks`) with search, lookup, stores, cart write, and order import
+  as optional interfaces (`ProductSearcher`, `ProductLooker`, `StoreFinder`,
+  `CartWriter`, `OrderImporter`). None is implemented yet. `internal/shopping`
+  holds settings, saved products, handoffs, and confirmations. The planned
+  `match` route and the provider list are there. The store picker and
+  product search routes wait for 8b.
+- **Store settings:** provider and an optional typed store number, no ZIP
+  (ZIP matters only for 8b lookups).
+- **Saved products:** from a pasted `walmart.com/ip/…` link or item ID, with
+  a member-typed name and optional package size. `name`/`brand`/`imageUrl`,
+  `alternates`, `packageSizeSource`, last price and stock, and use counts
+  from the table above wait for 8b lookups.
+- **Package counts** follow [Package count](#package-count) exactly, with
+  one addition: when only some of a line's amounts convert, the count covers
+  what converts and is flagged. Size parsing from product names waits for 8b
+  (the member types the size).
+- **Handoffs:** candidates are `toBuy` lines (or the lines the app selects),
+  minus checked-off keys the app sends, house-made batches, and lines without
+  a saved product. There's no stock check yet, so "leave unavailable items
+  out" is a member's choice until 8b. Links are split past 2,000 characters
+  or 40 products, both unverified against Walmart.
+- **Confirm:** "Did you order these?" writes provider purchases server-side
+  (`unit: package` + `unitSize`, or the exact count when the size is a
+  count), once per handoff line, and handoffs record
+  `shopping.handoff_created` / `shopping.order_confirmed` events (counts
+  only).
+- **Permission:** `shopping.edit` (admins and members) for settings, saved
+  products, and handoffs; confirming needs `pantry.edit`.
+- **Affiliate:** the Impact wrapper runs only when all three
+  `WALMART_IMPACT_*` config vars are set; responses carry `affiliateTracked`
+  for the disclosure.
+- **Not done yet:** recording that the member opened the links, an
+  out-of-stock or alternates flow, and the 8.0 spike's answers (whether the
+  `goto.walmart.com` wrapper still opens the app, and the real URL limits).
 
 ## Phased plan
 

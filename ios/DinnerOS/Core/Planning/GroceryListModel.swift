@@ -49,8 +49,9 @@ final class InMemoryGroceryChecks: GroceryCheckStorage {
     }
 }
 
-/// One week's grocery list screen: the computed list, local check-off state, and the
-/// "Add to pantry?" prompt for lines just checked off.
+/// One week's grocery list screen: the computed list, local check-off state, the "Add to
+/// pantry?" prompt for lines just checked off, and specialty ingredient actions (choosing an
+/// option for a line, and "Made It" for a house-made batch).
 ///
 /// The prompt never blocks shopping: confirming closes it at once and records the purchase
 /// in the background, and checking off another line replaces an unanswered prompt. A failed
@@ -89,6 +90,43 @@ final class GroceryListModel {
         let name: String
     }
 
+    /// A specialty ingredient change made from the list.
+    enum SpecialtyAction: Equatable {
+        case choose(optionID: String, specialtyID: String, name: String)
+        /// Keeps its `clientPurchaseID`, so trying again records one batch.
+        case recordBatch(GroceryBatch, clientPurchaseID: String)
+
+        var specialtyID: String {
+            switch self {
+            case .choose(_, let specialtyID, _): specialtyID
+            case .recordBatch(let batch, _): batch.specialtyID
+            }
+        }
+
+        var name: String {
+            switch self {
+            case .choose(_, _, let name): name
+            case .recordBatch(let batch, _): batch.specialtyName
+            }
+        }
+    }
+
+    /// A specialty ingredient change that failed.
+    struct SpecialtyFailure: Equatable, Identifiable {
+        let id: String
+        let action: SpecialtyAction
+        let message: String
+        /// The member's role doesn't allow the change, so trying again won't help.
+        let isForbidden: Bool
+
+        var title: String {
+            switch action {
+            case .choose(_, _, let name): String(localized: "Couldn't Choose an Option for \(name)")
+            case .recordBatch(let batch, _): String(localized: "Couldn't Record \(batch.specialtyName)")
+            }
+        }
+    }
+
     let householdID: String
     let week: ISOWeek
     private(set) var phase: Phase = .idle
@@ -102,9 +140,15 @@ final class GroceryListModel {
     private(set) var lastRecordedPurchase: RecordedPurchase?
     private(set) var purchasesInFlight = 0
     private(set) var isSkippingPurchasePrompts = false
-    /// Whether the member may change the pantry (`pantry.edit`). The screen keeps it current;
-    /// a `403` turns it off.
+    /// Whether the member may change the pantry (`pantry.edit`), which also covers specialty
+    /// ingredient choices and batches. The screen keeps it current; a `403` turns it off.
     private(set) var canAddToPantry: Bool
+
+    /// Specialty ingredients with a change in flight, by ID.
+    private(set) var specialtyActionsInFlight: Set<String> = []
+    private(set) var specialtyFailure: SpecialtyFailure?
+    /// A batch just recorded, for a brief confirmation. Its ID is the `clientPurchaseId`.
+    private(set) var lastRecordedBatch: RecordedPurchase?
 
     /// The prompt's editable amount, for bindings. Writes for a replaced prompt are ignored.
     var purchaseDraft: PantryPurchaseDraft {
@@ -120,16 +164,34 @@ final class GroceryListModel {
         list?.allItems.count { !checked.contains($0.ingredientKey) } ?? 0
     }
 
+    /// The list arranged for the screen: batches to make with their ingredients, then aisles.
+    var layout: GroceryListLayout? {
+        list.map(GroceryListLayout.init)
+    }
+
+    /// Whether Choose and Made It are offered. Hiding them is a convenience; the API enforces
+    /// `pantry.edit`.
+    var canChangeSpecialties: Bool {
+        specialties != nil && canAddToPantry
+    }
+
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let api: PlansAPI?
     @ObservationIgnored private let checks: any GroceryCheckStorage
     @ObservationIgnored private let purchases: (any PantryPurchaseRecording)?
+    @ObservationIgnored private let specialties: (any SpecialtyChoosing)?
+    /// A batch's `clientPurchaseId` until it's recorded, by specialty ID, so tapping Made It again
+    /// after a failure can't record twice.
+    @ObservationIgnored private var batchPurchaseIDs: [String: String] = [:]
+    /// The specialty revision this list already reloaded for.
+    @ObservationIgnored private var handledSpecialtyRevision: Int?
 
     private static let logger = Logger(subsystem: "DinnerOS", category: "grocery")
 
     init(
         householdID: String, week: ISOWeek, session: AuthSession, api: PlansAPI?, checks: any GroceryCheckStorage,
-        purchases: (any PantryPurchaseRecording)? = nil, canAddToPantry: Bool = false
+        purchases: (any PantryPurchaseRecording)? = nil, specialties: (any SpecialtyChoosing)? = nil,
+        canAddToPantry: Bool = false
     ) {
         self.householdID = householdID
         self.week = week
@@ -137,7 +199,9 @@ final class GroceryListModel {
         self.api = api
         self.checks = checks
         self.purchases = purchases
+        self.specialties = specialties
         self.canAddToPantry = canAddToPantry
+        handledSpecialtyRevision = specialties?.revision
         checked = checks.checkedItems(householdID: householdID, week: week)
     }
 
@@ -185,7 +249,8 @@ final class GroceryListModel {
     }
 
     /// Checks or unchecks a line. Checking one off asks "Add to pantry?" when the member may
-    /// change the pantry and hasn't turned the prompt off for this trip.
+    /// change the pantry and hasn't turned the prompt off for this trip. A house-made item is
+    /// already in the pantry, so it never asks.
     func toggle(_ item: GroceryItem) {
         if checked.contains(item.ingredientKey) {
             checked.remove(item.ingredientKey)
@@ -252,7 +317,7 @@ final class GroceryListModel {
     }
 
     private func offerPurchase(for item: GroceryItem) {
-        guard purchases != nil, canAddToPantry, !isSkippingPurchasePrompts else { return }
+        guard purchases != nil, canAddToPantry, !isSkippingPurchasePrompts, !item.isHouseMade else { return }
         purchasePrompt = PurchasePrompt(item: item, draft: PantryPurchaseDraft(groceryItem: item))
     }
 
@@ -279,6 +344,94 @@ final class GroceryListModel {
         }
     }
 
+    // MARK: - Specialty ingredients
+
+    func isChangingSpecialty(withID specialtyID: String) -> Bool {
+        specialtyActionsInFlight.contains(specialtyID)
+    }
+
+    /// Chooses an option (or `SpecialtyChoice.asIsOptionID`) for a line, then reloads the list.
+    func choose(optionID: String, for specialty: GrocerySpecialty) async {
+        await perform(.choose(optionID: optionID, specialtyID: specialty.id, name: specialty.name))
+    }
+
+    /// Keeps a line by its own name and stops asking.
+    func keepAsIs(_ specialty: GrocerySpecialty) async {
+        await choose(optionID: SpecialtyChoice.asIsOptionID, for: specialty)
+    }
+
+    /// Records the batches the list asks for, then reloads the list.
+    func recordBatch(_ batch: GroceryBatch) async {
+        let clientPurchaseID = batchPurchaseIDs[batch.specialtyID] ?? UUID().uuidString
+        batchPurchaseIDs[batch.specialtyID] = clientPurchaseID
+        await perform(.recordBatch(batch, clientPurchaseID: clientPurchaseID))
+    }
+
+    /// Sends a failed change again; a batch keeps its `clientPurchaseId`. Takes the failure itself,
+    /// because an alert's dismissal can clear `specialtyFailure` before its button's task runs.
+    func retrySpecialtyAction(_ failure: SpecialtyFailure) async {
+        guard !failure.isForbidden else { return }
+        if specialtyFailure?.id == failure.id {
+            specialtyFailure = nil
+        }
+        await perform(failure.action)
+    }
+
+    func dismissSpecialtyFailure() {
+        specialtyFailure = nil
+    }
+
+    /// Hides the batch confirmation for `id`, unless a newer one replaced it.
+    func dismissRecordedBatch(id: String) {
+        if lastRecordedBatch?.id == id {
+            lastRecordedBatch = nil
+        }
+    }
+
+    /// Reloads after specialty ingredients changed elsewhere, such as the setup screen. A change
+    /// this list made already reloaded it.
+    func specialtiesDidChange() async {
+        guard let specialties, specialties.revision != handledSpecialtyRevision else { return }
+        handledSpecialtyRevision = specialties.revision
+        await load()
+    }
+
+    private func perform(_ action: SpecialtyAction) async {
+        guard let specialties, canAddToPantry else { return }
+        let specialtyID = action.specialtyID
+        guard !specialtyActionsInFlight.contains(specialtyID) else { return }
+        specialtyActionsInFlight.insert(specialtyID)
+        defer { specialtyActionsInFlight.remove(specialtyID) }
+        do {
+            switch action {
+            case .choose(let optionID, let specialtyID, _):
+                try await specialties.choose(
+                    optionID: optionID, forSpecialtyWithID: specialtyID, householdID: householdID)
+                Self.logger.info("Specialty chosen from the grocery list")
+            case .recordBatch(let batch, let clientPurchaseID):
+                try await specialties.recordBatch(
+                    specialtyID: batch.specialtyID, optionID: batch.optionID, batches: max(batch.batches, 1),
+                    clientPurchaseID: clientPurchaseID, householdID: householdID)
+                batchPurchaseIDs[batch.specialtyID] = nil
+                lastRecordedBatch = RecordedPurchase(id: clientPurchaseID, name: batch.specialtyName)
+                Self.logger.info("Batch recorded from the grocery list")
+            }
+            handledSpecialtyRevision = specialties.revision
+            await load()
+        } catch is CancellationError {
+            return
+        } catch let error as APIError where error.status == 403 {
+            Self.logger.notice("Specialty change forbidden")
+            setCanAddToPantry(false)
+            specialtyFailure = SpecialtyFailure(
+                id: UUID().uuidString, action: action, message: HouseholdStore.message(for: error), isForbidden: true)
+        } catch {
+            Self.logger.notice("Specialty change failed")
+            specialtyFailure = SpecialtyFailure(
+                id: UUID().uuidString, action: action, message: HouseholdStore.message(for: error), isForbidden: false)
+        }
+    }
+
     /// The list as plain text for sharing, or `nil` before it loads.
     func plainText(locale: Locale = .autoupdatingCurrent) -> String? {
         list.map { GroceryListText.make($0, week: week, checked: checked, locale: locale) }
@@ -292,12 +445,17 @@ nonisolated enum GroceryListText {
     /// ```text
     /// Grocery List: Sep 14 – 20
     ///
+    /// Make This Week
+    /// - Southwest Spice Blend: Make a batch (makes about 12 tbsp). Needed for Chili Bowls
+    ///
     /// Produce
     /// - [ ] Yellow Onion, 1 ½ + 8 oz
     /// - [x] Garlic, 2 cloves
     ///
     /// Spices
     /// - [ ] Salt (pantry staple)
+    /// - [ ] Ground Cumin, 2 tbsp
+    ///     to make Southwest Spice Blend (makes about 12 tbsp)
     /// ```
     ///
     /// Categories keep the server's aisle order. Skipped entries are listed at the end.
@@ -305,6 +463,17 @@ nonisolated enum GroceryListText {
         _ list: GroceryList, week: ISOWeek, checked: Set<String>, locale: Locale = .autoupdatingCurrent
     ) -> String {
         var blocks = [String(localized: "Grocery List: \(week.rangeLabel(locale: locale))")]
+        let toMake = list.batches.filter { $0.status == .make }
+        if !toMake.isEmpty {
+            let lines = toMake.map { batch in
+                var line = "- \(batch.specialtyName): \(batch.text)"
+                if let recipes = SpecialtyFormat.neededFor(batch.recipes, locale: locale) {
+                    line += ". " + recipes
+                }
+                return line
+            }
+            blocks.append(([String(localized: "Make This Week")] + lines).joined(separator: "\n"))
+        }
         for category in list.categories where !category.items.isEmpty {
             let lines = category.items.map { line(for: $0, checked: checked.contains($0.ingredientKey)) }
             blocks.append(([category.title] + lines).joined(separator: "\n"))
@@ -326,8 +495,12 @@ nonisolated enum GroceryListText {
         }
         switch item.status {
         case .pantryHint: text += " " + String(localized: "(pantry staple)")
+        case .inPantry where item.isHouseMade: text += " " + String(localized: "(in pantry, house-made)")
         case .inPantry: text += " " + String(localized: "(in pantry)")
         default: break
+        }
+        for via in item.via {
+            text += "\n    " + via.text
         }
         return text
     }

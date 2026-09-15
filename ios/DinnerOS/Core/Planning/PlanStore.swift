@@ -218,14 +218,16 @@ final class PlanStore {
     }
 
     /// A grocery list screen's model for `week` of the current household. Checked-off lines
-    /// offer to record purchases through `purchases`.
+    /// offer to record purchases through `purchases`; specialty ingredient choices and batches go
+    /// through `specialties`.
     func makeGroceryList(
-        week: ISOWeek, purchases: (any PantryPurchaseRecording)? = nil, canAddToPantry: Bool = false
+        week: ISOWeek, purchases: (any PantryPurchaseRecording)? = nil,
+        specialties: (any SpecialtyChoosing)? = nil, canAddToPantry: Bool = false
     ) -> GroceryListModel? {
         guard let householdID else { return nil }
         return GroceryListModel(
             householdID: householdID, week: week, session: session, api: api, checks: checks, purchases: purchases,
-            canAddToPantry: canAddToPantry)
+            specialties: specialties, canAddToPantry: canAddToPantry)
     }
 
     // MARK: - Reset

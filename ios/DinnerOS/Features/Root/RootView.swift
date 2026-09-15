@@ -7,6 +7,7 @@ struct RootView: View {
     @Environment(RecipeLibrary.self) private var recipes
     @Environment(PlanStore.self) private var plans
     @Environment(PantryStore.self) private var pantry
+    @Environment(SpecialtyStore.self) private var specialties
     @Environment(EventReporter.self) private var events
     @Environment(NotificationStore.self) private var notifications
 
@@ -23,6 +24,7 @@ struct RootView: View {
                     recipes.reset()
                     plans.reset()
                     pantry.reset()
+                    specialties.reset()
                     notifications.reset()
                     // At launch there's no user while the session restores; only a real
                     // sign-out discards queued events.
@@ -80,6 +82,7 @@ struct RootView: View {
         .environment(RecipePreviewData.library(session: session))
         .environment(PlanPreviewData.store(session: session))
         .environment(PantryPreviewData.store(session: session))
+        .environment(SpecialtyPreviewData.store(session: session))
         .environment(EventReporter.preview(session: session))
         .environment(NotificationPreviewData.store(session: session))
 }
@@ -92,6 +95,7 @@ struct RootView: View {
         .environment(RecipeLibrary.preview(session: session, phase: .idle))
         .environment(PlanStore.preview(session: session, plan: nil, phase: .idle))
         .environment(PantryStore.preview(session: session, phase: .idle))
+        .environment(SpecialtyStore.preview(session: session, phase: .idle))
         .environment(EventReporter.preview(session: session))
         .environment(NotificationStore.preview(session: session, phase: .idle))
 }

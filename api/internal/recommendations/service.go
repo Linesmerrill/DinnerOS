@@ -116,12 +116,16 @@ func required(householdID, userID string) error {
 // --- profile ------------------------------------------------------------------
 
 // Profile returns the household's profile, or the defaults when it has none.
+// Cuisines and tags are read in their canonical form.
 func (s *Service) Profile(ctx context.Context, householdID string) (Profile, error) {
 	p, err := s.store.GetProfile(ctx, householdID)
-	if errors.Is(err, ErrNotFound) {
+	switch {
+	case errors.Is(err, ErrNotFound):
 		return DefaultProfile(householdID), nil
+	case err != nil:
+		return Profile{}, err
 	}
-	return p, err
+	return canonicalProfile(p), nil
 }
 
 // DefaultServings resolves the profile's servings: its own value, or the
@@ -187,6 +191,9 @@ func (s *Service) UpdateProfile(ctx context.Context, householdID, userID string,
 		} else if err != nil {
 			return Profile{}, err
 		}
+		// Compare canonical values, so older spellings aren't reported as
+		// changes.
+		current = canonicalProfile(current)
 		def := DefaultProfile(householdID)
 		next := current
 		next.Taste = pick(u.Taste, current.Taste, def.Taste, replace)

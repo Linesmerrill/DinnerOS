@@ -149,7 +149,8 @@ var displayFractions = []struct {
 }
 
 // Format renders q for people: whole numbers, kitchen fractions ("1 ½"), or a
-// short decimal when the value is not a common fraction.
+// decimal of at most two places ("1.83") when the value is not a common
+// fraction.
 func (q Quantity) Format() string {
 	r := q.rat()
 	whole := new(big.Int).Quo(r.Num(), r.Denom())
@@ -165,5 +166,8 @@ func (q Quantity) Format() string {
 			return whole.String() + " " + f.glyph
 		}
 	}
-	return strconv.FormatFloat(q.Float64(), 'f', -1, 64)
+	// Exact sums like 11/6 have no kitchen glyph; a long float ("1.8333333333333333")
+	// reads as an error, so round for display. The exact value stays in String.
+	text := strings.TrimRight(strconv.FormatFloat(q.Float64(), 'f', 2, 64), "0")
+	return strings.TrimSuffix(text, ".")
 }

@@ -13,6 +13,26 @@ const testSigningKey = "q83vEjRWeJq83vEjRWeJq83vEjRWeJq83vEjRWeJq83vEjRWeJq83vEj
 // testResendKey is a fake Resend API key.
 const testResendKey = "re_test_0123456789abcdef"
 
+func TestLoadShopping(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil || cfg.WalmartImpact.Enabled() {
+		t.Fatalf("defaults: WalmartImpact = %+v, %v", cfg.WalmartImpact, err)
+	}
+	all := map[string]string{"WALMART_IMPACT_PUBLISHER_ID": "1234567", "WALMART_IMPACT_AD_ID": "565706", "WALMART_IMPACT_CAMPAIGN_ID": "9383"}
+	cfg, err = Load(env(all))
+	if err != nil || !cfg.WalmartImpact.Enabled() || cfg.WalmartImpact.CampaignID != "9383" {
+		t.Fatalf("configured: WalmartImpact = %+v, %v", cfg.WalmartImpact, err)
+	}
+	for name, values := range map[string]map[string]string{
+		"partial":     {"WALMART_IMPACT_PUBLISHER_ID": "1234567"},
+		"non-numeric": {"WALMART_IMPACT_PUBLISHER_ID": "abc", "WALMART_IMPACT_AD_ID": "565706", "WALMART_IMPACT_CAMPAIGN_ID": "9383"},
+	} {
+		if _, err := Load(env(values)); err == nil || !strings.Contains(err.Error(), "WALMART_IMPACT_") {
+			t.Errorf("%s: Load() error = %v", name, err)
+		}
+	}
+}
+
 func TestLoadEmailDefaults(t *testing.T) {
 	cfg, err := Load(env(nil))
 	if err != nil {

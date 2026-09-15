@@ -301,12 +301,14 @@ func (r Role) Covers(other Role) bool // r has every permission other has
 | `pantry.edit` | ✅ | ✅ |
 | `recipes.edit` | ✅ | ✅ |
 | `recipes.import` | ✅ | ✅ |
+| `shopping.edit` | ✅ | ✅ |
 
 No code checks `role == admin` to decide access; it asks `Role.Can`. Adding
 `viewer`, `shopper`, `child`, or `guest` means adding a constant and a row in
 that table. Unknown roles grant nothing. `recipes.import` guards recipe
-imports, `plan.edit` week plans, and `pantry.edit` the pantry; `recipes.edit`
-is reserved for a later phase.
+imports, `plan.edit` week plans, `pantry.edit` the pantry (including
+confirming a shopping order), and `shopping.edit` store settings, saved
+products, and shopping handoffs; `recipes.edit` is reserved for a later phase.
 
 Rules beyond the table:
 

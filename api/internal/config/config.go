@@ -79,7 +79,24 @@ type Config struct {
 	// AppURLScheme is the iOS app's custom URL scheme. The invitation landing
 	// page links to <scheme>://invite?token=... to open the app.
 	AppURLScheme string
+
+	// WalmartImpact wraps Walmart cart handoff links in Impact affiliate
+	// tracking links when all three IDs are set. Empty (the default) leaves
+	// links untracked; no Walmart setting is required.
+	WalmartImpact WalmartImpact
 }
+
+// WalmartImpact holds the Impact affiliate IDs for Walmart links
+// (docs/shopping-providers.md#credentials). They are identifiers, not
+// secrets.
+type WalmartImpact struct {
+	PublisherID string
+	AdID        string
+	CampaignID  string
+}
+
+// Enabled reports whether affiliate tracking is configured.
+func (w WalmartImpact) Enabled() bool { return w.PublisherID != "" }
 
 // Email providers.
 const (
@@ -146,6 +163,7 @@ func (c Config) LogValue() slog.Value {
 		slog.Int64("recipeImportMaxBytes", c.RecipeImportMaxBytes),
 		slog.String("mongoURI", RedactURI(c.MongoURI)),
 		slog.String("mongoDatabase", c.MongoDatabase),
+		slog.Bool("walmartAffiliateLinks", c.WalmartImpact.Enabled()),
 	)
 }
 
@@ -220,11 +238,34 @@ func Load(getenv func(string) string) (Config, error) {
 
 	errs = append(errs, loadAuth(&cfg, get)...)
 	errs = append(errs, loadEmail(&cfg, get)...)
+	errs = append(errs, loadShopping(&cfg, get)...)
 
 	if err := errors.Join(errs...); err != nil {
 		return Config{}, fmt.Errorf("invalid configuration: %w", err)
 	}
 	return cfg, nil
+}
+
+// impactIDPattern matches one numeric Impact identifier.
+var impactIDPattern = regexp.MustCompile(`^[0-9]{1,20}$`)
+
+// loadShopping reads shopping provider settings into cfg. The Walmart Impact
+// IDs are all set or all empty.
+func loadShopping(cfg *Config, get func(key, fallback string) string) []error {
+	cfg.WalmartImpact = WalmartImpact{
+		PublisherID: get("WALMART_IMPACT_PUBLISHER_ID", ""),
+		AdID:        get("WALMART_IMPACT_AD_ID", ""),
+		CampaignID:  get("WALMART_IMPACT_CAMPAIGN_ID", ""),
+	}
+	w := cfg.WalmartImpact
+	if w.PublisherID == "" && w.AdID == "" && w.CampaignID == "" {
+		return nil
+	}
+	if !impactIDPattern.MatchString(w.PublisherID) || !impactIDPattern.MatchString(w.AdID) || !impactIDPattern.MatchString(w.CampaignID) {
+		cfg.WalmartImpact = WalmartImpact{}
+		return []error{errors.New("WALMART_IMPACT_PUBLISHER_ID, WALMART_IMPACT_AD_ID, and WALMART_IMPACT_CAMPAIGN_ID must all be set to numeric Impact IDs, or all be empty")}
+	}
+	return nil
 }
 
 // loadAuth reads authentication settings into cfg. cfg.Env must already be set.

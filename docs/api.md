@@ -152,7 +152,19 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/slots/{slotId}/swap` `{version}` → proposal | `plan.edit` | 10 | ✅ |
 | POST | `/api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/accept` `{version, excludeSlotIds?}` → `{proposal, plan, added, skipped}` | `plan.edit` | 10 | ✅ |
 | POST | `/api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/reject` `{version}` → proposal | `plan.edit` | 10 | ✅ |
-| … | saved grocery lists, providers | | 8 | planned |
+| GET | `/api/v1/shopping/providers` → `{items: [{key, name, affiliateTracked, capabilities}]}` | bearer | 8a | ✅ |
+| GET | `/api/v1/households/{householdId}/shopping/settings` → `{provider, storeId, updatedBy, updatedAt}` | `household.view` | 8a | ✅ |
+| PUT | `/api/v1/households/{householdId}/shopping/settings` `{provider, storeId?}` → settings | `shopping.edit` | 8a | ✅ |
+| GET | `/api/v1/households/{householdId}/shopping/{provider}/preferences` → `{items}` | `household.view` | 8a | ✅ |
+| GET | `/api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}` → saved product | `household.view` | 8a | ✅ |
+| PUT | `/api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}` `{productUrl or productId, displayName, packageSize?, ingredientName?}` → `201` saved product, or `200` when replaced | `shopping.edit` | 8a | ✅ |
+| DELETE | `/api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}` → `204` | `shopping.edit` | 8a | ✅ |
+| POST | `/api/v1/households/{householdId}/plans/{week}/shopping/{provider}/match` `{lines?, checkedOffKeys?, excludeKeys?}` → proposal (not stored) | `household.view` | 8a | ✅ |
+| POST | `/api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs` `{lines?, checkedOffKeys?, excludeKeys?}` → `201` handoff | `shopping.edit` | 8a | ✅ |
+| GET | `/api/v1/households/{householdId}/shopping/handoffs` `?week&status&limit` → `{items}` | `household.view` | 8a | ✅ |
+| GET | `/api/v1/households/{householdId}/shopping/handoffs/{handoffId}` → handoff | `household.view` | 8a | ✅ |
+| POST | `/api/v1/households/{householdId}/shopping/handoffs/{handoffId}/confirm` `{all}` or `{lines: [{lineId, packages?}], skipRest?}` → `{handoff, purchases}` | `pantry.edit` | 8a | ✅ |
+| … | saved grocery lists, product search, other providers | | 8 | planned |
 
 Household-scoped routes return `404 not_found` to anyone who isn't a member,
 so a household's existence is never revealed, and `403 forbidden` to members
@@ -747,8 +759,11 @@ and a new usage cycle starts.
 
 - Identify the item with `itemId` (restocking from the Pantry tab), or with
   `ingredientId` or `name` (checking off a grocery line), not both.
-- `source` is `grocery_list` or `manual`. `provider` is reserved for shopping
-  providers and rejected. `house_made` appears on batches recorded through
+- `source` is `grocery_list` or `manual`. `provider` is rejected: it's
+  recorded from a shopping handoff by
+  [`POST .../shopping/handoffs/{handoffId}/confirm`](#confirm-an-order), and
+  such purchases carry `provider: {key, handoffId, lineId, productId}` (`null`
+  on every other purchase). `house_made` appears on batches recorded through
   [`POST .../specialty-ingredients/{specialtyId}/batches`](#specialty-ingredients)
   and is rejected here.
 - `quantity` and `unit` follow the pantry rules. Without `quantity` the item
@@ -924,6 +939,279 @@ records a batch made and returns `201 {purchase, item, option}`:
 | 403 | `forbidden` | Changing anything without `pantry.edit` |
 | 404 | `not_found` | Not a member; unknown or retired specialty ingredient (for changes); unknown household option |
 | 409 | `conflict` | The batch's pantry item kept changing concurrently; retry |
+
+## Shopping
+
+Phase 8a hands the week's grocery list to Walmart as add-to-cart links, with
+no Walmart account connection, API keys, or approval. The API never fetches
+Walmart pages ([shopping-providers.md](shopping-providers.md)). The flow:
+store setup, save a product per ingredient, match, create a handoff and open
+its links, then confirm what was ordered.
+
+`{provider}` is `walmart`. A planned provider that isn't enabled
+(`instacart`, `kroger`) returns `503 provider_unavailable`; any other value
+returns `404 not_found`.
+
+### Providers and store
+
+`GET /api/v1/shopping/providers` (signed in):
+
+```json
+{
+  "items": [
+    {
+      "key": "walmart",
+      "name": "Walmart",
+      "affiliateTracked": false,
+      "capabilities": {
+        "handoff": "cart_link", "pasteProductLink": true, "storeId": true,
+        "productSearch": false, "productLookup": false, "storeFinder": false, "cartWrite": false, "orderImport": false
+      }
+    }
+  ]
+}
+```
+
+`affiliateTracked` is true only when the server has the Impact IDs
+(`WALMART_IMPACT_*`). Show "DinnerOS may earn a commission" next to the
+handoff button only then.
+
+`GET .../shopping/settings` (`household.view`) and `PUT .../shopping/settings`
+(`shopping.edit`):
+
+```json
+{ "provider": "walmart", "storeId": "5435", "updatedBy": "66e5a1f2c3b4a5d6e7f80912", "updatedAt": "2026-09-15T18:30:00Z" }
+```
+
+All fields are `null` until someone sets them. `PUT` takes `{"provider":
+"walmart", "storeId": "5435"}`. `storeId` is the store number the member
+types (1–6 digits; leading zeros are dropped). `null` or omitted means no
+store, and an empty string is `400`. Links carry the store only while the
+settings' provider matches.
+
+### Saved products
+
+`GET .../shopping/{provider}/preferences` (`household.view`) returns
+`{"items": [...]}` ordered by ingredient name. `GET`, `PUT` (`shopping.edit`),
+and `DELETE` (`shopping.edit`) `.../preferences/{ingredientKey}` read, save,
+and remove one. `{ingredientKey}` is the grocery line's `ingredientKey`,
+percent-encoded (`name:red%20onion`).
+
+```json
+{
+  "productUrl": "https://www.walmart.com/ip/Great-Value-80-20-Ground-Beef-1-lb/123456789?classType=REGULAR",
+  "displayName": "Great Value 80/20 ground beef",
+  "packageSize": { "quantity": "16", "unit": "oz" }
+}
+```
+
+```json
+{
+  "id": "66e5a1f2c3b4a5d6e7f80e11",
+  "provider": "walmart",
+  "ingredientKey": "66e5a1f2c3b4a5d6e7f80a14",
+  "ingredientId": "66e5a1f2c3b4a5d6e7f80a14",
+  "ingredientName": "Ground Beef",
+  "productId": "123456789",
+  "productUrl": "https://www.walmart.com/ip/123456789",
+  "displayName": "Great Value 80/20 ground beef",
+  "packageSize": { "quantity": "16", "quantityValue": 16, "unit": "oz", "text": "16 oz" },
+  "createdBy": "66e5a1f2c3b4a5d6e7f80912",
+  "createdAt": "2026-09-15T18:30:00Z",
+  "updatedBy": "66e5a1f2c3b4a5d6e7f80912",
+  "updatedAt": "2026-09-15T18:30:00Z"
+}
+```
+
+- Send `productUrl` (the pasted link) or `productId` (the numeric item ID),
+  not both. The item ID is read from the text: `http(s)://walmart.com` or
+  `www.walmart.com`, path `/ip/<id>` or `/ip/<name>/<id>`, any query or
+  fragment. Other hosts, short links (`walmrt.us`), search or cart pages, and
+  text around the link are `400`. On iOS, extract the URL from shared text
+  before sending it.
+- `productUrl` in responses is rebuilt from the ID.
+- `displayName` is required (at most 100 characters). `packageSize` is
+  optional: a positive exact quantity and a unit code (`oz`, `floz`, `lb`,
+  `g`, `ml`, `count`, `can`, …). `null` or omitted means unknown, and every
+  line with that product is flagged "check amount".
+- `ingredientName` is optional: it defaults to the catalog name, or the
+  normalized name after `name:`.
+- `201` creates, `200` replaces (keeping `id`, `createdBy`, `createdAt`). At
+  most 1,000 saved products per store.
+
+### Match and hand off
+
+`POST .../plans/{week}/shopping/{provider}/match` (`household.view`) matches
+the week's list and stores nothing. `POST .../plans/{week}/shopping/{provider}/handoffs`
+(`shopping.edit`) does the same and stores the result (`201`). Both take:
+
+```json
+{
+  "lines": [{ "ingredientKey": "66e5a1f2c3b4a5d6e7f80a14", "packages": 2 }],
+  "checkedOffKeys": ["name:cilantro"],
+  "excludeKeys": []
+}
+```
+
+Every field is optional; send `{}` for the defaults. Without `lines`, the
+candidates are the list's `toBuy` lines. With `lines`, exactly those lines
+are candidates, whatever their status, and `packages` (1–99) overrides the
+computed count. `checkedOffKeys` and `excludeKeys` are left out.
+
+```json
+{
+  "id": "66e5a1f2c3b4a5d6e7f80b01",
+  "provider": "walmart",
+  "week": "2026-W38",
+  "storeId": "5435",
+  "status": "open",
+  "lines": [
+    {
+      "id": "l1",
+      "ingredientKey": "66e5a1f2c3b4a5d6e7f80a14",
+      "ingredientId": "66e5a1f2c3b4a5d6e7f80a14",
+      "name": "Ground Beef",
+      "category": "meat-seafood",
+      "amounts": [{ "quantity": "9/4", "quantityValue": 2.25, "unit": "lb", "text": "2 ¼ lb" }],
+      "quantityText": "2 ¼ lb",
+      "unquantified": false,
+      "groceryStatus": "toBuy",
+      "product": {
+        "productId": "123456789",
+        "displayName": "Great Value 80/20 ground beef",
+        "productUrl": "https://www.walmart.com/ip/123456789",
+        "packageSize": { "quantity": "16", "quantityValue": 16, "unit": "oz", "text": "16 oz" }
+      },
+      "computedPackages": 3,
+      "packages": 3,
+      "packagesOverridden": false,
+      "checkAmount": false,
+      "reason": null,
+      "reasonText": null,
+      "coverageText": "3 × 16 oz covers 36 oz",
+      "confirmation": { "status": "pending", "packages": null, "purchaseId": null, "confirmedBy": null, "confirmedAt": null, "skippedBy": null, "skippedAt": null }
+    }
+  ],
+  "excluded": [
+    {
+      "ingredientKey": "name:flour tortillas", "ingredientId": null, "name": "Flour Tortillas", "category": "bakery",
+      "amounts": [{ "quantity": "6", "quantityValue": 6, "unit": "count", "text": "6" }], "quantityText": "6",
+      "unquantified": false, "groceryStatus": "toBuy", "reason": "no_product", "text": "Choose a Walmart product"
+    }
+  ],
+  "cartLinks": [
+    { "url": "https://www.walmart.com/sc/cart/addToCart?items=123456789_3&storeId=5435", "lineIds": ["l1"], "itemCount": 1 }
+  ],
+  "affiliateTracked": false,
+  "createdBy": "66e5a1f2c3b4a5d6e7f80912",
+  "createdAt": "2026-09-15T18:30:00Z",
+  "updatedAt": "2026-09-15T18:30:00Z"
+}
+```
+
+A match has the same shape without `id`, `status`, `createdBy`, `createdAt`,
+and `updatedAt`, and every `confirmation` is `null`.
+
+**Package counts** (`computedPackages`) are exact:
+
+| Line amount vs package size | Packages | `reason` |
+| --- | --- | --- |
+| Converts (same unit, or both weights or both volumes): 20 oz for 16 oz | Total ÷ size, rounded up: 2 | `null` |
+| Several amounts: 1 cup + 3 tbsp for 8 fl oz | Converted and summed, rounded up: 2 | `null` |
+| Discrete units only convert to themselves: 2 cans for 1 can, 13 count for 12 count | 2, 2 | `null` |
+| Doesn't convert: 4 cloves for 3 count, 1 cup for 5 lb | 1 | `unit_not_convertible` |
+| Partly converts: 1 count + 40 oz for 32 oz | What converts, at least 1: 2 | `unit_not_convertible` |
+| No saved package size | 1 | `no_package_size` |
+| Unquantified ("to taste") | 1 | `null` |
+| More than 99 | 99 | `package_count_capped` |
+
+`checkAmount` is true whenever `reason` is set; show `reasonText`
+("Check amount: 4 cloves doesn't convert to a 3 ct package") and let the
+member change the count. Flags never block the handoff.
+
+**Exclusions** (`excluded[].reason`), each with display `text`:
+
+| Reason | When |
+| --- | --- |
+| `in_pantry` | The pantry has it (`inPantry`) and `lines` didn't select it |
+| `pantry_hint` | Probably have it (`pantryHint`) and `lines` didn't select it |
+| `house_made` | A house-made specialty batch in the pantry (never bought) |
+| `checked_off` | Listed in `checkedOffKeys` |
+| `excluded` | Listed in `excludeKeys` |
+| `not_selected` | `lines` was sent without it |
+| `no_product` | No saved product for the ingredient: "Choose a Walmart product" |
+| `not_on_list` | A `lines` key that isn't on the week's list (only `ingredientKey` is set) |
+
+**Cart links**: `https://www.walmart.com/sc/cart/addToCart?items=ID_QTY,ID&storeId=N`.
+A quantity of 1 has no suffix, lines that share a product are merged into one
+item, and every link carries the store. Items stay in aisle order. A new link
+starts past 2,000 characters or 40 products, so a big week can have several:
+open them one after another, each fills the same Walmart cart. With affiliate
+tracking each URL is a `goto.walmart.com` link wrapping that one. Creating a
+handoff with no line to add is `400`.
+
+`GET .../shopping/handoffs` (`household.view`) lists handoffs newest first:
+`?week=2026-W38`, `?status=open` (some line pending) or `done`, `?limit=`
+(1–50, default 20). `GET .../shopping/handoffs/{handoffId}` returns one.
+
+### Confirm an order
+
+`POST .../shopping/handoffs/{handoffId}/confirm` (`pantry.edit`) records what
+was ordered. Walmart doesn't report orders, so the member confirms:
+
+```json
+{ "lines": [{ "lineId": "l1", "packages": 2 }, { "lineId": "l3" }], "skipRest": true }
+```
+
+or `{"all": true}` for every line that isn't skipped, at its `packages`.
+`packages` (1–99) defaults to the line's. `skipRest` marks the other pending
+lines `skipped` (not ordered). `{"skipRest": true}` alone says nothing was
+ordered.
+
+```json
+{
+  "handoff": { "id": "66e5a1f2c3b4a5d6e7f80b01", "status": "done", "…": "…" },
+  "purchases": [
+    {
+      "lineId": "l1",
+      "ingredientKey": "66e5a1f2c3b4a5d6e7f80a14",
+      "created": true,
+      "purchase": {
+        "id": "66e5a1f2c3b4a5d6e7f80f09", "source": "provider", "quantity": "2", "unit": "package",
+        "unitSize": { "per": "package", "quantity": "16", "quantityValue": 16, "unit": "oz" }, "week": "2026-W38",
+        "provider": { "key": "walmart", "handoffId": "66e5a1f2c3b4a5d6e7f80b01", "lineId": "l1", "productId": "123456789" },
+        "…": "…"
+      },
+      "item": { "id": "66e5a1f2c3b4a5d6e7f80d01", "status": "in_stock", "…": "…" }
+    }
+  ]
+}
+```
+
+Each confirmed line is one pantry purchase with `source: provider`, written
+from the stored line (the app can't send amounts):
+
+| Saved package size | Purchase |
+| --- | --- |
+| A weight or volume (16 oz) | `quantity: packages`, `unit: package`, `unitSize` = the size, so recipe use deducts exactly |
+| A discrete unit (12 count, 1 can) | The exact amount: 2 × 12 count = `24 count` |
+| None | `quantity: packages`, `unit: package` |
+
+- The item is added if needed (by catalog ID, or the `name:` name), set
+  `in_stock`, and starts a usage cycle, as a grocery check-off does.
+- **Idempotent per line:** a confirmed line keeps its first purchase. Sending
+  it again (by anyone, with any `packages`) returns that purchase with
+  `created: false` and changes nothing. A skipped line can still be confirmed.
+- After confirming, treat those grocery lines as checked off: don't also ask
+  "Add to pantry?", which would record a second purchase.
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `validation_failed` | Bad link, product ID, name, package size, key, store, week, `status`, or `limit`; both or neither of `productUrl`/`productId`; no line to hand off; confirm with neither `all`, `lines`, nor `skipRest`, both `all` and `lines`, an unknown or repeated `lineId`, or `packages` outside 1–99 |
+| 403 | `forbidden` | Settings, saved products, or handoffs without `shopping.edit`; confirm without `pantry.edit` |
+| 404 | `not_found` | Not a member; unknown provider; no saved product or handoff |
+| 409 | `conflict` | Another request is confirming the same line, or a pantry item kept changing; retry |
+| 503 | `provider_unavailable` | A planned provider that isn't enabled |
 
 ## Notifications
 
@@ -1139,7 +1427,10 @@ every change needs `plan.edit`.
 - Validation (`400 validation_failed`):
   - Cuisines, tags, and excluded ingredients are free text, trimmed,
     lowercased, and deduplicated: at most 30 values of 40 characters (50
-    excluded ingredients of 60 characters).
+    excluded ingredients of 60 characters). Cuisines and tags are stored in
+    canonical form (`North America` → `north american`; see
+    [autopilot.md](autopilot.md#cuisines)), and stored profiles read that way
+    too.
   - Proteins, diets, allergens, equipment, days, `novelty`, `timeBand`, and
     `frequency` must come from the [vocabulary](#vocabulary).
   - A value can't be both liked and disliked, or liked and excluded.
@@ -1180,10 +1471,14 @@ preference screens:
 }
 ```
 
-- Cuisines and tags are counted across the household's main meals, most used
-  first, followed by a starter list (`recipeCount: 0`), at most 60 each, so
-  onboarding works before any recipes are imported. Proteins list every
-  protein with its recipe count.
+- Cuisines and tags are counted in canonical form across the household's main
+  meals, most used first, followed by a starter list (`recipeCount: 0`), at
+  most 60 each, so onboarding works before any recipes are imported. Proteins
+  list every protein with its recipe count.
+- A cuisine counts for its regions too: an Italian recipe counts for
+  `italian`, `southern european`, and `european`, so `recipeCount` is how many
+  recipes a like of the value matches. Known cuisines have title-case labels;
+  other values show the catalog's most common spelling.
 - Diets, allergens, proteins, equipment, novelty, time bands, frequencies, and
   days are fixed lists without `recipeCount`.
 
@@ -1219,7 +1514,8 @@ derives from a recipe:
   "recipeId": "66e5a1f2c3b4a5d6e7f80915",
   "cookMinutes": 90,
   "timeBand": "long",
-  "cuisines": ["american"],
+  "cuisines": ["southern"],
+  "cuisineRegions": ["north american"],
   "tags": [],
   "proteins": ["pork"],
   "allergens": [],
@@ -1233,6 +1529,9 @@ derives from a recipe:
 }
 ```
 
+- `cuisines` and `tags` are canonical. `cuisineRegions` are the broader
+  regions of `cuisines`, which likes, dislikes, exclusions, and weekday rules
+  also match.
 - `methods` lists every equipment option. `heuristicSuits` and `evidence` are
   the heuristic's answer and why; `suits` is what Autopilot uses, and `source`
   says whether the household overrode it. See
@@ -1279,8 +1578,13 @@ derives from a recipe:
 - `maxMinutes` (5–480) is a hard cap for every day; `days[].maxMinutes` is a
   hard cap for one day (the tighter applies). Recipes with an unknown cook time
   don't pass a cap.
-- `busy` is softer: no long meals and at least half quick ones, without a
-  cap.
+- `busy` is softer and about weeknights. On the profile's `weeknights` it
+  prefers quick meals, allows no long ones, and wants at least half of them
+  quick, without a cap. Other days keep their usual cook-time handling, and a
+  day whose rule has `timeBand: long` keeps its long cook (a Sunday smoker
+  night stays long). Only `maxMinutes` or `days[].maxMinutes` caps those days.
+  Reasons say "Quick for your busy week" on weeknights, and "Ready in 20 min
+  for Sunday" under a cap on other days.
 - `servings` (1–12) overrides the household's servings for the week, and
   `days[].servings` for one day (guests). Autopilot picks the smallest serving
   size a recipe offers that feeds that many.
@@ -1481,6 +1785,8 @@ can observe.
 | `autopilot.week_context_updated` | server (Autopilot) | — | `{changes?, cleared?}` |
 | `autopilot.recipe_override_updated` | server (Autopilot) | required | `{method, value, previous?}`: `yes`, `no`, `auto` |
 | `import.completed` | server (recipe import) | — | `{source, created, updated, unchanged, rejected}` |
+| `shopping.handoff_created` | server (shopping) | — | `{handoffId, provider, lines, packages, checkAmount, excluded, links}` (counts only, never product IDs) |
+| `shopping.order_confirmed` | server (shopping) | — | `{handoffId, provider, confirmed, packages, skipped}` |
 
 `date` is `YYYY-MM-DD`, `day` is `mon`–`sun`, and `servings` is 1–12.
 

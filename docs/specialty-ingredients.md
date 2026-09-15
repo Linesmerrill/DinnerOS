@@ -2,7 +2,7 @@
 
 Status: API implemented (`api/internal/substitutes`, with changes in
 `internal/grocery`, `internal/planning`, `internal/pantry`, and
-`internal/recipes`). The iOS screens are a follow-up.
+`internal/recipes`) and iOS implemented ([iOS](#ios)).
 
 Recipes imported from a meal-kit history name items a grocery store doesn't
 sell under that name: "Tex-Mex Paste", "Southwest Spice Blend", "Chicken Stock
@@ -172,6 +172,24 @@ sizes. The learned rate, low threshold, and notifications then work unchanged.
   reload the grocery list. A `400` means the choice isn't a batch.
 - Checking off a raw ingredient line still offers "Add to pantry?" as
   before; checking off a house-made item needs no purchase.
+
+## iOS
+
+| Flow | Where | What happens |
+| --- | --- | --- |
+| Setup | Pantry → ⋯ → **Specialty Ingredients…** (`SpecialtyIngredientsView` in a sheet, `SpecialtyStore`) | Most used first: name, "Used in N recipes", a choice badge (Not Set, Keep as Is, Store Alternative, House-Made Batch), the chosen option's name, and the batch in the pantry. **Use Suggested for All** asks to confirm, sends `choices/defaults`, and says how many got their suggestion and how many already had a choice. |
+| Options | Setup → an ingredient (`SpecialtyDetailView`) | Every option with `summary`, notes, and ingredients, headed "Replaces 1 tbsp Tex-Mex Paste" for a store alternative. Batches add numbered steps, **Makes** (`yield.text`), and **Keeps** (`shelfLifeDays`). **Use This Option**, **Keep as Is**, and **Clear Choice**. |
+| Customize | An option → **Customize…** (`SpecialtyOptionEditor`, `SpecialtyOptionDraft`) | Edits a copy: name, notes, "replaces" amount or yield and shelf life, ingredients, and steps. **Save & Use** posts it with `basedOnOptionId` and chooses it. Household options also show **Edit…** and **Delete…**. Amounts are parsed like pantry amounts ("1 1/2" → `"3/2"`). |
+| Made a batch | Detail → **Made a Batch** (`SpecialtyBatchSheet`); grocery list → **Made It** | 1–10 batches with one `clientPurchaseId` per sheet (or per list batch until it's recorded). The returned `item` replaces the pantry item, and open grocery lists reload. |
+| Grocery list | Week → Grocery List (`GroceryListView`, `GroceryListLayout`, `GrocerySpecialtyViews`) | Each `via[].text` under its item. An unchosen line shows `specialtyDetail.text` and **Choose**, a sheet with `suggestedOptions`, **Keep as Is**, and **See All Options**; a notice at the top opens setup. **Make This Week** lists `make` batches with their recipes, why they're needed, and **Made It**, with the ingredients bought only for that batch under it. **Already Made** lists `inPantry` batches. House-made lines read "In pantry (house-made)" and don't ask "Add to pantry?". Shared text includes the batches and `via` lines. |
+
+Choosing from a grocery list closes the picker at once and saves in the
+background, with progress on the line, then reloads the list; a failure shows
+an alert with **Try Again**. Members without `pantry.edit` see every screen
+read-only, and the list hides **Choose**, **Made It**, and the notice. A `403`
+turns those actions off and reloads the household's role. The store resets on
+sign-out and when the household changes. Decisions 139–144 in
+[architecture.md](architecture.md) record the placement, grouping, and flows.
 
 ## Limitations
 

@@ -88,8 +88,8 @@ var (
 
 	// Starter cuisines and tags are offered before the catalog has any.
 	starterCuisines = []string{
-		"American", "Chinese", "French", "Greek", "Indian", "Italian", "Japanese", "Korean",
-		"Mediterranean", "Mexican", "Middle Eastern", "Spanish", "Thai", "Vietnamese",
+		"Chinese", "French", "Greek", "Indian", "Italian", "Japanese", "Korean",
+		"Mediterranean", "Mexican", "Middle Eastern", "North American", "Spanish", "Thai", "Vietnamese",
 	}
 	starterTags = []string{
 		"Comfort Food", "Curry", "Family Friendly", "Healthy", "High Protein", "Low Carb", "One Pot",
@@ -121,7 +121,7 @@ func buildVocabulary(catalog []recipes.Recipe) Vocabulary {
 		Diets: DietOptions, Allergens: AllergenOptions, Equipment: EquipmentOptions, Novelty: NoveltyOptions,
 		TimeBands: TimeBandOptions, Frequencies: FrequencyOptions, Days: DayOptions,
 	}
-	cuisines, tags := newCounter(), newCounter()
+	cuisines, tags := newCounter(cuisineValues), newCounter(tagValues)
 	proteinCounts := map[string]int{}
 	for _, r := range catalog {
 		if r.IsAddon {
@@ -143,34 +143,66 @@ func buildVocabulary(catalog []recipes.Recipe) Vocabulary {
 	return v
 }
 
-// counter counts normalized values and remembers their most common spelling.
+// valueKind says how a vocabulary list reads catalog values.
+type valueKind struct {
+	// canonical maps a source label to its stored value.
+	canonical func(string) string
+	// expand returns every value a recipe with the canonical value carries.
+	expand func(string) []string
+	// label returns a known value's display label, or "".
+	label func(string) string
+}
+
+var (
+	// A cuisine counts for its region too, so each count is how many recipes
+	// a like of that value matches.
+	cuisineValues = valueKind{canonical: canonicalCuisine, expand: withAncestors, label: cuisineLabel}
+	tagValues     = valueKind{
+		canonical: canonicalTag,
+		expand:    func(v string) []string { return []string{v} },
+		label:     func(string) string { return "" },
+	}
+)
+
+// counter counts canonical values per recipe and remembers the most common
+// source spelling of each.
 type counter struct {
+	kind      valueKind
 	counts    map[string]int
 	spellings map[string]map[string]int
 }
 
-func newCounter() *counter {
-	return &counter{counts: map[string]int{}, spellings: map[string]map[string]int{}}
+func newCounter(kind valueKind) *counter {
+	return &counter{kind: kind, counts: map[string]int{}, spellings: map[string]map[string]int{}}
 }
 
+// addAll counts one recipe's values.
 func (c *counter) addAll(values []string) {
 	seen := map[string]bool{}
 	for _, raw := range values {
-		label := strings.Join(strings.Fields(raw), " ")
-		value := normalizeValue(label)
+		spelling := strings.Join(strings.Fields(raw), " ")
+		value := c.kind.canonical(spelling)
 		if value == "" || seen[value] || len(value) > MaxValueLength {
 			continue
 		}
-		seen[value] = true
-		c.counts[value]++
 		if c.spellings[value] == nil {
 			c.spellings[value] = map[string]int{}
 		}
-		c.spellings[value][label]++
+		c.spellings[value][spelling]++
+		for _, v := range c.kind.expand(value) {
+			if !seen[v] {
+				seen[v] = true
+				c.counts[v]++
+			}
+		}
 	}
 }
 
+// label is the known label, or the most common source spelling.
 func (c *counter) label(value string) string {
+	if label := c.kind.label(value); label != "" {
+		return label
+	}
 	best, bestN := "", 0
 	for label, n := range c.spellings[value] {
 		if n > bestN || (n == bestN && label < best) {
@@ -194,9 +226,15 @@ func (c *counter) options(starters []string) []Option {
 		return cmp.Compare(a.Value, b.Value)
 	})
 	for _, s := range starters {
-		if value := normalizeValue(s); c.counts[value] == 0 {
-			counted = append(counted, Option{Value: value, Label: s})
+		value := c.kind.canonical(s)
+		if c.counts[value] > 0 || slices.ContainsFunc(counted, func(o Option) bool { return o.Value == value }) {
+			continue
 		}
+		label := c.kind.label(value)
+		if label == "" {
+			label = s
+		}
+		counted = append(counted, Option{Value: value, Label: label})
 	}
 	return counted[:min(len(counted), MaxVocabularyOptions)]
 }

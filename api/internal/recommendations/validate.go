@@ -40,12 +40,13 @@ func invalidf(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrInvalid, fmt.Sprintf(format, args...))
 }
 
-// freeValues normalizes free-text choices (cuisines, tags, ingredients):
-// trimmed, lowercase, deduplicated, and sorted.
-func freeValues(field string, values []string, maxCount, maxLength int) ([]string, error) {
+// freeValues normalizes free-text choices (cuisines, tags, ingredients) with
+// canonical (canonicalCuisine, canonicalTag, or normalizeValue), then
+// deduplicates and sorts them.
+func freeValues(field string, values []string, maxCount, maxLength int, canonical func(string) string) ([]string, error) {
 	var out []string
 	for _, v := range values {
-		n := normalizeValue(v)
+		n := canonical(v)
 		switch {
 		case n == "":
 			continue
@@ -101,10 +102,10 @@ func normalizeProfile(p Profile) (Profile, error) {
 		name string
 		ch   *Choices
 	}{{"taste.likes", &t.Likes}, {"taste.dislikes", &t.Dislikes}} {
-		if c.ch.Cuisines, err = freeValues(c.name+".cuisines", c.ch.Cuisines, MaxListValues, MaxValueLength); err != nil {
+		if c.ch.Cuisines, err = freeValues(c.name+".cuisines", c.ch.Cuisines, MaxListValues, MaxValueLength, canonicalCuisine); err != nil {
 			return Profile{}, err
 		}
-		if c.ch.Tags, err = freeValues(c.name+".tags", c.ch.Tags, MaxListValues, MaxValueLength); err != nil {
+		if c.ch.Tags, err = freeValues(c.name+".tags", c.ch.Tags, MaxListValues, MaxValueLength, canonicalTag); err != nil {
 			return Profile{}, err
 		}
 		if c.ch.Proteins, err = closedValues(c.name+".proteins", c.ch.Proteins, ProteinOptions); err != nil {
@@ -126,13 +127,13 @@ func normalizeProfile(p Profile) (Profile, error) {
 	if r.Allergens, err = closedValues("restrictions.allergens", r.Allergens, AllergenOptions); err != nil {
 		return Profile{}, err
 	}
-	if r.ExcludedIngredients, err = freeValues("restrictions.excludedIngredients", r.ExcludedIngredients, MaxExcludedIngredient, MaxIngredientLength); err != nil {
+	if r.ExcludedIngredients, err = freeValues("restrictions.excludedIngredients", r.ExcludedIngredients, MaxExcludedIngredient, MaxIngredientLength, normalizeValue); err != nil {
 		return Profile{}, err
 	}
-	if r.ExcludedCuisines, err = freeValues("restrictions.excludedCuisines", r.ExcludedCuisines, MaxListValues, MaxValueLength); err != nil {
+	if r.ExcludedCuisines, err = freeValues("restrictions.excludedCuisines", r.ExcludedCuisines, MaxListValues, MaxValueLength, canonicalCuisine); err != nil {
 		return Profile{}, err
 	}
-	if r.ExcludedTags, err = freeValues("restrictions.excludedTags", r.ExcludedTags, MaxListValues, MaxValueLength); err != nil {
+	if r.ExcludedTags, err = freeValues("restrictions.excludedTags", r.ExcludedTags, MaxListValues, MaxValueLength, canonicalTag); err != nil {
 		return Profile{}, err
 	}
 	if r.ExcludedProteins, err = closedValues("restrictions.excludedProteins", r.ExcludedProteins, ProteinOptions); err != nil {
@@ -208,10 +209,10 @@ func normalizeProfile(p Profile) (Profile, error) {
 		if utf8.RuneCountInString(nr.Label) > MaxLabelLength {
 			return Profile{}, invalidf("%s.label must be at most %d characters", field, MaxLabelLength)
 		}
-		if nr.Cuisines, err = freeValues(field+".cuisines", rule.Cuisines, MaxRuleValues, MaxValueLength); err != nil {
+		if nr.Cuisines, err = freeValues(field+".cuisines", rule.Cuisines, MaxRuleValues, MaxValueLength, canonicalCuisine); err != nil {
 			return Profile{}, err
 		}
-		if nr.Tags, err = freeValues(field+".tags", rule.Tags, MaxRuleValues, MaxValueLength); err != nil {
+		if nr.Tags, err = freeValues(field+".tags", rule.Tags, MaxRuleValues, MaxValueLength, canonicalTag); err != nil {
 			return Profile{}, err
 		}
 		if nr.Proteins, err = closedValues(field+".proteins", rule.Proteins, ProteinOptions); err != nil {
