@@ -180,8 +180,11 @@ func TestVocabulary(t *testing.T) {
 		}
 		return options[i], true
 	}
-	if o, ok := find(v.Cuisines, "american"); !ok || o.RecipeCount != 2 || o.Label != "American" || v.Cuisines[0].Value != "american" && v.Cuisines[0].Value != "french" {
-		t.Errorf("american = %+v; most used cuisines come first: %+v", o, v.Cuisines[:3])
+	if o, ok := find(v.Cuisines, "north american"); !ok || o.RecipeCount != 4 || o.Label != "North American" || v.Cuisines[0].Value != "north american" {
+		t.Errorf("north american = %+v; American, Southern, and Tex-Mex recipes count for their region, most used first: %+v", o, v.Cuisines[:3])
+	}
+	if o, ok := find(v.Cuisines, "american"); ok {
+		t.Errorf("american = %+v; it's an alias of north american", o)
 	}
 	if o, ok := find(v.Cuisines, "thai"); !ok || o.RecipeCount != 0 || o.Label != "Thai" {
 		t.Errorf("starter cuisine thai = %+v, %v", o, ok)

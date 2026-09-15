@@ -109,11 +109,17 @@ smoker night: chicken or pork, long cook OK":
 
 ### Week context
 
-Per ISO week, all optional: `skip` the week, `busy` (soft: no long meals, at
-least half quick), `maxMinutes` (hard cap), `servings`, `mealsPerWeek`, per-day
-overrides (`skip`, `maxMinutes`, `servings`), and a free-text `note` that V1
-stores but doesn't interpret. Guests are a servings override for the week or a
-day, or more meals.
+Per ISO week, all optional: `skip` the week, `busy`, `maxMinutes` (hard cap),
+`servings`, `mealsPerWeek`, per-day overrides (`skip`, `maxMinutes`,
+`servings`), and a free-text `note` that V1 stores but doesn't interpret.
+Guests are a servings override for the week or a day, or more meals.
+
+A busy week is about weeknights. `busy` is soft and applies only to the
+profile's `weeknights`: the quick band becomes their soft limit, they allow no
+long meals, and at least half of their meals should be quick. Other days keep
+their usual cook-time handling, and a day whose rule has `timeBand: long`
+keeps its long cook, even on a weeknight. Only `maxMinutes` or a day's
+`maxMinutes` caps those days.
 
 ### Recipe attributes
 
@@ -137,6 +143,62 @@ Households override methods per recipe ("good for smoker": yes/no/auto), and
 overrides always win. Hard-constraint heuristics are conservative: when unsure,
 a recipe contains the allergen and doesn't satisfy the diet.
 
+### Cuisines
+
+Sources label cuisines inconsistently ("North America" next to "North
+American", "East Asia" next to "East Asian"), so Autopilot reads and stores
+every cuisine in one canonical form (`recommendations/canonical.go`):
+vocabulary counts, recipe attributes, likes and dislikes, excluded cuisines,
+and weekday rules.
+
+1. Trim, lowercase, and single-space the label.
+2. A known value or alias maps to its canonical value: `latin` → `latin
+   american`, `middle east` → `middle eastern`, `american` → `north
+   american`, `southwest` → `southwestern`, `tex mex` → `tex-mex`.
+3. Otherwise a trailing region noun becomes its adjective (`southern europe` →
+   `southern european`, `central africa` → `central african`), and step 2 is
+   tried again.
+4. Anything else is kept as normalized.
+
+Canonical cuisines form a small hierarchy, so choices keep their specificity:
+
+| Value | Parent | Children in the table |
+| --- | --- | --- |
+| `asian` | | `east asian`, `southeast asian`, `south asian` |
+| `east asian` | `asian` | `chinese`, `japanese`, `korean` |
+| `southeast asian` | `asian` | `thai`, `vietnamese`, `filipino`, `indonesian` |
+| `south asian` | `asian` | `indian` |
+| `european` | | `southern european`, `western european`, `eastern european`, `northern european` |
+| `southern european` | `european` | `italian`, `greek`, `spanish`, `portuguese` |
+| `western european` | `european` | `french`, `german`, `british`, `irish` |
+| `eastern european` | `european` | `hungarian`, `polish`, `russian` |
+| `north american` | | `southern`, `southwestern`, `tex-mex`, `cajun` |
+| `latin american` | | `mexican`, `caribbean` (`cuban`, `jamaican`), `central american`, `south american` (`brazilian`, `peruvian`) |
+| `middle eastern` | | `lebanese`, `turkish`, `persian` |
+| `african` | | `north african` (`moroccan`), `west african`, `east african` (`ethiopian`) |
+| `pacific islander` | | `hawaiian` |
+| `mediterranean`, `fusion` | | |
+
+- A recipe carries its canonical cuisines and their regions (`cuisineRegions`
+  in the attributes). Likes, dislikes, exclusions, and weekday rules match
+  either, so liking `european` or `southern european` covers Italian recipes,
+  and excluding `asian` excludes Japanese ones. Liking `italian` doesn't match
+  a recipe labeled only `southern european`: a label can't be more specific
+  than its source.
+- Variety compares only a recipe's own cuisines: two Italian dinners repeat,
+  but Italian and French don't.
+- `asian` is the parent of `east asian`, not a synonym: catalogs use it for
+  East and Southeast Asian dishes alike. `american` means `north american`.
+  `mediterranean` spans regions, so it has no parent.
+- Vocabulary counts roll up: a region's `recipeCount` is how many recipes a
+  like of it matches. Known values have title-case labels.
+- Profiles saved before canonicalization are read canonically, and writes store
+  canonical values. If merging spellings makes a stored value both liked and
+  disliked or excluded, the restrictive choice wins when read.
+- Tags only merge case, spacing, and a few spellings missing a space
+  (`familyfriendly` → `family friendly`). The rest are distinct labels, not
+  synonyms.
+
 ### History
 
 | Signal | DinnerOS source | Generic input |
@@ -157,7 +219,8 @@ removed meal (tested by giving a forbidden meal every advantage).
 - any member tagged it `never-again`
 - contains a household allergen
 - doesn't satisfy every household diet
-- excluded cuisine, protein, or tag; an excluded ingredient word (`mushroom`
+- excluded cuisine (or a region its cuisine belongs to), protein, or tag; an
+  excluded ingredient word (`mushroom`
   excludes "cremini mushrooms"); spicy when "no spicy" is set
 - over the week's or day's `maxMinutes`, or unknown cook time under a cap
 - already in this week's plan (a recipe appears at most once a week)
@@ -185,8 +248,9 @@ signals.
 | `avoid` | −1…0 | a previous pending proposal's meal (regenerate) | 0.30 |
 | `objective` | ±0.2 | tenant business boost (DinnerOS sends none) | 1 |
 
-The day's soft limit is, in order: a busy week (the quick band), the day's rule
-band, or the weeknight limit on weeknights. Servings are the smallest authored
+The day's soft limit is, in order: none on a long-cook rule day, the quick band
+on a busy week's weeknights, the day's rule band, or the weeknight limit on
+weeknights. Servings are the smallest authored
 size that feeds the day's servings (day override, week override, profile, then
 household default).
 
@@ -200,11 +264,12 @@ the same meals.
 
 ```text
 objective = Σ meal scores
-          − 0.20 per pair of meals sharing a cuisine
+          − 0.20 per pair of meals sharing a cuisine (their own, not regions)
           − 0.15 per pair sharing a protein
-          − 0.35 per long meal beyond maxLongPerWeek (0 in a busy week; long-cook rule days exempt)
+          − 0.35 per long meal beyond maxLongPerWeek, and per long meal on a busy week's weeknight (long-cook rule days exempt)
           − 0.25 per pair of long meals on adjacent days (when avoidConsecutiveLong)
-          − 0.35 per quick meal the week can no longer fit to reach minQuickPerWeek (half the meals in a busy week)
+          − 0.35 per quick meal the week can no longer fit to reach minQuickPerWeek
+          − 0.35 per quick meal a busy week can no longer fit to make half its weeknight meals quick
           − 0.40 per extra full match of an at-most-once rule
           − 0.20 per new meal beyond the novelty budget (favorites 20%, balanced 50%, adventurous 100%)
           − 1.00 per open day left without a meal
@@ -242,8 +307,8 @@ them with " · ".
 | Code | Example |
 | --- | --- |
 | `rule` | Sunday smoker night · Pork · Long cook OK |
-| `busyWeek` | Quick for your busy week (15 min) |
-| `dayLimit` | Ready in 12 min for Wednesday |
+| `busyWeek` | Quick for your busy week (15 min), on weeknights only |
+| `dayLimit` | Ready in 12 min for Wednesday: a day's cap, or the week's cap on other days |
 | `rating` | You rated this 5★ / Rated 4.5★ by your household |
 | `feedback` | Marked make-again / A kid favorite / Great leftovers |
 | `familiar` | A household regular (6 times) |
@@ -375,6 +440,9 @@ baseline alone plans a 500-recipe, 5000-interaction week in a few milliseconds
   exist, but proteins, allergens, and diets can't be overridden per recipe yet.
   Allergen and diet data are only as good as recipe labels and ingredient
   names.
+- Cuisine canonicalization is a hand-kept table. Unknown labels are kept as
+  normalized, and a recipe's cuisine can't be more specific than its source's
+  label.
 - One weekday rule per day; one dinner per day; add-ons are never planned.
 - The week note is stored, not interpreted. There's no weather, season, or
   calendar context yet.

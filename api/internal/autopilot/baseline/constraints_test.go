@@ -82,6 +82,7 @@ func TestBusyWeekCaps(t *testing.T) {
 
 	t.Run("week cap explains the shortfall", func(t *testing.T) {
 		in := input(catalog...)
+		in.Preferences.Weeknights = weeknights
 		in.Context.MaxMinutes = 20
 		res := generate(t, p, in)
 		if res.Planned != 3 || res.Requested != 5 || len(res.Unfilled) != 2 {
@@ -91,8 +92,13 @@ func TestBusyWeekCaps(t *testing.T) {
 			if !slices.Contains([]string{"quick-1", "quick-2", "quick-3"}, s.ItemID) || s.TimeBand != autopilot.BandQuick {
 				t.Errorf("slot %s = %s (%s)", s.Day, s.ItemID, s.TimeBand)
 			}
-			if s.Reasons[0].Code != "busyWeek" {
-				t.Errorf("first reason = %+v, want the busy week", s.Reasons)
+			// The busy-week wording is for weeknights; other days name the day.
+			want := "dayLimit"
+			if slices.Contains(weeknights, s.Day) {
+				want = "busyWeek"
+			}
+			if s.Reasons[0].Code != want {
+				t.Errorf("%s first reason = %+v, want %s", s.Day, s.Reasons, want)
 			}
 		}
 		want := "Only 3 quick recipes (≤20 min) match; planned 3 of 5 nights."
@@ -128,8 +134,9 @@ func TestBusyWeekCaps(t *testing.T) {
 		}
 	})
 
-	t.Run("soft busy week prefers quick meals", func(t *testing.T) {
+	t.Run("soft busy week prefers quick meals on weeknights", func(t *testing.T) {
 		in := input(catalog...)
+		in.Preferences.Weeknights = weekdays
 		in.Preferences.MealsPerWeek = 3
 		in.Context.Busy = true
 		res := generate(t, p, in)
@@ -139,6 +146,86 @@ func TestBusyWeekCaps(t *testing.T) {
 			}
 		}
 	})
+}
+
+var weeknights = []autopilot.Day{autopilot.Monday, autopilot.Tuesday, autopilot.Wednesday, autopilot.Thursday}
+
+// TestBusyWeekIsAboutWeeknights: a busy week favors quick meals on weeknights,
+// a weekend long-cook rule keeps its long cook, and only an explicit cap
+// limits the weekend.
+func TestBusyWeekIsAboutWeeknights(t *testing.T) {
+	p := New(Options{})
+	catalog := []autopilot.Item{
+		meal("quick-1", minutes(10)), meal("quick-2", minutes(12)), meal("quick-3", minutes(15)),
+		meal("quick-4", minutes(18)), meal("quick-5", minutes(20)),
+		meal("medium-1", minutes(30)), meal("medium-2", minutes(32)),
+		meal("long-1", minutes(50)), meal("long-2", minutes(70)),
+		meal("smoked-pork", proteins("pork"), methods("smoker"), minutes(240)),
+		meal("pork-chops", proteins("pork"), methods("smoker"), minutes(20)),
+	}
+	busyWeek := func() autopilot.Input {
+		in := input(catalog...)
+		in.Preferences.PlanDays = append(slices.Clone(weekdays), autopilot.Sunday)
+		in.Preferences.Weeknights = weeknights
+		in.Preferences.MealsPerWeek = 6
+		in.Preferences.CookTime = autopilot.CookTimeMix{MaxLongPerWeek: 2, AvoidConsecutiveLong: true}
+		in.Preferences.Equipment = []string{"smoker"}
+		in.Preferences.Rules = []autopilot.WeekdayRule{{
+			Day: autopilot.Sunday, Label: "Smoker night", Proteins: []string{"chicken", "pork"}, Methods: []string{"smoker"},
+			TimeBand: autopilot.BandLong, Frequency: autopilot.EveryWeek,
+		}}
+		in.Context.Busy = true
+		return in
+	}
+	hasCode := func(reasons []autopilot.Reason, code string) bool {
+		return slices.ContainsFunc(reasons, func(r autopilot.Reason) bool { return r.Code == code })
+	}
+
+	t.Run("sunday keeps its long cook and weeknights are quick", func(t *testing.T) {
+		res := generate(t, p, busyWeek())
+		if res.Planned != 6 {
+			t.Fatalf("planned %d, want 6: %s", res.Planned, describe(res))
+		}
+		sun := slotOn(res, autopilot.Sunday)
+		if sun == nil || sun.ItemID != "smoked-pork" || sun.TimeBand != autopilot.BandLong {
+			t.Fatalf("sunday = %+v; want the long smoker cook: %s", sun, describe(res))
+		}
+		if want := "Smoker night · Pork · Long cook OK"; sun.Reasons[0].Text != want {
+			t.Errorf("sunday reasons = %v, want %q first", reasonTexts(sun.Reasons), want)
+		}
+		for _, s := range res.Slots {
+			busy := hasCode(s.Reasons, "busyWeek")
+			switch weeknight := slices.Contains(weeknights, s.Day); {
+			case weeknight && (s.TimeBand != autopilot.BandQuick || !busy):
+				t.Errorf("busy weeknight %s = %s (%s, %v); want quick for the busy week", s.Day, s.ItemID, s.TimeBand, reasonTexts(s.Reasons))
+			case !weeknight && busy:
+				t.Errorf("%s = %s says %v; the busy week is about weeknights", s.Day, s.ItemID, reasonTexts(s.Reasons))
+			}
+		}
+		if r := rank(t, p, busyWeek(), autopilot.Sunday); len(r.Items) == 0 || r.Items[0].ItemID != "smoked-pork" {
+			t.Errorf("sunday alternatives = %+v; swapping keeps the long cook first", r.Items)
+		}
+	})
+
+	for name, cap := range map[string]func(*autopilot.Input){
+		"week cap still caps sunday": func(in *autopilot.Input) { in.Context.MaxMinutes = 25 },
+		"day cap caps sunday": func(in *autopilot.Input) {
+			in.Context.Days = []autopilot.DayContext{{Day: autopilot.Sunday, MaxMinutes: 25}}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			in := busyWeek()
+			cap(&in)
+			res := generate(t, p, in)
+			sun := slotOn(res, autopilot.Sunday)
+			if sun == nil || sun.ItemID != "pork-chops" {
+				t.Fatalf("sunday = %+v; want the smoker meal ready within 25 minutes: %s", sun, describe(res))
+			}
+			if !hasCode(sun.Reasons, "dayLimit") || hasCode(sun.Reasons, "busyWeek") {
+				t.Errorf("sunday reasons = %+v; want the day's limit, not the busy week", sun.Reasons)
+			}
+		})
+	}
 }
 
 func TestSkippedWeeksAndDays(t *testing.T) {

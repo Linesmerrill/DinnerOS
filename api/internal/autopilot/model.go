@@ -59,7 +59,11 @@ func (d Day) Name() string {
 type Item struct {
 	ID       string
 	Cuisines []string
-	Tags     []string
+	// CuisineRegions are broader groups the cuisines belong to ("italian" →
+	// "southern european", "european"). Likes, dislikes, exclusions, and
+	// weekday rules match them too; variety compares only Cuisines.
+	CuisineRegions []string
+	Tags           []string
 	// Proteins are protein codes ("chicken", "pork", "tofu").
 	Proteins []string
 	// Methods are cooking methods or equipment the item suits ("smoker",

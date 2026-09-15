@@ -5139,7 +5139,7 @@ components:
         cuisines:
           type: array
           maxItems: 30
-          description: Free values, stored trimmed, lowercase, deduplicated, and sorted.
+          description: Free values, stored trimmed, lowercase, in canonical form (`North America` → `north american`; see docs/autopilot.md#cuisines), deduplicated, and sorted.
           items:
             type: string
             maxLength: 40
@@ -5431,7 +5431,7 @@ components:
         cuisines:
           type: array
           maxItems: 30
-          description: Free values, stored trimmed, lowercase, deduplicated, and sorted.
+          description: Free values, stored trimmed, lowercase, in canonical form (`North America` → `north american`; see docs/autopilot.md#cuisines), deduplicated, and sorted.
           items:
             type: string
             maxLength: 40
@@ -5721,7 +5721,11 @@ components:
           description: Don't plan this week.
         busy:
           type: boolean
-          description: A busy week favors quick meals and avoids long ones.
+          description: |
+            A busy week is about weeknights: on the profile's `weeknights` it
+            favors quick meals and allows no long ones, without a cap. Other
+            days, and days whose weekday rule allows a long cook, keep their
+            usual cook-time handling; only `maxMinutes` caps them.
         mealsPerWeek:
           type: [integer, "null"]
           minimum: 1
@@ -5765,6 +5769,7 @@ components:
           type: boolean
         busy:
           type: boolean
+          description: Favor quick meals on the profile's weeknights. See `AutopilotWeekContext.busy`.
         mealsPerWeek:
           type: [integer, "null"]
           minimum: 1
@@ -6151,7 +6156,7 @@ components:
             air-fryer: null
     AutopilotRecipeAttributes:
       type: object
-      required: [recipeId, cookMinutes, timeBand, cuisines, tags, proteins, allergens, diets, spicy, methods, override]
+      required: [recipeId, cookMinutes, timeBand, cuisines, cuisineRegions, tags, proteins, allergens, diets, spicy, methods, override]
       properties:
         recipeId:
           type: string
@@ -6164,12 +6169,19 @@ components:
           $ref: "#/components/schemas/AutopilotTimeBand"
         cuisines:
           type: array
-          description: The recipe's cuisines, lowercased.
+          description: The recipe's cuisines in canonical form (lowercase; `North America` → `north american`).
           items:
             type: string
+          example: [italian]
+        cuisineRegions:
+          type: array
+          description: Broader regions of `cuisines`, nearest first. Likes, dislikes, exclusions, and weekday rules match them too; variety doesn't.
+          items:
+            type: string
+          example: [southern european, european]
         tags:
           type: array
-          description: The recipe's tags, lowercased.
+          description: The recipe's tags in canonical form (lowercase).
           items:
             type: string
         proteins:
@@ -6298,7 +6310,7 @@ components:
         recipeCount:
           type: integer
           minimum: 0
-          description: Only on cuisines, tags, and proteins. Main-meal recipes that carry the value; 0 for starter values.
+          description: Only on cuisines, tags, and proteins. Main-meal recipes that carry the value; a cuisine counts for its regions too, so a region's count is how many recipes a like of it matches. 0 for starter values.
           example: 12
     AutopilotLimits:
       type: object
@@ -6341,7 +6353,7 @@ components:
       properties:
         cuisines:
           type: array
-          description: Values the household's main meals use (most used first), then starter values they don't (alphabetically); at most 60.
+          description: Canonical values the household's main meals use, including their cuisines' regions (most used first), then starter values they don't (in list order); at most 60. Known cuisines have title-case labels.
           items:
             $ref: "#/components/schemas/AutopilotOption"
         tags:

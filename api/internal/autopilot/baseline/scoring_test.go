@@ -167,3 +167,34 @@ func TestColdStartLeansOnTasteProfile(t *testing.T) {
 		t.Error("a household with 40 cooked meals is not in cold start")
 	}
 }
+
+// TestCuisineRegions: likes and exclusions match an item's cuisine regions,
+// but variety compares only its own cuisines.
+func TestCuisineRegions(t *testing.T) {
+	regions := func(r ...string) opt { return func(it *autopilot.Item) { it.CuisineRegions = r } }
+	in := input(
+		meal("pasta", cuisine("italian"), regions("southern european", "european")),
+		meal("crepes", cuisine("french"), regions("western european", "european")),
+		meal("ramen", cuisine("japanese"), regions("east asian", "asian")),
+		meal("stew", cuisine("klingon")),
+	)
+	in.Preferences.MealsPerWeek = 3
+	in.Preferences.Likes.Cuisines = []string{"European"}
+	in.Preferences.Exclusions.Cuisines = []string{"asian"}
+	res := generate(t, New(Options{}), in)
+	want := map[string]bool{"pasta": true, "crepes": true, "stew": true}
+	if res.Planned != 3 {
+		t.Fatalf("planned %d, want every non-Asian meal: %s", res.Planned, describe(res))
+	}
+	for _, s := range res.Slots {
+		if !want[s.ItemID] {
+			t.Errorf("picked %s; the Asian region is excluded: %s", s.ItemID, describe(res))
+		}
+		if s.ItemID != "stew" && !hasReason(s.Reasons, "You like European") {
+			t.Errorf("%s reasons = %v", s.ItemID, reasonTexts(s.Reasons))
+		}
+	}
+	if res.Score.Variety != 0 {
+		t.Errorf("variety = %v; Italian and French share only a region", res.Score.Variety)
+	}
+}
