@@ -40,9 +40,15 @@ type Fetcher struct {
 	Log           *slog.Logger
 }
 
+// OriginAccount marks a raw recipe captured from the owner's signed-in past
+// deliveries view. It is the exact variant delivered, whereas a public recipe
+// page can redirect a weekly clone to a different canonical variant.
+const OriginAccount = "account"
+
 // RawRecipe is the stored source record for one delivered recipe.
 type RawRecipe struct {
 	DeliveredID  string          `json:"deliveredId"`
+	Origin       string          `json:"origin,omitempty"` // "" for public pages, OriginAccount for captures
 	RequestedURL string          `json:"requestedUrl"`
 	FinalURL     string          `json:"finalUrl"`
 	FetchedAt    time.Time       `json:"fetchedAt"`

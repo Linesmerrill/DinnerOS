@@ -180,6 +180,98 @@ func TestNormalizeFlagsDeliveredVariants(t *testing.T) {
 	}
 }
 
+// porkVariant is an account capture: the exact delivered variant, which has no
+// canonical recipeId.
+func porkVariant(deliveredID string) string {
+	r := strings.Replace(syntheticRecipe, `"recipeId": "aaaaaaaaaaaaaaaaaaaaaaaa",`, ``, 1)
+	r = strings.Replace(r, `"id": "aaaaaaaaaaaaaaaaaaaaaaaa-en-US",`, `"id": "`+deliveredID+`", "slug": "pork-synthetic-taco-night",`, 1)
+	return strings.Replace(r, " Synthetic Taco Night ", "Pork & Synthetic Taco Night", 1)
+}
+
+func TestNormalizePrefersAccountCaptures(t *testing.T) {
+	canonical := strings.Replace(syntheticRecipe, `"id": "aaaaaaaaaaaaaaaaaaaaaaaa-en-US",`, `"id": "aaaaaaaaaaaaaaaaaaaaaaaa-en-US", "slug": "synthetic-taco-night",`, 1)
+	history := History{Weeks: []HistoryWeek{
+		{Week: "2026-W01", Meals: []HistoryMeal{{ID: "bbbbbbbbbbbbbbbbbbbbbbbb", Name: "synthetic-taco-night"}}},
+		{Week: "2026-W02", Meals: []HistoryMeal{{ID: "cccccccccccccccccccccccc", Name: "pork-and-synthetic-taco-night"}}},
+		{Week: "2026-W03", Meals: []HistoryMeal{{ID: "dddddddddddddddddddddddd", Name: "pork-synthetic-taco-night"}}},
+	}}
+	account := func(id string) RawRecipe {
+		r := rawFrom(t, id, porkVariant(id))
+		r.Origin = OriginAccount
+		return r
+	}
+	file, err := Normalize([]RawRecipe{
+		rawFrom(t, "bbbbbbbbbbbbbbbbbbbbbbbb", canonical),
+		rawFrom(t, "cccccccccccccccccccccccc", canonical), // redirected to the wrong variant
+		account("cccccccccccccccccccccccc"),
+		account("dddddddddddddddddddddddd"),
+	}, history, time.Now())
+	if err != nil {
+		t.Fatalf("Normalize() error = %v", err)
+	}
+
+	if len(file.Recipes) != 2 {
+		t.Fatalf("recipes = %d, want canonical + pork variant", len(file.Recipes))
+	}
+	byName := map[string]ImportRecipe{}
+	for _, r := range file.Recipes {
+		byName[r.Name] = r
+	}
+	if r := byName["Synthetic Taco Night"]; r.SourceRecipeID != "aaaaaaaaaaaaaaaaaaaaaaaa" || strings.Join(r.OrderWeeks, ",") != "2026-W01" {
+		t.Errorf("canonical = %s weeks %v, want only the matching delivery", r.SourceRecipeID, r.OrderWeeks)
+	}
+	pork := byName["Pork & Synthetic Taco Night"]
+	if pork.SourceRecipeID != "dddddddddddddddddddddddd" || strings.Join(pork.SourceAliases, ",") != "cccccccccccccccccccccccc" || strings.Join(pork.OrderWeeks, ",") != "2026-W02,2026-W03" {
+		t.Errorf("pork variant = id %s aliases %v weeks %v", pork.SourceRecipeID, pork.SourceAliases, pork.OrderWeeks)
+	}
+	for _, rv := range file.Review {
+		if rv.Field == "variant" {
+			t.Errorf("unexpected variant review item %+v: captures are exact", rv)
+		}
+	}
+}
+
+func TestPendingVariants(t *testing.T) {
+	canonical := strings.Replace(syntheticRecipe, `"id": "aaaaaaaaaaaaaaaaaaaaaaaa-en-US",`, `"id": "aaaaaaaaaaaaaaaaaaaaaaaa-en-US", "slug": "synthetic-taco-night",`, 1)
+	history := History{Weeks: []HistoryWeek{
+		{Week: "2026-W01", Meals: []HistoryMeal{{ID: "bbbbbbbbbbbbbbbbbbbbbbbb", Name: "synthetic-and-taco-night"}}},
+		{Week: "2026-W02", Meals: []HistoryMeal{{ID: "cccccccccccccccccccccccc", Name: "pork-synthetic-taco-night"}}},
+		{Week: "2026-W05", Meals: []HistoryMeal{{ID: "dddddddddddddddddddddddd", Name: "beef-synthetic-taco-night"}}},
+		{Week: "2026-W06", Meals: []HistoryMeal{{ID: "eeeeeeeeeeeeeeeeeeeeeeee", Name: "turkey-synthetic-taco-night"}}},
+	}}
+	captured := rawFrom(t, "eeeeeeeeeeeeeeeeeeeeeeee", porkVariant("eeeeeeeeeeeeeeeeeeeeeeee"))
+	captured.Origin = OriginAccount
+	pending, err := PendingVariants([]RawRecipe{
+		rawFrom(t, "bbbbbbbbbbbbbbbbbbbbbbbb", canonical),
+		rawFrom(t, "cccccccccccccccccccccccc", canonical),
+		rawFrom(t, "dddddddddddddddddddddddd", canonical),
+		rawFrom(t, "eeeeeeeeeeeeeeeeeeeeeeee", canonical),
+		captured,
+	}, history)
+	if err != nil {
+		t.Fatalf("PendingVariants() error = %v", err)
+	}
+	var got []string
+	for _, p := range pending {
+		got = append(got, p.DeliveredID[:1]+"@"+p.LastWeek)
+	}
+	if strings.Join(got, ",") != "d@2026-W05,c@2026-W02" {
+		t.Errorf("pending = %v, want beef then pork (newest first; stopword and captured ones skipped)", got)
+	}
+}
+
+func TestVariantKey(t *testing.T) {
+	want := variantKey("Rigatoni with Beef & Zucchini Ragu")
+	for _, s := range []string{"rigatoni-with-beef-and-zucchini-ragu", "rigatoni-beef-zucchini-ragu"} {
+		if got := variantKey(s); got != want {
+			t.Errorf("variantKey(%q) = %q, want %q", s, got, want)
+		}
+	}
+	if variantKey("pork-schnitzel") == variantKey("chicken-schnitzel") {
+		t.Error("different proteins must be different variants")
+	}
+}
+
 func TestSlugify(t *testing.T) {
 	for in, want := range map[string]string{
 		"One-Pan Pork & Green Pepper Tacos":   "one-pan-pork-and-green-pepper-tacos",

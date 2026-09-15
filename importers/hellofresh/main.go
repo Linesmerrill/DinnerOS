@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -38,6 +39,10 @@ func main() {
 		err = runFetch(ctx, logger, os.Args[2:])
 	case "normalize":
 		err = runNormalize(logger, os.Args[2:])
+	case "variants":
+		err = runVariants(logger, os.Args[2:])
+	case "capture":
+		err = runCapture(logger, os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -58,7 +63,66 @@ func usage() {
 commands:
   fetch       save public recipe page data for every recipe in the order history
   normalize   convert raw recipes into the DinnerOS import format
+  variants    list delivered variants that still need an account capture
+  capture     save account captures ({deliveredId: recipe} JSON) to data/raw/delivered
 `)
+}
+
+func runCapture(logger *slog.Logger, args []string) error {
+	fs := flag.NewFlagSet("capture", flag.ContinueOnError)
+	inPath := fs.String("in", "-", "captures JSON file, or - for stdin")
+	rawDir := fs.String("raw", "data/raw", "directory containing raw recipe files")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	in := os.Stdin
+	if *inPath != "-" {
+		f, err := os.Open(*inPath)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		in = f
+	}
+	var captures map[string]json.RawMessage
+	if err := json.NewDecoder(in).Decode(&captures); err != nil {
+		return fmt.Errorf("decode captures: %w", err)
+	}
+	n, err := SaveAccountCaptures(*rawDir, captures, time.Now())
+	if err != nil {
+		return err
+	}
+	logger.Info("account captures saved", "count", n, "dir", filepath.Join(*rawDir, "delivered"))
+	return nil
+}
+
+func runVariants(logger *slog.Logger, args []string) error {
+	fs := flag.NewFlagSet("variants", flag.ContinueOnError)
+	historyPath := fs.String("history", "data/order-history.json", "order history exported from the browser")
+	rawDir := fs.String("raw", "data/raw", "directory containing raw recipe files")
+	outPath := fs.String("out", "data/variants-pending.json", "pending variant list to write")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	history, err := LoadHistory(*historyPath)
+	if err != nil {
+		return err
+	}
+	raws, err := LoadRawRecipes(*rawDir)
+	if err != nil {
+		return err
+	}
+	pending, err := PendingVariants(raws, history)
+	if err != nil {
+		return err
+	}
+	if err := writeJSONAtomic(*outPath, pending); err != nil {
+		return err
+	}
+	logger.Info("pending variants", "count", len(pending), "out", *outPath)
+	return nil
 }
 
 func runNormalize(logger *slog.Logger, args []string) error {

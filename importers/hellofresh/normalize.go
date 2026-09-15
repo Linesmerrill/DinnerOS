@@ -173,11 +173,16 @@ type parsedRaw struct {
 	recipe hfRecipe
 }
 
-// LoadRawRecipes reads every raw recipe file in dir/recipes.
+// LoadRawRecipes reads every raw recipe file in dir/recipes (public pages) and
+// dir/delivered (account captures).
 func LoadRawRecipes(dir string) ([]RawRecipe, error) {
-	paths, err := filepath.Glob(filepath.Join(dir, "recipes", "*.json"))
-	if err != nil {
-		return nil, err
+	var paths []string
+	for _, sub := range []string{"recipes", "delivered"} {
+		matches, err := filepath.Glob(filepath.Join(dir, sub, "*.json"))
+		if err != nil {
+			return nil, err
+		}
+		paths = append(paths, matches...)
 	}
 	sort.Strings(paths)
 	out := make([]RawRecipe, 0, len(paths))
@@ -205,23 +210,53 @@ func Normalize(raws []RawRecipe, history History, now time.Time) (ImportFile, er
 		namesByDelivered[r.DeliveredID] = r.Name
 	}
 
-	groups := map[string][]parsedRaw{}
-	for _, raw := range raws {
-		var rec hfRecipe
-		if err := json.Unmarshal(raw.Recipe, &rec); err != nil {
-			return ImportFile{}, fmt.Errorf("parse recipe %s: %w", raw.DeliveredID, err)
-		}
-		key := rec.RecipeID
-		if key == "" {
-			key = strings.TrimSuffix(rec.ID, "-en-US")
-		}
-		if key == "" {
-			key = raw.DeliveredID
-		}
-		groups[key] = append(groups[key], parsedRaw{raw: raw, recipe: rec})
+	parsed, captured, err := parseRaws(raws)
+	if err != nil {
+		return ImportFile{}, err
 	}
 
-	file := ImportFile{Version: ImportVersion, Source: "hellofresh", GeneratedAt: now.UTC()}
+	// Public pages group by canonical recipe ID. An account capture replaces the
+	// public page for its delivered ID, because it is the exact variant delivered.
+	groups := map[string][]parsedRaw{}
+	keyByVariant := map[string]string{}
+	for _, p := range parsed {
+		if p.raw.Origin == OriginAccount || captured[p.raw.DeliveredID] {
+			continue
+		}
+		key := p.recipe.RecipeID
+		if key == "" {
+			key = strings.TrimSuffix(p.recipe.ID, "-en-US")
+		}
+		if key == "" {
+			key = p.raw.DeliveredID
+		}
+		groups[key] = append(groups[key], p)
+		keyByVariant[variantKey(firstNonEmpty(p.recipe.Slug, p.recipe.Name))] = key
+	}
+
+	// Account captures carry no canonical ID. They join the public recipe of the
+	// same name, or group by name under their newest delivered ID.
+	accountGroups := map[string][]parsedRaw{}
+	for _, p := range parsed {
+		if p.raw.Origin != OriginAccount {
+			continue
+		}
+		vk := variantKey(firstNonEmpty(p.recipe.Slug, p.recipe.Name))
+		if key, ok := keyByVariant[vk]; ok {
+			groups[key] = append(groups[key], p)
+			continue
+		}
+		accountGroups[vk] = append(accountGroups[vk], p)
+	}
+	for _, group := range accountGroups {
+		key := group[0].raw.DeliveredID
+		for _, g := range group[1:] {
+			key = max(key, g.raw.DeliveredID) // Object IDs sort by creation time.
+		}
+		groups[key] = append(groups[key], group...)
+	}
+
+	file := ImportFile{Version: ImportVersion, Source: "hellofresh", GeneratedAt: now.UTC(), Recipes: []ImportRecipe{}, Review: []ReviewItem{}}
 	keys := make([]string, 0, len(groups))
 	for k := range groups {
 		keys = append(keys, k)
@@ -252,14 +287,13 @@ func Normalize(raws []RawRecipe, history History, now time.Time) (ImportFile, er
 		// Recipe pages redirect weekly menu clones to a canonical recipe, which is
 		// occasionally a different variant (e.g. pork delivered, chicken page).
 		// Flag it so a person knows the stored details may not match the box.
-		canonicalSlug := slugify(firstNonEmpty(primary.Slug, primary.Name))
 		variants := map[string]bool{}
 		for _, g := range group {
 			delivered := namesByDelivered[g.raw.DeliveredID]
-			if delivered == "" || slugify(delivered) == canonicalSlug || variants[slugify(delivered)] {
+			if g.raw.Origin == OriginAccount || delivered == "" || sameVariant(delivered, primary) || variants[variantKey(delivered)] {
 				continue
 			}
-			variants[slugify(delivered)] = true
+			variants[variantKey(delivered)] = true
 			review = append(review, ReviewItem{
 				SourceRecipeID: key,
 				RecipeName:     rec.Name,
@@ -280,6 +314,85 @@ func Normalize(raws []RawRecipe, history History, now time.Time) (ImportFile, er
 		return file.Recipes[i].SourceRecipeID < file.Recipes[j].SourceRecipeID
 	})
 	return file, nil
+}
+
+// parseRaws decodes every raw recipe and reports which delivered IDs have an
+// account capture.
+func parseRaws(raws []RawRecipe) ([]parsedRaw, map[string]bool, error) {
+	parsed := make([]parsedRaw, 0, len(raws))
+	captured := map[string]bool{}
+	for _, raw := range raws {
+		var rec hfRecipe
+		if err := json.Unmarshal(raw.Recipe, &rec); err != nil {
+			return nil, nil, fmt.Errorf("parse recipe %s: %w", raw.DeliveredID, err)
+		}
+		parsed = append(parsed, parsedRaw{raw: raw, recipe: rec})
+		if raw.Origin == OriginAccount {
+			captured[raw.DeliveredID] = true
+		}
+	}
+	return parsed, captured, nil
+}
+
+// PendingVariant is a delivered recipe whose public page resolved to a different
+// variant and that has no account capture yet.
+type PendingVariant struct {
+	DeliveredID string `json:"deliveredId"`
+	Name        string `json:"name"`
+	LastWeek    string `json:"lastWeek"`
+}
+
+// PendingVariants lists delivered recipes that need an account capture, newest
+// delivery first.
+func PendingVariants(raws []RawRecipe, history History) ([]PendingVariant, error) {
+	parsed, captured, err := parseRaws(raws)
+	if err != nil {
+		return nil, err
+	}
+	ordered := map[string]OrderedRecipe{}
+	for _, r := range history.UniqueRecipes() {
+		ordered[r.DeliveredID] = r
+	}
+
+	out := []PendingVariant{}
+	for _, p := range parsed {
+		o, ok := ordered[p.raw.DeliveredID]
+		if p.raw.Origin == OriginAccount || captured[p.raw.DeliveredID] || !ok || o.Name == "" || sameVariant(o.Name, p.recipe) {
+			continue
+		}
+		pv := PendingVariant{DeliveredID: o.DeliveredID, Name: o.Name}
+		for _, w := range o.Weeks {
+			pv.LastWeek = max(pv.LastWeek, w)
+		}
+		out = append(out, pv)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].LastWeek != out[j].LastWeek {
+			return out[i].LastWeek > out[j].LastWeek
+		}
+		return out[i].DeliveredID < out[j].DeliveredID
+	})
+	return out, nil
+}
+
+// variantStopwords are ignored when comparing recipe names, so "Beef & Zucchini
+// Ragu" and "beef-zucchini-ragu" are the same variant.
+var variantStopwords = map[string]bool{"and": true, "with": true}
+
+func variantKey(s string) string {
+	var kept []string
+	for _, part := range strings.Split(slugify(s), "-") {
+		if part != "" && !variantStopwords[part] {
+			kept = append(kept, part)
+		}
+	}
+	return strings.Join(kept, "-")
+}
+
+// sameVariant reports whether a delivered name matches a recipe's slug or name.
+func sameVariant(delivered string, r hfRecipe) bool {
+	k := variantKey(delivered)
+	return k == variantKey(r.Slug) || k == variantKey(r.Name)
 }
 
 func normalizeRecipe(id string, r hfRecipe, raw RawRecipe) (ImportRecipe, []ReviewItem) {
