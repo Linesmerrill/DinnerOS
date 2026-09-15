@@ -32,6 +32,9 @@ type Store interface {
 	SaveRecipes(ctx context.Context, householdID string, recipes []Recipe) error
 	// GetRecipe returns one of the household's recipes.
 	GetRecipe(ctx context.Context, householdID, id string) (Recipe, error)
+	// GetRecipes returns the household's recipes with the given IDs, ordered
+	// by ID, skipping IDs that are malformed, missing, or another household's.
+	GetRecipes(ctx context.Context, householdID string, ids []string) ([]Recipe, error)
 	// ListRecipes returns summaries matching f in f.Sort order.
 	ListRecipes(ctx context.Context, householdID string, f ListFilter) ([]RecipeSummary, error)
 
