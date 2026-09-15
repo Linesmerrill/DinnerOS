@@ -19,6 +19,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot/baseline"
 	"github.com/Linesmerrill/DinnerOS/api/internal/config"
+	"github.com/Linesmerrill/DinnerOS/api/internal/customize"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/httpapi"
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
@@ -188,18 +189,38 @@ func run() error {
 	})
 	// Autopilot runs the local baseline provider. A remote provider can
 	// replace it behind the same autopilot.RecommendationProvider interface.
+	autopilotService := recommendations.NewService(recommendations.ServiceOptions{
+		Store:      recommendations.NewMongoStore(db.Database()),
+		Provider:   baseline.New(baseline.Options{}),
+		Households: householdService,
+		Recipes:    recipeService,
+		Ratings:    behavior.ratings,
+		Events:     behavior.events,
+		Plans:      planService,
+		Pantry:     pantryService,
+		Logger:     logger,
+	})
 	autopilotHandler := recommendations.NewHandler(recommendations.HandlerOptions{
-		Service: recommendations.NewService(recommendations.ServiceOptions{
-			Store:      recommendations.NewMongoStore(db.Database()),
-			Provider:   baseline.New(baseline.Options{}),
-			Households: householdService,
-			Recipes:    recipeService,
-			Ratings:    behavior.ratings,
-			Events:     behavior.events,
-			Plans:      planService,
-			Pantry:     pantryService,
-			Logger:     logger,
-		}),
+		Service:    autopilotService,
+		Authorizer: householdService,
+		Tokens:     tokens,
+		Logger:     logger,
+	})
+	// Meal customizations (swap or double a protein) filter choices by the
+	// household's Autopilot restrictions. Grocery lists and cook deductions
+	// apply the chosen customizations.
+	customizeService := customize.NewService(customize.ServiceOptions{
+		Plans:    planService,
+		Recipes:  recipeService,
+		Catalog:  recipeService,
+		Profiles: autopilotService,
+		Events:   behavior.events,
+		Logger:   logger,
+	})
+	planService.WithCustomizations(customizeService)
+	pantryService.SetCookAdjuster(customizeService)
+	customizeHandler := customize.NewHandler(customize.HandlerOptions{
+		Service:    customizeService,
 		Authorizer: householdService,
 		Tokens:     tokens,
 		Logger:     logger,
@@ -264,6 +285,7 @@ func run() error {
 				invitationHandler.Mount(r)
 				recipeHandler.Mount(r)
 				planHandler.Mount(r)
+				customizeHandler.Mount(r)
 				autopilotHandler.Mount(r)
 				pantryHandler.Mount(r)
 				specialtyHandler.Mount(r)

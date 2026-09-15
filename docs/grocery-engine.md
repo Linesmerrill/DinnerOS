@@ -140,6 +140,28 @@ that `Aggregate` takes:
   when the estimate crosses the household's threshold, which puts them back
   on the list.
 
+## Meal customizations
+
+`customize.ApplyGrocery(selection, picks)` runs before `ApplySpecialties` when
+the planner has a customization source ([api.md](api.md#customize-a-meal)).
+It's pure: the entry's stored choices come in already resolved against the
+curated protein table.
+
+- **`double`:** the line keeps its ingredient with twice the amount.
+- **`swap` and `swap_double`:** the line becomes the chosen protein's catalog
+  ingredient (its ID, name, and category, or `name:<key>` when the catalog
+  doesn't have it), with the amount times the choice's factor — the same
+  weight by default, or the table's ratio for that pair. A swapped line is no
+  longer a pantry staple.
+- Changed lines carry a `Line.Via` of kind `customized` naming the original
+  line and the choice, so the item reads "Ground Beef instead of Ground Pork
+  in One-Pan Pork Tacos", or "2x Ground Pork in …" for a doubled line.
+- A line without an amount stays without one, and lines nothing customizes are
+  untouched — including specialty ingredients, which `ApplySpecialties`
+  handles next. `Aggregate` then merges the swapped-in ingredient with the
+  same ingredient from other recipes and scales by servings as usual, so the
+  two transforms compose.
+
 ## Specialty ingredients
 
 `ApplySpecialties(selections, specialties)` runs before `Aggregate` when the

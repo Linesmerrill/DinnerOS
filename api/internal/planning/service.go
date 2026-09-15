@@ -56,6 +56,9 @@ type Service struct {
 	pantry PantrySource
 	// specialties is optional; without it specialty lines stay as they are.
 	specialties SpecialtySource
+	// customizations is optional; without it customized entries contribute
+	// their recipe as written (customization.go).
+	customizations CustomizationSource
 	// events is optional; without it entry changes record nothing.
 	events events.Recorder
 	logger *slog.Logger
@@ -453,6 +456,11 @@ func (s *Service) GroceryList(ctx context.Context, householdID, week string) (Gr
 		}
 	}
 	selections, skipped := grocerySelections(p, live)
+	// Customizations change the recipe's own lines, so they run before
+	// specialty ingredients handle what's left.
+	if selections, err = s.customizeGrocery(ctx, householdID, p, selections, skipped); err != nil {
+		return GroceryList{}, err
+	}
 	var batches []grocery.BatchPlan
 	if s.specialties != nil && len(selections) > 0 {
 		var lines []grocery.Line

@@ -404,6 +404,12 @@ Autopilot types are server-observed; clients can't send them.
 | `autopilot.preferences_updated` | a profile section changed | `{sections, changes: [{field, added?, removed?, from?, to?}]}` |
 | `autopilot.week_context_updated` | a week context changed or was cleared (`week`) | `{changes?, cleared?}` |
 | `autopilot.recipe_override_updated` | a method override changed (`recipeId`) | `{method, value: yes/no/auto, previous}` |
+| `meal.customized` | a member swapped or doubled a planned meal's protein (`recipeId`, `week`) | `{entryId, changes: [{ingredientKey, from, to}]}` |
+
+`meal.customized` is recorded but not yet learned from. It's a direct
+preference signal for a later model: a household that always swaps pork for
+chicken is saying something its taste profile doesn't, and repeated doubling
+says the portions are too small.
 
 Plan entries carry `origin` and `proposalId`. `recipe.planned` includes
 `origin` and `proposalId`, and `recipe.unplanned` includes `origin`, so

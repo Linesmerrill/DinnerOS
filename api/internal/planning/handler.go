@@ -87,6 +87,15 @@ type EntryResponse struct {
 	// Origin is manual, or autopilot for entries added by accepting an
 	// Autopilot proposal.
 	Origin Origin `json:"origin"`
+	// Customizations are the meal's protein choices; omitted when none.
+	Customizations []EntryCustomizationResponse `json:"customizations,omitempty"`
+}
+
+// EntryCustomizationResponse is one customized ingredient line of an entry.
+type EntryCustomizationResponse struct {
+	IngredientKey string `json:"ingredientKey"`
+	ChoiceID      string `json:"choiceId"`
+	Label         string `json:"label"`
 }
 
 // EntryRecipeResponse is the recipe snapshot stored on an entry.
@@ -290,6 +299,9 @@ func newEntryResponse(w Week, e Entry) EntryResponse {
 	if resp.Origin == "" {
 		resp.Origin = OriginManual
 	}
+	for _, c := range e.Customizations {
+		resp.Customizations = append(resp.Customizations, EntryCustomizationResponse(c))
+	}
 	if e.Day != "" {
 		day, date := e.Day, w.Date(e.Day)
 		resp.Day, resp.Date = &day, &date
@@ -394,6 +406,19 @@ func joinNames(sources []grocery.Source) string {
 	return strings.Join(names[:len(names)-1], ", ") + ", and " + names[len(names)-1]
 }
 
+// customizedViaText is "2x Ground Pork in A" for a doubled line, or
+// "Ground Beef instead of Ground Pork in A" for a swap.
+func customizedViaText(v grocery.ItemVia) string {
+	text := v.OptionName
+	if strings.HasPrefix(v.OptionID, "swap:") {
+		text += " instead of " + v.SpecialtyName
+	}
+	if names := joinNames(v.Recipes); names != "" {
+		text += " in " + names
+	}
+	return text
+}
+
 func newGroceryViaResponse(v grocery.ItemVia) GroceryViaResponse {
 	resp := GroceryViaResponse{
 		Kind: v.Kind, SpecialtyID: v.SpecialtyID, SpecialtyKey: v.SpecialtyKey, SpecialtyName: v.SpecialtyName,
@@ -405,6 +430,8 @@ func newGroceryViaResponse(v grocery.ItemVia) GroceryViaResponse {
 		if names := joinNames(v.Recipes); names != "" {
 			resp.Text += " in " + names
 		}
+	case grocery.ViaCustomized:
+		resp.Text = customizedViaText(v)
 	case grocery.ViaHouseMadeBatch:
 		batches := v.Batches
 		resp.Batches = &batches

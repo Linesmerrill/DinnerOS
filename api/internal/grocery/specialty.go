@@ -34,6 +34,11 @@ type ViaKind string
 const (
 	ViaStoreAlternative ViaKind = "store_alternative"
 	ViaHouseMadeBatch   ViaKind = "house_made_batch"
+	// ViaCustomized marks a line changed by a meal customization (package
+	// customize): SpecialtyKey and SpecialtyName are the recipe's original
+	// line, OptionID the choice ("double", "swap:ground-beef"), and
+	// OptionName its label ("2x Ground Beef").
+	ViaCustomized ViaKind = "customized"
 )
 
 // Via is a line's provenance when it stands in for a specialty ingredient:

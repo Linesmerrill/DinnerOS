@@ -49,6 +49,10 @@ const (
 	TypeMealSwapped   Type = "meal.swapped"
 	TypeMealRejected  Type = "meal.rejected"
 
+	// TypeMealCustomized: a member customized a planned meal's protein
+	// (swapped it or doubled it).
+	TypeMealCustomized Type = "meal.customized"
+
 	// TypeShoppingHandoffCreated: a member handed the week's list to a
 	// shopping provider.
 	TypeShoppingHandoffCreated Type = "shopping.handoff_created"
@@ -299,6 +303,32 @@ type MealRejected struct {
 	ModelVersion string `json:"modelVersion" bson:"modelVersion"`
 }
 
+// MealCustomized is the payload of meal.customized: a member changed how a
+// planned meal is cooked. Event.RecipeID is the meal and Event.Week its week.
+// Each change is one ingredient line's choice before and after: "original",
+// "double", "swap:<proteinId>", or "swap:<proteinId>:double". Autopilot
+// doesn't learn from it yet; it's kept as a preference signal ("they always
+// swap pork for chicken").
+type MealCustomized struct {
+	EntryID string                `json:"entryId" bson:"entryId"`
+	Changes []CustomizationChange `json:"changes" bson:"changes"`
+}
+
+// CustomizationChange is one ingredient line's customization before and
+// after a change.
+type CustomizationChange struct {
+	// IngredientKey is the line's catalog ID or "name:<normalized name>".
+	IngredientKey string `json:"ingredientKey" bson:"ingredientKey"`
+	From          string `json:"from" bson:"from"`
+	To            string `json:"to" bson:"to"`
+}
+
+// Bounds for meal customization changes.
+const (
+	MaxCustomizationChanges = 20
+	maxIngredientKey        = 200
+)
+
 // ShoppingHandoffCreated is the payload of shopping.handoff_created. It holds
 // counts only: product IDs from providers are never copied into events, which
 // are forwarded to Autopilot (docs/shopping-providers.md#risks-and-open-questions).
@@ -514,6 +544,25 @@ func (p MealRejected) validate() error {
 		requiredDay(p.Day), validDate(p.Date))
 }
 
+// EventType implements Payload.
+func (MealCustomized) EventType() Type { return TypeMealCustomized }
+
+func (p MealCustomized) validate() error {
+	errs := []error{validID("entryId", p.EntryID, true)}
+	if len(p.Changes) == 0 || len(p.Changes) > MaxCustomizationChanges {
+		errs = append(errs, invalid(fmt.Sprintf("changes must list 1 to %d changes", MaxCustomizationChanges)))
+	}
+	for _, c := range p.Changes {
+		switch {
+		case c.IngredientKey == "" || utf8.RuneCountInString(c.IngredientKey) > maxIngredientKey:
+			errs = append(errs, invalid(fmt.Sprintf("each change needs an ingredientKey of at most %d characters", maxIngredientKey)))
+		case c.From == "" || c.To == "" || utf8.RuneCountInString(c.From) > maxShortText || utf8.RuneCountInString(c.To) > maxShortText:
+			errs = append(errs, invalid(fmt.Sprintf("each change needs from and to of at most %d characters", maxShortText)))
+		}
+	}
+	return errors.Join(errs...)
+}
+
 func validHandoff(handoffID, provider string) error {
 	switch {
 	case handoffID == "" || len(handoffID) > MaxClientEventIDLength:
@@ -568,6 +617,7 @@ var typeSpecs = map[Type]typeSpec{
 	TypeWeekRejected:                   {decode: decoder[WeekRejected]()},
 	TypeMealSwapped:                    {recipe: true, decode: decoder[MealSwapped]()},
 	TypeMealRejected:                   {recipe: true, decode: decoder[MealRejected]()},
+	TypeMealCustomized:                 {recipe: true, decode: decoder[MealCustomized]()},
 	TypeShoppingHandoffCreated:         {decode: decoder[ShoppingHandoffCreated]()},
 	TypeShoppingOrderConfirmed:         {decode: decoder[ShoppingOrderConfirmed]()},
 }

@@ -103,6 +103,20 @@ type Entry struct {
 	Origin Origin
 	// ProposalID is the Autopilot proposal an autopilot entry came from.
 	ProposalID string
+	// Customizations are the member's protein choices for this meal (package
+	// customize). Empty when the meal is cooked as written.
+	Customizations []Customization
+}
+
+// Customization is one customized ingredient line of a planned meal: the
+// line's key (catalog ID or "name:<key>") and the chosen choice ("double",
+// "swap:ground-beef"). Package customize validates and applies them; planning
+// only stores them.
+type Customization struct {
+	IngredientKey string
+	ChoiceID      string
+	// Label is the choice's display label when it was chosen ("2x Ground Beef").
+	Label string
 }
 
 // EntryChanges is a partial update of an entry. Nil fields are unchanged; a
@@ -111,6 +125,9 @@ type EntryChanges struct {
 	Day      *Day
 	Servings *int
 	Note     *string
+	// Customizations replaces the entry's customizations; an empty slice
+	// removes them.
+	Customizations *[]Customization
 }
 
 // Summary describes one week in a range.
