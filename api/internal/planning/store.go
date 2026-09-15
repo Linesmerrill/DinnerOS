@@ -30,6 +30,9 @@ type Store interface {
 	// ListPlans returns the stored plans from..to inclusive, in week order.
 	// Weeks without a stored plan are omitted.
 	ListPlans(ctx context.Context, householdID string, from, to Week) ([]Plan, error)
+	// EarliestWeek returns the earliest week whose stored plan has at least
+	// one entry. ok is false when there is none.
+	EarliestWeek(ctx context.Context, householdID string) (week Week, ok bool, err error)
 	// UpdateEntry applies changes to one entry. ErrNotFound when the plan or
 	// entry does not exist.
 	UpdateEntry(ctx context.Context, householdID string, week Week, entryID string, changes EntryChanges, now time.Time) (Plan, error)

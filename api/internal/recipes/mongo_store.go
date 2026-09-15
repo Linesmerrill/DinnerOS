@@ -194,6 +194,7 @@ type summaryDoc struct {
 	LastOrderedWeek string        `bson:"lastOrderedWeek"`
 	IsAddon         bool          `bson:"isAddon"`
 	Tags            []string      `bson:"tags"`
+	Nutrition       []nutrientDoc `bson:"nutritionPerServing"`
 }
 
 func newRecipeDoc(r Recipe, householdID, id bson.ObjectID) (recipeDoc, error) {
@@ -650,7 +651,7 @@ func (s *MongoStore) ListRecipes(ctx context.Context, householdID string, f List
 		SetProjection(bson.D{
 			{Key: "name", Value: 1}, {Key: "headline", Value: 1}, {Key: "imageUrl", Value: 1},
 			{Key: "prepMinutes", Value: 1}, {Key: "totalMinutes", Value: 1}, {Key: "timesOrdered", Value: 1}, {Key: "lastOrderedWeek", Value: 1},
-			{Key: "isAddon", Value: 1}, {Key: "tags", Value: 1},
+			{Key: "isAddon", Value: 1}, {Key: "tags", Value: 1}, {Key: "nutritionPerServing", Value: 1},
 		})
 	cur, err := s.recipes.Find(ctx, filter, opts)
 	if err != nil {
@@ -662,10 +663,49 @@ func (s *MongoStore) ListRecipes(ctx context.Context, householdID string, f List
 	}
 	out := make([]RecipeSummary, 0, len(docs))
 	for _, d := range docs {
-		out = append(out, RecipeSummary{
+		s := RecipeSummary{
 			ID: d.ID.Hex(), Name: d.Name, Headline: d.Headline, ImageURL: d.ImageURL, PrepMinutes: d.PrepMinutes, TotalMinutes: d.TotalMinutes,
 			TimesOrdered: d.TimesOrdered, LastOrderedWeek: d.LastOrderedWeek, IsAddon: d.IsAddon, Tags: nilIfEmpty(d.Tags),
-		})
+		}
+		for _, n := range d.Nutrition {
+			s.Nutrition = append(s.Nutrition, Nutrient(n))
+		}
+		out = append(out, s)
+	}
+	return out, nil
+}
+
+// ListMenuCatalog implements Store with one query whose projection keeps
+// what menu cards and recipe attributes read.
+func (s *MongoStore) ListMenuCatalog(ctx context.Context, householdID string, limit int) ([]Recipe, error) {
+	hid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return nil, nil
+	}
+	fields := []string{
+		"householdId", "name", "headline", "imageUrl", "isAddon", "servings", "prepMinutes", "totalMinutes", "difficulty",
+		"cuisines", "tags", "utensils", "allergens", "nutritionPerServing", "ingredients.name", "orderWeeks", "timesOrdered", "lastOrderedWeek",
+	}
+	projection := make(bson.D, 0, len(fields))
+	for _, f := range fields {
+		projection = append(projection, bson.E{Key: f, Value: 1})
+	}
+	opts := options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}).SetLimit(int64(limit)).SetProjection(projection)
+	cur, err := s.recipes.Find(ctx, bson.D{{Key: "householdId", Value: hid}}, opts)
+	if err != nil {
+		return nil, translate(err)
+	}
+	var docs []recipeDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	out := make([]Recipe, 0, len(docs))
+	for _, d := range docs {
+		r := d.toRecipe()
+		for i := range r.Ingredients {
+			r.Ingredients[i].IngredientID = "" // not projected
+		}
+		out = append(out, r)
 	}
 	return out, nil
 }

@@ -60,6 +60,10 @@ tags:
     description: |
       A household's taste profile, weekday rules, equipment, per-week
       context, and Autopilot week proposals (generate, swap, accept, reject).
+  - name: menu
+    description: |
+      The Menu screen: one week's plan and curated sections, the All Meals
+      list with its filter chips, and the week strip (docs/api.md#menu).
       Reading needs `household.view`; changes need `plan.edit`. Proposals are
       separate from plans: accepting one adds its meals to the week's draft
       plan as entries with origin `autopilot` (docs/autopilot.md).
@@ -785,6 +789,198 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "413":
           $ref: "#/components/responses/PayloadTooLarge"
+  /api/v1/households/{householdId}/menu:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      tags: [menu]
+      summary: One week's menu
+      operationId: getMenu
+      description: |
+        The week's plan, its Autopilot proposal, and the curated sections
+        (docs/api.md#menu). Sections come in display order, an empty one is
+        left out, and each holds at most 12 cards. Add-ons appear only in
+        `sides` and the history sections. Nothing is stored: every request
+        reads the catalog once and builds the response in memory.
+      parameters:
+        - name: week
+          in: query
+          description: ISO week. Defaults to the household's current week.
+          schema:
+            type: string
+            example: 2026-W38
+      responses:
+        "200":
+          description: The week's menu.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/menu/recipes:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      tags: [menu]
+      summary: The All Meals list
+      operationId: listMenuRecipes
+      description: |
+        The household's recipes as menu cards, with search, filters, sorting,
+        and cursor paging. `recommended` orders by a deterministic score built
+        from favorite and taste signals; a cursor is the last item's position
+        in the sort, so pages stay in order for the same inputs.
+      parameters:
+        - name: q
+          in: query
+          description: Text the name or headline contains, case-insensitive.
+          schema:
+            type: string
+            maxLength: 100
+        - name: protein
+          in: query
+          description: An Autopilot protein value, from the filters endpoint.
+          schema:
+            type: string
+            example: chicken
+        - name: cuisine
+          in: query
+          description: A canonical cuisine; a region also matches its cuisines.
+          schema:
+            type: string
+            example: asian
+        - name: tag
+          in: query
+          description: A canonical tag.
+          schema:
+            type: string
+        - name: maxMinutes
+          in: query
+          description: Keeps meals with a known cook time at most this long.
+          schema:
+            type: integer
+            minimum: 1
+            example: 30
+        - name: addons
+          in: query
+          description: List add-ons instead of main meals.
+          schema:
+            type: boolean
+            default: false
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [recommended, popular, recent, quick, name]
+            default: recommended
+        - name: week
+          in: query
+          description: The week `inPlan` and `planEntryIds` refer to.
+          schema:
+            type: string
+            example: 2026-W38
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          description: The previous page's `nextCursor`. Send it with the same sort.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of cards.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuRecipesResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/menu/filters:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      tags: [menu]
+      summary: Filter chips for the All Meals list
+      operationId: getMenuFilters
+      description: |
+        Chip options with counts over the household's main meals, from the
+        same Autopilot vocabulary the preference screens use, so a chip's
+        count is how many recipes the matching filter returns. Options the
+        catalog doesn't use are left out.
+      responses:
+        "200":
+          description: The chips.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuFiltersResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/weeks:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      tags: [menu]
+      summary: The week strip
+      operationId: listMenuWeeks
+      description: |
+        Past, current, and upcoming weeks with what the household planned,
+        cooked, and ordered in each, oldest first.
+      parameters:
+        - name: around
+          in: query
+          description: The week the range centers on. Defaults to the current week.
+          schema:
+            type: string
+            example: 2026-W38
+        - name: before
+          in: query
+          description: Weeks before `around`, clamped to 52.
+          schema:
+            type: integer
+            default: 8
+        - name: after
+          in: query
+          description: Weeks after `around`, clamped to 52.
+          schema:
+            type: integer
+            default: 4
+      responses:
+        "200":
+          description: The strip.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeksResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/plans:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -3028,7 +3224,7 @@ components:
   schemas:
     RecipeSummary:
       type: object
-      required: [id, name, timesOrdered, isAddon, tags, householdRating, myRating]
+      required: [id, name, timesOrdered, isAddon, tags, calories, proteinGrams, timeBand, householdRating, myRating]
       properties:
         id:
           type: string
@@ -3062,6 +3258,18 @@ components:
           type: array
           items:
             type: string
+        calories:
+          type: [integer, "null"]
+          description: |
+            Kilocalories per serving, read from the recipe's nutrition list.
+            Null when the source didn't report energy.
+          example: 690
+        proteinGrams:
+          type: [integer, "null"]
+          description: Grams of protein per serving, or null.
+          example: 36
+        timeBand:
+          $ref: "#/components/schemas/TimeBand"
         householdRating:
           $ref: "#/components/schemas/HouseholdRating"
         myRating:
@@ -3080,6 +3288,234 @@ components:
         nextCursor:
           type: string
           description: Present when another page exists.
+    TimeBand:
+      type: [string, "null"]
+      enum: [quick, medium, long, null]
+      description: |
+        The band a recipe's `cookMinutes` falls in under the household's
+        Autopilot cook-time limits (20 and 35 minutes by default). Null when
+        the cook time is unknown.
+    MenuResponse:
+      type: object
+      required: [week, weekStart, weekEnd, currentWeek, timing, plan, proposal, sections]
+      properties:
+        week:
+          type: string
+          example: 2026-W38
+        weekStart:
+          type: string
+          description: The week's Monday, YYYY-MM-DD.
+          example: 2026-09-14
+        weekEnd:
+          type: string
+          description: The week's Sunday, YYYY-MM-DD.
+          example: 2026-09-20
+        currentWeek:
+          type: string
+          description: The household's current week, which `timing` compares to.
+          example: 2026-W38
+        timing:
+          type: string
+          enum: [past, current, upcoming]
+        plan:
+          description: The week's plan, or null when nothing is stored for it.
+          oneOf:
+            - $ref: "#/components/schemas/Plan"
+            - type: "null"
+        proposal:
+          description: A summary of the week's Autopilot proposal, or null.
+          oneOf:
+            - $ref: "#/components/schemas/MenuProposalSummary"
+            - type: "null"
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuSection"
+    MenuProposalSummary:
+      type: object
+      required: [id, status, version, plannedMeals]
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [proposed, accepted, rejected]
+        version:
+          type: integer
+          format: int64
+        plannedMeals:
+          type: integer
+    MenuSection:
+      type: object
+      required: [id, kind, title, subtitle, items, moreQuery]
+      properties:
+        id:
+          type: string
+          description: |
+            `favorites`, `quick`, `new_to_you`, `long_cooks`, `sides`,
+            `history_planned`, `history_ordered`, or `rule_<day>` for a
+            weekday rule (`rule_sun`, and `rule_sun_2` for a second rule on
+            one day). Treat it as opaque: new IDs can appear.
+          example: favorites
+        kind:
+          type: string
+          enum: [carousel, history]
+        title:
+          type: string
+          example: Your Favorites
+        subtitle:
+          type: string
+          example: Based on what you rate and reorder
+        items:
+          type: array
+          maxItems: 12
+          items:
+            $ref: "#/components/schemas/MenuCard"
+        moreQuery:
+          description: |
+            Query parameters for GET .../menu/recipes that list more of the
+            same, or null. Every value is a string.
+          oneOf:
+            - type: object
+              additionalProperties:
+                type: string
+              example: { "sort": "popular" }
+            - type: "null"
+    MenuCard:
+      type: object
+      required: [recipe, badges, reason, inPlan, planEntryIds]
+      properties:
+        recipe:
+          $ref: "#/components/schemas/RecipeSummary"
+        badges:
+          type: array
+          maxItems: 2
+          items:
+            $ref: "#/components/schemas/MenuBadge"
+        reason:
+          type: [string, "null"]
+          description: A short explanation, or null.
+          example: Ordered 21 times
+        inPlan:
+          type: boolean
+          description: The shown week's plan has this recipe.
+        planEntryIds:
+          type: array
+          description: The shown week's plan entries for this recipe.
+          items:
+            type: string
+    MenuBadge:
+      type: object
+      required: [code, text]
+      properties:
+        code:
+          type: string
+          enum: [quick, make_again, kid_favorite, new, top_rated, autopilot_pick, smoker_friendly, often_ordered]
+        text:
+          type: string
+          example: Make Again
+    MenuRecipesResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuCard"
+        nextCursor:
+          type: [string, "null"]
+          description: Null on the last page. Send it back with the same sort.
+    MenuFiltersResponse:
+      type: object
+      required: [proteins, cuisines, tags, maxMinutes, sorts]
+      properties:
+        proteins:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuFilterOption"
+        cuisines:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuFilterOption"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/MenuFilterOption"
+        maxMinutes:
+          type: array
+          description: Cook-time chips, in minutes.
+          items:
+            type: integer
+          example: [15, 20, 30, 45]
+        sorts:
+          type: array
+          items:
+            type: object
+            required: [value, label]
+            properties:
+              value:
+                type: string
+                enum: [recommended, popular, recent, quick, name]
+              label:
+                type: string
+    MenuFilterOption:
+      type: object
+      required: [value, label, count]
+      properties:
+        value:
+          type: string
+          description: Send this back as the filter's value.
+          example: chicken
+        label:
+          type: string
+          example: Chicken
+        count:
+          type: integer
+          description: Main meals the chip matches.
+    WeeksResponse:
+      type: object
+      required: [items, earliestWeek]
+      properties:
+        items:
+          type: array
+          description: Weeks, oldest first.
+          items:
+            $ref: "#/components/schemas/WeekSummary"
+        earliestWeek:
+          type: [string, "null"]
+          description: |
+            The earliest week with a planned entry or an ordered main meal,
+            so the app knows how far back "Past" goes. Null without history.
+          example: 2023-W05
+    WeekSummary:
+      type: object
+      required: [week, weekStart, weekEnd, timing, plannedCount, cookedCount, orderedCount, status]
+      properties:
+        week:
+          type: string
+          example: 2026-W30
+        weekStart:
+          type: string
+          example: 2026-07-20
+        weekEnd:
+          type: string
+          example: 2026-07-26
+        timing:
+          type: string
+          enum: [past, current, upcoming]
+        plannedCount:
+          type: integer
+          description: Plan entries that week.
+        cookedCount:
+          type: integer
+          description: Distinct recipe.cooked events that week.
+        orderedCount:
+          type: integer
+          description: Main meals delivered that week; add-ons are excluded.
+        status:
+          type: string
+          enum: [draft, finalized, none]
+          description: none when no plan is stored for the week.
     Recipe:
       type: object
       required: [id, householdId, source, sourceRecipeId, sourceAliases, name, isAddon, servings, cuisines, tags, utensils, allergens, nutritionPerServing, ingredients, steps, orderWeeks, timesOrdered, createdAt, updatedAt, householdRating, myRating]
@@ -3126,8 +3562,19 @@ components:
             Effective cook time: the larger of `prepMinutes` and
             `totalMinutes` (sources report them inconsistently). Omitted when
             neither is known. Use it for display and time filters.
+        timeBand:
+          $ref: "#/components/schemas/TimeBand"
+        calories:
+          type: [integer, "null"]
+          description: Kilocalories per serving, or null.
+          example: 690
+        proteinGrams:
+          type: [integer, "null"]
+          description: Grams of protein per serving, or null.
+          example: 36
         difficulty:
           type: integer
+          description: The source's difficulty scale, when it gave one.
         cuisines:
           type: array
           items:
@@ -3208,6 +3655,12 @@ components:
         category:
           type: string
           enum: [produce, meat-seafood, dairy-eggs, bakery, deli, pantry, spices, condiments, frozen, beverages, other]
+        imageUrl:
+          type: string
+          description: |
+            The catalog ingredient's image, when it has one. Ingredient lines
+            carry no allergens of their own: the import format reports
+            allergens per recipe.
         pantryStaple:
           type: boolean
           description: Source hint that the ingredient is usually at home.

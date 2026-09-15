@@ -93,6 +93,15 @@ Implemented in Phase 4 (`internal/recipes`; categories and units from `internal/
 
 `cookMinutes` in API responses is computed as max(`prepMinutes`,
 `totalMinutes`) and isn't stored ([architecture.md](architecture.md#decision-log), #127).
+`calories`, `proteinGrams`, and `timeBand` are derived on read too: the first
+two from `nutritionPerServing` (names and units matched case-insensitively,
+kilojoules converted), the band from the household's Autopilot cook-time
+limits (#259).
+
+The [Menu](api.md#menu) reads the whole catalog per request through a
+projection that keeps ingredient names but drops amounts, steps, and
+descriptions. It stores nothing and needs no collection or index of its own
+(#251); the recipe list's projection also reads `nutritionPerServing`.
 
 A recipe's ingredient lines and steps are small and bounded, so they are
 embedded. Embedded ingredient lines *reference* catalog `ingredients` by ID; the

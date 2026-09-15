@@ -23,6 +23,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/httpapi"
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/menu"
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
@@ -169,16 +170,6 @@ func run() error {
 	})
 	pantryService.SetKeyResolver(substitutesService)
 	behavior := newBehavior(db, recipeService, userService, householdService, tokens, logger, pantryService.CookedListener())
-	recipeHandler := recipes.NewHandler(recipes.HandlerOptions{
-		Service:        recipeService,
-		Ratings:        behavior.ratings,
-		Events:         behavior.events,
-		Authorizer:     householdService,
-		Tokens:         tokens,
-		Logger:         logger,
-		ImportMaxBytes: cfg.RecipeImportMaxBytes,
-		ImportTimeout:  recipeImportTimeout,
-	})
 	planService := planning.NewService(planning.NewMongoStore(db.Database()), recipeService).
 		WithPantry(pantryService).WithSpecialties(substitutesService).WithEvents(behavior.events, logger)
 	planHandler := planning.NewHandler(planning.HandlerOptions{
@@ -221,6 +212,33 @@ func run() error {
 	pantryService.SetCookAdjuster(customizeService)
 	customizeHandler := customize.NewHandler(customize.HandlerOptions{
 		Service:    customizeService,
+		Authorizer: householdService,
+		Tokens:     tokens,
+		Logger:     logger,
+	})
+	// Recipe summaries label cook times with the household's Autopilot bands.
+	recipeHandler := recipes.NewHandler(recipes.HandlerOptions{
+		Service:        recipeService,
+		Ratings:        behavior.ratings,
+		Events:         behavior.events,
+		TimeBands:      autopilotService,
+		Authorizer:     householdService,
+		Tokens:         tokens,
+		Logger:         logger,
+		ImportMaxBytes: cfg.RecipeImportMaxBytes,
+		ImportTimeout:  recipeImportTimeout,
+	})
+	// The menu composes recipes, ratings, plans, Autopilot preferences, and
+	// cooked events into the Menu screen. It stores nothing.
+	menuHandler := menu.NewHandler(menu.HandlerOptions{
+		Service: menu.NewService(menu.Options{
+			Recipes:    recipeService,
+			Ratings:    behavior.ratings,
+			Plans:      planService,
+			Autopilot:  autopilotService,
+			Events:     behavior.events,
+			Households: householdService,
+		}),
 		Authorizer: householdService,
 		Tokens:     tokens,
 		Logger:     logger,
@@ -287,6 +305,7 @@ func run() error {
 				planHandler.Mount(r)
 				customizeHandler.Mount(r)
 				autopilotHandler.Mount(r)
+				menuHandler.Mount(r)
 				pantryHandler.Mount(r)
 				specialtyHandler.Mount(r)
 				shoppingHandler.Mount(r)

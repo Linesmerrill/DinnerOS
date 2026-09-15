@@ -229,6 +229,7 @@ func (m *memoryStore) ListRecipes(_ context.Context, householdID string, f ListF
 		s := RecipeSummary{
 			ID: r.ID, Name: r.Name, Headline: r.Headline, ImageURL: r.ImageURL, PrepMinutes: r.PrepMinutes, TotalMinutes: r.TotalMinutes,
 			TimesOrdered: r.TimesOrdered, LastOrderedWeek: r.LastOrderedWeek, IsAddon: r.IsAddon, Tags: slices.Clone(r.Tags),
+			Nutrition: slices.Clone(r.Nutrition),
 		}
 		if f.After != nil && compareListOrder(f.Sort, positionOf(s), *f.After) <= 0 {
 			continue
@@ -250,6 +251,27 @@ func (m *memoryStore) ListCatalog(_ context.Context, householdID string, limit i
 		if r.HouseholdID == householdID {
 			r = cloneRecipe(r)
 			r.Steps, r.Nutrition, r.Description = nil, nil, ""
+			out = append(out, r)
+		}
+	}
+	slices.SortFunc(out, func(a, b Recipe) int { return cmp.Compare(a.ID, b.ID) })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (m *memoryStore) ListMenuCatalog(_ context.Context, householdID string, limit int) ([]Recipe, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []Recipe
+	for _, r := range m.recipes {
+		if r.HouseholdID == householdID {
+			r = cloneRecipe(r)
+			r.Steps, r.Description, r.Source, r.SourceRecipeID, r.SourceAliases, r.SourceURL = nil, "", "", "", nil, ""
+			for i := range r.Ingredients {
+				r.Ingredients[i] = RecipeIngredient{Name: r.Ingredients[i].Name}
+			}
 			out = append(out, r)
 		}
 	}
