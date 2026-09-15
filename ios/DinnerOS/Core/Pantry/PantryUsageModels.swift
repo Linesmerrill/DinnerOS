@@ -159,6 +159,8 @@ nonisolated struct PantryPurchase: Decodable, Hashable, Sendable, Identifiable {
     let clientPurchaseID: String?
     let recordedBy: String
     let purchasedAt: Date
+    /// The shopping handoff line a `provider` purchase was confirmed from; `nil` otherwise.
+    let provider: PantryPurchaseProvider?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -166,7 +168,22 @@ nonisolated struct PantryPurchase: Decodable, Hashable, Sendable, Identifiable {
         case itemID = "itemId"
         case source, quantity, quantityValue, unit, unitSize, week
         case clientPurchaseID = "clientPurchaseId"
-        case recordedBy, purchasedAt
+        case recordedBy, purchasedAt, provider
+    }
+}
+
+/// Where a `provider` purchase came from (`PantryPurchaseProvider`).
+nonisolated struct PantryPurchaseProvider: Decodable, Hashable, Sendable {
+    let key: String
+    let handoffID: String
+    let lineID: String
+    let productID: String
+
+    private enum CodingKeys: String, CodingKey {
+        case key
+        case handoffID = "handoffId"
+        case lineID = "lineId"
+        case productID = "productId"
     }
 }
 

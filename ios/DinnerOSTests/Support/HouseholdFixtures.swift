@@ -7,10 +7,11 @@ import Synchronization
 nonisolated enum HouseholdFixtures {
     static let adminPermissions = [
         "household.view", "household.update", "members.view", "members.invite", "members.remove",
-        "members.changeRole", "plan.edit", "pantry.edit", "recipes.edit", "recipes.import",
+        "members.changeRole", "plan.edit", "pantry.edit", "recipes.edit", "recipes.import", "shopping.edit",
     ]
     static let memberPermissions = [
         "household.view", "members.view", "plan.edit", "pantry.edit", "recipes.edit", "recipes.import",
+        "shopping.edit",
     ]
 
     static func permissions(for role: String) -> String {
