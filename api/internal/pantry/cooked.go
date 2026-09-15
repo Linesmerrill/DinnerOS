@@ -233,6 +233,8 @@ func (s *Service) matchNeeds(ctx context.Context, m CookedMeal, needs []recipeNe
 		}
 	}
 
+	resolved := s.resolveNeedKeys(ctx, m.HouseholdID, needs, catalogKeys)
+
 	var lines []CookLine
 	for _, n := range needs {
 		item, ok := byIngredientID[n.ingredientID]
@@ -241,6 +243,13 @@ func (s *Service) matchNeeds(ctx context.Context, m CookedMeal, needs []recipeNe
 		}
 		if !ok {
 			item, ok = byKey[ingredients.NormalizeName(n.name)]
+		}
+		r, hasResolved := resolved[catalogKeys[n.ingredientID]]
+		if !hasResolved {
+			r, hasResolved = resolved[ingredients.NormalizeName(n.name)]
+		}
+		if !ok && hasResolved {
+			item, ok = byKey[r.Key]
 		}
 		if !ok {
 			continue
@@ -261,6 +270,9 @@ func (s *Service) matchNeeds(ctx context.Context, m CookedMeal, needs []recipeNe
 			line.SkipReason = SkipNoAmount
 		default:
 			converted, ok := convertAmount(n.quantity, n.unit, t.Unit, item.UnitSize)
+			for i := 0; !ok && hasResolved && i < len(r.UnitSizes); i++ {
+				converted, ok = convertAmount(n.quantity, n.unit, t.Unit, &r.UnitSizes[i])
+			}
 			if !ok {
 				line.SkipReason = SkipUnitMismatch
 				break
