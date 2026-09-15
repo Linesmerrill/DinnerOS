@@ -439,8 +439,8 @@ fields, and the list has `batches`:
         {
           "ingredientKey": "66e5a1f2c3b4a5d6e7f80a20",
           "name": "Tomato Paste",
-          "amounts": [{ "quantity": "7/3", "quantityValue": 2.3333333333333335, "unit": "tbsp", "text": "2.3333333333333335 tbsp" }],
-          "quantityText": "2.3333333333333335 tbsp",
+          "amounts": [{ "quantity": "7/3", "quantityValue": 2.3333333333333335, "unit": "tbsp", "text": "2 ⅓ tbsp" }],
+          "quantityText": "2 ⅓ tbsp",
           "unquantified": false,
           "status": "toBuy",
           "recipes": [{ "id": "…15", "name": "Chili Bowls" }, { "id": "…16", "name": "Smoky Pork Tacos" }],
