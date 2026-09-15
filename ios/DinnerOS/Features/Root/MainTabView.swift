@@ -18,6 +18,10 @@ struct MainTabView: View {
                         // Another household starts at its own list, not at a recipe
                         // (or search) from the previous one.
                         .id(households.current?.household.id)
+                    case .pantry:
+                        NavigationStack {
+                            PantryView()
+                        }
                     case .household:
                         NavigationStack {
                             HouseholdView()
