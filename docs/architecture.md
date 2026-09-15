@@ -175,7 +175,18 @@ ios/DinnerOS/
   all end in `AuthSession.signIn`. See
   [authentication.md](authentication.md#ios-client).
 - **Root flow:** `RootView` shows `restoring` (splash), then `SignInView`, the
-  tab shell, or the configuration error, based on `AuthSession.state`.
+  signed-in root, or the configuration error, based on `AuthSession.state`.
+  `SignedInRootView` shows household onboarding until the user belongs to a
+  household, then the tab shell.
+- **Households (`Core/Households`):** `HouseholdsAPI` wraps the household and
+  invitation endpoints. `HouseholdStore` (`@Observable`, main actor) loads the
+  user's households after every sign-in, remembers the selected household per
+  user in `UserDefaults`, and reloads from the server after each change.
+  `HouseholdAccess` turns the response's `permissions` into which actions the UI
+  shows. The API still authorizes every request. Invitation links
+  (`dinneros://invite?token=...`) arrive through `onOpenURL`. The app asks before
+  joining, and holds a link opened while signed out in memory until sign-in.
+  Tokens and invite codes are never logged.
 - **Navigation:** a tab shell (Week, Recipes, Shop, Household) with
   `NavigationStack` per tab, native sheets, and forms.
 - **Quality bar:** Dynamic Type, VoiceOver labels, dark mode, and explicit
@@ -233,3 +244,8 @@ a versioned Autopilot API. See [autopilot.md](autopilot.md).
 | 32 | One pending invitation per household and email, enforced by a partial unique index on a `pending` flag | Re-inviting revokes the previous invitation. The index makes that hold under concurrency and also serves the pending list. |
 | 33 | Email failures don't fail invitation creation (`emailDelivered: false`) | The admin already has the code, so a Resend outage shouldn't block inviting. |
 | 34 | `EMAIL_PROVIDER=log` for development; production requires Resend. `time/tzdata` is embedded | Local development and tests never send email or need a key. The Alpine runtime image has no zoneinfo, so `time.LoadLocation` would reject every time zone without the embedded data. |
+| 35 | The iOS app hides household actions using the `permissions` in responses, plus a copy of the role table (`HouseholdAccess`) to decide which roles a user may grant | Responses list the caller's permissions but not other roles', and `Covers` needs both. The copy only picks what the UI offers: if it drifts from the server, the worst case is a hidden action or a `403`, never extra access. Roles the app doesn't know get no actions. |
+| 36 | The selected household ID is stored in `UserDefaults`, keyed by user ID | It isn't a secret, so the Keychain isn't needed. Keying by user means another account on the same device starts fresh. A stale ID falls back to the first household. |
+| 37 | Invitation links use a custom URL scheme (`APP_URL_SCHEME`, default `dinneros`) registered through `Info.plist`, not universal links | It matches the API's default `APP_INVITE_URL_BASE` and works without a hosted domain or associated-domains entitlement. The scheme is configuration, so universal links can replace it later. |
+| 38 | Opening an invitation link asks before joining. A link opened while signed out waits in memory, not on disk, until sign-in | Joining shares your name with the household and switches your selected household, so a link from a stranger must not do that silently. The token is a secret, so it isn't persisted; if the app quits before sign-in, tap the link again. |
+| 39 | `HouseholdStore` reloads from the server after every change, and after a `403`/`404`/`409`, instead of patching local state | The requests are few and small. The screen always matches the server, including after concurrent changes by other members. |
