@@ -449,6 +449,19 @@ func (s *Service) fillCategories(ctx context.Context, list []Recipe) error {
 	return nil
 }
 
+// ExistingRecipeIDs returns those of ids that are the household's recipes, in
+// any order. Other modules (ratings, events) use it to check recipe
+// references without reading whole recipes.
+func (s *Service) ExistingRecipeIDs(ctx context.Context, householdID string, ids []string) ([]string, error) {
+	if householdID == "" {
+		return nil, errHouseholdRequired
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	return s.store.ExistingRecipeIDs(ctx, householdID, ids)
+}
+
 // --- small helpers ------------------------------------------------------------
 
 // uniqueStrings trims values and drops empties, exclude, and duplicates,
