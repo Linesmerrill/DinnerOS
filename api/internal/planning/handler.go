@@ -190,6 +190,13 @@ func timePtr(t time.Time) *time.Time {
 	return &t
 }
 
+// NewPlanResponse returns the wire form of a plan, for other modules that
+// return plans (accepting an Autopilot proposal).
+func NewPlanResponse(p Plan) PlanResponse { return newPlanResponse(p) }
+
+// NewEntryResponse returns the wire form of an entry in week w.
+func NewEntryResponse(w Week, e Entry) EntryResponse { return newEntryResponse(w, e) }
+
 func newPlanResponse(p Plan) PlanResponse {
 	resp := PlanResponse{
 		HouseholdID: p.HouseholdID, Week: p.Week.String(),

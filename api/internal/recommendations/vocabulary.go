@@ -1,0 +1,208 @@
+package recommendations
+
+import (
+	"cmp"
+	"slices"
+	"strings"
+
+	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
+)
+
+// Option is a choice the app can offer.
+type Option struct {
+	Value string
+	Label string
+	// Description explains the option, when useful.
+	Description string
+	// RecipeCount is how many of the household's main-meal recipes carry
+	// the value; 0 for starter values the catalog doesn't use yet.
+	RecipeCount int
+}
+
+// Vocabulary is everything the onboarding and preference screens offer.
+type Vocabulary struct {
+	Cuisines    []Option
+	Tags        []Option
+	Proteins    []Option
+	Diets       []Option
+	Allergens   []Option
+	Equipment   []Option
+	Novelty     []Option
+	TimeBands   []Option
+	Frequencies []Option
+	Days        []Option
+	// CatalogRecipes is how many main-meal recipes the counts cover.
+	CatalogRecipes int
+}
+
+// MaxVocabularyOptions bounds the cuisine and tag lists.
+const MaxVocabularyOptions = 60
+
+// Fixed choice lists. Diets, allergens, proteins, and equipment are closed:
+// the attribute heuristics recognize exactly these values.
+var (
+	DietOptions = []Option{
+		{Value: "vegetarian", Label: "Vegetarian", Description: "No meat or fish"},
+		{Value: "pescatarian", Label: "Pescatarian", Description: "Fish, but no other meat"},
+		{Value: "vegan", Label: "Vegan", Description: "No animal products"},
+		{Value: "gluten-free", Label: "Gluten-free"},
+		{Value: "dairy-free", Label: "Dairy-free"},
+	}
+	AllergenOptions = []Option{
+		{Value: "milk", Label: "Milk"}, {Value: "eggs", Label: "Eggs"}, {Value: "fish", Label: "Fish"},
+		{Value: "shellfish", Label: "Shellfish"}, {Value: "tree-nuts", Label: "Tree nuts"}, {Value: "peanuts", Label: "Peanuts"},
+		{Value: "wheat", Label: "Wheat"}, {Value: "soy", Label: "Soy"}, {Value: "sesame", Label: "Sesame"},
+	}
+	ProteinOptions = []Option{
+		{Value: "chicken", Label: "Chicken"}, {Value: "beef", Label: "Beef"}, {Value: "pork", Label: "Pork"},
+		{Value: "turkey", Label: "Turkey"}, {Value: "lamb", Label: "Lamb"}, {Value: "duck", Label: "Duck"},
+		{Value: "fish", Label: "Fish"}, {Value: "shellfish", Label: "Shellfish"}, {Value: "tofu", Label: "Tofu & tempeh"},
+		{Value: "legumes", Label: "Beans & lentils"}, {Value: "eggs", Label: "Eggs"},
+	}
+	EquipmentOptions = []Option{
+		{Value: "smoker", Label: "Smoker", Description: "Whole or large cuts of chicken, pork, beef, or turkey"},
+		{Value: "grill", Label: "Grill"},
+		{Value: "air-fryer", Label: "Air fryer"},
+		{Value: "slow-cooker", Label: "Slow cooker"},
+		{Value: "pressure-cooker", Label: "Instant Pot or pressure cooker"},
+	}
+	NoveltyOptions = []Option{
+		{Value: "favorites", Label: "Mostly favorites", Description: "Stick to meals we know we like"},
+		{Value: "balanced", Label: "A mix", Description: "Favorites with something new now and then"},
+		{Value: "adventurous", Label: "Try new things", Description: "Lean toward meals we haven't had"},
+	}
+	TimeBandOptions = []Option{
+		{Value: "quick", Label: "Quick", Description: "Up to the quick limit (20 min by default)"},
+		{Value: "medium", Label: "Medium", Description: "Up to the medium limit (35 min by default)"},
+		{Value: "long", Label: "Long cook OK", Description: "Longer than the medium limit"},
+	}
+	FrequencyOptions = []Option{
+		{Value: "every_week", Label: "Every week"},
+		{Value: "at_most_once", Label: "At most once a week"},
+	}
+	DayOptions = []Option{
+		{Value: "mon", Label: "Monday"}, {Value: "tue", Label: "Tuesday"}, {Value: "wed", Label: "Wednesday"},
+		{Value: "thu", Label: "Thursday"}, {Value: "fri", Label: "Friday"}, {Value: "sat", Label: "Saturday"},
+		{Value: "sun", Label: "Sunday"},
+	}
+
+	// Starter cuisines and tags are offered before the catalog has any.
+	starterCuisines = []string{
+		"American", "Chinese", "French", "Greek", "Indian", "Italian", "Japanese", "Korean",
+		"Mediterranean", "Mexican", "Middle Eastern", "Spanish", "Thai", "Vietnamese",
+	}
+	starterTags = []string{
+		"Comfort Food", "Curry", "Family Friendly", "Healthy", "High Protein", "Low Carb", "One Pot",
+		"Pasta", "Pizza", "Quick", "Rice Bowl", "Salad", "Sandwich", "Sheet Pan", "Soup", "Stir Fry", "Tacos",
+	}
+)
+
+func optionValues(options []Option) []string {
+	out := make([]string, 0, len(options))
+	for _, o := range options {
+		out = append(out, o.Value)
+	}
+	return out
+}
+
+func optionLabel(options []Option, value string) string {
+	for _, o := range options {
+		if o.Value == value {
+			return o.Label
+		}
+	}
+	return value
+}
+
+// buildVocabulary counts cuisines, tags, and proteins across the household's
+// main meals and merges in the starter lists.
+func buildVocabulary(catalog []recipes.Recipe) Vocabulary {
+	v := Vocabulary{
+		Diets: DietOptions, Allergens: AllergenOptions, Equipment: EquipmentOptions, Novelty: NoveltyOptions,
+		TimeBands: TimeBandOptions, Frequencies: FrequencyOptions, Days: DayOptions,
+	}
+	cuisines, tags := newCounter(), newCounter()
+	proteinCounts := map[string]int{}
+	for _, r := range catalog {
+		if r.IsAddon {
+			continue
+		}
+		v.CatalogRecipes++
+		cuisines.addAll(r.Cuisines)
+		tags.addAll(r.Tags)
+		for _, p := range classifyProteins(ingredientTokens(r)) {
+			proteinCounts[p]++
+		}
+	}
+	v.Cuisines = cuisines.options(starterCuisines)
+	v.Tags = tags.options(starterTags)
+	for _, o := range ProteinOptions {
+		o.RecipeCount = proteinCounts[o.Value]
+		v.Proteins = append(v.Proteins, o)
+	}
+	return v
+}
+
+// counter counts normalized values and remembers their most common spelling.
+type counter struct {
+	counts    map[string]int
+	spellings map[string]map[string]int
+}
+
+func newCounter() *counter {
+	return &counter{counts: map[string]int{}, spellings: map[string]map[string]int{}}
+}
+
+func (c *counter) addAll(values []string) {
+	seen := map[string]bool{}
+	for _, raw := range values {
+		label := strings.Join(strings.Fields(raw), " ")
+		value := normalizeValue(label)
+		if value == "" || seen[value] || len(value) > MaxValueLength {
+			continue
+		}
+		seen[value] = true
+		c.counts[value]++
+		if c.spellings[value] == nil {
+			c.spellings[value] = map[string]int{}
+		}
+		c.spellings[value][label]++
+	}
+}
+
+func (c *counter) label(value string) string {
+	best, bestN := "", 0
+	for label, n := range c.spellings[value] {
+		if n > bestN || (n == bestN && label < best) {
+			best, bestN = label, n
+		}
+	}
+	return best
+}
+
+// options returns counted values (most used first), then starters the
+// catalog doesn't use (alphabetically), capped at MaxVocabularyOptions.
+func (c *counter) options(starters []string) []Option {
+	var counted []Option
+	for value, n := range c.counts {
+		counted = append(counted, Option{Value: value, Label: c.label(value), RecipeCount: n})
+	}
+	slices.SortFunc(counted, func(a, b Option) int {
+		if a.RecipeCount != b.RecipeCount {
+			return cmp.Compare(b.RecipeCount, a.RecipeCount)
+		}
+		return cmp.Compare(a.Value, b.Value)
+	})
+	for _, s := range starters {
+		if value := normalizeValue(s); c.counts[value] == 0 {
+			counted = append(counted, Option{Value: value, Label: s})
+		}
+	}
+	return counted[:min(len(counted), MaxVocabularyOptions)]
+}
+
+// normalizeValue is the stored form of a cuisine, tag, or ingredient choice:
+// trimmed, lowercase, single-spaced.
+func normalizeValue(s string) string {
+	return strings.ToLower(strings.Join(strings.Fields(s), " "))
+}
