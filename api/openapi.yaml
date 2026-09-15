@@ -1,0 +1,68 @@
+openapi: 3.1.0
+info:
+  title: DinnerOS API
+  version: 0.1.0
+  description: |
+    Backend for the DinnerOS iOS app. "DinnerOS" is a working name.
+
+    Conventions (see docs/api.md):
+    - All product routes are versioned under `/api/v1`.
+    - JSON bodies use camelCase.
+    - Every non-2xx response uses the `ErrorResponse` envelope.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+paths:
+  /health:
+    get:
+      summary: Liveness check
+      description: Reports that the process is serving HTTP. Does not check dependencies.
+      operationId: getHealth
+      tags: [operations]
+      responses:
+        "200":
+          description: The API process is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service, version]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        service:
+          type: string
+          description: Configured application name (APP_NAME).
+          example: DinnerOS
+        version:
+          type: string
+          description: Deployed build identifier.
+          example: 3f2c1ab
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable error code.
+              example: not_found
+            message:
+              type: string
+              description: Human-readable description. Not stable; do not parse.
+              example: resource not found
+  responses:
+    NotFound:
+      description: The resource does not exist or is not visible to the caller.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

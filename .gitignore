@@ -1,0 +1,72 @@
+# ---------------------------------------------------------------------------
+# Secrets & local configuration — NEVER commit these
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.p8
+*.p12
+*.key
+*.cer
+*.mobileprovision
+*.provisionprofile
+secrets/
+fastlane/*.json
+ios/fastlane/*.json
+
+# ---------------------------------------------------------------------------
+# Imported personal data (HelloFresh history, sessions, cookies) — NEVER commit
+# ---------------------------------------------------------------------------
+data/
+importers/**/data/
+importers/**/output/
+importers/**/.session/
+importers/**/cookies*
+*.har
+*.cookies
+dump/
+mongobackups/
+
+# ---------------------------------------------------------------------------
+# Go
+# ---------------------------------------------------------------------------
+api/bin/
+*.test
+*.out
+coverage.*
+go.work
+go.work.sum
+
+# ---------------------------------------------------------------------------
+# Xcode / Swift
+# ---------------------------------------------------------------------------
+build/
+DerivedData/
+*.xcresult
+xcuserdata/
+ios/Config/Local.xcconfig
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+.swiftpm/
+.build/
+ios/fastlane/report.xml
+ios/fastlane/Preview.html
+ios/fastlane/screenshots/
+ios/fastlane/test_output/
+ios/fastlane/README.md
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# ---------------------------------------------------------------------------
+# Tooling / OS
+# ---------------------------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
+*.swp
+node_modules/
+vendor/bundle/
+.bundle/

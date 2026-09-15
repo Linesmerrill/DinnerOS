@@ -1,0 +1,3 @@
+# Values come from the environment so no account identifiers are committed.
+app_identifier(ENV.fetch("APP_BUNDLE_ID", "com.linesmerrill.dinneros"))
+team_id(ENV["DEVELOPMENT_TEAM"]) unless ENV["DEVELOPMENT_TEAM"].to_s.empty?

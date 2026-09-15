@@ -1,0 +1,18 @@
+#include "Shared.xcconfig"
+
+APP_ENVIRONMENT = development
+// `/$()/` keeps xcconfig from treating `//` as a comment.
+API_BASE_URL = http:/$()/localhost:8080
+
+DEBUG_INFORMATION_FORMAT = dwarf
+ENABLE_TESTABILITY = YES
+GCC_OPTIMIZATION_LEVEL = 0
+GCC_PREPROCESSOR_DEFINITIONS = DEBUG=1 $(inherited)
+MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE
+ONLY_ACTIVE_ARCH = YES
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG $(inherited)
+SWIFT_OPTIMIZATION_LEVEL = -Onone
+
+// Optional, git-ignored per-developer overrides (DEVELOPMENT_TEAM, or an
+// API_BASE_URL pointing at your Mac's LAN IP for on-device testing).
+#include? "Local.xcconfig"

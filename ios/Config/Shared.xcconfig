@@ -1,0 +1,31 @@
+// Settings shared by every configuration and target.
+//
+// Product identity lives here so the working name "DinnerOS" can change in one
+// place. Changing APP_DISPLAY_NAME only affects the home-screen name. Changing
+// the bundle identifier creates a *different* App Store Connect app, so only do
+// that deliberately.
+
+APP_DISPLAY_NAME = DinnerOS
+APP_BUNDLE_ID_BASE = com.linesmerrill.dinneros
+
+MARKETING_VERSION = 0.1.0
+// CI overrides this with the TestFlight build number.
+CURRENT_PROJECT_VERSION = 1
+
+// Apple Developer Team ID. Leave empty in the repository; set it in
+// Local.xcconfig for on-device builds, and via the DEVELOPMENT_TEAM secret in CI.
+DEVELOPMENT_TEAM =
+
+SDKROOT = iphoneos
+IPHONEOS_DEPLOYMENT_TARGET = 18.0
+SWIFT_VERSION = 6.0
+
+ALWAYS_SEARCH_USER_PATHS = NO
+ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES
+CLANG_ENABLE_MODULES = YES
+CLANG_ENABLE_OBJC_ARC = YES
+ENABLE_STRICT_OBJC_MSGSEND = YES
+ENABLE_USER_SCRIPT_SANDBOXING = YES
+GCC_NO_COMMON_BLOCKS = YES
+LOCALIZATION_PREFERS_STRING_CATALOGS = YES
+STRING_CATALOG_GENERATE_SYMBOLS = YES

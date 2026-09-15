@@ -1,0 +1,12 @@
+#include "Shared.xcconfig"
+
+APP_ENVIRONMENT = production
+// Set once the production API exists (docs/deployment.md). CI may override via
+// the API_BASE_URL build setting. Production builds require https.
+API_BASE_URL =
+
+DEBUG_INFORMATION_FORMAT = dwarf-with-dsym
+ENABLE_NS_ASSERTIONS = NO
+MTL_ENABLE_DEBUG_INFO = NO
+SWIFT_COMPILATION_MODE = wholemodule
+VALIDATE_PRODUCT = YES
