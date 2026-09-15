@@ -99,7 +99,14 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | DELETE | `/api/v1/households/{householdId}/plans/{week}/entries/{entryId}` → `204` | `plan.edit` | 6 | ✅ |
 | PUT | `/api/v1/households/{householdId}/plans/{week}/status` `{status}` → plan | `plan.edit` | 6 | ✅ |
 | GET | `/api/v1/households/{householdId}/plans/{week}/grocery` → `{week, status, pantryApplied, categories, skipped}` | `household.view` | 6 | ✅ |
-| … | pantry, saved grocery lists, providers, events | | 7–9 | planned |
+| GET | `/api/v1/ingredients` `?q&limit` → `{items: [{id, key, name, category, categoryConfident, imageUrl?}]}` | bearer | 7 | ✅ |
+| GET | `/api/v1/households/{householdId}/pantry` `?status&category&staple&q` → `{items}` | `household.view` | 7 | ✅ |
+| POST | `/api/v1/households/{householdId}/pantry` `{ingredientId? or name, category?, quantity?, unit?, status?, isStaple?, expiresOn?, note?}` → `201` item, or `200` when merged | `pantry.edit` | 7 | ✅ |
+| PATCH | `/api/v1/households/{householdId}/pantry/{itemId}` `{displayName?, category?, quantity?, unit?, status?, isStaple?, expiresOn?, note?}` → item | `pantry.edit` | 7 | ✅ |
+| DELETE | `/api/v1/households/{householdId}/pantry/{itemId}` → `204` | `pantry.edit` | 7 | ✅ |
+| POST | `/api/v1/households/{householdId}/pantry/bulk` `{items: [{id, status}]}` → `{items, missing}` | `pantry.edit` | 7 | ✅ |
+| POST | `/api/v1/households/{householdId}/pantry/staples/defaults` → `{items, skipped}` | `pantry.edit` | 7 | ✅ |
+| … | saved grocery lists, providers, events | | 7–9 | planned |
 
 Household-scoped routes return `404 not_found` to anyone who isn't a member,
 so a household's existence is never revealed, and `403 forbidden` to members
@@ -320,7 +327,7 @@ including other members' changes.
 {
   "week": "2026-W38",
   "status": "draft",
-  "pantryApplied": false,
+  "pantryApplied": true,
   "categories": [
     {
       "category": "produce",
@@ -358,9 +365,13 @@ including other members' changes.
   above. `quantity` is exact, `text` is for display, and `quantityText` joins
   the texts with ` + `. `unquantified: true` means at least one recipe gave no
   amount ("salt to taste").
-- `status` is `toBuy`, or `pantryHint` when every contributing recipe marks
-  the item as a pantry staple. The household pantry doesn't exist yet
-  (`pantryApplied: false`); Phase 7 adds it and the `inPantry` status.
+- `status` comes from the household [pantry](#pantry): `inPantry` when the
+  item is `in_stock`, `toBuy` when it's `out`, and otherwise `pantryHint` when
+  every contributing recipe marks it as a pantry staple, or `toBuy`. Pantry
+  amounts aren't compared with what the recipes need yet.
+- `pantryApplied` is `true` when the pantry decided the statuses. A server
+  running without a pantry returns `false`, and statuses are then only
+  `toBuy` or `pantryHint`.
 - `skipped` lists entries that couldn't contribute: `recipeUnavailable` (the
   recipe is no longer in the household) or `servingsUnavailable` (the recipe
   no longer offers that serving size).
@@ -373,3 +384,145 @@ including other members' changes.
 | 404 | `not_found` | Not a member of the household; no such entry in that week |
 | 409 | `plan_finalized` | The plan is finalized; set its status to `draft` first |
 | 409 | `plan_full` | The week already has 50 entries |
+
+## Pantry
+
+A household's pantry records what it has at home, with one item per
+ingredient. `key` is the normalized name (`"Olive Oil"` → `olive oil`), or the
+catalog ingredient's key when the item references the catalog. A pantry holds
+at most 1000 items, and lists aren't paginated.
+
+### List
+
+`GET /api/v1/households/{householdId}/pantry` (`household.view`)
+
+| Parameter | Meaning |
+| --- | --- |
+| `status` | `in_stock`, `low`, or `out` |
+| `category` | A grocery category (`produce`, …, `other`) |
+| `staple` | `true` for staples only, `false` for the rest |
+| `q` | Text the display name contains (case-insensitive), or that the normalized name contains, so `jalapeno` finds "Jalapeño". Literal text; at most 100 characters. |
+
+Items are in aisle order, then by name.
+
+```json
+{
+  "items": [
+    {
+      "id": "66e5a1f2c3b4a5d6e7f80d01",
+      "householdId": "66e5a1f2c3b4a5d6e7f80913",
+      "ingredientId": "66e5a1f2c3b4a5d6e7f80a14",
+      "key": "olive oil",
+      "displayName": "Olive Oil",
+      "category": "pantry",
+      "quantity": "3/2",
+      "quantityValue": 1.5,
+      "unit": "cup",
+      "status": "in_stock",
+      "isStaple": true,
+      "expiresOn": "2027-03-01",
+      "note": "big tin",
+      "updatedBy": "66e5a1f2c3b4a5d6e7f80912",
+      "createdAt": "2026-09-15T18:30:00Z",
+      "updatedAt": "2026-09-15T18:30:00Z"
+    },
+    {
+      "id": "66e5a1f2c3b4a5d6e7f80d02",
+      "householdId": "66e5a1f2c3b4a5d6e7f80913",
+      "ingredientId": null,
+      "key": "za'atar",
+      "displayName": "Za'atar",
+      "category": "spices",
+      "quantity": null,
+      "quantityValue": null,
+      "unit": null,
+      "status": "low",
+      "isStaple": false,
+      "expiresOn": null,
+      "note": "",
+      "updatedBy": "66e5a1f2c3b4a5d6e7f80912",
+      "createdAt": "2026-09-15T18:31:00Z",
+      "updatedAt": "2026-09-15T18:31:00Z"
+    }
+  ]
+}
+```
+
+- `quantity` is exact; use `quantityValue` only for display. `quantity`,
+  `quantityValue`, and `unit` are `null` together when no amount was recorded
+  ("have some").
+- `ingredientId` is `null` for free text that matched no catalog ingredient.
+
+### Change the pantry
+
+Requires `pantry.edit`.
+
+- `POST .../pantry` adds an ingredient by `ingredientId` (from the
+  [ingredient catalog](#ingredient-catalog)) or by `name`. A name that is a
+  catalog ingredient is linked to it. `category` defaults to the catalog's, or
+  to the category rules, and `status` defaults to `in_stock`. Returns `201`
+  with the new item, or `200` when the pantry already had that ingredient. In
+  that case `status` and every field you sent are applied, fields you left out
+  keep their values, and the display name is kept. Retrying is safe.
+- `PATCH .../pantry/{itemId}` changes the fields you send: `displayName`,
+  `category`, `quantity`, `unit`, `status`, `isStaple`, `expiresOn`, or
+  `note`. Send `null` (or `""`) for `quantity`, `expiresOn`, or `note` to
+  clear it; clearing `quantity` also clears `unit`.
+- `DELETE .../pantry/{itemId}` returns `204`.
+- `POST .../pantry/bulk` `{"items": [{"id": "...", "status": "in_stock"}]}`
+  sets up to 200 statuses at once, for example after shopping. It returns
+  `{items, missing}`: the updated items in request order, and the requested
+  IDs that aren't in the pantry (say, another member deleted them).
+- `POST .../pantry/staples/defaults`, with no body, adds salt, black pepper,
+  cooking oil, olive oil, butter, sugar, flour, garlic powder, and onion
+  powder, in stock and marked `isStaple`. Each links to the catalog ingredient
+  with its name or an alias ("Pepper" for black pepper). Staples the pantry
+  already has, under either name, are left as they are and counted:
+  `{"items": [...added items], "skipped": 2}`. Calling it again adds nothing.
+
+Rules:
+
+- `quantity` is a positive amount such as `2`, `0.5`, `1/2`, `1 1/2`, or `½`,
+  stored reduced (`"3/2"`). It's a string: a JSON number is
+  `400 invalid_request`.
+- `unit` is a DinnerOS unit code (`count`, `clove`, `can`, `tsp`, `tbsp`,
+  `cup`, `ml`, `oz`, `lb`, `g`, …; see
+  [grocery-engine.md](grocery-engine.md#units)). A quantity without a unit is
+  a `count`; a unit without a quantity is invalid.
+- Setting `status` to `out` clears the amount, and an `out` item can't be
+  given one.
+- `expiresOn` is `YYYY-MM-DD`. `note` is at most 500 characters.
+- Grocery lists use the pantry as described under [Grocery list](#grocery-list).
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `validation_failed` | Missing name; unknown unit code; a quantity that isn't a positive amount; unknown status or category; bad date; no fields in a PATCH; `null` for `displayName`, `category`, `status`, or `isStaple`; unknown `ingredientId`; empty, blank, or repeated bulk items; a full pantry; invalid list filters |
+| 400 | `invalid_request` | Body is empty, malformed, has unknown fields, or wrong types |
+| 403 | `forbidden` | Changing the pantry without `pantry.edit` |
+| 404 | `not_found` | Not a member of the household; no such item in its pantry |
+| 409 | `conflict` | The item kept changing concurrently; retry |
+
+## Ingredient catalog
+
+`GET /api/v1/ingredients?q=oil&limit=20` searches the global ingredient
+catalog, for example to autocomplete a pantry item. Any signed-in user may
+search; no household is involved.
+
+- `q` is required. It's normalized like catalog keys (case, accents, and
+  punctuation are ignored) and matches the start of any word in the name:
+  `oil` finds "Oil", "Olive Oil", and "Sesame Oil", but not "Boiled Egg".
+- The exact name comes first, then names that start with `q`, then names with
+  a later word that starts with it. Each group is alphabetical.
+- `limit` defaults to 20; values above 50 are treated as 50.
+
+```json
+{
+  "items": [
+    { "id": "66e5a1f2c3b4a5d6e7f80a13", "key": "oil", "name": "Oil", "category": "pantry", "categoryConfident": true },
+    { "id": "66e5a1f2c3b4a5d6e7f80a14", "key": "olive oil", "name": "Olive Oil", "category": "pantry", "categoryConfident": true }
+  ]
+}
+```
+
+`categoryConfident: false` means no category rule matched, so the category is
+a placeholder (`other`) awaiting review.

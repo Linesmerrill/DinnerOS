@@ -162,15 +162,47 @@ Implemented in Phase 6 (`internal/planning`).
 - Entries snapshot the recipe's name and image for rendering. Recipe details
   and the grocery list read the live recipe, so re-imports show up there.
 
-### Pantry and grocery
+### Pantry
+
+Implemented in Phase 7 (`internal/pantry`).
 
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `pantry_items` | householdId, ingredientId | **unique** `{householdId, ingredientId}` |
+| `pantry_items` | householdId, ingredientId (catalog; absent for free text), key, displayName, category, quantity, quantityValue, unit, status (`in_stock`/`low`/`out`), isStaple, expiresOn (`YYYY-MM-DD`), note, version, createdAt, updatedBy, updatedAt | **unique** `{householdId, key}` |
+
+- **One item per ingredient.** `key` is `ingredients.NormalizeName` of the
+  name, or the catalog ingredient's `key` when the item references the
+  catalog, so "Olive Oil" and "olive oil" are the same item. Adding an
+  ingredient that's already there updates that item. The unique index settles
+  concurrent adds: the loser merges into the winner's item. Different units of
+  one ingredient share the item and its single amount.
+- The unique index serves every query: lists filter on `householdId` (plus
+  status, category, isStaple, or a name regex) and lookups use
+  `{householdId, key: {$in: [...]}}`. A pantry holds at most 1000 items, so
+  lists aren't paginated.
+- **Exact amounts**, as on recipes: `quantity` is a reduced fraction string
+  and authoritative; `quantityValue` is a double copy. Both, and `unit`, are
+  absent when no amount was recorded. An `out` item never has an amount:
+  marking items out `$unset`s it.
+- **Optimistic concurrency.** Every write increments `version`. An update sets
+  the mutable fields (and `$unset`s cleared ones) on `{_id, householdId,
+  version}`. When nothing matches, a count tells a deleted item (`404`) from a
+  concurrent change, which the service retries, up to 5 attempts. Bulk status
+  changes are one `updateMany` that also bumps `version`. `key` and
+  `createdAt` never change. `ingredientId` and `updatedBy` are ObjectIDs.
+- `ingredientId` references the global catalog but isn't required. A free-text
+  name that matches no catalog ingredient is stored unlinked and is resolved
+  against the catalog again whenever a grocery list is built.
+
+### Grocery lists
+
+| Collection | Key fields | Indexes |
+| --- | --- | --- |
 | `grocery_lists` | householdId, weeklyPlanId, items[], generatedAt | **unique** `{weeklyPlanId}` |
 | `grocery_provider_configurations` | householdId, provider, settings | **unique** `{householdId, provider}` |
 
-Until Phase 7, a week's grocery list is computed on request and not stored.
+A week's grocery list is still computed on request, with the household pantry
+applied, and isn't stored yet.
 
 ### Behavior
 

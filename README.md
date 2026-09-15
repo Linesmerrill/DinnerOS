@@ -24,7 +24,7 @@ Autopilot's first customer.
 | 4 | Recipes, ingredient catalog, units, recipe import — API and iOS library | ✅ Done |
 | 5 | HelloFresh historical importer (full order history loaded) | ✅ Done; exact variant capture for some recipes pending |
 | 6 | Weekly planner and week grocery list | API ✅ Done; iOS in progress |
-| 7 | Pantry and grocery engine | Grocery engine ✅; pantry in progress |
+| 7 | Pantry and grocery engine | Grocery engine and pantry API ✅ (applied to week grocery lists); saved lists and iOS pending |
 | 8 | Shopping providers | Planned |
 | 9 | Ratings and behavioral events | In progress |
 | 10–12 | Autopilot (deterministic V1, context, private service) | Later |

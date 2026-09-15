@@ -13,21 +13,23 @@ Status:
     for the entry's serving size (never scaled), and
     `GET /api/v1/households/{householdId}/plans/{week}/grocery` returns the
     result grouped by category (Phase 6; see [api.md](api.md#grocery-list)).
-    It is computed on every request with an **empty pantry**, so statuses are
-    only `toBuy` and `pantryHint`.
+    It is computed on every request.
+  - The household pantry: `api/internal/pantry` (Phase 7; see [Pantry](#pantry)
+    and [api.md](api.md#pantry)). `planning.Service.GroceryList` passes it to
+    `Aggregate`, so items get `inPantry`, and the list reports
+    `pantryApplied: true`.
 - **Pending:**
-  - The household pantry, passed to `Aggregate` in place of the empty one
-    (`planning.Service.GroceryList`), so items get `inPantry` (Phase 7).
   - Saved grocery lists with checked state, and the shopping UI (Phase 7).
+  - Comparing pantry amounts with what the recipes need.
 
 The implemented engine differs from the pipeline below in two ways:
 
 - The display unit for a combined amount is picked only from the units that
   contributed: the largest unit in which the total is at least 1, otherwise the
   smallest contributing unit. The choice never depends on input order.
-- Each item has a status: `inPantry` (in the household pantry), `pantryHint`
-  (every source flagged it as a staple, but it isn't in the household pantry),
-  or `toBuy`.
+- Each item has a status: `inPantry` (in stock in the household pantry),
+  `pantryHint` (every source flagged it as a staple, and the pantry doesn't
+  record it as out), or `toBuy`. See [Pantry](#pantry).
 
 This is the heart of DinnerOS's usefulness. Ingredient **strings are not the
 grocery system**. Every recipe line keeps its raw text *and* a normalized,
@@ -100,6 +102,37 @@ Example: Recipe A needs `½ onion` and Recipe B needs `½ onion`, so the list sh
 
 Regenerating the list after changing a recipe or its servings produces the new
 list. Manual checked and unchecked state is kept for items that still exist.
+
+## Pantry
+
+A household keeps one pantry item per ingredient (`pantry_items`, unique by
+household and normalized key; see [database.md](database.md#pantry)). An item
+has a status (`in_stock`, `low`, or `out`), an optional exact amount, and an
+`isStaple` flag for always-have items such as salt and oil.
+
+`pantry.Service.GroceryPantry` turns the pantry into the `grocery.PantryStock`
+that `Aggregate` takes:
+
+| Pantry item | In `PantryStock` | Grocery status of its lines |
+| --- | --- | --- |
+| `in_stock` | `InStock` | `inPantry` |
+| `low` | neither | `pantryHint` if every recipe flags it as a staple, otherwise `toBuy` |
+| `out` | `OutOfStock` | `toBuy`, even if every recipe flags it as a staple |
+| not in the pantry | neither | `pantryHint` if every recipe flags it as a staple, otherwise `toBuy` |
+
+- `Aggregate` reads out-of-stock keys through the optional `grocery.OutPantry`
+  interface, so a plain `PantrySet` still works.
+- `isStaple` doesn't change the status. It marks always-have items for the UI
+  and for the default staples (`POST .../pantry/staples/defaults`).
+- **Keys.** An item is registered under its catalog ingredient ID and under
+  `name:<normalized name>`, the two ways the planner keys recipe lines (with
+  and without a catalog ID). A free-text item is linked to the catalog when
+  it's added, if its name is a catalog ingredient, and resolved against the
+  catalog again each time a list is built, so an ingredient the catalog learns
+  later still matches.
+- **Amounts are informational.** The engine doesn't yet compare the pantry's
+  amount with what recipes need: 1 tbsp of olive oil in stock makes a recipe's
+  ½ cup `inPantry`. Mark the item `low` or `out` to put it on the list.
 
 ## Rules
 
