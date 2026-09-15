@@ -393,6 +393,7 @@ func normalizePrefs(in autopilot.Preferences) (prefs, error) {
 		p.maxLong = 7
 	}
 
+	equipment := normAll(in.Equipment)
 	for _, r := range in.Rules {
 		day := r.Day.Index()
 		if day < 0 {
@@ -400,7 +401,14 @@ func normalizePrefs(in autopilot.Preferences) (prefs, error) {
 		}
 		nr := &rule{
 			day: day, label: strings.TrimSpace(r.Label), cuisines: normAll(r.Cuisines), tags: normAll(r.Tags),
-			proteins: normAll(r.Proteins), methods: normAll(r.Methods), band: r.TimeBand, freq: r.Frequency,
+			proteins: normAll(r.Proteins), band: r.TimeBand, freq: r.Frequency,
+		}
+		// A method the household has no equipment for can't be asked of a
+		// meal, so the rule is scored without it.
+		for _, method := range normAll(r.Methods) {
+			if slices.Contains(equipment, method) {
+				nr.methods = append(nr.methods, method)
+			}
 		}
 		switch nr.band {
 		case "", autopilot.BandQuick, autopilot.BandMedium, autopilot.BandLong:

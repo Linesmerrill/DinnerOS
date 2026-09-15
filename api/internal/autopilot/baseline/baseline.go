@@ -19,7 +19,7 @@ import (
 
 // ModelVersion identifies this implementation and DefaultWeights. Bump it when
 // features, weights, or the optimizer change.
-const ModelVersion = "baseline-2026.1"
+const ModelVersion = "baseline-2026.2"
 
 // Search defaults.
 const (
