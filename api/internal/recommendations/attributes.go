@@ -153,17 +153,46 @@ var spicyRules = []phrase{
 }
 
 // Smoker-friendly cuts: whole or large cuts of chicken, pork, beef, or turkey.
-// Ground, sliced, diced, or cubed meat doesn't count.
-var cutUnless = []string{"ground", "sliced", "diced", "cubed", "strips", "shredded", "minced", "cooked", "deli"}
+// Meat that is cut small, pre-cooked, or processed doesn't count: ground,
+// sliced, diced, chopped, strips, cutlets, pulled, sausage, or patties.
+var cutUnless = []string{
+	"ground", "sliced", "diced", "cubed", "chopped", "strip", "cutlet", "shredded", "pulled", "minced", "cooked", "deli",
+	"sausage", "mix", "patty", "crumble", "meatball",
+}
 
 var smokerCuts = []phrase{
 	p("whole chicken", cutUnless...), p("bone in chicken", cutUnless...), p("chicken leg", cutUnless...), p("chicken quarter", cutUnless...),
 	p("drumstick", cutUnless...), p("spatchcock", cutUnless...), p("chicken wing", cutUnless...),
 	p("pork shoulder", cutUnless...), p("pork butt", cutUnless...), p("boston butt", cutUnless...), p("pork tenderloin", cutUnless...),
-	p("pork loin", cutUnless...), p("pork chop", cutUnless...), p("pork belly", cutUnless...), p("baby back rib", cutUnless...),
-	p("spare rib", cutUnless...), p("spareribs", cutUnless...), p("pork rib", cutUnless...),
+	p("pork filet", cutUnless...), p("pork loin", cutUnless...), p("pork chop", cutUnless...), p("pork steak", cutUnless...),
+	p("pork belly", cutUnless...), p("baby back rib", cutUnless...), p("spare rib", cutUnless...), p("spareribs", cutUnless...),
+	p("pork rib", cutUnless...), p("country style rib", cutUnless...),
 	p("brisket", cutUnless...), p("beef rib", cutUnless...), p("short rib", cutUnless...), p("tri tip", cutUnless...), p("chuck roast", cutUnless...),
 	p("turkey breast", cutUnless...), p("whole turkey", cutUnless...), p("turkey leg", cutUnless...),
+}
+
+// notSmokerDishes are dish shapes that aren't smoker meals even when they use
+// a smokable cut: pasta, noodles, soups and stews, pies and casseroles,
+// stir-fries, tacos and other wrapped or bowl meals, and ground-meat dishes.
+// They're matched in the name's main part, before "with", "over", or "in",
+// so a side ("Pork Chops with Garlic Noodles") doesn't count.
+var notSmokerDishes = []phrase{
+	p("pasta"), p("spaghetti"), p("penne"), p("rigatoni"), p("linguine"), p("fettuccine"), p("cavatappi"), p("macaroni"),
+	p("lasagna"), p("noodle"), p("ramen"), p("lo mein"), p("yakisoba"), p("udon"),
+	p("soup"), p("stew"), p("pot pie"), p("casserole"), p("bake"), p("fricassee"),
+	p("stir fry"), p("fried rice"), p("skillet"),
+	p("taco"), p("taquito"), p("burrito"), p("enchilada"), p("quesadilla"), p("nacho"), p("bowl"), p("wrap"), p("pita"),
+	p("sandwich"), p("sando"), p("slider"), p("burger"), p("pizza"), p("flatbread"),
+	p("meatball"), p("meatloaf"), p("meatloaves"), p("patty"), p("sausage"), p("gyoza"), p("dumpling"), p("wonton"),
+	p("bibimbap"), p("donburi"), p("katsu"), p("schnitzel"),
+}
+
+// dishHead is the name's main part: the words before "with", "over", or "in".
+func dishHead(name []string) []string {
+	if i := slices.IndexFunc(name, func(w string) bool { return w == "with" || w == "over" || w == "in" }); i > 0 {
+		return name[:i]
+	}
+	return name
 }
 
 // Method keywords found in recipe names, tags, or utensils.
@@ -228,6 +257,20 @@ func (a RecipeAttributes) item(r recipes.Recipe) autopilot.Item {
 
 func heuristicMethod(method string, r recipes.Recipe, names, labels [][]string, proteins []string) (bool, string) {
 	if method == "smoker" {
+		// An explicit smoker tag or utensil always counts.
+		for _, label := range labels[1:] {
+			if match(label, []phrase{p("smoker")}) {
+				return true, "Tagged or named for smoking"
+			}
+		}
+		// Pasta, tacos, soups, and similar dishes aren't smoker meals, even
+		// with a smokable cut or "smoked" in the name.
+		head := dishHead(labels[0])
+		for _, dish := range notSmokerDishes {
+			if match(head, []phrase{dish}) {
+				return false, "Not a smoker dish: " + strings.Join(dish.words, " ")
+			}
+		}
 		for i, name := range names {
 			if match(name, smokerCuts) {
 				return true, r.Ingredients[i].Name

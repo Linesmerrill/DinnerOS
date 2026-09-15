@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot"
 )
@@ -108,6 +109,27 @@ func fullMatch(it *item, r *rule) bool {
 		}
 	}
 	return groups > 0
+}
+
+// suitsMethod reports whether the item suits any of the rule's methods.
+func suitsMethod(it *item, r *rule) bool {
+	return intersect(it.methods, r.methods) != ""
+}
+
+// methodUnmet explains a rule day filled with a meal that doesn't suit the
+// rule's methods: none of the day's candidates did, or those that did lost to
+// the rest of the week (recently had, repeated, or already planned).
+func methodUnmet(s *slot) autopilot.Message {
+	names := make([]string, len(s.rule.methods))
+	for i, method := range s.rule.methods {
+		names[i] = strings.ReplaceAll(method, "-", " ")
+	}
+	kind, day := strings.Join(names, " or ")+"-friendly", autopilot.Days[s.day].Name()
+	text := fmt.Sprintf("No %s recipe fits %s; picked the best alternative.", kind, day)
+	if slices.ContainsFunc(s.cands, func(c cand) bool { return suitsMethod(c.it, s.rule) }) {
+		text = fmt.Sprintf("%s's %s recipes didn't fit this week; picked the best alternative.", day, kind)
+	}
+	return autopilot.Message{Code: "rule_method_unmet", Text: text}
 }
 
 func (m *model) initialState(slots []*slot) state {
@@ -561,6 +583,11 @@ func (m *model) generate() autopilot.WeekResult {
 			msg.Text = fmt.Sprintf("Only %s %s your preferences; %s.", plural(matching, "recipe", "recipes"), verb(matching), nights)
 		}
 		res.Messages = append(res.Messages, msg)
+	}
+	for si, s := range slots {
+		if c := picks[si]; c != nil && s.rule != nil && len(s.rule.methods) > 0 && !suitsMethod(c.it, s.rule) {
+			res.Messages = append(res.Messages, methodUnmet(s))
+		}
 	}
 	if len(days) < needed {
 		res.Messages = append(res.Messages, autopilot.Message{

@@ -137,6 +137,149 @@ func TestWeekdayRules(t *testing.T) {
 	})
 }
 
+// TestMethodRules: on a rule day with methods, suiting the method dominates
+// the rule. A familiar casserole-shaped meal that only matches the protein and
+// the long cook loses to a smoker-friendly one, never carries the rule's
+// label, and fills the day only when nothing smoker-friendly is left.
+func TestMethodRules(t *testing.T) {
+	p := New(Options{})
+	smokerNight := autopilot.WeekdayRule{
+		Day: autopilot.Sunday, Label: "Smoker night", Proteins: []string{"chicken", "pork"}, Methods: []string{"smoker"},
+		TimeBand: autopilot.BandLong, Frequency: autopilot.EveryWeek,
+	}
+	sunday := func(catalog ...autopilot.Item) autopilot.Input {
+		in := input(catalog...)
+		in.Preferences.PlanDays = []autopilot.Day{autopilot.Sunday}
+		in.Preferences.MealsPerWeek = 1
+		in.Preferences.Equipment = []string{"smoker", "grill"}
+		in.Preferences.Rules = []autopilot.WeekdayRule{smokerNight}
+		// The pot pie is a well-rated household regular not had in a while;
+		// the smoker-friendly meals are new.
+		for _, w := range []string{"2026-W01", "2026-W05", "2026-W09", "2026-W13", "2026-W17", "2026-W21", "2026-W25"} {
+			in.History = append(in.History, autopilot.Interaction{ItemID: "pot-pie", Kind: autopilot.KindOrdered, Week: w})
+		}
+		in.Ratings = []autopilot.Rating{rate("pot-pie", 4)}
+		return in
+	}
+	potPie := meal("pot-pie", proteins("chicken"), minutes(45))
+	tenderloin := meal("pork-tenderloin", proteins("pork"), methods("smoker"), minutes(45))
+	chops := meal("pork-chops", proteins("pork"), methods("smoker", "grill"), minutes(30))
+	tacos := meal("chicken-tacos", proteins("chicken"), minutes(20))
+	ruleReason := func(reasons []autopilot.Reason) string {
+		for _, r := range reasons {
+			if r.Code == "rule" {
+				return r.Text
+			}
+		}
+		return ""
+	}
+
+	t.Run("a suitable meal wins over a familiar partial match", func(t *testing.T) {
+		in := sunday(potPie, tenderloin, tacos)
+		res := generate(t, p, in)
+		sun := slotOn(res, autopilot.Sunday)
+		if sun == nil || sun.ItemID != "pork-tenderloin" {
+			t.Fatalf("sunday = %s; want the smoker-friendly tenderloin", describe(res))
+		}
+		if got := ruleReason(sun.Reasons); got != "Smoker night · Pork · Long cook OK" || sun.Signals[SignalRule] != 1 {
+			t.Errorf("tenderloin rule reason = %q, signal %v", got, sun.Signals[SignalRule])
+		}
+		for _, msg := range res.Messages {
+			if msg.Code == "rule_method_unmet" {
+				t.Errorf("messages = %+v; the day's pick suits the smoker", res.Messages)
+			}
+		}
+		ranked := rank(t, p, in, autopilot.Sunday)
+		for _, rec := range ranked.Items {
+			if rec.ItemID != "pot-pie" {
+				continue
+			}
+			if rec.Signals[SignalFamiliarity] <= 0 || rec.Signals[SignalRule] != -1 {
+				t.Errorf("pot pie signals = %v; want familiarity and the method-miss rule penalty", rec.Signals)
+			}
+			for _, r := range rec.Reasons {
+				if r.Code == "rule" || strings.Contains(r.Text, "Smoker night") {
+					t.Errorf("pot pie reasons = %v; a meal that doesn't suit the smoker doesn't get the rule", reasonTexts(rec.Reasons))
+				}
+			}
+		}
+	})
+
+	t.Run("swap offers suitable meals first", func(t *testing.T) {
+		in := sunday(potPie, tenderloin, chops, tacos)
+		ranked := rank(t, p, in, autopilot.Sunday, "pork-tenderloin")
+		if len(ranked.Items) != 3 || ranked.Items[0].ItemID != "pork-chops" {
+			t.Fatalf("swap candidates = %+v; want the other smoker-friendly meal first", ranked.Items)
+		}
+		if got := ruleReason(ranked.Items[0].Reasons); got != "Smoker night · Pork" {
+			t.Errorf("pork chops rule reason = %q", got)
+		}
+		if ranked = rank(t, p, in, autopilot.Sunday, "pork-tenderloin", "pork-chops"); len(ranked.Items) != 2 || ranked.Items[0].ItemID != "pot-pie" {
+			t.Errorf("with no smoker-friendly meal left = %+v; want the best alternative", ranked.Items)
+		}
+	})
+
+	t.Run("no suitable meal still fills the day", func(t *testing.T) {
+		res := generate(t, p, sunday(potPie, tacos))
+		sun := slotOn(res, autopilot.Sunday)
+		if sun == nil || sun.ItemID != "pot-pie" {
+			t.Fatalf("sunday = %s; want the best alternative", describe(res))
+		}
+		if got := ruleReason(sun.Reasons); got != "" {
+			t.Errorf("pot pie rule reason = %q; want none", got)
+		}
+		i := slices.IndexFunc(res.Messages, func(m autopilot.Message) bool { return m.Code == "rule_method_unmet" })
+		if i < 0 || res.Messages[i].Text != "No smoker-friendly recipe fits Sunday; picked the best alternative." {
+			t.Errorf("messages = %+v", res.Messages)
+		}
+
+		// A smoker-friendly meal the household disliked, had last week, and
+		// just regenerated away loses; the message says one existed.
+		in := sunday(potPie, tacos, tenderloin)
+		in.Ratings = append(in.Ratings, rate("pork-tenderloin", 1, "kids-disliked"))
+		in.History = append(in.History, autopilot.Interaction{ItemID: "pork-tenderloin", Kind: autopilot.KindCooked, Week: "2026-W37"})
+		in.Avoid = []string{"pork-tenderloin"}
+		res = generate(t, p, in)
+		if sun := slotOn(res, autopilot.Sunday); sun == nil || sun.ItemID != "pot-pie" {
+			t.Fatalf("sunday = %s", describe(res))
+		}
+		i = slices.IndexFunc(res.Messages, func(m autopilot.Message) bool { return m.Code == "rule_method_unmet" })
+		if i < 0 || res.Messages[i].Text != "Sunday's smoker-friendly recipes didn't fit this week; picked the best alternative." {
+			t.Errorf("messages = %+v", res.Messages)
+		}
+	})
+
+	t.Run("at most once gives a method miss no credit", func(t *testing.T) {
+		in := sunday(potPie, tenderloin)
+		in.Preferences.Rules[0].Frequency = autopilot.AtMostOnce
+		for _, rec := range rank(t, p, in, autopilot.Sunday).Items {
+			if want := map[string]float64{"pot-pie": 0, "pork-tenderloin": 1}[rec.ItemID]; rec.Signals[SignalRule] != want {
+				t.Errorf("%s rule = %v, want %v", rec.ItemID, rec.Signals[SignalRule], want)
+			}
+		}
+	})
+
+	t.Run("methods need equipment", func(t *testing.T) {
+		in := sunday(potPie)
+		in.Preferences.Equipment = nil
+		rec := rank(t, p, in, autopilot.Sunday).Items[0]
+		if got := ruleReason(rec.Reasons); rec.Signals[SignalRule] != 1 || got != "Smoker night · Chicken · Long cook OK" {
+			t.Errorf("without a smoker, rule = %v, reason %q; the rule is scored on its other groups", rec.Signals[SignalRule], got)
+		}
+	})
+
+	t.Run("partial matches without methods explain only the match", func(t *testing.T) {
+		in := input(meal("enchiladas", cuisine("mexican")), meal("tacos", cuisine("mexican"), tags("tacos")))
+		in.Preferences.Rules = []autopilot.WeekdayRule{{Day: autopilot.Tuesday, Label: "Taco Tuesday", Cuisines: []string{"mexican"}, Tags: []string{"tacos"}}}
+		for _, rec := range rank(t, p, in, autopilot.Tuesday).Items {
+			want := map[string]string{"enchiladas": "Mexican", "tacos": "Taco Tuesday · Mexican · Tacos"}[rec.ItemID]
+			if got := ruleReason(rec.Reasons); got != want {
+				t.Errorf("%s rule reason = %q, want %q", rec.ItemID, got, want)
+			}
+		}
+	})
+}
+
 func TestCookTimeMix(t *testing.T) {
 	p := New(Options{})
 	longAndMedium := func(longRating int) []autopilot.Item {

@@ -208,12 +208,15 @@ func (m *model) score(s *slot, it *item) cand {
 	tasteWeight := w.Taste * (1 + w.ColdStartTasteBoost*(1-m.confidence))
 	explain("taste", tasteText, add(SignalTaste, clamp(taste), tasteWeight), false)
 
-	// Weekday rule.
+	// Weekday rule. A rule's methods (already limited to the household's
+	// equipment) dominate: a meal that doesn't suit them earns no rule credit
+	// however well its protein, cuisine, or tags match, and an every-week
+	// rule penalizes it.
 	var ruleValue float64
 	var ruleText string
 	if r := s.rule; r != nil {
 		groups, matched := 0, 0
-		var labels []string
+		var parts []string
 		// The label names the method ("smoker night"), so explanations list
 		// the matched protein, cuisine, or tag.
 		for i, g := range [][2][]string{{it.proteins, r.proteins}, {it.methods, r.methods}, {it.withRegions, r.cuisines}, {it.tags, r.tags}} {
@@ -224,21 +227,34 @@ func (m *model) score(s *slot, it *item) cand {
 			if v := intersect(g[0], g[1]); v != "" {
 				matched++
 				if i != 1 {
-					labels = append(labels, displayName(v))
+					parts = append(parts, displayName(v))
 				}
 			}
 		}
-		if groups > 0 {
+		methodMiss := len(r.methods) > 0 && !suitsMethod(it, r)
+		switch {
+		case methodMiss && r.freq == autopilot.EveryWeek:
+			ruleValue = -1
+		case methodMiss:
+		case groups > 0 && matched == 0 && r.freq == autopilot.EveryWeek:
+			ruleValue = -0.3
+		case groups > 0:
 			ruleValue = float64(matched) / float64(groups)
-			if matched == 0 && r.freq == autopilot.EveryWeek {
-				ruleValue = -0.3
-			}
 		}
 		if s.longOK && it.band == autopilot.BandLong {
-			labels = append(labels, "Long cook OK")
+			parts = append(parts, "Long cook OK")
 		}
-		if ruleValue > 0 || (groups == 0 && len(labels) > 0) {
-			ruleText = strings.Join(append([]string{r.label}, labels...), " · ")
+		// The label says the meal is what the rule is about: it suits the
+		// rule's method, or matches every group of a rule without methods.
+		// Other positive matches explain only the parts that match.
+		switch {
+		case methodMiss:
+		case len(r.methods) > 0 || matched == groups:
+			if ruleValue > 0 || len(parts) > 0 {
+				ruleText = strings.Join(append([]string{r.label}, parts...), " · ")
+			}
+		case ruleValue > 0:
+			ruleText = strings.Join(parts, " · ")
 		}
 	}
 	c.signals[SignalRule] = round3(ruleValue)
