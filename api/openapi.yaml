@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: DinnerOS API
-  version: 0.7.0
+  version: 0.8.0
   description: |
     Backend for the DinnerOS iOS app. "DinnerOS" is a working name.
 
@@ -56,6 +56,13 @@ tags:
       `household.view` is enough to rate, change, or remove your own.
   - name: events
     description: Client-observed household behavior, used for recommendations (docs/autopilot.md).
+  - name: autopilot
+    description: |
+      A household's taste profile, weekday rules, equipment, per-week
+      context, and Autopilot week proposals (generate, swap, accept, reject).
+      Reading needs `household.view`; changes need `plan.edit`. Proposals are
+      separate from plans: accepting one adds its meals to the week's draft
+      plan as entries with origin `autopilot` (docs/autopilot.md).
 paths:
   /health:
     get:
@@ -1891,6 +1898,531 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/autopilot/profile:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: Get the Autopilot profile
+      description: |
+        The household's taste, restrictions, schedule, cook-time mix, novelty,
+        equipment, and weekday rules. Requires `household.view`. A household
+        that never saved a profile reads the defaults with `configured: false`
+        and null timestamps, not a 404.
+      operationId: getAutopilotProfile
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotProfile"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Replace the Autopilot profile
+      description: |
+        Requires `plan.edit`. Every section is optional; sections left out
+        reset to their defaults, so onboarding sends all of them. The whole
+        resulting profile is validated (400 `validation_failed`). Sections
+        whose values change record who changed them and appear in the
+        preference history; saving an identical profile changes nothing.
+        409 `conflict` when the profile kept changing concurrently.
+      operationId: replaceAutopilotProfile
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutopilotProfileRequest"
+      responses:
+        "200":
+          description: The saved profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotProfile"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/AutopilotConflict"
+    patch:
+      summary: Update Autopilot profile sections
+      description: |
+        Requires `plan.edit`. Send at least one section as an object (`null`
+        is not a change); each sent section is replaced whole and the others don't change. The whole resulting
+        profile is validated, so a change can fail because of another section
+        (a weekday rule's method must be in `equipment`, for example).
+        409 `conflict` when the profile kept changing concurrently.
+      operationId: updateAutopilotProfile
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/AutopilotProfileRequest"
+              minProperties: 1
+      responses:
+        "200":
+          description: The saved profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotProfile"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/AutopilotConflict"
+  /api/v1/households/{householdId}/autopilot/profile/history:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: List Autopilot preference changes
+      description: |
+        Changes to the profile, week contexts, and recipe overrides, newest
+        first. Requires `household.view`.
+      operationId: listAutopilotPreferenceHistory
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: The changes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotHistory"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/autopilot/vocabulary:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: Get Autopilot choices
+      description: |
+        Everything the onboarding and preference screens offer: cuisines and
+        tags from the household's main meals plus starter values, the fixed
+        lists, and the validation limits. Requires `household.view`.
+      operationId: getAutopilotVocabulary
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The choices.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotVocabulary"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/autopilot/recipe-overrides:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: List recipe method overrides
+      description: The household's cooking-method overrides, one per recipe that has any. Requires `household.view`.
+      operationId: listAutopilotRecipeOverrides
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The overrides.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotRecipeOverrideList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/autopilot/recipes/{recipeId}/attributes:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/RecipeID"
+    get:
+      summary: Get a recipe's Autopilot attributes
+      description: |
+        What Autopilot derives from the recipe (cook time and band, cuisines,
+        tags, proteins, allergens, diets, spiciness, and the cooking methods it
+        suits), with the household's overrides applied. The time band uses the
+        profile's cook-time limits. Requires `household.view`. 404 when the
+        recipe isn't in the household.
+      operationId: getAutopilotRecipeAttributes
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The attributes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotRecipeAttributes"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/autopilot/recipes/{recipeId}/override:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/RecipeID"
+    put:
+      summary: Override a recipe's cooking methods
+      description: |
+        Requires `plan.edit`. Says whether the recipe suits each named method;
+        `null` clears that method's override, returning it to the heuristic.
+        Methods left out don't change. Each changed method appears in the
+        preference history. 404 when the recipe isn't in the household.
+      operationId: setAutopilotRecipeOverride
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutopilotRecipeOverrideRequest"
+      responses:
+        "200":
+          description: The recipe's attributes with the override applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotRecipeAttributes"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/autopilot/weeks/{week}/context:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    get:
+      summary: Get a week's Autopilot context
+      description: |
+        What's special about the week. Requires `household.view`. A week
+        without a saved context reads empty, with `configured: false` and null
+        `updatedBy` and `updatedAt`, not a 404.
+      operationId: getAutopilotWeekContext
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The week context.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotWeekContext"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Save a week's Autopilot context
+      description: |
+        Requires `plan.edit`. Replaces the whole context; fields left out take
+        their empty values. Days with nothing set are dropped. Changes appear
+        in the preference history; saving an identical context changes
+        nothing. 409 `conflict` when the context kept changing concurrently.
+      operationId: saveAutopilotWeekContext
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutopilotWeekContextRequest"
+      responses:
+        "200":
+          description: The saved week context.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotWeekContext"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/AutopilotConflict"
+    delete:
+      summary: Clear a week's Autopilot context
+      description: Requires `plan.edit`. Also 204 when the week had no context.
+      operationId: clearAutopilotWeekContext
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Cleared.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/autopilot/weeks/{week}/generate:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    post:
+      summary: Generate an Autopilot week
+      description: |
+        Requires `plan.edit`. Proposes meals for the week's open days from the
+        profile, the week context, ratings, and history, and saves it as the
+        week's proposal, replacing any earlier one (a pending one is recorded
+        as rejected). Meals already in the plan are kept and their days aren't
+        planned. The plan doesn't change until the proposal is accepted. A
+        proposal can plan fewer meals than requested; `unfilled` and
+        `messages` say why. The body is optional: an empty body, chunked or
+        not, means no options.
+        409 `plan_finalized` or `proposal_changed`.
+      operationId: generateAutopilotWeek
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutopilotGenerateRequest"
+      responses:
+        "201":
+          description: The new proposal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotProposal"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/AutopilotConflict"
+  /api/v1/households/{householdId}/autopilot/weeks/{week}/proposal:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    get:
+      summary: Get a week's Autopilot proposal
+      description: |
+        The week's latest proposal, whatever its status. Requires
+        `household.view`. 404 when the week has none.
+      operationId: getAutopilotProposal
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The proposal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotProposal"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/slots/{slotId}/swap:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+      - $ref: "#/components/parameters/SlotID"
+    post:
+      summary: Swap a proposed meal
+      description: |
+        Requires `plan.edit`. Replaces the slot's meal with the next best
+        recipe that honors the same constraints, given the plan and the other
+        proposed meals. Meals swapped out of a slot aren't offered for it
+        again. Send the proposal's current `version`; the response carries
+        the new one. 400 when `slotId` isn't a day code; 404 when the week has
+        no proposal or no meal on that day. 409 `proposal_changed`, `proposal_not_pending`,
+        `no_alternative`, or `plan_finalized`.
+      operationId: swapAutopilotMeal
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutopilotVersionRequest"
+      responses:
+        "200":
+          description: The proposal after the swap.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotProposal"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/AutopilotConflict"
+  /api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/accept:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    post:
+      summary: Accept an Autopilot week
+      description: |
+        Requires `plan.edit`. Adds the proposal's meals, except
+        `excludeSlotIds`, to the week's draft plan as entries with origin
+        `autopilot` in one atomic change, and marks the proposal accepted.
+        Accepting never replaces or duplicates entries: a meal whose day has
+        been planned since (`dayTaken`) or whose recipe is already in the week
+        (`alreadyPlanned`) is left out and listed in `skipped`. 400 when an
+        excluded ID isn't a slot of the proposal. 404 when the week has no
+        proposal. 409 `proposal_changed`, `proposal_not_pending`,
+        `nothing_to_accept`, `proposal_stale`, `plan_finalized`, or
+        `plan_full`.
+      operationId: acceptAutopilotWeek
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutopilotAcceptRequest"
+      responses:
+        "200":
+          description: The accepted proposal, the plan after adding its meals, and what was added and skipped.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotAcceptResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/AutopilotConflict"
+  /api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/reject:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    post:
+      summary: Reject an Autopilot week
+      description: |
+        Requires `plan.edit`. Dismisses a pending proposal; the plan doesn't
+        change. 404 when the week has no proposal. 409 `proposal_changed` or
+        `proposal_not_pending`.
+      operationId: rejectAutopilotWeek
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutopilotVersionRequest"
+      responses:
+        "200":
+          description: The rejected proposal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotProposal"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/AutopilotConflict"
 
 components:
   securitySchemes:
@@ -1972,6 +2504,13 @@ components:
       description: A household option ID.
       schema:
         type: string
+    SlotID:
+      name: slotId
+      in: path
+      required: true
+      description: A proposal slot's ID, which is its day code.
+      schema:
+        $ref: "#/components/schemas/AutopilotDay"
   schemas:
     RecipeSummary:
       type: object
@@ -1989,6 +2528,13 @@ components:
           type: string
         totalMinutes:
           type: integer
+        cookMinutes:
+          type: integer
+          minimum: 1
+          description: |
+            Effective cook time: the larger of `prepMinutes` and
+            `totalMinutes` (sources report them inconsistently). Omitted when
+            neither is known. Use it for display and time filters.
         timesOrdered:
           type: integer
           description: Number of distinct weeks the household received this recipe.
@@ -2059,6 +2605,13 @@ components:
           type: integer
         totalMinutes:
           type: integer
+        cookMinutes:
+          type: integer
+          minimum: 1
+          description: |
+            Effective cook time: the larger of `prepMinutes` and
+            `totalMinutes` (sources report them inconsistently). Omitted when
+            neither is known. Use it for display and time filters.
         difficulty:
           type: integer
         cuisines:
@@ -2903,7 +3456,7 @@ components:
           description: Null for a week nobody has planned.
     PlanEntry:
       type: object
-      required: [id, recipe, day, date, servings, note, addedBy, addedAt]
+      required: [id, recipe, day, date, servings, note, addedBy, addedAt, origin]
       properties:
         id:
           type: string
@@ -2940,6 +3493,10 @@ components:
         addedAt:
           type: string
           format: date-time
+        origin:
+          type: string
+          enum: [manual, autopilot]
+          description: "`autopilot` for entries added by accepting an Autopilot proposal; otherwise `manual`."
     AddPlanEntryRequest:
       type: object
       required: [recipeId, servings]
@@ -4107,6 +4664,1303 @@ components:
           $ref: "#/components/schemas/PantryItem"
         option:
           $ref: "#/components/schemas/SpecialtyOption"
+    AutopilotDay:
+      type: string
+      enum: [mon, tue, wed, thu, fri, sat, sun]
+      description: Day of the week. Unlike `PlanDay`, never null.
+      example: sun
+    AutopilotProtein:
+      type: string
+      enum: [chicken, beef, pork, turkey, lamb, duck, fish, shellfish, tofu, legumes, eggs]
+      description: "`tofu` covers tofu, tempeh, and seitan; `legumes` covers beans and lentils."
+    AutopilotDiet:
+      type: string
+      enum: [vegetarian, pescatarian, vegan, gluten-free, dairy-free]
+    AutopilotAllergen:
+      type: string
+      enum: [milk, eggs, fish, shellfish, tree-nuts, peanuts, wheat, soy, sesame]
+    AutopilotEquipment:
+      type: string
+      enum: [smoker, grill, air-fryer, slow-cooker, pressure-cooker]
+      description: A cooking method or piece of equipment.
+    AutopilotNovelty:
+      type: string
+      enum: [favorites, balanced, adventurous]
+      description: Appetite for new meals. Defaults to `balanced`.
+    AutopilotRuleFrequency:
+      type: string
+      enum: [every_week, at_most_once]
+      description: "`at_most_once` discourages a second meal matching the rule in the same week."
+    AutopilotTimeBand:
+      type: string
+      enum: [quick, medium, long]
+      description: |
+        Cook-time band from the profile's limits: `quick` up to
+        `quickMaxMinutes`, `medium` up to `mediumMaxMinutes`, `long` beyond.
+        A recipe with unknown cook time is `medium`.
+    AutopilotProposalStatus:
+      type: string
+      enum: [proposed, accepted, rejected]
+      description: Only a `proposed` proposal can be swapped, accepted, or rejected.
+    AutopilotSection:
+      type: string
+      enum: [taste, restrictions, schedule, cookTime, novelty, equipment, weekdayRules]
+    AutopilotChoices:
+      type: object
+      additionalProperties: false
+      required: [cuisines, tags, proteins]
+      properties:
+        cuisines:
+          type: array
+          maxItems: 30
+          description: Free values, stored trimmed, lowercase, deduplicated, and sorted.
+          items:
+            type: string
+            maxLength: 40
+          example: [mexican, thai]
+        tags:
+          type: array
+          maxItems: 30
+          description: Free values (food types), stored like `cuisines`.
+          items:
+            type: string
+            maxLength: 40
+          example: [one pot, tacos]
+        proteins:
+          type: array
+          description: Deduplicated and returned in vocabulary order.
+          items:
+            $ref: "#/components/schemas/AutopilotProtein"
+          example: [chicken, pork]
+    AutopilotTaste:
+      type: object
+      additionalProperties: false
+      description: Soft preferences. A value can't be both liked and disliked.
+      required: [likes, dislikes]
+      properties:
+        likes:
+          $ref: "#/components/schemas/AutopilotChoices"
+        dislikes:
+          $ref: "#/components/schemas/AutopilotChoices"
+    AutopilotRestrictions:
+      type: object
+      additionalProperties: false
+      description: |
+        Hard constraints: a recipe that violates one is never suggested. A
+        liked cuisine or protein can't also be excluded.
+      required: [diets, allergens, excludedIngredients, excludedCuisines, excludedProteins, excludedTags, noSpicy]
+      properties:
+        diets:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotDiet"
+        allergens:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotAllergen"
+        excludedIngredients:
+          type: array
+          maxItems: 50
+          description: Free values matched against ingredient names, stored like `cuisines`.
+          items:
+            type: string
+            maxLength: 60
+          example: [cilantro]
+        excludedCuisines:
+          type: array
+          maxItems: 30
+          items:
+            type: string
+            maxLength: 40
+        excludedProteins:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotProtein"
+        excludedTags:
+          type: array
+          maxItems: 30
+          items:
+            type: string
+            maxLength: 40
+        noSpicy:
+          type: boolean
+    AutopilotSchedule:
+      type: object
+      additionalProperties: false
+      required: [planDays, weeknights, mealsPerWeek, defaultServings, weeknightMaxMinutes]
+      properties:
+        planDays:
+          type: array
+          minItems: 1
+          maxItems: 7
+          description: Days Autopilot plans, in week order. Defaults to `mon`–`fri`.
+          items:
+            $ref: "#/components/schemas/AutopilotDay"
+          example: [mon, tue, wed, thu, sun]
+        weeknights:
+          type: array
+          maxItems: 7
+          description: Days the weeknight time limit applies to, in week order. Defaults to `mon`–`thu`.
+          items:
+            $ref: "#/components/schemas/AutopilotDay"
+          example: [mon, tue, wed, thu]
+        mealsPerWeek:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: Between 1 and the number of `planDays`. Defaults to 4.
+          example: 4
+        defaultServings:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 12
+          description: Null uses the household's default servings (see `effective.defaultServings`).
+        weeknightMaxMinutes:
+          type: [integer, "null"]
+          minimum: 5
+          maximum: 480
+          description: Soft cook-time limit on weeknights, or null for none.
+          example: 30
+    AutopilotCookTime:
+      type: object
+      additionalProperties: false
+      required: [quickMaxMinutes, mediumMaxMinutes, maxLongPerWeek, minQuickPerWeek, avoidConsecutiveLong]
+      properties:
+        quickMaxMinutes:
+          type: integer
+          minimum: 5
+          maximum: 480
+          description: Longest quick meal. Defaults to 20.
+          example: 20
+        mediumMaxMinutes:
+          type: integer
+          minimum: 6
+          maximum: 480
+          description: Longest medium meal; greater than `quickMaxMinutes`. Longer meals are long. Defaults to 35.
+          example: 35
+        maxLongPerWeek:
+          type: integer
+          minimum: 0
+          maximum: 7
+          description: Most long meals wanted in a week; 7 means no limit. Defaults to 2.
+          example: 2
+        minQuickPerWeek:
+          type: integer
+          minimum: 0
+          maximum: 7
+          description: Fewest quick meals wanted in a week. Defaults to 0.
+          example: 2
+        avoidConsecutiveLong:
+          type: boolean
+          description: Discourage long meals on back-to-back days. Defaults to true.
+    AutopilotWeekdayRule:
+      type: object
+      additionalProperties: false
+      description: |
+        A soft preference for one day. Needs at least one cuisine, tag,
+        protein, method, or a time band.
+      required: [day, label, cuisines, tags, proteins, methods, timeBand, frequency]
+      properties:
+        day:
+          $ref: "#/components/schemas/AutopilotDay"
+        label:
+          type: string
+          maxLength: 40
+          description: Whitespace is collapsed; an empty label becomes the day's name.
+          example: Sunday smoker night
+        cuisines:
+          type: array
+          maxItems: 10
+          description: Free values, stored like profile cuisines.
+          items:
+            type: string
+            maxLength: 40
+        tags:
+          type: array
+          maxItems: 10
+          description: Free values, stored like profile tags.
+          items:
+            type: string
+            maxLength: 40
+        proteins:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotProtein"
+          example: [pork]
+        methods:
+          type: array
+          description: Each must also be in the profile's `equipment`.
+          items:
+            $ref: "#/components/schemas/AutopilotEquipment"
+          example: [smoker]
+        timeBand:
+          description: Preferred cook time (`long` means a long cook is OK), or null for no preference.
+          oneOf:
+            - $ref: "#/components/schemas/AutopilotTimeBand"
+            - type: "null"
+          example: long
+        frequency:
+          $ref: "#/components/schemas/AutopilotRuleFrequency"
+    AutopilotChange:
+      type: object
+      required: [updatedBy, updatedAt]
+      properties:
+        updatedBy:
+          type: string
+          description: User ID of the member who made the change.
+        updatedAt:
+          type: string
+          format: date-time
+    AutopilotProfile:
+      type: object
+      required: [householdId, configured, taste, restrictions, schedule, cookTime, novelty, equipment, weekdayRules, sections, effective, createdBy, createdAt, updatedBy, updatedAt]
+      properties:
+        householdId:
+          type: string
+        configured:
+          type: boolean
+          description: False until the household saves a profile; the values are then the defaults.
+        taste:
+          $ref: "#/components/schemas/AutopilotTaste"
+        restrictions:
+          $ref: "#/components/schemas/AutopilotRestrictions"
+        schedule:
+          $ref: "#/components/schemas/AutopilotSchedule"
+        cookTime:
+          $ref: "#/components/schemas/AutopilotCookTime"
+        novelty:
+          $ref: "#/components/schemas/AutopilotNovelty"
+        equipment:
+          type: array
+          description: Equipment the household has, in vocabulary order. Weekday rules can only use these methods.
+          items:
+            $ref: "#/components/schemas/AutopilotEquipment"
+          example: [smoker, air-fryer]
+        weekdayRules:
+          type: array
+          maxItems: 7
+          description: At most one per day, in week order.
+          items:
+            $ref: "#/components/schemas/AutopilotWeekdayRule"
+        sections:
+          type: object
+          description: Who last changed each section and when; null for a section never set.
+          required: [taste, restrictions, schedule, cookTime, novelty, equipment, weekdayRules]
+          properties:
+            taste:
+              oneOf:
+                - $ref: "#/components/schemas/AutopilotChange"
+                - type: "null"
+            restrictions:
+              oneOf:
+                - $ref: "#/components/schemas/AutopilotChange"
+                - type: "null"
+            schedule:
+              oneOf:
+                - $ref: "#/components/schemas/AutopilotChange"
+                - type: "null"
+            cookTime:
+              oneOf:
+                - $ref: "#/components/schemas/AutopilotChange"
+                - type: "null"
+            novelty:
+              oneOf:
+                - $ref: "#/components/schemas/AutopilotChange"
+                - type: "null"
+            equipment:
+              oneOf:
+                - $ref: "#/components/schemas/AutopilotChange"
+                - type: "null"
+            weekdayRules:
+              oneOf:
+                - $ref: "#/components/schemas/AutopilotChange"
+                - type: "null"
+        effective:
+          type: object
+          description: Values resolved from the household.
+          required: [defaultServings]
+          properties:
+            defaultServings:
+              type: integer
+              description: "`schedule.defaultServings`, or the household's default servings when that is null."
+              example: 4
+        createdBy:
+          type: [string, "null"]
+          description: Null until the profile is saved.
+        createdAt:
+          type: [string, "null"]
+          format: date-time
+          description: Null until the profile is saved.
+        updatedBy:
+          type: [string, "null"]
+          description: Null until the profile is saved.
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+          description: Null until the profile is saved.
+    AutopilotChoicesInput:
+      type: object
+      additionalProperties: false
+      properties:
+        cuisines:
+          type: array
+          maxItems: 30
+          description: Free values, stored trimmed, lowercase, deduplicated, and sorted.
+          items:
+            type: string
+            maxLength: 40
+          example: [mexican, thai]
+        tags:
+          type: array
+          maxItems: 30
+          description: Free values (food types), stored like `cuisines`.
+          items:
+            type: string
+            maxLength: 40
+          example: [one pot, tacos]
+        proteins:
+          type: array
+          description: Deduplicated and returned in vocabulary order.
+          items:
+            $ref: "#/components/schemas/AutopilotProtein"
+          example: [chicken, pork]
+    AutopilotTasteInput:
+      type: object
+      additionalProperties: false
+      description: Soft preferences. A value can't be both liked and disliked.
+      properties:
+        likes:
+          $ref: "#/components/schemas/AutopilotChoicesInput"
+        dislikes:
+          $ref: "#/components/schemas/AutopilotChoicesInput"
+    AutopilotRestrictionsInput:
+      type: object
+      additionalProperties: false
+      description: |
+        Hard constraints: a recipe that violates one is never suggested. A
+        liked cuisine or protein can't also be excluded.
+      properties:
+        diets:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotDiet"
+        allergens:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotAllergen"
+        excludedIngredients:
+          type: array
+          maxItems: 50
+          description: Free values matched against ingredient names, stored like `cuisines`.
+          items:
+            type: string
+            maxLength: 60
+          example: [cilantro]
+        excludedCuisines:
+          type: array
+          maxItems: 30
+          items:
+            type: string
+            maxLength: 40
+        excludedProteins:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotProtein"
+        excludedTags:
+          type: array
+          maxItems: 30
+          items:
+            type: string
+            maxLength: 40
+        noSpicy:
+          type: boolean
+    AutopilotScheduleInput:
+      type: object
+      additionalProperties: false
+      required: [planDays, mealsPerWeek]
+      properties:
+        planDays:
+          type: array
+          minItems: 1
+          maxItems: 7
+          description: Days Autopilot plans, in week order. Defaults to `mon`–`fri`.
+          items:
+            $ref: "#/components/schemas/AutopilotDay"
+          example: [mon, tue, wed, thu, sun]
+        weeknights:
+          type: array
+          maxItems: 7
+          description: Days the weeknight time limit applies to, in week order. Defaults to `mon`–`thu`.
+          items:
+            $ref: "#/components/schemas/AutopilotDay"
+          example: [mon, tue, wed, thu]
+        mealsPerWeek:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: Between 1 and the number of `planDays`. Defaults to 4.
+          example: 4
+        defaultServings:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 12
+          description: Null uses the household's default servings (see `effective.defaultServings`).
+        weeknightMaxMinutes:
+          type: [integer, "null"]
+          minimum: 5
+          maximum: 480
+          description: Soft cook-time limit on weeknights, or null for none.
+          example: 30
+    AutopilotCookTimeInput:
+      type: object
+      additionalProperties: false
+      required: [quickMaxMinutes, mediumMaxMinutes]
+      properties:
+        quickMaxMinutes:
+          type: integer
+          minimum: 5
+          maximum: 480
+          description: Longest quick meal. Defaults to 20.
+          example: 20
+        mediumMaxMinutes:
+          type: integer
+          minimum: 6
+          maximum: 480
+          description: Longest medium meal; greater than `quickMaxMinutes`. Longer meals are long. Defaults to 35.
+          example: 35
+        maxLongPerWeek:
+          type: integer
+          minimum: 0
+          maximum: 7
+          description: Most long meals wanted in a week; 7 means no limit. Defaults to 2.
+          example: 2
+        minQuickPerWeek:
+          type: integer
+          minimum: 0
+          maximum: 7
+          description: Fewest quick meals wanted in a week. Defaults to 0.
+          example: 2
+        avoidConsecutiveLong:
+          type: boolean
+          description: Discourage long meals on back-to-back days. Defaults to true.
+    AutopilotWeekdayRuleInput:
+      type: object
+      additionalProperties: false
+      description: |
+        A soft preference for one day. Needs at least one cuisine, tag,
+        protein, method, or a time band.
+      required: [day]
+      properties:
+        day:
+          $ref: "#/components/schemas/AutopilotDay"
+        label:
+          type: string
+          maxLength: 40
+          description: Whitespace is collapsed; an empty label becomes the day's name.
+          example: Sunday smoker night
+        cuisines:
+          type: array
+          maxItems: 10
+          description: Free values, stored like profile cuisines.
+          items:
+            type: string
+            maxLength: 40
+        tags:
+          type: array
+          maxItems: 10
+          description: Free values, stored like profile tags.
+          items:
+            type: string
+            maxLength: 40
+        proteins:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotProtein"
+          example: [pork]
+        methods:
+          type: array
+          description: Each must also be in the profile's `equipment`.
+          items:
+            $ref: "#/components/schemas/AutopilotEquipment"
+          example: [smoker]
+        timeBand:
+          description: Preferred cook time (`long` means a long cook is OK), or null for no preference.
+          oneOf:
+            - $ref: "#/components/schemas/AutopilotTimeBand"
+            - type: "null"
+          example: long
+        frequency:
+          $ref: "#/components/schemas/AutopilotRuleFrequency"
+    AutopilotDayOverrideInput:
+      type: object
+      additionalProperties: false
+      required: [day]
+      properties:
+        day:
+          $ref: "#/components/schemas/AutopilotDay"
+        skip:
+          type: boolean
+          description: Don't plan this day.
+        maxMinutes:
+          type: [integer, "null"]
+          minimum: 5
+          maximum: 480
+          description: Hard cook-time cap for this day, like the week's `maxMinutes`; the lower cap wins. Null for none.
+          example: 20
+        servings:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 12
+          description: Servings for this day, or null to use the week's or profile's.
+          example: 6
+    AutopilotProfileRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        Sections have the shapes of `AutopilotProfile`'s sections and are
+        replaced whole. Within a section, omitted lists are empty, omitted
+        booleans false, omitted nullable numbers null, and other omitted
+        numbers 0 (so an omitted `cookTime.maxLongPerWeek` allows no long
+        meals); send the full section to keep values. A section's value must be
+        an object: `null` is not a change, so a PATCH with only null sections
+        is `400 validation_failed`. Free-text lists are trimmed, lowercased, deduplicated,
+        and sorted; fixed-value lists are deduplicated and put in vocabulary
+        order.
+      properties:
+        taste:
+          $ref: "#/components/schemas/AutopilotTasteInput"
+        restrictions:
+          $ref: "#/components/schemas/AutopilotRestrictionsInput"
+        schedule:
+          $ref: "#/components/schemas/AutopilotScheduleInput"
+        cookTime:
+          $ref: "#/components/schemas/AutopilotCookTimeInput"
+        novelty:
+          $ref: "#/components/schemas/AutopilotNovelty"
+        equipment:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotEquipment"
+        weekdayRules:
+          type: array
+          maxItems: 7
+          description: At most one rule per day.
+          items:
+            $ref: "#/components/schemas/AutopilotWeekdayRuleInput"
+    AutopilotDayOverride:
+      type: object
+      additionalProperties: false
+      required: [day, skip, maxMinutes, servings]
+      properties:
+        day:
+          $ref: "#/components/schemas/AutopilotDay"
+        skip:
+          type: boolean
+          description: Don't plan this day.
+        maxMinutes:
+          type: [integer, "null"]
+          minimum: 5
+          maximum: 480
+          description: Hard cook-time cap for this day, like the week's `maxMinutes`; the lower cap wins. Null for none.
+          example: 20
+        servings:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 12
+          description: Servings for this day, or null to use the week's or profile's.
+          example: 6
+    AutopilotWeekContext:
+      type: object
+      required: [householdId, week, startDate, endDate, configured, skip, busy, mealsPerWeek, maxMinutes, servings, days, note, updatedBy, updatedAt]
+      properties:
+        householdId:
+          type: string
+        week:
+          $ref: "#/components/schemas/IsoWeek"
+        startDate:
+          type: string
+          format: date
+          description: The week's Monday.
+          example: "2026-09-14"
+        endDate:
+          type: string
+          format: date
+          description: The week's Sunday.
+          example: "2026-09-20"
+        configured:
+          type: boolean
+          description: False when the week has no saved context.
+        skip:
+          type: boolean
+          description: Don't plan this week.
+        busy:
+          type: boolean
+          description: A busy week favors quick meals and avoids long ones.
+        mealsPerWeek:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 7
+          description: Overrides the profile's `mealsPerWeek` for this week, or null.
+        maxMinutes:
+          type: [integer, "null"]
+          minimum: 5
+          maximum: 480
+          description: Hard cook-time cap for every meal this week; recipes with unknown cook time are excluded under it. Null for none.
+          example: 30
+        servings:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 12
+          description: Servings for this week, or null to use the profile's.
+        days:
+          type: array
+          maxItems: 7
+          description: Only days with something set, in week order.
+          items:
+            $ref: "#/components/schemas/AutopilotDayOverride"
+        note:
+          type: string
+          maxLength: 500
+          description: Free text for the household. Autopilot doesn't read it.
+          example: Grandparents visiting Saturday.
+        updatedBy:
+          type: [string, "null"]
+          description: Null when the week has no saved context.
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+          description: Null when the week has no saved context.
+    AutopilotWeekContextRequest:
+      type: object
+      additionalProperties: false
+      description: The whole context. Fields left out are false, null, empty, or blank.
+      properties:
+        skip:
+          type: boolean
+        busy:
+          type: boolean
+        mealsPerWeek:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 7
+        maxMinutes:
+          type: [integer, "null"]
+          minimum: 5
+          maximum: 480
+        servings:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 12
+        days:
+          type: array
+          maxItems: 7
+          description: At most one entry per day.
+          items:
+            $ref: "#/components/schemas/AutopilotDayOverrideInput"
+        note:
+          type: string
+          maxLength: 500
+          description: Leading and trailing whitespace is trimmed.
+    AutopilotText:
+      type: object
+      required: [code, text]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable code; see where it's used for the known codes. Handle unknown codes.
+        text:
+          type: string
+          description: Human-readable text to show. Not stable; do not parse.
+    AutopilotSlot:
+      type: object
+      required: [id, day, date, recipe, servings, cookMinutes, timeBand, score, signals, reasons, swapCount]
+      properties:
+        id:
+          type: string
+          description: The slot's ID, which is its day code (a proposal has at most one meal per day).
+          example: sun
+        day:
+          $ref: "#/components/schemas/AutopilotDay"
+        date:
+          type: string
+          format: date
+          example: "2026-09-20"
+        recipe:
+          type: object
+          description: Snapshot taken when the meal was proposed.
+          required: [id, name]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+              example: Smoked Pork Shoulder
+            imageUrl:
+              type: string
+        servings:
+          type: integer
+          minimum: 1
+          description: One of the recipe's serving sizes.
+          example: 4
+        cookMinutes:
+          type: [integer, "null"]
+          minimum: 1
+          description: The recipe's effective cook time, or null when unknown.
+          example: 240
+        timeBand:
+          $ref: "#/components/schemas/AutopilotTimeBand"
+        score:
+          type: number
+          description: Weighted sum of the signals plus week adjustments. Only comparable within a proposal.
+          example: 1.284
+        signals:
+          type: object
+          description: |
+            Scoring inputs by name, for debugging and explanations. Meal
+            signals: `rating`, `feedback`, `familiarity`, `conversion`,
+            `recency`, `weekdayAffinity`, `taste`, `rule`, `timeFit`,
+            `novelty`, `servingsFit`, `pantry`, `avoid`, and `objective` (when
+            present). Week signals appear only when non-zero: `variety`,
+            `cookTimeMix`, `ruleFrequency`, `noveltyBudget`. Names may be added.
+          additionalProperties:
+            type: number
+          example:
+            rating: 0.75
+            taste: 0.5
+            rule: 1
+            timeFit: 0.2
+            variety: -0.1
+        reasons:
+          type: array
+          maxItems: 3
+          description: |
+            Why the meal was picked, most important first. Codes: `rule`,
+            `busyWeek`, `dayLimit`, `rating`, `feedback`, `familiar`,
+            `conversion`, `notRecently`, `weekday`, `taste`, `weeknight`,
+            `quick`, `new`, `guests`, `pantry`, and `fit` (when nothing else
+            applies).
+          items:
+            $ref: "#/components/schemas/AutopilotText"
+          example:
+            - code: rule
+              text: Sunday smoker night · Pork · Long cook OK
+            - code: rating
+              text: Rated 4.5★ by your household
+        swapCount:
+          type: integer
+          minimum: 0
+          description: Times this slot was swapped.
+    AutopilotUnfilled:
+      type: object
+      description: A day the proposal wanted to plan but couldn't.
+      required: [day, date, code, text]
+      properties:
+        day:
+          $ref: "#/components/schemas/AutopilotDay"
+        date:
+          type: string
+          format: date
+        code:
+          type: string
+          description: "`no_candidates`, or `no_quick_candidates` when a cook-time cap left nothing."
+          example: no_quick_candidates
+        text:
+          type: string
+          example: No remaining recipe is ready within 20 minutes on Friday.
+    AutopilotObjective:
+      type: object
+      description: The week objective's breakdown; `total` is the sum of the others.
+      required: [meals, variety, cookTime, rules, novelty, total]
+      properties:
+        meals:
+          type: number
+          description: Sum of the meals' base scores.
+        variety:
+          type: number
+          description: Penalty for repeated cuisines and proteins (0 or less).
+        cookTime:
+          type: number
+          description: Penalty for the cook-time mix (0 or less).
+        rules:
+          type: number
+          description: Penalty for `at_most_once` rules matched more than once (0 or less).
+        novelty:
+          type: number
+          description: Penalty for new meals beyond the novelty budget (0 or less).
+        total:
+          type: number
+    AutopilotProposal:
+      type: object
+      required: [id, householdId, week, startDate, endDate, status, version, attempt, modelVersion, inputsHash, requestedMeals, plannedMeals, candidateCount, coldStart, slots, unfilled, messages, objective, swapCount, excludedSlotIds, generatedBy, generatedAt, updatedAt, decidedBy, decidedAt]
+      properties:
+        id:
+          type: string
+          description: Changes each time the week is generated.
+        householdId:
+          type: string
+        week:
+          $ref: "#/components/schemas/IsoWeek"
+        startDate:
+          type: string
+          format: date
+          description: The week's Monday.
+          example: "2026-09-14"
+        endDate:
+          type: string
+          format: date
+          description: The week's Sunday.
+          example: "2026-09-20"
+        status:
+          $ref: "#/components/schemas/AutopilotProposalStatus"
+        version:
+          type: integer
+          format: int64
+          description: Increases with every change, including regeneration. Send it to swap, accept, or reject.
+          example: 3
+        attempt:
+          type: integer
+          minimum: 1
+          description: 1 for the week's first generation, then one more each time it's generated again.
+        modelVersion:
+          type: string
+          example: baseline-2026.1
+        inputsHash:
+          type: string
+          description: Fingerprint of the generation inputs; identical inputs give the same hash.
+        requestedMeals:
+          type: integer
+          minimum: 0
+          description: Meals the week asked for, from the profile or week context.
+          example: 5
+        plannedMeals:
+          type: integer
+          minimum: 0
+          description: Meals in `slots` when generated.
+          example: 3
+        candidateCount:
+          type: integer
+          minimum: 0
+          description: Recipes that passed the hard constraints.
+        coldStart:
+          type: boolean
+          description: True while the household has little history, so picks lean on the taste profile.
+        slots:
+          type: array
+          description: Proposed meals, in week order.
+          items:
+            $ref: "#/components/schemas/AutopilotSlot"
+        unfilled:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotUnfilled"
+        messages:
+          type: array
+          description: |
+            Week-level notes. Codes: `week_skipped`, `empty_catalog`,
+            `week_full`, `not_enough_candidates`, `not_enough_days`,
+            `already_planned`, `cold_start`.
+          items:
+            $ref: "#/components/schemas/AutopilotText"
+          example:
+            - code: not_enough_candidates
+              text: Only 3 quick recipes (≤20 min) match; planned 3 of 5 nights.
+        objective:
+          $ref: "#/components/schemas/AutopilotObjective"
+        swapCount:
+          type: integer
+          minimum: 0
+          description: Swaps across all slots.
+        excludedSlotIds:
+          type: array
+          description: Slots left out when the proposal was accepted; empty otherwise.
+          items:
+            $ref: "#/components/schemas/AutopilotDay"
+        generatedBy:
+          type: string
+          description: User ID of the member who generated it.
+        generatedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        decidedBy:
+          type: [string, "null"]
+          description: User ID of the member who accepted or rejected it; null while proposed.
+        decidedAt:
+          type: [string, "null"]
+          format: date-time
+          description: Null while proposed.
+    AutopilotGenerateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        avoidPrevious:
+          type: boolean
+          default: true
+          description: When a pending proposal is replaced, steer away from its meals and the meals swapped out of it.
+    AutopilotVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version:
+          type: integer
+          format: int64
+          description: The proposal's current `version`.
+          example: 3
+    AutopilotAcceptRequest:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version:
+          type: integer
+          format: int64
+          description: The proposal's current `version`.
+          example: 3
+        excludeSlotIds:
+          type: array
+          description: Slots not to add. Each must be a slot of the proposal; duplicates are ignored.
+          items:
+            type: string
+          example: [wed]
+    AutopilotSkippedSlot:
+      type: object
+      required: [slotId, day, reason]
+      properties:
+        slotId:
+          type: string
+          example: tue
+        day:
+          $ref: "#/components/schemas/AutopilotDay"
+        reason:
+          type: string
+          enum: [dayTaken, alreadyPlanned]
+          description: "`dayTaken`: the plan already has a meal that day. `alreadyPlanned`: the recipe is already in the week."
+    AutopilotAcceptResult:
+      type: object
+      required: [proposal, plan, added, skipped]
+      properties:
+        proposal:
+          $ref: "#/components/schemas/AutopilotProposal"
+        plan:
+          $ref: "#/components/schemas/Plan"
+        added:
+          type: array
+          description: The new plan entries, with origin `autopilot`.
+          items:
+            $ref: "#/components/schemas/PlanEntry"
+        skipped:
+          type: array
+          description: Meals not added because their day or recipe was already planned. Excluded slots aren't listed.
+          items:
+            $ref: "#/components/schemas/AutopilotSkippedSlot"
+    AutopilotMethod:
+      type: object
+      required: [method, label, suits, source, heuristicSuits]
+      properties:
+        method:
+          $ref: "#/components/schemas/AutopilotEquipment"
+        label:
+          type: string
+          example: Smoker
+        suits:
+          type: boolean
+          description: Whether the recipe suits the method, after the household's override.
+        source:
+          type: string
+          enum: [heuristic, override]
+        heuristicSuits:
+          type: boolean
+          description: The heuristic's answer, even when overridden.
+        evidence:
+          type: string
+          description: What the heuristic matched. Omitted when nothing matched.
+          example: pork shoulder
+    AutopilotRecipeOverride:
+      type: object
+      required: [recipeId, methods, updatedBy, updatedAt]
+      properties:
+        recipeId:
+          type: string
+        methods:
+          type: object
+          description: Whether the recipe suits each overridden method. Methods left out use the heuristic.
+          propertyNames:
+            $ref: "#/components/schemas/AutopilotEquipment"
+          additionalProperties:
+            type: boolean
+          example:
+            smoker: true
+            grill: false
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    AutopilotRecipeOverrideList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotRecipeOverride"
+    AutopilotRecipeOverrideRequest:
+      type: object
+      additionalProperties: false
+      required: [methods]
+      properties:
+        methods:
+          type: object
+          minProperties: 1
+          description: Method to whether the recipe suits it; null clears that method's override.
+          propertyNames:
+            $ref: "#/components/schemas/AutopilotEquipment"
+          additionalProperties:
+            type: [boolean, "null"]
+          example:
+            smoker: true
+            air-fryer: null
+    AutopilotRecipeAttributes:
+      type: object
+      required: [recipeId, cookMinutes, timeBand, cuisines, tags, proteins, allergens, diets, spicy, methods, override]
+      properties:
+        recipeId:
+          type: string
+        cookMinutes:
+          type: [integer, "null"]
+          minimum: 1
+          description: The recipe's effective cook time, or null when unknown.
+          example: 240
+        timeBand:
+          $ref: "#/components/schemas/AutopilotTimeBand"
+        cuisines:
+          type: array
+          description: The recipe's cuisines, lowercased.
+          items:
+            type: string
+        tags:
+          type: array
+          description: The recipe's tags, lowercased.
+          items:
+            type: string
+        proteins:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotProtein"
+        allergens:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotAllergen"
+        diets:
+          type: array
+          description: Diets the recipe fits.
+          items:
+            $ref: "#/components/schemas/AutopilotDiet"
+        spicy:
+          type: boolean
+        spicyEvidence:
+          type: string
+          description: The tag or ingredient that made it spicy. Omitted when not spicy.
+          example: chipotle
+        methods:
+          type: array
+          description: One per equipment value, in vocabulary order, whether or not the household has it.
+          items:
+            $ref: "#/components/schemas/AutopilotMethod"
+        override:
+          description: The household's override for this recipe, or null when it has none.
+          oneOf:
+            - $ref: "#/components/schemas/AutopilotRecipeOverride"
+            - type: "null"
+    AutopilotFieldChange:
+      type: object
+      required: [field]
+      description: How one field changed. Values are truncated to 100 characters.
+      properties:
+        field:
+          type: string
+          description: Dotted path, such as `schedule.mealsPerWeek`, `weekdayRules.sun`, or `days.fri`.
+          example: taste.likes.cuisines
+        added:
+          type: array
+          maxItems: 30
+          description: For lists. Omitted when empty.
+          items:
+            type: string
+          example: [thai]
+        removed:
+          type: array
+          maxItems: 30
+          description: For lists. Omitted when empty.
+          items:
+            type: string
+        from:
+          type: string
+          description: For single values; omitted when the value was unset.
+        to:
+          type: string
+          description: For single values; omitted when the value is now unset.
+    AutopilotHistoryItem:
+      type: object
+      required: [type, userId, occurredAt]
+      properties:
+        type:
+          type: string
+          enum: [autopilot.preferences_updated, autopilot.week_context_updated, autopilot.recipe_override_updated]
+        userId:
+          type: string
+          description: The member who made the change.
+        occurredAt:
+          type: string
+          format: date-time
+        week:
+          $ref: "#/components/schemas/IsoWeek"
+        recipeId:
+          type: string
+          description: Present for `autopilot.recipe_override_updated`.
+        sections:
+          type: array
+          description: Present for `autopilot.preferences_updated`.
+          items:
+            $ref: "#/components/schemas/AutopilotSection"
+        changes:
+          type: array
+          maxItems: 40
+          description: Present for profile and week context changes. Omitted when a week context was cleared.
+          items:
+            $ref: "#/components/schemas/AutopilotFieldChange"
+        cleared:
+          type: boolean
+          description: True when the week context was cleared; omitted otherwise.
+        method:
+          $ref: "#/components/schemas/AutopilotEquipment"
+        value:
+          type: string
+          enum: [auto, "yes", "no"]
+          description: For recipe overrides, the method's new setting (`auto` means the heuristic decides).
+        previous:
+          type: string
+          enum: [auto, "yes", "no"]
+          description: For recipe overrides, the method's previous setting.
+    AutopilotHistory:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: Newest first.
+          items:
+            $ref: "#/components/schemas/AutopilotHistoryItem"
+    AutopilotOption:
+      type: object
+      required: [value, label]
+      properties:
+        value:
+          type: string
+          description: What to send.
+          example: mexican
+        label:
+          type: string
+          description: What to show.
+          example: Mexican
+        description:
+          type: string
+          description: Omitted when there's nothing to add.
+        recipeCount:
+          type: integer
+          minimum: 0
+          description: Only on cuisines, tags, and proteins. Main-meal recipes that carry the value; 0 for starter values.
+          example: 12
+    AutopilotLimits:
+      type: object
+      description: Validation bounds, for input limits in the app.
+      required: [maxListValues, maxExcludedIngredients, maxValueLength, maxIngredientLength, maxRuleValues, maxLabelLength, maxNoteLength, minCookMinutes, maxCookMinutes, maxServings]
+      properties:
+        maxListValues:
+          type: integer
+          example: 30
+        maxExcludedIngredients:
+          type: integer
+          example: 50
+        maxValueLength:
+          type: integer
+          example: 40
+        maxIngredientLength:
+          type: integer
+          example: 60
+        maxRuleValues:
+          type: integer
+          example: 10
+        maxLabelLength:
+          type: integer
+          example: 40
+        maxNoteLength:
+          type: integer
+          example: 500
+        minCookMinutes:
+          type: integer
+          example: 5
+        maxCookMinutes:
+          type: integer
+          example: 480
+        maxServings:
+          type: integer
+          example: 12
+    AutopilotVocabulary:
+      type: object
+      required: [cuisines, tags, proteins, diets, allergens, equipment, novelty, timeBands, frequencies, days, catalogRecipeCount, limits]
+      properties:
+        cuisines:
+          type: array
+          description: Values the household's main meals use (most used first), then starter values they don't (alphabetically); at most 60.
+          items:
+            $ref: "#/components/schemas/AutopilotOption"
+        tags:
+          type: array
+          description: Like `cuisines`.
+          items:
+            $ref: "#/components/schemas/AutopilotOption"
+        proteins:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotOption"
+        diets:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotOption"
+        allergens:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotOption"
+        equipment:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotOption"
+        novelty:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotOption"
+        timeBands:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotOption"
+        frequencies:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotOption"
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotOption"
+        catalogRecipeCount:
+          type: integer
+          minimum: 0
+          description: Main-meal recipes the counts cover.
+        limits:
+          $ref: "#/components/schemas/AutopilotLimits"
   responses:
     Forbidden:
       description: "`forbidden`: the caller is a member of the household, but their role doesn't allow this action."
@@ -4126,6 +5980,20 @@ components:
       description: |
         `plan_finalized`: the plan is finalized; set its status to `draft` first.
         `plan_full`: the week already has 50 entries.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    AutopilotConflict:
+      description: |
+        `conflict`: the profile or week context kept changing concurrently after several automatic retries; retry.
+        `plan_finalized`: the week's plan is finalized; set its status to `draft` to use Autopilot.
+        `plan_full`: accepting would put more than 50 entries in the week.
+        `proposal_changed`: `version` is stale, or the proposal changed concurrently; reload it and retry.
+        `proposal_not_pending`: the proposal was already accepted or rejected.
+        `no_alternative`: no other recipe fits the slot's day (swap); the message says why.
+        `nothing_to_accept`: every meal is excluded, or its day or recipe is already planned.
+        `proposal_stale`: a recipe in the proposal was removed or lost the serving size; generate the week again.
       content:
         application/json:
           schema:
