@@ -62,6 +62,15 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Use(auth.RequireAuth(h.opts.Tokens))
 		r.Post("/invitations/accept", h.accept)
 	})
+	r.Group(func(r chi.Router) {
+		// No authentication: the web landing page and a signed-out app preview
+		// invitations. The same limiter as accept means previews and accepts
+		// draw from one budget, so previewing adds no guesses.
+		if h.opts.AcceptRateLimit != nil {
+			r.Use(h.opts.AcceptRateLimit)
+		}
+		r.Post("/invitations/preview", h.preview)
+	})
 }
 
 // --- Wire types ---------------------------------------------------------------
@@ -107,9 +116,33 @@ type createInvitationRequest struct {
 	Role  string `json:"role"`
 }
 
-type acceptInvitationRequest struct {
+// InvitationPreviewResponse is returned by POST /invitations/preview.
+type InvitationPreviewResponse struct {
+	HouseholdName string `json:"householdName"`
+	// InviterName is empty when the inviter has no display name or no longer
+	// exists.
+	InviterName string          `json:"inviterName"`
+	Role        households.Role `json:"role"`
+	ExpiresAt   time.Time       `json:"expiresAt"`
+}
+
+// invitationSecretRequest is the body of accept and preview.
+type invitationSecretRequest struct {
 	Token string `json:"token"`
 	Code  string `json:"code"`
+}
+
+// decodeSecret decodes and length-checks an accept or preview body.
+func decodeSecret(w http.ResponseWriter, r *http.Request) (invitationSecretRequest, bool) {
+	var req invitationSecretRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return req, false
+	}
+	if len(req.Token) > 256 || len(req.Code) > 64 {
+		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", "token or code is too long")
+		return req, false
+	}
+	return req, true
 }
 
 // --- Handlers -----------------------------------------------------------------
@@ -161,12 +194,8 @@ func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) accept(w http.ResponseWriter, r *http.Request) {
 	userID, _ := auth.UserIDFromContext(r.Context())
-	var req acceptInvitationRequest
-	if !httpx.DecodeJSON(w, r, &req) {
-		return
-	}
-	if len(req.Token) > 256 || len(req.Code) > 64 {
-		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", "token or code is too long")
+	req, ok := decodeSecret(w, r)
+	if !ok {
 		return
 	}
 	res, err := h.opts.Service.Accept(r.Context(), userID, req.Token, req.Code)
@@ -178,6 +207,26 @@ func (h *Handler) accept(w http.ResponseWriter, r *http.Request) {
 		Household:   households.NewHouseholdResponse(res.Household),
 		Role:        res.Membership.Role,
 		Permissions: res.Membership.Role.Permissions(),
+	})
+}
+
+func (h *Handler) preview(w http.ResponseWriter, r *http.Request) {
+	req, ok := decodeSecret(w, r)
+	if !ok {
+		return
+	}
+	res, err := h.opts.Service.Preview(r.Context(), req.Token, req.Code)
+	if err != nil {
+		h.writeError(w, r, "preview invitation failed", err)
+		return
+	}
+	// The response is only for the holder of the secret; keep it out of caches.
+	w.Header().Set("Cache-Control", "no-store")
+	httpx.WriteJSON(w, http.StatusOK, InvitationPreviewResponse{
+		HouseholdName: res.HouseholdName,
+		InviterName:   res.InviterName,
+		Role:          res.Role,
+		ExpiresAt:     res.ExpiresAt.UTC(),
 	})
 }
 

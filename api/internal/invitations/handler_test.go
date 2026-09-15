@@ -102,7 +102,7 @@ func TestInvitationLifecycleHandlers(t *testing.T) {
 	if len(list.Items) != 1 || list.Items[0].ID != created.Invitation.ID {
 		t.Errorf("list = %+v", list)
 	}
-	token := strings.TrimPrefix(srv.email.last().AcceptURL, DefaultAcceptURLBase)
+	token := strings.TrimPrefix(srv.email.last().AcceptURL, DefaultAcceptURLBase+"#token=")
 	for _, secret := range []string{created.Code, token, "Hash"} {
 		if strings.Contains(rec.Body.String(), secret) {
 			t.Errorf("list leaks %q: %s", secret, rec.Body.String())
@@ -221,4 +221,105 @@ func TestAcceptInvitationIsRateLimited(t *testing.T) {
 	if rec := srv.do(t, http.MethodGet, invitationsPath, "", userAda); rec.Code != http.StatusOK {
 		t.Errorf("list status = %d, want 200", rec.Code)
 	}
+}
+
+const (
+	acceptPath  = "/api/v1/invitations/accept"
+	previewPath = "/api/v1/invitations/preview"
+)
+
+func TestPreviewInvitationHandler(t *testing.T) {
+	srv := newInvitationTestServer(t, 0)
+	created := decodeBody[CreateInvitationResponse](t, srv.do(t, http.MethodPost, invitationsPath, `{"email":"cat@example.com","role":"admin"}`, userAda))
+	token := strings.TrimPrefix(srv.email.last().AcceptURL, DefaultAcceptURLBase+"#token=")
+
+	for _, body := range []string{`{"token":"` + token + `"}`, `{"code":"` + strings.ToLower(created.Code) + `"}`} {
+		// No Authorization header: previews work signed out.
+		rec := srv.do(t, http.MethodPost, previewPath, body, "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("preview status = %d, body %s", rec.Code, rec.Body.String())
+		}
+		if cc := rec.Header().Get("Cache-Control"); cc != "no-store" {
+			t.Errorf("Cache-Control = %q, want no-store", cc)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+			t.Fatal(err)
+		}
+		if len(raw) != 4 {
+			t.Errorf("preview fields = %v, want exactly householdName, inviterName, role, expiresAt", raw)
+		}
+		got := decodeBody[InvitationPreviewResponse](t, rec)
+		want := InvitationPreviewResponse{HouseholdName: "The Lines", InviterName: "Ada", Role: households.RoleAdmin, ExpiresAt: created.Invitation.ExpiresAt}
+		if got != want {
+			t.Errorf("preview = %+v, want %+v", got, want)
+		}
+		for _, secret := range []string{token, created.Code, "Hash", "cat@example.com"} {
+			if strings.Contains(rec.Body.String(), secret) {
+				t.Errorf("preview leaks %q: %s", secret, rec.Body.String())
+			}
+		}
+	}
+
+	// Previewing doesn't use the invitation up.
+	if rec := srv.do(t, http.MethodPost, acceptPath, `{"token":"`+token+`"}`, userCat); rec.Code != http.StatusOK {
+		t.Errorf("accept after preview status = %d, body %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestPreviewErrorsMatchAccept checks that preview and accept give identical
+// errors, so preview can't distinguish invitations that accept doesn't.
+func TestPreviewErrorsMatchAccept(t *testing.T) {
+	srv := newInvitationTestServer(t, 0)
+	create := func(email string) CreateInvitationResponse {
+		return decodeBody[CreateInvitationResponse](t, srv.do(t, http.MethodPost, invitationsPath, `{"email":"`+email+`","role":"member"}`, userAda))
+	}
+	revoked := create("revoked@example.com")
+	srv.do(t, http.MethodDelete, invitationsPath+"/"+revoked.Invitation.ID, "", userAda)
+	used := create("used@example.com")
+	srv.do(t, http.MethodPost, acceptPath, `{"code":"`+used.Code+`"}`, userCat)
+	expired := create("expired@example.com")
+
+	bodies := map[string]string{
+		"unknown code":    `{"code":"00000-00000"}`,
+		"unknown token":   `{"token":"` + strings.Repeat("A", TokenLength) + `"}`,
+		"malformed token": `{"token":"short"}`,
+		"revoked":         `{"code":"` + revoked.Code + `"}`,
+		"used":            `{"code":"` + used.Code + `"}`,
+		"neither":         `{}`,
+		"both":            `{"token":"abc","code":"00000-00000"}`,
+		"huge token":      `{"token":"` + strings.Repeat("a", 300) + `"}`,
+		"empty body":      ``,
+		"unknown field":   `{"code":"00000-00000","email":"a@example.com"}`,
+	}
+	compare := func(name, body string) {
+		t.Helper()
+		accept := srv.do(t, http.MethodPost, acceptPath, body, userDan)
+		preview := srv.do(t, http.MethodPost, previewPath, body, "")
+		a := decodeBody[httpx.ErrorResponse](t, accept).Error
+		p := decodeBody[httpx.ErrorResponse](t, preview).Error
+		if accept.Code != preview.Code || a.Code != p.Code || a.Message != p.Message || accept.Code < 400 {
+			t.Errorf("%s: accept %d %+v, preview %d %+v; want the same error", name, accept.Code, a, preview.Code, p)
+		}
+	}
+	for name, body := range bodies {
+		compare(name, body)
+	}
+	srv.clock.Advance(TTL)
+	compare("expired", `{"code":"`+expired.Code+`"}`)
+}
+
+func TestPreviewSharesAcceptRateLimit(t *testing.T) {
+	srv := newInvitationTestServer(t, 3)
+	wantError(t, srv.do(t, http.MethodPost, previewPath, `{"code":"00000-00000"}`, ""), 404, "invitation_invalid")
+	wantError(t, srv.do(t, http.MethodPost, acceptPath, `{"code":"00000-00000"}`, userCat), 404, "invitation_invalid")
+	wantError(t, srv.do(t, http.MethodPost, previewPath, `{"code":"00000-00000"}`, ""), 404, "invitation_invalid")
+
+	// Previews and accepts draw from one bucket, so previewing adds no guesses.
+	rec := srv.do(t, http.MethodPost, previewPath, `{"code":"00000-00000"}`, "")
+	wantError(t, rec, 429, "rate_limited")
+	if rec.Header().Get("Retry-After") == "" {
+		t.Error("missing Retry-After")
+	}
+	wantError(t, srv.do(t, http.MethodPost, acceptPath, `{"code":"00000-00000"}`, userCat), 429, "rate_limited")
 }

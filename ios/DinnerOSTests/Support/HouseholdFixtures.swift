@@ -63,6 +63,16 @@ nonisolated enum HouseholdFixtures {
                 .utf8)
     }
 
+    static func preview(
+        householdName: String = "Babbage House", inviterName: String = "Charles Babbage", role: String = "member"
+    ) -> Data {
+        Data(
+            #"""
+            {"householdName":"\#(householdName)","inviterName":"\#(inviterName)","role":"\#(role)",
+             "expiresAt":"2026-09-21T18:30:00Z"}
+            """#.utf8)
+    }
+
     static func invitation(id: String = "invitation-1", email: String = "grace@example.com", role: String = "member")
         -> String
     {
@@ -136,6 +146,12 @@ nonisolated final class FakeHouseholdServer: Sendable {
                 }
                 state.memberships.removeAll { $0.householdID == route[1] }
                 return (204, Data())
+            case ("POST", 2) where route == ["invitations", "preview"]:
+                let body = request.jsonBody ?? [:]
+                guard body["code"] == state.validCode || body["token"] == state.validToken else {
+                    return (404, Fixtures.errorJSON(code: "invitation_invalid"))
+                }
+                return (200, HouseholdFixtures.preview())
             case ("POST", 2) where route == ["invitations", "accept"]:
                 let body = request.jsonBody ?? [:]
                 guard body["code"] == state.validCode || body["token"] == state.validToken else {

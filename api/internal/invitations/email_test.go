@@ -23,7 +23,7 @@ func testEmail() HouseholdInvitationEmail {
 		InviterName:   "Ada",
 		Role:          households.RoleMember,
 		Code:          "ABCDE-FGHJK",
-		AcceptURL:     "dinneros://invite?token=tok_abc-123",
+		AcceptURL:     "https://api.tlps.dev/invite#token=tok_abc-123",
 		ExpiresAt:     time.Date(2026, 9, 21, 18, 30, 0, 0, time.UTC),
 	}
 }
@@ -36,12 +36,12 @@ func TestRenderHouseholdInvitation(t *testing.T) {
 	if msg.Subject != "Ada invited you to The Lines on Supper Club" {
 		t.Errorf("Subject = %q", msg.Subject)
 	}
-	for _, want := range []string{"ABCDE-FGHJK", `href="dinneros://invite?token=tok_abc-123"`, "Open in the app", "Supper Club", "September 21, 2026", "as a member"} {
+	for _, want := range []string{"ABCDE-FGHJK", `href="https://api.tlps.dev/invite#token=tok_abc-123"`, "Open in the app", "Supper Club", "September 21, 2026", "as a member"} {
 		if !strings.Contains(msg.HTML, want) {
 			t.Errorf("HTML missing %q", want)
 		}
 	}
-	for _, want := range []string{"ABCDE-FGHJK", "dinneros://invite?token=tok_abc-123", "Supper Club", "September 21, 2026"} {
+	for _, want := range []string{"ABCDE-FGHJK", "https://api.tlps.dev/invite#token=tok_abc-123", "Supper Club", "September 21, 2026"} {
 		if !strings.Contains(msg.Text, want) {
 			t.Errorf("Text missing %q", want)
 		}

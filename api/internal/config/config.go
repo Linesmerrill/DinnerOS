@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/mail"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -67,9 +68,17 @@ type Config struct {
 	ResendAPIKey string
 	// EmailFrom is the sender address, e.g. "DinnerOS <invites@example.com>".
 	EmailFrom string
-	// InviteURLBase is prepended to an invitation token to form the link in
-	// invitation emails.
+	// InviteURLBase is the invitation link in emails, before the token. The
+	// token is appended as a "#token=" fragment, or directly when the base ends
+	// in "=" (the legacy "dinneros://invite?token=" form).
 	InviteURLBase string
+
+	// AppleTeamID is the Apple Developer Team ID. With AppleBundleID it forms
+	// the app ID in apple-app-site-association. Empty disables that file.
+	AppleTeamID string
+	// AppURLScheme is the iOS app's custom URL scheme. The invitation landing
+	// page links to <scheme>://invite?token=... to open the app.
+	AppURLScheme string
 }
 
 // Email providers.
@@ -78,9 +87,14 @@ const (
 	EmailProviderLog    = "log"
 )
 
-// DefaultInviteURLBase opens the iOS app's custom URL scheme. Universal links
-// can replace it later without a code change.
-const DefaultInviteURLBase = "dinneros://invite?token="
+// DefaultInviteURLBase is the invitation landing page, which the iOS app
+// claims as a universal link (see GET /.well-known/apple-app-site-association).
+// The token goes in the URL fragment, so it never reaches the server or its
+// router logs.
+const DefaultInviteURLBase = "https://api.tlps.dev/invite"
+
+// DefaultAppURLScheme matches APP_URL_SCHEME in ios/Config/Shared.xcconfig.
+const DefaultAppURLScheme = "dinneros"
 
 // DefaultRecipeImportMaxBytes fits a full recipe order history (about 1000
 // recipes, 10–15 MB) with room to grow.
@@ -115,6 +129,8 @@ func (c Config) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("authSigningKey", signingKey),
 		slog.String("appleBundleId", c.AppleBundleID),
+		slog.String("appleTeamId", c.AppleTeamID),
+		slog.String("appURLScheme", c.AppURLScheme),
 		slog.Bool("googleSignInEnabled", c.GoogleClientID != ""),
 		slog.Bool("devLoginEnabled", c.DevLoginEnabled()),
 		slog.String("emailProvider", c.EmailProvider),
@@ -216,6 +232,10 @@ func loadAuth(cfg *Config, get func(key, fallback string) string) []error {
 	var errs []error
 
 	cfg.AppleBundleID = get("APPLE_BUNDLE_ID", DefaultAppleBundleID)
+	cfg.AppleTeamID = get("APPLE_TEAM_ID", "")
+	if cfg.AppleTeamID != "" && !appleTeamIDPattern.MatchString(cfg.AppleTeamID) {
+		errs = append(errs, fmt.Errorf("APPLE_TEAM_ID must be 10 uppercase letters or digits, got %q", cfg.AppleTeamID))
+	}
 	cfg.GoogleClientID = get("GOOGLE_CLIENT_ID", "")
 
 	devLogin, err := strconv.ParseBool(get("AUTH_DEV_LOGIN_ENABLED", "false"))
@@ -286,9 +306,24 @@ func loadEmail(cfg *Config, get func(key, fallback string) string) []error {
 	cfg.InviteURLBase = get("APP_INVITE_URL_BASE", DefaultInviteURLBase)
 	if u, err := url.Parse(cfg.InviteURLBase); err != nil || u.Scheme == "" || unsafeLinkScheme(u.Scheme) {
 		errs = append(errs, fmt.Errorf("APP_INVITE_URL_BASE must be an absolute URL such as %q", DefaultInviteURLBase))
+	} else if strings.Contains(cfg.InviteURLBase, "#") && !strings.HasSuffix(cfg.InviteURLBase, "=") {
+		// The token is appended as "#token=...", so a base can't have its own fragment.
+		errs = append(errs, fmt.Errorf("APP_INVITE_URL_BASE must not contain a fragment; use a URL such as %q", DefaultInviteURLBase))
+	}
+
+	cfg.AppURLScheme = strings.ToLower(get("APP_URL_SCHEME", DefaultAppURLScheme))
+	switch s := cfg.AppURLScheme; {
+	case !urlSchemePattern.MatchString(s), unsafeLinkScheme(s), s == "http", s == "https":
+		errs = append(errs, fmt.Errorf("APP_URL_SCHEME must be a custom URL scheme such as %q, got %q", DefaultAppURLScheme, s))
 	}
 	return errs
 }
+
+var (
+	appleTeamIDPattern = regexp.MustCompile(`^[A-Z0-9]{10}$`)
+	// urlSchemePattern is RFC 3986's scheme syntax, lowercased.
+	urlSchemePattern = regexp.MustCompile(`^[a-z][a-z0-9+.-]*$`)
+)
 
 func unsafeLinkScheme(scheme string) bool {
 	switch strings.ToLower(scheme) {

@@ -157,3 +157,31 @@ func TestUnknownRoutesReturnJSONErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestWebRoutesMountedAtRootWithMiddleware(t *testing.T) {
+	srv := newTestServer(t, Options{
+		WebRoutes: func(r chi.Router) {
+			r.Get("/invite", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+		},
+		APIRoutes: func(r chi.Router) {
+			r.Get("/invite", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) })
+		},
+	})
+
+	rec := srv.do(httptest.NewRequest(http.MethodGet, "/invite", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /invite status = %d, want 200", rec.Code)
+	}
+	if rec.Header().Get(RequestIDHeader) == "" {
+		t.Error("global middleware not applied to web routes (missing request ID)")
+	}
+	if !strings.Contains(srv.logs.String(), `"route":"/invite"`) {
+		t.Errorf("web route not logged by pattern: %s", srv.logs.String())
+	}
+	if rec := srv.do(httptest.NewRequest(http.MethodGet, "/api/v1/invite", nil)); rec.Code != http.StatusAccepted {
+		t.Errorf("GET /api/v1/invite status = %d, want the API route", rec.Code)
+	}
+	if rec := srv.do(httptest.NewRequest(http.MethodGet, "/health", nil)); rec.Code != http.StatusOK {
+		t.Errorf("GET /health status = %d", rec.Code)
+	}
+}

@@ -1,22 +1,24 @@
 import SwiftUI
 
 extension View {
-    /// Asks before joining through an invitation link, then reports the result.
+    /// Checks an invitation link, asks before joining, then reports the result.
     func inviteLinkPrompt() -> some View {
         modifier(InviteLinkPrompt())
     }
 }
 
 /// Opening a link never joins a household silently: a link from someone you don't know
-/// would otherwise add you to their household and share your name with its members.
+/// would otherwise add you to their household and share your name with its members. The
+/// prompt names the household and who sent the invitation, so people know what they're
+/// joining.
 private struct InviteLinkPrompt: ViewModifier {
     @Environment(HouseholdStore.self) private var households
 
     func body(content: Content) -> some View {
         content
             .overlay {
-                if households.inviteStatus == .accepting {
-                    ProgressView("Joining household…")
+                if let progressMessage {
+                    ProgressView(progressMessage)
                         .padding(24)
                         .background(.regularMaterial, in: .rect(cornerRadius: 16, style: .continuous))
                 }
@@ -34,12 +36,20 @@ private struct InviteLinkPrompt: ViewModifier {
             }
     }
 
+    private var progressMessage: String? {
+        switch households.inviteStatus {
+        case .loadingPreview: String(localized: "Checking invitation…")
+        case .accepting: String(localized: "Joining household…")
+        default: nil
+        }
+    }
+
     private var isPresented: Binding<Bool> {
         Binding(
             get: {
                 switch households.inviteStatus {
-                case .awaitingConfirmation, .joined, .failed: true
-                case .accepting, nil: false
+                case .awaitingConfirmation, .invalid, .joined, .failed: true
+                case .loadingPreview, .accepting, nil: false
                 }
             },
             set: { presented in
@@ -50,25 +60,28 @@ private struct InviteLinkPrompt: ViewModifier {
 
     private var title: String {
         switch households.inviteStatus {
-        case .awaitingConfirmation: String(localized: "Join Household?")
+        case .awaitingConfirmation(let preview): preview.joinTitle
+        case .invalid: String(localized: "This invitation is no longer valid")
         case .joined: String(localized: "You're In")
         case .failed: String(localized: "Couldn't Join Household")
-        case .accepting, nil: ""
+        case .loadingPreview, .accepting, nil: ""
         }
     }
 
     private var message: String {
         switch households.inviteStatus {
-        case .awaitingConfirmation:
+        case .awaitingConfirmation(let preview):
+            preview.joinMessage
+        case .invalid:
             String(
                 localized:
-                    "You opened an invitation link. Joining adds you to that household and shares your name with its members."
+                    "It may have expired, been revoked, or already been used. Ask the person who invited you for a new invitation."
             )
         case .joined(let name):
             String(localized: "You joined \(name).")
         case .failed(let message):
             message
-        case .accepting, nil:
+        case .loadingPreview, .accepting, nil:
             ""
         }
     }

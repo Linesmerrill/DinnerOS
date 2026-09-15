@@ -13,6 +13,13 @@ any endpoint change.
   - `GET /ready`: readiness. Returns `200 {"status":"ready","checks":{"mongodb":"ok"}}`,
     or `503` with `"unavailable"` when a dependency is down. Failure details go
     to the logs only.
+- Browser-facing routes are unversioned too. They're mounted through
+  `httpapi.Options.WebRoutes` from `api/internal/applinks`:
+  - `GET /invite`: the invitation landing page. The token is in the URL
+    fragment, so the server never sees it. See
+    [authentication.md](authentication.md#invitation-links).
+  - `GET /.well-known/apple-app-site-association`: the iOS app's universal-link
+    association, served as `application/json` once `APPLE_TEAM_ID` is set.
 
 ## Requests
 
@@ -89,6 +96,9 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/invitations` → `{items}` (pending only) | `members.invite` | 3 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/invitations/{invitationId}` → `204` | `members.invite` | 3 | ✅ |
 | POST | `/api/v1/invitations/accept` `{token}` or `{code}` → `{household, role, permissions}` | bearer, rate limited | 3 | ✅ |
+| POST | `/api/v1/invitations/preview` `{token}` or `{code}` → `{householdName, inviterName, role, expiresAt}` | none, rate limited (shares accept's bucket) | 3 | ✅ |
+| GET | `/invite` → HTML landing page for invitation links (token in the `#token=` fragment) | — | 3 | ✅ |
+| GET | `/.well-known/apple-app-site-association` → universal-link association JSON (404 until `APPLE_TEAM_ID` is set) | — | 3 | ✅ |
 | GET | `/api/v1/households/{householdId}/recipes` `?q&addons&tag&cuisine&sort&limit&cursor` → `{items, nextCursor}` | `household.view` | 4 | ✅ |
 | GET | `/api/v1/households/{householdId}/recipes/{recipeId}` → recipe | `household.view` | 4 | ✅ |
 | POST | `/api/v1/households/{householdId}/recipes/import` import file → `{created, updated, unchanged, ingredientsCreated, reviewItems, errors}` | `recipes.import` | 4 | ✅ |

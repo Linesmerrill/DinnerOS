@@ -21,9 +21,14 @@ final class HouseholdStore {
         case failed(String)
     }
 
+    /// An invitation link's progress: checked with the API, confirmed, then accepted.
     enum InviteStatus: Equatable {
-        /// An invitation link arrived; ask before joining.
-        case awaitingConfirmation
+        /// An invitation link arrived; the API is describing it.
+        case loadingPreview
+        /// Ask before joining, naming the household and who sent the invitation.
+        case awaitingConfirmation(InvitationPreview)
+        /// The invitation is unknown, expired, revoked, or already used.
+        case invalid
         case accepting
         case joined(householdName: String)
         case failed(String)
@@ -45,10 +50,16 @@ final class HouseholdStore {
     @ObservationIgnored private let api: HouseholdsAPI?
     @ObservationIgnored private let selection: any HouseholdSelectionStorage
     @ObservationIgnored private let inviteURLScheme: String
+    @ObservationIgnored private let inviteLinkHost: String
     /// Kept in memory only: a token is a secret and must not outlive the process.
     @ObservationIgnored private var pendingInviteToken: String?
     /// Incremented by every load and reset so a slow response can't overwrite newer state.
     @ObservationIgnored private var generation = 0
+    /// Incremented whenever the invitation-link flow restarts or is abandoned, so a slow
+    /// preview or accept can't overwrite newer state.
+    @ObservationIgnored private var inviteGeneration = 0
+    /// The latest invitation-link preview or accept. Tests await it.
+    @ObservationIgnored private(set) var inviteTask: Task<Void, Never>?
 
     private static let logger = Logger(subsystem: "DinnerOS", category: "households")
 
@@ -56,12 +67,14 @@ final class HouseholdStore {
         session: AuthSession,
         api: HouseholdsAPI?,
         selection: any HouseholdSelectionStorage,
-        inviteURLScheme: String = InviteLink.defaultScheme
+        inviteURLScheme: String = InviteLink.defaultScheme,
+        inviteLinkHost: String = InviteLink.defaultWebHost
     ) {
         self.session = session
         self.api = api
         self.selection = selection
         self.inviteURLScheme = inviteURLScheme
+        self.inviteLinkHost = inviteLinkHost
     }
 
     /// A store frozen in the given state, for SwiftUI previews. It has no network access.
@@ -149,7 +162,8 @@ final class HouseholdStore {
     }
 
     /// Clears in-memory state after sign-out. A pending invitation link is kept so it
-    /// can be accepted after the next sign-in; the stored selection is kept per user.
+    /// can be previewed and accepted after the next sign-in; the stored selection is kept
+    /// per user.
     func reset() {
         generation += 1
         phase = .idle
@@ -157,9 +171,8 @@ final class HouseholdStore {
         current = nil
         invitations = []
         refreshError = nil
-        if inviteStatus != .awaitingConfirmation {
-            inviteStatus = nil
-        }
+        inviteGeneration += 1
+        inviteStatus = nil
     }
 
     // MARK: - Creating and joining
@@ -173,6 +186,18 @@ final class HouseholdStore {
         Self.logger.info("Household created")
         select(response.household.id)
         await load()
+    }
+
+    /// Describes the invitation for a typed code without accepting it, so the user can
+    /// confirm which household they're joining. Needs no sign-in.
+    func previewInvitation(code: String) async throws -> InvitationPreview {
+        let api = try requireAPI()
+        return try await api.previewInvitation(.code(InviteCode.normalize(code)))
+    }
+
+    /// Whether `error` means the invitation is unknown, expired, revoked, or already used.
+    static func isInvalidInvitation(_ error: any Error) -> Bool {
+        (error as? APIError)?.code == "invitation_invalid"
     }
 
     /// Joins with a typed invite code and selects that household.
@@ -194,16 +219,20 @@ final class HouseholdStore {
 
     // MARK: - Invitation links
 
-    /// Handles a URL opened by the system. Returns `false` when it isn't an invitation
-    /// link. When signed out, the token waits for the next sign-in.
+    /// Handles a URL opened by the system: a universal link or a custom-scheme link.
+    /// Returns `false` when it isn't an invitation link. When signed out, the token waits
+    /// for the next sign-in.
     @discardableResult
     func handleOpenURL(_ url: URL) -> Bool {
-        guard let link = InviteLink(url: url, scheme: inviteURLScheme) else { return false }
+        guard let link = InviteLink(url: url, scheme: inviteURLScheme, webHost: inviteLinkHost) else {
+            return false
+        }
         switch link {
         case .token(let token):
             Self.logger.info("Invitation link received")
             pendingInviteToken = token
             if inviteStatus != .accepting {
+                inviteGeneration += 1
                 inviteStatus = nil
             }
             promptForPendingInvite()
@@ -215,50 +244,85 @@ final class HouseholdStore {
         return true
     }
 
-    /// Accepts the pending invitation link after the user confirms. Returns the running
-    /// task, or `nil` when there's nothing to accept. State changes to `.accepting`
-    /// before this returns, so a confirmation alert can dismiss cleanly.
+    /// Accepts the pending invitation link after the user confirms its preview. Returns
+    /// the running task, or `nil` when nothing is awaiting confirmation. State changes to
+    /// `.accepting` before this returns, so a confirmation alert can dismiss cleanly.
     @discardableResult
     func confirmPendingInvite() -> Task<Void, Never>? {
-        guard let token = pendingInviteToken, inviteStatus != .accepting else { return nil }
+        guard let token = pendingInviteToken, case .awaitingConfirmation = inviteStatus else { return nil }
         pendingInviteToken = nil
+        inviteGeneration += 1
+        let started = inviteGeneration
         inviteStatus = .accepting
-        return Task {
+        let task = Task {
             do {
                 let household = try await accept(.token(token))
+                guard started == inviteGeneration else { return }
                 inviteStatus = .joined(householdName: household.name)
             } catch is CancellationError {
-                inviteStatus = nil
+                if started == inviteGeneration { inviteStatus = nil }
             } catch {
+                guard started == inviteGeneration else { return }
                 Self.logger.notice("Invitation link rejected: \(Self.describe(error), privacy: .public)")
-                inviteStatus = .failed(Self.message(for: error))
+                inviteStatus = Self.isInvalidInvitation(error) ? .invalid : .failed(Self.message(for: error))
             }
         }
+        inviteTask = task
+        return task
     }
 
+    /// Discards the pending link, including one whose preview is still loading.
     func declinePendingInvite() {
         pendingInviteToken = nil
-        if inviteStatus == .awaitingConfirmation {
+        switch inviteStatus {
+        case .loadingPreview, .awaitingConfirmation:
+            inviteGeneration += 1
             inviteStatus = nil
+        default:
+            break
         }
     }
 
-    /// Dismisses a finished `.joined` or `.failed` status.
+    /// Dismisses a finished `.invalid`, `.joined`, or `.failed` status, then previews any
+    /// link that arrived in the meantime.
     func dismissInviteStatus() {
         switch inviteStatus {
-        case .joined, .failed: inviteStatus = nil
-        default: break
+        case .invalid, .joined, .failed:
+            inviteStatus = nil
+            promptForPendingInvite()
+        default:
+            break
         }
     }
 
+    /// Previews the pending link, then asks before joining. It waits for a signed-in user
+    /// with households loaded. Preview needs no access token, but joining does, and the
+    /// prompt shouldn't cover sign-in.
     private func promptForPendingInvite() {
         guard
-            pendingInviteToken != nil,
+            let token = pendingInviteToken,
+            let api,
             session.currentUser != nil,
             phase == .ready || phase == .needsHousehold,
-            inviteStatus != .accepting
+            inviteStatus == nil
         else { return }
-        inviteStatus = .awaitingConfirmation
+        inviteGeneration += 1
+        let started = inviteGeneration
+        inviteStatus = .loadingPreview
+        inviteTask = Task {
+            do {
+                let preview = try await api.previewInvitation(.token(token))
+                guard started == inviteGeneration else { return }
+                inviteStatus = .awaitingConfirmation(preview)
+            } catch is CancellationError {
+                if started == inviteGeneration { inviteStatus = nil }
+            } catch {
+                guard started == inviteGeneration else { return }
+                Self.logger.notice("Invitation preview failed: \(Self.describe(error), privacy: .public)")
+                pendingInviteToken = nil
+                inviteStatus = Self.isInvalidInvitation(error) ? .invalid : .failed(Self.message(for: error))
+            }
+        }
     }
 
     // MARK: - Managing the current household

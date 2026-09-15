@@ -66,7 +66,7 @@ func (e *testEnv) invite(t *testing.T, email string, role households.Role) (Crea
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	token, ok := strings.CutPrefix(e.email.last().AcceptURL, DefaultAcceptURLBase)
+	token, ok := strings.CutPrefix(e.email.last().AcceptURL, DefaultAcceptURLBase+"#token=")
 	if !ok && res.EmailDelivered {
 		t.Fatalf("accept URL %q lacks base", e.email.last().AcceptURL)
 	}
@@ -101,7 +101,7 @@ func TestCreateInvitation(t *testing.T) {
 	sent := env.email.last()
 	want := HouseholdInvitationEmail{
 		To: "cat@example.com", HouseholdName: "The Lines", InviterName: "Ada", Role: households.RoleMember,
-		Code: res.Code, AcceptURL: DefaultAcceptURLBase + token, ExpiresAt: inv.ExpiresAt,
+		Code: res.Code, AcceptURL: AcceptURL(DefaultAcceptURLBase, token), ExpiresAt: inv.ExpiresAt,
 	}
 	if sent != want {
 		t.Errorf("email = %+v\nwant    %+v", sent, want)
@@ -439,13 +439,138 @@ func TestAcceptJoinFailureRestoresInvitation(t *testing.T) {
 	}
 }
 
-func TestCustomAcceptURLBase(t *testing.T) {
+func TestInvitationLinkKeepsTokenInFragment(t *testing.T) {
+	env := newTestEnv(t)
+	_, token := env.invite(t, "cat@example.com", households.RoleMember)
+	link := env.email.last().AcceptURL
+	if link != "https://api.tlps.dev/invite#token="+token || len(token) != TokenLength {
+		t.Fatalf("AcceptURL = %q", link)
+	}
+	// Browsers never send the fragment, so the token can't reach server logs.
+	if strings.Contains(link, "?") {
+		t.Errorf("AcceptURL has a query string: %q", link)
+	}
+	msg, err := RenderHouseholdInvitation("DinnerOS", env.email.last())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(msg.HTML, `href="`+link+`"`) || !strings.Contains(msg.Text, link) {
+		t.Errorf("rendered email doesn't link to %q", link)
+	}
+}
+
+func TestAcceptURL(t *testing.T) {
+	tests := []struct{ base, token, want string }{
+		{"https://api.tlps.dev/invite", "abc_DEF-123", "https://api.tlps.dev/invite#token=abc_DEF-123"},
+		{"https://example.com/invite?utm=email", "abc", "https://example.com/invite?utm=email#token=abc"},
+		// Legacy prefix forms append the token directly.
+		{"dinneros://invite?token=", "abc", "dinneros://invite?token=abc"},
+		{"https://example.com/invite#token=", "abc", "https://example.com/invite#token=abc"},
+		{"https://api.tlps.dev/invite", "a+b/c&d", "https://api.tlps.dev/invite#token=a%2Bb%2Fc%26d"},
+	}
+	for _, tt := range tests {
+		if got := AcceptURL(tt.base, tt.token); got != tt.want {
+			t.Errorf("AcceptURL(%q, %q) = %q, want %q", tt.base, tt.token, got, tt.want)
+		}
+	}
+
 	env := newTestEnv(t)
 	env.svc.acceptURLBase = "https://example.com/invite?token="
 	if _, err := env.svc.Create(context.Background(), env.ada, "cat@example.com", households.RoleMember); err != nil {
 		t.Fatal(err)
 	}
 	if url := env.email.last().AcceptURL; !strings.HasPrefix(url, "https://example.com/invite?token=") || len(url) != len("https://example.com/invite?token=")+TokenLength {
-		t.Errorf("AcceptURL = %q", url)
+		t.Errorf("legacy base AcceptURL = %q", url)
 	}
+}
+
+func TestPreviewInvitation(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	res, token := env.invite(t, "cat@example.com", households.RoleAdmin)
+
+	secrets := []struct{ name, token, code string }{
+		{"token", token, ""},
+		{"token with spaces", " " + token + "\n", ""},
+		{"code", "", res.Code},
+		{"messy code", "", " " + strings.ToLower(strings.ReplaceAll(res.Code, "-", " ")) + " "},
+	}
+	for _, s := range secrets {
+		got, err := env.svc.Preview(ctx, s.token, s.code)
+		if err != nil {
+			t.Fatalf("%s: Preview() error = %v", s.name, err)
+		}
+		if got.HouseholdName != "The Lines" || got.InviterName != "Ada" || got.Role != households.RoleAdmin || !got.ExpiresAt.Equal(testNow.Add(TTL)) {
+			t.Errorf("%s: Preview() = %+v", s.name, got)
+		}
+	}
+
+	// Previewing doesn't use the invitation up.
+	if _, err := env.svc.Accept(ctx, userCat, token, ""); err != nil {
+		t.Fatalf("Accept() after preview error = %v", err)
+	}
+	env.assertNoSecretsLogged(t, token, res.Code, strings.ReplaceAll(res.Code, "-", ""))
+}
+
+func TestPreviewWithoutInviterName(t *testing.T) {
+	env := newTestEnv(t)
+	_, token := env.invite(t, "cat@example.com", households.RoleMember)
+	env.store.mu.Lock()
+	env.store.invs[0].CreatedBy = userDan // not in the user directory
+	env.store.mu.Unlock()
+
+	got, err := env.svc.Preview(context.Background(), token, "")
+	if err != nil || got.InviterName != "" || got.HouseholdName != "The Lines" {
+		t.Errorf("Preview() = %+v, %v; want no inviter name", got, err)
+	}
+}
+
+// TestPreviewRejectsWhatAcceptRejects checks that Preview answers exactly as
+// Accept does for unusable invitations, so it reveals nothing more.
+func TestPreviewRejectsWhatAcceptRejects(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+
+	revokedRes, revoked := env.invite(t, "revoked@example.com", households.RoleMember)
+	if err := env.svc.Revoke(ctx, env.ada, revokedRes.Invitation.ID); err != nil {
+		t.Fatal(err)
+	}
+	_, used := env.invite(t, "used@example.com", households.RoleMember)
+	if _, err := env.svc.Accept(ctx, userCat, used, ""); err != nil {
+		t.Fatal(err)
+	}
+	_, goneHousehold := env.invite(t, "gone@example.com", households.RoleMember)
+	env.store.mu.Lock()
+	env.store.invs[len(env.store.invs)-1].HouseholdID = "999999999999999999999999"
+	env.store.mu.Unlock()
+
+	check := func(name, token, code string) {
+		t.Helper()
+		_, previewErr := env.svc.Preview(ctx, token, code)
+		_, acceptErr := env.svc.Accept(ctx, userDan, token, code)
+		if !errors.Is(previewErr, ErrInvalid) || !errors.Is(acceptErr, ErrInvalid) {
+			t.Errorf("%s: Preview() error = %v, Accept() error = %v; want ErrInvalid for both", name, previewErr, acceptErr)
+		}
+	}
+	check("unknown token", strings.Repeat("A", TokenLength), "")
+	check("malformed token", "short", "")
+	check("unknown code", "", "00000-00000")
+	check("malformed code", "", "not a code!")
+	check("revoked", revoked, "")
+	check("used", used, "")
+	check("household gone", goneHousehold, "")
+
+	_, expired := env.invite(t, "expired@example.com", households.RoleMember)
+	env.clock.Advance(TTL)
+	check("expired", expired, "")
+
+	for _, in := range [][2]string{{"", ""}, {" ", "\t"}, {"token", "code"}} {
+		_, previewErr := env.svc.Preview(ctx, in[0], in[1])
+		_, acceptErr := env.svc.Accept(ctx, userDan, in[0], in[1])
+		var pv, av *ValidationError
+		if !errors.As(previewErr, &pv) || !errors.As(acceptErr, &av) || pv.Message != av.Message {
+			t.Errorf("Preview(%q, %q) error = %v, Accept() error = %v; want the same ValidationError", in[0], in[1], previewErr, acceptErr)
+		}
+	}
+	env.assertNoSecretsLogged(t, revoked, used, goneHousehold, expired)
 }

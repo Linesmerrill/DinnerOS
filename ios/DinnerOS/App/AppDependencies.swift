@@ -20,7 +20,8 @@ final class AppDependencies {
             session: session,
             api: client.map { HouseholdsAPI(client: $0) },
             selection: UserDefaultsHouseholdSelection(),
-            inviteURLScheme: configuration.urlScheme)
+            inviteURLScheme: configuration.urlScheme,
+            inviteLinkHost: configuration.appLinkDomain)
         recipes = RecipeLibrary(session: session, api: client.map { RecipesAPI(client: $0) })
         plans = PlanStore(
             session: session, api: client.map { PlansAPI(client: $0) }, checks: UserDefaultsGroceryChecks())

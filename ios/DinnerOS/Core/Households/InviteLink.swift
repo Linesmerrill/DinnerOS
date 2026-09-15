@@ -1,33 +1,65 @@
 import Foundation
 
-/// An invitation link such as `dinneros://invite?token=...`.
+/// An invitation link. Tokens are secrets: never log a link or its token.
 ///
-/// The API builds links from `APP_INVITE_URL_BASE` (default `dinneros://invite?token=`),
-/// and the scheme is registered from `APP_URL_SCHEME` in `ios/Config/Shared.xcconfig`.
-/// The two must match. Tokens are secrets: never log a link or its token.
+/// Invitation emails link to `https://api.tlps.dev/invite#token=...` (the API's
+/// `APP_INVITE_URL_BASE`). With the app installed, iOS opens that universal link in the
+/// app; the domain is `APP_LINK_DOMAIN` in `ios/Config/Shared.xcconfig`. Without the app,
+/// the API's landing page opens instead, and its button uses the custom-scheme form
+/// `dinneros://invite?token=...` (`APP_URL_SCHEME`). Emails sent before universal links
+/// used the custom scheme directly, so both forms are accepted, with the token in either
+/// the fragment or the query.
 nonisolated enum InviteLink: Equatable, Sendable {
     static let defaultScheme = "dinneros"
+    static let defaultWebHost = "api.tlps.dev"
+    /// The host of a custom-scheme link.
     static let host = "invite"
+    /// The path of a universal link.
+    static let webPath = "/invite"
 
     case token(String)
     /// The link is an invitation link, but its token is missing or empty.
     case missingToken
 
-    /// Returns `nil` when `url` isn't an invitation link for `scheme`.
-    init?(url: URL, scheme: String = InviteLink.defaultScheme) {
+    /// Returns `nil` when `url` is neither `<scheme>://invite` nor `https://<webHost>/invite`.
+    init?(url: URL, scheme: String = InviteLink.defaultScheme, webHost: String = InviteLink.defaultWebHost) {
         guard
-            url.scheme?.lowercased() == scheme.lowercased(),
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-            components.host?.lowercased() == Self.host,
-            components.path.isEmpty || components.path == "/"
+            let urlScheme = components.scheme?.lowercased(),
+            let host = components.host?.lowercased()
         else { return nil }
 
-        let token =
-            components.queryItems?
-            .first { $0.name == "token" }?
-            .value?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        self = token.isEmpty ? .missingToken : .token(token)
+        switch urlScheme {
+        case scheme.lowercased():
+            guard host == Self.host, components.path.isEmpty || components.path == "/" else { return nil }
+        case "https":
+            guard
+                host == webHost.lowercased(),
+                components.port == nil,
+                components.path == Self.webPath || components.path == Self.webPath + "/"
+            else { return nil }
+        default:
+            return nil
+        }
+
+        let token = Self.token(inFragment: components.percentEncodedFragment) ?? Self.token(in: components.queryItems)
+        self = token.map { .token($0) } ?? .missingToken
+    }
+
+    /// Reads `token` from a fragment written like a query string (`#token=...`).
+    private static func token(inFragment fragment: String?) -> String? {
+        guard let fragment else { return nil }
+        let items = fragment.split(separator: "&").map { pair in
+            let parts = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            let value = parts.count == 2 ? String(parts[1]) : ""
+            return URLQueryItem(name: String(parts[0]), value: value.removingPercentEncoding ?? value)
+        }
+        return token(in: items)
+    }
+
+    private static func token(in items: [URLQueryItem]?) -> String? {
+        let value = items?.first { $0.name == "token" }?.value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value?.isEmpty == false ? value : nil
     }
 }
 

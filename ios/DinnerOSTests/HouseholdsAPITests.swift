@@ -190,6 +190,43 @@ struct HouseholdsAPITests {
         #expect(request.url?.query() == nil)
         #expect(request.jsonBody == expectedBody)
     }
+
+    @Test(arguments: [
+        (InvitationSecret.token("link-token"), ["token": "link-token"]),
+        (InvitationSecret.code("ABCDE12345"), ["code": "ABCDE12345"]),
+    ])
+    func previewSendsTheSecretWithoutAnAccessToken(secret: InvitationSecret, expectedBody: [String: String])
+        async throws
+    {
+        let transport = StubTransport { _ in
+            (200, HouseholdFixtures.preview(householdName: "Lines", inviterName: "Merrill Lines", role: "admin"))
+        }
+
+        let preview = try await makeAPI(transport).previewInvitation(secret)
+
+        #expect(preview.householdName == "Lines")
+        #expect(preview.inviterName == "Merrill Lines")
+        #expect(preview.role == .admin)
+        #expect(preview.expiresAt == (try Date("2026-09-21T18:30:00Z", strategy: .iso8601)))
+        let request = try #require(transport.requests.first)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.path() == "/api/v1/invitations/preview")
+        #expect(request.url?.query() == nil)
+        #expect(request.bearerToken == nil)
+        #expect(request.jsonBody == expectedBody)
+    }
+
+    @Test func previewOfAnInvalidInvitationThrowsInvitationInvalid() async throws {
+        let transport = StubTransport { _ in (404, Fixtures.errorJSON(code: "invitation_invalid")) }
+
+        do {
+            _ = try await makeAPI(transport).previewInvitation(.code("ZZZZZZZZZZ"))
+            Issue.record("expected invitation_invalid")
+        } catch {
+            #expect(HouseholdStore.isInvalidInvitation(error))
+        }
+        #expect(!HouseholdStore.isInvalidInvitation(APIError.transport(.notConnectedToInternet)))
+    }
 }
 
 struct HouseholdErrorMappingTests {

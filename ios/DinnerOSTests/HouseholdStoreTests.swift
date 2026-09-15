@@ -15,11 +15,15 @@ struct HouseholdStoreTests {
     private func makeHarness(
         server: FakeHouseholdServer = FakeHouseholdServer(),
         signedIn: Bool = true,
-        selection: InMemoryHouseholdSelection = InMemoryHouseholdSelection()
+        selection: InMemoryHouseholdSelection = InMemoryHouseholdSelection(),
+        overrides: [String: (status: Int, body: Data)] = [:]
     ) async throws -> Harness {
         let transport = StubTransport { request in
             if request.url?.path() == "/api/v1/auth/google" {
                 return (200, Fixtures.sessionJSON(access: "access-1", refresh: "refresh-1"))
+            }
+            if let path = request.url?.path(), let response = overrides[path] {
+                return response
             }
             return server.handle(request)
         }
@@ -202,12 +206,19 @@ struct HouseholdStoreTests {
 
     // MARK: Invitation links
 
-    @Test func linkWhileSignedOutIsAcceptedAfterSignInAndConfirmation() async throws {
+    private let universalLink = "https://api.tlps.dev/invite#token=link-token-abc"
+
+    private func expectedPreview() throws -> InvitationPreview {
+        InvitationPreview(
+            householdName: "Babbage House", inviterName: "Charles Babbage", role: .member,
+            expiresAt: try Date("2026-09-21T18:30:00Z", strategy: .iso8601))
+    }
+
+    @Test func linkWhileSignedOutIsPreviewedAfterSignInThenAcceptedOnConfirmation() async throws {
         let harness = try await makeHarness(signedIn: false)
         let store = harness.store
-        let url = try #require(URL(string: "dinneros://invite?token=link-token-abc"))
 
-        #expect(store.handleOpenURL(url))
+        #expect(store.handleOpenURL(try #require(URL(string: universalLink))))
         #expect(store.hasPendingInvite)
         #expect(store.inviteStatus == nil)
         #expect(harness.transport.requests.isEmpty)
@@ -216,7 +227,12 @@ struct HouseholdStoreTests {
             try await api.signInWithGoogle(idToken: "google.jwt", rawNonce: "raw")
         }
         await store.load()
-        #expect(store.inviteStatus == .awaitingConfirmation)
+        await store.inviteTask?.value
+
+        #expect(store.inviteStatus == .awaitingConfirmation(try expectedPreview()))
+        let preview = try #require(harness.transport.requests(to: "/api/v1/invitations/preview").first)
+        #expect(preview.jsonBody == ["token": "link-token-abc"])
+        #expect(preview.url?.query() == nil)
         #expect(harness.transport.requests(to: "/api/v1/invitations/accept").isEmpty)
 
         let task = try #require(store.confirmPendingInvite())
@@ -234,27 +250,81 @@ struct HouseholdStoreTests {
         #expect(store.inviteStatus == nil)
     }
 
-    @Test func linkWhileSignedInPromptsImmediately() async throws {
+    @Test(arguments: [
+        "https://api.tlps.dev/invite#token=link-token-abc",
+        "dinneros://invite?token=link-token-abc",
+    ])
+    func linkWhileSignedInShowsProgressThenNamesTheHousehold(link: String) async throws {
         let harness = try await makeHarness()
         await harness.store.load()
 
-        harness.store.handleOpenURL(try #require(URL(string: "dinneros://invite?token=unknown")))
-        #expect(harness.store.inviteStatus == .awaitingConfirmation)
+        #expect(harness.store.handleOpenURL(try #require(URL(string: link))))
+        #expect(harness.store.inviteStatus == .loadingPreview)
+        #expect(harness.store.confirmPendingInvite() == nil)
+        await harness.store.inviteTask?.value
 
-        await harness.store.confirmPendingInvite()?.value
+        guard case .awaitingConfirmation(let preview) = harness.store.inviteStatus else {
+            Issue.record("expected awaitingConfirmation, got \(String(describing: harness.store.inviteStatus))")
+            return
+        }
+        #expect(preview.joinTitle == "Join Babbage House?")
+        #expect(
+            preview.joinMessage
+                == "Charles Babbage invited you to join as a member. Joining shares your name with its members.")
+    }
+
+    @Test func invalidLinkSaysNoLongerValidInsteadOfOfferingJoin() async throws {
+        let harness = try await makeHarness()
+        await harness.store.load()
+
+        harness.store.handleOpenURL(try #require(URL(string: "https://api.tlps.dev/invite#token=expired")))
+        await harness.store.inviteTask?.value
+
+        #expect(harness.store.inviteStatus == .invalid)
+        #expect(!harness.store.hasPendingInvite)
+        #expect(harness.store.confirmPendingInvite() == nil)
+        #expect(harness.transport.requests(to: "/api/v1/invitations/accept").isEmpty)
+
+        harness.store.dismissInviteStatus()
+        #expect(harness.store.inviteStatus == nil)
+        #expect(harness.store.phase == .needsHousehold)
+    }
+
+    @Test func previewFailureReportsTheErrorWithoutJoining() async throws {
+        let harness = try await makeHarness(
+            overrides: ["/api/v1/invitations/preview": (503, Fixtures.errorJSON(code: "unavailable"))])
+        await harness.store.load()
+
+        harness.store.handleOpenURL(try #require(URL(string: universalLink)))
+        await harness.store.inviteTask?.value
 
         guard case .failed(let message) = harness.store.inviteStatus else {
             Issue.record("expected failed, got \(String(describing: harness.store.inviteStatus))")
             return
         }
-        #expect(message.localizedCaseInsensitiveContains("invitation"))
+        #expect(message.localizedCaseInsensitiveContains("server"))
+        #expect(!harness.store.hasPendingInvite)
+        #expect(harness.transport.requests(to: "/api/v1/invitations/accept").isEmpty)
+    }
+
+    @Test func invitationUsedUpBeforeConfirmingSaysNoLongerValid() async throws {
+        let harness = try await makeHarness(
+            overrides: ["/api/v1/invitations/accept": (404, Fixtures.errorJSON(code: "invitation_invalid"))])
+        await harness.store.load()
+        harness.store.handleOpenURL(try #require(URL(string: universalLink)))
+        await harness.store.inviteTask?.value
+
+        await harness.store.confirmPendingInvite()?.value
+
+        #expect(harness.store.inviteStatus == .invalid)
         #expect(harness.store.phase == .needsHousehold)
     }
 
     @Test func declinedLinkIsDiscarded() async throws {
         let harness = try await makeHarness()
         await harness.store.load()
-        harness.store.handleOpenURL(try #require(URL(string: "dinneros://invite?token=link-token-abc")))
+        harness.store.handleOpenURL(try #require(URL(string: universalLink)))
+        await harness.store.inviteTask?.value
 
         harness.store.declinePendingInvite()
 
@@ -263,26 +333,77 @@ struct HouseholdStoreTests {
         #expect(harness.store.confirmPendingInvite() == nil)
     }
 
+    @Test func decliningWhilePreviewingIgnoresTheLateResponse() async throws {
+        let harness = try await makeHarness()
+        await harness.store.load()
+        harness.store.handleOpenURL(try #require(URL(string: universalLink)))
+        #expect(harness.store.inviteStatus == .loadingPreview)
+
+        harness.store.declinePendingInvite()
+        await harness.store.inviteTask?.value
+
+        #expect(harness.store.inviteStatus == nil)
+        #expect(!harness.store.hasPendingInvite)
+    }
+
     @Test func pendingLinkSurvivesSignOutReset() async throws {
         let harness = try await makeHarness(signedIn: false)
-        harness.store.handleOpenURL(try #require(URL(string: "dinneros://invite?token=link-token-abc")))
+        harness.store.handleOpenURL(try #require(URL(string: universalLink)))
 
         harness.store.reset()
 
         #expect(harness.store.hasPendingInvite)
     }
 
+    @Test func signingOutWhileConfirmingKeepsTheLinkForTheNextSignIn() async throws {
+        let harness = try await makeHarness()
+        await harness.store.load()
+        harness.store.handleOpenURL(try #require(URL(string: universalLink)))
+        await harness.store.inviteTask?.value
+        #expect(harness.store.inviteStatus == .awaitingConfirmation(try expectedPreview()))
+
+        harness.store.reset()
+
+        #expect(harness.store.inviteStatus == nil)
+        #expect(harness.store.hasPendingInvite)
+        await harness.store.load()
+        await harness.store.inviteTask?.value
+        #expect(harness.store.inviteStatus == .awaitingConfirmation(try expectedPreview()))
+    }
+
     @Test func linkWithoutTokenReportsFailureAndOtherURLsAreIgnored() async throws {
         let harness = try await makeHarness()
 
-        #expect(harness.store.handleOpenURL(try #require(URL(string: "dinneros://invite"))))
-        guard case .failed = harness.store.inviteStatus else {
-            Issue.record("expected failed, got \(String(describing: harness.store.inviteStatus))")
-            return
+        for link in ["dinneros://invite", "https://api.tlps.dev/invite"] {
+            #expect(harness.store.handleOpenURL(try #require(URL(string: link))))
+            guard case .failed = harness.store.inviteStatus else {
+                Issue.record("expected failed, got \(String(describing: harness.store.inviteStatus))")
+                return
+            }
+            #expect(!harness.store.hasPendingInvite)
+            harness.store.dismissInviteStatus()
         }
-        #expect(!harness.store.hasPendingInvite)
 
-        #expect(!harness.store.handleOpenURL(try #require(URL(string: "https://example.com/invite?token=x"))))
+        #expect(!harness.store.handleOpenURL(try #require(URL(string: "https://example.com/invite#token=x"))))
+        #expect(harness.transport.requests(to: "/api/v1/invitations/preview").isEmpty)
+    }
+
+    @Test func previewByCodeNormalizesTheCode() async throws {
+        let harness = try await makeHarness()
+
+        let preview = try await harness.store.previewInvitation(code: " abcde-12345\n")
+
+        #expect(preview == (try expectedPreview()))
+        let request = try #require(harness.transport.requests(to: "/api/v1/invitations/preview").first)
+        #expect(request.jsonBody == ["code": "ABCDE12345"])
+        #expect(request.bearerToken == nil)
+        do {
+            _ = try await harness.store.previewInvitation(code: "ZZZZZ-ZZZZZ")
+            Issue.record("expected invitation_invalid")
+        } catch {
+            #expect(HouseholdStore.isInvalidInvitation(error))
+        }
+        #expect(harness.transport.requests(to: "/api/v1/invitations/accept").isEmpty)
     }
 }
 

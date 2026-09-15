@@ -132,8 +132,9 @@ Dependency rules:
   requests for up to 25 seconds.
 - **Errors:** every non-2xx response uses `{"error": {"code", "message"}}`.
 - **Limits:** request body size (`HTTP_MAX_BODY_BYTES`), server timeouts, and
-  per-IP rate limiting on auth endpoints, invitation acceptance, and invitation
-  creation, plus per-user rate limiting on event ingestion. Each has its own
+  per-IP rate limiting on auth endpoints, invitation acceptance and preview
+  (which share one limiter), and invitation creation, plus per-user rate
+  limiting on event ingestion. Otherwise each has its own
   limiter instance. The recipe import route has its
   own body limit (`RECIPE_IMPORT_MAX_BYTES`) and extends the server's read and
   write deadlines for that request with `http.ResponseController`.
@@ -150,7 +151,10 @@ Dependency rules:
   `httpapi.Options.APIRoutes` and wrap protected routes in `auth.RequireAuth`,
   which puts the user ID in the request context (`auth.UserIDFromContext`).
 - **Versioning:** product routes live under `/api/v1`. Operational routes
-  (`/health`, `/ready`) are unversioned.
+  (`/health`, `/ready`) are unversioned. So are browser-facing routes
+  (`/invite` and `/.well-known/apple-app-site-association`, from
+  `api/internal/applinks`), which mount at the root through
+  `httpapi.Options.WebRoutes`.
 
 ## iOS (`ios/`)
 
@@ -195,10 +199,14 @@ ios/DinnerOS/
   user's households after every sign-in, remembers the selected household per
   user in `UserDefaults`, and reloads from the server after each change.
   `HouseholdAccess` turns the response's `permissions` into which actions the UI
-  shows. The API still authorizes every request. Invitation links
-  (`dinneros://invite?token=...`) arrive through `onOpenURL`. The app asks before
-  joining, and holds a link opened while signed out in memory until sign-in.
-  Tokens and invite codes are never logged.
+  shows. The API still authorizes every request. Invitation links arrive as
+  universal links (`https://api.tlps.dev/invite#token=...`, through
+  `onContinueUserActivity`) or custom-scheme links
+  (`dinneros://invite?token=...`, through `onOpenURL`). The app previews the
+  invitation and names the household and inviter before joining, and holds a
+  link opened while signed out in memory until sign-in. Typed codes are
+  previewed and confirmed the same way. Tokens and invite codes are never
+  logged.
 - **Planning (`Core/Planning`):** `PlansAPI` wraps the week plan and grocery
   list endpoints. `PlanStore` (`@Observable`, main actor, app lifetime) holds the
   week shown in the Week tab, which starts at this week in the household's time
@@ -305,3 +313,8 @@ a versioned Autopilot API. See [autopilot.md](autopilot.md).
 | 75 | Event ingestion is rate limited per user (`ratelimit.Limiter.MiddlewareBy`), after authentication and before the membership lookup | Household members often share one IP, so a per-IP limit would couple them. Unauthenticated requests are rejected before they use a budget. It's the same in-memory, per-dyno limiter as decision 18. |
 | 76 | Events are kept indefinitely with no TTL. Client `occurredAt` is accepted from 30 days back to 5 minutes ahead | History is the recommender's raw material, and the volume per household is tiny. Retention and archival are a later decision. The window bounds clock skew and stale offline queues. |
 | 77 | Planning records `recipe.planned` and `recipe.unplanned` through an optional recorder (`planning.Service.WithEvents`); `DeleteEntry` takes the acting user and reads the entry first only when a recorder is set | The delete returns the remaining plan, so the removed entry's recipe, day, and date must be read before it. The read and the delete aren't atomic, so a concurrent edit can leave the event's day stale, which is acceptable for behavioral history. Without a recorder nothing extra is read. Entry updates and status changes aren't recorded yet. |
+| 78 | Invitation emails link to `https://api.tlps.dev/invite#token=…`, a universal link backed by a server-rendered landing page, instead of the custom scheme from #41. The app still accepts `dinneros://invite?token=` | A custom-scheme link does nothing on a phone without the app, and during private TestFlight testing most invitees don't have it yet. One https link opens the app when it's installed and otherwise explains how to get it. The token goes in the fragment because browsers never send fragments, while Heroku's router logs full paths including query strings. Emails already sent keep working. |
+| 79 | `POST /api/v1/invitations/preview` requires no authentication and returns only the household name, inviter name, role, and expiry | The landing page and a signed-out app must name the household before anyone joins. Holding the secret is already enough to join (#30), so it's enough to see what you'd join. Preview reuses accept's lookup and returns the same `404 invitation_invalid` and `400` errors, so it can't distinguish expired from nonexistent invitations any more than accept can. It never uses the invitation up and exposes no IDs, emails, or members. |
+| 80 | Preview and accept share one per-IP rate-limit bucket | Separate buckets would double the guesses per IP against the 50-bit code. The app's preview-then-accept costs two requests out of a burst of 10. |
+| 81 | The landing page is rendered once at startup, with a hash-based CSP (`default-src 'none'`; script and style by SHA-256), `Cache-Control: no-store`, and `Referrer-Policy: no-referrer`. `apple-app-site-association` is built from `APPLE_TEAM_ID` and `APPLE_BUNDLE_ID` and isn't served until both are set | The page handles a secret, so nothing else may run on it or learn its URL, and hashes need no per-request nonce. An association file with a wrong app ID would silently break universal links, so an unconfigured API serves none. |
+| 82 | The app previews every invitation, from a link or a typed code, before asking to join. An `invitation_invalid` preview shows "This invitation is no longer valid" instead of a Join button | People see which household and inviter they're joining. An invitation that can't work never offers an action that would fail. |

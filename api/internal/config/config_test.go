@@ -324,3 +324,49 @@ func TestLogValueOmitsSigningKey(t *testing.T) {
 		t.Errorf("log output missing signing key status: %s", out)
 	}
 }
+
+func TestLoadAppLinks(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.InviteURLBase != "https://api.tlps.dev/invite" || cfg.AppURLScheme != "dinneros" || cfg.AppleTeamID != "" {
+		t.Errorf("defaults: InviteURLBase = %q AppURLScheme = %q AppleTeamID = %q", cfg.InviteURLBase, cfg.AppURLScheme, cfg.AppleTeamID)
+	}
+
+	tests := []struct {
+		name    string
+		env     map[string]string
+		wantErr string
+		check   func(Config) bool
+	}{
+		{name: "team ID", env: map[string]string{"APPLE_TEAM_ID": "ABCDE12345"}, check: func(c Config) bool { return c.AppleTeamID == "ABCDE12345" }},
+		{name: "lowercase team ID", env: map[string]string{"APPLE_TEAM_ID": "abcde12345"}, wantErr: "APPLE_TEAM_ID"},
+		{name: "short team ID", env: map[string]string{"APPLE_TEAM_ID": "ABC"}, wantErr: "APPLE_TEAM_ID"},
+		{name: "scheme is lowercased", env: map[string]string{"APP_URL_SCHEME": "Supper"}, check: func(c Config) bool { return c.AppURLScheme == "supper" }},
+		{name: "https scheme", env: map[string]string{"APP_URL_SCHEME": "https"}, wantErr: "APP_URL_SCHEME"},
+		{name: "script scheme", env: map[string]string{"APP_URL_SCHEME": "javascript"}, wantErr: "APP_URL_SCHEME"},
+		{name: "malformed scheme", env: map[string]string{"APP_URL_SCHEME": "1app://"}, wantErr: "APP_URL_SCHEME"},
+		{name: "invite base with query", env: map[string]string{"APP_INVITE_URL_BASE": "https://example.com/invite?utm=email"}, check: func(c Config) bool { return c.InviteURLBase == "https://example.com/invite?utm=email" }},
+		{name: "invite base with fragment", env: map[string]string{"APP_INVITE_URL_BASE": "https://example.com/invite#join"}, wantErr: "must not contain a fragment"},
+		{name: "legacy scheme prefix", env: map[string]string{"APP_INVITE_URL_BASE": "dinneros://invite?token="}, check: func(c Config) bool { return c.InviteURLBase == "dinneros://invite?token=" }},
+		{name: "explicit fragment prefix", env: map[string]string{"APP_INVITE_URL_BASE": "https://example.com/invite#token="}, check: func(Config) bool { return true }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := Load(env(tt.env))
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("Load() error = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if !tt.check(cfg) {
+				t.Errorf("unexpected config: %+v", cfg)
+			}
+		})
+	}
+}

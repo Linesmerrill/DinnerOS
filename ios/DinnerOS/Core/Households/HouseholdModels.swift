@@ -205,3 +205,38 @@ nonisolated enum InvitationSecret: Equatable, Sendable {
     /// Typed by the user, normalized with `InviteCode.normalize`.
     case code(String)
 }
+
+/// Response to `POST /api/v1/invitations/preview`: what joining means, shown before the
+/// user confirms.
+nonisolated struct InvitationPreview: Decodable, Equatable, Sendable {
+    let householdName: String
+    /// Empty or `nil` when the inviter has no display name.
+    let inviterName: String?
+    let role: HouseholdRole
+    let expiresAt: Date
+
+    /// For example, "Join Lines?".
+    var joinTitle: String {
+        String(localized: "Join \(householdName)?")
+    }
+
+    /// For example, "Merrill Lines invited you to join as an admin. Joining shares your
+    /// name with its members."
+    var joinMessage: String {
+        let inviter = inviterName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let role = roleWithArticle
+        let invited =
+            inviter.isEmpty
+            ? String(localized: "You're invited to join as \(role).")
+            : String(localized: "\(inviter) invited you to join as \(role).")
+        return invited + " " + String(localized: "Joining shares your name with its members.")
+    }
+
+    private var roleWithArticle: String {
+        switch role {
+        case .admin: String(localized: "an admin")
+        case .member: String(localized: "a member")
+        default: role.rawValue
+        }
+    }
+}

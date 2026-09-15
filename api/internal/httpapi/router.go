@@ -36,6 +36,10 @@ type Options struct {
 	// applies; route-specific middleware (auth, rate limits) is added by the
 	// domain handlers themselves.
 	APIRoutes func(chi.Router)
+	// WebRoutes mounts unversioned routes at the root, for browsers and Apple's
+	// CDN rather than API clients: the invitation landing page and
+	// /.well-known files. The global middleware stack applies.
+	WebRoutes func(chi.Router)
 }
 
 // HealthResponse is returned by GET /health.
@@ -89,6 +93,10 @@ func newMux(opts Options) *chi.Mux {
 
 	// Readiness: dependencies are reachable.
 	r.Get("/ready", readyHandler(logger, opts.ReadinessChecks))
+
+	if opts.WebRoutes != nil {
+		opts.WebRoutes(r)
+	}
 
 	r.Route("/api/v1", func(api chi.Router) {
 		if opts.APIRoutes != nil {
