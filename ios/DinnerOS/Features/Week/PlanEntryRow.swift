@@ -19,9 +19,14 @@ struct PlanEntryRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.recipe.name)
                     .font(.headline)
-                Text("\(entry.servings) servings")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text("\(entry.servings) servings")
+                    if entry.isFromAutopilot {
+                        AutopilotEntryBadge()
+                    }
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
                 if !entry.note.isEmpty {
                     Text(entry.note)
                         .font(.subheadline)

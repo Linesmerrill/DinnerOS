@@ -48,7 +48,7 @@ struct RecipeRow: View {
         if summary.isAddon {
             parts.append(String(localized: "Add-on"))
         }
-        if let minutes = summary.totalMinutes, minutes > 0 {
+        if let minutes = summary.displayMinutes {
             parts.append(RecipeFormat.minutes(minutes))
         }
         parts.append(RecipeFormat.timesOrdered(summary.timesOrdered))

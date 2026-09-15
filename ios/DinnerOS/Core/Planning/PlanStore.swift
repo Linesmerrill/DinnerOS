@@ -202,6 +202,13 @@ final class PlanStore {
         Self.logger.info("Plan status changed to \(status.rawValue, privacy: .public)")
     }
 
+    /// Shows a plan another change returned, such as an accepted Autopilot proposal, when
+    /// it's for the shown week and household.
+    func present(_ updated: Plan) {
+        guard let target = ISOWeek(updated.week) else { return }
+        apply(updated, week: target)
+    }
+
     /// Weeks from `from` through `to`, for choosing a week to add to. Not stored.
     func summaries(from: ISOWeek, to: ISOWeek) async throws -> [PlanSummary] {
         guard let api, let householdID else { throw AuthSessionError.notConfigured }

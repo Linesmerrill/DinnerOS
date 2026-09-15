@@ -161,6 +161,15 @@ nonisolated enum RecipeFormat {
 
     // MARK: Other values
 
+    /// The minutes to show for a recipe. The API's `cookMinutes` wins because sources report
+    /// total time inconsistently (often below prep). Without it, the larger of prep and total
+    /// time, which is how the API derives it. `nil` when nothing positive is known.
+    static func displayMinutes(cook: Int?, prep: Int?, total: Int?) -> Int? {
+        if let cook, cook > 0 { return cook }
+        let known = [prep, total].compactMap { $0 }.filter { $0 > 0 }
+        return known.max()
+    }
+
     /// For example "30 min" or "1 hr, 15 min".
     static func minutes(_ minutes: Int) -> String {
         Duration.seconds(minutes * 60).formatted(.units(allowed: [.hours, .minutes], width: .abbreviated))

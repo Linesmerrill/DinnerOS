@@ -9,8 +9,10 @@ struct WeekView: View {
     @Environment(EventReporter.self) private var events
     @Environment(PantryStore.self) private var pantry
     @Environment(NotificationStore.self) private var notifications
+    @Environment(AutopilotStore.self) private var autopilot
 
     @State private var editingEntry: PlanEntry?
+    @State private var autopilotFlow = WeekAutopilotFlow()
     @State private var isAddingRecipes = false
     @State private var actionError: String?
 
@@ -58,6 +60,7 @@ struct WeekView: View {
             } message: {
                 Text(actionError ?? "")
             }
+            .modifier(WeekAutopilotModifier(flow: autopilotFlow, canEdit: canEdit))
     }
 
     @ViewBuilder
@@ -96,8 +99,10 @@ struct WeekView: View {
             if plans.isSaving {
                 ProgressView()
             }
-            if canEdit, let plan = plans.plan {
-                statusMenu(plan)
+            if let plan = plans.plan {
+                weekMenu(plan)
+            }
+            if canEdit, plans.plan != nil {
                 Button("Add Recipes", systemImage: "plus") {
                     isAddingRecipes = true
                 }
@@ -106,20 +111,24 @@ struct WeekView: View {
         }
     }
 
-    private func statusMenu(_ plan: Plan) -> some View {
+    /// The week's status for planners, and Autopilot for everyone.
+    private func weekMenu(_ plan: Plan) -> some View {
         Menu {
-            if plan.status == .draft {
-                Button("Finalize Week", systemImage: "lock") {
-                    perform { try await plans.setStatus(.finalized) }
-                }
-                .disabled(plan.entries.isEmpty)
-            } else {
-                Button("Reopen Week", systemImage: "lock.open") {
-                    perform { try await plans.setStatus(.draft) }
+            if canEdit {
+                if plan.status == .draft {
+                    Button("Finalize Week", systemImage: "lock") {
+                        perform { try await plans.setStatus(.finalized) }
+                    }
+                    .disabled(plan.entries.isEmpty)
+                } else {
+                    Button("Reopen Week", systemImage: "lock.open") {
+                        perform { try await plans.setStatus(.draft) }
+                    }
                 }
             }
+            WeekAutopilotMenuItems(flow: autopilotFlow, canEdit: canEdit)
         } label: {
-            Label("Week Status", systemImage: "ellipsis.circle")
+            Label("Week Menu", systemImage: "ellipsis.circle")
         }
     }
 
@@ -133,6 +142,7 @@ struct WeekView: View {
                     perform { try await plans.setStatus(.draft) }
                 }
             }
+            WeekAutopilotSection(flow: autopilotFlow, canEdit: canEdit)
             if plan.entries.isEmpty {
                 emptyState
                     .listRowBackground(Color.clear)
@@ -167,7 +177,9 @@ struct WeekView: View {
             }
         }
         .refreshable {
-            await plans.reload()
+            async let week: Void = plans.reload()
+            await autopilot.reloadWeek()
+            await week
         }
         .sensoryFeedback(.success, trigger: events.outcomes)
     }
@@ -421,6 +433,7 @@ private struct FinalizedNotice: View {
     .environment(EventReporter.preview(session: session))
     .environment(PantryPreviewData.store(session: session))
     .environment(NotificationPreviewData.store(session: session))
+    .environment(AutopilotPreviewData.store(session: session))
 }
 
 #Preview("Empty") {
@@ -434,4 +447,5 @@ private struct FinalizedNotice: View {
     .environment(EventReporter.preview(session: session))
     .environment(PantryPreviewData.store(session: session))
     .environment(NotificationPreviewData.store(session: session))
+    .environment(AutopilotPreviewData.store(session: session))
 }

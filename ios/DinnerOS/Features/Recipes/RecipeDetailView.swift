@@ -129,9 +129,9 @@ private struct RecipeFacts: View {
 
     @ViewBuilder
     private var facts: some View {
-        if let total = recipe.totalMinutes, total > 0 {
-            Label(RecipeFormat.minutes(total), systemImage: "clock")
-                .accessibilityLabel("Total time \(RecipeFormat.minutes(total))")
+        if let minutes = recipe.displayMinutes {
+            Label(RecipeFormat.minutes(minutes), systemImage: "clock")
+                .accessibilityLabel("Cook time \(RecipeFormat.minutes(minutes))")
         }
         if let difficulty = recipe.difficulty, difficulty > 0 {
             Label(RecipeFormat.difficulty(difficulty, source: recipe.source), systemImage: "chart.bar")
@@ -166,6 +166,7 @@ private struct RecipeDetailSections: View {
         }
         // After the steps, where someone who just cooked it finishes reading.
         RecipeRatingSection(recipe: recipe, onChange: onRatingChange)
+        RecipeAutopilotSection(recipeID: recipe.id)
         if !recipe.nutritionPerServing.isEmpty {
             DetailSection("Nutrition per Serving") {
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
@@ -346,4 +347,5 @@ struct DetailSection<Content: View>: View {
     .environment(RecipePreviewData.library(session: session))
     .environment(PlanPreviewData.store(session: session))
     .environment(EventReporter.preview(session: session))
+    .environment(AutopilotPreviewData.store(session: session))
 }
