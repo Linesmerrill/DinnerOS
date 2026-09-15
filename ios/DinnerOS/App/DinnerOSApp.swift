@@ -20,6 +20,8 @@ struct DinnerOSApp: App {
                 .environment(dependencies.events)
                 .environment(dependencies.notifications)
                 .environment(dependencies.shopping)
+                .environment(dependencies.menu)
+                .environment(dependencies.planner)
                 .onChange(of: scenePhase, initial: true) { _, phase in
                     let events = dependencies.events
                     switch phase {

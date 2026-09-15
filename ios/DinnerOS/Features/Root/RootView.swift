@@ -12,6 +12,8 @@ struct RootView: View {
     @Environment(EventReporter.self) private var events
     @Environment(NotificationStore.self) private var notifications
     @Environment(ShoppingStore.self) private var shopping
+    @Environment(MenuStore.self) private var menu
+    @Environment(MealPlanner.self) private var planner
 
     var body: some View {
         content
@@ -30,6 +32,8 @@ struct RootView: View {
                     autopilot.reset()
                     notifications.reset()
                     shopping.reset()
+                    menu.reset()
+                    planner.reset()
                     // At launch there's no user while the session restores; only a real
                     // sign-out discards queued events.
                     if session.state == .signedOut {

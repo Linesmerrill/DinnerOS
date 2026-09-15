@@ -204,6 +204,9 @@ nonisolated struct IngredientLine: Equatable, Sendable, Identifiable {
     let amount: String?
     let isPantryStaple: Bool
     let category: String
+    var imageURL: URL? = nil
+    /// For example `["Soy", "Wheat"]`; empty when unknown.
+    var allergens: [String] = []
 }
 
 extension Recipe {
@@ -232,7 +235,9 @@ extension Recipe {
                 amount: ingredient.amounts.first { $0.servings == servings }
                     .flatMap { RecipeFormat.amount($0, locale: locale) },
                 isPantryStaple: ingredient.pantryStaple,
-                category: ingredient.category)
+                category: ingredient.category,
+                imageURL: ingredient.imageURL,
+                allergens: ingredient.allergens)
         }
     }
 }

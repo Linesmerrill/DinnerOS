@@ -5,24 +5,19 @@ struct MainTabView: View {
     @Environment(HouseholdStore.self) private var households
     @Environment(NotificationStore.self) private var notifications
     @Environment(ShoppingStore.self) private var shopping
-    @State private var selection: AppTab = .recipes
+    @State private var selection: AppTab = .menu
 
     var body: some View {
         TabView(selection: $selection) {
             ForEach(AppTab.allCases) { tab in
                 Tab(value: tab) {
                     switch tab {
-                    case .recipes:
+                    case .menu:
                         NavigationStack {
-                            RecipesView()
+                            MenuView()
                         }
-                        // Another household starts at its own list, not at a recipe
+                        // Another household starts at its own menu, not at a recipe
                         // (or search) from the previous one.
-                        .id(households.current?.household.id)
-                    case .week:
-                        NavigationStack {
-                            WeekView()
-                        }
                         .id(households.current?.household.id)
                     case .shop:
                         NavigationStack {

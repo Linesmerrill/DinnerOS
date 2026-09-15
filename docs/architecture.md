@@ -165,7 +165,7 @@ Dependency rules:
 ios/DinnerOS/
 ├── App/          entry point, AppConfiguration, dependency container
 ├── Core/         networking (APIClient), auth session, Keychain, persistence (added as needed)
-├── Features/     one folder per feature: Week, Recipes, Shop, Pantry, Household, Root
+├── Features/     one folder per feature: Menu, Week, Recipes, Shop, Pantry, Household, Root
 └── Resources/    asset catalog, string catalogs
 ```
 
@@ -217,7 +217,19 @@ ios/DinnerOS/
   reloads the week. `GroceryListModel` backs one grocery list screen, keeps
   check-offs on the device, and exports the list as plain text. Checking off a
   line asks "Add to pantry?" in a card at the bottom of the list and records the
-  purchase through `PantryPurchaseRecording` (#106).
+  purchase through `PantryPurchaseRecording` (#106). `PlanStore` owns the week the
+  whole Menu tab shows, and hands every plan the server returns to
+  `planDidChange`, which the Menu screen uses to patch its cards (#270, #271).
+- **Menu (`Core/Menu`, `Features/Menu`):** `MenuAPI` wraps `GET .../menu`,
+  `.../menu/recipes`, `.../menu/filters`, and `.../weeks`. `MenuStore`
+  (`@Observable`, main actor, app lifetime) holds the selected week's sections,
+  the week strip and how far back it reaches, the filter options, and the All
+  Meals list (`MenuRecipeList`, one per screen, cursor-paged). It resets on
+  sign-out and household switches, and `applyPlan` patches every card's `inPlan`
+  state from the plan (#271). `MealPlanner` adds, steps servings, moves, and
+  removes meals with an undo toast (#274, #275). Sections, badges, and
+  `moreQuery` filters come from the server and are rendered generically (#272).
+  `RecipeImageURL` asks the CDN for card-sized photos (#280).
 - **Pantry usage (`Core/Pantry`):** `PantryItem` decodes `statusSource`,
   `lowThresholdPercent`, `unitSize`, and `estimate` leniently, so older
   responses and unreadable estimates still show the item. `PantryStore` records
@@ -231,6 +243,14 @@ ios/DinnerOS/
   actor, app lifetime) holds the unread count for the bell badge and the paged
   list, marks notifications read on screen before the request returns, and
   resets on sign-out and household switches (#108, #109).
+- **Recipes (`Core/Recipes`, `Features/Recipes`):** the recipe screen is an
+  edge-to-edge stretchy hero, the title and headline, a stats row (time,
+  calories, protein, difficulty), tag chips, and Overview / Ingredients /
+  Nutrition under a sticky picker, with Cooking Steps below and a bottom bar that
+  adds the recipe to the week or steps its servings (#275, #277, #278).
+  Customizations and pairings load per recipe and hide themselves when the API
+  has none (#279). Summaries and details decode the menu's additive fields
+  leniently (#281).
 - **Ratings (`Core/Recipes`):** recipe summaries and details carry
   `householdRating` and `myRating`. `RatingDraft` enforces the API's rating
   rules while the user edits. `RecipeLibrary` saves or removes a rating, then
@@ -248,9 +268,12 @@ ios/DinnerOS/
   shell asks when the app returns from Walmart. Choose Product saves a product
   from a pasted Walmart link. The grocery list's toolbar opens the Shop tab for
   its week, and confirmed lines are checked off on the device (#200–#207).
-- **Navigation:** a tab shell (Recipes, Week, Shop, Pantry, Household) with
-  `NavigationStack` per tab, native sheets, and forms. Notifications open from a
-  bell in the Pantry and Week toolbars (#108).
+- **Navigation:** a tab shell (Menu, Shop, Pantry, Household) with
+  `NavigationStack` per tab, native sheets, and forms. The Menu tab holds the
+  week strip, Your Meals, the server's carousels, All Meals, and a sticky bottom
+  bar to the grocery list; the day-by-day week is the same `WeekView` behind the
+  toolbar's **By Day** control (#270). Notifications open from a bell in the
+  Pantry and Menu toolbars (#108).
 - **Quality bar:** Dynamic Type, VoiceOver labels, dark mode, and explicit
   loading, empty, and error states for every screen.
 - **Visual identity:** Apple-native structure with DinnerOS's own herb-green
@@ -457,6 +480,18 @@ into the provider's inputs.
 | 210 | On a weekday rule with methods, suiting a method dominates the `rule` signal: a meal that suits none gets −1 on an `every_week` rule and 0 on an `at_most_once` rule, whatever its proteins, cuisines, tags, or time band match. It stays soft, and a day filled with such a meal gets a `rule_method_unmet` week message. Rule methods count only when they're in the household's equipment. Model version `baseline-2026.2` | Partial credit (protein and long cook, rule 0.5) let a familiar chicken pot pie win a chicken-or-pork smoker night over smoker-friendly pork. The method is what the household means, and protein and time only narrow it. A hard filter would leave the day empty in catalogs with nothing suitable. At −1 × 0.45 the gap to a suitable meal is 0.9, more than familiarity, recency, and a good rating together. |
 | 211 | A weekday rule's label is a reason only when the meal is what the rule is about: it suits the rule's method, or fully matches a rule without methods. Other positive matches list only what matches ("Mexican"), and a meal that misses the method has no `rule` reason | "Smoker night · Chicken · Long cook OK" on a pot pie read as a claim that it's a smoker meal. |
 | 212 | The smoker heuristic rejects dish shapes named in the name's main part (before "with", "over", or "in"): pasta and noodles, soups and stews, pot pies, casseroles, stir-fries, tacos, bowls, sandwiches, burgers, meatballs, sausage, and similar. Cuts that are chopped, strips, cutlets, pulled, sausage mix, or patties don't count, and pork filet does. An explicit smoker tag or utensil still wins, and a dish shape outranks "smoked" in the name. Fish isn't included | Checked against an imported catalog of about 400 main meals: pork filet (the same cut as tenderloin) was missed, and a pasta with sliced chops counted. Meal-kit chicken comes as cutlets, strips, or diced meat, so no chicken recipe qualifies, which matches "a whole or large cut". A dish shape describes the meal better than a smoked ingredient does. |
+| 270 | The Recipes and Week tabs become one **Menu** tab, so the tabs are Menu, Shop, Pantry, Household. The day-by-day week stays as `WeekView`, behind a **By Day** segmented control in the Menu screen's toolbar; both halves share one `WeekAutopilotFlow`, and `PlanStore` owns the shown week, which the strip changes and the menu follows | Recipes and the week in one page was the point of the redesign, and a toggle keeps every planning action (days, cooked and skipped, finalize, the entry editor, Add Recipes) reachable without rewriting it. One week in `PlanStore` keeps the menu, By Day, the grocery list, Autopilot, and the recipe screen on the same week. |
+| 271 | `MenuStore` holds the menu; the plan stays in `PlanStore`, which hands every plan the server returns to `planDidChange` → `MenuStore.applyPlan`. That recomputes each card's `inPlan` and `planEntryIds` from the plan's entries and updates the week's planned count. Full menu reloads happen on pull to refresh, week switches, and after Autopilot's picks are accepted | The plan has one owner. Patching from the plan is exact and immediate, so a card's ✓ and the bottom bar don't wait for a round trip, while the reloads pick up the badges and reasons only the server can compute. |
+| 272 | Sections render generically in the server's order: an unknown `kind` falls back to a carousel, an unknown badge code shows its text without a symbol, and "Show More" passes the section's `moreQuery` straight to All Meals | The API owns which sections exist (`favorites`, `rule_<day>`, `history_*`…). Hard-coding them would need an app release for every new one. |
+| 273 | The week strip synthesizes its weeks from `oldestWeek` through four weeks ahead and decorates them with the server's summaries. Scrolling back asks for eight more weeks and stops at `earliestWeek`; when `/weeks` fails, a year of weeks still shows, without counts, and **Past** opens the same weeks as a list | The strip is navigation first: a failed counts request shouldn't make weeks unreachable. |
+| 274 | **+** on a card adds the recipe to the shown week at once — unscheduled, with `preferredServings(householdDefault:)` (#66) — and shows an undo toast; long-pressing **+** offers the days. **✓** removes the most recently added entry for that recipe, also with undo. Past weeks and finalized weeks show no **+** | Planning a week means adding several meals in a row, so the common case is one tap; a sheet per add is friction, and undo makes both directions safe without a confirmation. |
+| 275 | The recipe screen's bottom bar is **Add to Week** until the recipe is in the shown week, then the stepper "− 1 in your week (2 servings) +": **+** and **−** move to the recipe's next authored serving size, and **−** at the smallest size removes the meal with undo. Planned more than once, the count reads "2 in your week" and the stepper acts on the most recently added entry, with a day menu beside it for moving or removing it. Your Meals cards carry the same compact stepper | Ingredient amounts are authored per serving size and are never scaled, so stepping between authored sizes is the only correct change. Acting on the newest entry matches the one a second add just created, while the count keeps the others visible. |
+| 276 | The stepper and the selected week pill use the herb-green `AccentColor`, not the reference app's black | DinnerOS's own identity (no HelloFresh cloning), and a black bar would disappear in dark mode while the accent reads as an action in both. |
+| 277 | The recipe screen keeps the system navigation bar — transparent over a stretchy hero about 45% of the screen tall, with a top scrim — and shows its title and background once scrolled past. Share is a toolbar `ShareLink` carrying the recipe's `sourceUrl`; on iOS 18 it gets a circular material background, on iOS 26 the system's own | Hiding the bar for custom circular buttons loses the swipe-back gesture and the system's Dynamic Type and accessibility handling. The scrim keeps the back and share buttons legible over bright photos. |
+| 278 | The recipe screen's sticky picker is Overview / Ingredients / Nutrition. Customize is the first section inside Overview, then pairings, then the description, Autopilot, ratings, and order history; Cooking Steps is a disclosure section under the picker's content | Keeps the reference layout's order ("customize first, then what goes with it") without a fourth tab for a section most recipes don't have, and leaves the steps reachable from every tab. |
+| 279 | Customizations and pairings are loaded per recipe, never cached, and a `404` from either endpoint means "none", which hides the section. A choice saves to the planned entry at once (optimistically, put back on failure); with nothing planned it's kept and sent right after **Add to Week** succeeds | Both APIs are being built in parallel, so the screen has to work before and after they merge. Saving on selection matches a radio control's feel; keeping it locally avoids forcing an add before a choice. |
+| 280 | Photos ask the CDN for the size they're shown at by swapping the imported URL's `w_<pixels>` segment (`RecipeImageURL`), rounded up to a few buckets and never above the original width; URLs without that segment are left alone. `URLCache.shared` is raised to 48 MB in memory and 256 MB on disk | A 1200-pixel photo per card costs several megabytes of decoded memory in a long list. Buckets keep one cached response per size class, and leaving other hosts alone keeps non-CDN images working. |
+| 281 | Additive API fields are read through `decodeLenient` and `decodeLossyArray`: `calories`, `proteinGrams`, `timeBand`, ingredient images and allergens, `nutrition`, `sourceUrl`, and plan entry `customizations`. Unreadable elements of a list are skipped rather than failing the response | The menu API is merging in parallel. A field that arrives late, as a string, or not at all should cost one badge or one stat, not the whole screen. |
 | 290 | Per-meal protein customization lives in a new `internal/customize`: a curated protein table, pure transforms, and the HTTP handlers. Planning, grocery, and pantry keep only small hooks — planning stores `Entry.Customizations` and calls a `CustomizationSource` before specialties, grocery gains a `customized` via kind, pantry gains an optional `CookAdjuster` | The feature touches three modules that other work is changing at the same time. Keeping the logic in one new package makes the hooks reviewable in isolation and the merges small, the way the specialty module did it. |
 | 291 | Only ingredient lines in the curated table, with an exact weight for the serving size, get a customization group. Counts ("2 Pork Chops"), amount-less lines, and processed or pre-cooked meat (pulled pork, cooked meatballs, bratwurst, bacon) don't | A swap is a like-for-like weight: 10 oz of pork becomes 10 oz of beef. Nothing in the data says how much a "chop" weighs, so a count swap would be a guess, and the engine never guesses. Checked against an imported catalog of 399 main meals: 340 (85%) get a group, and only four weight-based protein lines are left out, all pre-cooked or processed. |
 | 292 | Swap families are curated, not derived: ground meats swap with each other plus diced chicken; chicken cuts with each other plus pork chops and tofu; pork cuts and steaks with each other plus chicken; sausage with sausage and ground meat; seafood with seafood and chicken; tofu with chicken and shrimp. Pairs may override the same-weight default with a ratio | The reference app offers a short, sensible list per meal, not every protein. Deriving families from the protein heuristics would offer fish for a taco filling. A table is reviewable and cheap to extend, and the ratio hook is there for pairs that aren't one-for-one. |

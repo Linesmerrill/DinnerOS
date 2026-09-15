@@ -218,6 +218,34 @@ final class RecipeLibrary {
         return recipe
     }
 
+    // MARK: - Customizations and pairings
+
+    /// The recipe's swappable ingredients. Empty when it has none, including a `404` from a
+    /// server without customizations. Not cached: the screen loads them when it opens.
+    func customizations(recipeID: String) async throws -> [CustomizationGroup] {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        do {
+            return try await session.authorized { token in
+                try await api.customizations(householdID: householdID, recipeID: recipeID, accessToken: token)
+            }.groups
+        } catch let error as APIError where error.status == 404 {
+            return []
+        }
+    }
+
+    /// Add-ons that go with the recipe, marked for `week`. Empty when there are none, including a
+    /// `404` from a server without pairings. Not cached.
+    func pairings(recipeID: String, week: ISOWeek?) async throws -> [RecipePairing] {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        do {
+            return try await session.authorized { token in
+                try await api.pairings(householdID: householdID, recipeID: recipeID, week: week, accessToken: token)
+            }.items
+        } catch let error as APIError where error.status == 404 {
+            return []
+        }
+    }
+
     // MARK: - Ratings
 
     /// Saves the signed-in user's rating of a recipe, then refreshes that recipe in the

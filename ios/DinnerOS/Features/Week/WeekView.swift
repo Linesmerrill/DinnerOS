@@ -1,24 +1,23 @@
 import SwiftUI
 
-/// The Week tab: one ISO week of the current household's plan, grouped by day, with
-/// the week's grocery list one tap away.
+/// The Menu tab's **By Day** view: the shown week's plan grouped by day, with cooked and skip
+/// swipes, day changes, and removal.
+///
+/// The Menu screen owns the week strip, the toolbar's week menu, and Autopilot's sheets, and
+/// passes its `WeekAutopilotFlow` in, so both views act on the same week and the same flow.
 struct WeekView: View {
+    let flow: WeekAutopilotFlow
+
     @Environment(PlanStore.self) private var plans
     @Environment(HouseholdStore.self) private var households
-    @Environment(RecipeLibrary.self) private var library
     @Environment(EventReporter.self) private var events
     @Environment(PantryStore.self) private var pantry
     @Environment(NotificationStore.self) private var notifications
     @Environment(AutopilotStore.self) private var autopilot
 
     @State private var editingEntry: PlanEntry?
-    @State private var autopilotFlow = WeekAutopilotFlow()
     @State private var isAddingRecipes = false
     @State private var actionError: String?
-
-    private var household: Household? {
-        households.current?.household
-    }
 
     /// Whether the role may change plans. Hiding controls is a convenience; the API
     /// enforces `plan.edit`.
@@ -32,23 +31,6 @@ struct WeekView: View {
 
     var body: some View {
         content
-            .navigationTitle("Week")
-            .navigationBarTitleDisplayMode(.inline)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                WeekSwitcher()
-            }
-            .toolbar { toolbar }
-            .notificationsToolbar()
-            .navigationDestination(for: GroceryListRoute.self) { route in
-                GroceryListView(week: route.week)
-            }
-            .task(id: household?.id) {
-                guard let household else { return }
-                // The editor reads serving sizes through the library's recipe cache.
-                async let recipes: Void = library.activate(householdID: household.id)
-                await plans.activate(householdID: household.id, timeZone: household.planningTimeZone)
-                await recipes
-            }
             .sheet(item: $editingEntry) { entry in
                 PlanEntryEditor(entry: entry, week: plans.week)
             }
@@ -60,7 +42,6 @@ struct WeekView: View {
             } message: {
                 Text(actionError ?? "")
             }
-            .modifier(WeekAutopilotModifier(flow: autopilotFlow, canEdit: canEdit))
     }
 
     @ViewBuilder
@@ -87,51 +68,6 @@ struct WeekView: View {
         }
     }
 
-    @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            NavigationLink(value: GroceryListRoute(week: plans.week)) {
-                Label("Grocery List", systemImage: "cart")
-            }
-            .disabled(plans.plan == nil)
-        }
-        ToolbarItemGroup(placement: .topBarTrailing) {
-            if plans.isSaving {
-                ProgressView()
-            }
-            if let plan = plans.plan {
-                weekMenu(plan)
-            }
-            if canEdit, plans.plan != nil {
-                Button("Add Recipes", systemImage: "plus") {
-                    isAddingRecipes = true
-                }
-                .disabled(!plans.isDraft)
-            }
-        }
-    }
-
-    /// The week's status for planners, and Autopilot for everyone.
-    private func weekMenu(_ plan: Plan) -> some View {
-        Menu {
-            if canEdit {
-                if plan.status == .draft {
-                    Button("Finalize Week", systemImage: "lock") {
-                        perform { try await plans.setStatus(.finalized) }
-                    }
-                    .disabled(plan.entries.isEmpty)
-                } else {
-                    Button("Reopen Week", systemImage: "lock.open") {
-                        perform { try await plans.setStatus(.draft) }
-                    }
-                }
-            }
-            WeekAutopilotMenuItems(flow: autopilotFlow, canEdit: canEdit)
-        } label: {
-            Label("Week Menu", systemImage: "ellipsis.circle")
-        }
-    }
-
     private func planList(_ plan: Plan) -> some View {
         List {
             if let refreshError = plans.refreshError {
@@ -142,7 +78,7 @@ struct WeekView: View {
                     perform { try await plans.setStatus(.draft) }
                 }
             }
-            WeekAutopilotSection(flow: autopilotFlow, canEdit: canEdit)
+            WeekAutopilotSection(flow: flow, canEdit: canEdit)
             if plan.entries.isEmpty {
                 emptyState
                     .listRowBackground(Color.clear)
@@ -310,60 +246,6 @@ struct GroceryListRoute: Hashable {
     let week: ISOWeek
 }
 
-/// Previous and next week, the shown week's dates and status, and a jump to this week.
-private struct WeekSwitcher: View {
-    @Environment(PlanStore.self) private var plans
-
-    var body: some View {
-        let week = plans.week
-        HStack(spacing: 12) {
-            Button("Previous Week", systemImage: "chevron.left") {
-                Task { await plans.show(week: week.previous) }
-            }
-            .labelStyle(.iconOnly)
-            Spacer(minLength: 0)
-            VStack(spacing: 4) {
-                Text(week.rangeLabel())
-                    .font(.headline)
-                HStack(spacing: 8) {
-                    if let relative = relativeName(week) {
-                        Text(relative)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Button("This Week") {
-                            Task { await plans.showCurrentWeek() }
-                        }
-                    }
-                    if let status = plans.plan?.status {
-                        PlanStatusBadge(status: status)
-                    }
-                }
-                .font(.subheadline)
-            }
-            .accessibilityElement(children: .contain)
-            Spacer(minLength: 0)
-            Button("Next Week", systemImage: "chevron.right") {
-                Task { await plans.show(week: week.next) }
-            }
-            .labelStyle(.iconOnly)
-        }
-        .font(.title3)
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(.bar)
-    }
-
-    private func relativeName(_ week: ISOWeek) -> LocalizedStringKey? {
-        let current = plans.currentWeek
-        switch week {
-        case current: return "This Week"
-        case current.next: return "Next Week"
-        case current.previous: return "Last Week"
-        default: return nil
-        }
-    }
-}
-
 struct PlanStatusBadge: View {
     let status: PlanStatus
 
@@ -422,30 +304,18 @@ private struct FinalizedNotice: View {
     }
 }
 
-#Preview("Planned") {
-    let session = HouseholdPreviewData.session()
+#Preview("By Day") {
     NavigationStack {
-        WeekView()
+        WeekView(flow: WeekAutopilotFlow())
+            .navigationTitle("By Day")
     }
-    .environment(HouseholdPreviewData.store(session: session))
-    .environment(RecipePreviewData.library(session: session))
-    .environment(PlanPreviewData.store(session: session))
-    .environment(EventReporter.preview(session: session))
-    .environment(PantryPreviewData.store(session: session))
-    .environment(NotificationPreviewData.store(session: session))
-    .environment(AutopilotPreviewData.store(session: session))
+    .menuPreviewEnvironment()
 }
 
-#Preview("Empty") {
-    let session = HouseholdPreviewData.session()
+#Preview("By Day, empty") {
     NavigationStack {
-        WeekView()
+        WeekView(flow: WeekAutopilotFlow())
+            .navigationTitle("By Day")
     }
-    .environment(HouseholdPreviewData.store(session: session))
-    .environment(RecipePreviewData.library(session: session))
-    .environment(PlanPreviewData.store(session: session, plan: PlanPreviewData.emptyPlan))
-    .environment(EventReporter.preview(session: session))
-    .environment(PantryPreviewData.store(session: session))
-    .environment(NotificationPreviewData.store(session: session))
-    .environment(AutopilotPreviewData.store(session: session))
+    .menuPreviewEnvironment(plan: PlanPreviewData.emptyPlan)
 }

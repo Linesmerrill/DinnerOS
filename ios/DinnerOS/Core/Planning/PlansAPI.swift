@@ -40,6 +40,16 @@ nonisolated struct PlansAPI: Sendable {
             APIRequest.delete(Self.weekPath(householdID, week) + "/entries/\(entryID)").authorized(with: accessToken))
     }
 
+    /// Replaces an entry's ingredient choices and returns the plan.
+    func setCustomization(
+        householdID: String, week: ISOWeek, entryID: String, request body: PlanCustomizationRequest,
+        accessToken: String
+    ) async throws -> Plan {
+        let request = try APIRequest.put(
+            Self.weekPath(householdID, week) + "/entries/\(entryID)/customization", body: body)
+        return try await client.send(request.authorized(with: accessToken))
+    }
+
     func setStatus(householdID: String, week: ISOWeek, status: PlanStatus, accessToken: String) async throws -> Plan {
         let request = try APIRequest.put(
             Self.weekPath(householdID, week) + "/status", body: ["status": status.rawValue])

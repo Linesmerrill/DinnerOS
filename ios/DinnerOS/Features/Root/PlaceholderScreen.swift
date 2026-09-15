@@ -18,6 +18,6 @@ struct PlaceholderScreen: View {
 
 #Preview {
     NavigationStack {
-        PlaceholderScreen(tab: .week)
+        PlaceholderScreen(tab: .pantry)
     }
 }
