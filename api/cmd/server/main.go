@@ -20,6 +20,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/httpapi"
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/logging"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb"
@@ -102,6 +103,7 @@ func run() error {
 		invitations.Indexes(),
 		recipes.Indexes(),
 		planning.Indexes(),
+		pantry.Indexes(),
 	)...); err != nil {
 		return err
 	}
@@ -134,6 +136,13 @@ func run() error {
 		Tokens:     tokens,
 		Logger:     logger,
 	})
+	// The recipe service is the pantry's view of the global ingredient catalog.
+	pantryHandler := pantry.NewHandler(pantry.HandlerOptions{
+		Service:    pantry.NewService(pantry.NewMongoStore(db.Database()), recipeService),
+		Authorizer: householdService,
+		Tokens:     tokens,
+		Logger:     logger,
+	})
 
 	srv := &http.Server{
 		Addr: cfg.Addr(),
@@ -151,6 +160,7 @@ func run() error {
 				invitationHandler.Mount(r)
 				recipeHandler.Mount(r)
 				planHandler.Mount(r)
+				pantryHandler.Mount(r)
 			},
 		}),
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelWarn),
