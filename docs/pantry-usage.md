@@ -124,6 +124,14 @@ deducts the recipe:
 4. Each item's cycle adds the converted amount, with version-checked writes
    that retry on conflicts, and then runs the low-stock check.
 
+A planned meal that was customized ([api.md](api.md#customize-a-meal))
+deducts what was actually cooked: before step 1, the entry's swapped or
+doubled protein replaces the recipe's line, with every authored amount scaled.
+The entry is found by its ID in the plans around the cooked date. A failure to
+read the customization fails that deduction instead of deducting an ingredient
+that may not have been cooked; an entry that isn't customized, or isn't found,
+deducts the recipe as written.
+
 Deduction is best effort, like event recording (#71): a failure is logged and
 the event is still stored. Any member who can send events can cook, so
 deductions don't require `pantry.edit`.

@@ -109,6 +109,8 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | DELETE | `/api/v1/households/{householdId}/plans/{week}/entries/{entryId}` → `204` | `plan.edit` | 6 | ✅ |
 | PUT | `/api/v1/households/{householdId}/plans/{week}/status` `{status}` → plan | `plan.edit` | 6 | ✅ |
 | GET | `/api/v1/households/{householdId}/plans/{week}/grocery` → `{week, status, pantryApplied, categories, skipped}` | `household.view` | 6 | ✅ |
+| GET | `/api/v1/households/{householdId}/recipes/{recipeId}/customizations` `?servings&entryId&week` → `{recipeId, servings, groups}` | `household.view` | 6 | ✅ |
+| PUT | `/api/v1/households/{householdId}/plans/{week}/entries/{entryId}/customization` `{selections}` → plan | `plan.edit` | 6 | ✅ |
 | GET | `/api/v1/ingredients` `?q&limit` → `{items: [{id, key, name, category, categoryConfident, imageUrl?}]}` | bearer | 7 | ✅ |
 | GET | `/api/v1/households/{householdId}/pantry` `?status&category&staple&q` → `{items}` | `household.view` | 7 | ✅ |
 | POST | `/api/v1/households/{householdId}/pantry` `{ingredientId? or name, category?, quantity?, unit?, status?, isStaple?, expiresOn?, note?}` → `201` item, or `200` when merged | `pantry.edit` | 7 | ✅ |
@@ -403,6 +405,97 @@ the stored plan atomically, so nobody's change is lost and there is no version
 to send or `409 conflict` to retry. Responses show the plan after your change,
 including other members' changes.
 
+### Customize a meal
+
+A recipe's protein can be swapped for another or doubled ("Customize your
+meal"). The chosen customization changes the week's grocery list and what
+cooking the meal deducts from the pantry. There are no prices.
+
+`GET /api/v1/households/{householdId}/recipes/{recipeId}/customizations`
+(`household.view`)
+
+```json
+{
+  "recipeId": "66e5a1f2c3b4a5d6e7f80915",
+  "servings": 2,
+  "groups": [
+    {
+      "ingredientKey": "66e5a1f2c3b4a5d6e7f80a20",
+      "ingredientName": "Ground Pork",
+      "amountText": "10 ounce",
+      "quantity": "10",
+      "unit": "oz",
+      "imageUrl": "https://img.example.com/ground-pork.png",
+      "selectedChoiceId": "original",
+      "choices": [
+        { "id": "original", "label": "Ground Pork", "ingredientName": "Ground Pork", "amountText": "10 ounce",
+          "quantity": "10", "unit": "oz", "imageUrl": "https://img.example.com/ground-pork.png", "kind": "original", "badge": null },
+        { "id": "double", "label": "2x Ground Pork", "ingredientName": "Ground Pork", "amountText": "20 ounce",
+          "quantity": "20", "unit": "oz", "imageUrl": "https://img.example.com/ground-pork.png", "kind": "double", "badge": "Double portion" },
+        { "id": "swap:ground-beef", "label": "Ground Beef", "ingredientName": "Ground Beef", "amountText": "10 ounce",
+          "quantity": "10", "unit": "oz", "imageUrl": "https://img.example.com/ground-beef.png", "kind": "swap", "badge": null },
+        { "id": "swap:ground-beef:double", "label": "2x Ground Beef", "ingredientName": "Ground Beef", "amountText": "20 ounce",
+          "quantity": "20", "unit": "oz", "imageUrl": "https://img.example.com/ground-beef.png", "kind": "swap_double", "badge": "Double portion" }
+      ]
+    }
+  ]
+}
+```
+
+- **Groups.** Only protein lines get a group, decided by a curated table in
+  the API (ground meats, chicken cuts, pork cuts, steaks, sausage, seafood,
+  tofu). A line qualifies only when it has an exact weight for the serving
+  size, so counts ("2 Pork Chops") and amount-less lines have no group. A
+  recipe with no protein lines returns `{"groups": []}`.
+- **Choices.** `original` first, then `double`, then each swap followed by its
+  double. `kind` is `original`, `double`, `swap`, or `swap_double`, and
+  `badge` is `"Double portion"` on the doubled ones (otherwise `null`).
+  `id` is what you send back. Swap families: ground meats swap with each other
+  plus diced chicken; chicken cuts with each other plus pork chops and tofu;
+  pork cuts and steaks with each other plus chicken; sausage with sausage and
+  ground meat; seafood with seafood and chicken; tofu with chicken and shrimp.
+- **Amounts.** `amountText` is for display ("10 ounce"); `quantity` is exact
+  and `unit` is the unit code. Swaps are the same weight unless the table sets
+  a ratio for the pair; a double is twice the amount.
+- **Serving size.** The recipe's smallest by default, `?servings=N` for one of
+  its sizes (400 otherwise), or the entry's when `?entryId=&week=` are given
+  (both or neither, 400 otherwise; 404 when that entry isn't this recipe's).
+  `servings` wins over the entry's size.
+- **`selectedChoiceId`** is the entry's current choice (`"original"` when it
+  isn't customized) with `entryId`, and `null` without one.
+- **Restrictions.** Choices the household's [Autopilot](#autopilot)
+  restrictions rule out — an excluded protein or ingredient, an allergen, or a
+  diet such as vegetarian — are dropped. The `original` is always offered, as
+  is a choice the entry already has.
+- **`imageUrl`** is the catalog ingredient's image when there is one, else
+  `null`.
+
+`PUT /api/v1/households/{householdId}/plans/{week}/entries/{entryId}/customization`
+(`plan.edit`)
+
+```json
+{ "selections": [{ "ingredientKey": "66e5a1f2c3b4a5d6e7f80a20", "choiceId": "swap:ground-beef" }] }
+```
+
+Returns the plan, like the other entry mutations. `selections` is required and
+replaces the entry's customizations: `[]` resets the meal, and a line you
+leave out goes back to the original. Sending `"original"` stores nothing.
+Unknown `ingredientKey`s or `choiceId`s (including a choice the restrictions
+rule out) are `400 validation_failed`, and a finalized plan is
+`409 plan_finalized`, as everywhere else in the planner.
+
+The entry then carries `customizations` (omitted when empty):
+
+```json
+"customizations": [{ "ingredientKey": "66e5a1f2c3b4a5d6e7f80a20", "choiceId": "swap:ground-beef", "label": "Ground Beef" }]
+```
+
+The week's [grocery list](#grocery-list) buys the chosen ingredient and
+amount, with `via` provenance ("Ground Beef instead of Ground Pork in One-Pan
+Pork Tacos"), and marking the meal cooked deducts the chosen ingredient from
+the pantry. The change is recorded as a `meal.customized`
+[event](#events) for Autopilot.
+
 ### Grocery list
 
 `GET /api/v1/households/{householdId}/plans/{week}/grocery` (`household.view`)
@@ -541,7 +634,11 @@ fields, and the list has `batches`:
   ingredients, scaled exactly from the recipe's amount (packet counts convert
   through the specialty's packet size; an amount that can't convert lists the
   ingredient without one). `house_made_batch`: the ingredients to make
-  `batches` batches, each `yield`. `text` is ready to show.
+  `batches` batches, each `yield`. `customized`: the line a member
+  [customized](#customize-a-meal) — `specialtyName` is the recipe's original
+  ingredient and `optionName` the chosen label. `text` is ready to show
+  ("Ground Beef instead of Ground Pork in One-Pan Pork Tacos", or "2x Ground
+  Pork in …" for a doubled line).
 - `batches` has one entry per house-made specialty the week uses. `status` is
   `inPantry` or `make`; `reason` is `enough` or `inStock` (in pantry), or
   `notEnough`, `low`, `out`, `missing` (make). `needed` is the week's total in
@@ -1777,6 +1874,7 @@ can observe.
 | `recipe.unrated` | server (ratings) | required | `{previousScore}` |
 | `recipe.planned` | server (planning) | required | `{entryId?, day?, date?, servings?, origin?, proposalId?}` |
 | `recipe.unplanned` | server (planning) | required | `{entryId?, day?, date?, origin?}` |
+| `meal.customized` | server (customize) | required | `{entryId, changes: [{ingredientKey, from, to}]}` (`from`/`to` are choice IDs, `original` when none) |
 | `week.generated` | server (Autopilot) | — | `{proposalId, modelVersion, attempt, requested, planned, unfilled, candidates, coldStart?, replacedProposalId?}` |
 | `meal.swapped` | server (Autopilot) | required (swapped in) | `{proposalId, slotId, day, date?, previousRecipeId, modelVersion, swapNumber}` |
 | `week.accepted` | server (Autopilot) | — | `{proposalId, modelVersion, planned, added, excluded, skipped, swaps}` |

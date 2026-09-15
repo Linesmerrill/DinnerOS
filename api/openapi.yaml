@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: DinnerOS API
-  version: 0.9.0
+  version: 0.10.0
   description: |
     Backend for the DinnerOS iOS app. "DinnerOS" is a working name.
 
@@ -880,6 +880,102 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AddPlanEntryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/PlanConflict"
+  /api/v1/households/{householdId}/recipes/{recipeId}/customizations:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/RecipeID"
+      - name: servings
+        in: query
+        description: |
+          One of the recipe's serving sizes. Defaults to the entry's servings
+          when `entryId` is given, otherwise the recipe's smallest size.
+        schema:
+          type: integer
+          minimum: 1
+      - name: entryId
+        in: query
+        description: A plan entry of this recipe; send `week` with it.
+        schema:
+          type: string
+      - name: week
+        in: query
+        description: The entry's ISO week.
+        schema:
+          type: string
+          example: 2026-W38
+    get:
+      summary: List a meal's protein customizations
+      description: |
+        The ways this meal's protein can be changed: doubled, or swapped for
+        another protein. Requires `household.view`.
+
+        Only protein lines of a curated table, with an exact weight for the
+        serving size, get a group; a recipe with none returns an empty list.
+        Choices the household's Autopilot restrictions rule out (an excluded
+        protein or ingredient, an allergen, or a diet) are dropped, except the
+        original and the choice the entry already has.
+      operationId: listMealCustomizations
+      tags: [plans]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The recipe's customization groups.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MealCustomizations"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/plans/{week}/entries/{entryId}/customization:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+      - $ref: "#/components/parameters/EntryID"
+    put:
+      summary: Customize a planned meal
+      description: |
+        Requires `plan.edit`. `selections` replaces the entry's
+        customizations; `[]` resets the meal, and a line left out goes back to
+        its original. A `choiceId` of `original` stores nothing.
+
+        An unknown `ingredientKey` or `choiceId`, including a choice the
+        household's restrictions rule out, is `400 validation_failed`. The
+        chosen customization changes the week's grocery list and what cooking
+        the meal deducts from the pantry, and is recorded as `meal.customized`.
+      operationId: setMealCustomization
+      tags: [plans]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetMealCustomizationRequest"
+      responses:
+        "200":
+          description: The plan after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plan"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -3873,6 +3969,119 @@ components:
           type: [string, "null"]
           format: date-time
           description: Null for a week nobody has planned.
+    MealCustomizations:
+      type: object
+      required: [recipeId, servings, groups]
+      properties:
+        recipeId:
+          type: string
+        servings:
+          type: integer
+          description: The serving size the amounts are for.
+          example: 2
+        groups:
+          type: array
+          description: One per customizable protein line, in recipe order. Empty when the recipe has none.
+          items:
+            $ref: "#/components/schemas/MealCustomizationGroup"
+    MealCustomizationGroup:
+      type: object
+      required: [ingredientKey, ingredientName, amountText, quantity, unit, imageUrl, selectedChoiceId, choices]
+      properties:
+        ingredientKey:
+          type: string
+          description: The line's key, as on grocery items — a catalog ingredient ID or `name:<normalized name>`. Send it back in a selection.
+          example: 66e5a1f2c3b4a5d6e7f80a20
+        ingredientName:
+          type: string
+          example: Ground Pork
+        amountText:
+          type: string
+          description: The recipe's amount for display.
+          example: 10 ounce
+        quantity:
+          type: string
+          description: The exact amount as `n` or `n/d`.
+          example: "10"
+        unit:
+          type: string
+          description: Unit code; always a weight.
+          example: oz
+        imageUrl:
+          type: [string, "null"]
+          description: The catalog ingredient's image, or null.
+        selectedChoiceId:
+          type: [string, "null"]
+          description: The entry's current choice (`original` when it isn't customized) when `entryId` was given; null otherwise.
+        choices:
+          type: array
+          description: The original first, then double, then each swap followed by its double.
+          items:
+            $ref: "#/components/schemas/MealCustomizationChoice"
+    MealCustomizationChoice:
+      type: object
+      required: [id, label, ingredientName, amountText, quantity, unit, imageUrl, kind, badge]
+      properties:
+        id:
+          type: string
+          description: "`original`, `double`, `swap:<proteinId>`, or `swap:<proteinId>:double`."
+          example: swap:ground-beef:double
+        label:
+          type: string
+          example: 2x Ground Beef
+        ingredientName:
+          type: string
+          example: Ground Beef
+        amountText:
+          type: string
+          example: 20 ounce
+        quantity:
+          type: string
+          example: "20"
+        unit:
+          type: string
+          example: oz
+        imageUrl:
+          type: [string, "null"]
+        kind:
+          type: string
+          enum: [original, double, swap, swap_double]
+        badge:
+          type: [string, "null"]
+          description: "`Double portion` on doubled choices, otherwise null."
+    SetMealCustomizationRequest:
+      type: object
+      required: [selections]
+      additionalProperties: false
+      properties:
+        selections:
+          type: array
+          description: Replaces the entry's customizations. An empty array resets the meal.
+          maxItems: 20
+          items:
+            type: object
+            required: [ingredientKey, choiceId]
+            additionalProperties: false
+            properties:
+              ingredientKey:
+                type: string
+                description: A group's `ingredientKey` for this meal.
+              choiceId:
+                type: string
+                description: One of that group's choice IDs. `original` stores nothing.
+    PlanEntryCustomization:
+      type: object
+      required: [ingredientKey, choiceId, label]
+      properties:
+        ingredientKey:
+          type: string
+        choiceId:
+          type: string
+          example: swap:ground-beef
+        label:
+          type: string
+          description: The choice's label when it was chosen.
+          example: Ground Beef
     PlanEntry:
       type: object
       required: [id, recipe, day, date, servings, note, addedBy, addedAt, origin]
@@ -3916,6 +4125,13 @@ components:
           type: string
           enum: [manual, autopilot]
           description: "`autopilot` for entries added by accepting an Autopilot proposal; otherwise `manual`."
+        customizations:
+          type: array
+          description: |
+            The meal's protein customizations, omitted when the meal is cooked
+            as written. See the customization endpoints.
+          items:
+            $ref: "#/components/schemas/PlanEntryCustomization"
     AddPlanEntryRequest:
       type: object
       required: [recipeId, servings]
@@ -4707,7 +4923,11 @@ components:
       properties:
         kind:
           type: string
-          enum: [store_alternative, house_made_batch]
+          enum: [store_alternative, house_made_batch, customized]
+          description: |
+            `customized` marks a line a member customized: `specialtyName` is
+            the recipe's original ingredient, `optionId` the choice, and
+            `optionName` its label. `specialtyId` is then empty.
         specialtyId:
           type: string
         specialtyKey:
