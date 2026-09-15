@@ -8,8 +8,17 @@ Status:
   - Ingredient categories: `api/internal/ingredients` (`Categorize`), stored in
     the global `ingredients` catalog by `api/internal/recipes` (Phase 4; see
     [database.md](database.md#recipes-and-ingredients)).
+  - A week's grocery list: `api/internal/planning` builds one
+    `RecipeSelection` per plan entry from the live recipe's authored amounts
+    for the entry's serving size (never scaled), and
+    `GET /api/v1/households/{householdId}/plans/{week}/grocery` returns the
+    result grouped by category (Phase 6; see [api.md](api.md#grocery-list)).
+    It is computed on every request with an **empty pantry**, so statuses are
+    only `toBuy` and `pantryHint`.
 - **Pending:**
-  - Grocery list persistence, API, and UI (Phase 7).
+  - The household pantry, passed to `Aggregate` in place of the empty one
+    (`planning.Service.GroceryList`), so items get `inPantry` (Phase 7).
+  - Saved grocery lists with checked state, and the shopping UI (Phase 7).
 
 The implemented engine differs from the pipeline below in two ways:
 

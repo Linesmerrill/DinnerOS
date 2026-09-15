@@ -61,7 +61,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | 403 | `forbidden` (the caller can see the resource but not perform the action) |
 | 404 | `not_found` (also used when the caller may not know the resource exists), `invitation_invalid` |
 | 405 | `method_not_allowed` |
-| 409 | `conflict`, `last_admin` |
+| 409 | `conflict`, `last_admin`, `plan_finalized`, `plan_full` |
 | 413 | `payload_too_large` |
 | 429 | `rate_limited` |
 | 500 | `internal` (details only in server logs) |
@@ -92,7 +92,14 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/recipes` `?q&addons&tag&cuisine&sort&limit&cursor` → `{items, nextCursor}` | `household.view` | 4 | ✅ |
 | GET | `/api/v1/households/{householdId}/recipes/{recipeId}` → recipe | `household.view` | 4 | ✅ |
 | POST | `/api/v1/households/{householdId}/recipes/import` import file → `{created, updated, unchanged, ingredientsCreated, reviewItems, errors}` | `recipes.import` | 4 | ✅ |
-| … | plans, grocery, events | | 5–9 | planned |
+| GET | `/api/v1/households/{householdId}/plans` `?from&to` → `{items: [{week, startDate, status, entryCount, updatedAt}]}` | `household.view` | 6 | ✅ |
+| GET | `/api/v1/households/{householdId}/plans/{week}` → plan (an empty draft if unplanned) | `household.view` | 6 | ✅ |
+| POST | `/api/v1/households/{householdId}/plans/{week}/entries` `{recipeId, day?, servings, note?}` → `201 {entry, plan}` | `plan.edit` | 6 | ✅ |
+| PATCH | `/api/v1/households/{householdId}/plans/{week}/entries/{entryId}` `{day?, servings?, note?}` → plan | `plan.edit` | 6 | ✅ |
+| DELETE | `/api/v1/households/{householdId}/plans/{week}/entries/{entryId}` → `204` | `plan.edit` | 6 | ✅ |
+| PUT | `/api/v1/households/{householdId}/plans/{week}/status` `{status}` → plan | `plan.edit` | 6 | ✅ |
+| GET | `/api/v1/households/{householdId}/plans/{week}/grocery` → `{week, status, pantryApplied, categories, skipped}` | `household.view` | 6 | ✅ |
+| … | pantry, saved grocery lists, providers, events | | 7–9 | planned |
 
 Household-scoped routes return `404 not_found` to anyone who isn't a member,
 so a household's existence is never revealed, and `403 forbidden` to members
@@ -219,3 +226,150 @@ in `errors` by their index in `recipes`, and the rest still import.
 
 For a full order history against production, prefer the `importrecipes`
 command (see [import-format.md](import-format.md#loading-into-dinneros)).
+
+## Plans
+
+A plan is a household's recipes for one ISO week (`2026-W38`, Monday to
+Sunday). The week number must exist in its year: 2026 has 53 weeks, 2025 has
+52. An invalid week is `400 validation_failed`.
+
+### Get a week
+
+`GET /api/v1/households/{householdId}/plans/{week}`
+
+```json
+{
+  "householdId": "66e5a1f2c3b4a5d6e7f80913",
+  "week": "2026-W38",
+  "startDate": "2026-09-14",
+  "endDate": "2026-09-20",
+  "status": "draft",
+  "entries": [
+    {
+      "id": "66e5a1f2c3b4a5d6e7f80c01",
+      "recipe": { "id": "66e5a1f2c3b4a5d6e7f80915", "name": "Beef Tacos", "imageUrl": "https://img.example.com/beef-tacos.jpg" },
+      "day": "tue",
+      "date": "2026-09-15",
+      "servings": 2,
+      "note": "extra lime",
+      "addedBy": "66e5a1f2c3b4a5d6e7f80912",
+      "addedAt": "2026-09-14T18:30:00Z"
+    },
+    {
+      "id": "66e5a1f2c3b4a5d6e7f80c02",
+      "recipe": { "id": "66e5a1f2c3b4a5d6e7f80916", "name": "Onion Soup" },
+      "day": null,
+      "date": null,
+      "servings": 4,
+      "note": "",
+      "addedBy": "66e5a1f2c3b4a5d6e7f80917",
+      "addedAt": "2026-09-14T19:05:00Z"
+    }
+  ],
+  "createdAt": "2026-09-14T18:30:00Z",
+  "updatedAt": "2026-09-14T19:05:00Z"
+}
+```
+
+- `day` is `mon`–`sun`, or `null` for "this week, not scheduled". `date` is
+  that day's `YYYY-MM-DD`, or `null`.
+- `recipe` is a snapshot of the name and image taken when the entry was
+  added. Use `GET .../recipes/{id}` for details.
+- Entries are in the order they were added.
+- A week nobody has planned returns `status: "draft"`, `entries: []`, and
+  `null` timestamps. Nothing is stored until someone adds an entry or sets the
+  status.
+
+### List weeks
+
+`GET /api/v1/households/{householdId}/plans?from=2026-W30&to=2026-W40`
+returns every week from `from` to `to`, in order, including unplanned weeks
+(`entryCount: 0`, `updatedAt: null`). Both parameters are required, `to` must
+not be before `from`, and the range covers at most 26 weeks.
+
+```json
+{ "items": [{ "week": "2026-W30", "startDate": "2026-07-20", "status": "draft", "entryCount": 3, "updatedAt": "2026-07-18T09:00:00Z" }] }
+```
+
+### Change a week
+
+Requires `plan.edit`.
+
+- `POST .../plans/{week}/entries` `{recipeId, day?, servings, note?}`.
+  `recipeId` must be a recipe in the household, `servings` one of the
+  recipe's `servings`, and `note` at most 500 characters. Returns
+  `201 {entry, plan}`. A week holds at most 50 entries.
+- `PATCH .../plans/{week}/entries/{entryId}` with at least one of `day`,
+  `servings`, or `note`. `"day": null` unschedules; fields you leave out
+  don't change. Returns the plan.
+- `DELETE .../plans/{week}/entries/{entryId}` returns `204`.
+- `PUT .../plans/{week}/status` `{"status": "finalized"}` or `"draft"`. A
+  finalized plan's entries can't change (`409 plan_finalized`) until its
+  status is set back to `draft`.
+
+Members can edit the same week at the same time. Each change is applied to
+the stored plan atomically, so nobody's change is lost and there is no version
+to send or `409 conflict` to retry. Responses show the plan after your change,
+including other members' changes.
+
+### Grocery list
+
+`GET /api/v1/households/{householdId}/plans/{week}/grocery` (`household.view`)
+
+```json
+{
+  "week": "2026-W38",
+  "status": "draft",
+  "pantryApplied": false,
+  "categories": [
+    {
+      "category": "produce",
+      "items": [
+        {
+          "ingredientKey": "66e5a1f2c3b4a5d6e7f80a12",
+          "name": "Yellow Onion",
+          "amounts": [
+            { "quantity": "3/2", "quantityValue": 1.5, "unit": "count", "text": "1 ½" },
+            { "quantity": "8", "quantityValue": 8, "unit": "oz", "text": "8 oz" }
+          ],
+          "quantityText": "1 ½ + 8 oz",
+          "unquantified": false,
+          "status": "toBuy",
+          "recipes": [
+            { "id": "66e5a1f2c3b4a5d6e7f80915", "name": "Beef Tacos" },
+            { "id": "66e5a1f2c3b4a5d6e7f80916", "name": "Onion Soup" }
+          ]
+        }
+      ]
+    }
+  ],
+  "skipped": []
+}
+```
+
+- The list is computed on every request by the grocery engine
+  ([grocery-engine.md](grocery-engine.md)) from each entry's live recipe, using
+  the amounts the source authored for the entry's serving size. Amounts are
+  never scaled from another size.
+- Categories are in aisle order (`produce`, `meat-seafood`, `dairy-eggs`,
+  `bakery`, `deli`, `pantry`, `spices`, `condiments`, `frozen`, `beverages`,
+  `other`). Empty categories are left out.
+- Amounts whose units can't be combined stay separate, as with the onion
+  above. `quantity` is exact, `text` is for display, and `quantityText` joins
+  the texts with ` + `. `unquantified: true` means at least one recipe gave no
+  amount ("salt to taste").
+- `status` is `toBuy`, or `pantryHint` when every contributing recipe marks
+  the item as a pantry staple. The household pantry doesn't exist yet
+  (`pantryApplied: false`); Phase 7 adds it and the `inPantry` status.
+- `skipped` lists entries that couldn't contribute: `recipeUnavailable` (the
+  recipe is no longer in the household) or `servingsUnavailable` (the recipe
+  no longer offers that serving size).
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `validation_failed` | Invalid week, range, day, servings, status, or note; no fields in a PATCH; `recipeId` not in the household |
+| 400 | `invalid_request` | Body is empty, malformed, has unknown fields, or wrong types |
+| 403 | `forbidden` | Changing a plan without `plan.edit` |
+| 404 | `not_found` | Not a member of the household; no such entry in that week |
+| 409 | `plan_finalized` | The plan is finalized; set its status to `draft` first |
+| 409 | `plan_full` | The week already has 50 entries |

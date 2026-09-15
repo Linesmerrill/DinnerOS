@@ -130,16 +130,47 @@ Ownership: recipes imported from our personal history belong to a household
 (`householdId`). A future shared or partner catalog will use an explicit
 `catalogId` rather than overloading `householdId`.
 
-### Planning, pantry, grocery
+### Week plans
+
+Implemented in Phase 6 (`internal/planning`).
+
+| Collection | Key fields | Indexes |
+| --- | --- | --- |
+| `weekly_plans` | householdId, week (`2026-W38`), startDate (Monday, `YYYY-MM-DD`), status (`draft`/`finalized`), entries[] (id, recipeId, recipeName, recipeImageUrl, day (`mon`–`sun`; absent when unscheduled), servings, note, addedBy, addedAt), createdAt, updatedAt | **unique** `{householdId, week}` |
+
+- One document per household and ISO week, created by the first added entry
+  or status change. Reading an unplanned week writes nothing. ISO weeks have
+  no time zone; `startDate` is stored for future date queries.
+- `week` is zero-padded, so string order is week order, and the unique index
+  also serves range queries (`week: {$gte, $lte}`). Summaries project
+  `entryCount` with `$size`.
+- A week has at most 50 entries, so they are embedded. `id`, `recipeId`, and
+  `addedBy` are ObjectIDs.
+- **No lost writes, without a version field.** Every entry change is one
+  atomic update of the plan document:
+  - add: an upsert with `$setOnInsert` makes sure the plan exists, then `$push`
+    on `{householdId, week, status: "draft", "entries.49": {$exists: false}}`;
+  - edit: positional `$set`/`$unset` (`entries.$.day`) on
+    `{householdId, week, status: "draft", "entries.id": id}`;
+  - delete: `$pull` with the same filter.
+
+  Concurrent edits by different members all land. When nothing matches, the
+  store reads the plan once to report `404` (no such entry), `409
+  plan_finalized`, or `409 plan_full`. If two first writes race to create a
+  plan, the unique index rejects one and it retries once, matching the
+  winner's document.
+- Entries snapshot the recipe's name and image for rendering. Recipe details
+  and the grocery list read the live recipe, so re-imports show up there.
+
+### Pantry and grocery
 
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
 | `pantry_items` | householdId, ingredientId | **unique** `{householdId, ingredientId}` |
-| `weekly_plans` | householdId, weekStart, entries[] (MealPlanEntry: date, recipeId, servings, status, source) | **unique** `{householdId, weekStart}` |
 | `grocery_lists` | householdId, weeklyPlanId, items[], generatedAt | **unique** `{weeklyPlanId}` |
 | `grocery_provider_configurations` | householdId, provider, settings | **unique** `{householdId, provider}` |
 
-A week has at most a few dozen entries, so they are embedded in the plan.
+Until Phase 7, a week's grocery list is computed on request and not stored.
 
 ### Behavior
 
