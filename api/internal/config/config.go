@@ -41,6 +41,8 @@ type Config struct {
 	LogLevel     slog.Level
 	LogFormat    string
 	MaxBodyBytes int64
+	// RecipeImportMaxBytes replaces MaxBodyBytes on the recipe import route.
+	RecipeImportMaxBytes int64
 
 	MongoURI      string
 	MongoDatabase string
@@ -79,6 +81,10 @@ const (
 // DefaultInviteURLBase opens the iOS app's custom URL scheme. Universal links
 // can replace it later without a code change.
 const DefaultInviteURLBase = "dinneros://invite?token="
+
+// DefaultRecipeImportMaxBytes fits a full recipe order history (about 1000
+// recipes, 10–15 MB) with room to grow.
+const DefaultRecipeImportMaxBytes = 32 << 20
 
 // Default and minimum values for authentication settings.
 const (
@@ -120,6 +126,8 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("port", c.Port),
 		slog.String("logLevel", c.LogLevel.String()),
 		slog.String("logFormat", c.LogFormat),
+		slog.Int64("maxBodyBytes", c.MaxBodyBytes),
+		slog.Int64("recipeImportMaxBytes", c.RecipeImportMaxBytes),
 		slog.String("mongoURI", RedactURI(c.MongoURI)),
 		slog.String("mongoDatabase", c.MongoDatabase),
 	)
@@ -176,6 +184,12 @@ func Load(getenv func(string) string) (Config, error) {
 		errs = append(errs, fmt.Errorf("HTTP_MAX_BODY_BYTES must be a positive integer, got %q", getenv("HTTP_MAX_BODY_BYTES")))
 	}
 	cfg.MaxBodyBytes = maxBody
+
+	importMax, err := strconv.ParseInt(get("RECIPE_IMPORT_MAX_BYTES", strconv.Itoa(DefaultRecipeImportMaxBytes)), 10, 64)
+	if err != nil || importMax <= 0 {
+		errs = append(errs, fmt.Errorf("RECIPE_IMPORT_MAX_BYTES must be a positive integer, got %q", getenv("RECIPE_IMPORT_MAX_BYTES")))
+	}
+	cfg.RecipeImportMaxBytes = importMax
 
 	// Production must be pointed at a real database explicitly; development
 	// falls back to the docker-compose MongoDB.
