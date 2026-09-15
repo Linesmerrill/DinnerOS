@@ -25,9 +25,9 @@ Autopilot's first customer.
 | 5 | HelloFresh historical importer (full order history loaded) | ✅ Done; exact variant capture for some recipes pending |
 | 6 | Weekly planner and week grocery list | API ✅ Done; iOS in progress |
 | 7 | Pantry and grocery engine | Grocery engine, pantry API, and iOS Pantry tab ✅ (applied to week grocery lists); saved lists pending |
-| 8 | Shopping providers | Planned |
+| 8 | Shopping providers | Walmart cart handoff API (8a) ✅; iOS Shop tab in progress; product search (8b) and Instacart later |
 | 9 | Ratings and behavioral events | ✅ Done (API and iOS) |
-| 10 | Autopilot V1: taste profile, week context, deterministic week proposals (generate, swap, accept) | API ✅ Done; iOS pending |
+| 10 | Autopilot V1: taste profile, week context, deterministic week proposals (generate, swap, accept) | API ✅ Done; iOS in progress |
 | 11–12 | Autopilot context engine and private service | Later |
 
 ## Repository layout
