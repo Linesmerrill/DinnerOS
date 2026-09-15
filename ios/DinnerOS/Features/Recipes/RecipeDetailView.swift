@@ -196,10 +196,22 @@ struct RecipeDetailView: View {
             })
     }
 
+    /// Imported tags carry the source's own slugs ("latin-american-faves", "seo"); show the
+    /// ones a person would recognize, spelled out.
     private var tags: [String] {
         let values = (recipe?.tags ?? summary.tags) + (recipe?.cuisines ?? [])
         var seen = Set<String>()
-        return values.filter { seen.insert($0.lowercased()).inserted }.prefix(5).map { $0 }
+        return values.compactMap { value -> String? in
+            let spelled = value.replacingOccurrences(of: "-", with: " ")
+                .replacingOccurrences(of: "_", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = spelled.lowercased()
+            guard !key.isEmpty, key != "seo", !key.hasSuffix("faves"), !key.hasSuffix("picks") else { return nil }
+            guard seen.insert(key).inserted else { return nil }
+            return spelled.capitalized(with: .current)
+        }
+        .prefix(5)
+        .map { $0 }
     }
 
     // MARK: Sections
