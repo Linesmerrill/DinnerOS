@@ -56,6 +56,14 @@ tags:
       `household.view` is enough to rate, change, or remove your own.
   - name: events
     description: Client-observed household behavior, used for recommendations (docs/autopilot.md).
+  - name: shopping
+    description: |
+      Handing the week's grocery list to a shopping provider (Phase 8a:
+      Walmart add-to-cart links, no Walmart credentials): store settings,
+      the product saved per ingredient from a pasted product link, matches
+      with package counts, stored handoffs, and confirming what was ordered
+      into the pantry (docs/shopping-providers.md). The API never fetches
+      provider pages.
 paths:
   /health:
     get:
@@ -1280,7 +1288,7 @@ paths:
         Records that the household bought an item: after a member checks off a
         grocery line and confirms "Add to pantry?" (`source: grocery_list`),
         or restocks from the Pantry tab (`source: manual`). `provider` is
-        reserved for shopping providers and rejected.
+        rejected: it's recorded by confirming a shopping handoff.
 
         The item (added when `ingredientId` or `name` isn't in the pantry yet)
         is set `in_stock` with the bought amount, and a new usage cycle starts
@@ -1666,6 +1674,389 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/PantryConflict"
+  /api/v1/shopping/providers:
+    get:
+      summary: List shopping providers
+      description: |
+        The enabled shopping providers and what each can do. Phase 8a enables
+        Walmart with cart links only. `affiliateTracked` says whether handoff
+        links carry affiliate tracking, which the app must disclose next to
+        the handoff button. Requires a signed-in user.
+      operationId: listShoppingProviders
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The providers.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingProviderList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+  /api/v1/households/{householdId}/shopping/settings:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: Get store settings
+      description: The household's shopping provider and store. Every field is null until set. Requires `household.view`.
+      operationId: getShoppingSettings
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingSettings"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Set store settings
+      description: |
+        Sets the household's provider and optional store number, recording
+        who set them and when. Handoff links carry the store while the
+        provider matches. Requires `shopping.edit`.
+      operationId: updateShoppingSettings
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateShoppingSettingsRequest"
+      responses:
+        "200":
+          description: The settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ProviderUnavailable"
+  /api/v1/households/{householdId}/shopping/{provider}/preferences:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/ShoppingProvider"
+    get:
+      summary: List saved products
+      description: The household's saved product per ingredient for the provider, by ingredient name. Requires `household.view`.
+      operationId: listShoppingPreferences
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The saved products.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingPreferenceList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ProviderUnavailable"
+  /api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/ShoppingProvider"
+      - $ref: "#/components/parameters/IngredientKey"
+    get:
+      summary: Get a saved product
+      description: Requires `household.view`.
+      operationId: getShoppingPreference
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The saved product.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingPreference"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ProviderUnavailable"
+    put:
+      summary: Save a product for an ingredient
+      description: |
+        Saves the product the household buys for an ingredient, from a pasted
+        product link (`productUrl`) or the numeric item ID (`productId`). The
+        item ID is read from the link text (walmart.com or www.walmart.com,
+        `/ip/<id>` or `/ip/<name>/<id>`); the page is never fetched, and
+        short links, other hosts, and other page types are rejected. The
+        member types `displayName` and an optional `packageSize`. Replacing
+        keeps `id`, `createdBy`, and `createdAt`. Requires `shopping.edit`.
+      operationId: putShoppingPreference
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShoppingPreferenceRequest"
+      responses:
+        "201":
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingPreference"
+        "200":
+          description: Replaced.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingPreference"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ProviderUnavailable"
+    delete:
+      summary: Remove a saved product
+      description: Requires `shopping.edit`.
+      operationId: deleteShoppingPreference
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Removed.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ProviderUnavailable"
+  /api/v1/households/{householdId}/plans/{week}/shopping/{provider}/match:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+      - $ref: "#/components/parameters/ShoppingProvider"
+    post:
+      summary: Match the week's list to saved products
+      description: |
+        Matches the week's grocery list to the household's saved products:
+        per-line package counts with check-amount flags, excluded lines with
+        reasons, and cart links. Nothing is stored. Send `{}` for the
+        defaults (every `toBuy` line). Requires `household.view`.
+      operationId: matchShoppingList
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShoppingMatchRequest"
+      responses:
+        "200":
+          description: The proposal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingProposal"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ProviderUnavailable"
+  /api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+      - $ref: "#/components/parameters/ShoppingProvider"
+    post:
+      summary: Hand off the week's list
+      description: |
+        Matches like `.../match` and stores the result as a handoff, so what
+        members confirm can be recorded. Open `cartLinks` in order; each adds
+        its products to the same cart. At least one line needs a saved
+        product. Requires `shopping.edit`.
+      operationId: createShoppingHandoff
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShoppingMatchRequest"
+      responses:
+        "201":
+          description: The stored handoff.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingHandoff"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ProviderUnavailable"
+  /api/v1/households/{householdId}/shopping/handoffs:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: List handoffs
+      description: The household's handoffs, newest first. Requires `household.view`.
+      operationId: listShoppingHandoffs
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: week
+          in: query
+          schema:
+            $ref: "#/components/schemas/IsoWeek"
+        - name: status
+          in: query
+          description: "`open`: some line is pending. `done`: every line is confirmed or skipped."
+          schema:
+            type: string
+            enum: [open, done]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          description: The handoffs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingHandoffList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/shopping/handoffs/{handoffId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/ShoppingHandoffID"
+    get:
+      summary: Get a handoff
+      description: Requires `household.view`.
+      operationId: getShoppingHandoff
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The handoff.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingHandoff"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/shopping/handoffs/{handoffId}/confirm:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/ShoppingHandoffID"
+    post:
+      summary: Confirm what was ordered
+      description: |
+        Records what a member says was ordered ("Did you order these?"). Each
+        confirmed line becomes one pantry purchase with `source: provider`,
+        written from the stored line: `unit: package` with `unitSize` for a
+        weight or volume package size, the exact amount for a discrete size
+        (2 × 12 count = 24 count), or a package count without a size. A
+        confirmed line keeps its first purchase: confirming it again returns
+        that purchase with `created: false` and changes nothing. `skipRest`
+        marks the other pending lines as not ordered; a skipped line can be
+        confirmed later. Requires `pantry.edit`.
+      operationId: confirmShoppingOrder
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmShoppingOrderRequest"
+      responses:
+        "200":
+          description: The handoff and a purchase per confirmed line.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfirmShoppingOrderResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ShoppingConflict"
   /api/v1/households/{householdId}/recipes/{recipeId}/rating:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -1972,6 +2363,33 @@ components:
       description: A household option ID.
       schema:
         type: string
+    ShoppingProvider:
+      name: provider
+      in: path
+      required: true
+      description: |
+        A shopping provider key. `walmart` is enabled; `instacart` and
+        `kroger` return 503 `provider_unavailable`; anything else 404.
+      schema:
+        type: string
+        example: walmart
+    IngredientKey:
+      name: ingredientKey
+      in: path
+      required: true
+      description: |
+        A grocery line's `ingredientKey`, percent-encoded: a catalog
+        ingredient ID, or `name:` and a normalized name (`name:red%20onion`).
+      schema:
+        type: string
+        example: 66e5a1f2c3b4a5d6e7f80a14
+    ShoppingHandoffID:
+      name: handoffId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: 66e5a1f2c3b4a5d6e7f80b01
   schemas:
     RecipeSummary:
       type: object
@@ -2447,6 +2865,7 @@ components:
         - pantry.edit
         - recipes.edit
         - recipes.import
+        - shopping.edit
     Household:
       type: object
       required: [id, name, defaultServings, timeZone, createdBy, createdAt, updatedAt]
@@ -3494,7 +3913,7 @@ components:
           description: Idempotency key, unique per member.
     PantryPurchase:
       type: object
-      required: [id, householdId, itemId, source, quantity, quantityValue, unit, unitSize, week, clientPurchaseId, recordedBy, purchasedAt]
+      required: [id, householdId, itemId, source, quantity, quantityValue, unit, unitSize, week, clientPurchaseId, provider, recordedBy, purchasedAt]
       properties:
         id:
           type: string
@@ -3506,7 +3925,9 @@ components:
         source:
           type: string
           enum: [grocery_list, manual, provider, house_made]
-          description: "`house_made` is a batch recorded through POST .../specialty-ingredients/{specialtyId}/batches."
+          description: |
+            `house_made` is a batch recorded through POST .../specialty-ingredients/{specialtyId}/batches.
+            `provider` is an order confirmed through POST .../shopping/handoffs/{handoffId}/confirm.
         quantity:
           type: [string, "null"]
         quantityValue:
@@ -3521,6 +3942,11 @@ components:
           type: [string, "null"]
         clientPurchaseId:
           type: [string, "null"]
+        provider:
+          description: The handoff line a `provider` purchase confirms; null for every other source.
+          oneOf:
+            - $ref: "#/components/schemas/PantryPurchaseProvider"
+            - type: "null"
         recordedBy:
           type: string
         purchasedAt:
@@ -4107,6 +4533,454 @@ components:
           $ref: "#/components/schemas/PantryItem"
         option:
           $ref: "#/components/schemas/SpecialtyOption"
+    PantryPurchaseProvider:
+      type: object
+      required: [key, handoffId, lineId, productId]
+      properties:
+        key:
+          type: string
+          example: walmart
+        handoffId:
+          type: string
+        lineId:
+          type: string
+          example: l1
+        productId:
+          type: string
+          description: The provider's product (a Walmart item ID).
+    ShoppingCapabilities:
+      type: object
+      required: [handoff, pasteProductLink, storeId, productSearch, productLookup, storeFinder, cartWrite, orderImport]
+      properties:
+        handoff:
+          type: string
+          enum: [cart_link]
+        pasteProductLink:
+          type: boolean
+        storeId:
+          type: boolean
+        productSearch:
+          type: boolean
+        productLookup:
+          type: boolean
+        storeFinder:
+          type: boolean
+        cartWrite:
+          type: boolean
+        orderImport:
+          type: boolean
+    ShoppingProvider:
+      type: object
+      required: [key, name, affiliateTracked, capabilities]
+      properties:
+        key:
+          type: string
+          example: walmart
+        name:
+          type: string
+          example: Walmart
+        affiliateTracked:
+          type: boolean
+          description: Handoff links carry affiliate tracking; show the commission disclosure next to the handoff button.
+        capabilities:
+          $ref: "#/components/schemas/ShoppingCapabilities"
+    ShoppingProviderList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShoppingProvider"
+    ShoppingSettings:
+      type: object
+      required: [provider, storeId, updatedBy, updatedAt]
+      properties:
+        provider:
+          type: [string, "null"]
+          example: walmart
+        storeId:
+          type: [string, "null"]
+          example: "5435"
+        updatedBy:
+          type: [string, "null"]
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+    UpdateShoppingSettingsRequest:
+      type: object
+      required: [provider]
+      properties:
+        provider:
+          type: string
+          example: walmart
+        storeId:
+          type: [string, "null"]
+          description: The store number (1–6 digits; leading zeros are dropped). Null or omitted means no store.
+          example: "5435"
+    ShoppingAmount:
+      type: object
+      required: [quantity, quantityValue, unit, text]
+      properties:
+        quantity:
+          type: string
+          description: Exact, "n" or "n/d".
+          example: "16"
+        quantityValue:
+          type: number
+          example: 16
+        unit:
+          type: string
+          example: oz
+        text:
+          type: string
+          example: 16 oz
+    ShoppingPreferenceRequest:
+      type: object
+      description: "`productUrl` or `productId`, not both."
+      required: [displayName]
+      properties:
+        productUrl:
+          type: string
+          maxLength: 2048
+          example: https://www.walmart.com/ip/Great-Value-Ground-Beef-1-lb/123456789?classType=REGULAR
+        productId:
+          type: string
+          pattern: "^[0-9]+$"
+          example: "123456789"
+        displayName:
+          type: string
+          maxLength: 100
+        packageSize:
+          description: How much one package holds; null or omitted when unknown.
+          oneOf:
+            - type: object
+              required: [quantity, unit]
+              properties:
+                quantity:
+                  type: string
+                  maxLength: 32
+                  example: "16"
+                unit:
+                  type: string
+                  description: A DinnerOS unit code.
+                  example: oz
+            - type: "null"
+        ingredientName:
+          type: string
+          maxLength: 100
+          description: Defaults to the catalog name, or the name after `name:`.
+    ShoppingPreference:
+      type: object
+      required: [id, provider, ingredientKey, ingredientId, ingredientName, productId, productUrl, displayName, packageSize, createdBy, createdAt, updatedBy, updatedAt]
+      properties:
+        id:
+          type: string
+        provider:
+          type: string
+          example: walmart
+        ingredientKey:
+          type: string
+        ingredientId:
+          type: [string, "null"]
+          description: The catalog ingredient, or null for a `name:` key.
+        ingredientName:
+          type: string
+        productId:
+          type: string
+          example: "123456789"
+        productUrl:
+          type: string
+          description: Rebuilt from `productId`, never the pasted text.
+          example: https://www.walmart.com/ip/123456789
+        displayName:
+          type: string
+        packageSize:
+          oneOf:
+            - $ref: "#/components/schemas/ShoppingAmount"
+            - type: "null"
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    ShoppingPreferenceList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShoppingPreference"
+    ShoppingMatchRequest:
+      type: object
+      description: |
+        Every field is optional; `{}` hands off every `toBuy` line. With
+        `lines`, exactly those lines are candidates, whatever their status.
+      properties:
+        lines:
+          type: [array, "null"]
+          maxItems: 300
+          items:
+            type: object
+            required: [ingredientKey]
+            properties:
+              ingredientKey:
+                type: string
+              packages:
+                type: integer
+                minimum: 1
+                maximum: 99
+                description: Overrides the computed package count.
+        checkedOffKeys:
+          type: [array, "null"]
+          maxItems: 300
+          description: Lines the member already checked off; left out.
+          items:
+            type: string
+        excludeKeys:
+          type: [array, "null"]
+          maxItems: 300
+          items:
+            type: string
+    ShoppingLineConfirmation:
+      type: object
+      required: [status, packages, purchaseId, confirmedBy, confirmedAt, skippedBy, skippedAt]
+      properties:
+        status:
+          type: string
+          enum: [pending, confirmed, skipped]
+        packages:
+          type: [integer, "null"]
+        purchaseId:
+          type: [string, "null"]
+        confirmedBy:
+          type: [string, "null"]
+        confirmedAt:
+          type: [string, "null"]
+          format: date-time
+        skippedBy:
+          type: [string, "null"]
+        skippedAt:
+          type: [string, "null"]
+          format: date-time
+    ShoppingHandoffLine:
+      type: object
+      required: [id, ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, product, computedPackages, packages, packagesOverridden, checkAmount, reason, reasonText, coverageText, confirmation]
+      properties:
+        id:
+          type: string
+          example: l1
+        ingredientKey:
+          type: string
+        ingredientId:
+          type: [string, "null"]
+        name:
+          type: string
+        category:
+          $ref: "#/components/schemas/GroceryCategoryName"
+        amounts:
+          type: array
+          description: The grocery list's amounts.
+          items:
+            $ref: "#/components/schemas/ShoppingAmount"
+        quantityText:
+          type: string
+        unquantified:
+          type: boolean
+        groceryStatus:
+          type: string
+          enum: [toBuy, inPantry, pantryHint]
+        product:
+          type: object
+          required: [productId, displayName, productUrl, packageSize]
+          properties:
+            productId:
+              type: string
+            displayName:
+              type: string
+            productUrl:
+              type: string
+            packageSize:
+              oneOf:
+                - $ref: "#/components/schemas/ShoppingAmount"
+                - type: "null"
+        computedPackages:
+          type: integer
+          description: Exact package math (docs/api.md#match-and-hand-off).
+        packages:
+          type: integer
+          description: What the cart link asks for.
+        packagesOverridden:
+          type: boolean
+        checkAmount:
+          type: boolean
+        reason:
+          type: [string, "null"]
+          enum: [unit_not_convertible, no_package_size, package_count_capped, null]
+        reasonText:
+          type: [string, "null"]
+          example: "Check amount: 4 cloves doesn't convert to a 3 ct package"
+        coverageText:
+          type: string
+          example: 3 × 16 oz covers 36 oz
+        confirmation:
+          description: Null on a match.
+          oneOf:
+            - $ref: "#/components/schemas/ShoppingLineConfirmation"
+            - type: "null"
+    ShoppingExcludedLine:
+      type: object
+      required: [ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, reason, text]
+      properties:
+        ingredientKey:
+          type: string
+        ingredientId:
+          type: [string, "null"]
+        name:
+          type: string
+          description: Empty for `not_on_list`.
+        category:
+          type: string
+        amounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShoppingAmount"
+        quantityText:
+          type: string
+        unquantified:
+          type: boolean
+        groceryStatus:
+          type: [string, "null"]
+          enum: [toBuy, inPantry, pantryHint, null]
+        reason:
+          type: string
+          enum: [in_pantry, pantry_hint, house_made, checked_off, excluded, not_selected, no_product, not_on_list]
+        text:
+          type: string
+          example: Choose a Walmart product
+    ShoppingCartLink:
+      type: object
+      required: [url, lineIds, itemCount]
+      properties:
+        url:
+          type: string
+          description: |
+            `https://www.walmart.com/sc/cart/addToCart?items=ID_QTY,ID&storeId=N`
+            (a `goto.walmart.com` link wrapping it when affiliate tracked). At
+            most 2,000 characters and 40 products per link.
+          example: https://www.walmart.com/sc/cart/addToCart?items=123456789_3,987654321&storeId=5435
+        lineIds:
+          type: array
+          items:
+            type: string
+        itemCount:
+          type: integer
+          description: Distinct products in the link.
+    ShoppingProposal:
+      type: object
+      required: [provider, week, storeId, lines, excluded, cartLinks, affiliateTracked]
+      properties:
+        provider:
+          type: string
+          example: walmart
+        week:
+          $ref: "#/components/schemas/IsoWeek"
+        storeId:
+          type: [string, "null"]
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShoppingHandoffLine"
+        excluded:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShoppingExcludedLine"
+        cartLinks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShoppingCartLink"
+        affiliateTracked:
+          type: boolean
+    ShoppingHandoff:
+      allOf:
+        - $ref: "#/components/schemas/ShoppingProposal"
+        - type: object
+          required: [id, status, createdBy, createdAt, updatedAt]
+          properties:
+            id:
+              type: string
+            status:
+              type: string
+              enum: [open, done]
+              description: "`open` while some line is pending."
+            createdBy:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+    ShoppingHandoffList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShoppingHandoff"
+    ConfirmShoppingOrderRequest:
+      type: object
+      description: "`all: true`, or `lines`; `skipRest: true` alone says nothing was ordered."
+      properties:
+        all:
+          type: boolean
+          description: Every line that isn't skipped, at its `packages`.
+        lines:
+          type: array
+          items:
+            type: object
+            required: [lineId]
+            properties:
+              lineId:
+                type: string
+              packages:
+                type: integer
+                minimum: 1
+                maximum: 99
+                description: What was ordered; defaults to the line's `packages`.
+        skipRest:
+          type: boolean
+          description: Mark the other pending lines as not ordered.
+    ConfirmShoppingOrderResponse:
+      type: object
+      required: [handoff, purchases]
+      properties:
+        handoff:
+          $ref: "#/components/schemas/ShoppingHandoff"
+        purchases:
+          type: array
+          items:
+            type: object
+            required: [lineId, ingredientKey, created, purchase, item]
+            properties:
+              lineId:
+                type: string
+              ingredientKey:
+                type: string
+              created:
+                type: boolean
+                description: False when the line was already confirmed; the first purchase is returned.
+              purchase:
+                $ref: "#/components/schemas/PantryPurchase"
+              item:
+                $ref: "#/components/schemas/PantryItem"
   responses:
     Forbidden:
       description: "`forbidden`: the caller is a member of the household, but their role doesn't allow this action."
@@ -4188,10 +5062,19 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    ShoppingConflict:
+      description: |
+        `conflict`: another request is confirming the same handoff line, or a
+        pantry item kept changing concurrently. Retry.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     ProviderUnavailable:
       description: |
-        `provider_unavailable`: the sign-in method is not configured, or the
-        provider's signing keys could not be fetched. Retry later.
+        `provider_unavailable`: the sign-in method is not configured, the
+        provider's signing keys could not be fetched (retry later), or the
+        shopping provider isn't enabled.
       content:
         application/json:
           schema:
