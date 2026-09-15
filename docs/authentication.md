@@ -1,7 +1,8 @@
 # Authentication and authorization
 
 Status: authentication is implemented (Phase 2: `api/internal/auth`,
-`api/internal/users`). Household roles are planned for Phase 3.
+`api/internal/users`). Household authorization and invitations are implemented
+(Phase 3: `api/internal/households`, `api/internal/invitations`).
 
 ## Providers
 
@@ -140,23 +141,113 @@ curl -s localhost:8080/api/v1/auth/dev -H 'Content-Type: application/json' \
 
 ## Authorization
 
+Status: implemented in Phase 3 (`api/internal/households`,
+`api/internal/invitations`).
+
 - Every request is authorized **server-side**. Client-side UI hiding is only a
-  convenience.
-- Household access requires a `HouseholdMembership`. Queries are always scoped by
-  `householdId`. A resource in a household the caller doesn't belong to returns
-  `404`, so its existence is never revealed.
-- Roles map to permissions in one place:
+  convenience. Household responses include the caller's `role` and
+  `permissions` so the app can hide actions the server would refuse.
+- Household access requires a `HouseholdMembership`. Queries are always scoped
+  by `householdId`.
+- `households.RequirePermission(authorizer, permission, logger)` guards every
+  route with a `{householdId}` parameter. It runs after `auth.RequireAuth`,
+  loads the caller's membership, and stores it in the request context
+  (`households.MembershipFromContext`):
+  - not a member, unknown household, or malformed ID → `404 not_found`, so a
+    household's existence is never revealed
+  - a member whose role lacks the permission → `403 forbidden`
+- Service methods take that membership and check the specific permission
+  again, so the rules don't depend on the HTTP layer.
+
+### Roles and permissions
+
+One table maps roles to permissions (`rolePermissions` in
+`api/internal/households/roles.go`):
 
 ```go
-type Role string // "admin", "member" (viewer, shopper, child, guest later)
-
-type Permission string // "household.invite", "plan.edit", "pantry.edit", ...
+type Role string       // "admin", "member"
+type Permission string // "household.view", "members.invite", "plan.edit", ...
 
 func (r Role) Can(p Permission) bool
+func (r Role) Covers(other Role) bool // r has every permission other has
 ```
 
-Handlers ask `membership.Role.Can(PermissionX)` instead of checking for
-`admin` directly.
+| Permission | admin | member |
+| --- | --- | --- |
+| `household.view` | ✅ | ✅ |
+| `household.update` | ✅ | — |
+| `members.view` | ✅ | ✅ |
+| `members.invite` | ✅ | — |
+| `members.remove` | ✅ | — |
+| `members.changeRole` | ✅ | — |
+| `plan.edit` | ✅ | ✅ |
+| `pantry.edit` | ✅ | ✅ |
+| `recipes.edit` | ✅ | ✅ |
+| `recipes.import` | ✅ | ✅ |
+
+No code checks `role == admin` to decide access; it asks `Role.Can`. Adding
+`viewer`, `shopper`, `child`, or `guest` means adding a constant and a row in
+that table. Unknown roles grant nothing. `plan.edit`, `pantry.edit`, and the
+`recipes.*` permissions are reserved for later phases.
+
+Rules beyond the table:
+
+- **Granting:** inviting someone with a role, or changing someone to a role,
+  requires a role that `Covers` it. You can only change or remove members
+  whose role yours covers. Nobody can hand out more access than they have.
+- **Leaving:** any member can remove themselves
+  (`DELETE .../members/{yourUserId}`) without `members.remove`.
+- **Last admin:** a household always has at least one admin. Demoting or
+  removing the last admin returns `409 last_admin`. That includes the last
+  admin leaving, even when they're the only member, because households can't
+  be deleted or left empty yet. The guard is atomic without transactions; see
+  [database.md](database.md#households).
+
+### Invitations
+
+- An admin invites an email address with a role. The response includes a
+  **code** (`XXXXX-XXXXX`: 10 Crockford base32 characters, 50 bits) that is
+  shown only once, so the admin can share it directly. The email contains the
+  same code and a link with a separate **token** (32 random bytes, base64url).
+  Only SHA-256 hashes of both are stored. Neither is logged or returned again.
+- The link is `APP_INVITE_URL_BASE` + token (default `dinneros://invite?token=`;
+  universal links can replace it later through configuration). The app posts
+  the token to `POST /api/v1/invitations/accept` in the body, never in a URL.
+- Invitations expire after 7 days. Re-inviting an address revokes its pending
+  invitation. Admins can revoke invitations, and revoking is idempotent.
+- **Accepting requires a signed-in user, but not a matching email.** Sign in
+  with Apple can hide the real address behind a private relay, and people often
+  accept from a different account than the one that received the email.
+  Holding the secret is the proof, as with any invite link.
+- Unknown, expired, revoked, and used invitations all return
+  `404 invitation_invalid`. The reason is only logged. Codes are matched
+  case-insensitively, spaces and dashes are ignored, and O, I, and L are read as
+  0, 1, and 1.
+- Acceptance is rate limited per client IP before authentication runs: a burst
+  of 10, then 1 request every 6 seconds, the same budget as sign-in. That makes
+  guessing a 50-bit code infeasible. Creating invitations sends email, so it has
+  its own limit: a burst of 20, then 1 every 30 seconds.
+- The invitation is marked accepted with a conditional update *before* the
+  membership is created, so two people can't both use it. If the user is
+  already a member, the invitation is used up and their existing role is kept.
+  If the same user retries an invitation they already accepted (for example
+  after a lost response), they get their membership back. After they leave the
+  household, the used invitation stops working.
+- If the email can't be sent, the invitation is kept and the response has
+  `emailDelivered: false`, so the admin can still share the code.
+
+### Email
+
+`invitations.EmailProvider` is the email seam:
+
+- `resend` posts to the Resend API. Its errors include the HTTP status and
+  Resend's message but never the API key.
+- `log` sends nothing. It logs the recipient and household, plus the code only
+  when `APP_ENV=development`. It never logs the token or link.
+
+Production refuses to start unless `EMAIL_PROVIDER=resend` and `EMAIL_FROM` is
+set. Email copy uses `APP_NAME`, escapes every interpolated value, and includes
+a plain-text part.
 
 ## Secrets
 

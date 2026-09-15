@@ -29,7 +29,9 @@ any endpoint change.
 - Timestamps are RFC 3339 in UTC (`2026-09-14T18:30:00Z`). Plan dates are
   `YYYY-MM-DD` in the household's time zone.
 - Lists use cursor pagination: `?limit=50&cursor=...` returns
-  `{ "items": [...], "nextCursor": "..." }`.
+  `{ "items": [...], "nextCursor": "..." }`. Lists that are small by nature
+  (a user's households, a household's pending invitations) return `items`
+  without pagination.
 
 ### Errors
 
@@ -56,9 +58,9 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | 400 | `invalid_request`, `validation_failed` |
 | 401 | `unauthenticated`, `token_expired` |
 | 403 | `forbidden` (the caller can see the resource but not perform the action) |
-| 404 | `not_found` (also used when the caller may not know the resource exists) |
+| 404 | `not_found` (also used when the caller may not know the resource exists), `invitation_invalid` |
 | 405 | `method_not_allowed` |
-| 409 | `conflict` |
+| 409 | `conflict`, `last_admin` |
 | 413 | `payload_too_large` |
 | 429 | `rate_limited` |
 | 500 | `internal` (details only in server logs) |
@@ -76,4 +78,20 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/auth/logout` `{refreshToken}` → `204` | rate limited | 2 | ✅ |
 | POST | `/api/v1/auth/dev` `{subject, email?, displayName?}` → session (development only) | rate limited | 2 | ✅ |
 | GET | `/api/v1/me` → `{user, identities}` | bearer | 2 | ✅ |
-| … | households, invitations, recipes, plans, grocery, events | 3–9 | planned |
+| POST | `/api/v1/households` `{name, timeZone, defaultServings?}` → `201 {household, membership}` | bearer | 3 | ✅ |
+| GET | `/api/v1/households` → `{items: [{household, role, permissions}]}` | bearer | 3 | ✅ |
+| GET | `/api/v1/households/{householdId}` → `{household, members, role, permissions}` | `household.view` | 3 | ✅ |
+| PATCH | `/api/v1/households/{householdId}` `{name?, timeZone?, defaultServings?}` → household | `household.update` | 3 | ✅ |
+| PATCH | `/api/v1/households/{householdId}/members/{userId}` `{role}` → member | `members.changeRole` | 3 | ✅ |
+| DELETE | `/api/v1/households/{householdId}/members/{userId}` → `204` | `members.remove`, or your own ID to leave | 3 | ✅ |
+| POST | `/api/v1/households/{householdId}/invitations` `{email, role}` → `201 {invitation, code, emailDelivered}` | `members.invite`, rate limited | 3 | ✅ |
+| GET | `/api/v1/households/{householdId}/invitations` → `{items}` (pending only) | `members.invite` | 3 | ✅ |
+| DELETE | `/api/v1/households/{householdId}/invitations/{invitationId}` → `204` | `members.invite` | 3 | ✅ |
+| POST | `/api/v1/invitations/accept` `{token}` or `{code}` → `{household, role, permissions}` | bearer, rate limited | 3 | ✅ |
+| … | recipes, plans, grocery, events | | 5–9 | planned |
+
+Household-scoped routes return `404 not_found` to anyone who isn't a member,
+so a household's existence is never revealed, and `403 forbidden` to members
+whose role lacks the permission in the Auth column. Roles, permissions,
+invitations, and the last-admin rule are described in
+[authentication.md](authentication.md#authorization).

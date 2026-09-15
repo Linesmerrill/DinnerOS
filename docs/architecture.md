@@ -108,7 +108,7 @@ Dependency rules:
 | Interface | Implementations | Phase |
 | --- | --- | --- |
 | `AuthProvider` (`auth.IdentityVerifier`) | Apple, Google ✅ | 2 |
-| `EmailProvider` | Resend, log-only (local/test) | 3 |
+| `EmailProvider` | Resend, log-only (local/test) ✅ | 3 |
 | `RecipeSourceImporter` | HelloFresh; later manual/import/partner | 5 |
 | `GroceryProvider` | Manual; Instacart and Walmart via official APIs only | 8 |
 | `RecommendationProvider` | Local deterministic → remote Autopilot | 10–12 |
@@ -128,8 +128,12 @@ Dependency rules:
   requests for up to 25 seconds.
 - **Errors:** every non-2xx response uses `{"error": {"code", "message"}}`.
 - **Limits:** request body size (`HTTP_MAX_BODY_BYTES`), server timeouts, and
-  per-IP rate limiting on auth endpoints (invitation endpoints will use the same
-  limiter).
+  per-IP rate limiting on auth endpoints, invitation acceptance, and invitation
+  creation. Each has its own limiter instance.
+- **Household authorization:** routes under `/households/{householdId}` use
+  `households.RequirePermission`, which returns 404 to non-members and 403 to
+  members lacking the permission, and stores the membership in the request
+  context for the handler and service.
 - **Authentication:** domain handlers mount under `/api/v1` through
   `httpapi.Options.APIRoutes` and wrap protected routes in `auth.RequireAuth`,
   which puts the user ID in the request context (`auth.UserIDFromContext`).
@@ -197,3 +201,13 @@ a versioned Autopilot API. See [autopilot.md](autopilot.md).
 | 18 | In-memory per-IP token-bucket rate limit on `/auth/*` (`internal/platform/ratelimit`, `golang.org/x/time/rate` v0.12.0) | One dyno today, so no shared store is needed. The client IP is the *last* `X-Forwarded-For` entry, which Heroku's router appends and clients can't forge. Each dyno limits separately; move to a shared store if we scale out. x/time is pinned below v0.13 because newer releases require Go 1.26. |
 | 19 | `POST /api/v1/auth/dev` gated by `APP_ENV=development` **and** `AUTH_DEV_LOGIN_ENABLED=true` | Simulator and integration testing need sessions without Apple or Google. Config validation refuses to start production with the flag set, and the route isn't mounted otherwise. |
 | 20 | `IdentityVerifier` returns `users.VerifiedIdentity`; `auth` depends on `users`, not the reverse | This is the `AuthProvider` seam. `GET /me` lives in the auth handler because it needs the auth context, and putting it in `users` would create an import cycle. |
+| 21 | Roles map to permissions in one table (`households.rolePermissions`); code asks `Role.Can`, and granting requires `Role.Covers` | New roles (viewer, shopper, child, guest) are a table row, not a hunt for `isAdmin` checks. `Covers` stops anyone from granting more access than they hold, without special-casing admin. |
+| 22 | The last-admin guard uses a conditional `adminCount` decrement on the household, not a transaction | Two admins demoting each other at once can't both succeed. It works on standalone local MongoDB like the Phase 2 code, and crash drift only makes the guard stricter. |
+| 23 | The last admin can't leave, even as the only member | This keeps "every household has an admin" unconditional and avoids orphaned households nobody can see. A lone user can rename the household; deleting households is a later feature. |
+| 24 | `households.RequirePermission` middleware returns 404 to non-members and 403 to under-privileged members; services re-check permissions on the membership they're given | Hides household existence and loads the membership once per request. The service check keeps authorization correct for non-HTTP callers and is covered by unit tests. |
+| 25 | Invitations have a link token and a separate short code, both stored only as SHA-256 hashes | The token (256 bits) stays in the email link. The code (50-bit Crockford base32, with O/I/L read as 0/1/1) can be read aloud or texted, and per-IP rate limiting on accept makes guessing it infeasible. Unsalted SHA-256 is fine at this entropy and allows lookup by hash. |
+| 26 | Accepting an invitation doesn't require the signed-in email to match the invited address | Apple private relay addresses and people using a different account would otherwise be locked out. Holding the secret is the proof. |
+| 27 | Accept marks the invitation used (conditionally) before creating the membership, and undoes that if joining fails | Two users racing with the same code can't both join. The same user retrying gets their membership back, but a used invitation can't be replayed to rejoin after leaving. |
+| 28 | One pending invitation per household and email, enforced by a partial unique index on a `pending` flag | Re-inviting revokes the previous invitation. The index makes that hold under concurrency and also serves the pending list. |
+| 29 | Email failures don't fail invitation creation (`emailDelivered: false`) | The admin already has the code, so a Resend outage shouldn't block inviting. |
+| 30 | `EMAIL_PROVIDER=log` for development; production requires Resend. `time/tzdata` is embedded | Local development and tests never send email or need a key. The Alpine runtime image has no zoneinfo, so `time.LoadLocation` would reject every time zone without the embedded data. |
