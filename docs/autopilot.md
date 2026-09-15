@@ -105,7 +105,15 @@ smoker night: chicken or pork, long cook OK":
 - `timeBand`: `quick` or `medium` prefer meals at or under that band that day;
   `long` means "long cook OK": no weeknight limit that day, a small bonus for a
   long meal, and it doesn't count against the week's long-meal allowance.
-- Methods must be in the household's equipment.
+- **Methods dominate.** When a rule sets methods, a meal must suit one of them
+  (the recipe's method attributes, including overrides) to earn any rule
+  credit, however well its proteins, cuisines, tags, or cook time match. On an
+  `every_week` rule a meal that doesn't suit gets −1, so familiarity or recency
+  can't carry a pot pie onto smoker night; on an `at_most_once` rule it gets 0.
+  It stays soft: when no suitable meal is left, the day is still filled and the
+  week says so (`rule_method_unmet`).
+- Methods must be in the household's equipment. A request whose rule names a
+  method missing from `equipment` is scored as if the rule had no methods.
 
 ### Week context
 
@@ -136,7 +144,7 @@ shows the result and its evidence.
 | Allergens | recipe allergen labels mapped to codes, plus ingredient keywords (`parmesan` → milk, `soy sauce` → soy and wheat, `oyster sauce` → shellfish). Plant milks and nut butters are handled. |
 | Diets | evidence of a violation (meat or stock, seafood, dairy, eggs, honey, wheat, barley) always rules a diet out. Without evidence, a recipe needs ingredient data, or a tag that asserts the diet. |
 | Spicy | a `spicy` tag or name, or a heat ingredient (sriracha, jalapeño, chili flakes…); chili powder and paprika don't count. |
-| Smoker | a whole or large cut of chicken, pork, beef, or turkey (whole chicken, bone-in thighs, legs, wings, pork shoulder/butt/tenderloin/loin/chops/belly/ribs, brisket, short ribs, tri-tip, turkey breast) that isn't ground, sliced, diced, cubed, shredded, or cooked; or a `smoker` tag; or "smoked" in the name or tags together with one of those proteins (so smoked paprika and smoked salmon don't count). |
+| Smoker | In order: (1) a `smoker` tag or utensil always counts. (2) A dish that isn't a smoker meal never counts, matched in the name's main part before "with", "over", or "in" (so a side doesn't count): pasta shapes and noodles, ramen, soup, stew, pot pie, casserole, bake, stir-fry, fried rice, skillet, tacos, taquitos, burritos, enchiladas, quesadillas, bowls, wraps, pitas, sandwiches, sliders, burgers, pizza, flatbread, meatballs, meatloaf, patties, sausage, dumplings, gyoza, wontons, bibimbap, donburi, katsu, schnitzel. The evidence names it ("Not a smoker dish: pot pie"). (3) A whole or large cut of chicken, pork, beef, or turkey: whole chicken, bone-in chicken, legs, quarters, drumsticks, wings, spatchcock; pork shoulder, butt, tenderloin, filet, loin, chops, steak, belly, and ribs; brisket, beef or short ribs, tri-tip, chuck roast; turkey breast or legs. The cut must not be ground, sliced, diced, cubed, chopped, strips, cutlets, shredded, pulled, minced, cooked, deli, sausage, a mix, patties, crumbles, or meatballs. (4) "smoked" in the name or tags together with chicken, pork, beef, or turkey (so smoked paprika and smoked salmon don't count). Fish isn't included: smoker rules are about large meat cuts. |
 | Grill, air fryer, slow cooker, pressure cooker | keywords in the name, tags, or utensils. |
 
 Households override methods per recipe ("good for smoker": yes/no/auto), and
@@ -240,7 +248,7 @@ signals.
 | `recency` | −1…0.3 | nearest week had: ≤1 → −1, 2 → −0.6, 3 → −0.4, 4 → −0.25, ≤8 → −0.1; ≥10 weeks for a familiar, well-rated meal → +0.3 | 0.25 |
 | `weekdayAffinity` | 0…1 | share of the meal's planned days that were this weekday (needs 2) | 0.10 |
 | `taste` | −1…1 | liked cuisine +0.4, tag +0.4, protein +0.3; each disliked −0.5 | 0.25 × (1 + (1 − confidence)) |
-| `rule` | −0.3…1 | the day's rule: matched groups / set groups; −0.3 for no match on an every-week rule | 0.45 |
+| `rule` | −1…1 | the day's rule: matched groups / set groups; −0.3 for no match on an every-week rule. When the rule sets methods and the meal suits none: −1 on an every-week rule, 0 on an at-most-once rule, whatever else matches | 0.45 |
 | `timeFit` | −1…1 | under the day's soft limit: 0.5 + 0.5 × (1 − minutes/limit); over: −2 × overage/limit; long meal on a long-cook day +0.5 | 0.20 |
 | `novelty` | −0.6…0.6 | new meal: favorites −0.6, balanced +0.1, adventurous +0.6; familiar: favorites +0.2, adventurous −0.1 | 0.15 |
 | `servingsFit` | −1…0 | when no authored size feeds the day's servings: −shortfall/servings | 0.25 |
@@ -306,7 +314,7 @@ them with " · ".
 
 | Code | Example |
 | --- | --- |
-| `rule` | Sunday smoker night · Pork · Long cook OK |
+| `rule` | Sunday smoker night · Pork · Long cook OK: the label only when the meal suits the rule's method, or fully matches a rule without methods. A partial match lists only what matches ("Mexican"); a meal that misses the method has no `rule` reason |
 | `busyWeek` | Quick for your busy week (15 min), on weeknights only |
 | `dayLimit` | Ready in 12 min for Wednesday: a day's cap, or the week's cap on other days |
 | `rating` | You rated this 5★ / Rated 4.5★ by your household |
@@ -325,7 +333,10 @@ them with " · ".
 Week messages explain shortfalls gracefully: `week_skipped`, `empty_catalog`,
 `week_full`, `not_enough_candidates` ("Only 3 quick recipes (≤20 min) match;
 planned 3 of 5 nights."), `not_enough_days` ("Only 4 days are open this week;
-planned 4 of 5 meals."), `already_planned`, and `cold_start`. Days that
+planned 4 of 5 meals."), `rule_method_unmet` ("No smoker-friendly recipe fits
+Sunday; picked the best alternative.", or "Sunday's smoker-friendly recipes
+didn't fit this week; picked the best alternative." when suitable ones lost to
+the rest of the week), `already_planned`, and `cold_start`. Days that
 couldn't be filled are listed as `unfilled` (`no_candidates`,
 `no_quick_candidates`).
 
@@ -335,7 +346,7 @@ couldn't be filled are listed as `unfilled` (`no_candidates`,
   catalog, ratings, and history are normalized and ordered internally, so their
   order doesn't matter (tested). Ties break with an FNV-1a hash of
   household ID, week, attempt, model version, and item ID.
-- `modelVersion` (`baseline-2026.1`) is stored on every proposal and event.
+- `modelVersion` (`baseline-2026.2`) is stored on every proposal and event.
   `inputsHash` fingerprints the provider request, so identical inputs can be
   recognized.
 - **Tuning:** change `baseline.DefaultWeights` (or pass `Options.Weights`) and
