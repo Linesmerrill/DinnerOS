@@ -10,6 +10,11 @@ struct DinnerOSApp: App {
                 .environment(\.appConfiguration, dependencies.configuration)
                 .environment(\.googleSignIn, dependencies.googleSignIn)
                 .environment(dependencies.session)
+                .environment(dependencies.households)
+                .onOpenURL { url in
+                    // Never log the URL: invitation links carry a secret token.
+                    dependencies.households.handleOpenURL(url)
+                }
         }
     }
 }
