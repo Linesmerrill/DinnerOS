@@ -56,7 +56,7 @@ func TestAddFreeTextLinksToCatalog(t *testing.T) {
 	item, created, err := svc.Add(ctx, member(testHousehold), AddInput{Name: "  olive OIL "})
 	want := Item{
 		ID: item.ID, HouseholdID: testHousehold, IngredientID: catalog.id("Olive Oil"), Key: "olive oil",
-		DisplayName: "olive OIL", Category: "pantry", Status: StatusInStock, Version: 1,
+		DisplayName: "olive OIL", Category: "pantry", Status: StatusInStock, StatusSource: StatusSourcePerson, StatusSetAt: testNow, Version: 1,
 		CreatedAt: testNow, UpdatedBy: testUser, UpdatedAt: testNow,
 	}
 	if err != nil || !created || !reflect.DeepEqual(item, want) {

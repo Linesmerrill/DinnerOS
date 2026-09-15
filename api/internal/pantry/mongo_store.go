@@ -17,28 +17,36 @@ import (
 // ItemsCollection is the collection this package owns.
 const ItemsCollection = "pantry_items"
 
-// Indexes returns the indexes MongoStore relies on. The unique key index also
-// serves every household-scoped list and lookup.
+// Indexes returns the indexes MongoStore relies on. The unique key index on
+// items also serves every household-scoped list and lookup.
 func Indexes() []mongodb.IndexSet {
-	return []mongodb.IndexSet{{
+	return append([]mongodb.IndexSet{{
 		Collection: ItemsCollection,
 		Indexes: []mongo.IndexModel{{
 			Keys:    bson.D{{Key: "householdId", Value: 1}, {Key: "key", Value: 1}},
 			Options: options.Index().SetUnique(true).SetName("householdId_key_unique"),
 		}},
-	}}
+	}}, usageIndexes()...)
 }
 
-// MongoStore is the MongoDB implementation of Store.
+// MongoStore is the MongoDB implementation of Store and UsageStore.
 type MongoStore struct {
-	items *mongo.Collection
+	items     *mongo.Collection
+	purchases *mongo.Collection
+	cookUsage *mongo.Collection
+	settings  *mongo.Collection
 }
 
 var _ Store = (*MongoStore)(nil)
 
 // NewMongoStore returns a store using db.
 func NewMongoStore(db *mongo.Database) *MongoStore {
-	return &MongoStore{items: db.Collection(ItemsCollection)}
+	return &MongoStore{
+		items:     db.Collection(ItemsCollection),
+		purchases: db.Collection(PurchasesCollection),
+		cookUsage: db.Collection(CookUsageCollection),
+		settings:  db.Collection(SettingsCollection),
+	}
 }
 
 // itemDoc stores the exact quantity as a fraction string and a float copy for
@@ -57,10 +65,12 @@ type itemDoc struct {
 	IsStaple      bool           `bson:"isStaple"`
 	ExpiresOn     string         `bson:"expiresOn,omitempty"`
 	Note          string         `bson:"note,omitempty"`
-	Version       int64          `bson:"version"`
-	CreatedAt     time.Time      `bson:"createdAt"`
-	UpdatedBy     bson.ObjectID  `bson:"updatedBy"`
-	UpdatedAt     time.Time      `bson:"updatedAt"`
+	// Usage is the usage estimate's state (docs/pantry-usage.md).
+	Usage     usageItemFields `bson:",inline"`
+	Version   int64           `bson:"version"`
+	CreatedAt time.Time       `bson:"createdAt"`
+	UpdatedBy bson.ObjectID   `bson:"updatedBy"`
+	UpdatedAt time.Time       `bson:"updatedAt"`
 }
 
 func newItemDoc(item Item, id, householdID bson.ObjectID) (itemDoc, error) {
@@ -73,6 +83,7 @@ func newItemDoc(item Item, id, householdID bson.ObjectID) (itemDoc, error) {
 		Quantity: item.Quantity, Unit: item.Unit, Status: string(item.Status), IsStaple: item.IsStaple,
 		ExpiresOn: item.ExpiresOn, Note: item.Note, Version: item.Version,
 		CreatedAt: item.CreatedAt, UpdatedBy: updatedBy, UpdatedAt: item.UpdatedAt,
+		Usage: newUsageItemFields(item),
 	}
 	if item.IngredientID != "" {
 		ingredientID, err := mongodb.ParseID(item.IngredientID)
@@ -102,6 +113,7 @@ func (d itemDoc) toItem() Item {
 	if d.IngredientID != nil {
 		item.IngredientID = d.IngredientID.Hex()
 	}
+	d.Usage.applyTo(&item)
 	return item
 }
 
@@ -271,6 +283,7 @@ func (s *MongoStore) UpdateItem(ctx context.Context, item Item) (Item, error) {
 	optional("unit", doc.Unit, doc.Unit != "")
 	optional("expiresOn", doc.ExpiresOn, doc.ExpiresOn != "")
 	optional("note", doc.Note, doc.Note != "")
+	doc.Usage.usageSet(optional)
 	update := bson.D{{Key: "$set", Value: set}}
 	if len(unset) > 0 {
 		update = append(update, bson.E{Key: "$unset", Value: unset})
@@ -331,7 +344,10 @@ func (s *MongoStore) SetStatus(ctx context.Context, householdID string, ids []st
 		return nil
 	}
 	update := bson.D{
-		{Key: "$set", Value: bson.D{{Key: "status", Value: string(status)}, {Key: "updatedBy", Value: by}, {Key: "updatedAt", Value: at}}},
+		{Key: "$set", Value: bson.D{
+			{Key: "status", Value: string(status)}, {Key: "statusSource", Value: string(StatusSourcePerson)}, {Key: "statusSetAt", Value: at},
+			{Key: "updatedBy", Value: by}, {Key: "updatedAt", Value: at},
+		}},
 		{Key: "$inc", Value: bson.D{{Key: "version", Value: 1}}},
 	}
 	if status == StatusOut {

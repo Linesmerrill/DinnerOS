@@ -28,6 +28,19 @@ const (
 	MaxEventAge = 30 * 24 * time.Hour
 )
 
+// Listener reacts to events after they are stored, such as the pantry
+// deducting a cooked recipe. It must be idempotent: a client retry passes an
+// already stored event again. Listeners run synchronously after the store
+// write, with a context detached from the request and bounded by
+// ListenerTimeout. They can't fail the write, so they log their own errors.
+type Listener interface {
+	EventsStored(ctx context.Context, events []Event)
+}
+
+// ListenerTimeout bounds how long listeners may delay the request that stored
+// the events.
+const ListenerTimeout = 10 * time.Second
+
 // RecipeChecker reports which recipe IDs belong to a household. The recipes
 // module implements it.
 type RecipeChecker interface {
@@ -42,21 +55,24 @@ type ServiceOptions struct {
 	Logger  *slog.Logger
 	// Now is the clock. Default time.Now.
 	Now func() time.Time
+	// Listeners run after events are stored.
+	Listeners []Listener
 }
 
 // Service records server events and ingests client events.
 type Service struct {
-	store   Store
-	recipes RecipeChecker
-	logger  *slog.Logger
-	now     func() time.Time
+	store     Store
+	recipes   RecipeChecker
+	logger    *slog.Logger
+	now       func() time.Time
+	listeners []Listener
 }
 
 var _ Recorder = (*Service)(nil)
 
 // NewService returns a Service.
 func NewService(opts ServiceOptions) *Service {
-	s := &Service{store: opts.Store, recipes: opts.Recipes, logger: opts.Logger, now: opts.Now}
+	s := &Service{store: opts.Store, recipes: opts.Recipes, logger: opts.Logger, now: opts.Now, listeners: opts.Listeners}
 	if s.logger == nil {
 		s.logger = slog.New(slog.DiscardHandler)
 	}
@@ -83,7 +99,20 @@ func (s *Service) Record(ctx context.Context, e Event) error {
 	if _, _, err := s.store.Insert(ctx, []Event{e}); err != nil {
 		return fmt.Errorf("insert event: %w", err)
 	}
+	s.notifyListeners(ctx, []Event{e})
 	return nil
+}
+
+// notifyListeners passes stored events to every listener.
+func (s *Service) notifyListeners(ctx context.Context, list []Event) {
+	if len(s.listeners) == 0 || len(list) == 0 {
+		return
+	}
+	listenCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ListenerTimeout)
+	defer cancel()
+	for _, l := range s.listeners {
+		l.EventsStored(listenCtx, list)
+	}
 }
 
 // ClientEvent is one event as an app sent it. Fields are untrusted and
@@ -194,6 +223,9 @@ func (s *Service) Ingest(ctx context.Context, actor households.Membership, batch
 		}
 		res.Accepted = inserted
 		res.Duplicates += duplicates
+		// Stored duplicates are passed too: the earlier request's listeners
+		// may not have run, and listeners are idempotent.
+		s.notifyListeners(ctx, list)
 	}
 	slices.SortFunc(res.Rejected, func(a, b Rejection) int { return cmp.Compare(a.Index, b.Index) })
 	s.logger.InfoContext(ctx, "client events ingested",

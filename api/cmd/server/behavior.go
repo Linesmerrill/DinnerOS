@@ -38,11 +38,14 @@ type behavior struct {
 	ratingHandler *ratings.Handler
 }
 
-func newBehavior(db *mongodb.Client, recipeService *recipes.Service, userService *users.Service, householdService *households.Service, tokens *auth.TokenService, logger *slog.Logger) behavior {
+// newBehavior wires ratings and events. listeners run after events are stored
+// (the pantry deducts cooked recipes).
+func newBehavior(db *mongodb.Client, recipeService *recipes.Service, userService *users.Service, householdService *households.Service, tokens *auth.TokenService, logger *slog.Logger, listeners ...events.Listener) behavior {
 	eventService := events.NewService(events.ServiceOptions{
-		Store:   events.NewMongoStore(db.Database()),
-		Recipes: recipeService,
-		Logger:  logger,
+		Store:     events.NewMongoStore(db.Database()),
+		Recipes:   recipeService,
+		Logger:    logger,
+		Listeners: listeners,
 	})
 	ratingService := ratings.NewService(ratings.ServiceOptions{
 		Store:   ratings.NewMongoStore(db.Database()),

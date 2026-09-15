@@ -5,9 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
@@ -35,12 +38,24 @@ type Catalog interface {
 type Service struct {
 	store   Store
 	catalog Catalog
-	now     func() time.Time
+	// usage, recipes, and notifier are set by WithUsage.
+	usage    UsageStore
+	recipes  RecipeReader
+	notifier Notifier
+	logger   *slog.Logger
+	now      func() time.Time
+	// newID generates purchase and cycle IDs.
+	newID func() string
 }
 
-// NewService returns a Service backed by store and catalog.
+// NewService returns a Service backed by store and catalog. Without WithUsage,
+// estimates use the default threshold and nothing is purchased, deducted, or
+// alerted.
 func NewService(store Store, catalog Catalog) *Service {
-	return &Service{store: store, catalog: catalog, now: time.Now}
+	return &Service{
+		store: store, catalog: catalog, logger: slog.New(slog.DiscardHandler), now: time.Now,
+		newID: func() string { return bson.NewObjectID().Hex() },
+	}
 }
 
 // timestamp returns the current time at the precision MongoDB stores, so
@@ -60,7 +75,9 @@ func authorizeEdit(actor households.Membership) error {
 }
 
 // List returns the household's items matching q, in aisle order
-// (grocery.CategoryOrder), then by name.
+// (grocery.CategoryOrder), then by name. It first runs the low-stock check, so
+// an item whose estimate crossed the threshold as time passed comes back low
+// (docs/pantry-usage.md).
 func (s *Service) List(ctx context.Context, householdID string, q ListQuery) ([]Item, error) {
 	if householdID == "" {
 		return nil, errHouseholdRequired
@@ -73,6 +90,7 @@ func (s *Service) List(ctx context.Context, householdID string, q ListQuery) ([]
 	if err != nil {
 		return nil, fmt.Errorf("list pantry items: %w", err)
 	}
+	items = s.checkAlerts(ctx, householdID, items)
 	sortItems(items)
 	return items, nil
 }
@@ -136,7 +154,9 @@ func (s *Service) Add(ctx context.Context, actor households.Membership, in AddIn
 			if err := s.checkCapacity(ctx, hh, 1); err != nil {
 				return Item{}, false, err
 			}
-			saved, err := s.store.InsertItem(ctx, newItem(hh, a, actor.UserID, now))
+			item := newItem(hh, a, actor.UserID, now)
+			applyPersonEdit(Item{}, &item, now, s.newID)
+			saved, err := s.store.InsertItem(ctx, item)
 			if errors.Is(err, ErrDuplicate) {
 				continue // someone added it concurrently; merge into theirs
 			}
@@ -145,7 +165,8 @@ func (s *Service) Add(ctx context.Context, actor households.Membership, in AddIn
 			}
 			return saved, true, nil
 		}
-		merged := mergeAddition(existing[0], a)
+		merged := mergeAddition(cloneItem(existing[0]), a)
+		applyPersonEdit(existing[0], &merged, now, s.newID)
 		merged.UpdatedBy, merged.UpdatedAt = actor.UserID, now
 		saved, err := s.store.UpdateItem(ctx, merged)
 		if errors.Is(err, ErrConflict) || errors.Is(err, ErrNotFound) {
@@ -281,7 +302,9 @@ func (s *Service) checkCapacity(ctx context.Context, householdID string, adding 
 }
 
 // Update applies a partial update to one item. Marking an item out clears its
-// quantity and unit.
+// quantity and unit. A new amount becomes the usage estimate's starting point,
+// and a status sent by a person replaces one the estimate set. The low-stock
+// check then runs for the item.
 func (s *Service) Update(ctx context.Context, actor households.Membership, id string, in UpdateInput) (Item, error) {
 	if err := authorizeEdit(actor); err != nil {
 		return Item{}, err
@@ -291,16 +314,24 @@ func (s *Service) Update(ctx context.Context, actor households.Membership, id st
 		if err != nil {
 			return Item{}, err
 		}
-		next, err := applyUpdate(item, in)
+		next, err := applyUpdate(cloneItem(item), in)
 		if err != nil {
 			return Item{}, err
 		}
-		next.UpdatedBy, next.UpdatedAt = actor.UserID, s.timestamp()
+		now := s.timestamp()
+		applyPersonEdit(item, &next, now, s.newID)
+		if in.Status != nil && next.StatusSource == StatusSourceEstimate {
+			next.StatusSource, next.StatusSetAt = StatusSourcePerson, now
+		}
+		next.UpdatedBy, next.UpdatedAt = actor.UserID, now
 		saved, err := s.store.UpdateItem(ctx, next)
 		if errors.Is(err, ErrConflict) {
 			continue
 		}
-		return saved, err
+		if err != nil {
+			return Item{}, err
+		}
+		return s.checkItemAlert(ctx, saved), nil
 	}
 	return Item{}, ErrConflict
 }
@@ -325,6 +356,13 @@ func applyUpdate(item Item, in UpdateInput) (Item, error) {
 	}
 	if in.IsStaple != nil {
 		item.IsStaple = *in.IsStaple
+	}
+	if in.LowThresholdPercent != nil {
+		v := *in.LowThresholdPercent
+		if v != 0 && (v < 1 || v > 100) {
+			return Item{}, invalid("lowThresholdPercent must be between 1 and 100")
+		}
+		item.LowThresholdPercent = v
 	}
 	if in.ExpiresOn != nil {
 		if item.ExpiresOn, err = normalizeDate(*in.ExpiresOn); err != nil {

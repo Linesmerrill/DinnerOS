@@ -80,7 +80,7 @@ func (m *memoryStore) GetItem(_ context.Context, householdID, id string) (Item, 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if i := m.index(householdID, id); i >= 0 {
-		return m.items[i], nil
+		return cloneItem(m.items[i]), nil
 	}
 	return Item{}, ErrNotFound
 }
@@ -130,7 +130,7 @@ func (m *memoryStore) InsertItem(_ context.Context, item Item) (Item, error) {
 	m.next++
 	item.ID = fmt.Sprintf("%024x", m.next)
 	item.Version = 1
-	m.items = append(m.items, item)
+	m.items = append(m.items, cloneItem(item))
 	return item, nil
 }
 
@@ -149,7 +149,7 @@ func (m *memoryStore) UpdateItem(_ context.Context, item Item) (Item, error) {
 	}
 	item.Key, item.CreatedAt = m.items[i].Key, m.items[i].CreatedAt
 	item.Version++
-	m.items[i] = item
+	m.items[i] = cloneItem(item)
 	return item, nil
 }
 
@@ -171,7 +171,7 @@ func (m *memoryStore) SetStatus(_ context.Context, householdID string, ids []str
 		if it.HouseholdID != householdID || !slices.Contains(ids, it.ID) {
 			continue
 		}
-		it.Status, it.UpdatedBy, it.UpdatedAt = status, updatedBy, at
+		it.Status, it.StatusSource, it.StatusSetAt, it.UpdatedBy, it.UpdatedAt = status, StatusSourcePerson, at, updatedBy, at
 		if status == StatusOut {
 			it.Quantity, it.Unit = "", ""
 		}

@@ -98,6 +98,31 @@ type Item struct {
 	// ExpiresOn is a calendar date (DateLayout) or empty.
 	ExpiresOn string
 	Note      string
+
+	// StatusSource says who set Status: a person (the default for items
+	// written before usage tracking) or the usage estimate.
+	StatusSource StatusSource
+	// StatusSetAt is when Status last changed. Zero for older items.
+	StatusSetAt time.Time
+	// Tracking is the current usage cycle, or nil when the household hasn't
+	// recorded how much it has (docs/pantry-usage.md).
+	Tracking *Tracking
+	// UnitSize says how much one discrete unit holds ("1 package = 8 oz"),
+	// so purchases counted in that unit are tracked in a measurable one.
+	UnitSize *UnitSize
+	// History holds the most recent closed usage segments, oldest first, at
+	// most MaxHistorySegments.
+	History []Segment
+	// Rate is the learned non-recipe use, or nil until there's enough
+	// history.
+	Rate *Rate
+	// LowThresholdPercent overrides the household's threshold for this item;
+	// 0 means use the household's.
+	LowThresholdPercent int
+	// LowAlertCycleID is the cycle the estimate last marked low and alerted
+	// about, so each cycle alerts at most once.
+	LowAlertCycleID string
+
 	// Version increases with every write; stores use it to reject updates
 	// based on a stale read.
 	Version   int64
@@ -127,16 +152,17 @@ type AddInput struct {
 
 // UpdateInput is a partial update; nil fields are unchanged. For Quantity,
 // ExpiresOn, and Note an empty string clears the value (clearing Quantity also
-// clears Unit).
+// clears Unit). LowThresholdPercent 0 clears the item's override.
 type UpdateInput struct {
-	DisplayName *string
-	Category    *string
-	Quantity    *string
-	Unit        *string
-	Status      *Status
-	IsStaple    *bool
-	ExpiresOn   *string
-	Note        *string
+	DisplayName         *string
+	Category            *string
+	Quantity            *string
+	Unit                *string
+	Status              *Status
+	IsStaple            *bool
+	ExpiresOn           *string
+	Note                *string
+	LowThresholdPercent *int
 }
 
 // StatusUpdate sets one item's status.

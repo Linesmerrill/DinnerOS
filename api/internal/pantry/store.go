@@ -29,12 +29,14 @@ type Store interface {
 	// UpdateItem replaces the item with item.ID, but only if its stored
 	// Version still equals item.Version, and returns it with the next
 	// Version. A missing item is ErrNotFound; a newer stored version is
-	// ErrConflict. Key and CreatedAt are never changed.
+	// ErrConflict. Key and CreatedAt are never changed; every other field,
+	// including Tracking, History, and Rate, is replaced.
 	UpdateItem(ctx context.Context, item Item) (Item, error)
 	// DeleteItem removes one item.
 	DeleteItem(ctx context.Context, householdID, id string) error
 	// SetStatus sets the status of the items with the given IDs (missing and
-	// malformed IDs are ignored), bumping each Version. Marking items out
-	// clears their quantity and unit.
+	// malformed IDs are ignored) as set by a person (StatusSource person,
+	// StatusSetAt at), bumping each Version. Marking items out clears their
+	// quantity and unit but keeps Tracking.
 	SetStatus(ctx context.Context, householdID string, ids []string, status Status, updatedBy string, at time.Time) error
 }
