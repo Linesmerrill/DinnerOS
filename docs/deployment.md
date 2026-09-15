@@ -46,10 +46,15 @@ Status:
    ```
 
 3. Expose the deployed commit as `HEROKU_BUILD_COMMIT`, which `/health`
-   reports as `version`:
+   reports as `version`. Container apps need both labs features, and the
+   variables only appear after the next release:
 
    ```bash
    heroku labs:enable runtime-dyno-build-metadata -a dinneros-api
+   ```
+
+   ```bash
+   heroku labs:enable runtime-dyno-metadata -a dinneros-api
    ```
 
 4. In the Heroku dashboard, go to **Deploy → GitHub**, connect
