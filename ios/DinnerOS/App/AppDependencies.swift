@@ -10,6 +10,7 @@ final class AppDependencies {
     let plans: PlanStore
     let pantry: PantryStore
     let events: EventReporter
+    let notifications: NotificationStore
     /// `nil` when the build has no Google client ID; the Google button is then hidden.
     let googleSignIn: GoogleSignInService?
 
@@ -31,6 +32,13 @@ final class AppDependencies {
             session: session,
             api: client.map { PantryAPI(client: $0) },
             ingredientsAPI: client.map { IngredientsAPI(client: $0) })
+        let notifications = NotificationStore(
+            session: session, api: client.map { NotificationsAPI(client: $0) })
+        self.notifications = notifications
+        // Pantry reads and changes can create notifications, so the badge follows them.
+        pantry.onChange = { [notifications] in
+            Task { await notifications.refreshUnreadCount() }
+        }
         events = EventReporter(
             session: session, api: client.map { EventsAPI(client: $0) },
             storage: FileEventQueueStorage.applicationSupport())

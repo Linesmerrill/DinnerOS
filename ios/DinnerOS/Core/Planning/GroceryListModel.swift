@@ -49,7 +49,13 @@ final class InMemoryGroceryChecks: GroceryCheckStorage {
     }
 }
 
-/// One week's grocery list screen: the computed list and local check-off state.
+/// One week's grocery list screen: the computed list, local check-off state, and the
+/// "Add to pantry?" prompt for lines just checked off.
+///
+/// The prompt never blocks shopping: confirming closes it at once and records the purchase
+/// in the background, and checking off another line replaces an unanswered prompt. A failed
+/// purchase is kept to try again with the same `clientPurchaseId`. "Don't ask during this
+/// trip" lasts as long as this model, which is one visit to the list.
 @Observable
 final class GroceryListModel {
     enum Phase: Equatable {
@@ -57,6 +63,30 @@ final class GroceryListModel {
         case loading
         case loaded
         case failed(String)
+    }
+
+    /// "Add to pantry?" for a line just checked off.
+    struct PurchasePrompt: Equatable, Identifiable {
+        let item: GroceryItem
+        var draft: PantryPurchaseDraft
+
+        var id: String { draft.clientPurchaseID }
+    }
+
+    /// A purchase that couldn't be recorded.
+    struct PurchaseFailure: Equatable, Identifiable {
+        let prompt: PurchasePrompt
+        let message: String
+        /// The member's role doesn't allow pantry changes, so trying again won't help.
+        let isForbidden: Bool
+
+        var id: String { prompt.id }
+    }
+
+    /// A purchase just recorded, for a brief confirmation.
+    struct RecordedPurchase: Equatable, Identifiable {
+        let id: String
+        let name: String
     }
 
     let householdID: String
@@ -67,6 +97,24 @@ final class GroceryListModel {
     private(set) var refreshError: String?
     private(set) var checked: Set<String>
 
+    private(set) var purchasePrompt: PurchasePrompt?
+    private(set) var purchaseFailure: PurchaseFailure?
+    private(set) var lastRecordedPurchase: RecordedPurchase?
+    private(set) var purchasesInFlight = 0
+    private(set) var isSkippingPurchasePrompts = false
+    /// Whether the member may change the pantry (`pantry.edit`). The screen keeps it current;
+    /// a `403` turns it off.
+    private(set) var canAddToPantry: Bool
+
+    /// The prompt's editable amount, for bindings. Writes for a replaced prompt are ignored.
+    var purchaseDraft: PantryPurchaseDraft {
+        get { purchasePrompt?.draft ?? PantryPurchaseDraft(clientPurchaseID: "") }
+        set {
+            guard purchasePrompt?.id == newValue.clientPurchaseID else { return }
+            purchasePrompt?.draft = newValue
+        }
+    }
+
     /// Items not checked off yet.
     var remainingCount: Int {
         list?.allItems.count { !checked.contains($0.ingredientKey) } ?? 0
@@ -75,17 +123,21 @@ final class GroceryListModel {
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let api: PlansAPI?
     @ObservationIgnored private let checks: any GroceryCheckStorage
+    @ObservationIgnored private let purchases: (any PantryPurchaseRecording)?
 
     private static let logger = Logger(subsystem: "DinnerOS", category: "grocery")
 
     init(
-        householdID: String, week: ISOWeek, session: AuthSession, api: PlansAPI?, checks: any GroceryCheckStorage
+        householdID: String, week: ISOWeek, session: AuthSession, api: PlansAPI?, checks: any GroceryCheckStorage,
+        purchases: (any PantryPurchaseRecording)? = nil, canAddToPantry: Bool = false
     ) {
         self.householdID = householdID
         self.week = week
         self.session = session
         self.api = api
         self.checks = checks
+        self.purchases = purchases
+        self.canAddToPantry = canAddToPantry
         checked = checks.checkedItems(householdID: householdID, week: week)
     }
 
@@ -132,18 +184,99 @@ final class GroceryListModel {
         checked.contains(item.ingredientKey)
     }
 
+    /// Checks or unchecks a line. Checking one off asks "Add to pantry?" when the member may
+    /// change the pantry and hasn't turned the prompt off for this trip.
     func toggle(_ item: GroceryItem) {
         if checked.contains(item.ingredientKey) {
             checked.remove(item.ingredientKey)
+            if purchasePrompt?.item.ingredientKey == item.ingredientKey {
+                purchasePrompt = nil
+            }
         } else {
             checked.insert(item.ingredientKey)
+            offerPurchase(for: item)
         }
         checks.setCheckedItems(checked, householdID: householdID, week: week)
     }
 
     func uncheckAll() {
         checked = []
+        purchasePrompt = nil
         checks.setCheckedItems([], householdID: householdID, week: week)
+    }
+
+    // MARK: - Add to pantry
+
+    func setCanAddToPantry(_ canAdd: Bool) {
+        canAddToPantry = canAdd
+        if !canAdd {
+            purchasePrompt = nil
+        }
+    }
+
+    /// Declines the prompt. Nothing is recorded.
+    func skipPurchase() {
+        purchasePrompt = nil
+    }
+
+    /// Declines this prompt and every later one until the list is left.
+    func stopAskingThisTrip() {
+        isSkippingPurchasePrompts = true
+        purchasePrompt = nil
+    }
+
+    /// Closes the prompt and records its purchase. Returns when the request finishes.
+    func confirmPurchase() async {
+        guard let prompt = purchasePrompt, prompt.draft.isValid else { return }
+        purchasePrompt = nil
+        await submit(prompt)
+    }
+
+    /// Sends a failed purchase again with the same `clientPurchaseId`, so it's recorded once
+    /// even if the first attempt reached the server.
+    func retryPurchase() async {
+        guard let failure = purchaseFailure, !failure.isForbidden else { return }
+        purchaseFailure = nil
+        await submit(failure.prompt)
+    }
+
+    func dismissPurchaseFailure() {
+        purchaseFailure = nil
+    }
+
+    /// Hides the confirmation for `id`, unless a newer one replaced it.
+    func dismissRecordedPurchase(id: String) {
+        if lastRecordedPurchase?.id == id {
+            lastRecordedPurchase = nil
+        }
+    }
+
+    private func offerPurchase(for item: GroceryItem) {
+        guard purchases != nil, canAddToPantry, !isSkippingPurchasePrompts else { return }
+        purchasePrompt = PurchasePrompt(item: item, draft: PantryPurchaseDraft(groceryItem: item))
+    }
+
+    private func submit(_ prompt: PurchasePrompt) async {
+        guard let purchases else { return }
+        purchasesInFlight += 1
+        defer { purchasesInFlight -= 1 }
+        do {
+            let purchase = try prompt.draft.groceryPurchase(for: prompt.item, week: week)
+            try await purchases.recordPurchase(purchase, householdID: householdID)
+            lastRecordedPurchase = RecordedPurchase(id: prompt.id, name: prompt.item.name)
+            Self.logger.info("Grocery line added to the pantry")
+        } catch is CancellationError {
+            return
+        } catch let error as APIError where error.status == 403 {
+            Self.logger.notice("Grocery purchase forbidden")
+            setCanAddToPantry(false)
+            purchaseFailure = PurchaseFailure(
+                prompt: prompt, message: HouseholdStore.message(for: error), isForbidden: true)
+        } catch {
+            Self.logger.notice("Grocery purchase failed")
+            purchaseFailure = PurchaseFailure(
+                prompt: prompt, message: HouseholdStore.message(for: error), isForbidden: false)
+        }
     }
 
     /// The list as plain text for sharing, or `nil` before it loads.

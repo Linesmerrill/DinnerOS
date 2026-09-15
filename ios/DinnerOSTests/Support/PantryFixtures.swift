@@ -5,7 +5,7 @@ import Synchronization
 
 /// Synthetic JSON shaped like the API's pantry and ingredient catalog responses.
 nonisolated enum PantryFixtures {
-    /// An item with every field set.
+    /// An item with every field set, from before usage tracking (no usage fields).
     static let oliveOilJSON = #"""
         {"id":"item-oil","householdId":"household-1","ingredientId":"i-olive-oil","key":"olive oil",
          "displayName":"Olive Oil","category":"pantry","quantity":"3/2","quantityValue":1.5,"unit":"cup",
@@ -20,6 +20,58 @@ nonisolated enum PantryFixtures {
          "status":"low","isStaple":false,"expiresOn":null,"note":"",
          "updatedBy":"user-1","createdAt":"2026-09-15T18:31:00Z","updatedAt":"2026-09-15T18:31:00Z"}
         """#
+
+    /// A tracked item the estimate marked low, with its own threshold and a package size.
+    static let butterUsageJSON = #"""
+        {"id":"item-butter","householdId":"household-1","ingredientId":"i-butter","key":"butter",
+         "displayName":"Butter","category":"dairy-eggs","quantity":"5","quantityValue":5,"unit":"tbsp",
+         "status":"low","isStaple":false,"expiresOn":null,"note":"",
+         "statusSource":"estimate","lowThresholdPercent":60,
+         "unitSize":{"per":"package","quantity":"8","quantityValue":8,"unit":"oz"},
+         "estimate":{"cycleId":"66e5a1f2c3b4a5d6e7f80f01","cycleSource":"grocery_list",
+           "cycleStartedAt":"2026-09-15T18:30:00Z","adjustedAt":null,"unit":"tbsp",
+           "startAmount":{"quantity":"16","quantityValue":16},"remaining":{"quantity":"5","quantityValue":5},
+           "percentRemaining":31,"percentUsed":69,"recipeUse":{"count":2,"quantity":"6","quantityValue":6},
+           "otherUse":{"quantity":"5","quantityValue":5},
+           "dailyRate":{"quantity":"1","quantityValue":1,"basedOnSegments":3},"skippedRecipes":1,
+           "lowThresholdPercent":60,"thresholdSource":"item","belowThreshold":true,
+           "summary":"About 31% left: 2 recipes used 6 tbsp, plus about 1 tbsp a day of other use.",
+           "estimatedAt":"2026-09-20T18:30:00Z"},
+         "updatedBy":"user-1","createdAt":"2026-09-15T18:30:00Z","updatedAt":"2026-09-20T18:30:00Z"}
+        """#
+
+    /// A newer server's item whose estimate this build can't read.
+    static let unreadableEstimateJSON = #"""
+        {"id":"item-rice","householdId":"household-1","ingredientId":null,"key":"rice",
+         "displayName":"Rice","category":"pantry","quantity":"2","quantityValue":2,"unit":"cup",
+         "status":"in_stock","isStaple":false,"expiresOn":null,"note":"",
+         "statusSource":"robot","lowThresholdPercent":null,"unitSize":null,"estimate":{"cycleId":5},
+         "updatedBy":"user-1","createdAt":"2026-09-15T18:30:00Z","updatedAt":"2026-09-15T18:30:00Z"}
+        """#
+
+    static let purchaseResponseJSON = Data(
+        #"""
+        {"purchase":{"id":"purchase-1","householdId":"household-1","itemId":"item-butter","source":"grocery_list",
+          "quantity":"1","quantityValue":1,"unit":"cup","unitSize":null,"week":"2026-W38",
+          "clientPurchaseId":"client-1","recordedBy":"user-1","purchasedAt":"2026-09-15T18:30:00Z"},
+         "item":\#(butterUsageJSON)}
+        """#.utf8)
+
+    static let purchaseHistoryJSON = Data(
+        #"""
+        {"items":[
+          {"id":"purchase-2","householdId":"household-1","itemId":"item-butter","source":"manual",
+           "quantity":"2","quantityValue":2,"unit":"package",
+           "unitSize":{"per":"package","quantity":"8","quantityValue":8,"unit":"oz"},"week":null,
+           "clientPurchaseId":"client-2","recordedBy":"user-1","purchasedAt":"2026-09-18T10:00:00Z"},
+          {"id":"purchase-1","householdId":"household-1","itemId":"item-butter","source":"grocery_list",
+           "quantity":null,"quantityValue":null,"unit":null,"unitSize":null,"week":"2026-W38",
+           "clientPurchaseId":null,"recordedBy":"user-2","purchasedAt":"2026-09-15T18:30:00Z"}
+        ]}
+        """#.utf8)
+
+    static let settingsJSON = Data(
+        #"{"lowThresholdPercent":80,"defaultLowThresholdPercent":80,"updatedBy":null,"updatedAt":null}"#.utf8)
 
     static func list(_ items: [String]) -> Data {
         Data(#"{"items":[\#(items.joined(separator: ","))]}"#.utf8)
@@ -38,14 +90,37 @@ nonisolated enum PantryFixtures {
     static func item(
         id: String = "item-1", name: String = "Butter", category: String = "dairy-eggs", quantity: String? = nil,
         quantityValue: Double? = nil, unit: String? = nil, status: PantryStatus = .inStock, isStaple: Bool = false,
-        expiresOn: String? = nil, note: String = "", ingredientID: String? = nil
+        expiresOn: String? = nil, note: String = "", ingredientID: String? = nil,
+        statusSource: PantryStatusSource = .person, lowThresholdPercent: Int? = nil, unitSize: PantryUnitSize? = nil,
+        estimate: PantryEstimate? = nil
     ) -> PantryItem {
         PantryItem(
             id: id, householdID: "household-1", ingredientID: ingredientID, key: name.lowercased(),
             displayName: name, category: category, quantity: quantity, quantityValue: quantityValue, unit: unit,
             status: status, isStaple: isStaple, expiresOn: expiresOn, note: note, updatedBy: Fixtures.user.id,
-            createdAt: Date(timeIntervalSince1970: 1_757_000_000), updatedAt: Date(timeIntervalSince1970: 1_757_000_000)
+            createdAt: Date(timeIntervalSince1970: 1_757_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_757_000_000),
+            statusSource: statusSource, lowThresholdPercent: lowThresholdPercent, unitSize: unitSize, estimate: estimate
         )
+    }
+
+    /// An estimate in tablespoons: 5 of 16 left by default.
+    static func estimate(
+        percentRemaining: Int = 31, belowThreshold: Bool = false, recipeCount: Int = 2,
+        dailyRate: PantryDailyRate? = PantryDailyRate(quantity: "1", quantityValue: 1, basedOnSegments: 3),
+        skippedRecipes: Int = 0, lowThresholdPercent: Int = 80, thresholdSource: PantryThresholdSource = .household
+    ) -> PantryEstimate {
+        PantryEstimate(
+            cycleID: "cycle-1", cycleSource: "grocery_list", cycleStartedAt: Date(timeIntervalSince1970: 1_757_000_000),
+            adjustedAt: nil, unit: "tbsp", startAmount: PantryAmount(quantity: "16", quantityValue: 16),
+            remaining: PantryAmount(quantity: "5", quantityValue: 5), percentRemaining: percentRemaining,
+            percentUsed: 100 - percentRemaining,
+            recipeUse: PantryRecipeUse(
+                count: recipeCount, quantity: String(recipeCount * 3), quantityValue: Double(recipeCount * 3)),
+            otherUse: PantryAmount(quantity: "5", quantityValue: 5), dailyRate: dailyRate,
+            skippedRecipes: skippedRecipes, lowThresholdPercent: lowThresholdPercent, thresholdSource: thresholdSource,
+            belowThreshold: belowThreshold, summary: "About \(percentRemaining)% left.",
+            estimatedAt: Date(timeIntervalSince1970: 1_757_000_000))
     }
 
     /// Parses a JSON request body.
@@ -72,6 +147,12 @@ nonisolated final class FakePantryServer: Sendable {
         var isStaple: Bool
         var expiresOn: String?
         var note = ""
+        var statusSource = "person"
+        var lowThresholdPercent: Int?
+        /// A tracked item's estimate; set to 100 by a purchase with an amount.
+        var estimatePercent: Int?
+        var unitSizeQuantity: String?
+        var unitSizeUnit: String?
 
         init(
             id: String, name: String, category: String, quantity: String? = nil, unit: String? = nil,
@@ -90,6 +171,22 @@ nonisolated final class FakePantryServer: Sendable {
         }
     }
 
+    /// A recorded purchase, as the server saw the request.
+    struct Purchase: Sendable, Equatable {
+        var id: String
+        var householdID: String
+        var itemID: String
+        var source: String
+        var ingredientID: String?
+        var name: String?
+        var quantity: String?
+        var unit: String?
+        var unitSizeQuantity: String?
+        var unitSizeUnit: String?
+        var week: String?
+        var clientPurchaseID: String?
+    }
+
     struct CatalogEntry: Sendable {
         let id: String
         let key: String
@@ -103,6 +200,8 @@ nonisolated final class FakePantryServer: Sendable {
         CatalogEntry(id: "i-oil", key: "oil", name: "Oil", category: "pantry"),
         CatalogEntry(id: "i-olive-oil", key: "olive oil", name: "Olive Oil", category: "pantry"),
         CatalogEntry(id: "i-apples", key: "apples", name: "Apples", category: "produce"),
+        CatalogEntry(id: "i-onion", key: "yellow onion", name: "Yellow Onion", category: "produce"),
+        CatalogEntry(id: "i-pepper", key: "pepper", name: "Pepper", category: "spices"),
     ]
 
     /// A short synthetic stand-in for the API's default staples.
@@ -125,6 +224,13 @@ nonisolated final class FakePantryServer: Sendable {
         var log: [String] = []
         /// The item count of every bulk request.
         var bulkSizes: [Int] = []
+        var purchases: [Purchase] = []
+        /// Household thresholds; 80 when unset.
+        var thresholds: [String: Int] = [:]
+        /// Purchases answer `403`, as for a member without `pantry.edit`.
+        var forbidsPurchases = false
+        /// The next purchase is recorded, but its response is a `500`, as if it were lost.
+        var losesNextPurchaseResponse = false
     }
 
     private let state: Mutex<State>
@@ -135,13 +241,26 @@ nonisolated final class FakePantryServer: Sendable {
 
     var log: [String] { state.withLock { $0.log } }
     var bulkSizes: [Int] { state.withLock { $0.bulkSizes } }
+    var purchases: [Purchase] { state.withLock { $0.purchases } }
 
     func items(in householdID: String) -> [Item] {
         state.withLock { $0.pantries[householdID] ?? [] }
     }
 
+    func threshold(for householdID: String) -> Int {
+        state.withLock { $0.thresholds[householdID] ?? 80 }
+    }
+
     func failNext(_ count: Int = 1) {
         state.withLock { $0.failuresRemaining = count }
+    }
+
+    func forbidPurchases() {
+        state.withLock { $0.forbidsPurchases = true }
+    }
+
+    func loseNextPurchaseResponse() {
+        state.withLock { $0.losesNextPurchaseResponse = true }
     }
 
     /// Another member deletes an item.
@@ -179,12 +298,13 @@ nonisolated final class FakePantryServer: Sendable {
             }
             let householdID = route[1]
             let rest = Array(route.dropFirst(3))
+            let threshold = state.thresholds[householdID] ?? 80
             var items = state.pantries[householdID] ?? []
             defer { state.pantries[householdID] = items }
 
             switch method {
             case "GET" where rest.isEmpty:
-                return (200, Self.list(items, householdID: householdID))
+                return (200, Self.list(items, householdID: householdID, threshold: threshold))
             case "POST" where rest.isEmpty:
                 return Self.add(body, to: &items, householdID: householdID, nextID: &state.nextID)
             case "POST" where rest == ["bulk"]:
@@ -193,12 +313,29 @@ nonisolated final class FakePantryServer: Sendable {
                 return Self.bulk(entries, items: &items, householdID: householdID)
             case "POST" where rest == ["staples", "defaults"]:
                 return Self.addDefaults(to: &items, householdID: householdID, nextID: &state.nextID)
+            case "POST" where rest == ["purchases"]:
+                guard !state.forbidsPurchases else { return (403, Fixtures.errorJSON(code: "forbidden")) }
+                return Self.recordPurchase(body, state: &state, items: &items, householdID: householdID)
+            case "GET" where rest.count == 2 && rest[1] == "purchases":
+                guard items.contains(where: { $0.id == rest[0] }) else {
+                    return (404, Fixtures.errorJSON(code: "not_found"))
+                }
+                let history = state.purchases.filter { $0.householdID == householdID && $0.itemID == rest[0] }
+                return (200, Data(#"{"items":[\#(history.reversed().map(Self.json).joined(separator: ","))]}"#.utf8))
+            case "GET" where rest == ["settings"]:
+                return (200, Self.settingsJSON(threshold, changed: state.thresholds[householdID] != nil))
+            case "PUT" where rest == ["settings"]:
+                guard let percent = body["lowThresholdPercent"] as? Int, (1...100).contains(percent) else {
+                    return (400, Fixtures.errorJSON(code: "validation_failed", message: "invalid threshold"))
+                }
+                state.thresholds[householdID] = percent
+                return (200, Self.settingsJSON(percent, changed: true))
             case "PATCH" where rest.count == 1:
                 guard let index = items.firstIndex(where: { $0.id == rest[0] }) else {
                     return (404, Fixtures.errorJSON(code: "not_found"))
                 }
                 Self.apply(body, to: &items[index])
-                return (200, Data(Self.json(items[index], householdID: householdID).utf8))
+                return (200, Data(Self.json(items[index], householdID: householdID, threshold: threshold).utf8))
             case "DELETE" where rest.count == 1:
                 guard items.contains(where: { $0.id == rest[0] }) else {
                     return (404, Fixtures.errorJSON(code: "not_found"))
@@ -244,6 +381,7 @@ nonisolated final class FakePantryServer: Sendable {
     private static func apply(_ body: [String: Any], to item: inout Item) {
         if let status = body["status"] as? String {
             item.status = status
+            item.statusSource = "person"
         }
         if let quantity = body["quantity"] as? String {
             if quantity.isEmpty {
@@ -263,10 +401,87 @@ nonisolated final class FakePantryServer: Sendable {
         if let note = body["note"] as? String {
             item.note = note
         }
+        if let threshold = body["lowThresholdPercent"] {
+            // `null` arrives as NSNull and returns the item to the household's threshold.
+            item.lowThresholdPercent = threshold as? Int
+        }
         if item.status == "out" {
             item.quantity = nil
             item.unit = nil
         }
+        if item.quantity == nil {
+            item.estimatePercent = nil
+        }
+    }
+
+    private static func recordPurchase(
+        _ body: [String: Any], state: inout State, items: inout [Item], householdID: String
+    ) -> (status: Int, body: Data) {
+        let threshold = state.thresholds[householdID] ?? 80
+        let clientID = body["clientPurchaseId"] as? String
+        if let clientID,
+            let existing = state.purchases.first(where: {
+                $0.householdID == householdID && $0.clientPurchaseID == clientID
+            }),
+            let item = items.first(where: { $0.id == existing.itemID })
+        {
+            return (200, purchaseResponse(existing, item, householdID: householdID, threshold: threshold))
+        }
+
+        let index: Int
+        if let itemID = body["itemId"] as? String {
+            guard let found = items.firstIndex(where: { $0.id == itemID }) else {
+                return (404, Fixtures.errorJSON(code: "not_found"))
+            }
+            index = found
+        } else {
+            let byID = (body["ingredientId"] as? String).flatMap { id in catalog.first { $0.id == id } }
+            if body["ingredientId"] != nil, byID == nil {
+                return (404, Fixtures.errorJSON(code: "not_found"))
+            }
+            guard let name = byID?.name ?? (body["name"] as? String) else {
+                return (400, Fixtures.errorJSON(code: "validation_failed", message: "itemId, ingredientId, or name"))
+            }
+            let key = byID?.key ?? name.lowercased()
+            if let found = items.firstIndex(where: { $0.key == key }) {
+                index = found
+            } else {
+                var item = Item(
+                    id: "item-new-\(state.nextID)", name: name, category: byID?.category ?? "other",
+                    ingredientID: byID?.id)
+                item.key = key
+                state.nextID += 1
+                items.append(item)
+                index = items.count - 1
+            }
+        }
+
+        let quantity = body["quantity"] as? String
+        let unit = quantity == nil ? nil : (body["unit"] as? String ?? "count")
+        let size = body["unitSize"] as? [String: Any]
+        items[index].status = "in_stock"
+        items[index].statusSource = "person"
+        items[index].quantity = quantity
+        items[index].unit = unit
+        items[index].estimatePercent = quantity == nil ? nil : 100
+        if let size {
+            items[index].unitSizeQuantity = size["quantity"] as? String
+            items[index].unitSizeUnit = size["unit"] as? String
+        }
+
+        let purchase = Purchase(
+            id: "purchase-\(state.nextID)", householdID: householdID, itemID: items[index].id,
+            source: body["source"] as? String ?? "", ingredientID: body["ingredientId"] as? String,
+            name: body["name"] as? String, quantity: quantity, unit: unit,
+            unitSizeQuantity: size?["quantity"] as? String, unitSizeUnit: size?["unit"] as? String,
+            week: body["week"] as? String, clientPurchaseID: clientID)
+        state.nextID += 1
+        state.purchases.append(purchase)
+        if state.losesNextPurchaseResponse {
+            state.losesNextPurchaseResponse = false
+            return (500, Fixtures.errorJSON(code: "internal"))
+        }
+        return (201, purchaseResponse(purchase, items[index], householdID: householdID, threshold: threshold))
     }
 
     private static func bulk(
@@ -324,21 +539,73 @@ nonisolated final class FakePantryServer: Sendable {
 
     // MARK: - JSON
 
-    private static func list(_ items: [Item], householdID: String) -> Data {
-        PantryFixtures.list(items.map { json($0, householdID: householdID) })
+    private static func string(_ value: String?) -> String {
+        value.map { "\"\($0)\"" } ?? "null"
     }
 
-    static func json(_ item: Item, householdID: String) -> String {
-        func string(_ value: String?) -> String {
-            value.map { "\"\($0)\"" } ?? "null"
-        }
+    private static func list(_ items: [Item], householdID: String, threshold: Int) -> Data {
+        PantryFixtures.list(items.map { json($0, householdID: householdID, threshold: threshold) })
+    }
+
+    private static func settingsJSON(_ percent: Int, changed: Bool) -> Data {
+        let updatedBy = changed ? #""\#(Fixtures.user.id)""# : "null"
+        let updatedAt = changed ? #""2026-09-15T18:30:00Z""# : "null"
+        return Data(
+            #"{"lowThresholdPercent":\#(percent),"defaultLowThresholdPercent":80,"updatedBy":\#(updatedBy),"updatedAt":\#(updatedAt)}"#
+                .utf8)
+    }
+
+    private static func purchaseResponse(
+        _ purchase: Purchase, _ item: Item, householdID: String, threshold: Int
+    ) -> Data {
+        Data(
+            #"{"purchase":\#(json(purchase)),"item":\#(json(item, householdID: householdID, threshold: threshold))}"#
+                .utf8)
+    }
+
+    static func json(_ purchase: Purchase) -> String {
+        let value = purchase.quantity.flatMap(quantityValue).map { String($0) } ?? "null"
+        let unitSize =
+            purchase.unitSizeQuantity.map { quantity in
+                #"{"per":\#(string(purchase.unit)),"quantity":"\#(quantity)","quantityValue":\#(quantityValue(quantity) ?? 0),"unit":\#(string(purchase.unitSizeUnit))}"#
+            } ?? "null"
+        return "{"
+            + #""id":"\#(purchase.id)","householdId":"\#(purchase.householdID)","itemId":"\#(purchase.itemID)","#
+            + #""source":"\#(purchase.source)","quantity":\#(string(purchase.quantity)),"quantityValue":\#(value),"#
+            + #""unit":\#(string(purchase.unit)),"unitSize":\#(unitSize),"week":\#(string(purchase.week)),"#
+            + #""clientPurchaseId":\#(string(purchase.clientPurchaseID)),"recordedBy":"\#(Fixtures.user.id)","#
+            + #""purchasedAt":"2026-09-15T18:30:00Z""#
+            + "}"
+    }
+
+    static func json(_ item: Item, householdID: String, threshold: Int = 80) -> String {
         let value = item.quantity.flatMap(quantityValue).map { String($0) } ?? "null"
+        let threshold = item.lowThresholdPercent ?? threshold
+        var estimate = "null"
+        if let percent = item.estimatePercent, let quantity = item.quantity, let unit = item.unit {
+            let amount = #"{"quantity":"\#(quantity)","quantityValue":\#(value)}"#
+            estimate =
+                #"{"cycleId":"cycle-\#(item.id)","cycleSource":"grocery_list","cycleStartedAt":"2026-09-15T18:30:00Z","#
+                + #""adjustedAt":null,"unit":"\#(unit)","startAmount":\#(amount),"remaining":\#(amount),"#
+                + #""percentRemaining":\#(percent),"percentUsed":\#(100 - percent),"#
+                + #""recipeUse":{"count":0,"quantity":"0","quantityValue":0},"#
+                + #""otherUse":{"quantity":"0","quantityValue":0},"dailyRate":null,"skippedRecipes":0,"#
+                + #""lowThresholdPercent":\#(threshold),"#
+                + #""thresholdSource":"\#(item.lowThresholdPercent == nil ? "household" : "item")","#
+                + #""belowThreshold":false,"summary":"About \#(percent)% left.","estimatedAt":"2026-09-15T18:30:00Z"}"#
+        }
+        let unitSize =
+            item.unitSizeQuantity.map { quantity in
+                #"{"per":\#(string(item.unit)),"quantity":"\#(quantity)","quantityValue":\#(quantityValue(quantity) ?? 0),"unit":\#(string(item.unitSizeUnit))}"#
+            } ?? "null"
         return "{"
             + #""id":"\#(item.id)","householdId":"\#(householdID)","ingredientId":\#(string(item.ingredientID)),"#
             + #""key":"\#(item.key)","displayName":"\#(item.name)","category":"\#(item.category)","#
             + #""quantity":\#(string(item.quantity)),"quantityValue":\#(value),"unit":\#(string(item.unit)),"#
             + #""status":"\#(item.status)","isStaple":\#(item.isStaple),"expiresOn":\#(string(item.expiresOn)),"#
-            + #""note":"\#(item.note)","updatedBy":"\#(Fixtures.user.id)","#
+            + #""note":"\#(item.note)","statusSource":"\#(item.statusSource)","#
+            + #""lowThresholdPercent":\#(item.lowThresholdPercent.map(String.init) ?? "null"),"#
+            + #""unitSize":\#(unitSize),"estimate":\#(estimate),"updatedBy":"\#(Fixtures.user.id)","#
             + #""createdAt":"2026-09-15T18:30:00Z","updatedAt":"2026-09-15T18:30:00Z""#
             + "}"
     }
