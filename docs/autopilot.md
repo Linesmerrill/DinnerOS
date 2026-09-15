@@ -1,6 +1,6 @@
 # Autopilot
 
-Status: **V1 implemented on the API (Phase 10).** A local, deterministic,
+Status: **V1 implemented on the API and in the iOS app (Phase 10).** A local, deterministic,
 explainable baseline plans a week from the household's taste profile, week
 context, and history, and the household reviews, swaps, and accepts it. The
 context engine (weather, calendar), learned weights, and the private service
@@ -432,6 +432,21 @@ cooked and skipped events, and low pantry items, with nothing cached. Measured
 locally: about 65 ms end to end for 500 recipes through MongoDB and HTTP. The
 baseline alone plans a 500-recipe, 5000-interaction week in a few milliseconds
 (`BenchmarkGenerateWeek`).
+
+## iOS
+
+| Flow | Where | What happens |
+| --- | --- | --- |
+| Onboarding | Offered once on the Week tab's first visit while the profile isn't configured; also **Set Up Autopilot** in the Week menu (⋯) and Preferences (`AutopilotOnboardingView`) | A welcome, then one step per section: taste chips from the vocabulary with recipe counts (tap to like, again for "not for us"), restrictions, schedule, cook-time mix, equipment, weekday rules (with templates such as "Smoker night: chicken or pork, long cook OK"), and novelty. **Skip** keeps a step's defaults. **Finish** saves every section with one `PUT` and offers **Plan My Week**. |
+| Plan and review | Week → **Plan with Autopilot** row or ⋯ menu; **Autopilot suggested N meals → Review** (`WeekAutopilotSection`, `ProposalReviewView`) | Generates the shown week and opens the review: `messages` as notes, each slot's date, photo, name, `cookMinutes` with a Quick/Medium/Long badge, servings, and reasons joined with " · ", and `unfilled` days with their text. Each slot has an include checkmark and **Swap**; ⋯ has **Plan Again** and **Dismiss Suggestions**; **Add N Meals to Week** accepts with `excludeSlotIds`. The plan then shows the new entries with a sparkles badge, and skipped meals are explained. |
+| This Week's Plans | Week → **This Week's Plans…** row or ⋯ menu (`WeekContextSheet`) | Skip the week, busy weeknights, a strict time limit, servings and meals for the week, per-day skip, limit, and servings, and a note. **Save** sends the whole context; **Clear This Week's Plans** deletes it. Afterward the Week tab offers **Regenerate** or **Plan with Autopilot**. |
+| Preferences | Household → **Autopilot Preferences**; Week → ⋯ → **Autopilot Preferences** (`AutopilotPreferencesView`, `AutopilotSectionEditor`) | One row per section with a summary and "Changed by *name* · *date*". Each section opens the same controls as onboarding and saves that section with `PATCH`. **Change History** lists profile, week context, and recipe override changes with who made them. |
+| Recipe methods | A recipe → **Autopilot** (`RecipeAutopilotSection`) | Cook time and band, and **Good for Smoker** (and the household's other equipment): Automatic (Yes/No), Yes, or No, saved with `PUT .../override`. |
+
+Everything that changes Autopilot is hidden without `plan.edit`. Swaps,
+accepts, and dismissals send the proposal's `version`; when another member
+changed it first, the review reloads and says so. A finalized week offers
+**Reopen and Plan**. See the decision log (#170–#181) for the reasoning.
 
 ## Limitations of V1
 
