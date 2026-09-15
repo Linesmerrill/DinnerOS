@@ -213,7 +213,22 @@ ios/DinnerOS/
   week shown in the Week tab, which starts at this week in the household's time
   zone. Changes apply the plan the API returns; a delete, or a `403`/`404`/`409`,
   reloads the week. `GroceryListModel` backs one grocery list screen, keeps
-  check-offs on the device, and exports the list as plain text.
+  check-offs on the device, and exports the list as plain text. Checking off a
+  line asks "Add to pantry?" in a card at the bottom of the list and records the
+  purchase through `PantryPurchaseRecording` (#106).
+- **Pantry usage (`Core/Pantry`):** `PantryItem` decodes `statusSource`,
+  `lowThresholdPercent`, `unitSize`, and `estimate` leniently, so older
+  responses and unreadable estimates still show the item. `PantryStore` records
+  purchases (one `clientPurchaseId` per draft, so retries record once), loads an
+  item's purchase history on demand, and reads and updates the household
+  threshold. `PantryUsageFormat` builds short, localizable text from the
+  estimate's numbers; the API's English `summary` is shown only in the item's
+  detail. See [pantry-usage.md](pantry-usage.md#ios).
+- **Notifications (`Core/Notifications`):** `NotificationsAPI` wraps the
+  household notification endpoints. `NotificationStore` (`@Observable`, main
+  actor, app lifetime) holds the unread count for the bell badge and the paged
+  list, marks notifications read on screen before the request returns, and
+  resets on sign-out and household switches (#108, #109).
 - **Ratings (`Core/Recipes`):** recipe summaries and details carry
   `householdRating` and `myRating`. `RatingDraft` enforces the API's rating
   rules while the user edits. `RecipeLibrary` saves or removes a rating, then
@@ -223,8 +238,9 @@ ios/DinnerOS/
   `grocery.item_checked` into a JSON queue in Application Support. It sends
   batches when the app goes to the background, every 60 seconds while active,
   and at 20 queued events. The queue belongs to one user and household.
-- **Navigation:** a tab shell (Week, Recipes, Shop, Household) with
-  `NavigationStack` per tab, native sheets, and forms.
+- **Navigation:** a tab shell (Recipes, Week, Shop, Pantry, Household) with
+  `NavigationStack` per tab, native sheets, and forms. Notifications open from a
+  bell in the Pantry and Week toolbars (#108).
 - **Quality bar:** Dynamic Type, VoiceOver labels, dark mode, and explicit
   loading, empty, and error states for every screen.
 - **Visual identity:** Apple-native structure with DinnerOS's own herb-green
@@ -351,3 +367,9 @@ a versioned Autopilot API. See [autopilot.md](autopilot.md).
 | 103 | Time-based decay needs no scheduler: `GET .../pantry` and notification reads run the household's low-stock check first (bounded to 3 s for notifications, failures logged). Push will add an hourly Heroku Scheduler sweep calling the same idempotent `Refresh` | In-app alerts only matter when someone opens the app, and that request can do the check. Push must reach closed apps, which is when a sweep earns its cost. |
 | 104 | Notifications are their own module (`internal/notifications`): household-wide, with per-member `readBy`, and the collection is the push outbox (`push.status` starts `pending`, partial index for pending) | Other features will notify too, so it isn't pantry-specific. A household sees one alert, but each member dismisses it separately. Writing the push state with the notification means the APNs worker needs no second outbox and no producer changes. |
 | 105 | The low-stock threshold is a household setting (`pantry_settings`, default 80%, 1–100) with an optional per-item override, not an environment variable | Households differ, and so do items (running out of salt is not running out of milk). It's product data members change, not deployment configuration. |
+| 106 | iOS asks "Add to pantry?" after a grocery check-off in a card inset at the bottom of the list, not a sheet or alert. Confirming closes it at once and records the purchase in the background; checking another line replaces an unanswered card; a failure shows Try Again, which resends the same `clientPurchaseId`. "Don't ask during this trip" is in memory on that list screen's model, so leaving the list, switching households, or signing out ends it | A shopper checks off many lines in a row, often one-handed, and a modal after every tap would block the list. Recording in the background keeps the checklist responsive, and one ID per prompt makes a retry after a lost response record a single purchase (#96). A trip is one visit to the list; a stored preference would silently stop prompts on the next shop. |
+| 107 | The household low-stock threshold is edited from the Pantry tab's More menu ("Low-Stock Alerts…"), shown as percent used and read-only without `pantry.edit`. An item's own threshold is a toggle and stepper in its edit sheet, sent as an integer or `null` | The setting is guarded by `pantry.edit`, not `household.update`, and only changes pantry estimates, so it belongs beside the items it affects. Household settings stay about the household itself. |
+| 108 | In-app notifications open from a bell toolbar button with an unread badge on the Pantry and Week screens, as a sheet with the paged list. There's no notifications tab or tab badge. Tapping `pantry.low` marks it read and pushes that item's detail inside the sheet | The tab bar is full at five tabs, and a sixth would hide a tab behind More. Pantry and Week are where low stock matters (restocking and planning). Pushing inside the sheet works from either tab without switching tabs or losing the member's place. |
+| 109 | The unread count refreshes when a household is activated, when the app becomes active, after every pantry load or change (purchases and threshold changes included), after Mark as Cooked, and when the notifications sheet closes. There's no polling | Notifications are created only by pantry reads, changes, and cook deductions (#102, #103), so these are the moments the count can change. Polling costs requests and battery for alerts that aren't urgent until push exists. |
+| 110 | Mark as Cooked sends the event queue right away, then refreshes the pantry and the unread count | The API deducts a recipe when its `recipe.cooked` event is stored (#99), and the queue otherwise waits up to 60 seconds (#91), so the pantry would show a stale estimate right after cooking. The send still honors backoff. |
+| 111 | A low status the estimate set (`statusSource: estimate`) shows as an outlined, dashed "Estimated Low" pill with a trend icon; a person's status keeps the filled pill. Rows with an estimate show a small ring and "~N% left". The API's `summary`, recipe use, daily rate, the threshold and its source, and recent purchases are on the item's edit sheet, or a read-only detail for members without `pantry.edit`. Purchase history is loaded when that screen opens and isn't cached | Members need to tell at a glance which statuses a person confirmed and which are estimates they can correct (#102). Rows stay scannable and the explanation is one tap away. History is only read on that screen, so a cache would add invalidation without saving a visible request. |
