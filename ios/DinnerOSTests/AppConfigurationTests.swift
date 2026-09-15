@@ -11,8 +11,10 @@ struct AppConfigurationTests {
             "APIBaseURL": "http://localhost:8080",
             "CFBundleShortVersionString": "1.2.3",
             "CFBundleVersion": "42",
+            "GoogleIOSClientID": " 123-abc.apps.googleusercontent.com ",
         ])
 
+        #expect(configuration.googleIOSClientID == "123-abc.apps.googleusercontent.com")
         #expect(configuration.displayName == "Renamed")
         #expect(configuration.environment == .development)
         #expect(configuration.apiBaseURL == URL(string: "http://localhost:8080"))
@@ -25,6 +27,7 @@ struct AppConfigurationTests {
 
         #expect(configuration.environment == .production)
         #expect(configuration.apiBaseURL == nil)
+        #expect(configuration.googleIOSClientID == nil)
         #expect(configuration.displayName == "App")
     }
 
