@@ -69,8 +69,10 @@ Status:
 
    Use `/health` for uptime monitoring. `/ready` also checks MongoDB.
 
-6. Optional custom domain, for example `api.tlps.dev`. Heroku manages the TLS
-   certificate automatically. First add the domain to the app:
+6. ✅ Custom domain `api.tlps.dev` is live over HTTPS (Squarespace CNAME →
+   Heroku DNS target, certificate managed by Heroku ACM).
+   `PRODUCTION_API_BASE_URL` is `https://api.tlps.dev`. To set up a domain like
+   this from scratch, Heroku manages the TLS certificate automatically. First add the domain to the app:
 
    ```bash
    heroku domains:add api.tlps.dev -a dinneros-api
