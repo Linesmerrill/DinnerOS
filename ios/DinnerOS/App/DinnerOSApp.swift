@@ -12,6 +12,7 @@ struct DinnerOSApp: App {
                 .environment(dependencies.session)
                 .environment(dependencies.households)
                 .environment(dependencies.recipes)
+                .environment(dependencies.plans)
                 .onOpenURL { url in
                     // Never log the URL: invitation links carry a secret token.
                     dependencies.households.handleOpenURL(url)

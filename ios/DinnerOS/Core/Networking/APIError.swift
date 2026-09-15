@@ -71,6 +71,13 @@ extension APIError: LocalizedError {
                         "A household needs at least one admin. Make another member an admin first, then try again.")
             case "invitation_invalid":
                 String(localized: "This invitation is invalid, has expired, or has already been used.")
+            case "plan_finalized":
+                String(localized: "This week is finalized, so its recipes can't change. Reopen the week to edit it.")
+            case "plan_full":
+                String(
+                    localized:
+                        "This week already has \(PlanLimits.maxEntriesPerWeek) recipes, the most it can hold. Remove one to add another."
+                )
             case "conflict":
                 String(localized: "Someone else changed this at the same time. Refresh and try again.")
             case "validation_failed" where !message.isEmpty:

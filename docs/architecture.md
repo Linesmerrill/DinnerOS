@@ -192,6 +192,12 @@ ios/DinnerOS/
   (`dinneros://invite?token=...`) arrive through `onOpenURL`. The app asks before
   joining, and holds a link opened while signed out in memory until sign-in.
   Tokens and invite codes are never logged.
+- **Planning (`Core/Planning`):** `PlansAPI` wraps the week plan and grocery
+  list endpoints. `PlanStore` (`@Observable`, main actor, app lifetime) holds the
+  week shown in the Week tab, which starts at this week in the household's time
+  zone. Changes apply the plan the API returns; a delete, or a `403`/`404`/`409`,
+  reloads the week. `GroceryListModel` backs one grocery list screen, keeps
+  check-offs on the device, and exports the list as plain text.
 - **Navigation:** a tab shell (Week, Recipes, Shop, Household) with
   `NavigationStack` per tab, native sheets, and forms.
 - **Quality bar:** Dynamic Type, VoiceOver labels, dark mode, and explicit
@@ -277,3 +283,8 @@ a versioned Autopilot API. See [autopilot.md](autopilot.md).
 | 60 | `GET /api/v1/ingredients?q=` is global and needs only a signed-in user, not a household | The catalog is global (#37) and holds only ingredient names and categories, no household data. If user-written ingredients ever enter the catalog, scope search to households first. |
 | 61 | Default staples are a fixed list with aliases ("Black Pepper" also matches "Pepper"), added only when the pantry has neither the name nor an alias | Staples must link to the catalog ingredients recipes use, or they won't match grocery lines. Never touching existing items keeps the call idempotent and respects the household's own choices. |
 | 62 | Pantry lists aren't paginated, and a household holds at most 1000 items | A pantry is small by nature, like a household's invitations. The cap keeps the unpaginated list bounded. |
+| 63 | The iOS `PlanStore` shows the plan a change returns instead of reloading, except for a delete (the `204` has no plan), which removes the entry at once and then reloads. A rejected change (`403`, `404`, `409`) reloads the shown week before the error appears | Adding several recipes costs one request each. A week finalized or changed by another member shows its real state as soon as a change fails, so a `plan_finalized` message comes with the lock already visible. Unlike `HouseholdStore` (#43), successful changes don't reload, because plan responses already include other members' edits (#48). |
+| 64 | "This week" on iOS is the ISO week containing now in the household's time zone, falling back to the device's when the stored zone is unknown. Week labels format the week's UTC-midnight dates in UTC | Plan dates are in the household's time zone, so late Sunday in Denver must still be that week even though it's Monday in UTC. `ISOWeek` dates stay time-zone free, so labels never shift a day. |
+| 65 | Grocery check-offs are stored on the device in `UserDefaults`, keyed by household and week, with one entry per `ingredientKey` | The API has no checked state until Phase 7's saved lists. Ingredient keys are what the list aggregates by, so a check survives amounts changing when recipes are added. Nothing personal is stored: only IDs. |
+| 66 | The Add Recipes sheet searches with its own `RecipeLibrary` instance; its plus button adds at once with `preferredServings(householdDefault:)` and the day chosen at the top, and tapping a recipe opens the full form | Searching in the sheet mustn't change the Recipes tab's list. Planning a week means adding several recipes in a row, so the common case is one tap, and the serving size follows the same rule as the recipe screen. |
+| 67 | Entries move between days with a "Move To…" context menu and the edit sheet's day picker, not drag and drop | Dragging rows between `List` sections is unreliable and hard to use with VoiceOver. A menu works the same for every input method. |

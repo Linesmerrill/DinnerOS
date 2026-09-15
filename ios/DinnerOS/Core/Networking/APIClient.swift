@@ -6,6 +6,7 @@ nonisolated struct APIRequest: Sendable {
         case get = "GET"
         case post = "POST"
         case patch = "PATCH"
+        case put = "PUT"
         case delete = "DELETE"
     }
 
@@ -28,6 +29,10 @@ nonisolated struct APIRequest: Sendable {
 
     static func patch(_ path: String, body: some Encodable) throws -> APIRequest {
         APIRequest(method: .patch, path: path, body: try JSONCoding.makeEncoder().encode(body), bearerToken: nil)
+    }
+
+    static func put(_ path: String, body: some Encodable) throws -> APIRequest {
+        APIRequest(method: .put, path: path, body: try JSONCoding.makeEncoder().encode(body), bearerToken: nil)
     }
 
     static func delete(_ path: String) -> APIRequest {

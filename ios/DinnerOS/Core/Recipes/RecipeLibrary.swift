@@ -62,6 +62,19 @@ final class RecipeLibrary {
         return library
     }
 
+    /// A separate library over the same API, for a picker whose search and paging must
+    /// not change this list. A preview library's copy starts with the same items.
+    func makeIndependentCopy() -> RecipeLibrary {
+        let copy = RecipeLibrary(session: session, api: api, pageSize: pageSize)
+        if api == nil {
+            copy.householdID = householdID
+            copy.phase = phase
+            copy.items = items
+            copy.details = details
+        }
+        return copy
+    }
+
     // MARK: - List
 
     /// Shows `householdID`'s recipes. Loads the first page unless that household's list
