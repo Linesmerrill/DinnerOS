@@ -136,6 +136,22 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | DELETE | `/api/v1/households/{householdId}/recipes/{recipeId}/rating` → `204` | `household.view` | 9 | ✅ |
 | GET | `/api/v1/households/{householdId}/recipes/{recipeId}/ratings` → `{householdRating, items}` | `household.view` | 9 | ✅ |
 | POST | `/api/v1/households/{householdId}/events` `{events}` → `{accepted, duplicates, rejected}` | `household.view`, rate limited per user | 9 | ✅ |
+| GET | `/api/v1/households/{householdId}/autopilot/profile` → profile (defaults when never saved) | `household.view` | 10 | ✅ |
+| PUT | `/api/v1/households/{householdId}/autopilot/profile` profile sections → profile (sections left out reset to defaults) | `plan.edit` | 10 | ✅ |
+| PATCH | `/api/v1/households/{householdId}/autopilot/profile` `{taste?, restrictions?, schedule?, cookTime?, novelty?, equipment?, weekdayRules?}` → profile | `plan.edit` | 10 | ✅ |
+| GET | `/api/v1/households/{householdId}/autopilot/profile/history` `?limit` → `{items}` (newest first) | `household.view` | 10 | ✅ |
+| GET | `/api/v1/households/{householdId}/autopilot/vocabulary` → `{cuisines, tags, proteins, diets, allergens, equipment, novelty, timeBands, frequencies, days, catalogRecipeCount, limits}` | `household.view` | 10 | ✅ |
+| GET | `/api/v1/households/{householdId}/autopilot/recipe-overrides` → `{items}` | `household.view` | 10 | ✅ |
+| GET | `/api/v1/households/{householdId}/autopilot/recipes/{recipeId}/attributes` → attributes | `household.view` | 10 | ✅ |
+| PUT | `/api/v1/households/{householdId}/autopilot/recipes/{recipeId}/override` `{methods: {method: true/false/null}}` → attributes | `plan.edit` | 10 | ✅ |
+| GET | `/api/v1/households/{householdId}/autopilot/weeks/{week}/context` → week context | `household.view` | 10 | ✅ |
+| PUT | `/api/v1/households/{householdId}/autopilot/weeks/{week}/context` `{skip?, busy?, mealsPerWeek?, maxMinutes?, servings?, days?, note?}` → week context | `plan.edit` | 10 | ✅ |
+| DELETE | `/api/v1/households/{householdId}/autopilot/weeks/{week}/context` → `204` | `plan.edit` | 10 | ✅ |
+| POST | `/api/v1/households/{householdId}/autopilot/weeks/{week}/generate` `{avoidPrevious?}` → `201` proposal | `plan.edit` | 10 | ✅ |
+| GET | `/api/v1/households/{householdId}/autopilot/weeks/{week}/proposal` → proposal | `household.view` | 10 | ✅ |
+| POST | `/api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/slots/{slotId}/swap` `{version}` → proposal | `plan.edit` | 10 | ✅ |
+| POST | `/api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/accept` `{version, excludeSlotIds?}` → `{proposal, plan, added, skipped}` | `plan.edit` | 10 | ✅ |
+| POST | `/api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/reject` `{version}` → proposal | `plan.edit` | 10 | ✅ |
 | … | saved grocery lists, providers | | 8 | planned |
 
 Household-scoped routes return `404 not_found` to anyone who isn't a member,
@@ -167,6 +183,7 @@ invitations, and the last-admin rule are described in
       "headline": "with Lime Crema",
       "imageUrl": "https://img.example.com/beef-tacos.jpg",
       "totalMinutes": 30,
+      "cookMinutes": 30,
       "timesOrdered": 3,
       "lastOrderedWeek": "2026-W30",
       "isAddon": false,
@@ -178,6 +195,11 @@ invitations, and the last-admin rule are described in
   "nextCursor": "eyJzIjoibmFtZSIsIm4iOiJCZWVmIFRhY29zIiwiaSI6IjY2ZTUuLi4ifQ"
 }
 ```
+
+`cookMinutes` is the effective cook time: the larger of `prepMinutes` and
+`totalMinutes`, because sources report them inconsistently (a total smaller
+than the prep time, or only a prep time). It is omitted when neither is known.
+Show it instead of `totalMinutes`. The recipe detail has it too.
 
 Every item carries `householdRating` and `myRating` (see [Ratings](#ratings)).
 The recipe detail has the same two fields.
@@ -305,7 +327,8 @@ Sunday). The week number must exist in its year: 2026 has 53 weeks, 2025 has
       "servings": 2,
       "note": "extra lime",
       "addedBy": "66e5a1f2c3b4a5d6e7f80912",
-      "addedAt": "2026-09-14T18:30:00Z"
+      "addedAt": "2026-09-14T18:30:00Z",
+      "origin": "manual"
     },
     {
       "id": "66e5a1f2c3b4a5d6e7f80c02",
@@ -315,7 +338,8 @@ Sunday). The week number must exist in its year: 2026 has 53 weeks, 2025 has
       "servings": 4,
       "note": "",
       "addedBy": "66e5a1f2c3b4a5d6e7f80917",
-      "addedAt": "2026-09-14T19:05:00Z"
+      "addedAt": "2026-09-14T19:05:00Z",
+      "origin": "autopilot"
     }
   ],
   "createdAt": "2026-09-14T18:30:00Z",
@@ -328,6 +352,9 @@ Sunday). The week number must exist in its year: 2026 has 53 weeks, 2025 has
 - `recipe` is a snapshot of the name and image taken when the entry was
   added. Use `GET .../recipes/{id}` for details.
 - Entries are in the order they were added.
+- `origin` is `manual`, or `autopilot` for entries added by accepting an
+  [Autopilot](#autopilot) proposal. Autopilot entries are ordinary entries:
+  edit or delete them like any other.
 - A week nobody has planned returns `status: "draft"`, `entries: []`, and
   `null` timestamps. Nothing is stored until someone adds an entry or sets the
   status.
@@ -1045,6 +1072,389 @@ nobody has rated the recipe. Recipe lists and details carry the same
 Each change records a `recipe.rated` or `recipe.unrated` event (below). A
 failure to record the event is logged and never fails the rating.
 
+## Autopilot
+
+Autopilot proposes a week of dinners from the household's taste profile, the
+week's context, and its history, and explains each pick
+([autopilot.md](autopilot.md)). Routes are under
+`/api/v1/households/{householdId}/autopilot`. Reading needs `household.view`;
+every change needs `plan.edit`.
+
+### Taste profile
+
+`GET .../autopilot/profile`
+
+```json
+{
+  "householdId": "66e5a1f2c3b4a5d6e7f80913",
+  "configured": true,
+  "taste": {
+    "likes": { "cuisines": ["mexican", "thai"], "tags": ["comfort food"], "proteins": ["chicken", "pork"] },
+    "dislikes": { "cuisines": [], "tags": [], "proteins": ["lamb"] }
+  },
+  "restrictions": {
+    "diets": [], "allergens": ["peanuts"], "excludedIngredients": ["cilantro"],
+    "excludedCuisines": [], "excludedProteins": [], "excludedTags": [], "noSpicy": false
+  },
+  "schedule": {
+    "planDays": ["mon", "tue", "wed", "thu", "fri", "sun"], "weeknights": ["mon", "tue", "wed", "thu"],
+    "mealsPerWeek": 5, "defaultServings": null, "weeknightMaxMinutes": 35
+  },
+  "cookTime": { "quickMaxMinutes": 20, "mediumMaxMinutes": 35, "maxLongPerWeek": 1, "minQuickPerWeek": 2, "avoidConsecutiveLong": true },
+  "novelty": "balanced",
+  "equipment": ["smoker"],
+  "weekdayRules": [
+    { "day": "tue", "label": "Taco Tuesday", "cuisines": ["mexican"], "tags": [], "proteins": [], "methods": [], "timeBand": null, "frequency": "every_week" },
+    { "day": "sun", "label": "Sunday smoker night", "cuisines": [], "tags": [], "proteins": ["chicken", "pork"], "methods": ["smoker"], "timeBand": "long", "frequency": "at_most_once" }
+  ],
+  "sections": {
+    "taste": { "updatedBy": "66e5a1f2c3b4a5d6e7f80912", "updatedAt": "2026-09-14T18:30:00Z" },
+    "restrictions": { "updatedBy": "66e5a1f2c3b4a5d6e7f80912", "updatedAt": "2026-09-14T18:30:00Z" },
+    "schedule": { "updatedBy": "66e5a1f2c3b4a5d6e7f80912", "updatedAt": "2026-09-14T18:30:00Z" },
+    "cookTime": { "updatedBy": "66e5a1f2c3b4a5d6e7f80917", "updatedAt": "2026-09-15T08:10:00Z" },
+    "novelty": { "updatedBy": "66e5a1f2c3b4a5d6e7f80912", "updatedAt": "2026-09-14T18:30:00Z" },
+    "equipment": { "updatedBy": "66e5a1f2c3b4a5d6e7f80912", "updatedAt": "2026-09-14T18:30:00Z" },
+    "weekdayRules": { "updatedBy": "66e5a1f2c3b4a5d6e7f80912", "updatedAt": "2026-09-14T18:30:00Z" }
+  },
+  "effective": { "defaultServings": 2 },
+  "createdBy": "66e5a1f2c3b4a5d6e7f80912",
+  "createdAt": "2026-09-14T18:30:00Z",
+  "updatedBy": "66e5a1f2c3b4a5d6e7f80917",
+  "updatedAt": "2026-09-15T08:10:00Z"
+}
+```
+
+- A household that never saved a profile gets the defaults with
+  `configured: false`, every `sections` value `null`, and `null` timestamps.
+  Defaults: plan Monday–Friday, 4 meals, weeknights Monday–Thursday, bands
+  20/35 minutes, at most 2 long meals, avoid back-to-back long meals,
+  `balanced`.
+- `PUT` replaces the whole profile: sections you leave out reset to their
+  defaults. Use it for onboarding. `PATCH` replaces only the sections you send.
+  Each section is replaced whole, so send all of its fields.
+- `sections.<name>` is who last changed that section and when. A section only
+  changes when its values do; saving identical values changes nothing.
+- `effective.defaultServings` is `schedule.defaultServings`, or the
+  household's default servings when that is `null`.
+- Validation (`400 validation_failed`):
+  - Cuisines, tags, and excluded ingredients are free text, trimmed,
+    lowercased, and deduplicated: at most 30 values of 40 characters (50
+    excluded ingredients of 60 characters).
+  - Proteins, diets, allergens, equipment, days, `novelty`, `timeBand`, and
+    `frequency` must come from the [vocabulary](#vocabulary).
+  - A value can't be both liked and disliked, or liked and excluded.
+  - `planDays` needs at least one day. `mealsPerWeek` is between 1 and the
+    number of plan days.
+  - `defaultServings` is `null` or 1–12. `weeknightMaxMinutes` is `null` or
+    5–480.
+  - `quickMaxMinutes` is 5–480, and `mediumMaxMinutes` is greater than it and
+    at most 480.
+  - `maxLongPerWeek` and `minQuickPerWeek` are 0–7; `maxLongPerWeek: 7` means
+    no limit.
+  - `weekdayRules` holds at most one rule per day. Each rule needs at least one
+    cuisine, tag, protein, method, or time band, with at most 10 values per
+    list and a label of at most 40 characters (default: the day's name). Its
+    methods must be in `equipment`.
+- Restrictions are hard: Autopilot never suggests a recipe that violates one.
+  Everything else is a preference.
+
+### Vocabulary
+
+`GET .../autopilot/vocabulary` returns the choices for the onboarding and
+preference screens:
+
+```json
+{
+  "cuisines": [{ "value": "mexican", "label": "Mexican", "recipeCount": 42 }, { "value": "thai", "label": "Thai", "recipeCount": 0 }],
+  "tags": [{ "value": "comfort food", "label": "Comfort Food", "recipeCount": 12 }],
+  "proteins": [{ "value": "chicken", "label": "Chicken", "recipeCount": 120 }, { "value": "tofu", "label": "Tofu & tempeh", "recipeCount": 8 }],
+  "diets": [{ "value": "vegetarian", "label": "Vegetarian", "description": "No meat or fish" }],
+  "allergens": [{ "value": "peanuts", "label": "Peanuts" }],
+  "equipment": [{ "value": "smoker", "label": "Smoker", "description": "Whole or large cuts of chicken, pork, beef, or turkey" }],
+  "novelty": [{ "value": "balanced", "label": "A mix", "description": "Favorites with something new now and then" }],
+  "timeBands": [{ "value": "long", "label": "Long cook OK", "description": "Longer than the medium limit" }],
+  "frequencies": [{ "value": "every_week", "label": "Every week" }, { "value": "at_most_once", "label": "At most once a week" }],
+  "days": [{ "value": "mon", "label": "Monday" }],
+  "catalogRecipeCount": 429,
+  "limits": { "maxListValues": 30, "maxExcludedIngredients": 50, "maxValueLength": 40, "maxIngredientLength": 60, "maxRuleValues": 10, "maxLabelLength": 40, "maxNoteLength": 500, "minCookMinutes": 5, "maxCookMinutes": 480, "maxServings": 12 }
+}
+```
+
+- Cuisines and tags are counted across the household's main meals, most used
+  first, followed by a starter list (`recipeCount: 0`), at most 60 each, so
+  onboarding works before any recipes are imported. Proteins list every
+  protein with its recipe count.
+- Diets, allergens, proteins, equipment, novelty, time bands, frequencies, and
+  days are fixed lists without `recipeCount`.
+
+### Preference history
+
+`GET .../autopilot/profile/history?limit=50` (1–100, default 50) lists
+preference changes, newest first:
+
+```json
+{
+  "items": [
+    { "type": "autopilot.preferences_updated", "userId": "66e5a1f2c3b4a5d6e7f80917", "occurredAt": "2026-09-15T08:10:00Z",
+      "sections": ["cookTime"], "changes": [{ "field": "cookTime.maxLongPerWeek", "from": "2", "to": "1" }] },
+    { "type": "autopilot.week_context_updated", "userId": "66e5a1f2c3b4a5d6e7f80912", "occurredAt": "2026-09-14T19:00:00Z",
+      "week": "2026-W38", "changes": [{ "field": "maxMinutes", "to": "20" }] },
+    { "type": "autopilot.recipe_override_updated", "userId": "66e5a1f2c3b4a5d6e7f80912", "occurredAt": "2026-09-14T18:45:00Z",
+      "recipeId": "66e5a1f2c3b4a5d6e7f80915", "method": "smoker", "value": "yes", "previous": "auto" }
+  ]
+}
+```
+
+List fields report `added` and `removed` values; other fields report `from` and
+`to` as text (omitted when empty). A cleared week context has `cleared: true`.
+Match `userId` against the household's members for names.
+
+### Recipe attributes and overrides
+
+`GET .../autopilot/recipes/{recipeId}/attributes` shows what Autopilot
+derives from a recipe:
+
+```json
+{
+  "recipeId": "66e5a1f2c3b4a5d6e7f80915",
+  "cookMinutes": 90,
+  "timeBand": "long",
+  "cuisines": ["american"],
+  "tags": [],
+  "proteins": ["pork"],
+  "allergens": [],
+  "diets": ["gluten-free", "dairy-free"],
+  "spicy": false,
+  "methods": [
+    { "method": "smoker", "label": "Smoker", "suits": false, "source": "override", "heuristicSuits": true, "evidence": "Pork Tenderloin" },
+    { "method": "grill", "label": "Grill", "suits": false, "source": "heuristic", "heuristicSuits": false }
+  ],
+  "override": { "recipeId": "66e5a1f2c3b4a5d6e7f80915", "methods": { "smoker": false }, "updatedBy": "66e5a1f2c3b4a5d6e7f80912", "updatedAt": "2026-09-14T18:45:00Z" }
+}
+```
+
+- `methods` lists every equipment option. `heuristicSuits` and `evidence` are
+  the heuristic's answer and why; `suits` is what Autopilot uses, and `source`
+  says whether the household overrode it. See
+  [autopilot.md](autopilot.md#recipe-attributes) for the rules (for example,
+  "smoker" means a whole or large cut of chicken, pork, beef, or turkey).
+- `PUT .../autopilot/recipes/{recipeId}/override` `{"methods": {"smoker": true, "grill": null}}`
+  sets "good for smoker" to yes (`true`) or no (`false`), or back to automatic
+  (`null`). Methods you leave out don't change. Returns the attributes.
+- `GET .../autopilot/recipe-overrides` lists every override:
+  `{"items": [{recipeId, methods, updatedBy, updatedAt}]}`.
+- `cookMinutes` is `null` when unknown; an unknown cook time is treated as
+  medium, and never passes a week's `maxMinutes`.
+
+### Week context
+
+`GET .../autopilot/weeks/{week}/context`
+
+```json
+{
+  "householdId": "66e5a1f2c3b4a5d6e7f80913",
+  "week": "2026-W38",
+  "startDate": "2026-09-14",
+  "endDate": "2026-09-20",
+  "configured": true,
+  "skip": false,
+  "busy": true,
+  "mealsPerWeek": null,
+  "maxMinutes": 20,
+  "servings": null,
+  "days": [
+    { "day": "fri", "skip": false, "maxMinutes": null, "servings": 6 },
+    { "day": "sat", "skip": true, "maxMinutes": null, "servings": null }
+  ],
+  "note": "Grandparents visiting Friday",
+  "updatedBy": "66e5a1f2c3b4a5d6e7f80912",
+  "updatedAt": "2026-09-14T19:00:00Z"
+}
+```
+
+- `PUT` replaces the week's context with `{skip, busy, mealsPerWeek, maxMinutes, servings, days, note}`
+  (all optional). `DELETE` clears it (`204`, also when there was none). A week
+  without a context returns `configured: false` and `null` timestamps.
+- `skip`: plan nothing this week. `days[].skip`: don't plan that day.
+- `maxMinutes` (5–480) is a hard cap for every day; `days[].maxMinutes` is a
+  hard cap for one day (the tighter applies). Recipes with an unknown cook time
+  don't pass a cap.
+- `busy` is softer: no long meals and at least half quick ones, without a
+  cap.
+- `servings` (1–12) overrides the household's servings for the week, and
+  `days[].servings` for one day (guests). Autopilot picks the smallest serving
+  size a recipe offers that feeds that many.
+- `mealsPerWeek` (1–7) overrides the profile's count for this week, for example
+  for extra meals.
+- `note` (at most 500 characters) is kept for the household; Autopilot doesn't
+  read it yet.
+- Numbers are `null` or positive: `0` is `400 validation_failed`. Day overrides
+  with nothing set are dropped.
+
+### Proposals
+
+`POST .../autopilot/weeks/{week}/generate` (body optional:
+`{"avoidPrevious": false}`) generates a proposal and returns `201`. `GET
+.../autopilot/weeks/{week}/proposal` returns the latest one (`404` when there
+is none).
+
+```json
+{
+  "id": "66e5a1f2c3b4a5d6e7f80e01",
+  "householdId": "66e5a1f2c3b4a5d6e7f80913",
+  "week": "2026-W38",
+  "startDate": "2026-09-14",
+  "endDate": "2026-09-20",
+  "status": "proposed",
+  "version": 2,
+  "attempt": 1,
+  "modelVersion": "baseline-2026.1",
+  "inputsHash": "9f2c4b1d0a7e6c35",
+  "requestedMeals": 5,
+  "plannedMeals": 3,
+  "candidateCount": 3,
+  "coldStart": false,
+  "slots": [
+    {
+      "id": "tue",
+      "day": "tue",
+      "date": "2026-09-15",
+      "recipe": { "id": "66e5a1f2c3b4a5d6e7f80915", "name": "Beef Tacos", "imageUrl": "https://img.example.com/beef-tacos.jpg" },
+      "servings": 2,
+      "cookMinutes": 18,
+      "timeBand": "quick",
+      "score": 1.042,
+      "signals": { "rating": 1, "feedback": 0.6, "familiarity": 0.5, "conversion": 0.6, "recency": 0, "weekdayAffinity": 0.5,
+                    "taste": 0.4, "rule": 1, "timeFit": 0.55, "novelty": 0, "servingsFit": 0, "pantry": 0, "avoid": 0, "variety": -0.15 },
+      "reasons": [
+        { "code": "rule", "text": "Taco Tuesday · Mexican" },
+        { "code": "busyWeek", "text": "Quick for your busy week (18 min)" },
+        { "code": "rating", "text": "You rated this 5★" }
+      ],
+      "swapCount": 1
+    }
+  ],
+  "unfilled": [
+    { "day": "thu", "date": "2026-09-17", "code": "no_quick_candidates", "text": "No remaining recipe is ready within 20 minutes on Thursday." }
+  ],
+  "messages": [
+    { "code": "not_enough_candidates", "text": "Only 3 quick recipes (≤20 min) match; planned 3 of 5 nights." }
+  ],
+  "objective": { "meals": 2.91, "variety": -0.15, "cookTime": 0, "rules": 0, "novelty": 0, "total": 2.76 },
+  "swapCount": 1,
+  "excludedSlotIds": [],
+  "generatedBy": "66e5a1f2c3b4a5d6e7f80912",
+  "generatedAt": "2026-09-14T19:02:00Z",
+  "updatedAt": "2026-09-14T19:03:10Z",
+  "decidedBy": null,
+  "decidedAt": null
+}
+```
+
+- **One proposal per week.** Generating again replaces it with a new `id` and
+  `attempt`. A pending proposal is recorded as rejected, and its meals are
+  avoided where alternatives exist (`avoidPrevious: false` turns that off).
+  The same inputs always produce the same week.
+- **The plan comes first.** Days that already have an entry aren't planned,
+  and those meals count toward `requestedMeals`. A finalized week can't be
+  generated (`409 plan_finalized`).
+- **Slots** are ordered by day, and a slot's `id` is its day. `reasons` (at
+  most 3, most important first) are for display: join the texts with " · ".
+  `signals` and `objective` are the numbers behind them, for debugging and
+  "why?" screens.
+- **Shortfalls are explained.** `messages` covers `week_skipped`,
+  `empty_catalog`, `week_full`, `not_enough_candidates`, `not_enough_days`,
+  `already_planned`, and `cold_start`. Days that couldn't be filled are in
+  `unfilled`. A skipped week returns `201` with no slots.
+- **Swap.** `POST .../proposal/slots/{slotId}/swap` `{"version": 2}` replaces
+  that day's meal with the next best one that fits the same constraints and the
+  rest of the week. A meal swapped out isn't offered for that day again. It
+  returns the proposal with `version` increased; `409 no_alternative` when
+  nothing else fits.
+- **Accept.** `POST .../proposal/accept` `{"version": 3, "excludeSlotIds": ["thu"]}`
+  adds the other meals to the draft plan in one change and returns
+  `{proposal, plan, added, skipped}`. `added` are the new plan entries
+  (`origin: autopilot`). `skipped` lists meals that weren't added because the
+  day now has an entry (`dayTaken`) or the recipe is already in the week
+  (`alreadyPlanned`). Existing entries are never replaced. `409
+  nothing_to_accept` when every meal is excluded or skipped.
+- **Reject.** `POST .../proposal/reject` `{"version": 3}` dismisses the
+  proposal (`status: rejected`).
+- **Versions.** Swap, accept, and reject need the proposal's current
+  `version`. When another member changed the proposal first, the response is
+  `409 proposal_changed`: reload the proposal and try again.
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `validation_failed` | Invalid week, profile, context, override, limit, or `excludeSlotIds`; missing `version` |
+| 400 | `invalid_request` | Malformed body, unknown fields, or wrong types |
+| 403 | `forbidden` | Changing anything without `plan.edit` |
+| 404 | `not_found` | Not a member; no proposal for the week; no slot on that day; recipe not in the household |
+| 409 | `plan_finalized` | The week's plan is finalized; set it back to `draft` first |
+| 409 | `plan_full` | Accepting would exceed 50 entries |
+| 409 | `proposal_changed` | The `version` is stale, or another member generated the week at the same time |
+| 409 | `proposal_not_pending` | The proposal was already accepted or rejected |
+| 409 | `no_alternative` | No other recipe fits the slot |
+| 409 | `nothing_to_accept` | Every meal is excluded, or its day or recipe is already planned |
+| 409 | `proposal_stale` | A proposed recipe was removed or lost its serving size; generate again |
+| 409 | `conflict` | The profile or context kept changing concurrently; retry |
+
+### Contract notes for the app
+
+- **Onboarding modal.**
+  1. Load `GET .../vocabulary` and `GET .../profile` in parallel, and show
+     onboarding while `configured` is `false`.
+  2. Steps map to sections:
+     - cuisines, food types, and proteins liked or disliked → `taste`;
+     - allergens, diets, excluded ingredients, cuisines, and proteins, plus
+       "no spicy" → `restrictions`;
+     - plan days, meals per week, servings (`null` = household default),
+       weeknights, and weeknight time limit → `schedule`;
+     - time bands, max long meals, and back-to-back long meals → `cookTime`;
+     - favorites vs. new → `novelty`;
+     - equipment, then weekday rules such as "Taco Tuesday" or "Sunday smoker
+       night" → `equipment` and `weekdayRules`.
+  3. Offer free-text cuisines and tags as chips from the vocabulary, allowing
+     custom values. Enforce `limits` locally.
+  4. Finish with one `PUT .../profile` containing every section, then offer to
+     plan this week (`POST .../generate`). A `400 validation_failed` message is
+     safe to show next to the form.
+- **Preference screens.** Use one screen per section, saved with `PATCH
+  .../profile` containing only that section, and always send the whole section
+  object. Show "Changed by {member} {relative time}" from
+  `sections.<name>`, resolving `userId` through the household's members. A
+  history screen reads `GET .../profile/history`. A per-recipe "Good for
+  smoker" control reads `GET .../recipes/{id}/attributes`: show
+  `heuristicSuits` and `evidence` as the automatic answer, and write it with
+  `PUT .../recipes/{id}/override` (`null` returns it to automatic).
+- **Week-context sheet.**
+  1. From the week screen, `GET .../weeks/{week}/context` and edit it as a
+     whole: skip week; busy toggle; strict time cap; servings for the week;
+     per-day skip, cap, and servings; a note.
+  2. Save with `PUT` and clear with `DELETE`.
+  3. After saving, offer "Regenerate" when a proposal exists.
+- **Generate, swap, and accept.**
+  1. "Plan my week" calls `POST .../generate` (`201`). Show the proposal
+     separately from the plan, not as plan entries.
+  2. Show each slot's day, date, recipe, `cookMinutes`, and reasons joined with
+     " · ".
+  3. Show `messages` as a banner, and `unfilled` days as empty rows with their
+     `text`.
+  4. Keep the proposal's `version`. Every swap, accept, or reject sends it, and
+     every successful response returns the new proposal (and `version`) to
+     display. On `409 proposal_changed`, reload the proposal. On
+     `409 no_alternative`, show the message and keep the meal.
+  5. "Accept" sends the slots the member switched off as `excludeSlotIds`.
+     Then show the returned `plan` (entries with `origin: autopilot` can carry
+     an Autopilot badge) and mention `skipped` meals.
+  6. "Regenerate" calls generate again; "Dismiss" calls reject.
+  7. On `409 plan_finalized`, explain that the week is finalized and offer to
+     reopen it (`PUT .../plans/{week}/status` `{"status": "draft"}`).
+- **Events.** The server records generation, swaps, acceptance, rejection, and
+  preference changes itself. Keep sending `recipe.cooked` and
+  `recipe.skipped` with the plan entry's `entryId`: that is how Autopilot learns
+  which accepted meals were actually cooked.
+
 ## Events
 
 DinnerOS keeps an append-only history of household behavior for the
@@ -1060,8 +1470,16 @@ can observe.
 | `grocery.item_checked` | app | — | `{ingredientId?, name?, checked}` (`ingredientId` or `name` required) |
 | `recipe.rated` | server (ratings) | required | `{score, previousScore?, tags?}` (comments are never copied) |
 | `recipe.unrated` | server (ratings) | required | `{previousScore}` |
-| `recipe.planned` | server (planning) | required | `{entryId?, day?, date?, servings?, origin?}` |
-| `recipe.unplanned` | server (planning) | required | `{entryId?, day?, date?}` |
+| `recipe.planned` | server (planning) | required | `{entryId?, day?, date?, servings?, origin?, proposalId?}` |
+| `recipe.unplanned` | server (planning) | required | `{entryId?, day?, date?, origin?}` |
+| `week.generated` | server (Autopilot) | — | `{proposalId, modelVersion, attempt, requested, planned, unfilled, candidates, coldStart?, replacedProposalId?}` |
+| `meal.swapped` | server (Autopilot) | required (swapped in) | `{proposalId, slotId, day, date?, previousRecipeId, modelVersion, swapNumber}` |
+| `week.accepted` | server (Autopilot) | — | `{proposalId, modelVersion, planned, added, excluded, skipped, swaps}` |
+| `meal.rejected` | server (Autopilot) | required | `{proposalId, slotId, day, date?, modelVersion}` (left out when accepting) |
+| `week.rejected` | server (Autopilot) | — | `{proposalId, modelVersion, planned, swaps, reason}`: `dismissed`, `regenerated` |
+| `autopilot.preferences_updated` | server (Autopilot) | — | `{sections, changes?: [{field, added?, removed?, from?, to?}]}` |
+| `autopilot.week_context_updated` | server (Autopilot) | — | `{changes?, cleared?}` |
+| `autopilot.recipe_override_updated` | server (Autopilot) | required | `{method, value, previous?}`: `yes`, `no`, `auto` |
 | `import.completed` | server (recipe import) | — | `{source, created, updated, unchanged, rejected}` |
 
 `date` is `YYYY-MM-DD`, `day` is `mon`–`sun`, and `servings` is 1–12.
