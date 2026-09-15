@@ -61,7 +61,8 @@ api/
 │   ├── platform/        domain-free infrastructure that domain packages may import
 │   │   ├── httpx/       JSON responses, error envelope, strict request decoding
 │   │   ├── logging/     slog construction; adds request ID from context
-│   │   ├── mongodb/     client lifecycle, IndexSet management, error translation
+│   │   ├── mongodb/     client lifecycle, IndexSet management, error translation (mongotest/: test DB helper)
+│   │   ├── ratelimit/   per-client-IP token-bucket middleware
 │   │   └── requestid/   request correlation ID in context
 │   ├── auth/            provider token verification, DinnerOS sessions
 │   ├── users/           User, AuthIdentity
@@ -106,7 +107,7 @@ Dependency rules:
 
 | Interface | Implementations | Phase |
 | --- | --- | --- |
-| `AuthProvider` | Apple, Google | 2 |
+| `AuthProvider` (`auth.IdentityVerifier`) | Apple, Google ✅ | 2 |
 | `EmailProvider` | Resend, log-only (local/test) | 3 |
 | `RecipeSourceImporter` | HelloFresh; later manual/import/partner | 5 |
 | `GroceryProvider` | Manual; Instacart and Walmart via official APIs only | 8 |
@@ -126,8 +127,12 @@ Dependency rules:
   listening. If that fails, it exits (fail fast). On SIGTERM it drains in-flight
   requests for up to 25 seconds.
 - **Errors:** every non-2xx response uses `{"error": {"code", "message"}}`.
-- **Limits:** request body size (`HTTP_MAX_BODY_BYTES`), server timeouts, and rate
-  limiting on auth and invitation endpoints.
+- **Limits:** request body size (`HTTP_MAX_BODY_BYTES`), server timeouts, and
+  per-IP rate limiting on auth endpoints (invitation endpoints will use the same
+  limiter).
+- **Authentication:** domain handlers mount under `/api/v1` through
+  `httpapi.Options.APIRoutes` and wrap protected routes in `auth.RequireAuth`,
+  which puts the user ID in the request context (`auth.UserIDFromContext`).
 - **Versioning:** product routes live under `/api/v1`. Operational routes
   (`/health`, `/ready`) are unversioned.
 
@@ -186,3 +191,9 @@ a versioned Autopilot API. See [autopilot.md](autopilot.md).
 | 12 | Shared HTTP/Mongo helpers live in `internal/platform/*` | Domain handlers need response conventions without importing the router package, which would create an import cycle |
 | 13 | Heroku container deploy (`heroku.yml` + `api/Dockerfile`) | The same image is built in CI and locally, with no third-party monorepo buildpack. The runtime is non-root Alpine rather than distroless because Heroku launches `CMD` via `/bin/sh -c`; CI checks this. |
 | 14 | No CORS middleware | The only client is the native iOS app, which doesn't need CORS. Add it when a browser client exists. |
+| 15 | `github.com/golang-jwt/jwt/v5` for JWTs; JWKS fetching written in-house (`internal/auth/jwks.go`) | jwt/v5 is the de facto Go JWT library and supports a strict algorithm allowlist (`RS256` for providers, `HS256` for our tokens), which blocks algorithm-confusion attacks. We only need RSA keys from two fixed URLs, so a ~150-line client is simpler to audit than a JOSE suite (`lestrrat-go/jwx`) or `keyfunc`. It adds a 1h cache, refetches on unknown `kid` at most once a minute, and serves stale keys during a provider outage. |
+| 16 | Opaque refresh tokens with rotation and family-wide reuse detection, no grace window | Only the SHA-256 hash is stored. Replaying a rotated or revoked token revokes the whole sign-in. Two concurrent refreshes with the same token count as reuse, so the iOS client must serialize refreshes. We'd rather force a sign-in than ignore a possible token theft. |
+| 17 | Logout revokes the whole token family, not just one session | A family has only one live session, so normal logout behaves the same. But a stale client logging out with an older token still ends the sign-in instead of leaving the newer session alive. |
+| 18 | In-memory per-IP token-bucket rate limit on `/auth/*` (`internal/platform/ratelimit`, `golang.org/x/time/rate` v0.12.0) | One dyno today, so no shared store is needed. The client IP is the *last* `X-Forwarded-For` entry, which Heroku's router appends and clients can't forge. Each dyno limits separately; move to a shared store if we scale out. x/time is pinned below v0.13 because newer releases require Go 1.26. |
+| 19 | `POST /api/v1/auth/dev` gated by `APP_ENV=development` **and** `AUTH_DEV_LOGIN_ENABLED=true` | Simulator and integration testing need sessions without Apple or Google. Config validation refuses to start production with the flag set, and the route isn't mounted otherwise. |
+| 20 | `IdentityVerifier` returns `users.VerifiedIdentity`; `auth` depends on `users`, not the reverse | This is the `AuthProvider` seam. `GET /me` lives in the auth handler because it needs the auth context, and putting it in `users` would create an import cycle. |

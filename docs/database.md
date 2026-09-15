@@ -29,11 +29,24 @@ indexes, in the phase that implements it. Update this page as that happens.
 
 ### Identity
 
+Implemented in Phase 2 (`internal/users`, `internal/auth`).
+
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `users` | displayName, primaryEmail, createdAt | — |
-| `auth_identities` | userId, provider (`apple`/`google`), subject, email, emailVerified | **unique** `{provider, subject}`; `{userId}` |
-| `sessions` | userId, refreshTokenHash, familyId, expiresAt, revokedAt | **unique** `{refreshTokenHash}`; `{userId}`; TTL on `expiresAt` |
+| `users` | displayName, primaryEmail (verified only), createdAt, updatedAt | — (looked up by `_id` only) |
+| `auth_identities` | userId, provider (`apple`/`google`/`dev`), subject, email, emailVerified, createdAt, lastUsedAt | **unique** `{provider, subject}`; `{userId}` |
+| `sessions` | userId, familyId, tokenHash, expiresAt, createdAt, lastUsedAt, rotatedAt, revokedAt | **unique** `{tokenHash}`; `{userId}`; `{familyId}`; TTL on `expiresAt` (`expireAfterSeconds: 0`) |
+
+- `auth_identities.email` is stored only when the provider verified it.
+- `sessions` holds one document per refresh token. `tokenHash` is the hex
+  SHA-256 of the token; the token itself is never stored. Rotated sessions stay
+  until their original `expiresAt` so reuse can be detected, then MongoDB's TTL
+  monitor deletes them (within about a minute). `{familyId}` supports revoking
+  a whole sign-in at once.
+- User and identity creation doesn't use a transaction, so it also works on a
+  standalone local MongoDB. The unique `{provider, subject}` index is the guard:
+  the loser of a concurrent first sign-in deletes its orphaned user and signs
+  in to the winner's account.
 
 ### Households
 

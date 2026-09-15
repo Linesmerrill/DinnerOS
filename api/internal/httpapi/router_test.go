@@ -106,6 +106,30 @@ func TestReady(t *testing.T) {
 	})
 }
 
+func TestAPIRoutesMountedUnderV1WithMiddleware(t *testing.T) {
+	srv := newTestServer(t, Options{APIRoutes: func(r chi.Router) {
+		r.Get("/widgets/{id}", func(w http.ResponseWriter, r *http.Request) {
+			httpx.WriteJSON(w, http.StatusOK, map[string]string{"id": chi.URLParam(r, "id")})
+		})
+	}})
+
+	rec := srv.do(httptest.NewRequest(http.MethodGet, "/api/v1/widgets/42", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"42"`) {
+		t.Fatalf("status = %d body = %s, want 200 with id", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get(RequestIDHeader) == "" {
+		t.Error("global middleware not applied to API routes (missing request ID)")
+	}
+	if !strings.Contains(srv.logs.String(), `"route":"/api/v1/widgets/{id}"`) {
+		t.Errorf("request log missing full route pattern: %s", srv.logs.String())
+	}
+
+	notFound := srv.do(httptest.NewRequest(http.MethodGet, "/api/v1/nope", nil))
+	if notFound.Code != http.StatusNotFound || decode[httpx.ErrorResponse](t, notFound).Error.Code != "not_found" {
+		t.Errorf("unknown API route status = %d, want JSON 404", notFound.Code)
+	}
+}
+
 func TestUnknownRoutesReturnJSONErrors(t *testing.T) {
 	tests := []struct {
 		name, method, path string

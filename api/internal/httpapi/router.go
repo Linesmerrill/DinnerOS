@@ -31,6 +31,11 @@ type Options struct {
 	Version         string
 	MaxBodyBytes    int64
 	ReadinessChecks []ReadinessCheck
+	// APIRoutes mounts domain handlers on the /api/v1 router. The global
+	// middleware stack (request ID, logging, recovery, body limit) already
+	// applies; route-specific middleware (auth, rate limits) is added by the
+	// domain handlers themselves.
+	APIRoutes func(chi.Router)
 }
 
 // HealthResponse is returned by GET /health.
@@ -85,8 +90,10 @@ func newMux(opts Options) *chi.Mux {
 	// Readiness: dependencies are reachable.
 	r.Get("/ready", readyHandler(logger, opts.ReadinessChecks))
 
-	r.Route("/api/v1", func(chi.Router) {
-		// Domain routes are mounted here as each phase lands.
+	r.Route("/api/v1", func(api chi.Router) {
+		if opts.APIRoutes != nil {
+			opts.APIRoutes(api)
+		}
 	})
 
 	return r
