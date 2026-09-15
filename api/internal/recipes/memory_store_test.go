@@ -183,6 +183,29 @@ func (m *memoryStore) ExistingRecipeIDs(_ context.Context, householdID string, i
 	return out, nil
 }
 
+func (m *memoryStore) FindIngredientUse(_ context.Context, householdID string, ingredientIDs []string) ([]IngredientUse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []IngredientUse
+	for _, r := range m.recipes {
+		if r.HouseholdID != householdID {
+			continue
+		}
+		use := IngredientUse{RecipeID: r.ID}
+		for _, line := range r.Ingredients {
+			if slices.Contains(ingredientIDs, line.IngredientID) && !slices.Contains(use.IngredientIDs, line.IngredientID) {
+				use.IngredientIDs = append(use.IngredientIDs, line.IngredientID)
+			}
+		}
+		if len(use.IngredientIDs) > 0 {
+			slices.Sort(use.IngredientIDs)
+			out = append(out, use)
+		}
+	}
+	slices.SortFunc(out, func(a, b IngredientUse) int { return cmp.Compare(a.RecipeID, b.RecipeID) })
+	return out, nil
+}
+
 func (m *memoryStore) ListRecipes(_ context.Context, householdID string, f ListFilter) ([]RecipeSummary, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
