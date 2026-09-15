@@ -165,6 +165,9 @@ func (s *Service) ApplyCooked(ctx context.Context, m CookedMeal) (usage CookUsag
 	if err != nil {
 		return CookUsage{}, false, fmt.Errorf("load cooked recipe: %w", err)
 	}
+	if recipe, err = s.adjustCooked(ctx, m, recipe); err != nil {
+		return CookUsage{}, false, err
+	}
 	needs, scaledFrom := recipeNeeds(recipe, m.Servings)
 	lines, err := s.matchNeeds(ctx, m, needs)
 	if err != nil || len(lines) == 0 {

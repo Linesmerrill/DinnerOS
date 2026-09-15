@@ -260,6 +260,12 @@ func (m *memoryStore) UpdateEntry(_ context.Context, householdID string, w Week,
 		if c.Note != nil {
 			p.Entries[i].Note = *c.Note
 		}
+		if c.Customizations != nil {
+			p.Entries[i].Customizations = slices.Clone(*c.Customizations)
+			if len(p.Entries[i].Customizations) == 0 {
+				p.Entries[i].Customizations = nil
+			}
+		}
 	})
 }
 

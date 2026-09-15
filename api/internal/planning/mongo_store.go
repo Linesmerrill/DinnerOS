@@ -67,6 +67,30 @@ type entryDoc struct {
 	// Origin is stored only for autopilot entries; absent means manual.
 	Origin     string `bson:"origin,omitempty"`
 	ProposalID string `bson:"proposalId,omitempty"`
+	// Customizations is absent when the meal isn't customized.
+	Customizations []customizationDoc `bson:"customizations,omitempty"`
+}
+
+type customizationDoc struct {
+	IngredientKey string `bson:"ingredientKey"`
+	ChoiceID      string `bson:"choiceId"`
+	Label         string `bson:"label"`
+}
+
+func customizationDocs(list []Customization) []customizationDoc {
+	out := make([]customizationDoc, 0, len(list))
+	for _, c := range list {
+		out = append(out, customizationDoc(c))
+	}
+	return out
+}
+
+func customizationsOf(docs []customizationDoc) []Customization {
+	var out []Customization
+	for _, d := range docs {
+		out = append(out, Customization(d))
+	}
+	return out
 }
 
 type summaryDoc struct {
@@ -93,7 +117,7 @@ func (d planDoc) toPlan() (Plan, error) {
 		p.Entries = append(p.Entries, Entry{
 			ID: e.ID.Hex(), RecipeID: e.RecipeID.Hex(), RecipeName: e.RecipeName, RecipeImageURL: e.RecipeImageURL,
 			Day: Day(e.Day), Servings: e.Servings, Note: e.Note, AddedBy: e.AddedBy.Hex(), AddedAt: e.AddedAt.UTC(),
-			Origin: origin, ProposalID: e.ProposalID,
+			Origin: origin, ProposalID: e.ProposalID, Customizations: customizationsOf(e.Customizations),
 		})
 	}
 	return p, nil
@@ -295,6 +319,9 @@ func (s *MongoStore) UpdateEntry(ctx context.Context, householdID string, w Week
 	}
 	if c.Note != nil {
 		setOrUnset("note", *c.Note, *c.Note == "")
+	}
+	if c.Customizations != nil {
+		setOrUnset("customizations", customizationDocs(*c.Customizations), len(*c.Customizations) == 0)
 	}
 	update := bson.D{{Key: "$set", Value: set}}
 	if len(unset) > 0 {
