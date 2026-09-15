@@ -353,7 +353,7 @@ func (h *Handler) updateEntry(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) deleteEntry(w http.ResponseWriter, r *http.Request) {
 	actor, _ := households.MembershipFromContext(r.Context())
-	if _, err := h.opts.Service.DeleteEntry(r.Context(), actor.HouseholdID, chi.URLParam(r, "week"), chi.URLParam(r, "entryId")); err != nil {
+	if _, err := h.opts.Service.DeleteEntry(r.Context(), actor.HouseholdID, actor.UserID, chi.URLParam(r, "week"), chi.URLParam(r, "entryId")); err != nil {
 		h.writeError(w, r, "delete plan entry failed", err)
 		return
 	}

@@ -138,7 +138,7 @@ func run() error {
 	// and the pantry decides grocery list statuses.
 	pantryService := pantry.NewService(pantry.NewMongoStore(db.Database()), recipeService)
 	planHandler := planning.NewHandler(planning.HandlerOptions{
-		Service:    planning.NewService(planning.NewMongoStore(db.Database()), recipeService).WithPantry(pantryService),
+		Service:    planning.NewService(planning.NewMongoStore(db.Database()), recipeService).WithPantry(pantryService).WithEvents(behavior.events, logger),
 		Authorizer: householdService,
 		Tokens:     tokens,
 		Logger:     logger,

@@ -164,7 +164,7 @@ in two collections ([database.md](database.md#behavior)):
 | Household rating | `recipe_ratings.score`; `recipe.rated` / `recipe.unrated` events with the previous score | API (ratings) | ✅ |
 | Would make again, kid appeal, dislikes | Rating tags: `make-again`, `never-again`, `kid-favorite`, `kids-disliked`, `too-spicy`, `too-bland`, `too-much-work`, `great-leftovers` | API (ratings) | ✅ |
 | Historical preference, recency, repetition | `recipes.orderWeeks` / `timesOrdered` / `lastOrderedWeek`; `import.completed` marks each refresh | API (import) | ✅ |
-| Planned meals, weekday affinity | `recipe.planned` / `recipe.unplanned` with `entryId`, `day`, `date`, `servings`, `origin` (`manual`/`autopilot`) | API (planning) | Payloads defined; planner wiring pending |
+| Planned meals, weekday affinity | `recipe.planned` / `recipe.unplanned` with `entryId`, `day`, `date`, `servings`, `origin` (`manual`/`autopilot`) | API (planning) | ✅ |
 | Conversion (planned → cooked), skip rate | `recipe.cooked` / `recipe.skipped` (`entryId` links to the plan entry; `reason` for skips) | App, via `POST /events` | Endpoint ready; app adoption pending |
 | Interest | `recipe.viewed` with `surface` | App | Endpoint ready; app adoption pending |
 | Shopping behavior | `grocery.item_checked` | App | Endpoint ready; app adoption pending |
@@ -196,7 +196,7 @@ average rating, repeat satisfaction, novelty acceptance, and meal skip rate.
 
 These are computed from the `events` collection. Phase 9 records meal-level
 events from day one: `recipe.rated`, `recipe.cooked`, and `recipe.skipped`, plus
-`recipe.planned` and `recipe.unplanned` once the planner records them. That
+`recipe.planned` and `recipe.unplanned` from the planner. That
 makes planned → cooked conversion, skip rate, and average rating measurable
 before any recommendations exist. Week-level events (`week.generated`,
 `week.accepted`, `week.modified`, `meal.swapped`) are added in Phase 10 with
