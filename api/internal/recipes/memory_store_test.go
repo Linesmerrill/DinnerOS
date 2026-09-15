@@ -85,6 +85,23 @@ func (m *memoryStore) UpsertIngredients(_ context.Context, list []Ingredient) (i
 	return inserted, nil
 }
 
+func (m *memoryStore) SearchIngredients(_ context.Context, keyPattern string, limit int) ([]Ingredient, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	re := regexp.MustCompile(keyPattern)
+	var out []Ingredient
+	for _, ing := range m.ingredients {
+		if re.MatchString(ing.Key) {
+			out = append(out, cloneIngredient(ing))
+		}
+	}
+	slices.SortFunc(out, func(a, b Ingredient) int { return cmp.Compare(a.Key, b.Key) })
+	if len(out) > limit {
+		out = out[:max(limit, 0)]
+	}
+	return out, nil
+}
+
 func (m *memoryStore) FindRecipesBySourceIDs(_ context.Context, householdID, source string, ids []string) ([]Recipe, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -294,7 +294,19 @@ func (s *MongoStore) FindIngredients(ctx context.Context, refs []SourceRef, keys
 	if len(or) == 0 {
 		return nil, nil
 	}
-	return s.findIngredients(ctx, bson.D{{Key: "$or", Value: or}})
+	return s.findIngredients(ctx, bson.D{{Key: "$or", Value: or}}, options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
+}
+
+// SearchIngredients implements Store. An anchored pattern ("^oli") is bounded
+// by the unique key index; others scan the index keys, which is fine at
+// catalog size.
+func (s *MongoStore) SearchIngredients(ctx context.Context, keyPattern string, limit int) ([]Ingredient, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	return s.findIngredients(ctx,
+		bson.D{{Key: "key", Value: bson.Regex{Pattern: keyPattern}}},
+		options.Find().SetSort(bson.D{{Key: "key", Value: 1}}).SetLimit(int64(limit)))
 }
 
 // GetIngredients implements Store.
@@ -308,11 +320,11 @@ func (s *MongoStore) GetIngredients(ctx context.Context, ids []string) ([]Ingred
 	if len(oids) == 0 {
 		return nil, nil
 	}
-	return s.findIngredients(ctx, bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: oids}}}})
+	return s.findIngredients(ctx, bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: oids}}}}, options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
 }
 
-func (s *MongoStore) findIngredients(ctx context.Context, filter bson.D) ([]Ingredient, error) {
-	cur, err := s.ingredients.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
+func (s *MongoStore) findIngredients(ctx context.Context, filter bson.D, opts *options.FindOptionsBuilder) ([]Ingredient, error) {
+	cur, err := s.ingredients.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, translate(err)
 	}
