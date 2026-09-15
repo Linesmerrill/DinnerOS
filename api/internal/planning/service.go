@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 )
@@ -45,6 +47,9 @@ type Service struct {
 	recipes RecipeReader
 	// pantry is optional; without it grocery lists use an empty pantry.
 	pantry PantrySource
+	// events is optional; without it entry changes record nothing.
+	events events.Recorder
+	logger *slog.Logger
 	now    func() time.Time
 }
 
@@ -57,6 +62,15 @@ func NewService(store Store, recipeReader RecipeReader) *Service {
 // returns s.
 func (s *Service) WithPantry(source PantrySource) *Service {
 	s.pantry = source
+	return s
+}
+
+// WithEvents makes AddEntry and DeleteEntry record recipe.planned and
+// recipe.unplanned through recorder, and returns s. Recording is best effort
+// (events.RecordOrLog): a failure is logged to logger (slog.Default when nil)
+// and never fails the change.
+func (s *Service) WithEvents(recorder events.Recorder, logger *slog.Logger) *Service {
+	s.events, s.logger = recorder, logger
 	return s
 }
 
@@ -173,6 +187,13 @@ func (s *Service) AddEntry(ctx context.Context, householdID, userID, week string
 	if !ok {
 		return Plan{}, Entry{}, fmt.Errorf("planning: added entry %s missing from plan", id)
 	}
+	events.RecordOrLog(ctx, s.events, s.logger, events.Event{
+		HouseholdID: householdID, UserID: userID, Type: events.TypeRecipePlanned, RecipeID: added.RecipeID,
+		Week: w.String(), OccurredAt: now,
+		Payload: events.RecipePlanned{
+			EntryID: added.ID, Day: string(added.Day), Date: entryDate(w, added.Day), Servings: added.Servings, Origin: "manual",
+		},
+	})
 	return p, added, nil
 }
 
@@ -225,13 +246,49 @@ func (s *Service) UpdateEntry(ctx context.Context, householdID, week, entryID st
 	return s.store.UpdateEntry(ctx, householdID, w, entryID, c, s.now().UTC())
 }
 
-// DeleteEntry removes an entry from the week.
-func (s *Service) DeleteEntry(ctx context.Context, householdID, week, entryID string) (Plan, error) {
+// DeleteEntry removes an entry from the week. userID is the member removing
+// it, recorded on the recipe.unplanned event.
+func (s *Service) DeleteEntry(ctx context.Context, householdID, userID, week, entryID string) (Plan, error) {
 	w, err := s.parse(householdID, week)
 	if err != nil {
 		return Plan{}, err
 	}
-	return s.store.DeleteEntry(ctx, householdID, w, entryID, s.now().UTC())
+	if userID == "" {
+		return Plan{}, errors.New("planning: user id is required")
+	}
+	// The event describes the removed entry, which the delete doesn't return,
+	// so read it first, but only when something records events. The read and
+	// the delete aren't atomic: a concurrent edit can leave the event's day
+	// stale, which is acceptable for behavioral history.
+	var removed Entry
+	var found bool
+	if s.events != nil {
+		if current, err := s.store.GetPlan(ctx, householdID, w); err == nil {
+			removed, found = current.entry(entryID)
+		}
+	}
+	now := s.now().UTC()
+	p, err := s.store.DeleteEntry(ctx, householdID, w, entryID, now)
+	if err != nil {
+		return Plan{}, err
+	}
+	if found {
+		events.RecordOrLog(ctx, s.events, s.logger, events.Event{
+			HouseholdID: householdID, UserID: userID, Type: events.TypeRecipeUnplanned, RecipeID: removed.RecipeID,
+			Week: w.String(), OccurredAt: now,
+			Payload: events.RecipeUnplanned{EntryID: removed.ID, Day: string(removed.Day), Date: entryDate(w, removed.Day)},
+		})
+	}
+	return p, nil
+}
+
+// entryDate is the YYYY-MM-DD of an entry's day in week w, or "" when the
+// entry isn't scheduled.
+func entryDate(w Week, d Day) string {
+	if d == "" {
+		return ""
+	}
+	return w.Date(d)
 }
 
 // SetStatus finalizes a week or returns it to draft.

@@ -146,21 +146,21 @@ func TestIntegrationPlanLifecycle(t *testing.T) {
 	if _, err := store.UpdateEntry(ctx, hhAda, mustWeek(t, testWeek), soup.ID, EntryChanges{Note: ptr("x")}, testNow); !errors.Is(err, ErrFinalized) {
 		t.Errorf("UpdateEntry(finalized) error = %v, want ErrFinalized", err)
 	}
-	if _, err := svc.DeleteEntry(ctx, hhAda, testWeek, soup.ID); !errors.Is(err, ErrFinalized) {
+	if _, err := svc.DeleteEntry(ctx, hhAda, userAda, testWeek, soup.ID); !errors.Is(err, ErrFinalized) {
 		t.Errorf("DeleteEntry(finalized) error = %v, want ErrFinalized", err)
 	}
-	if _, err := svc.DeleteEntry(ctx, hhAda, testWeek, "ffffffffffffffffffffffff"); !errors.Is(err, ErrNotFound) {
+	if _, err := svc.DeleteEntry(ctx, hhAda, userAda, testWeek, "ffffffffffffffffffffffff"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("DeleteEntry(finalized, unknown) error = %v, want ErrNotFound", err)
 	}
 	if _, err := svc.SetStatus(ctx, hhAda, testWeek, "draft"); err != nil {
 		t.Fatal(err)
 	}
 
-	if p, err = svc.DeleteEntry(ctx, hhAda, testWeek, tacos.ID); err != nil || len(p.Entries) != 1 || p.Entries[0].ID != soup.ID {
+	if p, err = svc.DeleteEntry(ctx, hhAda, userAda, testWeek, tacos.ID); err != nil || len(p.Entries) != 1 || p.Entries[0].ID != soup.ID {
 		t.Fatalf("DeleteEntry() = %+v, %v", p, err)
 	}
 	for _, id := range []string{tacos.ID, "not-an-id"} {
-		if _, err := svc.DeleteEntry(ctx, hhAda, testWeek, id); !errors.Is(err, ErrNotFound) {
+		if _, err := svc.DeleteEntry(ctx, hhAda, userAda, testWeek, id); !errors.Is(err, ErrNotFound) {
 			t.Errorf("DeleteEntry(%q) error = %v, want ErrNotFound", id, err)
 		}
 	}
@@ -169,7 +169,7 @@ func TestIntegrationPlanLifecycle(t *testing.T) {
 	if _, err := store.GetPlan(ctx, hhBob, mustWeek(t, testWeek)); !errors.Is(err, ErrNotFound) {
 		t.Errorf("GetPlan(other household) error = %v, want ErrNotFound", err)
 	}
-	if _, err := svc.DeleteEntry(ctx, hhBob, testWeek, soup.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := svc.DeleteEntry(ctx, hhBob, userAda, testWeek, soup.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("DeleteEntry(other household) error = %v, want ErrNotFound", err)
 	}
 	mustAdd(t, svc, hhBob, userBob, testWeek, NewEntry{RecipeID: recipeBobs, Servings: 2})

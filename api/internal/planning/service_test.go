@@ -137,14 +137,14 @@ func TestEntryLifecycle(t *testing.T) {
 		t.Errorf("UpdateEntry(servings, recipe gone) error = %v, want ErrRecipeNotFound", err)
 	}
 
-	p, err = svc.DeleteEntry(ctx, hhAda, testWeek, tacos.ID)
+	p, err = svc.DeleteEntry(ctx, hhAda, userAda, testWeek, tacos.ID)
 	if err != nil || len(p.Entries) != 1 || p.Entries[0].ID != soup.ID {
 		t.Fatalf("DeleteEntry() = %+v, %v", p, err)
 	}
-	if _, err := svc.DeleteEntry(ctx, hhAda, testWeek, tacos.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := svc.DeleteEntry(ctx, hhAda, userAda, testWeek, tacos.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("second DeleteEntry() error = %v, want ErrNotFound", err)
 	}
-	if _, err := svc.DeleteEntry(ctx, hhAda, "2026-W39", soup.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := svc.DeleteEntry(ctx, hhAda, userAda, "2026-W39", soup.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("DeleteEntry(other week) error = %v, want ErrNotFound", err)
 	}
 }
@@ -167,7 +167,7 @@ func TestFinalizedPlanLocksEntries(t *testing.T) {
 	if _, err := svc.UpdateEntry(ctx, hhAda, testWeek, e.ID, EntryChanges{Servings: ptr(4)}); !errors.Is(err, ErrFinalized) {
 		t.Errorf("UpdateEntry(finalized, servings) error = %v, want ErrFinalized", err)
 	}
-	if _, err := svc.DeleteEntry(ctx, hhAda, testWeek, e.ID); !errors.Is(err, ErrFinalized) {
+	if _, err := svc.DeleteEntry(ctx, hhAda, userAda, testWeek, e.ID); !errors.Is(err, ErrFinalized) {
 		t.Errorf("DeleteEntry(finalized) error = %v, want ErrFinalized", err)
 	}
 	if _, err := svc.UpdateEntry(ctx, hhAda, testWeek, "nope", EntryChanges{Note: ptr("x")}); !errors.Is(err, ErrNotFound) {

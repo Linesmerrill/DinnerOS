@@ -11,6 +11,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb/mongotest"
 )
@@ -105,6 +106,11 @@ func TestIntegrationRunImportsIntoExistingHousehold(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output missing %q:\n%s", want, out.String())
 		}
+	}
+	recorded, err := events.NewMongoStore(client.Database()).List(ctx, events.Query{HouseholdID: h.ID, Types: []events.Type{events.TypeImportCompleted}})
+	if err != nil || len(recorded) != 1 || recorded[0].UserID != "" ||
+		recorded[0].Payload != (events.ImportCompleted{Source: "hellofresh", Created: 1, Rejected: 1}) {
+		t.Errorf("import.completed events = %+v, %v", recorded, err)
 	}
 	if strings.Contains(out.String(), uri) {
 		t.Errorf("output contains the MongoDB URI:\n%s", out.String())

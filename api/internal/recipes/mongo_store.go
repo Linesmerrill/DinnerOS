@@ -493,6 +493,40 @@ func (s *MongoStore) GetRecipes(ctx context.Context, householdID string, ids []s
 	return out, nil
 }
 
+// ExistingRecipeIDs implements Store with an _id lookup that reads only IDs.
+func (s *MongoStore) ExistingRecipeIDs(ctx context.Context, householdID string, ids []string) ([]string, error) {
+	hid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return nil, nil
+	}
+	oids := make([]bson.ObjectID, 0, len(ids))
+	for _, id := range ids {
+		if oid, err := mongodb.ParseID(id); err == nil {
+			oids = append(oids, oid)
+		}
+	}
+	if len(oids) == 0 {
+		return nil, nil
+	}
+	cur, err := s.recipes.Find(ctx,
+		bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: oids}}}, {Key: "householdId", Value: hid}},
+		options.Find().SetProjection(bson.D{{Key: "_id", Value: 1}}))
+	if err != nil {
+		return nil, translate(err)
+	}
+	var docs []struct {
+		ID bson.ObjectID `bson:"_id"`
+	}
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	var out []string
+	for _, d := range docs {
+		out = append(out, d.ID.Hex())
+	}
+	return out, nil
+}
+
 // ListRecipes implements Store.
 func (s *MongoStore) ListRecipes(ctx context.Context, householdID string, f ListFilter) ([]RecipeSummary, error) {
 	hid, err := mongodb.ParseID(householdID)

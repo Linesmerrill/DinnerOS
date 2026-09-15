@@ -171,6 +171,18 @@ func (m *memoryStore) GetRecipes(_ context.Context, householdID string, ids []st
 	return out, nil
 }
 
+func (m *memoryStore) ExistingRecipeIDs(_ context.Context, householdID string, ids []string) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []string
+	for _, r := range m.recipes {
+		if r.HouseholdID == householdID && slices.Contains(ids, r.ID) {
+			out = append(out, r.ID)
+		}
+	}
+	return out, nil
+}
+
 func (m *memoryStore) ListRecipes(_ context.Context, householdID string, f ListFilter) ([]RecipeSummary, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -148,6 +148,44 @@ interpretation, cold-start preferences, and explanation phrasing. They are never
 used for authentication, authorization, constraint enforcement, unit conversion,
 or grocery arithmetic.
 
+## Signals available today
+
+Phase 9 started collecting behavior. Everything is household-scoped and lives
+in two collections ([database.md](database.md#behavior)):
+
+- `recipe_ratings`: each member's current opinion of a recipe.
+- `events`: an append-only history. Every event has `householdId`, `userId`,
+  `type`, `recipeId` (recipe events), `week` (ISO week, when it applies), a
+  small typed `payload`, `occurredAt`, `recordedAt`, and `source`
+  (`api` for server-observed, `client` for app-observed).
+
+| Candidate feature | Signal | Recorded by | Status |
+| --- | --- | --- | --- |
+| Household rating | `recipe_ratings.score`; `recipe.rated` / `recipe.unrated` events with the previous score | API (ratings) | ✅ |
+| Would make again, kid appeal, dislikes | Rating tags: `make-again`, `never-again`, `kid-favorite`, `kids-disliked`, `too-spicy`, `too-bland`, `too-much-work`, `great-leftovers` | API (ratings) | ✅ |
+| Historical preference, recency, repetition | `recipes.orderWeeks` / `timesOrdered` / `lastOrderedWeek`; `import.completed` marks each refresh | API (import) | ✅ |
+| Planned meals, weekday affinity | `recipe.planned` / `recipe.unplanned` with `entryId`, `day`, `date`, `servings`, `origin` (`manual`/`autopilot`) | API (planning) | ✅ |
+| Conversion (planned → cooked), skip rate | `recipe.cooked` / `recipe.skipped` (`entryId` links to the plan entry; `reason` for skips) | App, via `POST /events` | Endpoint ready; app adoption pending |
+| Interest | `recipe.viewed` with `surface` | App | Endpoint ready; app adoption pending |
+| Shopping behavior | `grocery.item_checked` | App | Endpoint ready; app adoption pending |
+
+How features read the data:
+
+- A household's history in time order uses `{householdId, occurredAt}`.
+- One recipe's events of one type ("when did we last cook this?") use
+  `{householdId, recipeId, type, occurredAt}`.
+- Weekday affinity comes from the planned entry's `day`, or from `occurredAt`
+  in the household's time zone.
+- Server-observed types (`recipe.rated`, `recipe.planned`, `import.completed`)
+  can't be sent by clients, so they can be weighted as facts. App events are as
+  trustworthy as the signed-in member.
+- Recording is best effort. A lost event never failed a user action, so
+  features must tolerate small gaps.
+
+Not captured yet: context (weather, calendar busyness), meal swaps, and
+week-level generation and acceptance events. Those arrive with week
+generation in Phase 10.
+
 ## Success metrics
 
 The primary metric is **week acceptance rate**: the share of generated weeks
@@ -156,6 +194,11 @@ accepted with no more than one swap.
 Secondary metrics: meal swap rate, recommendation conversion (planned → cooked),
 average rating, repeat satisfaction, novelty acceptance, and meal skip rate.
 
-These are computed from `meal_events` (`WEEK_GENERATED`, `WEEK_ACCEPTED`,
-`WEEK_MODIFIED`, `MEAL_SWAPPED`, `MEAL_COOKED`, `MEAL_SKIPPED`, `MEAL_RATED`), so
-event collection in Phase 9 must record them from day one.
+These are computed from the `events` collection. Phase 9 records meal-level
+events from day one: `recipe.rated`, `recipe.cooked`, and `recipe.skipped`, plus
+`recipe.planned` and `recipe.unplanned` from the planner. That
+makes planned → cooked conversion, skip rate, and average rating measurable
+before any recommendations exist. Week-level events (`week.generated`,
+`week.accepted`, `week.modified`, `meal.swapped`) are added in Phase 10 with
+week generation, because nothing generates weeks before then. They are new
+event types, not a schema change.

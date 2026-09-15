@@ -104,6 +104,7 @@ func run() error {
 		recipes.Indexes(),
 		planning.Indexes(),
 		pantry.Indexes(),
+		behaviorIndexes(),
 	)...); err != nil {
 		return err
 	}
@@ -122,8 +123,11 @@ func run() error {
 	authHandler := newAuthHandler(cfg, userService, tokens, logger)
 	householdService, householdHandler, invitationHandler := newHouseholdHandlers(cfg, db, userService, tokens, logger)
 	recipeService := recipes.NewService(recipes.NewMongoStore(db.Database()))
+	behavior := newBehavior(db, recipeService, userService, householdService, tokens, logger)
 	recipeHandler := recipes.NewHandler(recipes.HandlerOptions{
 		Service:        recipeService,
+		Ratings:        behavior.ratings,
+		Events:         behavior.events,
 		Authorizer:     householdService,
 		Tokens:         tokens,
 		Logger:         logger,
@@ -134,7 +138,7 @@ func run() error {
 	// and the pantry decides grocery list statuses.
 	pantryService := pantry.NewService(pantry.NewMongoStore(db.Database()), recipeService)
 	planHandler := planning.NewHandler(planning.HandlerOptions{
-		Service:    planning.NewService(planning.NewMongoStore(db.Database()), recipeService).WithPantry(pantryService),
+		Service:    planning.NewService(planning.NewMongoStore(db.Database()), recipeService).WithPantry(pantryService).WithEvents(behavior.events, logger),
 		Authorizer: householdService,
 		Tokens:     tokens,
 		Logger:     logger,
@@ -163,6 +167,8 @@ func run() error {
 				recipeHandler.Mount(r)
 				planHandler.Mount(r)
 				pantryHandler.Mount(r)
+				behavior.ratingHandler.Mount(r)
+				behavior.eventHandler.Mount(r)
 			},
 		}),
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelWarn),

@@ -18,12 +18,15 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
@@ -84,7 +87,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, out io.
 	if err != nil {
 		return fmt.Errorf("look up household: %w", err)
 	}
-	if err := client.EnsureIndexes(ctx, recipes.Indexes()...); err != nil {
+	if err := client.EnsureIndexes(ctx, slices.Concat(recipes.Indexes(), events.Indexes())...); err != nil {
 		return err
 	}
 
@@ -94,6 +97,14 @@ func run(ctx context.Context, args []string, getenv func(string) string, out io.
 		return err
 	}
 	printResult(out, res)
+
+	// Like the HTTP import, record import.completed for Autopilot on a
+	// best-effort basis. Operator imports have no user.
+	eventService := events.NewService(events.ServiceOptions{Store: events.NewMongoStore(client.Database())})
+	events.RecordOrLog(ctx, eventService, slog.New(slog.NewTextHandler(out, nil)), events.Event{
+		HouseholdID: household.ID, Type: events.TypeImportCompleted,
+		Payload: events.ImportCompleted{Source: file.Source, Created: res.Created, Updated: res.Updated, Unchanged: res.Unchanged, Rejected: len(res.Errors)},
+	})
 	return nil
 }
 
