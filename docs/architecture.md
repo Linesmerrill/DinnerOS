@@ -154,13 +154,31 @@ ios/DinnerOS/
 - **Keychain** stores DinnerOS access and refresh tokens. No provider secrets or
   API keys ship in the app.
 - **Configuration** flows from `Config/*.xcconfig` → `Info.plist` →
-  `AppConfiguration`: display name, environment, and API base URL.
+  `AppConfiguration`: display name, environment, API base URL, and Google iOS
+  client ID. A missing API URL shows a configuration error screen and doesn't
+  crash.
+- **Dependencies:** `App/AppDependencies` is the only place that picks concrete
+  implementations (`URLSessionTransport`, `KeychainTokenStore`). It injects
+  `AuthSession` and `GoogleSignInService` through the SwiftUI environment.
+- **Networking (`Core/Networking`):** `APIClient` is a `Sendable` struct over an
+  injectable `HTTPTransport`. Its `@concurrent` methods encode, send, and decode
+  off the main actor. Every non-2xx response becomes a typed `APIError` built from
+  the `{error: {code, message, requestId}}` envelope.
+- **Auth (`Core/Auth`):** `AuthSession` is `@Observable` and main-actor-isolated.
+  It owns the tokens, restores the session at launch, and runs exactly one
+  in-flight refresh that all callers share. Sign in with Apple, Google OAuth with
+  PKCE through `ASWebAuthenticationSession`, and a Debug-only developer sign-in
+  all end in `AuthSession.signIn`. See
+  [authentication.md](authentication.md#ios-client).
+- **Root flow:** `RootView` shows `restoring` (splash), then `SignInView`, the
+  tab shell, or the configuration error, based on `AuthSession.state`.
 - **Navigation:** a tab shell (Week, Recipes, Shop, Household) with
   `NavigationStack` per tab, native sheets, and forms.
 - **Quality bar:** Dynamic Type, VoiceOver labels, dark mode, and explicit
   loading, empty, and error states for every screen.
-- **Visual identity:** Apple-native structure with DinnerOS's own warm accent
-  (paprika orange). No HelloFresh visual cloning.
+- **Visual identity:** Apple-native structure with DinnerOS's own herb-green
+  accent (`AccentColor` in the asset catalog, with a lighter dark-mode variant).
+  No HelloFresh visual cloning.
 
 The Xcode project uses file-system-synchronized folders (Xcode 16+). Adding a
 Swift file to `ios/DinnerOS/` or `ios/DinnerOSTests/` needs no project-file edits,
@@ -197,3 +215,7 @@ a versioned Autopilot API. See [autopilot.md](autopilot.md).
 | 18 | In-memory per-IP token-bucket rate limit on `/auth/*` (`internal/platform/ratelimit`, `golang.org/x/time/rate` v0.12.0) | One dyno today, so no shared store is needed. The client IP is the *last* `X-Forwarded-For` entry, which Heroku's router appends and clients can't forge. Each dyno limits separately; move to a shared store if we scale out. x/time is pinned below v0.13 because newer releases require Go 1.26. |
 | 19 | `POST /api/v1/auth/dev` gated by `APP_ENV=development` **and** `AUTH_DEV_LOGIN_ENABLED=true` | Simulator and integration testing need sessions without Apple or Google. Config validation refuses to start production with the flag set, and the route isn't mounted otherwise. |
 | 20 | `IdentityVerifier` returns `users.VerifiedIdentity`; `auth` depends on `users`, not the reverse | This is the `AuthProvider` seam. `GET /me` lives in the auth handler because it needs the auth context, and putting it in `users` would create an import cycle. |
+| 21 | Google sign-in on iOS uses OAuth 2.0 authorization code + PKCE through `ASWebAuthenticationSession`, not the GoogleSignIn SDK | We only need an ID token. The flow is about 200 lines of auditable code: authorize URL, `state` check, form-encoded token exchange. It avoids a third-party dependency, its transitive pods or packages, its privacy manifest, and its release schedule. It also keeps the "Apple frameworks only" rule. The trade-off is that we build the button and handle Google's endpoints ourselves. Both are stable, documented OAuth endpoints. |
+| 22 | iOS token refresh is serialized on the main actor with one shared `Task` | The API revokes a sign-in when the same refresh token is used twice (decision 16). Main-actor state makes "check for an in-flight refresh, else start one" atomic without locks. A refresh takes one network round trip, so hopping through the main actor costs nothing noticeable. |
+| 23 | Launch refresh failures sign out only when the server rejects the refresh token | If the app signed out on network errors, opening it offline would discard a refresh token that is still valid (60-day sliding). A `400`/`401` from `/auth/refresh` still clears the Keychain. |
+| 24 | Developer sign-in compiled only into `DEBUG` builds and shown only when `AppEnvironment == development` | Simulator testing needs a session without Apple or Google. `#if DEBUG` keeps the code path out of Release binaries, on top of the server-side gating in decision 19. |

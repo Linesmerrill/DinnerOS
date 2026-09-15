@@ -138,6 +138,123 @@ curl -s localhost:8080/api/v1/auth/dev -H 'Content-Type: application/json' \
   -d '{"subject":"simulator-ada","email":"ada@example.com","displayName":"Ada"}'
 ```
 
+## iOS client
+
+The app (`ios/DinnerOS/Core/Auth`, `Core/Networking`) uses only Apple frameworks:
+`AuthenticationServices`, `CryptoKit`, `Security`, and `URLSession`. There is no
+Google SDK.
+
+### Sign in with Apple
+
+1. `SignInWithAppleButton` asks for `.fullName` and `.email`.
+2. The app generates a raw nonce (32 bytes from `SecRandomCopyBytes`, base64url)
+   and sets `request.nonce` to its **lowercase hex SHA-256**. Apple copies that
+   hash into the identity token's `nonce` claim.
+3. The app sends `{identityToken, nonce: <raw nonce>, fullName?}` to
+   `/auth/apple`. The API hashes the raw nonce and compares it to the claim.
+   `fullName` is formatted with `PersonNameComponentsFormatter`, capped at 100
+   characters, and omitted when Apple shares no name. Apple only shares it on the
+   first authorization.
+4. If the API call fails (for example, offline), **Try Again** resends the same
+   credential without another Apple prompt.
+
+Capability: `ios/Config/DinnerOS.entitlements` has
+`com.apple.developer.applesignin = [Default]`. The App ID must have Sign in with
+Apple enabled.
+
+### Sign in with Google (OAuth 2.0 + PKCE, no SDK)
+
+The client ID is the iOS OAuth client from Google Cloud. It's a public
+identifier, set as `GOOGLE_IOS_CLIENT_ID` in `ios/Config/Shared.xcconfig` and
+read through `Info.plist` → `AppConfiguration.googleIOSClientID`. An empty
+value hides the button. The redirect URI comes from the client ID:
+`com.googleusercontent.apps.<id>:/oauth2redirect` (the reversed client ID as the
+scheme).
+
+```text
+app                                    ASWebAuthenticationSession / Google
+───                                    ───────────────────────────────────
+state, raw nonce, code_verifier  (32 random bytes each, base64url)
+code_challenge = BASE64URL(SHA256(code_verifier))
+open https://accounts.google.com/o/oauth2/v2/auth
+  ?client_id&redirect_uri&response_type=code&scope=openid email profile
+  &code_challenge&code_challenge_method=S256&state&nonce        ──▶ user consents
+callback <reversed-client-id>:/oauth2redirect?code&state        ◀──
+reject unless scheme matches and state == ours
+POST https://oauth2.googleapis.com/token (form-encoded)
+  client_id, code, code_verifier, grant_type=authorization_code, redirect_uri
+                                                                 ──▶ { id_token, … }
+POST /api/v1/auth/google { idToken, nonce: <raw nonce> }
+```
+
+- `state` is checked **before** the callback's `error` or `code` is read.
+  `error=access_denied` counts as a cancellation, so no error is shown.
+- Google puts the raw nonce in the ID token unchanged. The API requires the
+  claim to equal the `nonce` in the request.
+- There's no client secret. iOS clients are public, and PKCE proves this app
+  started the authorization. Google's access token is discarded.
+- `prefersEphemeralWebBrowserSession = false`, so Safari's Google cookies allow
+  one-tap sign-in. The presentation anchor is the key window.
+- The backend's `GOOGLE_CLIENT_ID` must be this iOS client ID, because it is the
+  ID token's `aud`.
+
+### Session lifecycle (`AuthSession`)
+
+`AuthSession` is an `@Observable`, main-actor-isolated object. It is the only
+code that holds DinnerOS tokens. Its states are `restoring`, `signedOut`,
+`signedIn(user)`, and `configurationError`. The last one appears when the build
+has no valid `API_BASE_URL`, so the app shows an error screen instead of crashing.
+
+- **Launch:** reads the Keychain. No item, or an expired refresh token, means
+  `signedOut`. Otherwise the app shows the cached user right away and refreshes
+  if the access token expires within 30 seconds. If the server **rejects** the
+  refresh (`400`/`401`), the app clears the Keychain and signs out. If the refresh
+  fails for a network or `5xx` reason, the app keeps the cached session and the
+  next authorized request tries again. Signing out when offline would throw away
+  a refresh token that may still be valid.
+- **Authorized requests** (`authorized { token in … }`): attach the bearer token,
+  refreshing first if it's expired. On `401` (`token_expired` or
+  `unauthenticated`), refresh once and retry once. A rejected refresh, or a
+  second `401` after a successful refresh, signs out.
+- **Refresh serialization:** all state is on the main actor, and the session
+  holds at most one in-flight refresh `Task`. Every caller that needs a refresh
+  awaits that same task. A caller whose rejected access token has already been
+  replaced reuses the new tokens without refreshing. Two refreshes with the same
+  token would look like reuse to the API and revoke the sign-in, so this is
+  required. Unit tests check that ten concurrent requests getting `401` cause
+  exactly one `/auth/refresh`.
+- A generation counter changes on every sign-in and sign-out. A refresh that
+  finishes after sign-out can't write tokens back.
+- **Sign out:** clears the Keychain and in-memory tokens first, then calls
+  `POST /auth/logout {refreshToken}` on a best-effort basis. The user is signed out
+  locally even if that call fails.
+
+### Keychain
+
+`KeychainTokenStore` saves one generic-password item. The service is
+`<bundle id>.auth` and the account is `session`. It holds JSON with the access
+token, refresh token, both expiries, and the user summary. It uses
+`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` and the data-protection
+keychain, so it doesn't sync to iCloud or move to another device. An item that
+can't be decoded is deleted and treated as signed out. If a Keychain write fails,
+the session still works but doesn't survive a relaunch. Tests use
+`InMemoryTokenStore`.
+
+### Logging
+
+The app logs with `os.Logger`. It logs error codes, HTTP statuses, and request
+IDs. It never logs tokens, nonces, authorization codes, or request bodies.
+Every API request sends a generated `X-Request-ID`, and an `APIError` includes
+the request ID for support.
+
+### Developer sign-in (Debug builds only)
+
+When a `DEBUG` build has `AppEnvironment == development`, the sign-in screen shows
+**Developer sign-in**. It calls `POST /auth/dev` with subject `dev-simulator`. The
+button and the `AuthAPI.signInForDevelopment` method are both inside `#if DEBUG`,
+so Release binaries don't contain them. See
+[development.md](development.md#developer-sign-in-from-the-simulator).
+
 ## Authorization
 
 - Every request is authorized **server-side**. Client-side UI hiding is only a
