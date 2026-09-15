@@ -1612,7 +1612,7 @@ is none).
   "status": "proposed",
   "version": 2,
   "attempt": 1,
-  "modelVersion": "baseline-2026.1",
+  "modelVersion": "baseline-2026.2",
   "inputsHash": "9f2c4b1d0a7e6c35",
   "requestedMeals": 5,
   "plannedMeals": 3,
@@ -1668,7 +1668,8 @@ is none).
   "why?" screens.
 - **Shortfalls are explained.** `messages` covers `week_skipped`,
   `empty_catalog`, `week_full`, `not_enough_candidates`, `not_enough_days`,
-  `already_planned`, and `cold_start`. Days that couldn't be filled are in
+  `rule_method_unmet` (a rule day with methods got a meal that doesn't suit
+  them, because nothing suitable was left), `already_planned`, and `cold_start`. Days that couldn't be filled are in
   `unfilled`. A skipped week returns `201` with no slots.
 - **Swap.** `POST .../proposal/slots/{slotId}/swap` `{"version": 2}` replaces
   that day's meal with the next best one that fits the same constraints and the

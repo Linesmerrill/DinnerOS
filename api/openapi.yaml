@@ -5954,7 +5954,7 @@ components:
           description: 1 for the week's first generation, then one more each time it's generated again.
         modelVersion:
           type: string
-          example: baseline-2026.1
+          example: baseline-2026.2
         inputsHash:
           type: string
           description: Fingerprint of the generation inputs; identical inputs give the same hash.
@@ -5989,7 +5989,7 @@ components:
           description: |
             Week-level notes. Codes: `week_skipped`, `empty_catalog`,
             `week_full`, `not_enough_candidates`, `not_enough_days`,
-            `already_planned`, `cold_start`.
+            `rule_method_unmet`, `already_planned`, `cold_start`.
           items:
             $ref: "#/components/schemas/AutopilotText"
           example:
