@@ -103,6 +103,15 @@ func UnitCodes() []string {
 // Discrete reports whether the unit only combines with itself.
 func (u Unit) Discrete() bool { return u.Kind == KindDiscrete }
 
+// BaseFactor returns a copy of the exact factor to the kind's base unit (ml or
+// g), or nil for discrete units. Use it to compare unit sizes deterministically.
+func (u Unit) BaseFactor() *big.Rat {
+	if u.toBase == nil {
+		return nil
+	}
+	return new(big.Rat).Set(u.toBase)
+}
+
 // CanConvertTo reports whether a quantity in u converts exactly to v without
 // ingredient-specific information.
 func (u Unit) CanConvertTo(v Unit) bool {
