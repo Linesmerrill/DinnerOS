@@ -151,7 +151,7 @@ Dependency rules:
 ios/DinnerOS/
 ├── App/          entry point, AppConfiguration, dependency container
 ├── Core/         networking (APIClient), auth session, Keychain, persistence (added as needed)
-├── Features/     one folder per feature: Week, Recipes, Shop, Household, Root
+├── Features/     one folder per feature: Week, Recipes, Shop, Pantry, Household, Root
 └── Resources/    asset catalog, string catalogs
 ```
 
@@ -277,3 +277,8 @@ a versioned Autopilot API. See [autopilot.md](autopilot.md).
 | 60 | `GET /api/v1/ingredients?q=` is global and needs only a signed-in user, not a household | The catalog is global (#37) and holds only ingredient names and categories, no household data. If user-written ingredients ever enter the catalog, scope search to households first. |
 | 61 | Default staples are a fixed list with aliases ("Black Pepper" also matches "Pepper"), added only when the pantry has neither the name nor an alias | Staples must link to the catalog ingredients recipes use, or they won't match grocery lines. Never touching existing items keeps the call idempotent and respects the household's own choices. |
 | 62 | Pantry lists aren't paginated, and a household holds at most 1000 items | A pantry is small by nature, like a household's invitations. The cap keeps the unpaginated list bounded. |
+| 63 | The iOS pantry is a fifth tab (Recipes, Week, Shop, Pantry, Household), not a screen inside Household | Households update the pantry around cooking and shopping, so it belongs one tap away rather than under member and account settings. Five is the most an iPhone tab bar shows before "More", so the next top-level feature has to replace a tab or live inside one. |
+| 64 | The iOS app loads the whole pantry once, then searches, filters by status, and groups by aisle on device. Changes apply the item the API returns; only a rejected change (`403`, `404`, `409`) or skipped default staples reload | The list is unpaginated and capped (#62), so local filtering is instant and sends no request per keystroke. The app sorts like the API (aisle, name, ID), so an applied item lands where a reload would put it. A rejection usually means another member changed the pantry. |
+| 65 | iOS parses typed amounts into the API's reduced exact form before sending ("1 1/2" and "1½" → `"3/2"`), rejecting negative, zero, and malformed input | The form explains the problem inline instead of after a `400`. What's sent equals what the API stores, so an edit that only retypes an amount sends no PATCH. |
+| 66 | Multi-select status changes use `POST .../pantry/bulk` in batches of 200. IDs returned in `missing` are dropped from the list and named in a summary, not reported as a failure | A status change after shopping shouldn't fail because another member deleted one item. Single-item swipes use PATCH. |
+| 67 | Expiry text ("Expires in 3 days", "Expired") counts calendar days in the device's time zone, not the household's | `expiresOn` is a date without a time zone, and "today" means the day for the person holding the phone. |
