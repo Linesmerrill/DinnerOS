@@ -42,6 +42,8 @@ type Service struct {
 	usage    UsageStore
 	recipes  RecipeReader
 	notifier Notifier
+	// resolver is set by SetKeyResolver; it's optional.
+	resolver KeyResolver
 	logger   *slog.Logger
 	now      func() time.Time
 	// newID generates purchase and cycle IDs.

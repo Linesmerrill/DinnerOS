@@ -33,6 +33,9 @@ const (
 	CycleProvider    CycleSource = "provider"
 	// CycleEdit: a person set an amount without recording a purchase.
 	CycleEdit CycleSource = "edit"
+	// CycleHouseMade: the household made a batch of a specialty ingredient
+	// (PurchaseHouseMade).
+	CycleHouseMade CycleSource = "house_made"
 )
 
 // Usage limits and defaults.

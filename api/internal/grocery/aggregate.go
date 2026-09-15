@@ -27,6 +27,14 @@ type Line struct {
 	UnitCode string
 	// PantryStaple is the source's hint that the ingredient is usually at home.
 	PantryStaple bool
+	// Via is set on a line that stands in for a specialty ingredient
+	// (ApplySpecialties).
+	Via *Via
+	// Specialty is set on a line that is itself a specialty ingredient.
+	Specialty *LineSpecialty
+	// Sources, when set, are the recipes the line is for, instead of the
+	// selection's recipe (a batch made for several recipes).
+	Sources []Source
 }
 
 // RecipeSelection is a planned recipe with the servings to cook.
@@ -76,6 +84,12 @@ type Item struct {
 	Unquantified bool
 	Status       Status
 	Sources      []Source
+	// Via lists the specialty ingredients this item stands in for, with the
+	// recipes each is for. Empty for ordinary items.
+	Via []ItemVia
+	// Specialty is set when the item is a specialty ingredient left on the
+	// list or kept as a house-made batch.
+	Specialty *LineSpecialty
 }
 
 // List is the aggregated grocery list.
@@ -130,6 +144,8 @@ type accumulator struct {
 	allHinted           bool
 	groups              map[string]*unitGroup
 	sources             map[string]Source
+	via                 map[string]*ItemVia
+	specialty           *LineSpecialty
 }
 
 // unitGroup sums quantities that convert to each other, exactly, in the kind's
@@ -164,7 +180,7 @@ func Aggregate(selections []RecipeSelection, pantry Pantry) (List, error) {
 			}
 			a, ok := acc[key]
 			if !ok {
-				a = &accumulator{key: key, name: line.Name, category: line.Category, allHinted: true, groups: map[string]*unitGroup{}, sources: map[string]Source{}}
+				a = &accumulator{key: key, name: line.Name, category: line.Category, allHinted: true, groups: map[string]*unitGroup{}, sources: map[string]Source{}, via: map[string]*ItemVia{}}
 				acc[key] = a
 			}
 			// Deterministic name/category choice independent of input order.
@@ -175,7 +191,18 @@ func Aggregate(selections []RecipeSelection, pantry Pantry) (List, error) {
 				a.category = line.Category
 			}
 			a.allHinted = a.allHinted && line.PantryStaple
-			a.sources[sel.RecipeID] = Source{RecipeID: sel.RecipeID, RecipeName: sel.RecipeName}
+			lineSources := line.Sources
+			if len(lineSources) == 0 {
+				lineSources = []Source{{RecipeID: sel.RecipeID, RecipeName: sel.RecipeName}}
+			}
+			for _, src := range lineSources {
+				a.sources[src.RecipeID] = src
+			}
+			a.addVia(line.Via, lineSources)
+			if s := line.Specialty; s != nil && (a.specialty == nil || s.less(*a.specialty)) {
+				c := *s
+				a.specialty = &c
+			}
 
 			if line.Quantity == nil || line.Quantity.IsZero() || line.UnitCode == "" {
 				a.unquantified = true
@@ -198,6 +225,8 @@ func Aggregate(selections []RecipeSelection, pantry Pantry) (List, error) {
 			Category:      normalizeCategory(a.category),
 			Unquantified:  a.unquantified,
 			Amounts:       a.amounts(),
+			Via:           a.itemVia(),
+			Specialty:     a.specialty,
 		}
 		switch {
 		case pantry.Has(a.key):

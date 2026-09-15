@@ -1,6 +1,7 @@
 package pantry
 
 import (
+	"context"
 	"math/big"
 	"net/http"
 	"time"
@@ -218,6 +219,23 @@ func (h *Handler) itemResponses(r *http.Request, householdID string, items []Ite
 	}
 	return out
 }
+
+// ItemResponse renders item with its usage estimate under the household's
+// settings, for other modules' responses (a recorded batch). A settings read
+// failure is logged and the defaults are used.
+func (s *Service) ItemResponse(ctx context.Context, item Item) PantryItemResponse {
+	settings, err := s.Settings(ctx, item.HouseholdID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "load pantry settings failed; using defaults", "householdId", item.HouseholdID, "error", err)
+		settings = Settings{HouseholdID: item.HouseholdID, LowThresholdPercent: DefaultLowThresholdPercent}
+	}
+	resp := newItemResponse(item)
+	resp.Estimate = newEstimateResponse(s.Estimate(item, settings))
+	return resp
+}
+
+// NewPurchaseResponse renders a purchase, for other modules' responses.
+func NewPurchaseResponse(p Purchase) PurchaseResponse { return newPurchaseResponse(p) }
 
 func (h *Handler) itemResponse(r *http.Request, item Item) PantryItemResponse {
 	return h.itemResponses(r, item.HouseholdID, []Item{item})[0]
