@@ -173,6 +173,31 @@ func (s *MongoStore) ListForRecipe(ctx context.Context, householdID, recipeID st
 	return out, nil
 }
 
+// ListForHousehold implements Store. The unique index's
+// {householdId, recipeId, userId} prefix serves both the filter and the sort.
+func (s *MongoStore) ListForHousehold(ctx context.Context, householdID string, limit int) ([]Rating, error) {
+	hid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return nil, nil
+	}
+	cur, err := s.ratings.Find(ctx, bson.D{{Key: "householdId", Value: hid}}, options.Find().
+		SetSort(bson.D{{Key: "recipeId", Value: 1}, {Key: "userId", Value: 1}}).
+		SetLimit(int64(limit)).
+		SetProjection(bson.D{{Key: "comment", Value: 0}}))
+	if err != nil {
+		return nil, mongodb.TranslateError(err)
+	}
+	var docs []ratingDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, mongodb.TranslateError(err)
+	}
+	var out []Rating
+	for _, d := range docs {
+		out = append(out, d.toRating())
+	}
+	return out, nil
+}
+
 // Summaries implements Store with one aggregation for the counts and one find
 // for the user's own ratings. Malformed recipe IDs are skipped.
 func (s *MongoStore) Summaries(ctx context.Context, householdID, userID string, recipeIDs []string) (map[string]Summary, error) {

@@ -15,6 +15,9 @@ type Store interface {
 	// ListForRecipe returns every rating of the recipe, most recently updated
 	// first.
 	ListForRecipe(ctx context.Context, householdID, recipeID string) ([]Rating, error)
+	// ListForHousehold returns up to limit of the household's ratings,
+	// ordered by recipe and then user. Comments are left out.
+	ListForHousehold(ctx context.Context, householdID string, limit int) ([]Rating, error)
 	// Summaries returns the count and score sum of each recipe's ratings,
 	// with userID's own rating as Mine. Recipes without ratings are absent.
 	Summaries(ctx context.Context, householdID, userID string, recipeIDs []string) (map[string]Summary, error)
