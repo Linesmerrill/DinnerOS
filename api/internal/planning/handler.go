@@ -116,7 +116,7 @@ type PlanListResponse struct {
 type GroceryListResponse struct {
 	Week   string `json:"week"`
 	Status Status `json:"status"`
-	// PantryApplied is false until the household pantry exists (Phase 7).
+	// PantryApplied is true when the household pantry decided statuses.
 	PantryApplied bool                      `json:"pantryApplied"`
 	Categories    []GroceryCategoryResponse `json:"categories"`
 	Skipped       []SkippedEntryResponse    `json:"skipped"`
@@ -215,7 +215,7 @@ func newEntryResponse(w Week, e Entry) EntryResponse {
 
 func newGroceryListResponse(g GroceryList) GroceryListResponse {
 	resp := GroceryListResponse{
-		Week: g.Week.String(), Status: g.Status,
+		Week: g.Week.String(), Status: g.Status, PantryApplied: g.PantryApplied,
 		Categories: make([]GroceryCategoryResponse, 0, len(g.Categories)),
 		Skipped:    make([]SkippedEntryResponse, 0, len(g.Skipped)),
 	}

@@ -130,15 +130,17 @@ func run() error {
 		ImportMaxBytes: cfg.RecipeImportMaxBytes,
 		ImportTimeout:  recipeImportTimeout,
 	})
+	// The recipe service is the pantry's view of the global ingredient catalog,
+	// and the pantry decides grocery list statuses.
+	pantryService := pantry.NewService(pantry.NewMongoStore(db.Database()), recipeService)
 	planHandler := planning.NewHandler(planning.HandlerOptions{
-		Service:    planning.NewService(planning.NewMongoStore(db.Database()), recipeService),
+		Service:    planning.NewService(planning.NewMongoStore(db.Database()), recipeService).WithPantry(pantryService),
 		Authorizer: householdService,
 		Tokens:     tokens,
 		Logger:     logger,
 	})
-	// The recipe service is the pantry's view of the global ingredient catalog.
 	pantryHandler := pantry.NewHandler(pantry.HandlerOptions{
-		Service:    pantry.NewService(pantry.NewMongoStore(db.Database()), recipeService),
+		Service:    pantryService,
 		Authorizer: householdService,
 		Tokens:     tokens,
 		Logger:     logger,
