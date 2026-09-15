@@ -31,8 +31,24 @@ func (m *memoryUsageStore) InsertPurchase(_ context.Context, p Purchase) (Purcha
 	}) {
 		return Purchase{}, fmt.Errorf("%w: householdId_recordedBy_clientPurchaseId_unique", ErrDuplicate)
 	}
+	if pr := p.Provider; pr != nil && slices.ContainsFunc(m.purchases, func(x Purchase) bool {
+		return x.HouseholdID == p.HouseholdID && x.Provider != nil && x.Provider.HandoffID == pr.HandoffID && x.Provider.LineID == pr.LineID
+	}) {
+		return Purchase{}, fmt.Errorf("%w: householdId_provider_handoffId_lineId_unique", ErrDuplicate)
+	}
 	m.purchases = append(m.purchases, p)
 	return p, nil
+}
+
+func (m *memoryUsageStore) FindPurchaseByProviderLine(_ context.Context, householdID, handoffID, lineID string) (Purchase, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, p := range m.purchases {
+		if p.HouseholdID == householdID && p.Provider != nil && p.Provider.HandoffID == handoffID && p.Provider.LineID == lineID {
+			return p, nil
+		}
+	}
+	return Purchase{}, ErrNotFound
 }
 
 func (m *memoryUsageStore) FindPurchaseByClientID(_ context.Context, householdID, userID, clientPurchaseID string) (Purchase, error) {

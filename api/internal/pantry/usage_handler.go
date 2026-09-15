@@ -99,8 +99,18 @@ type PurchaseResponse struct {
 	UnitSize         *UnitSizeResponse `json:"unitSize"`
 	Week             *string           `json:"week"`
 	ClientPurchaseID *string           `json:"clientPurchaseId"`
-	RecordedBy       string            `json:"recordedBy"`
-	PurchasedAt      time.Time         `json:"purchasedAt"`
+	// Provider is set for source provider: the handoff line it confirms.
+	Provider    *PurchaseProviderResponse `json:"provider"`
+	RecordedBy  string                    `json:"recordedBy"`
+	PurchasedAt time.Time                 `json:"purchasedAt"`
+}
+
+// PurchaseProviderResponse links a provider purchase to its handoff line.
+type PurchaseProviderResponse struct {
+	Key       string `json:"key"`
+	HandoffID string `json:"handoffId"`
+	LineID    string `json:"lineId"`
+	ProductID string `json:"productId"`
 }
 
 // RecordPurchaseResponse is returned by POST .../pantry/purchases.
@@ -190,6 +200,9 @@ func newPurchaseResponse(p Purchase) PurchaseResponse {
 	if p.ClientPurchaseID != "" {
 		id := p.ClientPurchaseID
 		resp.ClientPurchaseID = &id
+	}
+	if pr := p.Provider; pr != nil {
+		resp.Provider = &PurchaseProviderResponse{Key: pr.Key, HandoffID: pr.HandoffID, LineID: pr.LineID, ProductID: pr.ProductID}
 	}
 	return resp
 }

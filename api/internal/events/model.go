@@ -36,6 +36,12 @@ const (
 	TypeRecipeSkipped      Type = "recipe.skipped"
 	TypeGroceryItemChecked Type = "grocery.item_checked"
 	TypeImportCompleted    Type = "import.completed"
+	// TypeShoppingHandoffCreated: a member handed the week's list to a
+	// shopping provider.
+	TypeShoppingHandoffCreated Type = "shopping.handoff_created"
+	// TypeShoppingOrderConfirmed: a member confirmed what was ordered from a
+	// handoff.
+	TypeShoppingOrderConfirmed Type = "shopping.order_confirmed"
 )
 
 // Source says who observed an event.
@@ -166,6 +172,34 @@ type ImportCompleted struct {
 	Rejected  int    `json:"rejected" bson:"rejected"`
 }
 
+// ShoppingHandoffCreated is the payload of shopping.handoff_created. It holds
+// counts only: product IDs from providers are never copied into events, which
+// are forwarded to Autopilot (docs/shopping-providers.md#risks-and-open-questions).
+type ShoppingHandoffCreated struct {
+	HandoffID string `json:"handoffId" bson:"handoffId"`
+	Provider  string `json:"provider" bson:"provider"`
+	// Lines are the grocery lines in the cart links; Packages sums their
+	// package counts.
+	Lines    int `json:"lines" bson:"lines"`
+	Packages int `json:"packages" bson:"packages"`
+	// CheckAmount counts lines whose package count was flagged.
+	CheckAmount int `json:"checkAmount" bson:"checkAmount"`
+	// Excluded counts grocery lines left out of the links.
+	Excluded int `json:"excluded" bson:"excluded"`
+	Links    int `json:"links" bson:"links"`
+}
+
+// ShoppingOrderConfirmed is the payload of shopping.order_confirmed: what a
+// member newly confirmed as ordered (recorded as pantry purchases) or not
+// ordered in one confirmation.
+type ShoppingOrderConfirmed struct {
+	HandoffID string `json:"handoffId" bson:"handoffId"`
+	Provider  string `json:"provider" bson:"provider"`
+	Confirmed int    `json:"confirmed" bson:"confirmed"`
+	Packages  int    `json:"packages" bson:"packages"`
+	Skipped   int    `json:"skipped" bson:"skipped"`
+}
+
 // Allowed values for optional enumerated payload fields.
 var (
 	ViewSurfaces = []string{"detail", "plan", "search", "recommendation"}
@@ -200,6 +234,12 @@ func (GroceryItemChecked) EventType() Type { return TypeGroceryItemChecked }
 
 // EventType implements Payload.
 func (ImportCompleted) EventType() Type { return TypeImportCompleted }
+
+// EventType implements Payload.
+func (ShoppingHandoffCreated) EventType() Type { return TypeShoppingHandoffCreated }
+
+// EventType implements Payload.
+func (ShoppingOrderConfirmed) EventType() Type { return TypeShoppingOrderConfirmed }
 
 func (p RecipeViewed) validate() error {
 	return optionalEnum("surface", p.Surface, ViewSurfaces)
@@ -263,6 +303,30 @@ func (p ImportCompleted) validate() error {
 	return nil
 }
 
+func validHandoff(handoffID, provider string) error {
+	switch {
+	case handoffID == "" || len(handoffID) > MaxClientEventIDLength:
+		return invalid("handoffId is required")
+	case provider == "" || len(provider) > 32:
+		return invalid("provider is required")
+	}
+	return nil
+}
+
+func (p ShoppingHandoffCreated) validate() error {
+	if p.Lines < 0 || p.Packages < 0 || p.CheckAmount < 0 || p.Excluded < 0 || p.Links < 0 {
+		return errors.Join(validHandoff(p.HandoffID, p.Provider), invalid("counts must not be negative"))
+	}
+	return validHandoff(p.HandoffID, p.Provider)
+}
+
+func (p ShoppingOrderConfirmed) validate() error {
+	if p.Confirmed < 0 || p.Packages < 0 || p.Skipped < 0 {
+		return errors.Join(validHandoff(p.HandoffID, p.Provider), invalid("counts must not be negative"))
+	}
+	return validHandoff(p.HandoffID, p.Provider)
+}
+
 // typeSpec describes the rules for one event type.
 type typeSpec struct {
 	// recipe events require RecipeID; other events must not carry one.
@@ -284,6 +348,9 @@ var typeSpecs = map[Type]typeSpec{
 	TypeRecipeSkipped:      {recipe: true, client: true, decode: decoder[RecipeSkipped]()},
 	TypeGroceryItemChecked: {client: true, decode: decoder[GroceryItemChecked]()},
 	TypeImportCompleted:    {decode: decoder[ImportCompleted]()},
+
+	TypeShoppingHandoffCreated: {decode: decoder[ShoppingHandoffCreated]()},
+	TypeShoppingOrderConfirmed: {decode: decoder[ShoppingOrderConfirmed]()},
 }
 
 func decoder[P Payload]() func([]byte, func([]byte, any) error) (Payload, error) {

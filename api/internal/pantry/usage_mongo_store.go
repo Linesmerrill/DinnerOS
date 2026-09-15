@@ -41,6 +41,14 @@ func usageIndexes() []mongodb.IndexSet {
 						SetPartialFilterExpression(bson.D{{Key: "clientPurchaseId", Value: bson.D{{Key: "$type", Value: "string"}}}}).
 						SetName("householdId_recordedBy_clientPurchaseId_unique"),
 				},
+				{
+					// A shopping handoff line is recorded as bought at most once.
+					Keys: bson.D{{Key: "householdId", Value: 1}, {Key: "provider.handoffId", Value: 1}, {Key: "provider.lineId", Value: 1}},
+					Options: options.Index().
+						SetUnique(true).
+						SetPartialFilterExpression(bson.D{{Key: "provider.handoffId", Value: bson.D{{Key: "$type", Value: "string"}}}}).
+						SetName("householdId_provider_handoffId_lineId_unique"),
+				},
 			},
 		},
 		{
@@ -190,8 +198,18 @@ type purchaseDoc struct {
 	UnitSize         *unitSizeDoc  `bson:"unitSize,omitempty"`
 	Week             string        `bson:"week,omitempty"`
 	ClientPurchaseID string        `bson:"clientPurchaseId,omitempty"`
-	RecordedBy       bson.ObjectID `bson:"recordedBy"`
-	PurchasedAt      time.Time     `bson:"purchasedAt"`
+	// Provider is a string handoff ID so the partial unique index covers
+	// only provider purchases.
+	Provider    *purchaseProviderDoc `bson:"provider,omitempty"`
+	RecordedBy  bson.ObjectID        `bson:"recordedBy"`
+	PurchasedAt time.Time            `bson:"purchasedAt"`
+}
+
+type purchaseProviderDoc struct {
+	Key       string `bson:"key"`
+	HandoffID string `bson:"handoffId"`
+	LineID    string `bson:"lineId"`
+	ProductID string `bson:"productId"`
 }
 
 func (d purchaseDoc) toPurchase() Purchase {
@@ -202,6 +220,9 @@ func (d purchaseDoc) toPurchase() Purchase {
 	}
 	if s := d.UnitSize; s != nil {
 		p.UnitSize = &UnitSize{Unit: s.Unit, Quantity: s.Quantity, SizeUnit: s.SizeUnit}
+	}
+	if pr := d.Provider; pr != nil {
+		p.Provider = &ProviderRef{Key: pr.Key, HandoffID: pr.HandoffID, LineID: pr.LineID, ProductID: pr.ProductID}
 	}
 	return p
 }
@@ -228,7 +249,26 @@ func (s *MongoStore) InsertPurchase(ctx context.Context, p Purchase) (Purchase, 
 	if size := p.UnitSize; size != nil {
 		d.UnitSize = &unitSizeDoc{Unit: size.Unit, Quantity: size.Quantity, SizeUnit: size.SizeUnit}
 	}
+	if pr := p.Provider; pr != nil {
+		d.Provider = &purchaseProviderDoc{Key: pr.Key, HandoffID: pr.HandoffID, LineID: pr.LineID, ProductID: pr.ProductID}
+	}
 	if _, err := s.purchases.InsertOne(ctx, d); err != nil {
+		return Purchase{}, translate(err)
+	}
+	return d.toPurchase(), nil
+}
+
+// FindPurchaseByProviderLine implements UsageStore.
+func (s *MongoStore) FindPurchaseByProviderLine(ctx context.Context, householdID, handoffID, lineID string) (Purchase, error) {
+	hid, err := mongodb.ParseID(householdID)
+	if err != nil || handoffID == "" || lineID == "" {
+		return Purchase{}, ErrNotFound
+	}
+	var d purchaseDoc
+	err = s.purchases.FindOne(ctx, bson.D{
+		{Key: "householdId", Value: hid}, {Key: "provider.handoffId", Value: handoffID}, {Key: "provider.lineId", Value: lineID},
+	}).Decode(&d)
+	if err != nil {
 		return Purchase{}, translate(err)
 	}
 	return d.toPurchase(), nil

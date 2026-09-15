@@ -32,6 +32,9 @@ const (
 	PermPantryEdit        Permission = "pantry.edit"
 	PermRecipesEdit       Permission = "recipes.edit"
 	PermRecipesImport     Permission = "recipes.import"
+	// PermShoppingEdit guards a household's store settings, saved provider
+	// products, and creating shopping handoffs.
+	PermShoppingEdit Permission = "shopping.edit"
 )
 
 // allPermissions lists every permission in a stable order for responses.
@@ -46,6 +49,7 @@ var allPermissions = []Permission{
 	PermPantryEdit,
 	PermRecipesEdit,
 	PermRecipesImport,
+	PermShoppingEdit,
 }
 
 // roleOrder lists the valid roles in a stable order.
@@ -61,6 +65,7 @@ var rolePermissions = map[Role][]Permission{
 		PermPantryEdit,
 		PermRecipesEdit,
 		PermRecipesImport,
+		PermShoppingEdit,
 	},
 }
 
