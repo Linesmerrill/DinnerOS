@@ -7,6 +7,8 @@ struct WeekView: View {
     @Environment(HouseholdStore.self) private var households
     @Environment(RecipeLibrary.self) private var library
     @Environment(EventReporter.self) private var events
+    @Environment(PantryStore.self) private var pantry
+    @Environment(NotificationStore.self) private var notifications
 
     @State private var editingEntry: PlanEntry?
     @State private var isAddingRecipes = false
@@ -34,6 +36,7 @@ struct WeekView: View {
                 WeekSwitcher()
             }
             .toolbar { toolbar }
+            .notificationsToolbar()
             .navigationDestination(for: GroceryListRoute.self) { route in
                 GroceryListView(week: route.week)
             }
@@ -208,7 +211,7 @@ struct WeekView: View {
         }
         .swipeActions(edge: .leading) {
             Button("Cooked", systemImage: "checkmark") {
-                events.recipeCooked(entry, week: plans.week)
+                markCooked(entry)
             }
             .tint(.green)
             Button("Skip", systemImage: "forward") {
@@ -226,7 +229,7 @@ struct WeekView: View {
         .contextMenu {
             Section {
                 Button("Mark as Cooked", systemImage: "checkmark.circle") {
-                    events.recipeCooked(entry, week: plans.week)
+                    markCooked(entry)
                 }
                 .disabled(outcome == .cooked)
                 Menu("Skip", systemImage: "forward") {
@@ -262,6 +265,18 @@ struct WeekView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// Records the cooked event and sends it right away: the API deducts the recipe from the
+    /// pantry when the event is stored, so the pantry's estimates and the unread count are
+    /// refreshed after the send instead of waiting for the next batch.
+    private func markCooked(_ entry: PlanEntry) {
+        events.recipeCooked(entry, week: plans.week)
+        Task {
+            await events.flush()
+            await pantry.refresh()
+            await notifications.refreshUnreadCount()
         }
     }
 
@@ -404,6 +419,8 @@ private struct FinalizedNotice: View {
     .environment(RecipePreviewData.library(session: session))
     .environment(PlanPreviewData.store(session: session))
     .environment(EventReporter.preview(session: session))
+    .environment(PantryPreviewData.store(session: session))
+    .environment(NotificationPreviewData.store(session: session))
 }
 
 #Preview("Empty") {
@@ -415,4 +432,6 @@ private struct FinalizedNotice: View {
     .environment(RecipePreviewData.library(session: session))
     .environment(PlanPreviewData.store(session: session, plan: PlanPreviewData.emptyPlan))
     .environment(EventReporter.preview(session: session))
+    .environment(PantryPreviewData.store(session: session))
+    .environment(NotificationPreviewData.store(session: session))
 }

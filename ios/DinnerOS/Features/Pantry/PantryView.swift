@@ -22,11 +22,13 @@ struct PantryView: View {
     private enum Sheet: Identifiable {
         case add
         case edit(PantryItem)
+        case lowStockSettings
 
         var id: String {
             switch self {
             case .add: "add"
             case .edit(let item): "edit-\(item.id)"
+            case .lowStockSettings: "low-stock-settings"
             }
         }
     }
@@ -51,6 +53,10 @@ struct PantryView: View {
         content
             .navigationTitle("Pantry")
             .toolbar { toolbar }
+            .notificationsToolbar(isHidden: isSelecting)
+            .navigationDestination(for: PantryItemRoute.self) { route in
+                PantryItemDetailView(itemID: route.itemID)
+            }
             .environment(\.editMode, $editMode)
             .task(id: householdID) {
                 endSelection()
@@ -67,6 +73,7 @@ struct PantryView: View {
                 switch sheet {
                 case .add: PantryAddSheet()
                 case .edit(let item): PantryEditSheet(item: item)
+                case .lowStockSettings: PantryThresholdSheet()
                 }
             }
             .alert(
@@ -187,9 +194,15 @@ struct PantryView: View {
                 }
             }
             .tag(item.id)
-        } else {
+        } else if isSelecting {
             PantryItemRow(item: item)
                 .tag(item.id)
+        } else {
+            // Members who can't edit still see the estimate and purchases.
+            NavigationLink(value: PantryItemRoute(itemID: item.id)) {
+                PantryItemRow(item: item)
+            }
+            .tag(item.id)
         }
     }
 
@@ -255,6 +268,15 @@ struct PantryView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Add Item", systemImage: "plus") { sheet = .add }
+                }
+            }
+        }
+        if !isSelecting && pantry.phase == .loaded {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu("More", systemImage: "ellipsis.circle") {
+                    Button("Low-Stock Alerts…", systemImage: "gauge.with.dots.needle.33percent") {
+                        sheet = .lowStockSettings
+                    }
                 }
             }
         }
@@ -327,9 +349,21 @@ struct PantryView: View {
 /// Sample data for SwiftUI previews. Not DEBUG-only because `#Preview` bodies are
 /// type-checked in Release builds too.
 enum PantryPreviewData {
+    static let estimate = PantryEstimate(
+        cycleID: "cycle-1", cycleSource: "grocery_list", cycleStartedAt: .now.addingTimeInterval(-5 * 86_400),
+        adjustedAt: nil, unit: "cup", startAmount: PantryAmount(quantity: "2", quantityValue: 2),
+        remaining: PantryAmount(quantity: "31/50", quantityValue: 0.62), percentRemaining: 31, percentUsed: 69,
+        recipeUse: PantryRecipeUse(count: 2, quantity: "3/4", quantityValue: 0.75),
+        otherUse: PantryAmount(quantity: "63/100", quantityValue: 0.63),
+        dailyRate: PantryDailyRate(quantity: "1/8", quantityValue: 0.125, basedOnSegments: 3), skippedRecipes: 1,
+        lowThresholdPercent: 80, thresholdSource: .household, belowThreshold: false,
+        summary: "About 31% left: 2 recipes used 3/4 cup, plus about 1/8 cup a day of other use.", estimatedAt: .now)
+
     static let items: [PantryItem] = [
-        item(id: "p1", name: "Olive Oil", category: "pantry", quantity: "3/2", value: 1.5, unit: "cup", staple: true),
-        item(id: "p2", name: "Carrots", category: "produce", status: .low),
+        item(
+            id: "p1", name: "Olive Oil", category: "pantry", quantity: "31/50", value: 0.62, unit: "cup", staple: true,
+            estimate: estimate),
+        item(id: "p2", name: "Carrots", category: "produce", status: .low, statusSource: .estimate),
         item(id: "p3", name: "Za'atar", category: "spices", status: .out),
         item(
             id: "p4", name: "Greek Yogurt", category: "dairy-eggs", quantity: "2", value: 2, unit: "cup",
@@ -342,13 +376,14 @@ enum PantryPreviewData {
 
     private static func item(
         id: String, name: String, category: String, quantity: String? = nil, value: Double? = nil,
-        unit: String? = nil, status: PantryStatus = .inStock, staple: Bool = false, expiresOn: String? = nil
+        unit: String? = nil, status: PantryStatus = .inStock, staple: Bool = false, expiresOn: String? = nil,
+        statusSource: PantryStatusSource = .person, estimate: PantryEstimate? = nil
     ) -> PantryItem {
         PantryItem(
             id: id, householdID: HouseholdPreviewData.household.id, ingredientID: nil, key: name.lowercased(),
             displayName: name, category: category, quantity: quantity, quantityValue: value, unit: unit,
             status: status, isStaple: staple, expiresOn: expiresOn, note: "", updatedBy: "user-ada",
-            createdAt: .now, updatedAt: .now)
+            createdAt: .now, updatedAt: .now, statusSource: statusSource, estimate: estimate)
     }
 }
 
@@ -360,6 +395,7 @@ enum PantryPreviewData {
     .environment(session)
     .environment(HouseholdPreviewData.store(session: session))
     .environment(PantryPreviewData.store(session: session))
+    .environment(NotificationPreviewData.store(session: session))
 }
 
 #Preview("Empty") {
@@ -370,4 +406,5 @@ enum PantryPreviewData {
     .environment(session)
     .environment(HouseholdPreviewData.store(session: session))
     .environment(PantryStore.preview(session: session))
+    .environment(NotificationStore.preview(session: session))
 }

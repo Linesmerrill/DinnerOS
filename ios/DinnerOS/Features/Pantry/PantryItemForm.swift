@@ -62,25 +62,31 @@ struct PantryItemFields: View {
     }
 }
 
-/// Edits one item, or deletes it.
+/// Edits one item, restocks it, or deletes it, and shows its usage estimate and purchases.
 struct PantryEditSheet: View {
-    let item: PantryItem
-
     @Environment(PantryStore.self) private var pantry
     @Environment(\.dismiss) private var dismiss
 
+    /// The item the draft started from; changes are computed against it.
+    @State private var item: PantryItem
     @State private var draft: PantryItemDraft
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var isConfirmingDelete = false
+    @State private var isRestocking = false
 
     init(item: PantryItem) {
-        self.item = item
+        _item = State(initialValue: item)
         _draft = State(initialValue: PantryItemDraft(item: item))
     }
 
     private var hasChanges: Bool {
         (try? draft.changes(from: item))?.isEmpty == false
+    }
+
+    /// The item as the store has it now, so the estimate stays current after a restock.
+    private var current: PantryItem {
+        pantry.items.first { $0.id == item.id } ?? item
     }
 
     var body: some View {
@@ -91,10 +97,40 @@ struct PantryEditSheet: View {
                         FormErrorLabel(message: errorMessage)
                     }
                 }
+                Section {
+                    Button("Restock / I Bought This", systemImage: "cart.badge.plus") {
+                        isRestocking = true
+                    }
+                } footer: {
+                    Text("Records a purchase. The estimate starts over from the amount you bought.")
+                }
                 PantryItemFields(draft: $draft)
+                PantryThresholdFields(draft: $draft, householdPercent: pantry.settings?.lowThresholdPercent)
+                PantryUsageSections(item: current)
                 Section {
                     Button("Delete from Pantry", role: .destructive) {
                         isConfirmingDelete = true
+                    }
+                }
+            }
+            .task {
+                if pantry.settings == nil {
+                    _ = try? await pantry.loadSettings()
+                }
+            }
+            .onChange(of: draft.usesHouseholdThreshold) { _, usesHousehold in
+                // Turning the override on starts from the household's threshold.
+                if !usesHousehold, item.lowThresholdPercent == nil, let percent = pantry.settings?.lowThresholdPercent {
+                    draft.lowThresholdPercent = percent
+                }
+            }
+            .sheet(isPresented: $isRestocking) {
+                PantryRestockSheet(item: current) { updated in
+                    // Without edits in progress the form shows the restocked item. With edits,
+                    // the draft keeps its base so only the member's own changes are sent.
+                    if !hasChanges {
+                        item = updated
+                        draft = PantryItemDraft(item: updated)
                     }
                 }
             }
