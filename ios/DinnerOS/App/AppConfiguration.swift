@@ -17,6 +17,8 @@ struct AppConfiguration: Sendable, Equatable {
     let environment: Environment
     /// `nil` when the build has no valid API URL configured.
     let apiBaseURL: URL?
+    /// Google's iOS OAuth client ID (a public identifier). `nil` hides Google sign-in.
+    let googleIOSClientID: String?
     let version: String
     let build: String
 
@@ -28,6 +30,8 @@ struct AppConfiguration: Sendable, Equatable {
         // Unknown or missing values fall back to the stricter production rules.
         environment = Environment(rawValue: info["AppEnvironment"] as? String ?? "") ?? .production
         apiBaseURL = Self.parseAPIBaseURL(info["APIBaseURL"] as? String, environment: environment)
+        let googleClientID = (info["GoogleIOSClientID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        googleIOSClientID = googleClientID?.isEmpty == false ? googleClientID : nil
         version = info["CFBundleShortVersionString"] as? String ?? "0"
         build = info["CFBundleVersion"] as? String ?? "0"
     }

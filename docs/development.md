@@ -99,6 +99,54 @@ API_BASE_URL = http:/$()/192.168.1.20:8080
 
 Debug builds default to `http://localhost:8080`, which works from the simulator.
 
+### Developer sign-in from the simulator
+
+Sign in with Apple needs a signed build and a real Apple ID, and Google sign-in
+needs `GOOGLE_CLIENT_ID` on the API. For everyday simulator work, use the Debug-only
+**Developer sign-in** button instead. It calls `POST /api/v1/auth/dev`.
+
+1. Start the API with development login enabled:
+
+   ```bash
+   APP_ENV=development AUTH_DEV_LOGIN_ENABLED=true make api-run
+   ```
+
+   Or run it without `make`, on another port, against a throwaway database:
+
+   ```bash
+   APP_ENV=development AUTH_DEV_LOGIN_ENABLED=true PORT=18080 \
+     MONGODB_URI=mongodb://localhost:27017 MONGODB_DATABASE=dinneros_dev \
+     go -C api run ./cmd/server
+   ```
+
+2. If the API isn't on port 8080, point Debug builds at it in
+   `ios/Config/Local.xcconfig`:
+
+   ```text
+   API_BASE_URL = http:/$()/localhost:18080
+   ```
+
+   The simulator shares the Mac's network, so `localhost` reaches the API.
+   `NSAllowsLocalNetworking` allows plain HTTP to local addresses. A physical device
+   needs the Mac's LAN IP instead.
+
+3. Run the **DinnerOS** scheme (Debug), tap **Developer sign-in**, then open the
+   **Household** tab. It shows "Simulator Developer" and
+   `dev-simulator@example.com` from `GET /api/v1/me`. **Sign Out** asks for
+   confirmation and returns to the sign-in screen.
+
+The button only appears in Debug builds whose `AppEnvironment` is `development`.
+It isn't compiled into Release. Without `AUTH_DEV_LOGIN_ENABLED=true`, the API
+returns `404` and the app shows an inline error with **Try Again**.
+
+The API uses an ephemeral signing key when `AUTH_TOKEN_SIGNING_KEY` is unset, so
+restarting it invalidates access tokens. The app recovers through
+`/auth/refresh`, because refresh tokens are stored in MongoDB. If you also drop
+the database, the next request signs you out.
+
+To clear a stored session from the simulator, sign out or delete the app. Keychain
+items are removed with the app on the simulator.
+
 ### Adding files
 
 `ios/DinnerOS/` and `ios/DinnerOSTests/` are synchronized folders. Create Swift

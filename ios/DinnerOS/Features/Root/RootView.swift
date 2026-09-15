@@ -1,24 +1,40 @@
 import SwiftUI
 
-/// The app shell. Each tab is a placeholder until its phase is implemented.
+/// Chooses the top-level screen from the authentication state.
 struct RootView: View {
-    @State private var selection: AppTab = .week
+    @Environment(AuthSession.self) private var session
 
     var body: some View {
-        TabView(selection: $selection) {
-            ForEach(AppTab.allCases) { tab in
-                Tab(value: tab) {
-                    NavigationStack {
-                        PlaceholderScreen(tab: tab)
-                    }
-                } label: {
-                    Label(tab.title, systemImage: tab.systemImage)
-                }
-            }
+        content
+            .animation(.default, value: session.state)
+            .task { await session.restore() }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch session.state {
+        case .restoring:
+            RestoringView()
+        case .configurationError(let message):
+            ConfigurationErrorView(message: message)
+        case .signedOut:
+            SignInView()
+                .transition(.opacity)
+        case .signedIn:
+            MainTabView()
+                .transition(.opacity)
         }
     }
 }
 
-#Preview {
+#Preview("Signed in") {
     RootView()
+        .environment(
+            AuthSession.preview(
+                .signedIn(UserSummary(id: "preview", displayName: "Ada", primaryEmail: nil, createdAt: .now))))
+}
+
+#Preview("Signed out") {
+    RootView()
+        .environment(AuthSession.preview(.signedOut))
 }

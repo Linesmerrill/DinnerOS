@@ -8,6 +8,11 @@
 APP_DISPLAY_NAME = DinnerOS
 APP_BUNDLE_ID_BASE = com.linesmerrill.dinneros
 
+// Google Sign-In iOS OAuth client (Google Cloud console → Credentials). A client ID
+// is a public identifier, not a secret. The redirect URI scheme is derived from it.
+// Leave empty to hide Google sign-in.
+GOOGLE_IOS_CLIENT_ID = 600707694145-ifi6jfhmial52rtjgrrs18eh5muiqsnt.apps.googleusercontent.com
+
 MARKETING_VERSION = 0.1.0
 // CI overrides this with the TestFlight build number.
 CURRENT_PROJECT_VERSION = 1
