@@ -180,6 +180,8 @@ struct NotificationRow: View {
                     .accessibilityHidden(true)
             }
         }
+        // Keeps `.secondary` text gray inside the list Button instead of tinted.
+        .foregroundStyle(Color.primary)
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
         .accessibilityValue(notification.read ? Text("") : Text("Unread"))

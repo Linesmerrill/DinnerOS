@@ -32,6 +32,9 @@ struct PantryItemRow: View {
             Spacer(minLength: 8)
             PantryStatusPill(status: item.status, isEstimated: item.isEstimatedLow)
         }
+        // Inside a list Button, hierarchical styles like `.secondary` resolve against the tint;
+        // anchoring them to the primary color keeps amounts and estimates gray.
+        .foregroundStyle(Color.primary)
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
     }
