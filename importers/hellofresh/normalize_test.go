@@ -231,6 +231,31 @@ func TestNormalizePrefersAccountCaptures(t *testing.T) {
 	}
 }
 
+func TestNormalizeMergesRepublishedRecipesByName(t *testing.T) {
+	older := strings.Replace(syntheticRecipe, `"updatedAt": "2026-01-02T00:00:00Z"`, `"updatedAt": "2023-01-01T00:00:00Z"`, 1)
+	republished := strings.ReplaceAll(syntheticRecipe, "aaaaaaaaaaaaaaaaaaaaaaaa", "ffffffffffffffffffffffff")
+	history := History{Weeks: []HistoryWeek{
+		{Week: "2023-W05", Meals: []HistoryMeal{{ID: "bbbbbbbbbbbbbbbbbbbbbbbb"}}},
+		{Week: "2026-W05", Meals: []HistoryMeal{{ID: "cccccccccccccccccccccccc"}}},
+	}}
+	file, err := Normalize([]RawRecipe{
+		rawFrom(t, "bbbbbbbbbbbbbbbbbbbbbbbb", older),
+		rawFrom(t, "cccccccccccccccccccccccc", republished),
+	}, history, time.Now())
+	if err != nil {
+		t.Fatalf("Normalize() error = %v", err)
+	}
+	if len(file.Recipes) != 1 {
+		t.Fatalf("recipes = %d, want one merged recipe", len(file.Recipes))
+	}
+	r := file.Recipes[0]
+	if r.SourceRecipeID != "ffffffffffffffffffffffff" ||
+		strings.Join(r.SourceAliases, ",") != "aaaaaaaaaaaaaaaaaaaaaaaa,bbbbbbbbbbbbbbbbbbbbbbbb,cccccccccccccccccccccccc" ||
+		strings.Join(r.OrderWeeks, ",") != "2023-W05,2026-W05" {
+		t.Errorf("merged = id %s aliases %v weeks %v", r.SourceRecipeID, r.SourceAliases, r.OrderWeeks)
+	}
+}
+
 func TestPendingVariants(t *testing.T) {
 	canonical := strings.Replace(syntheticRecipe, `"id": "aaaaaaaaaaaaaaaaaaaaaaaa-en-US",`, `"id": "aaaaaaaaaaaaaaaaaaaaaaaa-en-US", "slug": "synthetic-taco-night",`, 1)
 	history := History{Weeks: []HistoryWeek{

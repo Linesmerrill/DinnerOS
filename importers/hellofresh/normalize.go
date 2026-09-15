@@ -256,6 +256,29 @@ func Normalize(raws []RawRecipe, history History, now time.Time) (ImportFile, er
 		groups[key] = append(groups[key], group...)
 	}
 
+	// HelloFresh republishes the same dish under new recipe IDs over the years.
+	// To the household they are one recipe, so groups with the same name merge
+	// under the newest ID (Object IDs sort by creation time).
+	keysByName := map[string][]string{}
+	for key, group := range groups {
+		name := variantKey(newestRaw(group).recipe.Name)
+		if name == "" {
+			continue
+		}
+		keysByName[name] = append(keysByName[name], key)
+	}
+	for _, same := range keysByName {
+		if len(same) < 2 {
+			continue
+		}
+		sort.Strings(same)
+		target := same[len(same)-1]
+		for _, k := range same[:len(same)-1] {
+			groups[target] = append(groups[target], groups[k]...)
+			delete(groups, k)
+		}
+	}
+
 	file := ImportFile{Version: ImportVersion, Source: "hellofresh", GeneratedAt: now.UTC(), Recipes: []ImportRecipe{}, Review: []ReviewItem{}}
 	keys := make([]string, 0, len(groups))
 	for k := range groups {
@@ -277,6 +300,9 @@ func Normalize(raws []RawRecipe, history History, now time.Time) (ImportFile, er
 			}
 			if g.raw.DeliveredID != key {
 				aliasSet[g.raw.DeliveredID] = true
+			}
+			if id := g.recipe.RecipeID; id != "" && id != key {
+				aliasSet[id] = true
 			}
 		}
 
@@ -314,6 +340,17 @@ func Normalize(raws []RawRecipe, history History, now time.Time) (ImportFile, er
 		return file.Recipes[i].SourceRecipeID < file.Recipes[j].SourceRecipeID
 	})
 	return file, nil
+}
+
+// newestRaw returns the most recently updated copy in a group.
+func newestRaw(group []parsedRaw) parsedRaw {
+	newest := group[0]
+	for _, g := range group[1:] {
+		if g.recipe.UpdatedAt > newest.recipe.UpdatedAt {
+			newest = g
+		}
+	}
+	return newest
 }
 
 // parseRaws decodes every raw recipe and reports which delivered IDs have an
