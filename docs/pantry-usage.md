@@ -19,7 +19,7 @@ again.
 
 | Record | Where | What it holds |
 | --- | --- | --- |
-| Purchase | `pantry_purchases` | item, `source` (`grocery_list`, `manual`, `provider`), quantity and unit, optional unit size, optional ISO week, optional `clientPurchaseId`, who recorded it, `purchasedAt` |
+| Purchase | `pantry_purchases` | item, `source` (`grocery_list`, `manual`, `provider`, `house_made`), quantity and unit, optional unit size, optional ISO week, optional `clientPurchaseId`, who recorded it, `purchasedAt` |
 | Usage cycle | `pantry_items.tracking` | the current cycle: its ID (the purchase ID), source, start, tracking unit, starting amount (100%), current segment start and amount, recipe use in the segment and the whole cycle, recipe count, skipped deductions |
 | Segment history | `pantry_items.history` | up to 6 closed segments: start, end, unit, starting amount, recipe use, remaining, and whether a person observed the remaining amount |
 | Learned rate | `pantry_items.rate` | non-recipe use per day (exact, in a unit), segments it's based on, when computed |
@@ -66,6 +66,14 @@ providers exist:
   item's `itemId`.
 - **Phase 8 providers** will write the same record with `source: provider`
   (plus an order reference field added then). Apps can't send `provider`.
+- **House-made batches** of specialty ingredients (a jar of spice blend) are
+  purchases with `source: house_made`, recorded by
+  `POST .../specialty-ingredients/{specialtyId}/batches` with the batch's
+  yield, packet size, and shelf-life expiry. The batch item's key is the
+  specialty ingredient's normalized name, so cooked recipes deduct from it
+  like anything else; a recipe naming an alias or counting packets matches
+  through the specialty module's `KeyResolver`. Apps can't send `house_made`
+  to the purchases endpoint. See [specialty-ingredients.md](specialty-ingredients.md).
 
 A grocery line with two amounts ("1 onion" and "8 oz onion") is two
 purchases or one the member chooses; the API takes one amount per purchase.

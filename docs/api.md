@@ -120,6 +120,15 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/pantry/{itemId}/purchases` → `{items}` (newest 20) | `household.view` | 7 | ✅ |
 | GET | `/api/v1/households/{householdId}/pantry/settings` → `{lowThresholdPercent, defaultLowThresholdPercent, updatedBy, updatedAt}` | `household.view` | 7 | ✅ |
 | PUT | `/api/v1/households/{householdId}/pantry/settings` `{lowThresholdPercent}` → settings | `pantry.edit` | 7 | ✅ |
+| GET | `/api/v1/households/{householdId}/specialty-ingredients` `?all` → `{items}` | `household.view` | 7 | ✅ |
+| POST | `/api/v1/households/{householdId}/specialty-ingredients/choices/defaults` → `{items, skipped}` | `pantry.edit` | 7 | ✅ |
+| GET | `/api/v1/households/{householdId}/specialty-ingredients/{specialtyId}` → specialty ingredient | `household.view` | 7 | ✅ |
+| PUT | `/api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/choice` `{optionId}` → specialty ingredient | `pantry.edit` | 7 | ✅ |
+| DELETE | `/api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/choice` → `204` | `pantry.edit` | 7 | ✅ |
+| POST | `/api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/options` option → `201` option | `pantry.edit` | 7 | ✅ |
+| PUT | `/api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/options/{optionId}` option → option | `pantry.edit` | 7 | ✅ |
+| DELETE | `/api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/options/{optionId}` → `204` | `pantry.edit` | 7 | ✅ |
+| POST | `/api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/batches` `{optionId?, batches?, clientPurchaseId?}` → `201 {purchase, item, option}`, or `200` for a repeated `clientPurchaseId` | `pantry.edit` | 7 | ✅ |
 | GET | `/api/v1/households/{householdId}/notifications` `?unread&limit&before` → `{items, nextCursor}` | `household.view` | 7 | ✅ |
 | GET | `/api/v1/households/{householdId}/notifications/unread-count` → `{unreadCount}` | `household.view` | 7 | ✅ |
 | POST | `/api/v1/households/{householdId}/notifications/read` `{ids}` or `{all: true}` → `{unreadCount}` | `household.view` | 7 | ✅ |
@@ -412,6 +421,97 @@ including other members' changes.
   recipe is no longer in the household) or `servingsUnavailable` (the recipe
   no longer offers that serving size).
 
+#### Specialty ingredients on the list
+
+Specialty ingredients (meal-kit blends, sauces, concentrates) are handled as
+the household chose ([Specialty ingredients](#specialty-ingredients),
+[specialty-ingredients.md](specialty-ingredients.md)) before aggregating.
+`specialtiesApplied` is `true` when that happened. Every item has three more
+fields, and the list has `batches`:
+
+```json
+{
+  "specialtiesApplied": true,
+  "categories": [
+    {
+      "category": "condiments",
+      "items": [
+        {
+          "ingredientKey": "66e5a1f2c3b4a5d6e7f80a20",
+          "name": "Tomato Paste",
+          "amounts": [{ "quantity": "7/3", "quantityValue": 2.3333333333333335, "unit": "tbsp", "text": "2.3333333333333335 tbsp" }],
+          "quantityText": "2.3333333333333335 tbsp",
+          "unquantified": false,
+          "status": "toBuy",
+          "recipes": [{ "id": "…15", "name": "Chili Bowls" }, { "id": "…16", "name": "Smoky Pork Tacos" }],
+          "specialty": false,
+          "specialtyDetail": null,
+          "via": [
+            {
+              "kind": "store_alternative",
+              "specialtyId": "tex-mex-paste", "specialtyKey": "tex mex paste", "specialtyName": "Tex-Mex Paste",
+              "optionId": "tex-mex-paste.store", "optionName": "Tomato paste and chili spices",
+              "yield": null, "batches": null,
+              "recipes": [{ "id": "…16", "name": "Smoky Pork Tacos" }],
+              "text": "for Tex-Mex Paste in Smoky Pork Tacos"
+            }
+          ]
+        },
+        {
+          "ingredientKey": "name:sweet soy glaze",
+          "name": "Sweet Soy Glaze",
+          "amounts": [{ "quantity": "2", "quantityValue": 2, "unit": "tbsp", "text": "2 tbsp" }],
+          "quantityText": "2 tbsp", "unquantified": false, "status": "toBuy",
+          "recipes": [{ "id": "…17", "name": "Teriyaki Bowls" }],
+          "specialty": true,
+          "specialtyDetail": {
+            "id": "sweet-soy-glaze", "key": "sweet soy glaze", "name": "Sweet Soy Glaze",
+            "choiceType": null, "optionId": null, "houseMade": false,
+            "suggestedOptions": [
+              { "id": "sweet-soy-glaze.store", "type": "store_alternative", "name": "Soy and honey", "isDefault": true },
+              { "id": "sweet-soy-glaze.batch", "type": "house_made_batch", "name": "Sweet soy glaze (house batch)", "isDefault": false }
+            ],
+            "text": "Specialty ingredient: choose a store alternative or a house-made batch"
+          },
+          "via": []
+        }
+      ]
+    }
+  ],
+  "batches": [
+    {
+      "specialtyId": "southwest-spice-blend", "specialtyKey": "southwest spice blend", "specialtyName": "Southwest Spice Blend",
+      "optionId": "southwest-spice-blend.batch", "optionName": "Southwest spice blend (house blend)",
+      "yield": { "quantity": "12", "quantityValue": 12, "unit": "tbsp", "text": "12 tbsp" },
+      "status": "make", "reason": "missing", "batches": 1,
+      "pantryItemId": null, "remaining": null,
+      "needed": { "quantity": "2", "quantityValue": 2, "unit": "tbsp", "text": "2 tbsp" },
+      "recipes": [{ "id": "…15", "name": "Chili Bowls" }, { "id": "…16", "name": "Smoky Pork Tacos" }],
+      "text": "Make a batch (makes about 12 tbsp)"
+    }
+  ]
+}
+```
+
+- `specialty` is `true` when the item is a specialty ingredient by its own
+  name: the household hasn't chosen (`specialtyDetail.choiceType: null`, with
+  `suggestedOptions`, the default first), chose `as_is`, or a house-made batch
+  in the pantry covers the week (`choiceType: house_made_batch`,
+  `houseMade: true`, `status: inPantry`, `ingredientKey: "name:<key>"`).
+- `via` lists what the item stands in for. `store_alternative`: the option's
+  ingredients, scaled exactly from the recipe's amount (packet counts convert
+  through the specialty's packet size; an amount that can't convert lists the
+  ingredient without one). `house_made_batch`: the ingredients to make
+  `batches` batches, each `yield`. `text` is ready to show.
+- `batches` has one entry per house-made specialty the week uses. `status` is
+  `inPantry` or `make`; `reason` is `enough` or `inStock` (in pantry), or
+  `notEnough`, `low`, `out`, `missing` (make). `needed` is the week's total in
+  the yield's unit (`null` when a recipe gives no amount), `remaining` the
+  pantry estimate. Several batches are asked for when the shortfall exceeds
+  one yield.
+- Without the specialty module, `specialtiesApplied` is `false`, `batches` and
+  `via` are empty, and `specialty` is `false`.
+
 | Status | Code | When |
 | --- | --- | --- |
 | 400 | `validation_failed` | Invalid week, range, day, servings, status, or note; no fields in a PATCH; `recipeId` not in the household |
@@ -554,7 +654,7 @@ bulk, staples, purchases) has these fields:
 
 | `estimate` field | Meaning |
 | --- | --- |
-| `cycleId`, `cycleSource`, `cycleStartedAt` | The current cycle: the purchase ID and source (`grocery_list`, `manual`, `provider`), or `edit` when a person set the amount without a purchase |
+| `cycleId`, `cycleSource`, `cycleStartedAt` | The current cycle: the purchase ID and source (`grocery_list`, `manual`, `provider`, `house_made` for a batch made), or `edit` when a person set the amount without a purchase |
 | `adjustedAt` | When a person last corrected the amount in this cycle, or `null` |
 | `unit` | Every amount below is in this unit code |
 | `startAmount` | 100%: the amount bought (exact) |
@@ -621,7 +721,9 @@ and a new usage cycle starts.
 - Identify the item with `itemId` (restocking from the Pantry tab), or with
   `ingredientId` or `name` (checking off a grocery line), not both.
 - `source` is `grocery_list` or `manual`. `provider` is reserved for shopping
-  providers and rejected.
+  providers and rejected. `house_made` appears on batches recorded through
+  [`POST .../specialty-ingredients/{specialtyId}/batches`](#specialty-ingredients)
+  and is rejected here.
 - `quantity` and `unit` follow the pantry rules. Without `quantity` the item
   is in stock but untracked.
 - `unitSize` applies to a discrete `unit` (`count`, `package`, `can`, …) and
@@ -658,6 +760,143 @@ newest 20 purchases: `{"items": [purchase, ...]}`.
 | 403 | `forbidden` | Recording a purchase or changing settings without `pantry.edit` |
 | 404 | `not_found` | Not a member of the household; `itemId` isn't in its pantry |
 | 409 | `conflict` | The item kept changing concurrently; retry |
+
+## Specialty ingredients
+
+Meal-kit blends, sauces, pastes, and concentrates that recipes name but stores
+don't sell under that name, with curated store alternatives and house-made
+batches ([specialty-ingredients.md](specialty-ingredients.md)). Reads need
+`household.view`; every change needs `pantry.edit`. `specialtyId` is a stable
+slug (`southwest-spice-blend`).
+
+### List and get
+
+`GET .../specialty-ingredients` returns the specialty ingredients the
+household's recipes use, most used first, then by name; `?all=true` returns
+every curated one. `GET .../specialty-ingredients/{specialtyId}` returns one.
+
+```json
+{
+  "id": "southwest-spice-blend",
+  "key": "southwest spice blend",
+  "name": "Southwest Spice Blend",
+  "aliases": ["Southwestern Spice Blend"],
+  "category": "spices",
+  "ingredientIds": ["66e5a1f2c3b4a5d6e7f80a30"],
+  "recipeCount": 52,
+  "unitSizes": [{ "per": "count", "quantity": "1", "quantityValue": 1, "unit": "tbsp", "text": "1 tbsp" }],
+  "defaultOptionId": "southwest-spice-blend.batch",
+  "retired": false,
+  "choice": { "optionId": "southwest-spice-blend.batch", "type": "house_made_batch", "optionName": "Southwest spice blend (house blend)", "chosenBy": "66e5…12", "chosenAt": "2026-09-15T18:30:00Z" },
+  "options": [
+    {
+      "id": "southwest-spice-blend.store", "specialtyId": "southwest-spice-blend", "source": "curated",
+      "type": "store_alternative", "name": "Southwest blend from the spice rack", "notes": "", "isDefault": false,
+      "per": { "quantity": "1", "quantityValue": 1, "unit": "tbsp", "text": "1 tbsp" },
+      "ingredients": [{ "name": "Chili Powder", "quantity": "3/2", "quantityValue": 1.5, "unit": "tsp", "text": "1 ½ tsp Chili Powder", "category": null }],
+      "steps": [], "yield": null, "shelfLifeDays": null, "basedOnOptionId": null,
+      "summary": "1 tbsp = 1 ½ tsp Chili Powder + ¾ tsp Ground Cumin + ½ tsp Smoked Paprika + ¼ tsp Garlic Powder",
+      "createdBy": null, "updatedBy": null, "createdAt": null, "updatedAt": null
+    },
+    {
+      "id": "southwest-spice-blend.batch", "specialtyId": "southwest-spice-blend", "source": "curated",
+      "type": "house_made_batch", "name": "Southwest spice blend (house blend)", "notes": "", "isDefault": true,
+      "per": null,
+      "ingredients": [{ "name": "Chili Powder", "quantity": "3", "quantityValue": 3, "unit": "tbsp", "text": "3 tbsp Chili Powder", "category": null }],
+      "steps": ["Stir everything together in a bowl until evenly colored.", "Store in an airtight jar away from heat and light."],
+      "yield": { "quantity": "12", "quantityValue": 12, "unit": "tbsp", "text": "12 tbsp" },
+      "shelfLifeDays": 180, "basedOnOptionId": null,
+      "summary": "Makes about 12 tbsp and keeps 180 days.",
+      "createdBy": null, "updatedBy": null, "createdAt": null, "updatedAt": null
+    }
+  ],
+  "batch": { "pantryItemId": "66e5…d01", "status": "in_stock", "remaining": { "quantity": "9", "quantityValue": 9, "unit": "tbsp", "text": "9 tbsp" }, "percentRemaining": 75, "expiresOn": "2027-03-14" }
+}
+```
+
+- `recipeCount` counts the household's recipes whose ingredient is this one
+  (by catalog ingredient, including aliases). `ingredientIds` are those
+  catalog ingredients.
+- `options` are the curated options, then the household's (`source:
+  household`, oldest first). `per` and the ingredient amounts are exact;
+  ingredient `quantity` is `null` for "to taste".
+- `choice.type` is `as_is` or the chosen option's type; `null` when there's
+  no choice.
+- `batch` is the pantry item holding the batch (key = `key`), or `null`.
+  `remaining` is `null` when it has no recorded amount.
+- A `retired` specialty ingredient (removed from the curated set) is still
+  returned by `GET .../{specialtyId}` but isn't listed and can't be chosen.
+
+### Choose
+
+- `PUT .../{specialtyId}/choice` `{"optionId": "southwest-spice-blend.batch"}`
+  chooses a curated option, one of the household's options, or `"as_is"`
+  (keep it on lists by its own name, and stop suggesting). Returns the
+  specialty ingredient.
+- `DELETE .../{specialtyId}/choice` clears it (`204`, also when there was
+  none).
+- `POST .../specialty-ingredients/choices/defaults` chooses `defaultOptionId`
+  for every used specialty ingredient without a choice and returns
+  `{"items": [...chosen], "skipped": 1}`. Existing choices never change.
+
+### Household options
+
+`POST .../{specialtyId}/options` adds one (`201`); `PUT .../options/{optionId}`
+replaces it; `DELETE .../options/{optionId}` deletes it and clears any choice
+of it. Curated options can't be changed: copy one with `basedOnOptionId`.
+
+```json
+{
+  "type": "house_made_batch",
+  "name": "Mild southwest blend",
+  "notes": "No cayenne.",
+  "ingredients": [
+    { "name": "Chili Powder", "quantity": "1 1/2", "unit": "tbsp" },
+    { "name": "Ground Cumin", "quantity": "1", "unit": "tbsp", "category": "spices" },
+    { "name": "Salt" }
+  ],
+  "steps": ["Mix."],
+  "yield": { "quantity": "3", "unit": "tbsp" },
+  "shelfLifeDays": 90,
+  "basedOnOptionId": "southwest-spice-blend.batch"
+}
+```
+
+- `type` is `store_alternative` (needs `per`; every ingredient needs a
+  quantity; no `yield`, `shelfLifeDays`, or `steps`) or `house_made_batch`
+  (needs `yield` and `shelfLifeDays` 1–730; no `per`; ingredients may omit the
+  amount).
+- `name` 1–100 characters, `notes` ≤ 500, 1–20 ingredients, ≤ 20 steps of ≤ 500
+  characters. Quantities and units follow the pantry rules (exact positive
+  amounts, DinnerOS unit codes, a quantity without a unit is a `count`).
+  `category` is a grocery category, used when the catalog doesn't know the
+  ingredient.
+- At most 10 household options per specialty ingredient.
+
+### Made a batch
+
+`POST .../{specialtyId}/batches` `{"optionId"?, "batches"?, "clientPurchaseId"?}`
+records a batch made and returns `201 {purchase, item, option}`:
+
+- `optionId` defaults to the household's choice and must be a
+  `house_made_batch`. `batches` is 1–10 (default 1).
+- `purchase` has `source: house_made`, the yield × `batches`, and starts a
+  usage cycle on `item`, the pantry item keyed by the specialty ingredient
+  (added when missing, named "… (house-made)"), which is `in_stock` with an
+  `estimate`, the specialty's packet `unitSize`, and `expiresOn` from the
+  shelf life (UTC date).
+- Cooking recipes that use the specialty ingredient (by name, alias, or
+  packet count) deducts from it like any pantry item, and the low-stock
+  alert applies.
+- A repeated `clientPurchaseId` returns `200` and changes nothing.
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `validation_failed` | Unknown or wrong-specialty `optionId`; invalid option content; option limit reached; `all` not a boolean; `batches` out of range; recording a batch without a batch option |
+| 400 | `invalid_request` | Body is malformed or has unknown fields |
+| 403 | `forbidden` | Changing anything without `pantry.edit` |
+| 404 | `not_found` | Not a member; unknown or retired specialty ingredient (for changes); unknown household option |
+| 409 | `conflict` | The batch's pantry item kept changing concurrently; retry |
 
 ## Notifications
 
