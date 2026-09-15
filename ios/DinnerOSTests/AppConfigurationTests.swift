@@ -50,7 +50,7 @@ struct AppConfigurationTests {
 struct AppTabTests {
     @Test func tabsHaveUniqueIdentifiersAndSymbols() {
         let tabs = AppTab.allCases
-        #expect(tabs.first == .recipes)
+        #expect(tabs == [.menu, .shop, .pantry, .household])
         #expect(Set(tabs.map(\.id)).count == tabs.count)
         #expect(Set(tabs.map(\.systemImage)).count == tabs.count)
     }
