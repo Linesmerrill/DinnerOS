@@ -99,6 +99,8 @@ nonisolated final class FakePlanServer: Sendable {
         var failuresRemaining = 0
         /// Method and path of every request, in order.
         var log: [String] = []
+        /// The body of every `GET .../grocery`.
+        var groceryList = PlanFixtures.groceryList
     }
 
     private let state: Mutex<State>
@@ -144,7 +146,7 @@ nonisolated final class FakePlanServer: Sendable {
             case ("GET", nil, 0):
                 return (200, Self.planJSON(state, weekKey, week, stored: state.weeks[weekKey] != nil))
             case ("GET", "grocery", 1):
-                return (200, PlanFixtures.groceryList)
+                return (200, state.groceryList)
             case ("PUT", "status", 1):
                 guard let status = body["status"] as? String, ["draft", "finalized"].contains(status) else {
                     return (400, Fixtures.errorJSON(code: "validation_failed", message: "invalid status"))

@@ -102,7 +102,8 @@ nonisolated enum PantryThresholdChange: Equatable, Sendable {
 
 // MARK: - Purchases
 
-/// Where a purchase came from. Apps send `groceryList` or `manual`.
+/// Where a purchase came from. Apps send `groceryList` or `manual`; `houseMade` is recorded only
+/// through `SpecialtiesAPI.recordBatch`.
 nonisolated struct PantryPurchaseSource: RawRepresentable, Codable, Hashable, Sendable {
     let rawValue: String
 
@@ -113,6 +114,7 @@ nonisolated struct PantryPurchaseSource: RawRepresentable, Codable, Hashable, Se
     static let groceryList = PantryPurchaseSource(rawValue: "grocery_list")
     static let manual = PantryPurchaseSource(rawValue: "manual")
     static let provider = PantryPurchaseSource(rawValue: "provider")
+    static let houseMade = PantryPurchaseSource(rawValue: "house_made")
 }
 
 /// How much one purchased discrete unit holds, in a volume or weight unit.

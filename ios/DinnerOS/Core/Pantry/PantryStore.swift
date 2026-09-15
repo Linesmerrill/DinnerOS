@@ -251,6 +251,15 @@ final class PantryStore {
         return response
     }
 
+    /// Shows an item another feature changed (a house-made batch recorded from specialty
+    /// ingredients), when it belongs to the shown pantry.
+    func applyChangedItem(_ item: PantryItem, householdID: String) {
+        if householdID == self.householdID {
+            apply([item])
+        }
+        onChange?()
+    }
+
     /// The item's most recent purchases, newest first. Not cached.
     func purchases(ofItemWithID itemID: String) async throws -> [PantryPurchase] {
         let (api, householdID) = try requirePantry()
