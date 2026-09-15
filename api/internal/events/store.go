@@ -11,7 +11,8 @@ type Store interface {
 	// userId, clientEventId) is already stored is skipped and counted in
 	// duplicates; the other events are still stored.
 	Insert(ctx context.Context, events []Event) (inserted, duplicates int, err error)
-	// List returns a household's events matching q, oldest first.
+	// List returns a household's events matching q, oldest first (newest
+	// first when q.Newest is set).
 	List(ctx context.Context, q Query) ([]Event, error)
 }
 
@@ -26,6 +27,9 @@ type Query struct {
 	Since time.Time
 	// Limit caps the result; 0 means DefaultListLimit.
 	Limit int
+	// Newest returns the most recent events first, so Limit keeps the newest
+	// rather than the oldest.
+	Newest bool
 }
 
 // DefaultListLimit is the List limit when Query.Limit is 0.

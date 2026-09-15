@@ -103,6 +103,25 @@ func (s *Service) Record(ctx context.Context, e Event) error {
 	return nil
 }
 
+// MaxListLimit caps Query.Limit for List.
+const MaxListLimit = 20000
+
+// List returns a household's events matching q. Server modules read history
+// through it (the recommender, preference history); clients can't read events.
+// q.Limit is capped at MaxListLimit. Callers must already have authorized
+// access to the household.
+func (s *Service) List(ctx context.Context, q Query) ([]Event, error) {
+	if q.HouseholdID == "" {
+		return nil, invalid("householdId is required")
+	}
+	q.Limit = min(q.Limit, MaxListLimit)
+	list, err := s.store.List(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+	return list, nil
+}
+
 // notifyListeners passes stored events to every listener.
 func (s *Service) notifyListeners(ctx context.Context, list []Event) {
 	if len(s.listeners) == 0 || len(list) == 0 {
