@@ -12,6 +12,10 @@ nonisolated struct RecipeSummary: Decodable, Hashable, Sendable, Identifiable {
     let lastOrderedWeek: String?
     let isAddon: Bool
     let tags: [String]
+    /// Updated in place after the user rates the recipe.
+    var householdRating: HouseholdRating = .unrated
+    /// The signed-in user's rating, or `nil`.
+    var myRating: RecipeRating?
 
     /// `nil` when missing or not a valid URL. Imported data isn't trusted to be well formed.
     var imageURL: URL? { imageURLString.flatMap { URL(string: $0) } }
@@ -19,7 +23,7 @@ nonisolated struct RecipeSummary: Decodable, Hashable, Sendable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case id, name, headline
         case imageURLString = "imageUrl"
-        case totalMinutes, timesOrdered, lastOrderedWeek, isAddon, tags
+        case totalMinutes, timesOrdered, lastOrderedWeek, isAddon, tags, householdRating, myRating
     }
 }
 
@@ -59,6 +63,9 @@ nonisolated struct Recipe: Decodable, Equatable, Sendable, Identifiable {
     let lastOrderedWeek: String?
     let createdAt: Date
     let updatedAt: Date
+    var householdRating: HouseholdRating = .unrated
+    /// The signed-in user's rating, or `nil`.
+    var myRating: RecipeRating?
 
     var imageURL: URL? { imageURLString.flatMap { URL(string: $0) } }
 
@@ -68,7 +75,8 @@ nonisolated struct Recipe: Decodable, Equatable, Sendable, Identifiable {
         case source, name, headline, description
         case imageURLString = "imageUrl"
         case isAddon, servings, prepMinutes, totalMinutes, difficulty, cuisines, tags, utensils, allergens,
-            nutritionPerServing, ingredients, steps, orderWeeks, timesOrdered, lastOrderedWeek, createdAt, updatedAt
+            nutritionPerServing, ingredients, steps, orderWeeks, timesOrdered, lastOrderedWeek, createdAt, updatedAt,
+            householdRating, myRating
     }
 }
 

@@ -218,6 +218,65 @@ final class RecipeLibrary {
         return recipe
     }
 
+    // MARK: - Ratings
+
+    /// Saves the signed-in user's rating of a recipe, then refreshes that recipe in the
+    /// cache and its row in the list so the household average matches the server.
+    @discardableResult
+    func saveRating(_ draft: RatingDraft, recipeID: String) async throws -> RecipeRating {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        let body = draft.request
+        let saved = try await session.authorized { token in
+            try await api.rate(householdID: householdID, recipeID: recipeID, request: body, accessToken: token)
+        }
+        Self.logger.info("Rating saved")
+        await refreshRating(recipeID: recipeID, householdID: householdID, mine: saved)
+        return saved
+    }
+
+    /// Removes the signed-in user's rating, then refreshes the recipe like `saveRating`.
+    func removeRating(recipeID: String) async throws {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        try await session.authorized { token in
+            try await api.removeRating(householdID: householdID, recipeID: recipeID, accessToken: token)
+        }
+        Self.logger.info("Rating removed")
+        await refreshRating(recipeID: recipeID, householdID: householdID, mine: nil)
+    }
+
+    /// Every member's rating of a recipe. Not cached: it's shown on its own screen.
+    func ratings(recipeID: String) async throws -> RatingListResponse {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        return try await session.authorized { token in
+            try await api.ratings(householdID: householdID, recipeID: recipeID, accessToken: token)
+        }
+    }
+
+    /// Reloads the rated recipe so the cache and list row carry the new household average.
+    /// When the reload fails, the rating is already saved, so only the user's own rating
+    /// is patched in and the average waits for the next load.
+    private func refreshRating(recipeID: String, householdID: String, mine: RecipeRating?) async {
+        do {
+            let recipe = try await recipe(id: recipeID, reload: true)
+            guard householdID == self.householdID else { return }
+            details[recipeID] = recipe
+            updateSummary(id: recipeID) {
+                $0.householdRating = recipe.householdRating
+                $0.myRating = recipe.myRating
+            }
+        } catch {
+            guard householdID == self.householdID else { return }
+            Self.logger.notice("Rated recipe reload failed: \(Self.describe(error), privacy: .public)")
+            details[recipeID]?.myRating = mine
+            updateSummary(id: recipeID) { $0.myRating = mine }
+        }
+    }
+
+    private func updateSummary(id: String, _ change: (inout RecipeSummary) -> Void) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        change(&items[index])
+    }
+
     // MARK: - Reset
 
     /// Forgets everything, for sign-out.

@@ -5,14 +5,18 @@ import Synchronization
 
 /// Synthetic JSON shaped like the API's recipe responses. No real recipes or orders.
 nonisolated enum RecipeFixtures {
+    static let unrated = #"{"average":null,"count":0}"#
+
     static func summary(
-        id: String, name: String, isAddon: Bool = false, timesOrdered: Int = 0, lastOrderedWeek: String? = nil
+        id: String, name: String, isAddon: Bool = false, timesOrdered: Int = 0, lastOrderedWeek: String? = nil,
+        householdRating: String = unrated, myRating: String = "null"
     ) -> String {
         let week = lastOrderedWeek.map { #","lastOrderedWeek":"\#($0)""# } ?? ""
         return #"""
             {"id":"\#(id)","name":"\#(name)","headline":"with Test Sauce",
              "imageUrl":"https://img.example.test/\#(id).jpg","totalMinutes":30,
-             "timesOrdered":\#(timesOrdered)\#(week),"isAddon":\#(isAddon),"tags":["Quick"]}
+             "timesOrdered":\#(timesOrdered)\#(week),"isAddon":\#(isAddon),"tags":["Quick"],
+             "householdRating":\#(householdRating),"myRating":\#(myRating)}
             """#
     }
 
@@ -23,11 +27,28 @@ nonisolated enum RecipeFixtures {
 
     /// A summary with every `omitempty` field left out.
     static let minimalPage = Data(
-        #"{"items":[{"id":"r-min","name":"Plain Toast","timesOrdered":0,"isAddon":true,"tags":[]}]}"#.utf8)
+        #"""
+        {"items":[{"id":"r-min","name":"Plain Toast","timesOrdered":0,"isAddon":true,"tags":[],
+                   "householdRating":{"average":null,"count":0},"myRating":null}]}
+        """#.utf8)
+
+    /// A rating as the API returns it.
+    static func rating(
+        recipeID: String = "recipe-1", userID: String = Fixtures.user.id, score: Int, tags: [String] = [],
+        comment: String = ""
+    ) -> String {
+        let tagList = tags.map { #""\#($0)""# }.joined(separator: ",")
+        return #"""
+            {"recipeId":"\#(recipeID)","userId":"\#(userID)","score":\#(score),"comment":"\#(comment)",
+             "tags":[\#(tagList)],"createdAt":"2026-09-14T19:00:00.123456789Z","updatedAt":"2026-09-15T18:00:00Z"}
+            """#
+    }
 
     /// A full recipe. Amounts for 4 servings are deliberately not double the 2-serving
     /// amounts, so tests catch arithmetic scaling.
-    static func detail(servings: String = "[2,4]") -> Data {
+    static func detail(
+        servings: String = "[2,4]", householdRating: String = unrated, myRating: String = "null"
+    ) -> Data {
         Data(
             #"""
             {
@@ -81,7 +102,8 @@ nonisolated enum RecipeFixtures {
                 {"index": 2, "text": "• Fill.\n• Serve."}
               ],
               "orderWeeks": ["2026-W12", "2026-W37"], "timesOrdered": 2, "lastOrderedWeek": "2026-W37",
-              "createdAt": "2026-09-14T18:30:00.123456789Z", "updatedAt": "2026-09-14T18:30:00Z"
+              "createdAt": "2026-09-14T18:30:00.123456789Z", "updatedAt": "2026-09-14T18:30:00Z",
+              "householdRating": \#(householdRating), "myRating": \#(myRating)
             }
             """#.utf8)
     }
