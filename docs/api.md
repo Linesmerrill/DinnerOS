@@ -1311,7 +1311,7 @@ search; no household is involved.
 ```json
 {
   "items": [
-    { "id": "66e5a1f2c3b4a5d6e7f80a13", "key": "oil", "name": "Oil", "category": "pantry", "categoryConfident": true },
+    { "id": "66e5a1f2c3b4a5d6e7f80a13", "key": "oil", "name": "Oil", "category": "pantry", "categoryConfident": true, "imageUrl": "https://img.example.com/oil.jpg" },
     { "id": "66e5a1f2c3b4a5d6e7f80a14", "key": "olive oil", "name": "Olive Oil", "category": "pantry", "categoryConfident": true }
   ]
 }
@@ -1319,6 +1319,11 @@ search; no household is involved.
 
 `categoryConfident: false` means no category rule matched, so the category is
 a placeholder (`other`) awaiting review.
+
+`imageUrl` is the ingredient's image, when the import that created it supplied
+one; it is omitted otherwise. The catalog is where ingredient images live, so
+a [recipe detail](#get)'s ingredient lines resolve the same image by
+`ingredientId` rather than storing a copy on the recipe.
 
 ## Ratings
 
