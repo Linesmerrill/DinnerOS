@@ -43,6 +43,10 @@ type Store interface {
 	ExistingRecipeIDs(ctx context.Context, householdID string, ids []string) ([]string, error)
 	// ListRecipes returns summaries matching f in f.Sort order.
 	ListRecipes(ctx context.Context, householdID string, f ListFilter) ([]RecipeSummary, error)
+	// ListCatalog returns up to limit of the household's recipes ordered by
+	// ID, without steps, nutrition, or descriptions. Ingredient lines are
+	// included (without categories).
+	ListCatalog(ctx context.Context, householdID string, limit int) ([]Recipe, error)
 
 	// SaveReviewItems records review items. Items already recorded for the
 	// household (same reviewKey) are left unchanged.

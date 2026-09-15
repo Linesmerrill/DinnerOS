@@ -187,6 +187,7 @@ type summaryDoc struct {
 	Name            string        `bson:"name"`
 	Headline        string        `bson:"headline"`
 	ImageURL        string        `bson:"imageUrl"`
+	PrepMinutes     int           `bson:"prepMinutes"`
 	TotalMinutes    int           `bson:"totalMinutes"`
 	TimesOrdered    int           `bson:"timesOrdered"`
 	LastOrderedWeek string        `bson:"lastOrderedWeek"`
@@ -493,6 +494,34 @@ func (s *MongoStore) GetRecipes(ctx context.Context, householdID string, ids []s
 	return out, nil
 }
 
+// ListCatalog implements Store with one query that leaves out the large
+// fields the catalog view doesn't need.
+func (s *MongoStore) ListCatalog(ctx context.Context, householdID string, limit int) ([]Recipe, error) {
+	hid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return nil, nil
+	}
+	opts := options.Find().
+		SetSort(bson.D{{Key: "_id", Value: 1}}).
+		SetLimit(int64(limit)).
+		SetProjection(bson.D{
+			{Key: "steps", Value: 0}, {Key: "nutritionPerServing", Value: 0}, {Key: "description", Value: 0},
+		})
+	cur, err := s.recipes.Find(ctx, bson.D{{Key: "householdId", Value: hid}}, opts)
+	if err != nil {
+		return nil, translate(err)
+	}
+	var docs []recipeDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	var out []Recipe
+	for _, d := range docs {
+		out = append(out, d.toRecipe())
+	}
+	return out, nil
+}
+
 // ExistingRecipeIDs implements Store with an _id lookup that reads only IDs.
 func (s *MongoStore) ExistingRecipeIDs(ctx context.Context, householdID string, ids []string) ([]string, error) {
 	hid, err := mongodb.ParseID(householdID)
@@ -569,7 +598,7 @@ func (s *MongoStore) ListRecipes(ctx context.Context, householdID string, f List
 		SetLimit(int64(f.Limit)).
 		SetProjection(bson.D{
 			{Key: "name", Value: 1}, {Key: "headline", Value: 1}, {Key: "imageUrl", Value: 1},
-			{Key: "totalMinutes", Value: 1}, {Key: "timesOrdered", Value: 1}, {Key: "lastOrderedWeek", Value: 1},
+			{Key: "prepMinutes", Value: 1}, {Key: "totalMinutes", Value: 1}, {Key: "timesOrdered", Value: 1}, {Key: "lastOrderedWeek", Value: 1},
 			{Key: "isAddon", Value: 1}, {Key: "tags", Value: 1},
 		})
 	cur, err := s.recipes.Find(ctx, filter, opts)
@@ -583,7 +612,7 @@ func (s *MongoStore) ListRecipes(ctx context.Context, householdID string, f List
 	out := make([]RecipeSummary, 0, len(docs))
 	for _, d := range docs {
 		out = append(out, RecipeSummary{
-			ID: d.ID.Hex(), Name: d.Name, Headline: d.Headline, ImageURL: d.ImageURL, TotalMinutes: d.TotalMinutes,
+			ID: d.ID.Hex(), Name: d.Name, Headline: d.Headline, ImageURL: d.ImageURL, PrepMinutes: d.PrepMinutes, TotalMinutes: d.TotalMinutes,
 			TimesOrdered: d.TimesOrdered, LastOrderedWeek: d.LastOrderedWeek, IsAddon: d.IsAddon, Tags: nilIfEmpty(d.Tags),
 		})
 	}

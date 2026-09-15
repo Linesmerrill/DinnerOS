@@ -73,6 +73,21 @@ type Recipe struct {
 	UpdatedAt       time.Time
 }
 
+// CookMinutes is the recipe's effective cook time (see CookMinutes).
+func (r Recipe) CookMinutes() int { return CookMinutes(r.PrepMinutes, r.TotalMinutes) }
+
+// CookMinutes returns a source-agnostic effective cook time: the larger of
+// prep and total minutes, ignoring missing (zero or negative) values. It is 0
+// when neither is usable, which callers treat as unknown.
+//
+// Sources don't agree on what the two fields mean. Some report a total that is
+// smaller than the prep time, or only a prep time, so neither field can be
+// used on its own: a total below prep can't be a total. The larger value is
+// the best available estimate of how long dinner takes.
+func CookMinutes(prepMinutes, totalMinutes int) int {
+	return max(prepMinutes, totalMinutes, 0)
+}
+
 // Nutrient is a per-serving nutrition value.
 type Nutrient struct {
 	Name   string
@@ -125,12 +140,16 @@ type RecipeSummary struct {
 	Name            string
 	Headline        string
 	ImageURL        string
+	PrepMinutes     int
 	TotalMinutes    int
 	TimesOrdered    int
 	LastOrderedWeek string
 	IsAddon         bool
 	Tags            []string
 }
+
+// CookMinutes is the summary's effective cook time (see CookMinutes).
+func (s RecipeSummary) CookMinutes() int { return CookMinutes(s.PrepMinutes, s.TotalMinutes) }
 
 // Ingredient is a canonical catalog ingredient. The catalog is global, not
 // household-scoped. Key is ingredients.NormalizeName(Name) and is unique.
