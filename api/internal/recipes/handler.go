@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
+	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
@@ -42,12 +43,21 @@ type HandlerOptions struct {
 	Ratings RatingReader
 	// Events, when set, records import.completed after each successful import.
 	Events events.Recorder
+	// TimeBands, when set, supplies the household's Autopilot cook-time bands
+	// for timeBand. Without it, or when it fails, the default bands apply.
+	TimeBands TimeBandReader
 }
 
 // RatingReader loads rating aggregates for recipes. *ratings.Service
 // implements it.
 type RatingReader interface {
 	Summaries(ctx context.Context, householdID, userID string, recipeIDs []string) (map[string]ratings.Summary, error)
+}
+
+// TimeBandReader loads a household's cook-time bands.
+// *recommendations.Service implements it.
+type TimeBandReader interface {
+	TimeBands(ctx context.Context, householdID string) (autopilot.TimeBands, error)
 }
 
 // Handler serves the recipe endpoints.
@@ -102,10 +112,40 @@ type RecipeSummaryResponse struct {
 	LastOrderedWeek string   `json:"lastOrderedWeek,omitempty"`
 	IsAddon         bool     `json:"isAddon"`
 	Tags            []string `json:"tags"`
+	// Calories (kcal) and ProteinGrams are per serving, null when the
+	// nutrition list doesn't have them.
+	Calories     *int `json:"calories"`
+	ProteinGrams *int `json:"proteinGrams"`
+	// TimeBand is quick, medium, or long under the household's Autopilot
+	// cook-time bands, null when cookMinutes is unknown.
+	TimeBand *autopilot.TimeBand `json:"timeBand"`
 	// HouseholdRating aggregates every member's rating; MyRating is the
 	// caller's own, or null.
 	HouseholdRating ratings.HouseholdRatingResponse `json:"householdRating"`
 	MyRating        *ratings.RatingResponse         `json:"myRating"`
+}
+
+// NewRecipeSummaryResponse returns the wire form of a summary with its rating
+// and time band under bands. Other modules that return recipe summaries (the
+// menu) use it so every summary has the same fields.
+func NewRecipeSummaryResponse(s RecipeSummary, rating ratings.Summary, bands autopilot.TimeBands) RecipeSummaryResponse {
+	facts := s.Facts()
+	item := RecipeSummaryResponse{
+		ID: s.ID, Name: s.Name, Headline: s.Headline, ImageURL: s.ImageURL, TotalMinutes: s.TotalMinutes, CookMinutes: s.CookMinutes(),
+		TimesOrdered: s.TimesOrdered, LastOrderedWeek: s.LastOrderedWeek, IsAddon: s.IsAddon, Tags: orEmpty(s.Tags),
+		Calories: facts.Calories, ProteinGrams: facts.ProteinGrams, TimeBand: TimeBandOf(s.CookMinutes(), bands),
+	}
+	item.HouseholdRating, item.MyRating = ratingFields(rating)
+	return item
+}
+
+// TimeBandOf returns the band of a cook time, or nil when it is unknown (0).
+func TimeBandOf(cookMinutes int, bands autopilot.TimeBands) *autopilot.TimeBand {
+	if cookMinutes <= 0 {
+		return nil
+	}
+	band := bands.Of(cookMinutes)
+	return &band
 }
 
 // RecipeListResponse is returned by GET /households/{householdId}/recipes.
@@ -131,6 +171,9 @@ type RecipeResponse struct {
 	PrepMinutes     int                        `json:"prepMinutes,omitempty"`
 	TotalMinutes    int                        `json:"totalMinutes,omitempty"`
 	CookMinutes     int                        `json:"cookMinutes,omitempty"`
+	TimeBand        *autopilot.TimeBand        `json:"timeBand"`
+	Calories        *int                       `json:"calories"`
+	ProteinGrams    *int                       `json:"proteinGrams"`
 	Difficulty      int                        `json:"difficulty,omitempty"`
 	Cuisines        []string                   `json:"cuisines"`
 	Tags            []string                   `json:"tags"`
@@ -169,6 +212,7 @@ type RecipeIngredientResponse struct {
 	IngredientID string           `json:"ingredientId"`
 	Name         string           `json:"name"`
 	Category     string           `json:"category"`
+	ImageURL     string           `json:"imageUrl,omitempty"`
 	PantryStaple bool             `json:"pantryStaple"`
 	Amounts      []AmountResponse `json:"amounts"`
 }
@@ -210,8 +254,10 @@ func orEmpty[T any](s []T) []T {
 	return s
 }
 
-func newRecipeResponse(r Recipe) RecipeResponse {
+func newRecipeResponse(r Recipe, bands autopilot.TimeBands) RecipeResponse {
+	facts := r.Facts()
 	resp := RecipeResponse{
+		TimeBand: TimeBandOf(r.CookMinutes(), bands), Calories: facts.Calories, ProteinGrams: facts.ProteinGrams,
 		ID: r.ID, HouseholdID: r.HouseholdID, Source: r.Source, SourceRecipeID: r.SourceRecipeID,
 		SourceAliases: orEmpty(r.SourceAliases), SourceURL: r.SourceURL,
 		Name: r.Name, Headline: r.Headline, Description: r.Description, ImageURL: r.ImageURL, IsAddon: r.IsAddon,
@@ -231,7 +277,7 @@ func newRecipeResponse(r Recipe) RecipeResponse {
 	}
 	for _, line := range r.Ingredients {
 		lr := RecipeIngredientResponse{
-			IngredientID: line.IngredientID, Name: line.Name, Category: line.Category, PantryStaple: line.PantryStaple,
+			IngredientID: line.IngredientID, Name: line.Name, Category: line.Category, ImageURL: line.ImageURL, PantryStaple: line.PantryStaple,
 			Amounts: make([]AmountResponse, 0, len(line.Amounts)),
 		}
 		for _, a := range line.Amounts {
@@ -286,14 +332,10 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		h.internalError(w, r, "load recipe ratings failed", err)
 		return
 	}
+	bands := h.timeBands(r.Context(), actor.HouseholdID)
 	resp := RecipeListResponse{Items: make([]RecipeSummaryResponse, 0, len(page.Items)), NextCursor: page.NextCursor}
 	for _, s := range page.Items {
-		item := RecipeSummaryResponse{
-			ID: s.ID, Name: s.Name, Headline: s.Headline, ImageURL: s.ImageURL, TotalMinutes: s.TotalMinutes, CookMinutes: s.CookMinutes(),
-			TimesOrdered: s.TimesOrdered, LastOrderedWeek: s.LastOrderedWeek, IsAddon: s.IsAddon, Tags: orEmpty(s.Tags),
-		}
-		item.HouseholdRating, item.MyRating = ratingFields(summaries[s.ID])
-		resp.Items = append(resp.Items, item)
+		resp.Items = append(resp.Items, NewRecipeSummaryResponse(s, summaries[s.ID], bands))
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
@@ -339,7 +381,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		h.internalError(w, r, "load recipe rating failed", err)
 		return
 	}
-	resp := newRecipeResponse(recipe)
+	resp := newRecipeResponse(recipe, h.timeBands(r.Context(), actor.HouseholdID))
 	resp.HouseholdRating, resp.MyRating = ratingFields(summaries[recipe.ID])
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
@@ -385,6 +427,20 @@ func (h *Handler) ratingSummaries(ctx context.Context, actor households.Membersh
 		return nil, nil
 	}
 	return h.opts.Ratings.Summaries(ctx, actor.HouseholdID, actor.UserID, recipeIDs)
+}
+
+// timeBands returns the household's cook-time bands. They only label
+// recipes, so a failure is logged and the default bands apply.
+func (h *Handler) timeBands(ctx context.Context, householdID string) autopilot.TimeBands {
+	if h.opts.TimeBands == nil {
+		return autopilot.TimeBands{}
+	}
+	bands, err := h.opts.TimeBands.TimeBands(ctx, householdID)
+	if err != nil {
+		h.logger.WarnContext(ctx, "load cook-time bands; using defaults", "householdId", householdID, "error", err)
+		return autopilot.TimeBands{}
+	}
+	return bands
 }
 
 func ratingFields(s ratings.Summary) (ratings.HouseholdRatingResponse, *ratings.RatingResponse) {

@@ -108,7 +108,10 @@ type RecipeIngredient struct {
 	Name         string
 	// Category comes from the ingredient catalog. Service.Get fills it in; it
 	// is not stored on the recipe.
-	Category     string
+	Category string
+	// ImageURL is the catalog ingredient's image. Like Category, Service.Get
+	// fills it in and it is not stored on the recipe.
+	ImageURL     string
 	PantryStaple bool
 	// Amounts has one entry per serving size, ascending.
 	Amounts []Amount
@@ -146,6 +149,16 @@ type RecipeSummary struct {
 	LastOrderedWeek string
 	IsAddon         bool
 	Tags            []string
+	// Nutrition is the per-serving list, read for Facts.
+	Nutrition []Nutrient
+}
+
+// SummaryOf returns the list view of a recipe.
+func SummaryOf(r Recipe) RecipeSummary {
+	return RecipeSummary{
+		ID: r.ID, Name: r.Name, Headline: r.Headline, ImageURL: r.ImageURL, PrepMinutes: r.PrepMinutes, TotalMinutes: r.TotalMinutes,
+		TimesOrdered: r.TimesOrdered, LastOrderedWeek: r.LastOrderedWeek, IsAddon: r.IsAddon, Tags: r.Tags, Nutrition: r.Nutrition,
+	}
 }
 
 // CookMinutes is the summary's effective cook time (see CookMinutes).

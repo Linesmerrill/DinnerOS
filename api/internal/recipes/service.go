@@ -433,8 +433,20 @@ func (s *Service) Catalog(ctx context.Context, householdID string) ([]Recipe, er
 	return s.store.ListCatalog(ctx, householdID, MaxCatalogRecipes)
 }
 
-// fillCategories sets each ingredient line's category from the catalog, with
-// one catalog query for all recipes.
+// MenuCatalog returns the household's recipes (main meals and add-ons) ordered
+// by ID with what menu cards need: names, images, times, cuisines, tags,
+// utensils, allergens, nutrition, order history, and ingredient names (for
+// recipe attributes). Steps, descriptions, and ingredient amounts are left
+// out. At most MaxCatalogRecipes are returned.
+func (s *Service) MenuCatalog(ctx context.Context, householdID string) ([]Recipe, error) {
+	if householdID == "" {
+		return nil, errHouseholdRequired
+	}
+	return s.store.ListMenuCatalog(ctx, householdID, MaxCatalogRecipes)
+}
+
+// fillCategories sets each ingredient line's category and image from the
+// catalog, with one catalog query for all recipes.
 func (s *Service) fillCategories(ctx context.Context, list []Recipe) error {
 	var ids []string
 	for _, r := range list {
@@ -451,13 +463,14 @@ func (s *Service) fillCategories(ctx context.Context, list []Recipe) error {
 	if err != nil {
 		return fmt.Errorf("get ingredients: %w", err)
 	}
-	categories := make(map[string]string, len(catalog))
+	byID := make(map[string]Ingredient, len(catalog))
 	for _, ing := range catalog {
-		categories[ing.ID] = ing.Category
+		byID[ing.ID] = ing
 	}
 	for _, r := range list {
 		for i := range r.Ingredients {
-			r.Ingredients[i].Category = categories[r.Ingredients[i].IngredientID]
+			ing := byID[r.Ingredients[i].IngredientID]
+			r.Ingredients[i].Category, r.Ingredients[i].ImageURL = ing.Category, ing.ImageURL
 		}
 	}
 	return nil

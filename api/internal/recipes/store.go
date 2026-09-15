@@ -47,6 +47,10 @@ type Store interface {
 	// ID, without steps, nutrition, or descriptions. Ingredient lines are
 	// included (without categories).
 	ListCatalog(ctx context.Context, householdID string, limit int) ([]Recipe, error)
+	// ListMenuCatalog returns up to limit of the household's recipes ordered
+	// by ID for menu cards: everything but steps, descriptions, source
+	// identity, and ingredient amounts. Ingredient lines carry only names.
+	ListMenuCatalog(ctx context.Context, householdID string, limit int) ([]Recipe, error)
 	// FindIngredientUse returns one IngredientUse per household recipe that
 	// has a line with any of ingredientIDs, ordered by recipe ID. Each use
 	// lists which of those IDs the recipe has, sorted and without repeats.
