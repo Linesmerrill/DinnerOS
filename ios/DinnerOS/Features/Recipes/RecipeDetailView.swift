@@ -29,7 +29,7 @@ struct RecipeDetailView: View {
                         }
                     }
                     if let recipe {
-                        RecipeDetailSections(recipe: recipe, servings: $servings)
+                        RecipeDetailSections(recipe: recipe, servings: $servings) { show($0) }
                     } else if loadError == nil {
                         ProgressView()
                             .frame(maxWidth: .infinity)
@@ -69,6 +69,7 @@ struct RecipeDetailView: View {
             if let recipe {
                 RecipeFacts(recipe: recipe)
                     .padding(.top, 4)
+                HouseholdRatingSummary(recipe: recipe)
             }
         }
     }
@@ -130,6 +131,7 @@ private struct RecipeFacts: View {
 private struct RecipeDetailSections: View {
     let recipe: Recipe
     @Binding var servings: Int?
+    let onRatingChange: (Recipe) -> Void
 
     var body: some View {
         if let description = recipe.description, !description.isEmpty {
@@ -144,6 +146,8 @@ private struct RecipeDetailSections: View {
                 }
             }
         }
+        // After the steps, where someone who just cooked it finishes reading.
+        RecipeRatingSection(recipe: recipe, onChange: onRatingChange)
         if !recipe.nutritionPerServing.isEmpty {
             DetailSection("Nutrition per Serving") {
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
@@ -296,7 +300,7 @@ private struct RecipeStepRow: View {
     }
 }
 
-private struct DetailSection<Content: View>: View {
+struct DetailSection<Content: View>: View {
     let title: LocalizedStringKey
     @ViewBuilder let content: Content
 

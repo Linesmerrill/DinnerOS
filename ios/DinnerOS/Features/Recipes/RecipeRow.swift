@@ -25,9 +25,17 @@ struct RecipeRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
-                Text(Self.details(for: summary))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    if let average = summary.householdRating.average, summary.householdRating.count > 0 {
+                        Text("\(Image(systemName: "star.fill")) \(RatingFormat.average(average))")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.orange)
+                            .accessibilityLabel(RatingFormat.accessibilitySummary(summary.householdRating))
+                    }
+                    Text(Self.details(for: summary))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(.vertical, 4)
