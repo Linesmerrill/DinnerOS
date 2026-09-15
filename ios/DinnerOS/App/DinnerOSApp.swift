@@ -16,11 +16,14 @@ struct DinnerOSApp: App {
                 .environment(dependencies.plans)
                 .environment(dependencies.pantry)
                 .environment(dependencies.events)
+                .environment(dependencies.notifications)
                 .onChange(of: scenePhase, initial: true) { _, phase in
                     let events = dependencies.events
                     switch phase {
                     case .active:
                         events.appDidBecomeActive()
+                        let notifications = dependencies.notifications
+                        Task { await notifications.refreshUnreadCount() }
                     case .background:
                         BackgroundActivity.run(named: "Send events") {
                             await events.appDidEnterBackground()

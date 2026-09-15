@@ -1,7 +1,7 @@
 # Smart pantry: usage tracking
 
-Status: API implemented (`api/internal/pantry`, `api/internal/notifications`).
-The iOS screens are a follow-up. Push delivery (APNs) is later.
+Status: API implemented (`api/internal/pantry`, `api/internal/notifications`)
+and iOS implemented ([iOS](#ios)). Push delivery (APNs) is later.
 
 A pantry item knows how much the household bought, what cooked recipes used,
 and how fast the household uses it otherwise. From that it estimates what's
@@ -261,6 +261,24 @@ tracked). [api.md](api.md#usage-estimates) has the full shape. For example:
 `remaining` and `otherUse` are rounded to hundredths, and `dailyRate` to
 thousandths. `startAmount` and `recipeUse` are exact. `summary` is English;
 apps may build their own text from the numbers.
+
+## iOS
+
+| Flow | Where | What happens |
+| --- | --- | --- |
+| Grocery check-off | Week → Grocery List (`GroceryListModel`, `GroceryPurchaseBanner`) | Checking a line off shows a card at the bottom: "Add *line* to pantry?" with the line's first amount and unit editable (the ⋯ menu offers the line's other amounts). **Add** closes the card and records `source: grocery_list` in the background; **Skip** records nothing. "Don't Ask During This Trip" stops the card until the list is left. Checking another line replaces an unanswered card. A failure shows **Try Again**, which resends the same `clientPurchaseId`. `grocery.item_checked` is still recorded for every check. |
+| Restock | Pantry → item → **Restock / I Bought This** (`PantryRestockSheet`) | Amount, unit, and for a discrete unit an optional package size (`unitSize`). Records `source: manual` with `itemId`. Also on the read-only item detail for members with `pantry.edit`. |
+| Estimates | Pantry rows (`PantryItemRow`), item edit sheet or detail (`PantryUsageSections`) | Rows with an `estimate` show a ring and "~31% left". The item screen shows the ring, remaining amount, `summary`, recipe use, daily rate, skipped recipes, the threshold in effect and whether it's the item's or the household's, and the 20 most recent purchases. |
+| Status source | `PantryStatusPill` | `statusSource: estimate` with `low` shows an outlined, dashed **Estimated Low** pill; a person's status keeps the filled pill. |
+| Thresholds | Pantry → ⋯ → **Low-Stock Alerts…** (`PantryThresholdSheet`); item edit sheet (`PantryThresholdFields`) | The household's percent used (1–100, default 80), read-only without `pantry.edit`. An item toggles **Use Household Setting** off to set its own, which `PATCH`es an integer; turning it back on sends `null`. |
+| Notifications | Bell in the Pantry and Week toolbars (`NotificationsView`) | Unread badge from `unread-count`. The sheet lists notifications 50 at a time and loads the next page when the last row appears. Tapping a notification marks it read; `pantry.low` opens the item. **Mark All Read** sends `all: true`. |
+| Cooking | Week → swipe or long-press → **Mark as Cooked** | Sends the queued events right away, then refreshes the pantry and the unread count so the deduction shows. |
+
+The unread count refreshes when a household is activated, when the app becomes
+active, after every pantry load or change, after cooking, and when the
+notifications sheet closes. Members without `pantry.edit` aren't asked "Add to
+pantry?" and don't see Restock or threshold controls; a `403` from a purchase
+also turns the prompt off and reloads the household's permissions.
 
 ## Limitations and open questions
 

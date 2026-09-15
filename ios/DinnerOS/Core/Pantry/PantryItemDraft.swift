@@ -14,6 +14,10 @@ nonisolated struct PantryItemDraft: Equatable, Sendable {
     /// Used only while `hasExpiry` is on.
     var expiryDate: Date
     var note = ""
+    /// Off when the item has its own low-stock threshold.
+    var usesHouseholdThreshold = true
+    /// The item's own threshold, as percent used; sent only while `usesHouseholdThreshold` is off.
+    var lowThresholdPercent = PantrySettings.defaultLowThresholdPercent
 
     init(today: Date = .now, timeZone: TimeZone = .autoupdatingCurrent) {
         expiryDate = PantryDate.calendar(timeZone: timeZone).startOfDay(for: today)
@@ -30,6 +34,12 @@ nonisolated struct PantryItemDraft: Equatable, Sendable {
             expiryDate = date
         }
         note = item.note
+        if let percent = item.lowThresholdPercent {
+            usesHouseholdThreshold = false
+            lowThresholdPercent = percent
+        } else if let percent = item.estimate?.lowThresholdPercent {
+            lowThresholdPercent = percent
+        }
     }
 
     /// An item that's out has no amount; the API rejects one.
@@ -102,6 +112,15 @@ nonisolated struct PantryItemDraft: Equatable, Sendable {
         }
         if trimmedNote != item.note {
             changes.note = trimmedNote
+        }
+        let percent = min(max(lowThresholdPercent, PantrySettings.thresholdRange.lowerBound), 100)
+        switch (usesHouseholdThreshold, item.lowThresholdPercent) {
+        case (true, .some):
+            changes.lowThresholdPercent = .household
+        case (false, let current) where current != percent:
+            changes.lowThresholdPercent = .percent(percent)
+        default:
+            break
         }
         return changes
     }
