@@ -86,7 +86,7 @@ func (m *model) longOKOn(day int) bool {
 // fullMatch reports whether the item matches every group the rule specifies.
 func fullMatch(it *item, r *rule) bool {
 	groups := 0
-	for _, g := range [][2][]string{{it.proteins, r.proteins}, {it.methods, r.methods}, {it.cuisines, r.cuisines}, {it.tags, r.tags}} {
+	for _, g := range [][2][]string{{it.proteins, r.proteins}, {it.methods, r.methods}, {it.withRegions, r.cuisines}, {it.tags, r.tags}} {
 		if len(g[1]) == 0 {
 			continue
 		}

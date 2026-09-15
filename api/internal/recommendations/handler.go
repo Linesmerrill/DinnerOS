@@ -327,18 +327,20 @@ type OverrideJSON struct {
 
 // AttributesResponse is what Autopilot derives from a recipe.
 type AttributesResponse struct {
-	RecipeID      string        `json:"recipeId"`
-	CookMinutes   *int          `json:"cookMinutes"`
-	TimeBand      string        `json:"timeBand"`
-	Cuisines      []string      `json:"cuisines"`
-	Tags          []string      `json:"tags"`
-	Proteins      []string      `json:"proteins"`
-	Allergens     []string      `json:"allergens"`
-	Diets         []string      `json:"diets"`
-	Spicy         bool          `json:"spicy"`
-	SpicyEvidence string        `json:"spicyEvidence,omitempty"`
-	Methods       []MethodJSON  `json:"methods"`
-	Override      *OverrideJSON `json:"override"`
+	RecipeID    string   `json:"recipeId"`
+	CookMinutes *int     `json:"cookMinutes"`
+	TimeBand    string   `json:"timeBand"`
+	Cuisines    []string `json:"cuisines"`
+	// CuisineRegions are the broader regions Autopilot also matches.
+	CuisineRegions []string      `json:"cuisineRegions"`
+	Tags           []string      `json:"tags"`
+	Proteins       []string      `json:"proteins"`
+	Allergens      []string      `json:"allergens"`
+	Diets          []string      `json:"diets"`
+	Spicy          bool          `json:"spicy"`
+	SpicyEvidence  string        `json:"spicyEvidence,omitempty"`
+	Methods        []MethodJSON  `json:"methods"`
+	Override       *OverrideJSON `json:"override"`
 }
 
 type overrideRequest struct {
@@ -629,7 +631,7 @@ func newOverrideJSON(o RecipeOverride) OverrideJSON {
 func newAttributesResponse(a RecipeAttributes) AttributesResponse {
 	resp := AttributesResponse{
 		RecipeID: a.RecipeID, CookMinutes: optionalInt(a.CookMinutes), TimeBand: a.TimeBand,
-		Cuisines: orEmptyStrings(a.Cuisines), Tags: orEmptyStrings(a.Tags), Proteins: orEmptyStrings(a.Proteins),
+		Cuisines: orEmptyStrings(a.Cuisines), CuisineRegions: orEmptyStrings(a.CuisineRegions), Tags: orEmptyStrings(a.Tags), Proteins: orEmptyStrings(a.Proteins),
 		Allergens: orEmptyStrings(a.Allergens), Diets: orEmptyStrings(a.Diets), Spicy: a.Spicy, SpicyEvidence: a.SpicyEvidence,
 		Methods: []MethodJSON{},
 	}

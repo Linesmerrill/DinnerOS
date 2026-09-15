@@ -22,12 +22,17 @@ type RecipeAttributes struct {
 	// CookMinutes is recipes.CookMinutes; 0 means unknown.
 	CookMinutes int
 	TimeBand    string
-	Cuisines    []string
-	Tags        []string
-	Proteins    []string
-	Allergens   []string
-	Diets       []string
-	Spicy       bool
+	// Cuisines are canonical (canonicalCuisine).
+	Cuisines []string
+	// CuisineRegions are the broader regions of Cuisines, which Autopilot
+	// matches too ("italian" → "southern european", "european").
+	CuisineRegions []string
+	// Tags are canonical (canonicalTag).
+	Tags      []string
+	Proteins  []string
+	Allergens []string
+	Diets     []string
+	Spicy     bool
 	// SpicyEvidence is the tag or ingredient that made it spicy.
 	SpicyEvidence string
 	Methods       []MethodAttribute
@@ -174,9 +179,10 @@ var methodKeywords = map[string][]phrase{
 func attributes(r recipes.Recipe, override *RecipeOverride, bands autopilot.TimeBands) RecipeAttributes {
 	names := ingredientTokens(r)
 	a := RecipeAttributes{
-		RecipeID: r.ID, CookMinutes: r.CookMinutes(), Cuisines: normalizeValues(r.Cuisines), Tags: normalizeValues(r.Tags),
+		RecipeID: r.ID, CookMinutes: r.CookMinutes(), Cuisines: canonicalCuisines(r.Cuisines), Tags: canonicalTags(r.Tags),
 		Proteins: classifyProteins(names), Override: override,
 	}
+	a.CuisineRegions = cuisineRegions(a.Cuisines)
 	a.TimeBand = string(bands.Of(a.CookMinutes))
 	a.Allergens = classifyAllergens(r.Allergens, names)
 	a.Diets = classifyDiets(a.Tags, a.Allergens, names)
@@ -200,10 +206,11 @@ func attributes(r recipes.Recipe, override *RecipeOverride, bands autopilot.Time
 	return a
 }
 
-// Item turns attributes into the provider's catalog item.
+// Item turns attributes into the provider's catalog item. Its cuisine regions
+// let preferences for a region match the region's cuisines.
 func (a RecipeAttributes) item(r recipes.Recipe) autopilot.Item {
 	it := autopilot.Item{
-		ID: r.ID, Cuisines: a.Cuisines, Tags: a.Tags, Proteins: a.Proteins, CookMinutes: a.CookMinutes,
+		ID: r.ID, Cuisines: a.Cuisines, CuisineRegions: a.CuisineRegions, Tags: a.Tags, Proteins: a.Proteins, CookMinutes: a.CookMinutes,
 		Servings: slices.Clone(r.Servings), Allergens: a.Allergens, Diets: a.Diets, Spicy: a.Spicy,
 	}
 	for _, m := range a.Methods {
@@ -384,14 +391,4 @@ func sameWord(got, want string) bool {
 		return true
 	}
 	return strings.HasSuffix(want, "y") && got == strings.TrimSuffix(want, "y")+"ies"
-}
-
-func normalizeValues(values []string) []string {
-	var out []string
-	for _, v := range values {
-		if n := normalizeValue(v); n != "" && !slices.Contains(out, n) {
-			out = append(out, n)
-		}
-	}
-	return out
 }

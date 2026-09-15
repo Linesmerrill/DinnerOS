@@ -98,17 +98,20 @@ type dayCtx struct {
 }
 
 type item struct {
-	id                                          string
-	cuisines, tags, proteins, methods, allergen []string
-	diets                                       []string
-	ingredients                                 [][]string // tokenized names
-	minutes                                     int
-	band                                        autopilot.TimeBand
-	servings                                    []int
-	spicy                                       bool
-	tie                                         uint64
-	isNew                                       bool
-	st                                          stats
+	id string
+	// cuisines are the item's own, for variety; withRegions adds their
+	// regions, for preferences, exclusions, and rules.
+	cuisines, withRegions             []string
+	tags, proteins, methods, allergen []string
+	diets                             []string
+	ingredients                       [][]string // tokenized names
+	minutes                           int
+	band                              autopilot.TimeBand
+	servings                          []int
+	spicy                             bool
+	tie                               uint64
+	isNew                             bool
+	st                                stats
 }
 
 type stats struct {
@@ -171,7 +174,8 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 			continue
 		}
 		it := &item{
-			id: ci.ID, cuisines: normAll(ci.Cuisines), tags: normAll(ci.Tags), proteins: normAll(ci.Proteins),
+			id: ci.ID, cuisines: normAll(ci.Cuisines), withRegions: normAll(append(slices.Clone(ci.Cuisines), ci.CuisineRegions...)),
+			tags: normAll(ci.Tags), proteins: normAll(ci.Proteins),
 			methods: normAll(ci.Methods), allergen: normAll(ci.Allergens), diets: normAll(ci.Diets),
 			minutes: max(ci.CookMinutes, 0), servings: sortedPositive(ci.Servings),
 			tie: hashString(fmt.Sprintf("%d|%s", m.seed, ci.ID)), st: stats{nearest: -1},
@@ -313,7 +317,7 @@ func (m *model) reject(it *item) string {
 		return "allergen"
 	case !containsAll(it.diets, m.prefs.diets):
 		return "diet"
-	case intersect(it.cuisines, x.cuisines) != "", intersect(it.proteins, x.proteins) != "",
+	case intersect(it.withRegions, x.cuisines) != "", intersect(it.proteins, x.proteins) != "",
 		intersect(it.tags, x.tags) != "", x.spicy && it.spicy:
 		return "exclusion"
 	}

@@ -187,7 +187,7 @@ func (m *model) score(s *slot, it *item) cand {
 		have, want []string
 		value      float64
 	}{
-		{it.cuisines, m.prefs.likes.cuisines, 0.4},
+		{it.withRegions, m.prefs.likes.cuisines, 0.4},
 		{it.tags, m.prefs.likes.tags, 0.4},
 		{it.proteins, m.prefs.likes.proteins, 0.3},
 	} {
@@ -199,7 +199,7 @@ func (m *model) score(s *slot, it *item) cand {
 		}
 	}
 	for _, g := range [][2][]string{
-		{it.cuisines, m.prefs.dislikes.cuisines}, {it.tags, m.prefs.dislikes.tags}, {it.proteins, m.prefs.dislikes.proteins},
+		{it.withRegions, m.prefs.dislikes.cuisines}, {it.tags, m.prefs.dislikes.tags}, {it.proteins, m.prefs.dislikes.proteins},
 	} {
 		if intersect(g[0], g[1]) != "" {
 			taste -= 0.5
@@ -216,7 +216,7 @@ func (m *model) score(s *slot, it *item) cand {
 		var labels []string
 		// The label names the method ("smoker night"), so explanations list
 		// the matched protein, cuisine, or tag.
-		for i, g := range [][2][]string{{it.proteins, r.proteins}, {it.methods, r.methods}, {it.cuisines, r.cuisines}, {it.tags, r.tags}} {
+		for i, g := range [][2][]string{{it.proteins, r.proteins}, {it.methods, r.methods}, {it.withRegions, r.cuisines}, {it.tags, r.tags}} {
 			if len(g[1]) == 0 {
 				continue
 			}
