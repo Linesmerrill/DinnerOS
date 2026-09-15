@@ -13,9 +13,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
 	"github.com/Linesmerrill/DinnerOS/api/internal/config"
+	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/httpapi"
+	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/logging"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/ratelimit"
@@ -31,6 +35,13 @@ const (
 	// token every 6 seconds.
 	authRateBurst = 10
 	authRateEvery = 6 * time.Second
+	// Accepting invitations uses the same budget as sign-in: invite codes are
+	// 50 bits, so guessing needs far more attempts than this allows.
+	inviteAcceptRateBurst = 10
+	inviteAcceptRateEvery = 6 * time.Second
+	// Creating invitations sends email; limit bursts from one client.
+	inviteCreateRateBurst = 20
+	inviteCreateRateEvery = 30 * time.Second
 )
 
 func main() {
@@ -82,16 +93,25 @@ func run() error {
 	if err := db.EnsureIndexes(startupCtx, slices.Concat(
 		users.Indexes(),
 		auth.Indexes(),
+		households.Indexes(),
+		invitations.Indexes(),
 	)...); err != nil {
 		return err
 	}
 	cancelStartup()
 	logger.Info("mongodb connected", "database", cfg.MongoDatabase)
 
-	authHandler, err := newAuthHandler(cfg, db, logger)
+	userService := users.NewService(users.NewMongoStore(db.Database()))
+	tokens, err := auth.NewTokenService(auth.NewMongoSessionStore(db.Database()), auth.TokenOptions{
+		SigningKey: cfg.AuthTokenSigningKey,
+		Logger:     logger,
+	})
 	if err != nil {
 		return err
 	}
+
+	authHandler := newAuthHandler(cfg, userService, tokens, logger)
+	householdHandler, invitationHandler := newHouseholdHandlers(cfg, db, userService, tokens, logger)
 
 	srv := &http.Server{
 		Addr: cfg.Addr(),
@@ -103,7 +123,11 @@ func run() error {
 			ReadinessChecks: []httpapi.ReadinessCheck{
 				{Name: "mongodb", Check: db.Ping},
 			},
-			APIRoutes: authHandler.Mount,
+			APIRoutes: func(r chi.Router) {
+				authHandler.Mount(r)
+				householdHandler.Mount(r)
+				invitationHandler.Mount(r)
+			},
 		}),
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelWarn),
 		ReadHeaderTimeout: 5 * time.Second,
@@ -136,19 +160,8 @@ func run() error {
 	return nil
 }
 
-// newAuthHandler wires users, sessions, provider verifiers, and the auth HTTP
-// handler.
-func newAuthHandler(cfg config.Config, db *mongodb.Client, logger *slog.Logger) (*auth.Handler, error) {
-	userService := users.NewService(users.NewMongoStore(db.Database()))
-
-	tokens, err := auth.NewTokenService(auth.NewMongoSessionStore(db.Database()), auth.TokenOptions{
-		SigningKey: cfg.AuthTokenSigningKey,
-		Logger:     logger,
-	})
-	if err != nil {
-		return nil, err
-	}
-
+// newAuthHandler wires provider verifiers and the auth HTTP handler.
+func newAuthHandler(cfg config.Config, userService *users.Service, tokens *auth.TokenService, logger *slog.Logger) *auth.Handler {
 	jwksHTTP := &http.Client{Timeout: jwksFetchTimeout}
 	verifiers := map[users.Provider]auth.IdentityVerifier{
 		users.ProviderApple: auth.NewAppleVerifier(cfg.AppleBundleID, auth.VerifierOptions{
@@ -178,5 +191,52 @@ func newAuthHandler(cfg config.Config, db *mongodb.Client, logger *slog.Logger) 
 		Logger:          logger,
 		RateLimit:       ratelimit.New(ratelimit.Options{Burst: authRateBurst, Every: authRateEvery}).Middleware,
 		DevLoginEnabled: cfg.DevLoginEnabled(),
-	}), nil
+	})
+}
+
+// newHouseholdHandlers wires the households and invitations modules.
+func newHouseholdHandlers(cfg config.Config, db *mongodb.Client, userService *users.Service, tokens *auth.TokenService, logger *slog.Logger) (*households.Handler, *invitations.Handler) {
+	householdService := households.NewService(households.ServiceOptions{
+		Store:  households.NewMongoStore(db.Database()),
+		Users:  userService,
+		Logger: logger,
+	})
+	invitationService := invitations.NewService(invitations.ServiceOptions{
+		Store:         invitations.NewMongoStore(db.Database()),
+		Households:    householdService,
+		Users:         userService,
+		Email:         newEmailProvider(cfg, logger),
+		AcceptURLBase: cfg.InviteURLBase,
+		Logger:        logger,
+	})
+
+	householdHandler := households.NewHandler(households.HandlerOptions{
+		Service: householdService,
+		Tokens:  tokens,
+		Logger:  logger,
+	})
+	invitationHandler := invitations.NewHandler(invitations.HandlerOptions{
+		Service:         invitationService,
+		Authorizer:      householdService,
+		Tokens:          tokens,
+		Logger:          logger,
+		AcceptRateLimit: ratelimit.New(ratelimit.Options{Burst: inviteAcceptRateBurst, Every: inviteAcceptRateEvery}).Middleware,
+		CreateRateLimit: ratelimit.New(ratelimit.Options{Burst: inviteCreateRateBurst, Every: inviteCreateRateEvery}).Middleware,
+	})
+	return householdHandler, invitationHandler
+}
+
+// newEmailProvider picks the EmailProvider named by EMAIL_PROVIDER. Config
+// validation guarantees production uses Resend.
+func newEmailProvider(cfg config.Config, logger *slog.Logger) invitations.EmailProvider {
+	if cfg.EmailProvider == config.EmailProviderResend {
+		return invitations.NewResendProvider(invitations.ResendOptions{
+			APIKey:  cfg.ResendAPIKey,
+			From:    cfg.EmailFrom,
+			AppName: cfg.AppName,
+		})
+	}
+	includeCode := cfg.Env == config.Development
+	logger.Warn("EMAIL_PROVIDER=log: invitation emails are logged, not sent", "logsInviteCodes", includeCode)
+	return invitations.NewLogEmailProvider(logger, includeCode)
 }
