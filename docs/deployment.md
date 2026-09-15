@@ -17,8 +17,19 @@ The API deploys as a **container**. `heroku.yml` at the repository root builds
 `api/Dockerfile`, the same image CI builds. The image runs as a non-root
 distroless binary and listens on Heroku's `$PORT`.
 
-Status: everything in the repository is ready. The Heroku app has not been
-created yet; this needs the account steps below.
+Status:
+
+- **Done:**
+  - The app `dinneros-api` exists at
+    `https://dinneros-api-bd0859895157.herokuapp.com`, on the container stack
+    with an Eco dyno.
+  - Build metadata is enabled.
+  - `APP_ENV`, `MONGODB_DATABASE`, and `LOG_LEVEL` are set.
+  - The Phase 1 image deploys and starts.
+- **Remaining:**
+  - Set `MONGODB_URI` (step 2).
+  - Connect GitHub auto-deploy (step 4).
+  - Optionally add the custom domain (step 6).
 
 1. Create the app on the container stack. The name may need to differ if
    `dinneros-api` is taken:
@@ -53,6 +64,28 @@ created yet; this needs the account steps below.
 
    Use `/health` for uptime monitoring. `/ready` also checks MongoDB.
 
+6. Optional custom domain, for example `api.tlps.dev`. Heroku manages the TLS
+   certificate automatically. First add the domain to the app:
+
+   ```bash
+   heroku domains:add api.tlps.dev -a dinneros-api
+   ```
+
+   At the DNS provider for `tlps.dev`, create a `CNAME` from `api` to the
+   **DNS target** Heroku prints. Then turn on automatic certificates and check
+   their status:
+
+   ```bash
+   heroku certs:auto:enable -a dinneros-api
+   ```
+
+   ```bash
+   heroku certs:auto -a dinneros-api
+   ```
+
+   Once the certificate is issued, set the GitHub variable
+   `PRODUCTION_API_BASE_URL=https://api.tlps.dev`.
+
 The API exits at startup if it can't reach MongoDB. A crash-looping dyno after a
 deploy almost always means `MONGODB_URI` is wrong or Atlas Network Access
 doesn't allow Heroku (Heroku dyno IPs are dynamic, so Atlas must allow
@@ -77,8 +110,11 @@ The job runs `bundle exec fastlane beta`, which:
 
 ### One-time Apple setup (manual)
 
-1. **Apple Developer → Identifiers:** register the App ID
-   `com.linesmerrill.dinneros` and enable **Sign in with Apple** (needed in Phase 2).
+1. ✅ **Apple Developer → Identifiers:** App ID `com.linesmerrill.dinneros`
+   ("DinnerOS", team `6VTPDG2HNK`) is registered with **Sign in with Apple**
+   enabled as a primary App ID. Other capabilities, such as Push Notifications
+   and Associated Domains for universal invite links, get added when a phase
+   needs them.
 2. **App Store Connect → Apps → +:** create the app with that bundle ID. The App
    Store name must be globally unique and can differ from the display name.
 3. **App Store Connect → Users and Access → Integrations → App Store Connect API:**
