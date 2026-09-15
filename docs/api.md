@@ -106,7 +106,11 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | DELETE | `/api/v1/households/{householdId}/pantry/{itemId}` → `204` | `pantry.edit` | 7 | ✅ |
 | POST | `/api/v1/households/{householdId}/pantry/bulk` `{items: [{id, status}]}` → `{items, missing}` | `pantry.edit` | 7 | ✅ |
 | POST | `/api/v1/households/{householdId}/pantry/staples/defaults` → `{items, skipped}` | `pantry.edit` | 7 | ✅ |
-| … | saved grocery lists, providers, events | | 7–9 | planned |
+| PUT | `/api/v1/households/{householdId}/recipes/{recipeId}/rating` `{score, comment?, tags?}` → rating | `household.view` | 9 | ✅ |
+| DELETE | `/api/v1/households/{householdId}/recipes/{recipeId}/rating` → `204` | `household.view` | 9 | ✅ |
+| GET | `/api/v1/households/{householdId}/recipes/{recipeId}/ratings` → `{householdRating, items}` | `household.view` | 9 | ✅ |
+| POST | `/api/v1/households/{householdId}/events` `{events}` → `{accepted, duplicates, rejected}` | `household.view`, rate limited per user | 9 | ✅ |
+| … | saved grocery lists, providers | | 8 | planned |
 
 Household-scoped routes return `404 not_found` to anyone who isn't a member,
 so a household's existence is never revealed, and `403 forbidden` to members
@@ -140,12 +144,17 @@ invitations, and the last-admin rule are described in
       "timesOrdered": 3,
       "lastOrderedWeek": "2026-W30",
       "isAddon": false,
-      "tags": ["Quick"]
+      "tags": ["Quick"],
+      "householdRating": { "average": 4.5, "count": 2 },
+      "myRating": null
     }
   ],
   "nextCursor": "eyJzIjoibmFtZSIsIm4iOiJCZWVmIFRhY29zIiwiaSI6IjY2ZTUuLi4ifQ"
 }
 ```
+
+Every item carries `householdRating` and `myRating` (see [Ratings](#ratings)).
+The recipe detail has the same two fields.
 
 ### Get
 
@@ -191,7 +200,17 @@ amount. Array fields are always present, possibly empty.
   "timesOrdered": 2,
   "lastOrderedWeek": "2026-W30",
   "createdAt": "2026-09-14T18:30:00Z",
-  "updatedAt": "2026-09-14T18:30:00Z"
+  "updatedAt": "2026-09-14T18:30:00Z",
+  "householdRating": { "average": 4.5, "count": 2 },
+  "myRating": {
+    "recipeId": "66e5a1f2c3b4a5d6e7f80915",
+    "userId": "66e5a1f2c3b4a5d6e7f80912",
+    "score": 5,
+    "comment": "",
+    "tags": ["kid-favorite"],
+    "createdAt": "2026-09-14T19:00:00Z",
+    "updatedAt": "2026-09-14T19:00:00Z"
+  }
 }
 ```
 
@@ -526,3 +545,146 @@ search; no household is involved.
 
 `categoryConfident: false` means no category rule matched, so the category is
 a placeholder (`other`) awaiting review.
+
+## Ratings
+
+Each household member can rate a recipe once: a `score` from 1 to 5, an
+optional `comment` of up to 500 characters, and `tags` from a fixed list.
+Rating again replaces your rating. Ratings are personal, so `household.view`
+is enough to rate, change, or remove your own, and every member can see
+everyone's ratings.
+
+| Tag | Meaning |
+| --- | --- |
+| `make-again` | Would happily have it again |
+| `never-again` | Don't plan it again (can't be combined with `make-again`) |
+| `kid-favorite` | The kids loved it |
+| `kids-disliked` | The kids didn't eat it |
+| `too-spicy`, `too-bland` | Seasoning was off |
+| `too-much-work` | Not worth the effort |
+| `great-leftovers` | Good the next day |
+
+Anything else goes in `comment`. Duplicate tags are ignored, and tags are
+returned in the order above.
+
+### Rate
+
+`PUT /api/v1/households/{householdId}/recipes/{recipeId}/rating`
+
+```json
+{ "score": 4, "comment": "Less chili next time", "tags": ["make-again", "too-spicy"] }
+```
+
+It returns your rating (`200`). `comment` is `""` and `tags` is `[]` when
+there are none.
+
+```json
+{
+  "recipeId": "66e5a1f2c3b4a5d6e7f80915",
+  "userId": "66e5a1f2c3b4a5d6e7f80912",
+  "score": 4,
+  "comment": "Less chili next time",
+  "tags": ["make-again", "too-spicy"],
+  "createdAt": "2026-09-14T19:00:00Z",
+  "updatedAt": "2026-09-15T18:00:00Z"
+}
+```
+
+`DELETE` on the same path removes your rating and returns `204`, also when
+you had none.
+
+### List
+
+`GET /api/v1/households/{householdId}/recipes/{recipeId}/ratings` returns
+every member's rating, most recently updated first, and the household
+aggregate. It isn't paginated: there is at most one rating per member.
+
+```json
+{
+  "householdRating": { "average": 4.5, "count": 2 },
+  "items": [
+    { "recipeId": "66e5…", "userId": "66e5…", "displayName": "Ada", "score": 4, "comment": "", "tags": [], "createdAt": "…", "updatedAt": "…" }
+  ]
+}
+```
+
+`householdRating.average` is rounded to two decimals and is `null` when
+nobody has rated the recipe. Recipe lists and details carry the same
+`householdRating`, plus `myRating` (your rating, or `null`).
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `validation_failed` | Score outside 1–5, comment over 500 characters, unknown tag, or `make-again` with `never-again` |
+| 400 | `invalid_request` | Malformed body, unknown field, or a non-integer score |
+| 404 | `not_found` | Not a member of the household, or the recipe isn't the household's |
+
+Each change records a `recipe.rated` or `recipe.unrated` event (below). A
+failure to record the event is logged and never fails the rating.
+
+## Events
+
+DinnerOS keeps an append-only history of household behavior for the
+recommendation engine ([autopilot.md](autopilot.md#signals-available-today)).
+The server records what it observes itself. The app sends only what it alone
+can observe.
+
+| Type | Recorded by | `recipeId` | Payload |
+| --- | --- | --- | --- |
+| `recipe.viewed` | app | required | `{surface?}`: `detail`, `plan`, `search`, `recommendation` |
+| `recipe.cooked` | app | required | `{entryId?, date?, servings?}` |
+| `recipe.skipped` | app | required | `{entryId?, date?, reason?}`: `no-time`, `ate-out`, `missing-ingredients`, `not-in-the-mood`, `other` |
+| `grocery.item_checked` | app | — | `{ingredientId?, name?, checked}` (`ingredientId` or `name` required) |
+| `recipe.rated` | server (ratings) | required | `{score, previousScore?, tags?}` (comments are never copied) |
+| `recipe.unrated` | server (ratings) | required | `{previousScore}` |
+| `recipe.planned` | server (planning) | required | `{entryId?, day?, date?, servings?, origin?}` |
+| `recipe.unplanned` | server (planning) | required | `{entryId?, day?, date?}` |
+| `import.completed` | server (recipe import) | — | `{source, created, updated, unchanged, rejected}` |
+
+`date` is `YYYY-MM-DD`, `day` is `mon`–`sun`, and `servings` is 1–12.
+
+### Send events
+
+`POST /api/v1/households/{householdId}/events`
+
+```json
+{
+  "events": [
+    {
+      "clientEventId": "0d8f6c1e-2c1a-4c55-9d7e-3f0f1b6a2e11",
+      "type": "recipe.cooked",
+      "recipeId": "66e5a1f2c3b4a5d6e7f80915",
+      "week": "2026-W38",
+      "occurredAt": "2026-09-15T01:30:00Z",
+      "payload": { "entryId": "66e5a1f2c3b4a5d6e7f80c01", "date": "2026-09-14", "servings": 2 }
+    }
+  ]
+}
+```
+
+```json
+{ "accepted": 1, "duplicates": 0, "rejected": [] }
+```
+
+- A batch holds 1–100 events. Only the four app types above are accepted.
+- The user and household come from the request. The body can't set them, or
+  the `source`.
+- Each event is validated on its own. Invalid events are listed in `rejected`
+  as `{index, message}`, and the rest are stored. After a `200`, drop the
+  whole batch from the device queue: retrying a rejected event can't succeed.
+- `clientEventId` (optional, at most 64 characters, unique per user) makes
+  retries safe. An event whose ID was already stored counts in `duplicates`.
+- `occurredAt` is required and must be within the last 30 days and no more
+  than 5 minutes in the future. `week` is optional (`2026-W38`). Payloads are
+  at most 1024 bytes, and unknown payload fields are rejected.
+- `recipeId` must be one of the household's recipes.
+- Requests are rate limited per user: a burst of 30 batches, then one batch
+  every 10 seconds (`429 rate_limited`). Send events in batches, for example
+  when the app goes to the background, rather than one request per event.
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `validation_failed` | No events, or more than 100 |
+| 400 | `invalid_request` | Malformed body or an unknown field on the batch or an event |
+| 404 | `not_found` | Not a member of the household |
+| 413 | `payload_too_large` | Body over `HTTP_MAX_BODY_BYTES` |
+| 429 | `rate_limited` | Too many batches from this user |

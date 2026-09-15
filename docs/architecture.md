@@ -62,19 +62,20 @@ api/
 │   │   ├── httpx/       JSON responses, error envelope, strict request decoding
 │   │   ├── logging/     slog construction; adds request ID from context
 │   │   ├── mongodb/     client lifecycle, IndexSet management, error translation (mongotest/: test DB helper)
-│   │   ├── ratelimit/   per-client-IP token-bucket middleware
+│   │   ├── ratelimit/   token-bucket middleware keyed by client IP or user
 │   │   └── requestid/   request correlation ID in context
 │   ├── auth/            provider token verification, DinnerOS sessions
 │   ├── users/           User, AuthIdentity
 │   ├── households/      Household, HouseholdMembership, roles/permissions
 │   ├── invitations/     HouseholdInvitation, EmailProvider
 │   ├── recipes/         Recipe, instructions, source metadata
+│   ├── ratings/         per-member recipe ratings, household aggregates
 │   ├── ingredients/     Ingredient, units, quantities, conversion
 │   ├── planning/        Week plans, entries, week grocery list
 │   ├── pantry/          PantryItem, default staples, pantry snapshot for grocery lists
 │   ├── grocery/         aggregation engine, GroceryList
 │   ├── providers/       GroceryProvider implementations
-│   ├── events/          MealEvent collection
+│   ├── events/          append-only behavior events, Recorder, client ingestion
 │   └── recommendations/ RecommendationProvider (local now, Autopilot later)
 ├── pkg/                 domain-free reusable code (empty until justified)
 └── migrations/          index + data migration conventions
@@ -132,13 +133,19 @@ Dependency rules:
 - **Errors:** every non-2xx response uses `{"error": {"code", "message"}}`.
 - **Limits:** request body size (`HTTP_MAX_BODY_BYTES`), server timeouts, and
   per-IP rate limiting on auth endpoints, invitation acceptance, and invitation
-  creation. Each has its own limiter instance. The recipe import route has its
+  creation, plus per-user rate limiting on event ingestion. Each has its own
+  limiter instance. The recipe import route has its
   own body limit (`RECIPE_IMPORT_MAX_BYTES`) and extends the server's read and
   write deadlines for that request with `http.ResponseController`.
 - **Household authorization:** routes under `/households/{householdId}` use
   `households.RequirePermission`, which returns 404 to non-members and 403 to
   members lacking the permission, and stores the membership in the request
   context for the handler and service.
+- **Behavior events:** modules that observe household behavior record it
+  through `events.Recorder` (implemented by `events.Service`), usually with
+  `events.RecordOrLog`. Recording is best effort: a failure is logged and never
+  fails the user's action. `cmd/server/behavior.go` wires the events and
+  ratings modules.
 - **Authentication:** domain handlers mount under `/api/v1` through
   `httpapi.Options.APIRoutes` and wrap protected routes in `auth.RequireAuth`,
   which puts the user ID in the request context (`auth.UserIDFromContext`).
@@ -288,3 +295,12 @@ a versioned Autopilot API. See [autopilot.md](autopilot.md).
 | 65 | Grocery check-offs are stored on the device in `UserDefaults`, keyed by household and week, with one entry per `ingredientKey` | The API has no checked state until Phase 7's saved lists. Ingredient keys are what the list aggregates by, so a check survives amounts changing when recipes are added. Nothing personal is stored: only IDs. |
 | 66 | The Add Recipes sheet searches with its own `RecipeLibrary` instance; its plus button adds at once with `preferredServings(householdDefault:)` and the day chosen at the top, and tapping a recipe opens the full form | Searching in the sheet mustn't change the Recipes tab's list. Planning a week means adding several recipes in a row, so the common case is one tap, and the serving size follows the same rule as the recipe screen. |
 | 67 | Entries move between days with a "Move To…" context menu and the edit sheet's day picker, not drag and drop | Dragging rows between `List` sections is unreliable and hard to use with VoiceOver. A menu works the same for every input method. |
+| 68 | A rating is one document per (household, recipe, member), upserted, and managing your own needs only `household.view` | Ratings are personal opinions, not household settings, so anyone who can see recipes can rate them. One rating per member keeps averages honest. The history of changes lives in `recipe.rated` events, which carry the previous score, rather than in extra rating documents. |
+| 69 | Rating tags come from a fixed allowlist; free text goes only in a comment of at most 500 characters | The recommender needs a vocabulary it can rely on (`make-again`, `never-again`, `kid-favorite`, …). Adding a tag is a one-line change; interpreting arbitrary strings is not. `make-again` together with `never-again` is rejected as contradictory. |
+| 70 | Recipe `householdRating` and `myRating` are joined per page from `recipe_ratings`, not stored on recipes | It costs one aggregation and one find per page on the unique index, and there are no counters to keep consistent without transactions. Denormalize if lists need to sort by rating. An unrated recipe has `average: null`, not 0. |
+| 71 | Event recording is best effort and synchronous: `events.RecordOrLog` logs failures and never fails the user's action, using a context detached from the request with a 2-second deadline | A rating or import that succeeded must not return 500 because the history write failed. An occasional lost event is acceptable for a recommender; a failed user action is not. The detached context keeps a client disconnect from dropping the event, and writing inline avoids a background queue that could lose events on shutdown. Revisit with an outbox if events ever need to be exact. |
+| 72 | Each event type has exactly one typed payload in a closed set (`events.Payload`); unknown payload fields are rejected | Autopilot features need stable shapes, and a closed set keeps free text and personal data out of the history. New types are additive. `recipe.unrated` was added to the starting list so removing a rating is visible in the history. |
+| 73 | Clients may send only `recipe.viewed`, `recipe.cooked`, `recipe.skipped`, and `grocery.item_checked`, in batches of at most 100. Each event is validated on its own, and invalid ones are reported in the response | Server-observed facts (rated, planned, imported) must not be forgeable. Rejecting per event keeps one bad event from blocking an offline queue forever. User and household come from the membership, never the body, and recipe IDs are checked against the household in one query per batch. |
+| 74 | Client events may carry a `clientEventId`, unique per (household, user) through a partial unique index | A retry after a lost response would otherwise count a meal as cooked twice. Events without an ID are never deduplicated. |
+| 75 | Event ingestion is rate limited per user (`ratelimit.Limiter.MiddlewareBy`), after authentication and before the membership lookup | Household members often share one IP, so a per-IP limit would couple them. Unauthenticated requests are rejected before they use a budget. It's the same in-memory, per-dyno limiter as decision 18. |
+| 76 | Events are kept indefinitely with no TTL. Client `occurredAt` is accepted from 30 days back to 5 minutes ahead | History is the recommender's raw material, and the volume per household is tiny. Retention and archival are a later decision. The window bounds clock skew and stale offline queues. |

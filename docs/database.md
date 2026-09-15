@@ -206,13 +206,41 @@ applied, and isn't stored yet.
 
 ### Behavior
 
+Implemented in Phase 9 (`internal/ratings`, `internal/events`).
+
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `meal_ratings` | householdId, userId, recipeId, planEntryRef, rating, wouldMakeAgain, notes | `{householdId, recipeId}`; **unique** `{householdId, userId, planEntryRef}` |
-| `meal_events` | householdId, userId, type, recipeId, weeklyPlanId, occurredAt, context{} | `{householdId, occurredAt}`; `{householdId, type, occurredAt}` |
+| `recipe_ratings` | householdId, recipeId, userId, score (1–5), comment (`""` when none), tags[], createdAt, updatedAt | **unique** `{householdId, recipeId, userId}` |
+| `events` | householdId, userId (absent for operator imports), type, recipeId (recipe events only), week, payload{}, clientEventId, occurredAt, recordedAt, source (`api`/`client`) | `{householdId, occurredAt}`; `{householdId, recipeId, type, occurredAt}`; **unique partial** `{householdId, userId, clientEventId}` where `clientEventId` is a string |
 
-Events are append-only. They are designed to be forwarded to Autopilot later
-(see [autopilot.md](autopilot.md)).
+- **One rating per member.** Rating is a single `findOneAndUpdate` upsert on
+  the unique key that returns the replaced document, so `recipe.rated` can
+  carry the previous score. `_id` and `createdAt` are set only on insert.
+  When two first ratings by the same member race, the loser hits the unique
+  index and retries once as an update.
+- **Aggregates are computed, not stored.** Recipe list and detail responses
+  join ratings for the page: one `$match`/`$group` over the page's recipe IDs
+  for count and sum, and one find for the caller's own ratings. Both use the
+  unique index, and there is no counter on the recipe to drift. If lists ever
+  need to sort by rating, denormalize then.
+- Ratings stay when a member leaves the household. Display names are read from
+  `users` when ratings are listed.
+- **Events are append-only.** Nothing updates or deletes them. `payload` is a
+  small sub-document whose shape is fixed per `type` (`events.Payload`). Free
+  text, such as rating comments, is never copied into events. Fields that
+  don't apply are omitted rather than stored as `null`.
+- `recordedAt` is server time. `occurredAt` is when it happened: server time
+  for server events, the device clock for client events (accepted within the
+  last 30 days and up to 5 minutes ahead).
+- The partial unique index makes client retries idempotent per user. It only
+  covers events that carry a `clientEventId`. An unordered `insertMany`
+  stores the rest of a batch when some are duplicates.
+- **Retention:** events are kept indefinitely; there is no TTL index.
+  Retention, archival, and rolling events up into per-household features are
+  a later decision, made once Autopilot shows which history it needs.
+
+Events are designed to be forwarded to Autopilot later
+(see [autopilot.md](autopilot.md#signals-available-today)).
 
 ## Multi-tenancy
 
