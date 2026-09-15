@@ -80,8 +80,75 @@ nonisolated struct PlanEntry: Decodable, Hashable, Sendable, Identifiable {
     let addedAt: Date
     /// `nil` from a server older than Autopilot, which only had manual entries.
     var origin: PlanEntryOrigin?
+    /// Protein swaps or doubles chosen for this entry; empty when it's the original recipe.
+    var customizations: [PlanEntryCustomization] = []
 
     var isFromAutopilot: Bool { origin == .autopilot }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, recipe, day, date, servings, note, addedBy, addedAt, origin, customizations
+    }
+}
+
+nonisolated extension PlanEntry {
+    /// `customizations` is additive, so it's read leniently.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(String.self, forKey: .id),
+            recipe: try container.decode(PlanEntryRecipe.self, forKey: .recipe),
+            day: try container.decodeIfPresent(PlanDay.self, forKey: .day),
+            date: try container.decodeIfPresent(String.self, forKey: .date),
+            servings: try container.decode(Int.self, forKey: .servings),
+            note: try container.decode(String.self, forKey: .note),
+            addedBy: try container.decode(String.self, forKey: .addedBy),
+            addedAt: try container.decode(Date.self, forKey: .addedAt),
+            origin: try container.decodeIfPresent(PlanEntryOrigin.self, forKey: .origin),
+            customizations: container.decodeLossyArray(PlanEntryCustomization.self, forKey: .customizations))
+    }
+}
+
+/// A choice made for one customizable ingredient of an entry, such as swapping the protein.
+nonisolated struct PlanEntryCustomization: Codable, Hashable, Sendable {
+    let ingredientKey: String
+    let choiceID: String
+    /// For example "Ground Beef"; empty when the server didn't send one.
+    var label: String = ""
+
+    private enum CodingKeys: String, CodingKey {
+        case ingredientKey
+        case choiceID = "choiceId"
+        case label
+    }
+
+    init(ingredientKey: String, choiceID: String, label: String = "") {
+        self.ingredientKey = ingredientKey
+        self.choiceID = choiceID
+        self.label = label
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ingredientKey = try container.decode(String.self, forKey: .ingredientKey)
+        choiceID = try container.decode(String.self, forKey: .choiceID)
+        label = container.decodeLenient(String.self, forKey: .label) ?? ""
+    }
+}
+
+/// Body of `PUT .../plans/{week}/entries/{entryId}/customization`. Empty `selections` resets
+/// the entry to the original recipe.
+nonisolated struct PlanCustomizationRequest: Encodable, Equatable, Sendable {
+    struct Selection: Encodable, Hashable, Sendable {
+        let ingredientKey: String
+        let choiceID: String
+
+        private enum CodingKeys: String, CodingKey {
+            case ingredientKey
+            case choiceID = "choiceId"
+        }
+    }
+
+    let selections: [Selection]
 }
 
 /// A household's plan for one ISO week (`Plan`).

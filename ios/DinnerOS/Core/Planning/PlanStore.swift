@@ -41,6 +41,10 @@ final class PlanStore {
         week == currentWeek ? PlanDay.containing(now(), in: timeZone) : nil
     }
 
+    /// Receives every plan the server returns for the current household, for any week: loads,
+    /// changes, and a removal shown before its reload. The Menu screen patches its cards from it.
+    @ObservationIgnored var planDidChange: ((Plan) -> Void)?
+
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let api: PlansAPI?
     @ObservationIgnored private let checks: any GroceryCheckStorage
@@ -124,6 +128,7 @@ final class PlanStore {
             plan = loaded
             refreshError = nil
             phase = .loaded
+            planDidChange?(loaded)
         } catch is CancellationError {
             if started == generation, phase == .loading { phase = .idle }
         } catch {
@@ -176,6 +181,9 @@ final class PlanStore {
         generation += 1
         let removal = generation
         plan?.entries.removeAll { $0.id == id }
+        if let plan {
+            planDidChange?(plan)
+        }
         do {
             try await mutate(week: target) { api, householdID, token in
                 try await api.deleteEntry(householdID: householdID, week: target, entryID: id, accessToken: token)
@@ -185,11 +193,39 @@ final class PlanStore {
         } catch {
             if removal == generation, previous?.week == plan?.week {
                 plan = previous
+                if let previous {
+                    planDidChange?(previous)
+                }
             }
             throw error
         }
         if target == week {
             await load(clearing: false)
+        }
+    }
+
+    /// Replaces an entry's ingredient choices in the shown week. The entry shows the new
+    /// choices at once; a failure puts the previous ones back and rethrows.
+    func setCustomization(entryID: String, selections: [PlanCustomizationRequest.Selection]) async throws {
+        let target = week
+        let previous = plan
+        if let index = plan?.entries.firstIndex(where: { $0.id == entryID }) {
+            plan?.entries[index].customizations = selections.map {
+                PlanEntryCustomization(ingredientKey: $0.ingredientKey, choiceID: $0.choiceID)
+            }
+        }
+        let body = PlanCustomizationRequest(selections: selections)
+        do {
+            let updated = try await mutate(week: target) { api, householdID, token in
+                try await api.setCustomization(
+                    householdID: householdID, week: target, entryID: entryID, request: body, accessToken: token)
+            }
+            apply(updated, week: target)
+        } catch {
+            if target == week, previous?.week == plan?.week {
+                plan = previous
+            }
+            throw error
         }
     }
 
@@ -269,7 +305,9 @@ final class PlanStore {
 
     /// Shows a plan returned by a change when it's for the shown week and household.
     private func apply(_ updated: Plan, week target: ISOWeek) {
-        guard target == week, updated.householdID == householdID else { return }
+        guard updated.householdID == householdID else { return }
+        planDidChange?(updated)
+        guard target == week else { return }
         // Drops a reload that started before the change.
         generation += 1
         plan = updated
