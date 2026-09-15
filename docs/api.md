@@ -17,7 +17,8 @@ any endpoint change.
 ## Requests
 
 - Content type: `application/json`. Bodies are limited by `HTTP_MAX_BODY_BYTES`.
-- Authentication: `Authorization: Bearer <access token>` (Phase 2).
+- Authentication: `Authorization: Bearer <access token>`. See
+  [authentication.md](authentication.md) for sign-in, refresh, and error codes.
 - Unknown JSON fields are rejected on write endpoints to catch client bugs early.
 - Request IDs: the server accepts a well-formed `X-Request-ID` or generates one,
   echoes it in the response, and includes it in every log line for that request.
@@ -61,14 +62,18 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | 413 | `payload_too_large` |
 | 429 | `rate_limited` |
 | 500 | `internal` (details only in server logs) |
+| 503 | `provider_unavailable` (sign-in method not configured, or provider keys unreachable) |
 
 ## Endpoints
 
-| Method | Path | Phase | Status |
-| --- | --- | --- | --- |
-| GET | `/health` | 0 | ✅ |
-| GET | `/ready` | 1 | ✅ |
-| POST | `/api/v1/auth/apple`, `/api/v1/auth/google` | 2 | planned |
-| POST | `/api/v1/auth/refresh`, `/api/v1/auth/logout` | 2 | planned |
-| GET | `/api/v1/me` | 2 | planned |
+| Method | Path | Auth | Phase | Status |
+| --- | --- | --- | --- | --- |
+| GET | `/health` | — | 0 | ✅ |
+| GET | `/ready` | — | 1 | ✅ |
+| POST | `/api/v1/auth/apple` `{identityToken, nonce, fullName?}` → session | rate limited | 2 | ✅ |
+| POST | `/api/v1/auth/google` `{idToken, nonce?}` → session | rate limited | 2 | ✅ |
+| POST | `/api/v1/auth/refresh` `{refreshToken}` → token pair | rate limited | 2 | ✅ |
+| POST | `/api/v1/auth/logout` `{refreshToken}` → `204` | rate limited | 2 | ✅ |
+| POST | `/api/v1/auth/dev` `{subject, email?, displayName?}` → session (development only) | rate limited | 2 | ✅ |
+| GET | `/api/v1/me` → `{user, identities}` | bearer | 2 | ✅ |
 | … | households, invitations, recipes, plans, grocery, events | 3–9 | planned |

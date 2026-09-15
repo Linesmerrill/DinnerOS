@@ -1,17 +1,23 @@
 openapi: 3.1.0
 info:
   title: DinnerOS API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Backend for the DinnerOS iOS app. "DinnerOS" is a working name.
 
     Conventions (see docs/api.md):
     - All product routes are versioned under `/api/v1`.
-    - JSON bodies use camelCase.
+    - JSON bodies use camelCase. Unknown request fields are rejected.
     - Every non-2xx response uses the `ErrorResponse` envelope.
+    - Authenticated routes take `Authorization: Bearer <accessToken>`
+      (see docs/authentication.md).
 servers:
   - url: http://localhost:8080
     description: Local development
+tags:
+  - name: operations
+  - name: auth
+    description: Sign-in, token refresh, logout, and the current user.
 paths:
   /health:
     get:
@@ -48,7 +54,181 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReadyResponse"
+
+  /api/v1/auth/apple:
+    post:
+      summary: Sign in with Apple
+      description: |
+        Verifies a Sign in with Apple identity token (signature via Apple's
+        JWKS, `iss`, `aud` = bundle ID, `exp`/`iat`, and `nonce` = hex SHA-256
+        of the raw nonce sent here), then finds or creates the user and starts
+        a new session. Rate limited per client IP.
+      operationId: signInWithApple
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppleSignInRequest"
+      responses:
+        "200":
+          description: Signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ProviderUnavailable"
+  /api/v1/auth/google:
+    post:
+      summary: Sign in with Google
+      description: |
+        Verifies a Google ID token (signature via Google's JWKS, `iss`,
+        `aud` = iOS OAuth client ID, `exp`/`iat`, and `nonce` when supplied),
+        then finds or creates the user and starts a new session. Returns 503
+        when Google sign-in is not configured on the server.
+      operationId: signInWithGoogle
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoogleSignInRequest"
+      responses:
+        "200":
+          description: Signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ProviderUnavailable"
+  /api/v1/auth/dev:
+    post:
+      summary: Development sign-in (development only)
+      description: |
+        Signs in with an **unverified** identity using provider `dev`. The route
+        exists only when `APP_ENV=development` and `AUTH_DEV_LOGIN_ENABLED=true`;
+        otherwise it returns 404. For simulator and integration testing.
+      operationId: signInDev
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DevSignInRequest"
+      responses:
+        "200":
+          description: Signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/auth/refresh:
+    post:
+      summary: Rotate a refresh token
+      description: |
+        Exchanges a refresh token for a new access token and a new refresh
+        token. The presented refresh token becomes unusable. Presenting a
+        refresh token that was already rotated or revoked revokes every session
+        from that sign-in and returns 401, so clients must never send two
+        refreshes with the same token concurrently.
+      operationId: refreshToken
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+      responses:
+        "200":
+          description: New token pair.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/auth/logout:
+    post:
+      summary: Log out
+      description: |
+        Revokes the sign-in the refresh token belongs to (its whole token
+        family). Idempotent: unknown, expired, or already revoked tokens also
+        return 204. No access token is required, so an expired session can
+        still log out.
+      operationId: logout
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+      responses:
+        "204":
+          description: Logged out.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/me:
+    get:
+      summary: Current user
+      description: Returns the authenticated user and their login methods.
+      operationId: getMe
+      tags: [auth]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The current user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        DinnerOS access token from a sign-in or refresh response. Valid for 15
+        minutes. An expired token yields 401 `token_expired`; refresh and retry.
   headers:
     RequestID:
       description: |
@@ -87,6 +267,131 @@ components:
           type: string
           description: Deployed build identifier.
           example: 3f2c1ab
+
+    AppleSignInRequest:
+      type: object
+      additionalProperties: false
+      required: [identityToken, nonce]
+      properties:
+        identityToken:
+          type: string
+          description: The `identityToken` from `ASAuthorizationAppleIDCredential`, as a UTF-8 string.
+        nonce:
+          type: string
+          maxLength: 512
+          description: The raw nonce the app generated. Apple's request must use its SHA-256 hex digest.
+        fullName:
+          type: string
+          maxLength: 100
+          description: |
+            Display name formatted by the app. Apple provides it only on the
+            first authorization; it is used only when a new user is created.
+    GoogleSignInRequest:
+      type: object
+      additionalProperties: false
+      required: [idToken]
+      properties:
+        idToken:
+          type: string
+          description: The Google Sign-In ID token.
+        nonce:
+          type: string
+          maxLength: 512
+          description: Optional raw nonce passed to Google Sign-In. When present, the token's `nonce` claim must equal it.
+    DevSignInRequest:
+      type: object
+      additionalProperties: false
+      required: [subject]
+      properties:
+        subject:
+          type: string
+          maxLength: 256
+          description: Stable test identity; the same subject always signs in to the same user.
+          example: simulator-ada
+        email:
+          type: string
+          format: email
+          example: ada@example.com
+        displayName:
+          type: string
+          maxLength: 100
+          example: Ada
+    RefreshTokenRequest:
+      type: object
+      additionalProperties: false
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+    TokenPair:
+      type: object
+      required: [accessToken, accessTokenExpiresAt, refreshToken, refreshTokenExpiresAt]
+      properties:
+        accessToken:
+          type: string
+          description: JWT bearer token for authenticated routes.
+        accessTokenExpiresAt:
+          type: string
+          format: date-time
+          example: "2026-09-14T18:45:00Z"
+        refreshToken:
+          type: string
+          description: Opaque single-use token (43 base64url characters). Store in the Keychain.
+        refreshTokenExpiresAt:
+          type: string
+          format: date-time
+          description: Sliding expiry; each refresh extends it to 60 days from the refresh.
+          example: "2026-11-13T18:30:00Z"
+    SessionResponse:
+      allOf:
+        - $ref: "#/components/schemas/TokenPair"
+        - type: object
+          required: [user, isNewUser]
+          properties:
+            user:
+              $ref: "#/components/schemas/User"
+            isNewUser:
+              type: boolean
+              description: True when this sign-in created the account.
+    User:
+      type: object
+      required: [id, displayName, createdAt]
+      properties:
+        id:
+          type: string
+          example: 66e5a1f2c3b4a5d6e7f80912
+        displayName:
+          type: string
+          description: May be empty when no provider supplied a name.
+          example: Ada Lovelace
+        primaryEmail:
+          type: string
+          format: email
+          description: Present only when a provider verified it. May be an Apple private relay address.
+        createdAt:
+          type: string
+          format: date-time
+    Identity:
+      type: object
+      required: [provider]
+      properties:
+        provider:
+          type: string
+          enum: [apple, google, dev]
+        email:
+          type: string
+          format: email
+          description: Verified email from this provider, if any.
+    MeResponse:
+      type: object
+      required: [user, identities]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        identities:
+          type: array
+          items:
+            $ref: "#/components/schemas/Identity"
     ErrorResponse:
       type: object
       required: [error]
@@ -110,6 +415,52 @@ components:
   responses:
     NotFound:
       description: The resource does not exist or is not visible to the caller.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    BadRequest:
+      description: |
+        `invalid_request` (malformed JSON, unknown field, wrong type, empty body)
+        or `validation_failed` (missing or invalid field).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthenticated:
+      description: |
+        `unauthenticated` (missing, invalid, rotated, or revoked token) or
+        `token_expired` (access token expired; refresh and retry).
+      headers:
+        WWW-Authenticate:
+          description: Sent by authenticated routes.
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    PayloadTooLarge:
+      description: "`payload_too_large`: the body exceeds HTTP_MAX_BODY_BYTES."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: "`rate_limited`: too many auth requests from this client IP."
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying.
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ProviderUnavailable:
+      description: |
+        `provider_unavailable`: the sign-in method is not configured, or the
+        provider's signing keys could not be fetched. Retry later.
       content:
         application/json:
           schema:
