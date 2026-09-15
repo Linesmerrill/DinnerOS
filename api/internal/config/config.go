@@ -6,6 +6,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -41,18 +43,53 @@ type Config struct {
 
 	MongoURI      string
 	MongoDatabase string
+
+	// AuthTokenSigningKey signs DinnerOS access tokens (HS256). Never log it.
+	AuthTokenSigningKey []byte
+	// AuthSigningKeyEphemeral is true when no key was configured in
+	// development and a random per-process key was generated instead.
+	AuthSigningKeyEphemeral bool
+	// AppleBundleID is the expected audience of Sign in with Apple tokens.
+	AppleBundleID string
+	// GoogleClientID is the expected audience of Google ID tokens. Empty
+	// disables Google sign-in.
+	GoogleClientID string
+	// AuthDevLoginEnabled requests the unverified development sign-in route.
+	// Use DevLoginEnabled, which also requires the development environment.
+	AuthDevLoginEnabled bool
 }
+
+// Default and minimum values for authentication settings.
+const (
+	DefaultAppleBundleID   = "com.linesmerrill.dinneros"
+	MinSigningKeyBytes     = 32
+	ephemeralSigningKeyLen = 32
+)
 
 // IsProduction reports whether the API is running in production.
 func (c Config) IsProduction() bool { return c.Env == Production }
+
+// DevLoginEnabled reports whether POST /api/v1/auth/dev should be mounted.
+// It is true only in development with AUTH_DEV_LOGIN_ENABLED=true.
+func (c Config) DevLoginEnabled() bool {
+	return c.Env == Development && c.AuthDevLoginEnabled
+}
 
 // Addr is the TCP listen address for the HTTP server.
 func (c Config) Addr() string { return ":" + strconv.Itoa(c.Port) }
 
 // LogValue implements slog.LogValuer. Credentials embedded in connection
-// strings are never included.
+// strings and the token signing key are never included.
 func (c Config) LogValue() slog.Value {
+	signingKey := "configured"
+	if c.AuthSigningKeyEphemeral {
+		signingKey = "ephemeral"
+	}
 	return slog.GroupValue(
+		slog.String("authSigningKey", signingKey),
+		slog.String("appleBundleId", c.AppleBundleID),
+		slog.Bool("googleSignInEnabled", c.GoogleClientID != ""),
+		slog.Bool("devLoginEnabled", c.DevLoginEnabled()),
 		slog.String("appName", c.AppName),
 		slog.String("env", string(c.Env)),
 		slog.String("version", c.Version),
@@ -127,10 +164,65 @@ func Load(getenv func(string) string) (Config, error) {
 		cfg.MongoURI = get("MONGODB_URI", "mongodb://localhost:27017")
 	}
 
+	errs = append(errs, loadAuth(&cfg, get)...)
+
 	if err := errors.Join(errs...); err != nil {
 		return Config{}, fmt.Errorf("invalid configuration: %w", err)
 	}
 	return cfg, nil
+}
+
+// loadAuth reads authentication settings into cfg. cfg.Env must already be set.
+func loadAuth(cfg *Config, get func(key, fallback string) string) []error {
+	var errs []error
+
+	cfg.AppleBundleID = get("APPLE_BUNDLE_ID", DefaultAppleBundleID)
+	cfg.GoogleClientID = get("GOOGLE_CLIENT_ID", "")
+
+	devLogin, err := strconv.ParseBool(get("AUTH_DEV_LOGIN_ENABLED", "false"))
+	if err != nil {
+		errs = append(errs, errors.New("AUTH_DEV_LOGIN_ENABLED must be true or false"))
+	}
+	cfg.AuthDevLoginEnabled = devLogin
+	if devLogin && cfg.IsProduction() {
+		errs = append(errs, errors.New("AUTH_DEV_LOGIN_ENABLED must not be true in production"))
+	}
+
+	// Error messages never include the key itself.
+	switch raw := get("AUTH_TOKEN_SIGNING_KEY", ""); {
+	case raw == "" && cfg.IsProduction():
+		errs = append(errs, errors.New("AUTH_TOKEN_SIGNING_KEY is required in production"))
+	case raw == "":
+		key := make([]byte, ephemeralSigningKeyLen)
+		if _, err := rand.Read(key); err != nil {
+			errs = append(errs, fmt.Errorf("AUTH_TOKEN_SIGNING_KEY: generate ephemeral key: %w", err))
+		}
+		cfg.AuthTokenSigningKey = key
+		cfg.AuthSigningKeyEphemeral = true
+	default:
+		key, err := decodeSigningKey(raw)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		cfg.AuthTokenSigningKey = key
+	}
+	return errs
+}
+
+// decodeSigningKey accepts standard or URL-safe base64, padded or not, and
+// requires at least MinSigningKeyBytes of key material.
+func decodeSigningKey(raw string) ([]byte, error) {
+	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
+		key, err := enc.DecodeString(raw)
+		if err != nil {
+			continue
+		}
+		if len(key) < MinSigningKeyBytes {
+			return nil, fmt.Errorf("AUTH_TOKEN_SIGNING_KEY must decode to at least %d bytes (got %d); generate one with `openssl rand -base64 48`", MinSigningKeyBytes, len(key))
+		}
+		return key, nil
+	}
+	return nil, errors.New("AUTH_TOKEN_SIGNING_KEY must be base64-encoded; generate one with `openssl rand -base64 48`")
 }
 
 // RedactURI removes any password from a URI so it is safe to log.
