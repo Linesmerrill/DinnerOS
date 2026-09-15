@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: DinnerOS API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Backend for the DinnerOS iOS app. "DinnerOS" is a working name.
 
@@ -31,6 +31,12 @@ tags:
     description: |
       Week plans (ISO weeks such as `2026-W38`) and each week's grocery list.
       Concurrent edits by different members are applied atomically; none are lost.
+  - name: pantry
+    description: |
+      A household's pantry: one item per ingredient, with a status that
+      decides grocery list statuses (docs/grocery-engine.md#pantry).
+  - name: ingredients
+    description: The global ingredient catalog.
 paths:
   /health:
     get:
@@ -853,10 +859,11 @@ paths:
       description: |
         Aggregates the week's entries with the grocery engine, using each live
         recipe's authored amounts for the entry's serving size (never scaled).
-        Requires `household.view`. Computed on every request. The household
-        pantry isn't applied yet (`pantryApplied: false`), so statuses are
-        `toBuy` or `pantryHint`. Amounts whose units can't be combined stay
-        separate.
+        Requires `household.view`. Computed on every request, with the
+        household pantry deciding statuses (`pantryApplied: true`): in-stock
+        items are `inPantry`, items marked out are `toBuy`, and the rest are
+        `pantryHint` when every recipe marks them as staples, otherwise
+        `toBuy`. Amounts whose units can't be combined stay separate.
       operationId: getPlanGroceryList
       tags: [plans]
       security:
@@ -868,6 +875,260 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GroceryList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/ingredients:
+    get:
+      summary: Search the ingredient catalog
+      description: |
+        Autocomplete for pantry items. The catalog is global, so any signed-in
+        user may search; no household is involved. `q` is normalized like
+        catalog keys (case, accents, and punctuation are ignored) and matches
+        the start of any word in the name. The exact name comes first, then
+        names starting with `q`, then names with a later word starting with
+        it; each group is alphabetical.
+      operationId: searchIngredients
+      tags: [ingredients]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 100
+          example: oil
+        - name: limit
+          in: query
+          description: Values above 50 are treated as 50.
+          schema:
+            type: integer
+            minimum: 1
+            default: 20
+      responses:
+        "200":
+          description: Matching catalog ingredients.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngredientSearchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+  /api/v1/households/{householdId}/pantry:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: List pantry items
+      description: |
+        Every matching item in the household's pantry, in aisle order and then
+        by name. A pantry holds at most 1000 items, so the list isn't
+        paginated. Requires `household.view`.
+      operationId: listPantryItems
+      tags: [pantry]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/PantryStatus"
+        - name: category
+          in: query
+          schema:
+            $ref: "#/components/schemas/GroceryCategoryName"
+        - name: staple
+          in: query
+          description: "`true` for staples only, `false` for the rest."
+          schema:
+            type: boolean
+        - name: q
+          in: query
+          description: |
+            Text the display name contains (case-insensitive), or that the
+            normalized name contains (`jalapeno` finds "Jalapeño"). Literal
+            text, not a pattern.
+          schema:
+            type: string
+            maxLength: 100
+      responses:
+        "200":
+          description: The pantry items.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PantryItemListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      summary: Add a pantry item
+      description: |
+        Adds an ingredient by catalog `ingredientId` or free-text `name`, or
+        merges into the item that already has the same ingredient (one item per
+        ingredient per household). Requires `pantry.edit`.
+
+        A free-text name that is a catalog ingredient is linked to it. A merge
+        applies `status` (default `in_stock`) and every field sent; omitted
+        fields keep their values and the display name is kept, so retrying is
+        safe.
+      operationId: addPantryItem
+      tags: [pantry]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddPantryItemRequest"
+      responses:
+        "201":
+          description: Added a new item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PantryItem"
+        "200":
+          description: Merged into the existing item for this ingredient.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PantryItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/PantryConflict"
+  /api/v1/households/{householdId}/pantry/{itemId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/PantryItemID"
+    patch:
+      summary: Update a pantry item
+      description: |
+        Changes the fields sent. `quantity`, `expiresOn`, and `note` may be
+        `null` (or `""`) to clear them; clearing `quantity` also clears `unit`.
+        Setting `status` to `out` clears the amount. Requires `pantry.edit`.
+      operationId: updatePantryItem
+      tags: [pantry]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePantryItemRequest"
+      responses:
+        "200":
+          description: The updated item.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PantryItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/PantryConflict"
+    delete:
+      summary: Delete a pantry item
+      description: Requires `pantry.edit`.
+      operationId: deletePantryItem
+      tags: [pantry]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Deleted.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/pantry/bulk:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    post:
+      summary: Set several items' statuses
+      description: |
+        Sets up to 200 items' statuses at once, for example after shopping.
+        Items marked `out` lose their amount. Requested IDs that aren't in the
+        pantry are listed in `missing` instead of failing the request.
+        Requires `pantry.edit`.
+      operationId: setPantryStatuses
+      tags: [pantry]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkPantryStatusRequest"
+      responses:
+        "200":
+          description: The updated items, in request order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkPantryStatusResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/pantry/staples/defaults:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    post:
+      summary: Add the default staples
+      description: |
+        Adds salt, black pepper, cooking oil, olive oil, butter, sugar, flour,
+        garlic powder, and onion powder, in stock and marked `isStaple`, unless
+        the pantry already has them. Each links to the catalog ingredient with
+        its name or a known alias ("Pepper" for black pepper). Idempotent:
+        staples already in the pantry under either name are left unchanged and
+        counted in `skipped`. No request body. Requires `pantry.edit`.
+      operationId: addDefaultPantryStaples
+      tags: [pantry]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The staples added.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DefaultStaplesResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -936,6 +1197,12 @@ components:
       schema:
         type: string
         example: 66e5a1f2c3b4a5d6e7f80c01
+    PantryItemID:
+      name: itemId
+      in: path
+      required: true
+      schema:
+        type: string
   schemas:
     RecipeSummary:
       type: object
@@ -1760,7 +2027,7 @@ components:
           $ref: "#/components/schemas/PlanStatus"
         pantryApplied:
           type: boolean
-          description: False until the household pantry exists (Phase 7).
+          description: True when the household pantry decided item statuses.
         categories:
           type: array
           description: In aisle order; empty categories are omitted.
@@ -1806,7 +2073,11 @@ components:
         status:
           type: string
           enum: [toBuy, inPantry, pantryHint]
-          description: "`pantryHint`: every recipe marks it as a staple. `inPantry` needs the pantry (Phase 7)."
+          description: |
+            `inPantry`: in stock in the household pantry. `toBuy`: not at home,
+            including anything the pantry marks as out. `pantryHint`: every
+            recipe marks it as a staple and the pantry doesn't list it as in
+            stock or out (or lists it as low).
         recipes:
           type: array
           items:
@@ -1852,6 +2123,200 @@ components:
           description: |
             `recipeUnavailable`: the recipe is no longer in the household.
             `servingsUnavailable`: the recipe no longer offers the entry's serving size.
+    GroceryCategoryName:
+      type: string
+      enum: [produce, meat-seafood, dairy-eggs, bakery, deli, pantry, spices, condiments, frozen, beverages, other]
+    PantryStatus:
+      type: string
+      enum: [in_stock, low, out]
+      description: |
+        `in_stock`: grocery lists show the ingredient as `inPantry`. `low`:
+        not treated as at home (`pantryHint` if every recipe marks it as a
+        staple, otherwise `toBuy`). `out`: always `toBuy`.
+    PantryItem:
+      type: object
+      required: [id, householdId, ingredientId, key, displayName, category, quantity, quantityValue, unit, status, isStaple, expiresOn, note, updatedBy, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        householdId:
+          type: string
+        ingredientId:
+          type: [string, "null"]
+          description: The catalog ingredient; null for free text that matched no catalog ingredient.
+        key:
+          type: string
+          description: The normalized ingredient name, unique within the household (the catalog key when linked).
+          example: olive oil
+        displayName:
+          type: string
+          example: Olive Oil
+        category:
+          $ref: "#/components/schemas/GroceryCategoryName"
+        quantity:
+          type: [string, "null"]
+          description: Exact amount as "n" or "n/d"; null when no amount was recorded ("have some").
+          example: "3/2"
+        quantityValue:
+          type: [number, "null"]
+          description: The same amount as a number, for display only.
+          example: 1.5
+        unit:
+          type: [string, "null"]
+          description: DinnerOS unit code; null exactly when quantity is null.
+          example: cup
+        status:
+          $ref: "#/components/schemas/PantryStatus"
+        isStaple:
+          type: boolean
+          description: An always-have item such as salt or oil.
+        expiresOn:
+          type: [string, "null"]
+          format: date
+        note:
+          type: string
+        updatedBy:
+          type: string
+          description: User ID of the last change.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PantryItemListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PantryItem"
+    AddPantryItemRequest:
+      type: object
+      description: Either `ingredientId` or `name` is required.
+      properties:
+        ingredientId:
+          type: string
+          description: A catalog ingredient ID from GET /api/v1/ingredients.
+        name:
+          type: string
+          maxLength: 100
+          description: Display name. Defaults to the catalog name when `ingredientId` is given.
+        category:
+          $ref: "#/components/schemas/GroceryCategoryName"
+        quantity:
+          type: string
+          maxLength: 32
+          description: A positive amount such as `2`, `0.5`, `1/2`, `1 1/2`, or `½`. Omit for "have some".
+          example: 1 1/2
+        unit:
+          type: string
+          description: DinnerOS unit code (docs/grocery-engine.md#units). Defaults to `count` when `quantity` is given; requires `quantity`.
+          example: cup
+        status:
+          $ref: "#/components/schemas/PantryStatus"
+        isStaple:
+          type: boolean
+        expiresOn:
+          type: string
+          format: date
+        note:
+          type: string
+          maxLength: 500
+    UpdatePantryItemRequest:
+      type: object
+      minProperties: 1
+      properties:
+        displayName:
+          type: string
+          maxLength: 100
+        category:
+          $ref: "#/components/schemas/GroceryCategoryName"
+        quantity:
+          type: [string, "null"]
+          description: A positive amount; null or "" clears the amount and unit.
+        unit:
+          type: [string, "null"]
+          description: DinnerOS unit code for the current or new quantity.
+        status:
+          $ref: "#/components/schemas/PantryStatus"
+        isStaple:
+          type: boolean
+        expiresOn:
+          type: [string, "null"]
+          format: date
+        note:
+          type: [string, "null"]
+          maxLength: 500
+    BulkPantryStatusRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: object
+            required: [id, status]
+            properties:
+              id:
+                type: string
+              status:
+                $ref: "#/components/schemas/PantryStatus"
+    BulkPantryStatusResponse:
+      type: object
+      required: [items, missing]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PantryItem"
+        missing:
+          type: array
+          description: Requested IDs that aren't in the household's pantry.
+          items:
+            type: string
+    DefaultStaplesResponse:
+      type: object
+      required: [items, skipped]
+      properties:
+        items:
+          type: array
+          description: The staples added.
+          items:
+            $ref: "#/components/schemas/PantryItem"
+        skipped:
+          type: integer
+          description: Default staples the pantry already had.
+    CatalogIngredient:
+      type: object
+      required: [id, key, name, category, categoryConfident]
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+          example: olive oil
+        name:
+          type: string
+          example: Olive Oil
+        category:
+          $ref: "#/components/schemas/GroceryCategoryName"
+        categoryConfident:
+          type: boolean
+          description: False when no category rule matched and the category is a placeholder (`other`).
+        imageUrl:
+          type: string
+    IngredientSearchResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CatalogIngredient"
     ErrorResponse:
       type: object
       required: [error]
@@ -1891,6 +2356,12 @@ components:
       description: |
         `plan_finalized`: the plan is finalized; set its status to `draft` first.
         `plan_full`: the week already has 50 entries.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    PantryConflict:
+      description: "`conflict`: the item kept changing concurrently after several automatic retries; retry."
       content:
         application/json:
           schema:

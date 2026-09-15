@@ -12,6 +12,8 @@ import (
 type GroceryList struct {
 	Week   Week
 	Status Status
+	// PantryApplied is true when the household pantry decided item statuses.
+	PantryApplied bool
 	// Categories are in grocery.CategoryOrder; empty categories are omitted.
 	Categories []GroceryCategory
 	// Skipped lists entries that could not contribute.

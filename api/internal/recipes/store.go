@@ -23,6 +23,9 @@ type Store interface {
 	// exists, adds its SourceRefs and sets UpdatedAt. Name, category, and
 	// image are only written on insert. It returns how many were inserted.
 	UpsertIngredients(ctx context.Context, ingredients []Ingredient) (inserted int, err error)
+	// SearchIngredients returns at most limit catalog ingredients whose Key
+	// matches keyPattern, a case-sensitive regular expression, ordered by Key.
+	SearchIngredients(ctx context.Context, keyPattern string, limit int) ([]Ingredient, error)
 
 	// FindRecipesBySourceIDs returns the household's recipes from source whose
 	// SourceRecipeID or any SourceAlias is in ids, ordered by ID.

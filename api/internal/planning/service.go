@@ -32,17 +32,32 @@ type RecipeReader interface {
 	GetMany(ctx context.Context, householdID string, ids []string) ([]recipes.Recipe, error)
 }
 
+// PantrySource provides a household's pantry for grocery lists.
+// *pantry.Service implements it.
+type PantrySource interface {
+	GroceryPantry(ctx context.Context, householdID string) (grocery.PantryStock, error)
+}
+
 // Service implements the weekly planner. Like recipes.Service it takes a
 // household ID: HTTP routes authorize first with households.RequirePermission.
 type Service struct {
 	store   Store
 	recipes RecipeReader
-	now     func() time.Time
+	// pantry is optional; without it grocery lists use an empty pantry.
+	pantry PantrySource
+	now    func() time.Time
 }
 
 // NewService returns a Service.
 func NewService(store Store, recipeReader RecipeReader) *Service {
 	return &Service{store: store, recipes: recipeReader, now: time.Now}
+}
+
+// WithPantry makes GroceryList apply the household pantry from source, and
+// returns s.
+func (s *Service) WithPantry(source PantrySource) *Service {
+	s.pantry = source
+	return s
 }
 
 // Get returns the household's plan for week. A week nobody has planned is an
@@ -235,9 +250,11 @@ func (s *Service) SetStatus(ctx context.Context, householdID, week, status strin
 // GroceryList aggregates the week's entries into a grocery list using each
 // live recipe's authored amounts for the entry's serving size.
 //
-// The household pantry doesn't exist yet, so the list uses an empty pantry:
-// items are toBuy, or pantryHint when every source marks them as a staple.
-// Phase 7 passes the household pantry here.
+// With a pantry source (WithPantry), the household pantry decides statuses:
+// in-stock ingredients are inPantry and ingredients recorded as out are toBuy
+// (see pantry.Service.GroceryPantry). Without one, items are toBuy, or
+// pantryHint when every source marks them as a staple. PantryApplied says
+// which happened. A pantry read failure fails the list.
 func (s *Service) GroceryList(ctx context.Context, householdID, week string) (GroceryList, error) {
 	w, err := s.parse(householdID, week)
 	if err != nil {
@@ -254,12 +271,25 @@ func (s *Service) GroceryList(ctx context.Context, householdID, week string) (Gr
 		}
 	}
 	var live []recipes.Recipe
+	var pantry grocery.Pantry = grocery.PantrySet{}
 	if len(ids) > 0 {
 		if live, err = s.recipes.GetMany(ctx, householdID, ids); err != nil {
 			return GroceryList{}, fmt.Errorf("planning: load recipes: %w", err)
 		}
+		if s.pantry != nil {
+			stock, err := s.pantry.GroceryPantry(ctx, householdID)
+			if err != nil {
+				return GroceryList{}, fmt.Errorf("planning: load pantry: %w", err)
+			}
+			pantry = stock
+		}
 	}
-	return buildGroceryList(p, live, grocery.PantrySet{})
+	g, err := buildGroceryList(p, live, pantry)
+	if err != nil {
+		return GroceryList{}, err
+	}
+	g.PantryApplied = s.pantry != nil
+	return g, nil
 }
 
 func (s *Service) parse(householdID, week string) (Week, error) {

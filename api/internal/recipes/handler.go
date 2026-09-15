@@ -58,6 +58,8 @@ func NewHandler(opts HandlerOptions) *Handler {
 func (h *Handler) Mount(r chi.Router) {
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireAuth(h.opts.Tokens))
+		// The ingredient catalog is global: signed in is enough.
+		r.Get("/ingredients", h.searchIngredients)
 		view := households.RequirePermission(h.opts.Authorizer, households.PermHouseholdView, h.logger)
 		r.With(view).Get("/households/{householdId}/recipes", h.list)
 		r.With(view).Get("/households/{householdId}/recipes/{recipeId}", h.get)
