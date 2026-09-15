@@ -6,6 +6,7 @@ struct RootView: View {
     @Environment(HouseholdStore.self) private var households
     @Environment(RecipeLibrary.self) private var recipes
     @Environment(PlanStore.self) private var plans
+    @Environment(EventReporter.self) private var events
 
     var body: some View {
         content
@@ -19,9 +20,35 @@ struct RootView: View {
                     households.reset()
                     recipes.reset()
                     plans.reset()
+                    // At launch there's no user while the session restores; only a real
+                    // sign-out discards queued events.
+                    if session.state == .signedOut {
+                        events.reset()
+                    }
+                }
+            }
+            .onChange(of: eventScope, initial: true) { _, scope in
+                guard let userID = scope.userID else { return }
+                if let householdID = scope.householdID {
+                    events.activate(householdID: householdID, userID: userID)
+                } else if scope.needsHousehold {
+                    events.reset()
                 }
             }
             .inviteLinkPrompt()
+    }
+
+    /// Events are recorded for the signed-in user in the selected household.
+    private var eventScope: EventScope {
+        EventScope(
+            userID: session.currentUser?.id, householdID: households.current?.household.id,
+            needsHousehold: households.phase == .needsHousehold)
+    }
+
+    private struct EventScope: Equatable {
+        let userID: String?
+        let householdID: String?
+        let needsHousehold: Bool
     }
 
     @ViewBuilder
@@ -48,6 +75,7 @@ struct RootView: View {
         .environment(HouseholdPreviewData.store(session: session))
         .environment(RecipePreviewData.library(session: session))
         .environment(PlanPreviewData.store(session: session))
+        .environment(EventReporter.preview(session: session))
 }
 
 #Preview("Signed out") {
@@ -57,4 +85,5 @@ struct RootView: View {
         .environment(HouseholdStore.preview(session: session, phase: .idle))
         .environment(RecipeLibrary.preview(session: session, phase: .idle))
         .environment(PlanStore.preview(session: session, plan: nil, phase: .idle))
+        .environment(EventReporter.preview(session: session))
 }

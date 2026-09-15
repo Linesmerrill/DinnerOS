@@ -1,8 +1,10 @@
 import SwiftUI
 
-/// A planned recipe: thumbnail, name, servings, and note.
+/// A planned recipe: thumbnail, name, servings, note, and whether it was cooked or
+/// skipped.
 struct PlanEntryRow: View {
     let entry: PlanEntry
+    var outcome: EventReporter.EntryOutcome?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var thumbnailWidth = 64.0
@@ -28,6 +30,7 @@ struct PlanEntryRow: View {
                         .lineLimit(3)
                         .accessibilityLabel("Note: \(entry.note)")
                 }
+                outcomeLabel
             }
             Spacer(minLength: 0)
         }
@@ -35,10 +38,29 @@ struct PlanEntryRow: View {
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
     }
+
+    @ViewBuilder
+    private var outcomeLabel: some View {
+        switch outcome {
+        case .cooked:
+            Label("Cooked", systemImage: "checkmark.circle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tint)
+        case .skipped(let reason):
+            Label(
+                reason.map { String(localized: "Skipped: \($0.title)") } ?? String(localized: "Skipped"),
+                systemImage: "forward.fill"
+            )
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+        case nil:
+            EmptyView()
+        }
+    }
 }
 
 #Preview {
-    List(PlanPreviewData.plan.entries) { entry in
-        PlanEntryRow(entry: entry)
+    List(Array(PlanPreviewData.plan.entries.enumerated()), id: \.element.id) { index, entry in
+        PlanEntryRow(entry: entry, outcome: index == 0 ? .cooked : index == 1 ? .skipped(.noTime) : nil)
     }
 }

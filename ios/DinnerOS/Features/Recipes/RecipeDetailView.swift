@@ -7,6 +7,8 @@ struct RecipeDetailView: View {
 
     @Environment(RecipeLibrary.self) private var library
     @Environment(HouseholdStore.self) private var households
+    @Environment(EventReporter.self) private var events
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var recipe: Recipe?
     @State private var loadError: String?
@@ -42,6 +44,17 @@ struct RecipeDetailView: View {
         .navigationTitle(summary.name)
         .navigationBarTitleDisplayMode(.inline)
         .task { await load(reload: false) }
+        .task(id: ViewedKey(recipeID: summary.id, isActive: scenePhase == .active)) {
+            // Counts as viewed after staying on screen, in the foreground, for a few
+            // seconds. Leaving the screen or the app cancels the wait.
+            guard scenePhase == .active else { return }
+            do {
+                try await Task.sleep(for: EventReporter.viewDwell)
+            } catch {
+                return
+            }
+            events.recipeViewed(recipeID: summary.id)
+        }
         .refreshable { await load(reload: true) }
         .toolbar {
             if households.access?.can(.planEdit) == true {
@@ -94,6 +107,11 @@ struct RecipeDetailView: View {
         if let servings, loaded.servingOptions.contains(servings) { return }
         servings = loaded.preferredServings(householdDefault: households.current?.household.defaultServings)
     }
+}
+
+private struct ViewedKey: Equatable {
+    let recipeID: String
+    let isActive: Bool
 }
 
 /// Time, difficulty, and serving sizes.
@@ -327,4 +345,5 @@ struct DetailSection<Content: View>: View {
     .environment(HouseholdPreviewData.store(session: session))
     .environment(RecipePreviewData.library(session: session))
     .environment(PlanPreviewData.store(session: session))
+    .environment(EventReporter.preview(session: session))
 }

@@ -187,6 +187,8 @@ struct RecipesView: View {
     }
     .environment(HouseholdPreviewData.store(session: session))
     .environment(RecipePreviewData.library(session: session))
+    .environment(PlanPreviewData.store(session: session))
+    .environment(EventReporter.preview(session: session))
 }
 
 #Preview("Empty") {
