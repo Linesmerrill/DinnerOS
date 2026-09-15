@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// The signed-in tab shell. Week and Shop are placeholders until their phase is
-/// implemented.
+/// The signed-in tab shell. Shop is a placeholder until its phase is implemented.
 struct MainTabView: View {
     @Environment(HouseholdStore.self) private var households
     @State private var selection: AppTab = .recipes
@@ -17,6 +16,11 @@ struct MainTabView: View {
                         }
                         // Another household starts at its own list, not at a recipe
                         // (or search) from the previous one.
+                        .id(households.current?.household.id)
+                    case .week:
+                        NavigationStack {
+                            WeekView()
+                        }
                         .id(households.current?.household.id)
                     case .household:
                         NavigationStack {

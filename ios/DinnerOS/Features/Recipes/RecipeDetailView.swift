@@ -11,6 +11,7 @@ struct RecipeDetailView: View {
     @State private var recipe: Recipe?
     @State private var loadError: String?
     @State private var servings: Int?
+    @State private var isAddingToWeek = false
 
     var body: some View {
         ScrollView {
@@ -42,6 +43,18 @@ struct RecipeDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await load(reload: false) }
         .refreshable { await load(reload: true) }
+        .toolbar {
+            if households.access?.can(.planEdit) == true {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Add to Week…", systemImage: "calendar.badge.plus") {
+                        isAddingToWeek = true
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $isAddingToWeek) {
+            AddEntrySheet(recipeID: summary.id, recipeName: summary.name, fixedWeek: nil)
+        }
     }
 
     private var header: some View {
@@ -309,4 +322,5 @@ private struct DetailSection<Content: View>: View {
     }
     .environment(HouseholdPreviewData.store(session: session))
     .environment(RecipePreviewData.library(session: session))
+    .environment(PlanPreviewData.store(session: session))
 }

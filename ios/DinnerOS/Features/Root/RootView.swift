@@ -5,6 +5,7 @@ struct RootView: View {
     @Environment(AuthSession.self) private var session
     @Environment(HouseholdStore.self) private var households
     @Environment(RecipeLibrary.self) private var recipes
+    @Environment(PlanStore.self) private var plans
 
     var body: some View {
         content
@@ -17,6 +18,7 @@ struct RootView: View {
                 } else {
                     households.reset()
                     recipes.reset()
+                    plans.reset()
                 }
             }
             .inviteLinkPrompt()
@@ -45,6 +47,7 @@ struct RootView: View {
         .environment(session)
         .environment(HouseholdPreviewData.store(session: session))
         .environment(RecipePreviewData.library(session: session))
+        .environment(PlanPreviewData.store(session: session))
 }
 
 #Preview("Signed out") {
@@ -53,4 +56,5 @@ struct RootView: View {
         .environment(session)
         .environment(HouseholdStore.preview(session: session, phase: .idle))
         .environment(RecipeLibrary.preview(session: session, phase: .idle))
+        .environment(PlanStore.preview(session: session, plan: nil, phase: .idle))
 }
