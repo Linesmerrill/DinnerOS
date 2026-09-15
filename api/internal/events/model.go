@@ -568,8 +568,8 @@ var typeSpecs = map[Type]typeSpec{
 	TypeWeekRejected:                   {decode: decoder[WeekRejected]()},
 	TypeMealSwapped:                    {recipe: true, decode: decoder[MealSwapped]()},
 	TypeMealRejected:                   {recipe: true, decode: decoder[MealRejected]()},
-	TypeShoppingHandoffCreated: {decode: decoder[ShoppingHandoffCreated]()},
-	TypeShoppingOrderConfirmed: {decode: decoder[ShoppingOrderConfirmed]()},
+	TypeShoppingHandoffCreated:         {decode: decoder[ShoppingHandoffCreated]()},
+	TypeShoppingOrderConfirmed:         {decode: decoder[ShoppingOrderConfirmed]()},
 }
 
 func decoder[P Payload]() func([]byte, func([]byte, any) error) (Payload, error) {
