@@ -249,6 +249,19 @@ func (m *memoryStore) ListPlans(_ context.Context, householdID string, from, to 
 	return out, nil
 }
 
+func (m *memoryStore) EarliestWeek(_ context.Context, householdID string) (Week, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var earliest Week
+	found := false
+	for _, p := range m.plans {
+		if p.HouseholdID == householdID && len(p.Entries) > 0 && (!found || p.Week.String() < earliest.String()) {
+			earliest, found = p.Week, true
+		}
+	}
+	return earliest, found, nil
+}
+
 func (m *memoryStore) UpdateEntry(_ context.Context, householdID string, w Week, entryID string, c EntryChanges, now time.Time) (Plan, error) {
 	return m.modifyEntry(householdID, w, entryID, now, func(p *Plan, i int) {
 		if c.Day != nil {

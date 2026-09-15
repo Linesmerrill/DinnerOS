@@ -277,6 +277,16 @@ func (s *Service) recipesByID(ctx context.Context, householdID string, ids []str
 	return out, nil
 }
 
+// EarliestPlannedWeek returns the earliest week with at least one planned
+// entry, for modules that show how far back history goes (the menu's week
+// strip). ok is false when nothing was ever planned.
+func (s *Service) EarliestPlannedWeek(ctx context.Context, householdID string) (week Week, ok bool, err error) {
+	if householdID == "" {
+		return Week{}, false, errHouseholdRequired
+	}
+	return s.store.EarliestWeek(ctx, householdID)
+}
+
 // ListPlans returns the household's stored plans from..to inclusive, in week
 // order, for modules that read planning history (the recommender). Weeks
 // nobody planned are omitted. The range covers at most MaxRangeWeeks weeks.

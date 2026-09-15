@@ -247,6 +247,33 @@ func (s *MongoStore) AddEntries(ctx context.Context, householdID string, w Week,
 	return p, ids, err
 }
 
+// EarliestWeek implements Store by walking the unique index in week order to
+// the first plan with an entry.
+func (s *MongoStore) EarliestWeek(ctx context.Context, householdID string) (Week, bool, error) {
+	hid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return Week{}, false, nil
+	}
+	var doc struct {
+		Week string `bson:"week"`
+	}
+	err = s.plans.FindOne(ctx,
+		bson.D{{Key: "householdId", Value: hid}, {Key: "entries.0", Value: bson.D{{Key: "$exists", Value: true}}}},
+		options.FindOne().SetSort(bson.D{{Key: "week", Value: 1}}).SetProjection(bson.D{{Key: "_id", Value: 0}, {Key: "week", Value: 1}}),
+	).Decode(&doc)
+	switch {
+	case errors.Is(err, mongo.ErrNoDocuments):
+		return Week{}, false, nil
+	case err != nil:
+		return Week{}, false, translate(err)
+	}
+	w, err := ParseWeek(doc.Week)
+	if err != nil {
+		return Week{}, false, fmt.Errorf("planning: stored plan week %q: %w", doc.Week, err)
+	}
+	return w, true, nil
+}
+
 // ListPlans implements Store with one range query on the unique index.
 func (s *MongoStore) ListPlans(ctx context.Context, householdID string, from, to Week) ([]Plan, error) {
 	hid, err := mongodb.ParseID(householdID)
