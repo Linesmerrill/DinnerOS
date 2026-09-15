@@ -48,14 +48,16 @@ func TestProfileSectionsAndHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !p.Configured() || p.Version != 1 || len(p.Sections) != len(Sections) || p.CreatedBy != userAda || !slices.Equal(p.Taste.Likes.Cuisines, []string{"mexican", "thai"}) {
+	// Replacing the profile writes every section but pairings, which it keeps
+	// (they are made from suggestions, not onboarding).
+	if !p.Configured() || p.Version != 1 || len(p.Sections) != len(Sections)-1 || p.CreatedBy != userAda || !slices.Equal(p.Taste.Likes.Cuisines, []string{"mexican", "thai"}) {
 		t.Fatalf("onboarded profile = %+v", p)
 	}
 	if p.CookTime.QuickMaxMinutes != 20 || p.Novelty != DefaultNovelty {
 		t.Errorf("sections the onboarding left out should be defaults: %+v", p)
 	}
 	recorded := env.events.ofType(events.TypeAutopilotPreferencesUpdated)
-	if len(recorded) != 1 || len(recorded[0].Payload.(events.AutopilotPreferencesUpdated).Sections) != len(Sections) {
+	if len(recorded) != 1 || len(recorded[0].Payload.(events.AutopilotPreferencesUpdated).Sections) != len(Sections)-1 {
 		t.Fatalf("onboarding events = %+v", recorded)
 	}
 

@@ -44,11 +44,13 @@ const (
 	SectionNovelty      Section = "novelty"
 	SectionEquipment    Section = "equipment"
 	SectionWeekdayRules Section = "weekdayRules"
+	SectionPairings     Section = "pairings"
 )
 
 // Sections lists every section in display order.
 var Sections = []Section{
 	SectionTaste, SectionRestrictions, SectionSchedule, SectionCookTime, SectionNovelty, SectionEquipment, SectionWeekdayRules,
+	SectionPairings,
 }
 
 // Change records who last changed something and when.
@@ -68,6 +70,8 @@ type Profile struct {
 	Novelty      string
 	Equipment    []string
 	WeekdayRules []WeekdayRule
+	// Pairings are the household's add-on pairing rules (pairings_rules.go).
+	Pairings []PairingRule
 	// Sections records who last changed each section and when. A section
 	// that was never set is absent.
 	Sections map[Section]Change
@@ -241,6 +245,8 @@ type Slot struct {
 	SwapCount      int
 	// RejectedRecipeIDs were swapped out of this slot, most recent last.
 	RejectedRecipeIDs []string
+	// Pairings are add-ons and grocery items offered with the meal.
+	Pairings []Pairing
 }
 
 // Reason explains a pick.
@@ -278,9 +284,11 @@ type RecipeOverride struct {
 	HouseholdID string
 	RecipeID    string
 	// Methods maps a method to whether the recipe suits it.
-	Methods   map[string]bool
-	UpdatedBy string
-	UpdatedAt time.Time
+	Methods map[string]bool
+	// MealCategories maps a meal category to whether the recipe is in it.
+	MealCategories map[string]bool
+	UpdatedBy      string
+	UpdatedAt      time.Time
 }
 
 // Limits.

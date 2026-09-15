@@ -249,6 +249,9 @@ func normalizeProfile(p Profile) (Profile, error) {
 		return slices.Index(optionValues(DayOptions), a.Day) - slices.Index(optionValues(DayOptions), b.Day)
 	})
 	p.WeekdayRules = rules
+	if p.Pairings, err = normalizePairingRules(p.Pairings); err != nil {
+		return Profile{}, err
+	}
 	return p, nil
 }
 
@@ -425,6 +428,10 @@ func diffProfile(old, next Profile) map[Section][]events.FieldChange {
 		d.scalar("weekdayRules."+day, o, n)
 	}
 	add(SectionWeekdayRules, &d)
+
+	if changes := diffPairingRules(old.Pairings, next.Pairings); len(changes) > 0 {
+		out[SectionPairings] = changes
+	}
 	return out
 }
 

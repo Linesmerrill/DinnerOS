@@ -31,6 +31,9 @@ type Vocabulary struct {
 	TimeBands   []Option
 	Frequencies []Option
 	Days        []Option
+	// MealCategories and PairingFrequencies are for pairing rules.
+	MealCategories     []Option
+	PairingFrequencies []Option
 	// CatalogRecipes is how many main-meal recipes the counts cover.
 	CatalogRecipes int
 }
