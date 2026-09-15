@@ -56,10 +56,10 @@ func (m *model) newSlot(day int) *slot {
 	}
 	s.guests = s.servings > m.prefs.servings
 	switch {
-	case m.ctx.busy:
-		s.softLimit, s.soft = m.prefs.bands.QuickMaxMinutes, "busy"
 	case s.rule != nil && s.rule.band == autopilot.BandLong:
 		s.longOK = true
+	case m.busyOn(day):
+		s.softLimit, s.soft = m.prefs.bands.QuickMaxMinutes, "busy"
 	case s.rule != nil && s.rule.band == autopilot.BandQuick:
 		s.softLimit, s.soft = m.prefs.bands.QuickMaxMinutes, "rule"
 	case s.rule != nil && s.rule.band == autopilot.BandMedium:
@@ -264,7 +264,7 @@ func (m *model) score(s *slot, it *item) cand {
 	}
 	add(SignalTimeFit, timeFit, w.TimeFit)
 	switch {
-	case s.hardCap > 0 && s.hardCap == m.ctx.maxMinutes:
+	case s.hardCap > 0 && s.hardCap == m.ctx.maxMinutes && weeknight:
 		c.reasons = append(c.reasons, reason{code: "busyWeek", text: fmt.Sprintf("Quick for your busy week (%d min)", it.minutes), priority: true})
 	case s.hardCap > 0:
 		c.reasons = append(c.reasons, reason{code: "dayLimit", text: fmt.Sprintf("Ready in %d min for %s", it.minutes, day.Name()), priority: true})

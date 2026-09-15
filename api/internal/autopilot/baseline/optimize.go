@@ -20,8 +20,11 @@ type state struct {
 	bands  [7]autopilot.TimeBand
 	// remaining is how many slots are still to be decided.
 	remaining int
-	total     float64
-	tie       uint64
+	// A busy week wants busyWant quick meals on its busy weeknights; busyQuick
+	// is how many it has, and busyLeft how many busy slots are undecided.
+	busyWant, busyQuick, busyLeft int
+	total                         float64
+	tie                           uint64
 }
 
 type chosenMeal struct {
@@ -47,20 +50,28 @@ func (m *model) requestedMeals() int {
 	return firstPositive(m.ctx.meals, m.prefs.mealsPerWeek)
 }
 
-// maxLong is the week's long-meal allowance; a busy week allows none.
-func (m *model) maxLong() int {
-	if m.ctx.busy {
-		return 0
-	}
-	return m.prefs.maxLong
+// busyOn reports whether a busy week's quick preference applies on day. A busy
+// week is about weeknights: other days keep their usual cook-time handling,
+// and a day whose rule allows a long cook keeps it. Hard caps apply anyway.
+func (m *model) busyOn(day int) bool {
+	return m.ctx.busy && day >= 0 && m.prefs.weeknights[day] && !m.longOKOn(day)
 }
 
-// minQuick is the fewest quick meals wanted; a busy week wants at least half.
-func (m *model) minQuick() int {
-	if m.ctx.busy {
-		return max(m.prefs.minQuick, (m.requestedMeals()+1)/2)
+// overLong reports whether another long meal on day, not allowed by the day's
+// rule, exceeds the week's long-meal allowance. Busy weeknights allow none.
+func (m *model) overLong(st *state, day int) bool {
+	return m.busyOn(day) || st.long >= m.prefs.maxLong
+}
+
+// missingQuick is how many more quick meals a week can no longer fit after
+// adding a meal: it wants want, has have so far, and left slots (including
+// this one) are undecided.
+func missingQuick(want, have, left int, quick bool) int {
+	before := max(0, want-have-left)
+	if quick {
+		have++
 	}
-	return m.prefs.minQuick
+	return max(0, want-have-(left-1)) - before
 }
 
 // noveltyBudget is how many new meals the week takes before penalties.
@@ -75,8 +86,9 @@ func (m *model) noveltyBudget() int {
 	return (n + 1) / 2
 }
 
+// longOKOn reports whether day's rule allows a long cook, busy week or not.
 func (m *model) longOKOn(day int) bool {
-	if day < 0 || m.ctx.busy {
+	if day < 0 {
 		return false
 	}
 	r := m.prefs.rules[day]
@@ -98,14 +110,33 @@ func fullMatch(it *item, r *rule) bool {
 	return groups > 0
 }
 
-func (m *model) initialState(slots int) state {
-	st := state{picks: make([]*cand, slots), pens: make([][4]float64, slots), hits: make([]int, len(m.prefs.allRules)), remaining: slots}
+func (m *model) initialState(slots []*slot) state {
+	n := len(slots)
+	st := state{picks: make([]*cand, n), pens: make([][4]float64, n), hits: make([]int, len(m.prefs.allRules)), remaining: n}
+	for _, s := range slots {
+		if m.busyOn(s.day) {
+			st.busyLeft++
+		}
+	}
+	busyMeals := st.busyLeft
 	for _, f := range m.fixed {
 		if f.it != nil {
+			if m.busyOn(f.day) {
+				busyMeals++
+			}
 			m.apply(&st, f.it, f.day, m.longOKOn(f.day))
 		}
 	}
+	st.busyWant = (busyMeals + 1) / 2
 	return st
+}
+
+// decided marks the slot on day as decided, filled or not.
+func (m *model) decided(st *state, day int) {
+	st.remaining--
+	if m.busyOn(day) {
+		st.busyLeft--
+	}
 }
 
 // apply adds a meal to the state's week.
@@ -118,6 +149,9 @@ func (m *model) apply(st *state, it *item, day int, longOK bool) {
 		}
 	case autopilot.BandQuick:
 		st.quick++
+		if m.busyOn(day) {
+			st.busyQuick++
+		}
 	}
 	if day >= 0 {
 		st.bands[day] = it.band
@@ -146,7 +180,7 @@ func (m *model) penalties(st *state, it *item, day int, longOK bool) [4]float64 
 		}
 	}
 	if it.band == autopilot.BandLong {
-		if !longOK && st.long >= m.maxLong() {
+		if !longOK && m.overLong(st, day) {
 			p[1] -= w.ExtraLong
 		}
 		if m.prefs.avoidConsecutiveLong && day >= 0 {
@@ -157,14 +191,10 @@ func (m *model) penalties(st *state, it *item, day int, longOK bool) [4]float64 
 			}
 		}
 	}
-	if minQuick := m.minQuick(); minQuick > 0 {
-		before := max(0, minQuick-st.quick-st.remaining)
-		quick := st.quick
-		if it.band == autopilot.BandQuick {
-			quick++
-		}
-		after := max(0, minQuick-quick-(st.remaining-1))
-		p[1] -= w.MissingQuick * float64(after-before)
+	quick := it.band == autopilot.BandQuick
+	p[1] -= w.MissingQuick * float64(missingQuick(m.prefs.minQuick, st.quick, st.remaining, quick))
+	if m.busyOn(day) {
+		p[1] -= w.MissingQuick * float64(missingQuick(st.busyWant, st.busyQuick, st.busyLeft, quick))
 	}
 	for i, r := range m.prefs.allRules {
 		if r.freq == autopilot.AtMostOnce && st.hits[i] > 0 && fullMatch(it, r) {
@@ -242,7 +272,7 @@ func (m *model) search(slots []*slot) state {
 		}
 		return cmp.Compare(slots[a].day, slots[b].day)
 	})
-	beam := []state{m.initialState(len(slots))}
+	beam := []state{m.initialState(slots)}
 	for _, si := range order {
 		s := slots[si]
 		var next []state
@@ -262,14 +292,14 @@ func (m *model) search(slots []*slot) state {
 				ns := st.clone()
 				ns.picks[si], ns.pens[si] = c, pen
 				m.apply(&ns, c.it, s.day, s.longOK)
-				ns.remaining--
+				m.decided(&ns, s.day)
 				ns.total += c.base + pen[0] + pen[1] + pen[2] + pen[3]
 				ns.tie = ns.tie*1099511628211 ^ c.it.tie
 				next = append(next, ns)
 			}
 			if tried == 0 {
 				ns := st.clone()
-				ns.remaining--
+				m.decided(&ns, s.day)
 				ns.total -= m.w.Unfilled
 				next = append(next, ns)
 			}
@@ -324,26 +354,26 @@ func (m *model) selectDiverse(sorted []state) []state {
 
 // signature describes what a partial week means for the days still open.
 func (st *state) signature() string {
-	return fmt.Sprint(st.bands, st.hits, st.fresh, st.quick, st.long)
+	return fmt.Sprint(st.bands, st.hits, st.fresh, st.quick, st.busyQuick, st.long)
 }
 
 // evaluate computes the week objective of picks (one per slot, nil for
 // unfilled), adding meals in day order, and each slot's week penalties.
 func (m *model) evaluate(slots []*slot, picks []*cand) (float64, [][4]float64) {
-	st := m.initialState(len(slots))
+	st := m.initialState(slots)
 	pens := make([][4]float64, len(slots))
 	var total float64
 	for i, s := range slots {
 		c := picks[i]
 		if c == nil {
-			st.remaining--
+			m.decided(&st, s.day)
 			total -= m.w.Unfilled
 			continue
 		}
 		pen := m.penalties(&st, c.it, s.day, s.longOK)
 		pens[i] = pen
 		m.apply(&st, c.it, s.day, s.longOK)
-		st.remaining--
+		m.decided(&st, s.day)
 		total += c.base + pen[0] + pen[1] + pen[2] + pen[3]
 	}
 	return total, pens
@@ -554,7 +584,7 @@ func (m *model) generate() autopilot.WeekResult {
 func (m *model) rank(day autopilot.Day, exclude []string, limit int) autopilot.RankResult {
 	res := autopilot.RankResult{ModelVersion: m.version}
 	s := m.newSlot(day.Index())
-	st := m.initialState(1)
+	st := m.initialState([]*slot{s})
 	excluded := map[string]bool{}
 	for _, id := range exclude {
 		excluded[id] = true
