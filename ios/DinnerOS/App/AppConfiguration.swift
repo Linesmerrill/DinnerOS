@@ -19,6 +19,9 @@ struct AppConfiguration: Sendable, Equatable {
     let apiBaseURL: URL?
     /// Google's iOS OAuth client ID (a public identifier). `nil` hides Google sign-in.
     let googleIOSClientID: String?
+    /// The custom URL scheme invitation links open (`dinneros://invite?token=...`). It must
+    /// match the API's `APP_INVITE_URL_BASE`.
+    let urlScheme: String
     let version: String
     let build: String
 
@@ -32,6 +35,8 @@ struct AppConfiguration: Sendable, Equatable {
         apiBaseURL = Self.parseAPIBaseURL(info["APIBaseURL"] as? String, environment: environment)
         let googleClientID = (info["GoogleIOSClientID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         googleIOSClientID = googleClientID?.isEmpty == false ? googleClientID : nil
+        let scheme = (info["AppURLScheme"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        urlScheme = scheme.flatMap { $0.isEmpty ? nil : $0 } ?? InviteLink.defaultScheme
         version = info["CFBundleShortVersionString"] as? String ?? "0"
         build = info["CFBundleVersion"] as? String ?? "0"
     }

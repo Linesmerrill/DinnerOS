@@ -5,6 +5,8 @@ nonisolated struct APIRequest: Sendable {
     enum Method: String, Sendable {
         case get = "GET"
         case post = "POST"
+        case patch = "PATCH"
+        case delete = "DELETE"
     }
 
     var method: Method
@@ -19,6 +21,14 @@ nonisolated struct APIRequest: Sendable {
 
     static func post(_ path: String, body: some Encodable) throws -> APIRequest {
         APIRequest(method: .post, path: path, body: try JSONCoding.makeEncoder().encode(body), bearerToken: nil)
+    }
+
+    static func patch(_ path: String, body: some Encodable) throws -> APIRequest {
+        APIRequest(method: .patch, path: path, body: try JSONCoding.makeEncoder().encode(body), bearerToken: nil)
+    }
+
+    static func delete(_ path: String) -> APIRequest {
+        APIRequest(method: .delete, path: path, body: nil, bearerToken: nil)
     }
 
     func authorized(with accessToken: String) -> APIRequest {
