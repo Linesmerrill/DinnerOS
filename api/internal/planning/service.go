@@ -144,57 +144,145 @@ type NewEntry struct {
 	Day      string
 	Servings int
 	Note     string
+	// Origin defaults to OriginManual. Only server code (accepting an
+	// Autopilot proposal) sets OriginAutopilot and ProposalID; HTTP handlers
+	// never take them from a request.
+	Origin     Origin
+	ProposalID string
 }
 
 // AddEntry adds a recipe to the week, creating the plan if needed. The recipe
 // must belong to the household and offer the requested serving size.
 func (s *Service) AddEntry(ctx context.Context, householdID, userID, week string, in NewEntry) (Plan, Entry, error) {
+	p, added, err := s.AddEntries(ctx, householdID, userID, week, []NewEntry{in})
+	if err != nil {
+		return Plan{}, Entry{}, err
+	}
+	return p, added[0], nil
+}
+
+// AddEntries adds several recipes to the week in one atomic change: either all
+// of them are added or none are. Each must pass AddEntry's checks. It records
+// recipe.planned for each added entry.
+func (s *Service) AddEntries(ctx context.Context, householdID, userID, week string, in []NewEntry) (Plan, []Entry, error) {
 	w, err := s.parse(householdID, week)
 	if err != nil {
-		return Plan{}, Entry{}, err
+		return Plan{}, nil, err
 	}
 	if userID == "" {
-		return Plan{}, Entry{}, errors.New("planning: user id is required")
+		return Plan{}, nil, errors.New("planning: user id is required")
 	}
-	e := Entry{Servings: in.Servings}
-	if strings.TrimSpace(in.RecipeID) == "" {
-		return Plan{}, Entry{}, fmt.Errorf("%w: recipeId is required", ErrInvalidEntry)
+	switch {
+	case len(in) == 0:
+		return Plan{}, nil, fmt.Errorf("%w: at least one entry is required", ErrInvalidEntry)
+	case len(in) > MaxEntriesPerWeek:
+		return Plan{}, nil, ErrPlanFull
 	}
-	if in.Day != "" {
-		if e.Day, err = ParseDay(in.Day); err != nil {
-			return Plan{}, Entry{}, err
+	var recipeIDs []string
+	for _, ne := range in {
+		if strings.TrimSpace(ne.RecipeID) == "" {
+			return Plan{}, nil, fmt.Errorf("%w: recipeId is required", ErrInvalidEntry)
+		}
+		if !slices.Contains(recipeIDs, ne.RecipeID) {
+			recipeIDs = append(recipeIDs, ne.RecipeID)
 		}
 	}
-	if e.Note, err = cleanNote(in.Note); err != nil {
-		return Plan{}, Entry{}, err
-	}
-	recipe, err := s.recipe(ctx, householdID, in.RecipeID)
+	live, err := s.recipesByID(ctx, householdID, recipeIDs)
 	if err != nil {
-		return Plan{}, Entry{}, err
-	}
-	if err := checkServings(recipe, in.Servings); err != nil {
-		return Plan{}, Entry{}, err
+		return Plan{}, nil, err
 	}
 	now := s.now().UTC()
-	e.RecipeID, e.RecipeName, e.RecipeImageURL = recipe.ID, recipe.Name, recipe.ImageURL
-	e.AddedBy, e.AddedAt = userID, now
+	entries := make([]Entry, 0, len(in))
+	for _, ne := range in {
+		e := Entry{Servings: ne.Servings, AddedBy: userID, AddedAt: now, ProposalID: ne.ProposalID}
+		if ne.Day != "" {
+			if e.Day, err = ParseDay(ne.Day); err != nil {
+				return Plan{}, nil, err
+			}
+		}
+		if e.Note, err = cleanNote(ne.Note); err != nil {
+			return Plan{}, nil, err
+		}
+		if e.Origin, err = parseOrigin(ne.Origin); err != nil {
+			return Plan{}, nil, err
+		}
+		recipe, ok := live[ne.RecipeID]
+		if !ok {
+			return Plan{}, nil, ErrRecipeNotFound
+		}
+		if err := checkServings(recipe, ne.Servings); err != nil {
+			return Plan{}, nil, err
+		}
+		e.RecipeID, e.RecipeName, e.RecipeImageURL = recipe.ID, recipe.Name, recipe.ImageURL
+		entries = append(entries, e)
+	}
 
-	p, id, err := s.store.AddEntry(ctx, householdID, w, e, MaxEntriesPerWeek, now)
+	p, ids, err := s.store.AddEntries(ctx, householdID, w, entries, MaxEntriesPerWeek, now)
 	if err != nil {
-		return Plan{}, Entry{}, err
+		return Plan{}, nil, err
 	}
-	added, ok := p.entry(id)
-	if !ok {
-		return Plan{}, Entry{}, fmt.Errorf("planning: added entry %s missing from plan", id)
+	added := make([]Entry, 0, len(ids))
+	for _, id := range ids {
+		e, ok := p.entry(id)
+		if !ok {
+			return Plan{}, nil, fmt.Errorf("planning: added entry %s missing from plan", id)
+		}
+		added = append(added, e)
+		events.RecordOrLog(ctx, s.events, s.logger, events.Event{
+			HouseholdID: householdID, UserID: userID, Type: events.TypeRecipePlanned, RecipeID: e.RecipeID,
+			Week: w.String(), OccurredAt: now,
+			Payload: events.RecipePlanned{
+				EntryID: e.ID, Day: string(e.Day), Date: entryDate(w, e.Day), Servings: e.Servings,
+				Origin: string(e.Origin), ProposalID: e.ProposalID,
+			},
+		})
 	}
-	events.RecordOrLog(ctx, s.events, s.logger, events.Event{
-		HouseholdID: householdID, UserID: userID, Type: events.TypeRecipePlanned, RecipeID: added.RecipeID,
-		Week: w.String(), OccurredAt: now,
-		Payload: events.RecipePlanned{
-			EntryID: added.ID, Day: string(added.Day), Date: entryDate(w, added.Day), Servings: added.Servings, Origin: "manual",
-		},
-	})
 	return p, added, nil
+}
+
+// recipesByID loads the household's recipes by ID. A single missing recipe is
+// reported as ErrRecipeNotFound by the caller.
+func (s *Service) recipesByID(ctx context.Context, householdID string, ids []string) (map[string]recipes.Recipe, error) {
+	if len(ids) == 1 {
+		r, err := s.recipe(ctx, householdID, ids[0])
+		if err != nil {
+			return nil, err
+		}
+		return map[string]recipes.Recipe{r.ID: r}, nil
+	}
+	list, err := s.recipes.GetMany(ctx, householdID, ids)
+	if err != nil {
+		return nil, fmt.Errorf("planning: load recipes: %w", err)
+	}
+	out := make(map[string]recipes.Recipe, len(list))
+	for _, r := range list {
+		out[r.ID] = r
+	}
+	return out, nil
+}
+
+// ListPlans returns the household's stored plans from..to inclusive, in week
+// order, for modules that read planning history (the recommender). Weeks
+// nobody planned are omitted. The range covers at most MaxRangeWeeks weeks.
+func (s *Service) ListPlans(ctx context.Context, householdID, from, to string) ([]Plan, error) {
+	if householdID == "" {
+		return nil, errHouseholdRequired
+	}
+	fw, err := ParseWeek(from)
+	if err != nil {
+		return nil, fmt.Errorf("from: %w", err)
+	}
+	tw, err := ParseWeek(to)
+	if err != nil {
+		return nil, fmt.Errorf("to: %w", err)
+	}
+	switch n := fw.WeeksUntil(tw) + 1; {
+	case n < 1:
+		return nil, fmt.Errorf("%w: to must not be before from", ErrInvalidRange)
+	case n > MaxRangeWeeks:
+		return nil, fmt.Errorf("%w: a range covers at most %d weeks", ErrInvalidRange, MaxRangeWeeks)
+	}
+	return s.store.ListPlans(ctx, householdID, fw, tw)
 }
 
 // UpdateEntry changes an entry's day, servings, or note. New servings must be
@@ -276,7 +364,7 @@ func (s *Service) DeleteEntry(ctx context.Context, householdID, userID, week, en
 		events.RecordOrLog(ctx, s.events, s.logger, events.Event{
 			HouseholdID: householdID, UserID: userID, Type: events.TypeRecipeUnplanned, RecipeID: removed.RecipeID,
 			Week: w.String(), OccurredAt: now,
-			Payload: events.RecipeUnplanned{EntryID: removed.ID, Day: string(removed.Day), Date: entryDate(w, removed.Day)},
+			Payload: events.RecipeUnplanned{EntryID: removed.ID, Day: string(removed.Day), Date: entryDate(w, removed.Day), Origin: string(removed.Origin)},
 		})
 	}
 	return p, nil

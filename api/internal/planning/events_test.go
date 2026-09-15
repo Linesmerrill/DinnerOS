@@ -81,7 +81,7 @@ func TestEntryChangesRecordEvents(t *testing.T) {
 		},
 		{
 			HouseholdID: hhAda, UserID: userViewer, Type: events.TypeRecipeUnplanned, RecipeID: recipeTacos, Week: testWeek, OccurredAt: testNow,
-			Payload: events.RecipeUnplanned{EntryID: tacos.ID, Day: "tue", Date: "2026-09-15"},
+			Payload: events.RecipeUnplanned{EntryID: tacos.ID, Day: "tue", Date: "2026-09-15", Origin: "manual"},
 		},
 	}
 	if got := recorder.recorded(); !reflect.DeepEqual(got, want) {

@@ -83,6 +83,9 @@ type EntryResponse struct {
 	Note     string    `json:"note"`
 	AddedBy  string    `json:"addedBy"`
 	AddedAt  time.Time `json:"addedAt"`
+	// Origin is manual, or autopilot for entries added by accepting an
+	// Autopilot proposal.
+	Origin Origin `json:"origin"`
 }
 
 // EntryRecipeResponse is the recipe snapshot stored on an entry.
@@ -204,7 +207,10 @@ func newEntryResponse(w Week, e Entry) EntryResponse {
 	resp := EntryResponse{
 		ID:       e.ID,
 		Recipe:   EntryRecipeResponse{ID: e.RecipeID, Name: e.RecipeName, ImageURL: e.RecipeImageURL},
-		Servings: e.Servings, Note: e.Note, AddedBy: e.AddedBy, AddedAt: e.AddedAt.UTC(),
+		Servings: e.Servings, Note: e.Note, AddedBy: e.AddedBy, AddedAt: e.AddedAt.UTC(), Origin: e.Origin,
+	}
+	if resp.Origin == "" {
+		resp.Origin = OriginManual
 	}
 	if e.Day != "" {
 		day, date := e.Day, w.Date(e.Day)
