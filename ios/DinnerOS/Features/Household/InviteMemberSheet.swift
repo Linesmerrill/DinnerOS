@@ -15,6 +15,7 @@ struct InviteMemberSheet: View {
     @State private var isSending = false
     @State private var errorMessage: String?
     @State private var result: CreateInvitationResponse?
+    @FocusState private var isEmailFocused: Bool
 
     init(roles: [HouseholdRole], householdName: String) {
         self.roles = roles
@@ -72,7 +73,9 @@ struct InviteMemberSheet: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .submitLabel(.send)
+                    .focused($isEmailFocused)
                     .onSubmit { Task { await send() } }
+                    .onAppear { isEmailFocused = true }
             } footer: {
                 Text("They'll get an email with a link and a code. Invitations expire after 7 days.")
             }
