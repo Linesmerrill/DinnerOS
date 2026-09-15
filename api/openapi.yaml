@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: DinnerOS API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Backend for the DinnerOS iOS app. "DinnerOS" is a working name.
 
@@ -27,6 +27,10 @@ tags:
     description: Inviting people to a household by email, link, or code.
   - name: recipes
     description: A household's recipes and recipe import (docs/import-format.md).
+  - name: plans
+    description: |
+      Week plans (ISO weeks such as `2026-W38`) and each week's grocery list.
+      Concurrent edits by different members are applied atomically; none are lost.
 paths:
   /health:
     get:
@@ -643,6 +647,235 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "413":
           $ref: "#/components/responses/PayloadTooLarge"
+  /api/v1/households/{householdId}/plans:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: List week summaries
+      description: |
+        One summary per ISO week from `from` to `to` inclusive, in order,
+        including weeks nobody has planned (`entryCount: 0`, `updatedAt: null`).
+        Requires `household.view`. The range covers at most 26 weeks.
+      operationId: listPlans
+      tags: [plans]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/IsoWeek"
+        - name: to
+          in: query
+          required: true
+          description: Not before `from`, and at most 25 weeks after it.
+          schema:
+            $ref: "#/components/schemas/IsoWeek"
+      responses:
+        "200":
+          description: The weeks in the range.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/plans/{week}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    get:
+      summary: Get a week plan
+      description: |
+        The household's plan for the week. Requires `household.view`. A week
+        nobody has planned is an empty draft with null timestamps, not a 404.
+      operationId: getPlan
+      tags: [plans]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The plan.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plan"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/plans/{week}/entries:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    post:
+      summary: Add a recipe to a week
+      description: |
+        Requires `plan.edit`. Creates the plan as a draft if needed. The recipe
+        must belong to the household (otherwise 400 `validation_failed`), and
+        `servings` must be one of its serving sizes.
+      operationId: addPlanEntry
+      tags: [plans]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddPlanEntryRequest"
+      responses:
+        "201":
+          description: The new entry and the plan after adding it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddPlanEntryResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/PlanConflict"
+  /api/v1/households/{householdId}/plans/{week}/entries/{entryId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+      - $ref: "#/components/parameters/EntryID"
+    patch:
+      summary: Change a planned entry
+      description: |
+        Requires `plan.edit`. Send at least one of `day`, `servings`, `note`;
+        omitted fields don't change, and `"day": null` unschedules. New
+        servings must be one of the recipe's serving sizes.
+      operationId: updatePlanEntry
+      tags: [plans]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePlanEntryRequest"
+      responses:
+        "200":
+          description: The plan after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plan"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/PlanConflict"
+    delete:
+      summary: Remove a planned entry
+      description: Requires `plan.edit`.
+      operationId: deletePlanEntry
+      tags: [plans]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Removed.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/PlanConflict"
+  /api/v1/households/{householdId}/plans/{week}/status:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    put:
+      summary: Finalize a week or reopen it
+      description: |
+        Requires `plan.edit`. Creates the plan if needed. A finalized plan's
+        entries can't change until its status is set back to `draft`.
+      operationId: setPlanStatus
+      tags: [plans]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetPlanStatusRequest"
+      responses:
+        "200":
+          description: The plan with its new status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plan"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/plans/{week}/grocery:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    get:
+      summary: Get a week's grocery list
+      description: |
+        Aggregates the week's entries with the grocery engine, using each live
+        recipe's authored amounts for the entry's serving size (never scaled).
+        Requires `household.view`. Computed on every request. The household
+        pantry isn't applied yet (`pantryApplied: false`), so statuses are
+        `toBuy` or `pantryHint`. Amounts whose units can't be combined stay
+        separate.
+      operationId: getPlanGroceryList
+      tags: [plans]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The grocery list, grouped by category in aisle order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroceryList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
 components:
   securitySchemes:
@@ -690,6 +923,19 @@ components:
       schema:
         type: string
         example: 66e5a1f2c3b4a5d6e7f80915
+    Week:
+      name: week
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/IsoWeek"
+    EntryID:
+      name: entryId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: 66e5a1f2c3b4a5d6e7f80c01
   schemas:
     RecipeSummary:
       type: object
@@ -1348,6 +1594,264 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Identity"
+    IsoWeek:
+      type: string
+      pattern: "^[0-9]{4}-W[0-9]{2}$"
+      description: ISO 8601 week, Monday to Sunday. The week must exist in its year (52 or 53 weeks).
+      example: 2026-W38
+    PlanDay:
+      type: [string, "null"]
+      enum: [mon, tue, wed, thu, fri, sat, sun, null]
+      description: Day of the week, or null for "this week, not scheduled".
+    PlanStatus:
+      type: string
+      enum: [draft, finalized]
+      description: A finalized plan's entries are locked until it is set back to draft.
+    Plan:
+      type: object
+      required: [householdId, week, startDate, endDate, status, entries, createdAt, updatedAt]
+      properties:
+        householdId:
+          type: string
+        week:
+          $ref: "#/components/schemas/IsoWeek"
+        startDate:
+          type: string
+          format: date
+          description: The week's Monday.
+          example: "2026-09-14"
+        endDate:
+          type: string
+          format: date
+          description: The week's Sunday.
+          example: "2026-09-20"
+        status:
+          $ref: "#/components/schemas/PlanStatus"
+        entries:
+          type: array
+          description: In the order they were added.
+          items:
+            $ref: "#/components/schemas/PlanEntry"
+        createdAt:
+          type: [string, "null"]
+          format: date-time
+          description: Null for a week nobody has planned.
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+          description: Null for a week nobody has planned.
+    PlanEntry:
+      type: object
+      required: [id, recipe, day, date, servings, note, addedBy, addedAt]
+      properties:
+        id:
+          type: string
+          example: 66e5a1f2c3b4a5d6e7f80c01
+        recipe:
+          type: object
+          description: Snapshot taken when the entry was added. Load the recipe for details.
+          required: [id, name]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+              example: Beef Tacos
+            imageUrl:
+              type: string
+        day:
+          $ref: "#/components/schemas/PlanDay"
+        date:
+          type: [string, "null"]
+          format: date
+          description: The date of `day`, or null when unscheduled.
+          example: "2026-09-15"
+        servings:
+          type: integer
+          minimum: 1
+          example: 2
+        note:
+          type: string
+          maxLength: 500
+        addedBy:
+          type: string
+          description: User ID of the member who added the entry.
+        addedAt:
+          type: string
+          format: date-time
+    AddPlanEntryRequest:
+      type: object
+      required: [recipeId, servings]
+      additionalProperties: false
+      properties:
+        recipeId:
+          type: string
+          description: A recipe in this household.
+        day:
+          $ref: "#/components/schemas/PlanDay"
+        servings:
+          type: integer
+          description: One of the recipe's `servings`.
+          example: 2
+        note:
+          type: string
+          maxLength: 500
+    AddPlanEntryResponse:
+      type: object
+      required: [entry, plan]
+      properties:
+        entry:
+          $ref: "#/components/schemas/PlanEntry"
+        plan:
+          $ref: "#/components/schemas/Plan"
+    UpdatePlanEntryRequest:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        day:
+          $ref: "#/components/schemas/PlanDay"
+        servings:
+          type: integer
+          description: One of the recipe's `servings`.
+        note:
+          type: string
+          maxLength: 500
+    SetPlanStatusRequest:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status:
+          $ref: "#/components/schemas/PlanStatus"
+    PlanSummary:
+      type: object
+      required: [week, startDate, status, entryCount, updatedAt]
+      properties:
+        week:
+          $ref: "#/components/schemas/IsoWeek"
+        startDate:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/PlanStatus"
+        entryCount:
+          type: integer
+          minimum: 0
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+          description: Null for a week nobody has planned.
+    PlanListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlanSummary"
+    GroceryList:
+      type: object
+      required: [week, status, pantryApplied, categories, skipped]
+      properties:
+        week:
+          $ref: "#/components/schemas/IsoWeek"
+        status:
+          $ref: "#/components/schemas/PlanStatus"
+        pantryApplied:
+          type: boolean
+          description: False until the household pantry exists (Phase 7).
+        categories:
+          type: array
+          description: In aisle order; empty categories are omitted.
+          items:
+            $ref: "#/components/schemas/GroceryCategory"
+        skipped:
+          type: array
+          items:
+            $ref: "#/components/schemas/SkippedPlanEntry"
+    GroceryCategory:
+      type: object
+      required: [category, items]
+      properties:
+        category:
+          type: string
+          enum: [produce, meat-seafood, dairy-eggs, bakery, deli, pantry, spices, condiments, frozen, beverages, other]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroceryItem"
+    GroceryItem:
+      type: object
+      required: [ingredientKey, name, amounts, quantityText, unquantified, status, recipes]
+      properties:
+        ingredientKey:
+          type: string
+          description: The catalog ingredient ID, or `name:<normalized name>` for uncatalogued lines.
+        name:
+          type: string
+          example: Yellow Onion
+        amounts:
+          type: array
+          description: One amount per group of units that combine. A count and a weight stay separate.
+          items:
+            $ref: "#/components/schemas/GroceryAmount"
+        quantityText:
+          type: string
+          description: The amounts' texts joined with " + ". Empty when no recipe gave an amount.
+          example: 1 ½ + 8 oz
+        unquantified:
+          type: boolean
+          description: At least one recipe gave no amount ("salt to taste").
+        status:
+          type: string
+          enum: [toBuy, inPantry, pantryHint]
+          description: "`pantryHint`: every recipe marks it as a staple. `inPantry` needs the pantry (Phase 7)."
+        recipes:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+    GroceryAmount:
+      type: object
+      required: [quantity, quantityValue, unit, text]
+      properties:
+        quantity:
+          type: string
+          description: Exact amount as "n" or "n/d".
+          example: "3/2"
+        quantityValue:
+          type: number
+          description: The same amount as a number, for display only.
+          example: 1.5
+        unit:
+          type: string
+          description: DinnerOS unit code.
+          example: count
+        text:
+          type: string
+          example: 1 ½
+    SkippedPlanEntry:
+      type: object
+      required: [entryId, recipeId, recipeName, reason]
+      properties:
+        entryId:
+          type: string
+        recipeId:
+          type: string
+        recipeName:
+          type: string
+        reason:
+          type: string
+          enum: [recipeUnavailable, servingsUnavailable]
+          description: |
+            `recipeUnavailable`: the recipe is no longer in the household.
+            `servingsUnavailable`: the recipe no longer offers the entry's serving size.
     ErrorResponse:
       type: object
       required: [error]
@@ -1379,6 +1883,14 @@ components:
       description: |
         `last_admin`: the change would leave the household without an admin.
         `conflict`: the membership changed concurrently; reload and retry.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    PlanConflict:
+      description: |
+        `plan_finalized`: the plan is finalized; set its status to `draft` first.
+        `plan_full`: the week already has 50 entries.
       content:
         application/json:
           schema:

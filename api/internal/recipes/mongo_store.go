@@ -450,6 +450,37 @@ func (s *MongoStore) GetRecipe(ctx context.Context, householdID, id string) (Rec
 	return doc.toRecipe(), nil
 }
 
+// GetRecipes implements Store with one query.
+func (s *MongoStore) GetRecipes(ctx context.Context, householdID string, ids []string) ([]Recipe, error) {
+	hid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return nil, nil
+	}
+	oids := make([]bson.ObjectID, 0, len(ids))
+	for _, id := range ids {
+		if oid, err := mongodb.ParseID(id); err == nil {
+			oids = append(oids, oid)
+		}
+	}
+	if len(oids) == 0 {
+		return nil, nil
+	}
+	filter := bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: oids}}}, {Key: "householdId", Value: hid}}
+	cur, err := s.recipes.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
+	if err != nil {
+		return nil, translate(err)
+	}
+	var docs []recipeDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	var out []Recipe
+	for _, d := range docs {
+		out = append(out, d.toRecipe())
+	}
+	return out, nil
+}
+
 // ListRecipes implements Store.
 func (s *MongoStore) ListRecipes(ctx context.Context, householdID string, f ListFilter) ([]RecipeSummary, error) {
 	hid, err := mongodb.ParseID(householdID)

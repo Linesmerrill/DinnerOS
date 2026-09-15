@@ -1,0 +1,299 @@
+package planning
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
+	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
+)
+
+// Limits.
+const (
+	// MaxEntriesPerWeek bounds the embedded entries array.
+	MaxEntriesPerWeek = 50
+	// MaxRangeWeeks is the longest range GET /plans accepts.
+	MaxRangeWeeks = 26
+	// MaxNoteLength is the longest entry note, in characters.
+	MaxNoteLength = 500
+)
+
+// RecipeReader loads a household's recipes with ingredient categories filled
+// in. *recipes.Service implements it.
+type RecipeReader interface {
+	// Get returns recipes.ErrNotFound for recipes outside the household.
+	Get(ctx context.Context, householdID, id string) (recipes.Recipe, error)
+	// GetMany skips IDs that are missing or belong to another household.
+	GetMany(ctx context.Context, householdID string, ids []string) ([]recipes.Recipe, error)
+}
+
+// Service implements the weekly planner. Like recipes.Service it takes a
+// household ID: HTTP routes authorize first with households.RequirePermission.
+type Service struct {
+	store   Store
+	recipes RecipeReader
+	now     func() time.Time
+}
+
+// NewService returns a Service.
+func NewService(store Store, recipeReader RecipeReader) *Service {
+	return &Service{store: store, recipes: recipeReader, now: time.Now}
+}
+
+// Get returns the household's plan for week. A week nobody has planned is an
+// empty draft, not ErrNotFound.
+func (s *Service) Get(ctx context.Context, householdID, week string) (Plan, error) {
+	w, err := s.parse(householdID, week)
+	if err != nil {
+		return Plan{}, err
+	}
+	return s.getOrEmpty(ctx, householdID, w)
+}
+
+func (s *Service) getOrEmpty(ctx context.Context, householdID string, w Week) (Plan, error) {
+	p, err := s.store.GetPlan(ctx, householdID, w)
+	if errors.Is(err, ErrNotFound) {
+		return Plan{HouseholdID: householdID, Week: w, Status: StatusDraft}, nil
+	}
+	return p, err
+}
+
+// List returns one summary per week from..to inclusive, including weeks
+// nobody has planned (as empty drafts). The range covers at most
+// MaxRangeWeeks weeks.
+func (s *Service) List(ctx context.Context, householdID, from, to string) ([]Summary, error) {
+	if householdID == "" {
+		return nil, errHouseholdRequired
+	}
+	if from == "" || to == "" {
+		return nil, fmt.Errorf("%w: from and to are required", ErrInvalidRange)
+	}
+	fw, err := ParseWeek(from)
+	if err != nil {
+		return nil, fmt.Errorf("from: %w", err)
+	}
+	tw, err := ParseWeek(to)
+	if err != nil {
+		return nil, fmt.Errorf("to: %w", err)
+	}
+	n := fw.WeeksUntil(tw) + 1
+	switch {
+	case n < 1:
+		return nil, fmt.Errorf("%w: to must not be before from", ErrInvalidRange)
+	case n > MaxRangeWeeks:
+		return nil, fmt.Errorf("%w: a range covers at most %d weeks", ErrInvalidRange, MaxRangeWeeks)
+	}
+	stored, err := s.store.ListSummaries(ctx, householdID, fw, tw)
+	if err != nil {
+		return nil, err
+	}
+	byWeek := make(map[Week]Summary, len(stored))
+	for _, sum := range stored {
+		byWeek[sum.Week] = sum
+	}
+	out := make([]Summary, 0, n)
+	for i := range n {
+		w := fw.AddWeeks(i)
+		sum, ok := byWeek[w]
+		if !ok {
+			sum = Summary{Week: w, Status: StatusDraft}
+		}
+		out = append(out, sum)
+	}
+	return out, nil
+}
+
+// NewEntry is a recipe to add to a week.
+type NewEntry struct {
+	RecipeID string
+	// Day is "" for unscheduled.
+	Day      string
+	Servings int
+	Note     string
+}
+
+// AddEntry adds a recipe to the week, creating the plan if needed. The recipe
+// must belong to the household and offer the requested serving size.
+func (s *Service) AddEntry(ctx context.Context, householdID, userID, week string, in NewEntry) (Plan, Entry, error) {
+	w, err := s.parse(householdID, week)
+	if err != nil {
+		return Plan{}, Entry{}, err
+	}
+	if userID == "" {
+		return Plan{}, Entry{}, errors.New("planning: user id is required")
+	}
+	e := Entry{Servings: in.Servings}
+	if strings.TrimSpace(in.RecipeID) == "" {
+		return Plan{}, Entry{}, fmt.Errorf("%w: recipeId is required", ErrInvalidEntry)
+	}
+	if in.Day != "" {
+		if e.Day, err = ParseDay(in.Day); err != nil {
+			return Plan{}, Entry{}, err
+		}
+	}
+	if e.Note, err = cleanNote(in.Note); err != nil {
+		return Plan{}, Entry{}, err
+	}
+	recipe, err := s.recipe(ctx, householdID, in.RecipeID)
+	if err != nil {
+		return Plan{}, Entry{}, err
+	}
+	if err := checkServings(recipe, in.Servings); err != nil {
+		return Plan{}, Entry{}, err
+	}
+	now := s.now().UTC()
+	e.RecipeID, e.RecipeName, e.RecipeImageURL = recipe.ID, recipe.Name, recipe.ImageURL
+	e.AddedBy, e.AddedAt = userID, now
+
+	p, id, err := s.store.AddEntry(ctx, householdID, w, e, MaxEntriesPerWeek, now)
+	if err != nil {
+		return Plan{}, Entry{}, err
+	}
+	added, ok := p.entry(id)
+	if !ok {
+		return Plan{}, Entry{}, fmt.Errorf("planning: added entry %s missing from plan", id)
+	}
+	return p, added, nil
+}
+
+// UpdateEntry changes an entry's day, servings, or note. New servings must be
+// one of the live recipe's serving sizes.
+func (s *Service) UpdateEntry(ctx context.Context, householdID, week, entryID string, c EntryChanges) (Plan, error) {
+	w, err := s.parse(householdID, week)
+	if err != nil {
+		return Plan{}, err
+	}
+	if c.Day == nil && c.Servings == nil && c.Note == nil {
+		return Plan{}, fmt.Errorf("%w: provide at least one of day, servings, or note", ErrInvalidEntry)
+	}
+	if c.Day != nil && *c.Day != "" {
+		day, err := ParseDay(string(*c.Day))
+		if err != nil {
+			return Plan{}, err
+		}
+		c.Day = &day
+	}
+	if c.Note != nil {
+		note, err := cleanNote(*c.Note)
+		if err != nil {
+			return Plan{}, err
+		}
+		c.Note = &note
+	}
+	if c.Servings != nil {
+		// Servings depend on the entry's recipe, which never changes, so
+		// reading the entry first is safe under concurrent edits.
+		p, err := s.store.GetPlan(ctx, householdID, w)
+		if err != nil {
+			return Plan{}, err
+		}
+		e, ok := p.entry(entryID)
+		if !ok {
+			return Plan{}, ErrNotFound
+		}
+		if p.Status == StatusFinalized {
+			return Plan{}, ErrFinalized
+		}
+		recipe, err := s.recipe(ctx, householdID, e.RecipeID)
+		if err != nil {
+			return Plan{}, err
+		}
+		if err := checkServings(recipe, *c.Servings); err != nil {
+			return Plan{}, err
+		}
+	}
+	return s.store.UpdateEntry(ctx, householdID, w, entryID, c, s.now().UTC())
+}
+
+// DeleteEntry removes an entry from the week.
+func (s *Service) DeleteEntry(ctx context.Context, householdID, week, entryID string) (Plan, error) {
+	w, err := s.parse(householdID, week)
+	if err != nil {
+		return Plan{}, err
+	}
+	return s.store.DeleteEntry(ctx, householdID, w, entryID, s.now().UTC())
+}
+
+// SetStatus finalizes a week or returns it to draft.
+func (s *Service) SetStatus(ctx context.Context, householdID, week, status string) (Plan, error) {
+	w, err := s.parse(householdID, week)
+	if err != nil {
+		return Plan{}, err
+	}
+	st, err := ParseStatus(status)
+	if err != nil {
+		return Plan{}, err
+	}
+	return s.store.SetStatus(ctx, householdID, w, st, s.now().UTC())
+}
+
+// GroceryList aggregates the week's entries into a grocery list using each
+// live recipe's authored amounts for the entry's serving size.
+//
+// The household pantry doesn't exist yet, so the list uses an empty pantry:
+// items are toBuy, or pantryHint when every source marks them as a staple.
+// Phase 7 passes the household pantry here.
+func (s *Service) GroceryList(ctx context.Context, householdID, week string) (GroceryList, error) {
+	w, err := s.parse(householdID, week)
+	if err != nil {
+		return GroceryList{}, err
+	}
+	p, err := s.getOrEmpty(ctx, householdID, w)
+	if err != nil {
+		return GroceryList{}, err
+	}
+	var ids []string
+	for _, e := range p.Entries {
+		if !slices.Contains(ids, e.RecipeID) {
+			ids = append(ids, e.RecipeID)
+		}
+	}
+	var live []recipes.Recipe
+	if len(ids) > 0 {
+		if live, err = s.recipes.GetMany(ctx, householdID, ids); err != nil {
+			return GroceryList{}, fmt.Errorf("planning: load recipes: %w", err)
+		}
+	}
+	return buildGroceryList(p, live, grocery.PantrySet{})
+}
+
+func (s *Service) parse(householdID, week string) (Week, error) {
+	if householdID == "" {
+		return Week{}, errHouseholdRequired
+	}
+	return ParseWeek(week)
+}
+
+func (s *Service) recipe(ctx context.Context, householdID, id string) (recipes.Recipe, error) {
+	r, err := s.recipes.Get(ctx, householdID, id)
+	if errors.Is(err, recipes.ErrNotFound) {
+		return recipes.Recipe{}, ErrRecipeNotFound
+	}
+	if err != nil {
+		return recipes.Recipe{}, fmt.Errorf("planning: load recipe: %w", err)
+	}
+	return r, nil
+}
+
+func checkServings(r recipes.Recipe, servings int) error {
+	if len(r.Servings) == 0 {
+		return fmt.Errorf("%w: the recipe has no serving sizes", ErrInvalidEntry)
+	}
+	if !slices.Contains(r.Servings, servings) {
+		return fmt.Errorf("%w: servings must be one of %v", ErrInvalidEntry, r.Servings)
+	}
+	return nil
+}
+
+func cleanNote(note string) (string, error) {
+	note = strings.TrimSpace(note)
+	if utf8.RuneCountInString(note) > MaxNoteLength {
+		return "", fmt.Errorf("%w: note must be at most %d characters", ErrInvalidEntry, MaxNoteLength)
+	}
+	return note, nil
+}

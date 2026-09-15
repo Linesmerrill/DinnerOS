@@ -391,27 +391,62 @@ func (s *Service) Get(ctx context.Context, householdID, id string) (Recipe, erro
 	if err != nil {
 		return Recipe{}, err
 	}
+	list := []Recipe{r}
+	if err := s.fillCategories(ctx, list); err != nil {
+		return Recipe{}, err
+	}
+	return list[0], nil
+}
+
+// GetMany returns the household's recipes with the given IDs, ordered by ID,
+// with each ingredient's catalog category filled in. IDs that are malformed,
+// missing, or another household's are skipped, so callers compare the result
+// with what they asked for. It is two round trips however many IDs there are.
+func (s *Service) GetMany(ctx context.Context, householdID string, ids []string) ([]Recipe, error) {
+	if householdID == "" {
+		return nil, errHouseholdRequired
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	list, err := s.store.GetRecipes(ctx, householdID, ids)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.fillCategories(ctx, list); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
+// fillCategories sets each ingredient line's category from the catalog, with
+// one catalog query for all recipes.
+func (s *Service) fillCategories(ctx context.Context, list []Recipe) error {
 	var ids []string
-	for _, line := range r.Ingredients {
-		if line.IngredientID != "" && !slices.Contains(ids, line.IngredientID) {
-			ids = append(ids, line.IngredientID)
+	for _, r := range list {
+		for _, line := range r.Ingredients {
+			if line.IngredientID != "" && !slices.Contains(ids, line.IngredientID) {
+				ids = append(ids, line.IngredientID)
+			}
 		}
 	}
 	if len(ids) == 0 {
-		return r, nil
+		return nil
 	}
 	catalog, err := s.store.GetIngredients(ctx, ids)
 	if err != nil {
-		return Recipe{}, fmt.Errorf("get ingredients: %w", err)
+		return fmt.Errorf("get ingredients: %w", err)
 	}
 	categories := make(map[string]string, len(catalog))
 	for _, ing := range catalog {
 		categories[ing.ID] = ing.Category
 	}
-	for i := range r.Ingredients {
-		r.Ingredients[i].Category = categories[r.Ingredients[i].IngredientID]
+	for _, r := range list {
+		for i := range r.Ingredients {
+			r.Ingredients[i].Category = categories[r.Ingredients[i].IngredientID]
+		}
 	}
-	return r, nil
+	return nil
 }
 
 // --- small helpers ------------------------------------------------------------

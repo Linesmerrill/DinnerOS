@@ -150,6 +150,15 @@ func TestIntegrationImport(t *testing.T) {
 		t.Errorf("stored amount = %v", amount)
 	}
 
+	// GetMany is one household-scoped query plus one catalog query.
+	many, err := svc.GetMany(ctx, hh, []string{tacos.ID, "not-an-id", bson.NewObjectID().Hex()})
+	if err != nil || len(many) != 1 || many[0].ID != tacos.ID || many[0].Ingredients[0].Category != "produce" {
+		t.Errorf("GetMany() = %+v, %v", many, err)
+	}
+	if others, err := svc.GetMany(ctx, otherHH, []string{tacos.ID}); err != nil || len(others) != 0 {
+		t.Errorf("GetMany(other household) = %+v, %v", others, err)
+	}
+
 	// Household isolation and error mapping.
 	if _, err := svc.Get(ctx, otherHH, tacos.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("Get(other household) error = %v, want ErrNotFound", err)

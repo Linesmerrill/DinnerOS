@@ -20,6 +20,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/httpapi"
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/logging"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/ratelimit"
@@ -100,6 +101,7 @@ func run() error {
 		households.Indexes(),
 		invitations.Indexes(),
 		recipes.Indexes(),
+		planning.Indexes(),
 	)...); err != nil {
 		return err
 	}
@@ -117,13 +119,20 @@ func run() error {
 
 	authHandler := newAuthHandler(cfg, userService, tokens, logger)
 	householdService, householdHandler, invitationHandler := newHouseholdHandlers(cfg, db, userService, tokens, logger)
+	recipeService := recipes.NewService(recipes.NewMongoStore(db.Database()))
 	recipeHandler := recipes.NewHandler(recipes.HandlerOptions{
-		Service:        recipes.NewService(recipes.NewMongoStore(db.Database())),
+		Service:        recipeService,
 		Authorizer:     householdService,
 		Tokens:         tokens,
 		Logger:         logger,
 		ImportMaxBytes: cfg.RecipeImportMaxBytes,
 		ImportTimeout:  recipeImportTimeout,
+	})
+	planHandler := planning.NewHandler(planning.HandlerOptions{
+		Service:    planning.NewService(planning.NewMongoStore(db.Database()), recipeService),
+		Authorizer: householdService,
+		Tokens:     tokens,
+		Logger:     logger,
 	})
 
 	srv := &http.Server{
@@ -141,6 +150,7 @@ func run() error {
 				householdHandler.Mount(r)
 				invitationHandler.Mount(r)
 				recipeHandler.Mount(r)
+				planHandler.Mount(r)
 			},
 		}),
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelWarn),

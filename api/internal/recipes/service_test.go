@@ -496,6 +496,38 @@ func TestListContract(t *testing.T) {
 	runListContract(t, svc, "hh")
 }
 
+func TestGetManyFillsCategoriesAndStaysInHousehold(t *testing.T) {
+	svc := NewService(newMemoryStore())
+	ctx := context.Background()
+	mustImport(t, svc, "hh", testFile(testRecipe("r1", "Tacos"), testRecipe("r2", "Bowls")))
+	mustImport(t, svc, "other", testFile(testRecipe("r3", "Elsewhere")))
+	page, err := svc.List(ctx, "hh", ListQuery{})
+	if err != nil || len(page.Items) != 2 {
+		t.Fatalf("List() = %+v, %v", page.Items, err)
+	}
+	other := onlyRecipe(t, svc, "other")
+
+	ids := []string{page.Items[1].ID, other.ID, "missing", page.Items[0].ID}
+	got, err := svc.GetMany(ctx, "hh", ids)
+	if err != nil {
+		t.Fatalf("GetMany() error = %v", err)
+	}
+	if len(got) != 2 || got[0].ID > got[1].ID {
+		t.Fatalf("GetMany() = %+v, want the household's 2 recipes ordered by ID", got)
+	}
+	for _, r := range got {
+		if r.HouseholdID != "hh" || r.Ingredients[0].Category != "produce" || r.Ingredients[1].Category != "spices" {
+			t.Errorf("recipe %s = %+v", r.Name, r.Ingredients)
+		}
+	}
+	if none, err := svc.GetMany(ctx, "hh", nil); err != nil || none != nil {
+		t.Errorf("GetMany(no ids) = %v, %v", none, err)
+	}
+	if _, err := svc.GetMany(ctx, "", ids); err == nil {
+		t.Error("GetMany(no household) error = nil")
+	}
+}
+
 func TestListQueryLimits(t *testing.T) {
 	for _, tt := range []struct{ in, want int }{{0, DefaultListLimit}, {7, 7}, {MaxListLimit + 1, MaxListLimit}} {
 		f, err := ListQuery{Limit: tt.in}.filter()

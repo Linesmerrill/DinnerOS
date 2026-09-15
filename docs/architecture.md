@@ -70,7 +70,7 @@ api/
 │   ├── invitations/     HouseholdInvitation, EmailProvider
 │   ├── recipes/         Recipe, instructions, source metadata
 │   ├── ingredients/     Ingredient, units, quantities, conversion
-│   ├── planning/        WeeklyPlan, MealPlanEntry
+│   ├── planning/        Week plans, entries, week grocery list
 │   ├── grocery/         PantryItem, aggregation engine, GroceryList
 │   ├── providers/       GroceryProvider implementations
 │   ├── events/          MealEvent collection
@@ -260,3 +260,11 @@ a versioned Autopilot API. See [autopilot.md](autopilot.md).
 | 44 | The iOS recipe detail shows only the amounts the source authored for each serving size, formatted from the exact `quantity` string (`quantityValue` only as a fallback), and never scales them | Sources don't scale linearly (4 servings may be ¾ oz, not 1 oz), and the grocery engine works from the same authored amounts. A size with no authored amount shows none instead of an invented one. |
 | 45 | `RecipeLibrary` is an app-lifetime, in-memory store for the current household's list and loaded recipes; any filter change restarts from the first page, and a generation counter drops responses for old filters or households | Returning from a recipe or another tab shows what was loaded without refetching. Cursors are only valid for the filters that produced them. Nothing personal is cached on disk, and switching households or signing out clears it. |
 | 46 | `APIClient` percent-encodes query items with RFC 3986 unreserved characters only | `URLQueryItem`'s default encoding leaves `+`, which Go's query parser reads as a space, so a search for "salt+pepper" would silently change. |
+| 47 | A week plan is one `weekly_plans` document per `(householdId, week)`, keyed by the ISO week string (`2026-W38`), with entries embedded and capped at 50 | One read renders a week. Zero-padded week strings sort in week order, so the unique index also serves range queries. ISO weeks involve no time zone. |
+| 48 | Concurrent plan edits use atomic single-document updates (`$push` guarded by `status: draft` and `entries.49: {$exists: false}`, positional `$set`/`$unset`, `$pull`), not a version field with `409 conflict` | Members editing the same week never lose writes and never have to reload and retry. A plan created by two first writes at once hits the unique index, and the loser retries once. The cost: when a conditional update matches nothing, a follow-up read decides between `404`, `409 plan_finalized`, and `409 plan_full`. |
+| 49 | Entries snapshot the recipe's name and image; recipe details and the grocery list always read the live recipe | Plans render without loading recipes. An entry whose recipe left the household, or no longer offers the entry's serving size, is listed in the grocery list's `skipped` instead of failing the list. |
+| 50 | Entry servings must be one of the recipe's authored sizes, and the grocery list uses those authored amounts unscaled (`RecipeServings == TargetServings`) | Same reason as #44: sources don't scale linearly. Scaling from another size would invent amounts. |
+| 51 | A finalized plan locks its entries (`409 plan_finalized`) until `PUT .../status` sets it back to `draft` | Finalized means the week's shopping is decided, so the list shouldn't change silently. Reopening is one deliberate call. |
+| 52 | `GET /plans/{week}` returns an empty draft for unplanned weeks, and `GET /plans` returns every week in the range (at most 26), not only stored plans | Clients render a calendar without special-casing missing weeks, and reading never writes. |
+| 53 | A `recipeId` in a plan request body that isn't in the household is `400 validation_failed`, not `404` | The path's household and week exist; the body is what's wrong. `404` stays reserved for the path (non-members, unknown entries). |
+| 54 | The week grocery list is computed on request with `recipes.Service.GetMany` (two round trips for the whole week) and an empty pantry | Nothing is persisted until Phase 7 adds the pantry and saved lists with checked state. Batch loading keeps a full week's cost constant instead of two queries per entry. |
