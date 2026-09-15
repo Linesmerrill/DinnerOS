@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Builds the app's long-lived services from configuration. `DinnerOSApp` is the only
 /// place concrete implementations are chosen.
@@ -11,6 +12,7 @@ final class AppDependencies {
     let pantry: PantryStore
     let events: EventReporter
     let notifications: NotificationStore
+    let shopping: ShoppingStore
     /// `nil` when the build has no Google client ID; the Google button is then hidden.
     let googleSignIn: GoogleSignInService?
 
@@ -26,18 +28,29 @@ final class AppDependencies {
             inviteURLScheme: configuration.urlScheme,
             inviteLinkHost: configuration.appLinkDomain)
         recipes = RecipeLibrary(session: session, api: client.map { RecipesAPI(client: $0) })
-        plans = PlanStore(
-            session: session, api: client.map { PlansAPI(client: $0) }, checks: UserDefaultsGroceryChecks())
-        pantry = PantryStore(
+        // Grocery lists and the Shop tab share check-offs: confirming an order checks lines off.
+        let groceryChecks = UserDefaultsGroceryChecks()
+        plans = PlanStore(session: session, api: client.map { PlansAPI(client: $0) }, checks: groceryChecks)
+        let pantry = PantryStore(
             session: session,
             api: client.map { PantryAPI(client: $0) },
             ingredientsAPI: client.map { IngredientsAPI(client: $0) })
+        self.pantry = pantry
         let notifications = NotificationStore(
             session: session, api: client.map { NotificationsAPI(client: $0) })
         self.notifications = notifications
         // Pantry reads and changes can create notifications, so the badge follows them.
         pantry.onChange = { [notifications] in
             Task { await notifications.refreshUnreadCount() }
+        }
+        shopping = ShoppingStore(
+            session: session, api: client.map { ShoppingAPI(client: $0) }, checks: groceryChecks,
+            // Cart links open the Walmart app when it's installed (a universal link), otherwise Safari.
+            openURL: { url in await UIApplication.shared.open(url) })
+        // A confirmed order records pantry purchases.
+        shopping.onPantryChanged = { [pantry, notifications] in
+            await pantry.refresh()
+            await notifications.refreshUnreadCount()
         }
         events = EventReporter(
             session: session, api: client.map { EventsAPI(client: $0) },

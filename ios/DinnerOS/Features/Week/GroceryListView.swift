@@ -7,6 +7,7 @@ struct GroceryListView: View {
     @Environment(PlanStore.self) private var plans
     @Environment(PantryStore.self) private var pantry
     @Environment(HouseholdStore.self) private var households
+    @Environment(\.openShop) private var openShop
     @State private var model: GroceryListModel?
 
     /// Hiding the "Add to pantry?" prompt is a convenience; the API enforces `pantry.edit`.
@@ -25,10 +26,19 @@ struct GroceryListView: View {
         }
         .navigationTitle("Grocery List")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let openShop, households.access?.can(.shoppingEdit) == true {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Open in Walmart", systemImage: "cart") { openShop(week) }
+                }
+            }
+        }
         .task {
             if model == nil {
                 model = plans.makeGroceryList(week: week, purchases: pantry, canAddToPantry: canEditPantry)
             }
+            // Lines confirmed as ordered on the Shop tab are checked off while this list was away.
+            model?.reloadChecks()
             await model?.load()
         }
         .onChange(of: canEditPantry) { _, canEdit in

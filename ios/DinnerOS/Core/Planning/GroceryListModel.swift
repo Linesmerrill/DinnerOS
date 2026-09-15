@@ -184,6 +184,12 @@ final class GroceryListModel {
         checked.contains(item.ingredientKey)
     }
 
+    /// Reads this device's check-offs again, for lines checked off elsewhere, such as the ones
+    /// an order confirmed on the Shop tab covered.
+    func reloadChecks() {
+        checked = checks.checkedItems(householdID: householdID, week: week)
+    }
+
     /// Checks or unchecks a line. Checking one off asks "Add to pantry?" when the member may
     /// change the pantry and hasn't turned the prompt off for this trip.
     func toggle(_ item: GroceryItem) {

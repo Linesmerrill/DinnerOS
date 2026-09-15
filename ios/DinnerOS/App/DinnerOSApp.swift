@@ -17,6 +17,7 @@ struct DinnerOSApp: App {
                 .environment(dependencies.pantry)
                 .environment(dependencies.events)
                 .environment(dependencies.notifications)
+                .environment(dependencies.shopping)
                 .onChange(of: scenePhase, initial: true) { _, phase in
                     let events = dependencies.events
                     switch phase {
@@ -24,6 +25,9 @@ struct DinnerOSApp: App {
                         events.appDidBecomeActive()
                         let notifications = dependencies.notifications
                         Task { await notifications.refreshUnreadCount() }
+                        // Back from Walmart: "Did you order these?"
+                        let shopping = dependencies.shopping
+                        Task { await shopping.appDidBecomeActive() }
                     case .background:
                         BackgroundActivity.run(named: "Send events") {
                             await events.appDidEnterBackground()
