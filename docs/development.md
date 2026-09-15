@@ -147,6 +147,42 @@ the database, the next request signs you out.
 To clear a stored session from the simulator, sign out or delete the app. Keychain
 items are removed with the app on the simulator.
 
+### Households and invitation links from the simulator
+
+With the development API running and the app signed in with **Developer sign-in**:
+
+1. The app opens onboarding when the account has no household. **Create a
+   Household** (the time zone defaults to the simulator's), or **Join with a Code**.
+2. On the **Household** tab, **Invite Someone** creates an invitation and shows its
+   code once. With `EMAIL_PROVIDER=log` (the development default) no email is sent,
+   and the API logs the code but never the link or token.
+3. To join as a second person, create another development user and accept the
+   code with `curl` (replace the port and code):
+
+   ```bash
+   API=http://localhost:18080
+   TOKEN=$(curl -s -X POST $API/api/v1/auth/dev -H 'Content-Type: application/json' \
+     -d '{"subject":"dev-second","displayName":"Second Tester"}' | jq -r .accessToken)
+   curl -s -X POST $API/api/v1/invitations/accept -H "Authorization: Bearer $TOKEN" \
+     -H 'Content-Type: application/json' -d '{"code":"XXXXX-XXXXX"}'
+   ```
+
+   Pull to refresh the Household tab to see the new member.
+
+Invitation links use the `dinneros://` scheme (`APP_URL_SCHEME` in
+`ios/Config/Shared.xcconfig`, which must match the API's `APP_INVITE_URL_BASE`).
+Open one in the booted simulator with:
+
+```bash
+xcrun simctl openurl booted 'dinneros://invite?token=TOKEN'
+```
+
+The app asks before joining. Because the log email provider never prints tokens,
+a made-up token exercises the prompt and the "Couldn't Join Household" error; a
+working link needs a real invitation email. To test a link that arrives while
+signed out, sign out, run the command, then sign in: the prompt appears once the
+household loads.
+
 ### Adding files
 
 `ios/DinnerOS/` and `ios/DinnerOSTests/` are synchronized folders. Create Swift

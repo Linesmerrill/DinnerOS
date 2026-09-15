@@ -57,8 +57,25 @@ nonisolated enum APIError: Error, Equatable, Sendable {
 extension APIError: LocalizedError {
     nonisolated var errorDescription: String? {
         switch self {
-        case .server(let status, let code, _, _):
+        case .server(let status, let code, let message, _):
             switch code {
+            case "forbidden":
+                String(localized: "Your role in this household doesn't allow that.")
+            case "not_found":
+                String(
+                    localized: "That's no longer available. It may have been removed, or you may no longer have access."
+                )
+            case "last_admin":
+                String(
+                    localized:
+                        "A household needs at least one admin. Make another member an admin first, then try again.")
+            case "invitation_invalid":
+                String(localized: "This invitation is invalid, has expired, or has already been used.")
+            case "conflict":
+                String(localized: "Someone else changed this at the same time. Refresh and try again.")
+            case "validation_failed" where !message.isEmpty:
+                // The API documents validation messages as safe to show.
+                message
             case "rate_limited":
                 String(localized: "Too many attempts. Wait a minute and try again.")
             case "provider_unavailable":

@@ -8,6 +8,10 @@
 APP_DISPLAY_NAME = DinnerOS
 APP_BUNDLE_ID_BASE = com.linesmerrill.dinneros
 
+// Custom URL scheme for invitation links (dinneros://invite?token=...). Must match
+// the scheme in the API's APP_INVITE_URL_BASE (api/internal/config/config.go).
+APP_URL_SCHEME = dinneros
+
 // Google Sign-In iOS OAuth client (Google Cloud console → Credentials). A client ID
 // is a public identifier, not a secret. The redirect URI scheme is derived from it.
 // Leave empty to hide Google sign-in.
