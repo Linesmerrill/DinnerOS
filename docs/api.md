@@ -1386,7 +1386,7 @@ is none).
 
 | Status | Code | When |
 | --- | --- | --- |
-| 400 | `validation_failed` | Invalid week, profile, context, override, limit, or `excludeSlotIds`; missing `version` |
+| 400 | `validation_failed` | Invalid week, profile, context, override, limit, or `excludeSlotIds`; missing `version`; a `slotId` that isn't a day code; a PATCH whose only sections are `null` (a section's value must be an object) |
 | 400 | `invalid_request` | Malformed body, unknown fields, or wrong types |
 | 403 | `forbidden` | Changing anything without `plan.edit` |
 | 404 | `not_found` | Not a member; no proposal for the week; no slot on that day; recipe not in the household |

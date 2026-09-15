@@ -538,6 +538,9 @@ func (s *Service) Swap(ctx context.Context, householdID, userID, week, slotID st
 	if err != nil {
 		return Proposal{}, err
 	}
+	if !slices.Contains(optionValues(DayOptions), slotID) {
+		return Proposal{}, invalidf("slotId must be a day code: mon, tue, wed, thu, fri, sat, or sun")
+	}
 	p, err := s.pending(ctx, householdID, w, version)
 	if err != nil {
 		return Proposal{}, err

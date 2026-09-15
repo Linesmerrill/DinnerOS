@@ -1,7 +1,10 @@
 package recommendations
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -827,8 +830,22 @@ func (h *Handler) deleteContext(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) generate(w http.ResponseWriter, r *http.Request) {
 	var req generateRequest
-	if r.ContentLength != 0 && !httpx.DecodeJSON(w, r, &req) {
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			httpx.WriteError(w, r, http.StatusRequestEntityTooLarge, "payload_too_large", fmt.Sprintf("request body must not exceed %d bytes", tooLarge.Limit))
+			return
+		}
+		httpx.WriteError(w, r, http.StatusBadRequest, "invalid_request", "request body could not be read")
 		return
+	}
+	// The body is optional: an empty one, chunked or not, means no options.
+	if len(bytes.TrimSpace(raw)) > 0 {
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		if !httpx.DecodeJSON(w, r, &req) {
+			return
+		}
 	}
 	m := actor(r)
 	p, err := h.opts.Service.Generate(r.Context(), m.HouseholdID, m.UserID, chi.URLParam(r, "week"), GenerateOptions(req))
