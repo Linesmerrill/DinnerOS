@@ -6,7 +6,8 @@ enum RecipePreviewData {
     static let summaries = [
         RecipeSummary(
             id: "recipe-1", name: "Skillet Test Tacos", headline: "with Lime Crema", imageURLString: nil,
-            totalMinutes: 30, timesOrdered: 3, lastOrderedWeek: "2026-W37", isAddon: false, tags: ["Quick"]),
+            totalMinutes: 30, timesOrdered: 3, lastOrderedWeek: "2026-W37", isAddon: false, tags: ["Quick"],
+            householdRating: HouseholdRating(average: 4.5, count: 2), myRating: myRating),
         RecipeSummary(
             id: "recipe-2", name: "Sample Garden Salad", headline: nil, imageURLString: nil,
             totalMinutes: 15, timesOrdered: 1, lastOrderedWeek: "2026-W12", isAddon: true, tags: []),
@@ -37,7 +38,23 @@ enum RecipePreviewData {
             RecipeStep(index: 2, text: "• Fill the tortillas.\n• Top with crema and serve.", imageURLString: nil),
         ],
         orderWeeks: ["2026-W12", "2026-W30", "2026-W37"], timesOrdered: 3, lastOrderedWeek: "2026-W37",
-        createdAt: .now, updatedAt: .now)
+        createdAt: .now, updatedAt: .now, householdRating: HouseholdRating(average: 4.5, count: 2),
+        myRating: myRating)
+
+    static let myRating = RecipeRating(
+        recipeID: "recipe-1", userID: HouseholdPreviewData.user.id, score: 5, comment: "Less chili next time",
+        tags: [.makeAgain, .kidFavorite], createdAt: .now, updatedAt: .now)
+
+    static let ratings = RatingListResponse(
+        householdRating: HouseholdRating(average: 4.5, count: 2),
+        items: [
+            MemberRating(rating: myRating, displayName: "Ada Lovelace"),
+            MemberRating(
+                rating: RecipeRating(
+                    recipeID: "recipe-1", userID: "user-charles", score: 4, comment: "", tags: [.tooSpicy],
+                    createdAt: .now, updatedAt: .now),
+                displayName: "Charles Babbage"),
+        ])
 
     static func library(session: AuthSession) -> RecipeLibrary {
         .preview(session: session, items: summaries, recipes: [recipe])

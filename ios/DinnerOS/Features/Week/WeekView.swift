@@ -6,6 +6,7 @@ struct WeekView: View {
     @Environment(PlanStore.self) private var plans
     @Environment(HouseholdStore.self) private var households
     @Environment(RecipeLibrary.self) private var library
+    @Environment(EventReporter.self) private var events
 
     @State private var editingEntry: PlanEntry?
     @State private var isAddingRecipes = false
@@ -165,6 +166,7 @@ struct WeekView: View {
         .refreshable {
             await plans.reload()
         }
+        .sensoryFeedback(.success, trigger: events.outcomes)
     }
 
     @ViewBuilder
@@ -187,43 +189,79 @@ struct WeekView: View {
         }
     }
 
-    @ViewBuilder
+    /// Marking a meal cooked or skipped only records an event, so any member can do it,
+    /// in a finalized week too. Editing still needs `plan.edit` and a draft.
     private func row(_ entry: PlanEntry) -> some View {
-        if canEditEntries {
-            Button {
-                editingEntry = entry
-            } label: {
-                PlanEntryRow(entry: entry)
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Edits the day, servings, and note")
-            .swipeActions(edge: .trailing) {
-                Button("Remove", systemImage: "trash", role: .destructive) {
-                    perform { try await plans.deleteEntry(id: entry.id) }
-                }
-            }
-            .contextMenu {
-                Menu("Move To…", systemImage: "arrow.up.and.down.text.horizontal") {
-                    ForEach(PlanDay.allCases) { day in
-                        Button(day.name()) {
-                            perform { try await plans.moveEntry(id: entry.id, to: day) }
-                        }
-                        .disabled(entry.day == day)
-                    }
-                    Button("Unscheduled") {
-                        perform { try await plans.moveEntry(id: entry.id, to: nil) }
-                    }
-                    .disabled(entry.day == nil)
-                }
-                Button("Edit…", systemImage: "pencil") {
+        let outcome = events.outcomes[entry.id]
+        return Group {
+            if canEditEntries {
+                Button {
                     editingEntry = entry
+                } label: {
+                    PlanEntryRow(entry: entry, outcome: outcome)
                 }
+                .buttonStyle(.plain)
+                .accessibilityHint("Edits the day, servings, and note")
+            } else {
+                PlanEntryRow(entry: entry, outcome: outcome)
+            }
+        }
+        .swipeActions(edge: .leading) {
+            Button("Cooked", systemImage: "checkmark") {
+                events.recipeCooked(entry, week: plans.week)
+            }
+            .tint(.green)
+            Button("Skip", systemImage: "forward") {
+                events.recipeSkipped(entry, week: plans.week, reason: nil)
+            }
+            .tint(.orange)
+        }
+        .swipeActions(edge: .trailing) {
+            if canEditEntries {
                 Button("Remove", systemImage: "trash", role: .destructive) {
                     perform { try await plans.deleteEntry(id: entry.id) }
                 }
             }
-        } else {
-            PlanEntryRow(entry: entry)
+        }
+        .contextMenu {
+            Section {
+                Button("Mark as Cooked", systemImage: "checkmark.circle") {
+                    events.recipeCooked(entry, week: plans.week)
+                }
+                .disabled(outcome == .cooked)
+                Menu("Skip", systemImage: "forward") {
+                    ForEach(SkipReason.allCases) { reason in
+                        Button(reason.title) {
+                            events.recipeSkipped(entry, week: plans.week, reason: reason)
+                        }
+                    }
+                    Button("Skip Without a Reason") {
+                        events.recipeSkipped(entry, week: plans.week, reason: nil)
+                    }
+                }
+            }
+            if canEditEntries {
+                Section {
+                    Menu("Move To…", systemImage: "arrow.up.and.down.text.horizontal") {
+                        ForEach(PlanDay.allCases) { day in
+                            Button(day.name()) {
+                                perform { try await plans.moveEntry(id: entry.id, to: day) }
+                            }
+                            .disabled(entry.day == day)
+                        }
+                        Button("Unscheduled") {
+                            perform { try await plans.moveEntry(id: entry.id, to: nil) }
+                        }
+                        .disabled(entry.day == nil)
+                    }
+                    Button("Edit…", systemImage: "pencil") {
+                        editingEntry = entry
+                    }
+                    Button("Remove", systemImage: "trash", role: .destructive) {
+                        perform { try await plans.deleteEntry(id: entry.id) }
+                    }
+                }
+            }
         }
     }
 
@@ -365,6 +403,7 @@ private struct FinalizedNotice: View {
     .environment(HouseholdPreviewData.store(session: session))
     .environment(RecipePreviewData.library(session: session))
     .environment(PlanPreviewData.store(session: session))
+    .environment(EventReporter.preview(session: session))
 }
 
 #Preview("Empty") {
@@ -375,4 +414,5 @@ private struct FinalizedNotice: View {
     .environment(HouseholdPreviewData.store(session: session))
     .environment(RecipePreviewData.library(session: session))
     .environment(PlanPreviewData.store(session: session, plan: PlanPreviewData.emptyPlan))
+    .environment(EventReporter.preview(session: session))
 }

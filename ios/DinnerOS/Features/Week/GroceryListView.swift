@@ -30,6 +30,8 @@ struct GroceryListView: View {
 struct GroceryListContent: View {
     let model: GroceryListModel
 
+    @Environment(EventReporter.self) private var events
+
     /// Items whose contributing recipes are shown.
     @State private var expanded: Set<String> = []
 
@@ -120,7 +122,10 @@ struct GroceryListContent: View {
                             item: item,
                             isChecked: model.isChecked(item),
                             isExpanded: expandedBinding(for: item.ingredientKey),
-                            toggle: { model.toggle(item) })
+                            toggle: {
+                                model.toggle(item)
+                                events.groceryItemChecked(item, checked: model.isChecked(item), week: model.week)
+                            })
                     }
                 }
             }
@@ -268,4 +273,5 @@ private struct SkippedEntriesNotice: View {
         GroceryListContent(
             model: .preview(session: session, list: PlanPreviewData.groceryList, checked: ["garlic"]))
     }
+    .environment(EventReporter.preview(session: session))
 }

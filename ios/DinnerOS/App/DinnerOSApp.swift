@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct DinnerOSApp: App {
     @State private var dependencies = AppDependencies()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -14,6 +15,20 @@ struct DinnerOSApp: App {
                 .environment(dependencies.recipes)
                 .environment(dependencies.plans)
                 .environment(dependencies.pantry)
+                .environment(dependencies.events)
+                .onChange(of: scenePhase, initial: true) { _, phase in
+                    let events = dependencies.events
+                    switch phase {
+                    case .active:
+                        events.appDidBecomeActive()
+                    case .background:
+                        BackgroundActivity.run(named: "Send events") {
+                            await events.appDidEnterBackground()
+                        }
+                    default:
+                        break
+                    }
+                }
                 // Never log these URLs: invitation links carry a secret token.
                 .onOpenURL { url in
                     // Custom-scheme links (dinneros://invite?token=...).

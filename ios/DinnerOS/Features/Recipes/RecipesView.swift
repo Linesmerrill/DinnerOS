@@ -21,6 +21,9 @@ struct RecipesView: View {
             .navigationDestination(for: RecipeSummary.self) { summary in
                 RecipeDetailView(summary: summary)
             }
+            .navigationDestination(for: HouseholdRatingsRoute.self) { route in
+                HouseholdRatingsView(route: route)
+            }
             .searchable(text: $searchText, prompt: "Search recipes")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -184,6 +187,8 @@ struct RecipesView: View {
     }
     .environment(HouseholdPreviewData.store(session: session))
     .environment(RecipePreviewData.library(session: session))
+    .environment(PlanPreviewData.store(session: session))
+    .environment(EventReporter.preview(session: session))
 }
 
 #Preview("Empty") {

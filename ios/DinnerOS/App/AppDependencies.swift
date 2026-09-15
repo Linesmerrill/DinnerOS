@@ -9,6 +9,7 @@ final class AppDependencies {
     let recipes: RecipeLibrary
     let plans: PlanStore
     let pantry: PantryStore
+    let events: EventReporter
     /// `nil` when the build has no Google client ID; the Google button is then hidden.
     let googleSignIn: GoogleSignInService?
 
@@ -30,6 +31,9 @@ final class AppDependencies {
             session: session,
             api: client.map { PantryAPI(client: $0) },
             ingredientsAPI: client.map { IngredientsAPI(client: $0) })
+        events = EventReporter(
+            session: session, api: client.map { EventsAPI(client: $0) },
+            storage: FileEventQueueStorage.applicationSupport())
         googleSignIn = GoogleOAuthConfiguration(clientID: configuration.googleIOSClientID).map {
             GoogleSignInService(configuration: $0, transport: transport)
         }

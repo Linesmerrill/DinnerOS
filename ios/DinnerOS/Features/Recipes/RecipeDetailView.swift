@@ -7,6 +7,8 @@ struct RecipeDetailView: View {
 
     @Environment(RecipeLibrary.self) private var library
     @Environment(HouseholdStore.self) private var households
+    @Environment(EventReporter.self) private var events
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var recipe: Recipe?
     @State private var loadError: String?
@@ -29,7 +31,7 @@ struct RecipeDetailView: View {
                         }
                     }
                     if let recipe {
-                        RecipeDetailSections(recipe: recipe, servings: $servings)
+                        RecipeDetailSections(recipe: recipe, servings: $servings) { show($0) }
                     } else if loadError == nil {
                         ProgressView()
                             .frame(maxWidth: .infinity)
@@ -42,6 +44,17 @@ struct RecipeDetailView: View {
         .navigationTitle(summary.name)
         .navigationBarTitleDisplayMode(.inline)
         .task { await load(reload: false) }
+        .task(id: ViewedKey(recipeID: summary.id, isActive: scenePhase == .active)) {
+            // Counts as viewed after staying on screen, in the foreground, for a few
+            // seconds. Leaving the screen or the app cancels the wait.
+            guard scenePhase == .active else { return }
+            do {
+                try await Task.sleep(for: EventReporter.viewDwell)
+            } catch {
+                return
+            }
+            events.recipeViewed(recipeID: summary.id)
+        }
         .refreshable { await load(reload: true) }
         .toolbar {
             if households.access?.can(.planEdit) == true {
@@ -69,6 +82,7 @@ struct RecipeDetailView: View {
             if let recipe {
                 RecipeFacts(recipe: recipe)
                     .padding(.top, 4)
+                HouseholdRatingSummary(recipe: recipe)
             }
         }
     }
@@ -93,6 +107,11 @@ struct RecipeDetailView: View {
         if let servings, loaded.servingOptions.contains(servings) { return }
         servings = loaded.preferredServings(householdDefault: households.current?.household.defaultServings)
     }
+}
+
+private struct ViewedKey: Equatable {
+    let recipeID: String
+    let isActive: Bool
 }
 
 /// Time, difficulty, and serving sizes.
@@ -130,6 +149,7 @@ private struct RecipeFacts: View {
 private struct RecipeDetailSections: View {
     let recipe: Recipe
     @Binding var servings: Int?
+    let onRatingChange: (Recipe) -> Void
 
     var body: some View {
         if let description = recipe.description, !description.isEmpty {
@@ -144,6 +164,8 @@ private struct RecipeDetailSections: View {
                 }
             }
         }
+        // After the steps, where someone who just cooked it finishes reading.
+        RecipeRatingSection(recipe: recipe, onChange: onRatingChange)
         if !recipe.nutritionPerServing.isEmpty {
             DetailSection("Nutrition per Serving") {
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
@@ -296,7 +318,7 @@ private struct RecipeStepRow: View {
     }
 }
 
-private struct DetailSection<Content: View>: View {
+struct DetailSection<Content: View>: View {
     let title: LocalizedStringKey
     @ViewBuilder let content: Content
 
@@ -323,4 +345,5 @@ private struct DetailSection<Content: View>: View {
     .environment(HouseholdPreviewData.store(session: session))
     .environment(RecipePreviewData.library(session: session))
     .environment(PlanPreviewData.store(session: session))
+    .environment(EventReporter.preview(session: session))
 }
