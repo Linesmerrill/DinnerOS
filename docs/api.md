@@ -200,6 +200,9 @@ invitations, and the last-admin rule are described in
       "lastOrderedWeek": "2026-W30",
       "isAddon": false,
       "tags": ["Quick"],
+      "calories": 690,
+      "proteinGrams": 36,
+      "timeBand": "medium",
       "householdRating": { "average": 4.5, "count": 2 },
       "myRating": null
     }
@@ -213,6 +216,14 @@ invitations, and the last-admin rule are described in
 than the prep time, or only a prep time). It is omitted when neither is known.
 Show it instead of `totalMinutes`. The recipe detail has it too.
 
+`calories` (kcal) and `proteinGrams` are per serving, read from the recipe's
+nutrition list; names and units are matched case-insensitively ("Calories",
+"Energy (kcal)", "Protein"), and energy reported only in kJ is converted.
+`timeBand` is `quick`, `medium`, or `long` under the household's
+[Autopilot cook-time limits](#taste-profile), 20 and 35 minutes by default.
+All three are `null` when the recipe doesn't say, and all three appear
+wherever a recipe summary does, including [menu](#menu) cards.
+
 Every item carries `householdRating` and `myRating` (see [Ratings](#ratings)).
 The recipe detail has the same two fields.
 
@@ -222,6 +233,21 @@ The recipe detail has the same two fields.
 Each ingredient carries its catalog `category`. `quantity` is exact (`"1/2"`);
 use `quantityValue` only for display. Both are `null` when the source gave no
 amount. Array fields are always present, possibly empty.
+
+The detail carries the same `cookMinutes`, `timeBand`, `calories`, and
+`proteinGrams` as a summary, plus what only the full recipe has:
+
+- `nutritionPerServing` is the whole per-serving list under the source's own
+  names ("Energy (kcal)", "Fat", "Saturated Fat", "Carbohydrate", "Sugar",
+  "Dietary Fiber", "Protein", "Cholesterol", "Sodium"). `calories` and
+  `proteinGrams` are read from it; show the list itself for everything else.
+- `allergens` is the recipe's allergen list, and `difficulty` the source's own
+  scale when it gave one.
+- Each step has an optional `imageUrl`, and each ingredient line carries the
+  catalog ingredient's `imageUrl` when it has one.
+- Ingredient lines have no allergens of their own: the
+  [import format](import-format.md) reports allergens per recipe, so there is
+  nothing per ingredient to return.
 
 ```json
 {
@@ -234,12 +260,21 @@ amount. Array fields are always present, possibly empty.
   "isAddon": false,
   "servings": [2, 4],
   "cuisines": ["Mexican"], "tags": ["Quick"], "utensils": [], "allergens": [],
-  "nutritionPerServing": [{ "name": "Calories", "amount": 640, "unit": "kcal" }],
+  "difficulty": 2,
+  "cookMinutes": 30,
+  "timeBand": "medium",
+  "calories": 640,
+  "proteinGrams": 36,
+  "nutritionPerServing": [
+    { "name": "Calories", "amount": 640, "unit": "kcal" },
+    { "name": "Protein", "amount": 36, "unit": "g" }
+  ],
   "ingredients": [
     {
       "ingredientId": "66e5a1f2c3b4a5d6e7f80a10",
       "name": "Parmesan Cheese",
       "category": "dairy-eggs",
+      "imageUrl": "https://img.example.com/parmesan.jpg",
       "pantryStaple": false,
       "amounts": [
         { "servings": 2, "quantity": "1/2", "quantityValue": 0.5, "unit": "oz", "sourceUnit": "ounce", "rawText": "½ ounce Parmesan Cheese" }
@@ -255,7 +290,7 @@ amount. Array fields are always present, possibly empty.
       ]
     }
   ],
-  "steps": [{ "index": 1, "text": "Preheat the oven." }],
+  "steps": [{ "index": 1, "text": "Preheat the oven.", "imageUrl": "https://img.example.com/step-1.jpg" }],
   "orderWeeks": ["2026-W12", "2026-W30"],
   "timesOrdered": 2,
   "lastOrderedWeek": "2026-W30",
@@ -1759,6 +1794,193 @@ is none).
   preference changes itself. Keep sending `recipe.cooked` and
   `recipe.skipped` with the plan entry's `entryId`: that is how Autopilot learns
   which accepted meals were actually cooked.
+
+## Menu
+
+The Menu screen is one screen for the week: a week strip, the week's plan,
+curated carousels, and an "All Meals" list. Every route is under
+`/api/v1/households/{householdId}` and needs `household.view`. Weeks are ISO
+weeks (`2026-W38`); omitting `week` means the household's current week in its
+time zone.
+
+Nothing here is stored. Each request reads the catalog once and builds the
+response in memory, so sections always reflect the household's current
+ratings, orders, plans, and Autopilot preferences.
+
+### The menu
+
+`GET /api/v1/households/{householdId}/menu?week=2026-W38`
+
+```json
+{
+  "week": "2026-W38",
+  "weekStart": "2026-09-14",
+  "weekEnd": "2026-09-20",
+  "currentWeek": "2026-W38",
+  "timing": "current",
+  "plan": { "week": "2026-W38", "status": "draft", "entries": [] },
+  "proposal": { "id": "66e5...", "status": "proposed", "version": 3, "plannedMeals": 5 },
+  "sections": [
+    {
+      "id": "favorites",
+      "kind": "carousel",
+      "title": "Your Favorites",
+      "subtitle": "Based on what you rate and reorder",
+      "moreQuery": { "sort": "popular" },
+      "items": [
+        {
+          "recipe": { "id": "66e5...", "name": "Beef Tacos", "cookMinutes": 30, "calories": 690, "proteinGrams": 36, "timeBand": "medium", "...": "a full RecipeSummary" },
+          "badges": [{ "code": "make_again", "text": "Make Again" }],
+          "reason": "Ordered 21 times",
+          "inPlan": true,
+          "planEntryIds": ["66e5a1f2c3b4a5d6e7f80c01"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+- `timing` is `past`, `current`, or `upcoming`, comparing `week` with
+  `currentWeek`.
+- `plan` is the same object as [`GET .../plans/{week}`](#get-a-week), or
+  `null` when nothing is stored for the week.
+- `proposal` summarizes the week's [Autopilot proposal](#proposals), or is
+  `null`. Load the full proposal from its own endpoint to review it.
+- `recipe` is a `RecipeSummary`, so cards show ratings, `cookMinutes`,
+  `calories`, `proteinGrams`, and `timeBand` without another request.
+- `inPlan` and `planEntryIds` refer to the week being shown.
+- `reason` is a short explanation or `null`; `moreQuery` is a set of
+  `GET .../menu/recipes` query parameters (all string values) that lists more
+  of the same, or `null`.
+
+**Sections.** Sections are returned in display order, an empty one is left
+out, each has at most 12 items, and the order within a section is
+deterministic. Add-ons appear only in `sides` and in the history sections.
+
+| Section | Shown | What it lists |
+| --- | --- | --- |
+| `favorites` | every week | Main meals with a household average of 4+, a make-again or kid-favorite tag, 3+ orders within two years, or 2+ cooks, by favorite score. On a past week it is titled "Cook It Again". |
+| `quick` | current, upcoming | Meals with a known cook time within the household's quick limit (20 minutes by default), by favorite score then shortest |
+| `new_to_you` | current, upcoming | Meals never ordered and never cooked, by taste fit |
+| `rule_<day>` | current, upcoming | One per [weekday rule](autopilot.md#taste-profile), Monday first, titled from the rule's label ("Smoker Night Ideas", subtitle "For Sunday"). A second rule on one day is `rule_<day>_2`. |
+| `long_cooks` | current, upcoming | "Worth the Wait": meals longer than the medium limit, by favorite score |
+| `sides` | current, upcoming | Add-ons, most ordered first |
+| `history_planned` | past | "You Planned": that week's plan entries by day, one card per recipe carrying every entry ID |
+| `history_ordered` | past | "You Ordered": recipes whose `orderWeeks` contain the week, add-ons included |
+
+A recipe that breaks a hard [restriction](autopilot.md#taste-profile) (diet,
+allergen, excluded cuisine, protein, tag, ingredient, or "no spicy") is left
+out of the suggestion sections — `quick`, `new_to_you`, `rule_<day>`, and
+`long_cooks` — and so is anything a member tagged never-again. History and
+`favorites` are a record of what the household did, so they are not filtered.
+
+Weekday rule sections match the way Autopilot scores rules: a rule's methods
+dominate, so a meal must suit one of them (when the household has that
+equipment) to appear, and it must match at least half the rule's groups.
+
+**Badges** are at most two per card, most important first, from a closed set:
+`make_again`, `top_rated` (average 4.5+), `kid_favorite`, `autopilot_pick` (in
+the week's pending proposal or added to the plan from one), `smoker_friendly`
+(the household has a smoker and the recipe suits it), `often_ordered` (5+),
+`quick`, and `new`. A section drops the badge that would repeat its own title,
+and a smoker rule's section leads with `smoker_friendly`.
+
+### All Meals
+
+`GET /api/v1/households/{householdId}/menu/recipes`
+
+| Parameter | Meaning |
+| --- | --- |
+| `q` | Text the name or headline contains, case-insensitive; at most 100 characters |
+| `protein` | An Autopilot protein value (`chicken`, `beef`, …), from `GET .../menu/filters` |
+| `cuisine` | A canonical cuisine; a region also matches its cuisines (`asian` matches Thai) |
+| `tag` | A canonical tag; spellings that differ only by a space are one value |
+| `maxMinutes` | Keeps meals with a known cook time at most this long |
+| `addons` | `true` lists add-ons instead of main meals (default `false`) |
+| `sort` | `recommended` (default), `popular`, `recent`, `quick`, or `name` |
+| `week` | The week `inPlan` and `planEntryIds` refer to (default: the current week) |
+| `limit`, `cursor` | Page size (default 20, at most 50) and the previous page's `nextCursor` |
+
+```json
+{ "items": [ { "recipe": {}, "badges": [], "reason": "Ready in 15 min", "inPlan": false, "planEntryIds": [] } ], "nextCursor": "eyJzIjoibmFtZSIsIms..." }
+```
+
+`recommended` is a deterministic score: the favorite score (ratings,
+make-again and kid-favorite tags, how often and how recently the household
+ordered or cooked it) plus taste fit (the profile's likes and dislikes, plus
+the share of past orders with the recipe's proteins and cuisines), lowered for
+recipes that break a hard restriction — those are listed, not hidden. It does
+not call the Autopilot planner: ranking a whole catalog per request is a
+week-planning cost, and browsing needs stable, explainable order.
+
+A cursor is the last item's position in the sort, not an offset, so pages stay
+in order for the same inputs even when recipes change between requests. Send
+it back with the same `sort`; a cursor from another sort is
+`400 validation_failed`. `nextCursor` is `null` on the last page.
+
+### Filter chips
+
+`GET /api/v1/households/{householdId}/menu/filters`
+
+```json
+{
+  "proteins": [{ "value": "chicken", "label": "Chicken", "count": 128 }],
+  "cuisines": [{ "value": "north american", "label": "North American", "count": 96 }],
+  "tags": [{ "value": "one pot", "label": "One Pot", "count": 41 }],
+  "maxMinutes": [15, 20, 30, 45],
+  "sorts": [{ "value": "recommended", "label": "Recommended" }]
+}
+```
+
+Values and counts come from the household's main meals through the same
+[Autopilot vocabulary](#vocabulary) the preference screens use, so a chip's
+`count` is how many recipes the matching filter returns. Options the catalog
+doesn't use are left out.
+
+### Week strip
+
+`GET /api/v1/households/{householdId}/weeks?around=2026-W38&before=8&after=4`
+
+```json
+{
+  "items": [
+    { "week": "2026-W30", "weekStart": "2026-07-20", "weekEnd": "2026-07-26", "timing": "past", "plannedCount": 5, "cookedCount": 3, "orderedCount": 4, "status": "finalized" }
+  ],
+  "earliestWeek": "2023-W05"
+}
+```
+
+- `around` defaults to the current week; `before` and `after` default to 8 and
+  4 and are clamped to 52 each. Weeks are oldest first.
+- `plannedCount` is plan entries, `cookedCount` distinct `recipe.cooked`
+  events in that week, and `orderedCount` main meals whose `orderWeeks`
+  contain it (add-ons excluded).
+- `status` is `draft`, `finalized`, or `none` when no plan is stored.
+- `earliestWeek` is the earliest week with a planned entry or an ordered main
+  meal, so the app knows how far back "Past" goes. It is `null` for a
+  household with no history.
+
+### Contract notes for the app
+
+- **One screen.** Load `GET .../weeks` once for the strip and `GET .../menu`
+  per week shown. Both are cheap enough to re-request on pull to refresh;
+  neither is cached server-side.
+- **Cards.** Render `recipe.imageUrl` large, and the facts line from
+  `cookMinutes`, `calories`, and `proteinGrams` ("30 min · 690 cal · 36g
+  protein"), leaving out what is `null`. Show `badges` as-is — the codes are
+  closed, so each can have its own icon — and `reason` as one short line.
+- **Sections.** Treat `sections` as opaque and ordered: render whatever comes
+  back, in order, and key carousels by `id`. New section IDs can appear, so
+  don't switch on them exhaustively; `kind` says whether it is a carousel or a
+  history list. "See all" opens All Meals with `moreQuery` applied.
+- **All Meals.** Build chips from `GET .../menu/filters` and send the values
+  back unchanged. Keep `nextCursor` for paging and drop it whenever a filter,
+  sort, or search changes.
+- **The plan.** `plan` is the same shape the Week tab already decodes, and
+  `planEntryIds` lets a card open or remove the entry it belongs to.
+- **Past weeks** have no `quick`, `new_to_you`, rule, `long_cooks`, or `sides`
+  sections; upcoming and current weeks have no history sections.
 
 ## Events
 
