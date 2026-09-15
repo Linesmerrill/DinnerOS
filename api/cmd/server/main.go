@@ -28,8 +28,10 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/logging"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/ratelimit"
+	"github.com/Linesmerrill/DinnerOS/api/internal/providers"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recommendations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/shopping"
 	"github.com/Linesmerrill/DinnerOS/api/internal/substitutes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/users"
 )
@@ -111,6 +113,7 @@ func run() error {
 		pantry.Indexes(),
 		notifications.Indexes(),
 		substitutes.Indexes(),
+		shopping.Indexes(),
 		behaviorIndexes(),
 		recommendations.Indexes(),
 	)...); err != nil {
@@ -201,6 +204,24 @@ func run() error {
 		Tokens:     tokens,
 		Logger:     logger,
 	})
+	// Shopping hands the week's list (as planning builds it) to a provider and
+	// records confirmed orders as pantry purchases. Walmart needs no keys in
+	// Phase 8a; the Impact IDs only wrap its links when set.
+	shoppingHandler := shopping.NewHandler(shopping.HandlerOptions{
+		Service: shopping.NewService(shopping.ServiceOptions{
+			Store:     shopping.NewMongoStore(db.Database()),
+			Providers: providers.NewRegistry(newWalmartProvider(cfg)),
+			Grocery:   planService,
+			Catalog:   recipeService,
+			Pantry:    pantryService,
+			Events:    behavior.events,
+			Logger:    logger,
+		}),
+		Pantry:     pantryService,
+		Authorizer: householdService,
+		Tokens:     tokens,
+		Logger:     logger,
+	})
 	pantryHandler := pantry.NewHandler(pantry.HandlerOptions{
 		Service:    pantryService,
 		Authorizer: householdService,
@@ -246,6 +267,7 @@ func run() error {
 				autopilotHandler.Mount(r)
 				pantryHandler.Mount(r)
 				specialtyHandler.Mount(r)
+				shoppingHandler.Mount(r)
 				notificationHandler.Mount(r)
 				behavior.ratingHandler.Mount(r)
 				behavior.eventHandler.Mount(r)
@@ -347,6 +369,16 @@ func newHouseholdHandlers(cfg config.Config, db *mongodb.Client, userService *us
 		CreateRateLimit: ratelimit.New(ratelimit.Options{Burst: inviteCreateRateBurst, Every: inviteCreateRateEvery}).Middleware,
 	})
 	return householdService, householdHandler, invitationHandler
+}
+
+// newWalmartProvider returns the Walmart provider, with Impact affiliate
+// links when WALMART_IMPACT_* is configured.
+func newWalmartProvider(cfg config.Config) *providers.Walmart {
+	opts := providers.WalmartOptions{}
+	if w := cfg.WalmartImpact; w.Enabled() {
+		opts.Affiliate = &providers.ImpactAffiliate{PublisherID: w.PublisherID, AdID: w.AdID, CampaignID: w.CampaignID}
+	}
+	return providers.NewWalmart(opts)
 }
 
 // newEmailProvider picks the EmailProvider named by EMAIL_PROVIDER. Config

@@ -208,7 +208,7 @@ Implemented in `internal/pantry` ([pantry-usage.md](pantry-usage.md)).
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
 | `pantry_items` (usage fields) | statusSource (`person`/`estimate`; absent on older items, meaning person), statusSetAt, tracking{cycleId, cycleSource, cycleStartedAt, unit, reference, segmentStart, segmentStartedAt, segmentRecipeUsed, recipeUsed, recipeUses, skippedUses}, unitSize{unit, quantity, sizeUnit}, history[{startedAt, endedAt, unit, start, recipeUsed, remaining, observed}], rate{perDay, unit, segments, computedAt}, lowThresholdPercent, lowAlertCycleId | the item's unique key |
-| `pantry_purchases` | householdId, itemId, itemKey, source (`grocery_list`/`manual`/`provider`/`house_made`), quantity, quantityValue, unit, unitSize{}, week, clientPurchaseId, recordedBy, purchasedAt | `{householdId, itemId, purchasedAt: -1}`; **unique partial** `{householdId, recordedBy, clientPurchaseId}` where `clientPurchaseId` is a string |
+| `pantry_purchases` | householdId, itemId, itemKey, source (`grocery_list`/`manual`/`provider`/`house_made`), quantity, quantityValue, unit, unitSize{}, week, clientPurchaseId, provider{key, handoffId, lineId, productId}, recordedBy, purchasedAt | `{householdId, itemId, purchasedAt: -1}`; **unique partial** `{householdId, recordedBy, clientPurchaseId}` where `clientPurchaseId` is a string; **unique partial** `{householdId, provider.handoffId, provider.lineId}` where `provider.handoffId` is a string |
 | `pantry_cook_usage` | householdId, sourceKey, recipeId, entryId, userId, servings, scaledFrom, occurredAt, createdAt, lines[{itemId, ingredient, quantity, unit, deducted, trackingUnit, cycleId, skipReason}] | **unique** `{householdId, sourceKey}` |
 | `pantry_settings` | householdId, lowThresholdPercent, updatedBy, updatedAt | **unique** `{householdId}` |
 
@@ -286,10 +286,41 @@ Implemented in `internal/notifications`.
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
 | `grocery_lists` | householdId, weeklyPlanId, items[], generatedAt | **unique** `{weeklyPlanId}` |
-| `grocery_provider_configurations` | householdId, provider, settings | **unique** `{householdId, provider}` |
 
 A week's grocery list is still computed on request, with the household pantry
-applied, and isn't stored yet.
+applied, and isn't stored yet. Store settings (planned as
+`grocery_provider_configurations`) are `shopping_settings` below.
+
+### Shopping
+
+Implemented in `internal/shopping` (Phase 8a, [shopping-providers.md](shopping-providers.md)).
+
+| Collection | Key fields | Indexes |
+| --- | --- | --- |
+| `shopping_settings` | householdId, provider (`walmart`), storeId, updatedBy, updatedAt | **unique** `{householdId}` |
+| `shopping_product_preferences` | householdId, provider, ingredientKey, ingredientName, productId, displayName, packageSize{quantity, quantityValue, unit}, createdBy, createdAt, updatedBy, updatedAt | **unique** `{householdId, provider, ingredientKey}` |
+| `shopping_handoffs` | householdId, week, provider, storeId, lines[{id, ingredientKey, name, category, amounts[{quantity, quantityValue, unit}], unquantified, groceryStatus, productId, productName, packageSize{}, computedPackages, packages, reason, status (`pending`/`confirmed`/`skipped`), claimedAt, confirmedPackages, purchaseId, confirmedBy, confirmedAt, skippedBy, skippedAt}], excluded[{ingredientKey, name, category, amounts[], unquantified, groceryStatus, reason}], links[{url, lineIds[], itemCount}], affiliateTracked, createdBy, createdAt, updatedAt | `{householdId, createdAt: -1}`; `{householdId, week, createdAt: -1}` |
+
+- **Settings** are one document per household, replaced with an upsert.
+- **Saved products** are upserted on the unique key: `_id`, `createdBy`, and
+  `createdAt` are `$setOnInsert`. `ingredientKey` is the grocery line key (a
+  catalog ingredient ID hex, or `name:` + a normalized name). `productId` is
+  the Walmart item ID read from a pasted link; the link itself isn't stored.
+  At most 1,000 per household and provider. `packageSize` is absent when the
+  member didn't give one, and `quantity` is exact like elsewhere.
+- **Handoffs** are a snapshot of the match when the member handed off, so a
+  later plan or pantry change doesn't alter what's confirmed. Lines are
+  bounded by the week's list. Line IDs (`l1`, `l2`, …) are unique within a
+  handoff. The status (`open` while a line is `pending`) is derived, and
+  `?status=` filters on `lines.status`.
+- **Confirming a line** is a positional update on `lines.$`: a conditional
+  `claimedAt` (no claim, or one older than a minute, on a line that isn't
+  confirmed), then the pantry purchase, then `status: confirmed` with its
+  `purchaseId`. The purchase is a `pantry_purchases` document with `source:
+  provider` and `provider{key, handoffId, lineId, productId}`, whose unique
+  partial index makes a line bought at most once (see
+  [Pantry usage](#pantry-usage)).
+- Handoffs are kept indefinitely for now, like purchases.
 
 ### Behavior
 

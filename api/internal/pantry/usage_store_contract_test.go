@@ -117,6 +117,32 @@ func runUsageStoreContract(t *testing.T, store UsageStore) {
 		t.Errorf("ListPurchases() = %+v", list)
 	}
 
+	fromHandoff := Purchase{
+		ID: "66e5a1f2c3b4a5d6e7f80f05", HouseholdID: testHousehold, ItemID: itemID, ItemKey: "butter", Source: PurchaseProvider,
+		Quantity: "2", Unit: "package", UnitSize: &UnitSize{Unit: "package", Quantity: "16", SizeUnit: "oz"}, Week: "2026-W38",
+		Provider:   &ProviderRef{Key: "walmart", HandoffID: "66e5a1f2c3b4a5d6e7f80b01", LineID: "l1", ProductID: "123456789"},
+		RecordedBy: testUser, PurchasedAt: day(4),
+	}
+	if saved, err := store.InsertPurchase(ctx, fromHandoff); err != nil || !reflect.DeepEqual(saved, fromHandoff) {
+		t.Fatalf("InsertPurchase(provider) = %+v, %v", saved, err)
+	}
+	again := fromHandoff
+	again.ID, again.RecordedBy = "66e5a1f2c3b4a5d6e7f80f06", "66e5a1f2c3b4a5d6e7f80c09"
+	if _, err := store.InsertPurchase(ctx, again); !errors.Is(err, ErrDuplicate) {
+		t.Errorf("second purchase for a handoff line error = %v", err)
+	}
+	otherLine := again
+	otherLine.Provider = &ProviderRef{Key: "walmart", HandoffID: "66e5a1f2c3b4a5d6e7f80b01", LineID: "l2", ProductID: "123456789"}
+	if _, err := store.InsertPurchase(ctx, otherLine); err != nil {
+		t.Errorf("another line error = %v", err)
+	}
+	if got, err := store.FindPurchaseByProviderLine(ctx, testHousehold, "66e5a1f2c3b4a5d6e7f80b01", "l1"); err != nil || !reflect.DeepEqual(got, fromHandoff) {
+		t.Errorf("FindPurchaseByProviderLine() = %+v, %v", got, err)
+	}
+	if _, err := store.FindPurchaseByProviderLine(ctx, otherHousehold, "66e5a1f2c3b4a5d6e7f80b01", "l1"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("FindPurchaseByProviderLine(other household) error = %v", err)
+	}
+
 	usage := CookUsage{
 		HouseholdID: testHousehold, SourceKey: "entry:e1", RecipeID: "66e5a1f2c3b4a5d6e7f80e01", EntryID: "e1", UserID: testUser,
 		Servings: 3, ScaledFrom: 2, OccurredAt: testNow, CreatedAt: testNow,

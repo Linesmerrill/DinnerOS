@@ -19,6 +19,7 @@ func TestRolePermissionMatrix(t *testing.T) {
 		PermPantryEdit:        {RoleAdmin: true, RoleMember: true},
 		PermRecipesEdit:       {RoleAdmin: true, RoleMember: true},
 		PermRecipesImport:     {RoleAdmin: true, RoleMember: true},
+		PermShoppingEdit:      {RoleAdmin: true, RoleMember: true},
 	}
 	if len(want) != len(AllPermissions()) {
 		t.Fatalf("matrix covers %d permissions, AllPermissions() has %d", len(want), len(AllPermissions()))

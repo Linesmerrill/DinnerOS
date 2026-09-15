@@ -18,10 +18,11 @@ import (
 // PurchaseSource says where a purchase record came from.
 type PurchaseSource string
 
-// Purchase sources. Clients may record grocery_list and manual purchases;
-// provider is reserved for shopping provider orders (Phase 8), which will
-// write the same record. house_made is a batch of a specialty ingredient the
-// household made, recorded through Service.RecordHouseMade.
+// Purchase sources. Clients may record grocery_list and manual purchases.
+// provider is a member-confirmed order from a shopping handoff, recorded only
+// by server code through Service.RecordProviderPurchase. house_made is a
+// batch of a specialty ingredient the household made, recorded through
+// Service.RecordHouseMade.
 const (
 	PurchaseGroceryList PurchaseSource = PurchaseSource(CycleGroceryList)
 	PurchaseManual      PurchaseSource = PurchaseSource(CycleManual)
@@ -46,8 +47,21 @@ type Purchase struct {
 	Week string
 	// ClientPurchaseID is the app's idempotency key, unique per member.
 	ClientPurchaseID string
-	RecordedBy       string
-	PurchasedAt      time.Time
+	// Provider is set on provider purchases: the handoff line it confirms.
+	Provider    *ProviderRef
+	RecordedBy  string
+	PurchasedAt time.Time
+}
+
+// ProviderRef links a provider purchase to the shopping handoff line it
+// confirms. (HouseholdID, HandoffID, LineID) is unique.
+type ProviderRef struct {
+	// Key is the provider ("walmart").
+	Key       string
+	HandoffID string
+	LineID    string
+	// ProductID is the provider's product (a Walmart item ID).
+	ProductID string
 }
 
 // PurchaseInput is the input for Service.RecordPurchase. ItemID, or
@@ -95,6 +109,10 @@ type UsageStore interface {
 	InsertPurchase(ctx context.Context, p Purchase) (Purchase, error)
 	// FindPurchaseByClientID returns a member's purchase by its client ID.
 	FindPurchaseByClientID(ctx context.Context, householdID, userID, clientPurchaseID string) (Purchase, error)
+	// FindPurchaseByProviderLine returns the provider purchase that confirms
+	// a handoff line. A second purchase for the same (householdId,
+	// handoffId, lineId) is ErrDuplicate on insert.
+	FindPurchaseByProviderLine(ctx context.Context, householdID, handoffID, lineID string) (Purchase, error)
 	// ListPurchases returns an item's purchases, newest first, at most limit.
 	ListPurchases(ctx context.Context, householdID, itemID string, limit int) ([]Purchase, error)
 	// InsertCookUsage stores u, assigning its ID. A second record with the
@@ -209,6 +227,7 @@ type purchase struct {
 	unitSize *UnitSize
 	week     string
 	clientID string
+	provider *ProviderRef
 }
 
 func validatePurchase(in PurchaseInput) (purchase, error) {
@@ -364,8 +383,13 @@ func (s *Service) recordPurchase(ctx context.Context, actor households.Membershi
 	record, err := s.usage.InsertPurchase(ctx, Purchase{
 		ID: purchaseID, HouseholdID: hh, ItemID: saved.ID, ItemKey: saved.Key, Source: p.source,
 		Quantity: p.quantity, Unit: p.unit, UnitSize: p.unitSize, Week: p.week,
-		ClientPurchaseID: p.clientID, RecordedBy: actor.UserID, PurchasedAt: saved.UpdatedAt,
+		ClientPurchaseID: p.clientID, Provider: p.provider, RecordedBy: actor.UserID, PurchasedAt: saved.UpdatedAt,
 	})
+	if errors.Is(err, ErrDuplicate) && p.provider != nil {
+		// A concurrent confirmation of the same handoff line recorded it first.
+		res, _, err := s.FindProviderPurchase(ctx, hh, p.provider.HandoffID, p.provider.LineID)
+		return res, err
+	}
 	if errors.Is(err, ErrDuplicate) && p.clientID != "" {
 		// A concurrent retry recorded it first.
 		res, _, err := s.existingPurchase(ctx, actor, p.clientID)
