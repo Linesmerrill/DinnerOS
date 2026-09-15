@@ -105,12 +105,8 @@ func Recoverer(logger *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-// MaxBodyBytes limits how much of a request body handlers can read.
+// MaxBodyBytes limits how much of a request body handlers can read. A route
+// that needs a larger body raises its own limit with httpx.OverrideBodyLimit.
 func MaxBodyBytes(limit int64) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Body = http.MaxBytesReader(w, r.Body, limit)
-			next.ServeHTTP(w, r)
-		})
-	}
+	return httpx.LimitBody(limit)
 }
