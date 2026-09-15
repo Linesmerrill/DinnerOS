@@ -1,49 +1,100 @@
 import SwiftUI
 
-/// A full recipe. Shows the summary's name and photo at once, then the rest when the
-/// recipe loads (from the library's cache when it was opened before).
+/// A recipe: an edge-to-edge hero photo, the title and headline, a stats row, tag chips, and
+/// the Overview, Ingredients, and Nutrition sections under a sticky picker, with a bottom bar
+/// that adds it to the week or changes the meal that's already there.
+///
+/// The summary's name and photo show at once; everything else appears when the recipe loads
+/// (from the library's cache when it was opened before).
 struct RecipeDetailView: View {
     let summary: RecipeSummary
 
     @Environment(RecipeLibrary.self) private var library
     @Environment(HouseholdStore.self) private var households
+    @Environment(MenuStore.self) private var menu
+    @Environment(MealPlanner.self) private var planner
+    @Environment(PlanStore.self) private var plans
     @Environment(EventReporter.self) private var events
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var recipe: Recipe?
     @State private var loadError: String?
     @State private var servings: Int?
-    @State private var isAddingToWeek = false
+    @State private var tab: RecipeDetailTab = .overview
+    @State private var customizations: [CustomizationGroup] = []
+    /// The chosen option per customizable ingredient, saved to the plan entry when there is one.
+    @State private var selections: [String: String] = [:]
+    @State private var pairings: [RecipePairing] = []
+    @State private var stepsExpanded = false
+    @State private var heroHeight: CGFloat = 320
+    @State private var showsNavigationBar = false
+
+    /// The meal in the shown week this screen acts on: the most recently added, when the same
+    /// recipe is planned more than once.
+    private var plannedEntries: [PlanEntry] {
+        planner.entries(recipeID: summary.id)
+    }
+
+    private var card: MenuCard? {
+        menu.card(forRecipeID: summary.id)
+    }
+
+    private var name: String { recipe?.name ?? summary.name }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                RecipeImage(url: recipe?.imageURL ?? summary.imageURL)
-                VStack(alignment: .leading, spacing: 28) {
-                    header
-                    if let loadError {
-                        VStack(alignment: .leading, spacing: 8) {
-                            FormErrorLabel(message: loadError)
-                            Button("Try Again") {
-                                Task { await load(reload: true) }
-                            }
-                            .buttonStyle(.bordered)
-                        }
+            VStack(alignment: .leading, spacing: 0) {
+                hero
+                LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
+                    titleBlock
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
+                    Section {
+                        sectionContent
+                            .padding(.horizontal, 16)
+                            .padding(.top, 4)
+                    } header: {
+                        RecipeDetailTabPicker(selection: $tab)
                     }
-                    if let recipe {
-                        RecipeDetailSections(recipe: recipe, servings: $servings) { show($0) }
-                    } else if loadError == nil {
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
+                    if let recipe, !recipe.steps.isEmpty {
+                        CookingStepsSection(steps: recipe.steps, isExpanded: $stepsExpanded)
+                            .padding(.horizontal, 16)
                     }
                 }
-                .padding(.horizontal)
+                .padding(.bottom, 24)
             }
-            .padding(.bottom, 32)
         }
-        .navigationTitle(summary.name)
+        .ignoresSafeArea(edges: .top)
+        .background(Color(.systemBackground))
+        .scrollIndicators(.hidden)
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentOffset.y > heroHeight - 110
+        } action: { _, isPastHero in
+            showsNavigationBar = isPastHero
+        }
+        .navigationTitle(showsNavigationBar ? name : "")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(showsNavigationBar ? .visible : .hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                ShareLink(item: shareURL ?? URL(string: "https://example.com").unsafelyUnwrapped, subject: Text(name)) {
+                    Image(systemName: "square.and.arrow.up")
+                        .modifier(HeroToolbarButton(needsBackground: !showsNavigationBar))
+                }
+                .accessibilityLabel("Share \(name)")
+                .opacity(shareURL == nil ? 0 : 1)
+                .disabled(shareURL == nil)
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            RecipePlanBar(
+                summary: summary, recipe: recipe, entries: plannedEntries, servings: $servings,
+                selections: customizationSelections)
+        }
+        .overlay(alignment: .bottom) { toast }
         .task { await load(reload: false) }
+        .task(id: summary.id) { await loadExtras() }
         .task(id: ViewedKey(recipeID: summary.id, isActive: scenePhase == .active)) {
             // Counts as viewed after staying on screen, in the foreground, for a few
             // seconds. Leaving the screen or the app cancels the wait.
@@ -55,37 +106,144 @@ struct RecipeDetailView: View {
             }
             events.recipeViewed(recipeID: summary.id)
         }
-        .refreshable { await load(reload: true) }
-        .toolbar {
-            if households.access?.can(.planEdit) == true {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Add to Week…", systemImage: "calendar.badge.plus") {
-                        isAddingToWeek = true
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $isAddingToWeek) {
-            AddEntrySheet(recipeID: summary.id, recipeName: summary.name, fixedWeek: nil)
+        .onChange(of: plannedEntries.last?.customizations) { _, saved in
+            applySavedCustomizations(saved)
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(recipe?.name ?? summary.name)
-                .font(.title.bold())
+    // MARK: Hero
+
+    private var hero: some View {
+        GeometryReader { geometry in
+            let minY = geometry.frame(in: .scrollView).minY
+            let stretch = max(minY, 0)
+            RecipePhoto(
+                url: recipe?.imageURL ?? summary.imageURL, aspectRatio: nil, pointWidth: geometry.size.width,
+                cornerRadius: 0
+            )
+            .frame(width: geometry.size.width, height: geometry.size.height + stretch)
+            .clipped()
+            .overlay(alignment: .top) {
+                // Keeps the back and share buttons legible over a bright photo.
+                LinearGradient(
+                    colors: [.black.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom
+                )
+                .frame(height: 120)
+                .allowsHitTesting(false)
+            }
+            .overlay(alignment: .bottomLeading) {
+                if let badge = heroBadge {
+                    MenuChip(text: badge.text, systemImage: badge.code.systemImage, isProminent: true)
+                        .background(.regularMaterial, in: .capsule)
+                        .padding(16)
+                }
+            }
+            .offset(y: -stretch)
+        }
+        .frame(height: heroHeight)
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            // About 45% of the screen's height, from the width the screen gives us.
+            heroHeight = max(240, min(width * 1.1, 420))
+        }
+    }
+
+    /// "Autopilot pick" or "Make Again" from the card this recipe was opened from.
+    private var heroBadge: MenuBadge? {
+        let badges = card?.badges ?? []
+        return badges.first { $0.code == .autopilotPick } ?? badges.first { $0.code == .makeAgain } ?? badges.first
+    }
+
+    private var shareURL: URL? {
+        recipe?.sourceURL
+    }
+
+    // MARK: Title and stats
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(name)
+                .font(.largeTitle.bold())
+                .foregroundStyle(Color.primary)
             if let headline = recipe?.headline ?? summary.headline, !headline.isEmpty {
                 Text(headline)
                     .font(.title3)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondary)
+            }
+            RecipeStatsRow(stats: stats)
+                .padding(.top, 4)
+            if !tags.isEmpty {
+                ChipFlowLayout(spacing: 6) {
+                    ForEach(tags, id: \.self) { tag in
+                        MenuChip(text: tag)
+                    }
+                }
             }
             if let recipe {
-                RecipeFacts(recipe: recipe)
-                    .padding(.top, 4)
                 HouseholdRatingSummary(recipe: recipe)
             }
         }
     }
+
+    private var stats: [MenuFormat.Stat] {
+        MenuFormat.stats(
+            minutes: recipe?.displayMinutes ?? summary.displayMinutes,
+            calories: recipe?.calories ?? summary.calories,
+            proteinGrams: recipe?.proteinGrams ?? summary.proteinGrams,
+            difficulty: recipe.flatMap { recipe in
+                recipe.difficulty.flatMap { $0 > 0 ? RecipeFormat.difficulty($0, source: recipe.source) : nil }
+            })
+    }
+
+    private var tags: [String] {
+        let values = (recipe?.tags ?? summary.tags) + (recipe?.cuisines ?? [])
+        var seen = Set<String>()
+        return values.filter { seen.insert($0.lowercased()).inserted }.prefix(5).map { $0 }
+    }
+
+    // MARK: Sections
+
+    @ViewBuilder
+    private var sectionContent: some View {
+        if let loadError {
+            VStack(alignment: .leading, spacing: 8) {
+                FormErrorLabel(message: loadError)
+                Button("Try Again") {
+                    Task { await load(reload: true) }
+                }
+                .buttonStyle(.bordered)
+            }
+        } else if let recipe {
+            switch tab {
+            case .overview:
+                RecipeOverviewSection(
+                    recipe: recipe, customizations: customizations, selections: $selections,
+                    choose: choose(group:choice:), pairings: pairings, mainEntry: plannedEntries.last,
+                    reloadPairings: { await loadPairings() })
+            case .ingredients:
+                RecipeIngredientsSection(recipe: recipe, servings: $servings)
+            case .nutrition:
+                RecipeNutritionSection(recipe: recipe)
+            }
+        } else {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+        }
+    }
+
+    @ViewBuilder
+    private var toast: some View {
+        if let toast = planner.toast {
+            PlannerToastView(
+                toast: toast,
+                undo: { Task { await planner.undo() } },
+                dismiss: { planner.dismissToast(toast.id) })
+        }
+    }
+
+    // MARK: Loading
 
     private func load(reload: Bool) async {
         if !reload, let cached = library.cachedRecipe(id: summary.id) {
@@ -105,7 +263,148 @@ struct RecipeDetailView: View {
     private func show(_ loaded: Recipe) {
         recipe = loaded
         if let servings, loaded.servingOptions.contains(servings) { return }
-        servings = loaded.preferredServings(householdDefault: households.current?.household.defaultServings)
+        servings =
+            plannedEntries.last?.servings
+            ?? loaded.preferredServings(householdDefault: households.current?.household.defaultServings)
+    }
+
+    /// Customizations and pairings are optional: a household or server without them shows nothing.
+    private func loadExtras() async {
+        async let pairings: Void = loadPairings()
+        customizations = (try? await library.customizations(recipeID: summary.id)) ?? []
+        applySavedCustomizations(plannedEntries.last?.customizations)
+        await pairings
+    }
+
+    private func loadPairings() async {
+        pairings = (try? await library.pairings(recipeID: summary.id, week: plans.week)) ?? []
+    }
+
+    /// Starts each group at the entry's saved choice, or the recipe as written.
+    private func applySavedCustomizations(_ saved: [PlanEntryCustomization]?) {
+        var chosen: [String: String] = [:]
+        for group in customizations {
+            if let match = saved?.first(where: { $0.ingredientKey == group.ingredientKey }) {
+                chosen[group.ingredientKey] = match.choiceID
+            } else if let original = group.originalChoice {
+                chosen[group.ingredientKey] = original.id
+            }
+        }
+        selections = chosen
+    }
+
+    /// The choices that differ from the recipe as written.
+    private var customizationSelections: [PlanCustomizationRequest.Selection] {
+        customizations.compactMap { group in
+            guard let choiceID = selections[group.ingredientKey], choiceID != group.originalChoice?.id else {
+                return nil
+            }
+            return PlanCustomizationRequest.Selection(ingredientKey: group.ingredientKey, choiceID: choiceID)
+        }
+    }
+
+    /// Saves a choice to the planned meal at once, or keeps it until the meal is added.
+    private func choose(group: CustomizationGroup, choice: CustomizationChoice) {
+        let previous = selections[group.ingredientKey]
+        selections[group.ingredientKey] = choice.id
+        guard let entry = plannedEntries.last else { return }
+        let selections = customizationSelections
+        Task {
+            do {
+                try await plans.setCustomization(entryID: entry.id, selections: selections)
+            } catch is CancellationError {
+                return
+            } catch {
+                self.selections[group.ingredientKey] = previous
+                planner.errorMessage = HouseholdStore.message(for: error)
+            }
+        }
+    }
+}
+
+/// Which part of the recipe is showing.
+enum RecipeDetailTab: String, CaseIterable, Identifiable {
+    case overview
+    case ingredients
+    case nutrition
+
+    var id: String { rawValue }
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .overview: "Overview"
+        case .ingredients: "Ingredients"
+        case .nutrition: "Nutrition"
+        }
+    }
+}
+
+/// The segmented picker that sticks under the navigation bar while the recipe scrolls.
+struct RecipeDetailTabPicker: View {
+    @Binding var selection: RecipeDetailTab
+
+    var body: some View {
+        Picker("Section", selection: $selection) {
+            ForEach(RecipeDetailTab.allCases) { tab in
+                Text(tab.title).tag(tab)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.bar)
+        .overlay(alignment: .bottom) { Divider() }
+    }
+}
+
+/// The recipe screen's four numbers: time, calories, protein, and difficulty.
+struct RecipeStatsRow: View {
+    let stats: [MenuFormat.Stat]
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if !stats.isEmpty {
+            let columns = Array(
+                repeating: GridItem(.flexible(), alignment: .topLeading),
+                count: dynamicTypeSize.isAccessibilitySize ? 2 : min(stats.count, 4))
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                ForEach(stats) { stat in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(stat.title)
+                            .font(.caption2)
+                            .foregroundStyle(Color.secondary)
+                        Label(stat.value, systemImage: stat.systemImage)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.primary)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(stat.title)
+                    .accessibilityValue(stat.accessibilityValue)
+                }
+            }
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// A circular material background for buttons floating over the hero, on systems that don't
+/// already give toolbar buttons one.
+private struct HeroToolbarButton: ViewModifier {
+    let needsBackground: Bool
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+        } else if needsBackground {
+            content
+                .foregroundStyle(Color.white)
+                .frame(width: 30, height: 30)
+                .background(.ultraThinMaterial, in: .circle)
+        } else {
+            content
+        }
     }
 }
 
@@ -114,238 +413,25 @@ private struct ViewedKey: Equatable {
     let isActive: Bool
 }
 
-/// Time, difficulty, and serving sizes.
-private struct RecipeFacts: View {
-    let recipe: Recipe
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 16) { facts }
-            VStack(alignment: .leading, spacing: 6) { facts }
-        }
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-    }
-
-    @ViewBuilder
-    private var facts: some View {
-        if let minutes = recipe.displayMinutes {
-            Label(RecipeFormat.minutes(minutes), systemImage: "clock")
-                .accessibilityLabel("Cook time \(RecipeFormat.minutes(minutes))")
-        }
-        if let difficulty = recipe.difficulty, difficulty > 0 {
-            Label(RecipeFormat.difficulty(difficulty, source: recipe.source), systemImage: "chart.bar")
-        }
-        let options = recipe.servingOptions
-        if !options.isEmpty {
-            Label(
-                String(localized: "Serves \(options.map(String.init).joined(separator: " or "))"),
-                systemImage: "person.2")
-        }
-    }
-}
-
-/// Everything below the header.
-private struct RecipeDetailSections: View {
-    let recipe: Recipe
-    @Binding var servings: Int?
-    let onRatingChange: (Recipe) -> Void
-
-    var body: some View {
-        if let description = recipe.description, !description.isEmpty {
-            Text(description)
-                .foregroundStyle(.secondary)
-        }
-        ingredientsSection
-        if !recipe.steps.isEmpty {
-            DetailSection("Steps") {
-                ForEach(recipe.steps) { step in
-                    RecipeStepRow(step: step)
-                }
-            }
-        }
-        // After the steps, where someone who just cooked it finishes reading.
-        RecipeRatingSection(recipe: recipe, onChange: onRatingChange)
-        RecipeAutopilotSection(recipeID: recipe.id)
-        if !recipe.nutritionPerServing.isEmpty {
-            DetailSection("Nutrition per Serving") {
-                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
-                    ForEach(Array(recipe.nutritionPerServing.enumerated()), id: \.offset) { _, nutrient in
-                        GridRow {
-                            Text(nutrient.name)
-                            Text(
-                                "\(nutrient.amount.formatted(.number.precision(.fractionLength(0...1)))) \(nutrient.unit)"
-                            )
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                            .gridColumnAlignment(.trailing)
-                        }
-                    }
-                }
-            }
-        }
-        if !recipe.allergens.isEmpty {
-            DetailSection("Allergens") {
-                Text(recipe.allergens.formatted(.list(type: .and)))
-            }
-        }
-        if !recipe.utensils.isEmpty {
-            DetailSection("Utensils") {
-                Text(recipe.utensils.formatted(.list(type: .and)))
-            }
-        }
-        DetailSection("Order History") {
-            if recipe.orderWeeks.isEmpty {
-                Text("Not ordered yet")
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(RecipeFormat.timesOrdered(recipe.timesOrdered))
-                    .foregroundStyle(.secondary)
-                ForEach(recipe.orderWeeks.reversed(), id: \.self) { week in
-                    Text(ISOWeek(week)?.weekOf() ?? week)
-                }
-            }
-        }
-    }
-
-    private var ingredientsSection: some View {
-        DetailSection("Ingredients") {
-            let options = recipe.servingOptions
-            if options.count > 1, let selected = servings {
-                ServingsPicker(options: options, selection: Binding(get: { selected }, set: { servings = $0 }))
-            } else if let only = options.first {
-                Text("\(only) servings")
-                    .foregroundStyle(.secondary)
-            }
-            IngredientList(lines: recipe.ingredientLines(servings: servings ?? options.first ?? 0))
-        }
-    }
-}
-
-private struct ServingsPicker: View {
-    let options: [Int]
-    @Binding var selection: Int
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    var body: some View {
-        if dynamicTypeSize.isAccessibilitySize || options.count > 4 {
-            Picker("Servings", selection: $selection) {
-                ForEach(options, id: \.self) { Text("\($0) servings").tag($0) }
-            }
-            .pickerStyle(.menu)
-        } else {
-            HStack {
-                Text("Servings")
-                Picker("Servings", selection: $selection) {
-                    ForEach(options, id: \.self) { Text("\($0)").tag($0) }
-                }
-                .pickerStyle(.segmented)
-            }
-        }
-    }
-}
-
-/// Amounts in one column and names in another; stacked at accessibility sizes.
-private struct IngredientList: View {
-    let lines: [IngredientLine]
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    var body: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(lines) { line in
-                    VStack(alignment: .leading, spacing: 2) {
-                        if let amount = line.amount {
-                            Text(amount)
-                                .foregroundStyle(.secondary)
-                        }
-                        name(line)
-                    }
-                    .accessibilityElement(children: .combine)
-                }
-            }
-        } else {
-            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 10) {
-                ForEach(lines) { line in
-                    GridRow {
-                        Text(line.amount ?? "")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                            .gridColumnAlignment(.trailing)
-                        name(line)
-                    }
-                }
-            }
-        }
-    }
-
-    private func name(_ line: IngredientLine) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(line.name)
-            if line.isPantryStaple {
-                Text("pantry")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 1)
-                    .background(.quaternary, in: .capsule)
-                    .accessibilityLabel("pantry staple")
-            }
-        }
-    }
-}
-
-private struct RecipeStepRow: View {
-    let step: RecipeStep
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(step.index.formatted())
-                .font(.headline)
-                .foregroundStyle(.tint)
-                .frame(minWidth: 20, alignment: .trailing)
-                .accessibilityLabel("Step \(step.index)")
-            VStack(alignment: .leading, spacing: 10) {
-                Text(step.text)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let url = step.imageURL {
-                    RecipeImage(url: url)
-                        .clipShape(.rect(cornerRadius: 8))
-                }
-            }
-        }
-    }
-}
-
-struct DetailSection<Content: View>: View {
-    let title: LocalizedStringKey
-    @ViewBuilder let content: Content
-
-    init(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.content = content()
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.title2.bold())
-                .accessibilityAddTraits(.isHeader)
-            content
-        }
-    }
-}
-
-#Preview {
-    let session = HouseholdPreviewData.session()
+#Preview("Recipe") {
     NavigationStack {
-        RecipeDetailView(summary: RecipePreviewData.summaries[0])
+        RecipeDetailView(summary: MenuPreviewData.cards[0].recipe)
     }
-    .environment(HouseholdPreviewData.store(session: session))
-    .environment(RecipePreviewData.library(session: session))
-    .environment(PlanPreviewData.store(session: session))
-    .environment(EventReporter.preview(session: session))
-    .environment(AutopilotPreviewData.store(session: session))
+    .menuPreviewEnvironment()
+}
+
+#Preview("Recipe, dark") {
+    NavigationStack {
+        RecipeDetailView(summary: MenuPreviewData.cards[1].recipe)
+    }
+    .menuPreviewEnvironment(plan: PlanPreviewData.emptyPlan)
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Recipe, accessibility size") {
+    NavigationStack {
+        RecipeDetailView(summary: MenuPreviewData.cards[0].recipe)
+    }
+    .menuPreviewEnvironment()
+    .environment(\.dynamicTypeSize, .accessibility2)
 }

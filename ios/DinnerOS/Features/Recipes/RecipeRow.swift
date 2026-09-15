@@ -61,16 +61,21 @@ struct RecipeRow: View {
 }
 
 /// A recipe photo at a fixed 4:3 aspect ratio, with a placeholder while loading or
-/// when there's no image.
+/// when there's no image. Thumbnails ask the CDN for a thumbnail-sized photo.
 struct RecipeImage: View {
     let url: URL?
+    /// The width the photo is shown at, in points.
+    var pointWidth: CGFloat = 140
+
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         Rectangle()
             .fill(.quaternary)
             .aspectRatio(4.0 / 3.0, contentMode: .fit)
             .overlay {
-                AsyncImage(url: url, transaction: Transaction(animation: .easeIn(duration: 0.2))) { phase in
+                let sized = RecipeImageURL.sized(url, pointWidth: pointWidth, scale: displayScale)
+                AsyncImage(url: sized, transaction: Transaction(animation: .easeIn(duration: 0.2))) { phase in
                     if let image = phase.image {
                         image
                             .resizable()
