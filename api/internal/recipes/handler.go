@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -12,8 +13,10 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
+	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
+	"github.com/Linesmerrill/DinnerOS/api/internal/ratings"
 )
 
 // DefaultImportMaxBytes is the body limit for POST .../recipes/import when
@@ -34,6 +37,17 @@ type HandlerOptions struct {
 	// for one import request, so a large upload is not cut off by the
 	// server-wide ReadTimeout and WriteTimeout.
 	ImportTimeout time.Duration
+	// Ratings, when set, fills householdRating and myRating in list and
+	// detail responses. Without it every recipe appears unrated.
+	Ratings RatingReader
+	// Events, when set, records import.completed after each successful import.
+	Events events.Recorder
+}
+
+// RatingReader loads rating aggregates for recipes. *ratings.Service
+// implements it.
+type RatingReader interface {
+	Summaries(ctx context.Context, householdID, userID string, recipeIDs []string) (map[string]ratings.Summary, error)
 }
 
 // Handler serves the recipe endpoints.
@@ -85,6 +99,10 @@ type RecipeSummaryResponse struct {
 	LastOrderedWeek string   `json:"lastOrderedWeek,omitempty"`
 	IsAddon         bool     `json:"isAddon"`
 	Tags            []string `json:"tags"`
+	// HouseholdRating aggregates every member's rating; MyRating is the
+	// caller's own, or null.
+	HouseholdRating ratings.HouseholdRatingResponse `json:"householdRating"`
+	MyRating        *ratings.RatingResponse         `json:"myRating"`
 }
 
 // RecipeListResponse is returned by GET /households/{householdId}/recipes.
@@ -122,6 +140,10 @@ type RecipeResponse struct {
 	LastOrderedWeek string                     `json:"lastOrderedWeek,omitempty"`
 	CreatedAt       time.Time                  `json:"createdAt"`
 	UpdatedAt       time.Time                  `json:"updatedAt"`
+	// HouseholdRating aggregates every member's rating; MyRating is the
+	// caller's own, or null.
+	HouseholdRating ratings.HouseholdRatingResponse `json:"householdRating"`
+	MyRating        *ratings.RatingResponse         `json:"myRating"`
 }
 
 // NutrientResponse is a per-serving nutrition value.
@@ -251,12 +273,23 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		h.internalError(w, r, "list recipes failed", err)
 		return
 	}
+	ids := make([]string, 0, len(page.Items))
+	for _, s := range page.Items {
+		ids = append(ids, s.ID)
+	}
+	summaries, err := h.ratingSummaries(r.Context(), actor, ids)
+	if err != nil {
+		h.internalError(w, r, "load recipe ratings failed", err)
+		return
+	}
 	resp := RecipeListResponse{Items: make([]RecipeSummaryResponse, 0, len(page.Items)), NextCursor: page.NextCursor}
 	for _, s := range page.Items {
-		resp.Items = append(resp.Items, RecipeSummaryResponse{
+		item := RecipeSummaryResponse{
 			ID: s.ID, Name: s.Name, Headline: s.Headline, ImageURL: s.ImageURL, TotalMinutes: s.TotalMinutes,
 			TimesOrdered: s.TimesOrdered, LastOrderedWeek: s.LastOrderedWeek, IsAddon: s.IsAddon, Tags: orEmpty(s.Tags),
-		})
+		}
+		item.HouseholdRating, item.MyRating = ratingFields(summaries[s.ID])
+		resp.Items = append(resp.Items, item)
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
@@ -297,7 +330,14 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		h.internalError(w, r, "get recipe failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, newRecipeResponse(recipe))
+	summaries, err := h.ratingSummaries(r.Context(), actor, []string{recipe.ID})
+	if err != nil {
+		h.internalError(w, r, "load recipe rating failed", err)
+		return
+	}
+	resp := newRecipeResponse(recipe)
+	resp.HouseholdRating, resp.MyRating = ratingFields(summaries[recipe.ID])
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) importRecipes(w http.ResponseWriter, r *http.Request) {
@@ -325,7 +365,31 @@ func (h *Handler) importRecipes(w http.ResponseWriter, r *http.Request) {
 		"householdId", actor.HouseholdID, "userId", actor.UserID,
 		"created", res.Created, "updated", res.Updated, "unchanged", res.Unchanged,
 		"ingredientsCreated", res.IngredientsCreated, "reviewItems", res.ReviewItems, "rejected", len(res.Errors))
+	// Best effort: the import already succeeded, so a failed event is only logged.
+	events.RecordOrLog(r.Context(), h.opts.Events, h.logger, events.Event{
+		HouseholdID: actor.HouseholdID, UserID: actor.UserID, Type: events.TypeImportCompleted,
+		Payload: events.ImportCompleted{Source: file.Source, Created: res.Created, Updated: res.Updated, Unchanged: res.Unchanged, Rejected: len(res.Errors)},
+	})
 	httpx.WriteJSON(w, http.StatusOK, newImportResultResponse(res))
+}
+
+// ratingSummaries loads rating aggregates, and the actor's own ratings, for
+// recipes the actor is authorized to view. Without a RatingReader, recipes
+// are unrated.
+func (h *Handler) ratingSummaries(ctx context.Context, actor households.Membership, recipeIDs []string) (map[string]ratings.Summary, error) {
+	if h.opts.Ratings == nil || len(recipeIDs) == 0 {
+		return nil, nil
+	}
+	return h.opts.Ratings.Summaries(ctx, actor.HouseholdID, actor.UserID, recipeIDs)
+}
+
+func ratingFields(s ratings.Summary) (ratings.HouseholdRatingResponse, *ratings.RatingResponse) {
+	var mine *ratings.RatingResponse
+	if s.Mine != nil {
+		r := ratings.NewRatingResponse(*s.Mine)
+		mine = &r
+	}
+	return ratings.NewHouseholdRatingResponse(s), mine
 }
 
 // extendDeadlines lets one request outlive the server-wide ReadTimeout and
