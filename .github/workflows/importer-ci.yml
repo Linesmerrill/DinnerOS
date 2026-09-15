@@ -1,0 +1,50 @@
+name: Importer CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "importers/**"
+      - ".github/workflows/importer-ci.yml"
+  pull_request:
+    paths:
+      - "importers/**"
+      - ".github/workflows/importer-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: importer-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hellofresh:
+    name: HelloFresh importer
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: importers/hellofresh
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: importers/hellofresh/go.mod
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::Files need gofmt:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@2025.1.1 ./...
+
+      - name: go test
+        run: go test -race -count=1 ./...
