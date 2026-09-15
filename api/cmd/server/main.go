@@ -21,6 +21,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/httpapi"
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/logging"
@@ -105,6 +106,7 @@ func run() error {
 		recipes.Indexes(),
 		planning.Indexes(),
 		pantry.Indexes(),
+		notifications.Indexes(),
 		behaviorIndexes(),
 	)...); err != nil {
 		return err
@@ -124,7 +126,23 @@ func run() error {
 	authHandler := newAuthHandler(cfg, userService, tokens, logger)
 	householdService, householdHandler, invitationHandler := newHouseholdHandlers(cfg, db, userService, tokens, logger)
 	recipeService := recipes.NewService(recipes.NewMongoStore(db.Database()))
-	behavior := newBehavior(db, recipeService, userService, householdService, tokens, logger)
+	// The recipe service is the pantry's view of the global ingredient catalog
+	// and of cooked recipes. The pantry decides grocery list statuses, deducts
+	// cooked recipes (an events listener), and raises low-stock notifications;
+	// reading notifications first runs its time-based low-stock check.
+	notificationService := notifications.NewService(notifications.ServiceOptions{
+		Store:  notifications.NewMongoStore(db.Database()),
+		Logger: logger,
+	})
+	pantryStore := pantry.NewMongoStore(db.Database())
+	pantryService := pantry.NewService(pantryStore, recipeService).WithUsage(pantry.UsageOptions{
+		Store:    pantryStore,
+		Recipes:  recipeService,
+		Notifier: notificationService,
+		Logger:   logger,
+	})
+	notificationService.SetRefresher(pantryService)
+	behavior := newBehavior(db, recipeService, userService, householdService, tokens, logger, pantryService.CookedListener())
 	recipeHandler := recipes.NewHandler(recipes.HandlerOptions{
 		Service:        recipeService,
 		Ratings:        behavior.ratings,
@@ -135,9 +153,6 @@ func run() error {
 		ImportMaxBytes: cfg.RecipeImportMaxBytes,
 		ImportTimeout:  recipeImportTimeout,
 	})
-	// The recipe service is the pantry's view of the global ingredient catalog,
-	// and the pantry decides grocery list statuses.
-	pantryService := pantry.NewService(pantry.NewMongoStore(db.Database()), recipeService)
 	planHandler := planning.NewHandler(planning.HandlerOptions{
 		Service:    planning.NewService(planning.NewMongoStore(db.Database()), recipeService).WithPantry(pantryService).WithEvents(behavior.events, logger),
 		Authorizer: householdService,
@@ -146,6 +161,12 @@ func run() error {
 	})
 	pantryHandler := pantry.NewHandler(pantry.HandlerOptions{
 		Service:    pantryService,
+		Authorizer: householdService,
+		Tokens:     tokens,
+		Logger:     logger,
+	})
+	notificationHandler := notifications.NewHandler(notifications.HandlerOptions{
+		Service:    notificationService,
 		Authorizer: householdService,
 		Tokens:     tokens,
 		Logger:     logger,
@@ -174,6 +195,7 @@ func run() error {
 				recipeHandler.Mount(r)
 				planHandler.Mount(r)
 				pantryHandler.Mount(r)
+				notificationHandler.Mount(r)
 				behavior.ratingHandler.Mount(r)
 				behavior.eventHandler.Mount(r)
 			},

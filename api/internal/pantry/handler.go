@@ -51,6 +51,10 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(edit).Post(base, h.add)
 		r.With(edit).Post(base+"/bulk", h.bulk)
 		r.With(edit).Post(base+"/staples/defaults", h.addDefaultStaples)
+		r.With(edit).Post(base+"/purchases", h.recordPurchase)
+		r.With(view).Get(base+"/settings", h.getSettings)
+		r.With(edit).Put(base+"/settings", h.putSettings)
+		r.With(view).Get(base+"/{itemId}/purchases", h.listPurchases)
 		r.With(edit).Patch(base+"/{itemId}", h.update)
 		r.With(edit).Delete(base+"/{itemId}", h.delete)
 	})
@@ -61,24 +65,33 @@ func (h *Handler) Mount(r chi.Router) {
 // PantryItemResponse is a pantry item. Quantity is exact ("3/2");
 // QuantityValue is the same amount as a number, for display. Quantity,
 // QuantityValue, and Unit are null together when the household didn't record
-// an amount.
+// an amount. Estimate is null when the item has no usage cycle
+// (docs/pantry-usage.md).
 type PantryItemResponse struct {
-	ID            string    `json:"id"`
-	HouseholdID   string    `json:"householdId"`
-	IngredientID  *string   `json:"ingredientId"`
-	Key           string    `json:"key"`
-	DisplayName   string    `json:"displayName"`
-	Category      string    `json:"category"`
-	Quantity      *string   `json:"quantity"`
-	QuantityValue *float64  `json:"quantityValue"`
-	Unit          *string   `json:"unit"`
-	Status        Status    `json:"status"`
-	IsStaple      bool      `json:"isStaple"`
-	ExpiresOn     *string   `json:"expiresOn"`
-	Note          string    `json:"note"`
-	UpdatedBy     string    `json:"updatedBy"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	ID            string   `json:"id"`
+	HouseholdID   string   `json:"householdId"`
+	IngredientID  *string  `json:"ingredientId"`
+	Key           string   `json:"key"`
+	DisplayName   string   `json:"displayName"`
+	Category      string   `json:"category"`
+	Quantity      *string  `json:"quantity"`
+	QuantityValue *float64 `json:"quantityValue"`
+	Unit          *string  `json:"unit"`
+	Status        Status   `json:"status"`
+	IsStaple      bool     `json:"isStaple"`
+	ExpiresOn     *string  `json:"expiresOn"`
+	Note          string   `json:"note"`
+	// StatusSource is person, or estimate when the usage estimate marked
+	// the item low.
+	StatusSource StatusSource `json:"statusSource"`
+	// LowThresholdPercent is the item's own threshold, or null for the
+	// household's.
+	LowThresholdPercent *int              `json:"lowThresholdPercent"`
+	UnitSize            *UnitSizeResponse `json:"unitSize"`
+	Estimate            *EstimateResponse `json:"estimate"`
+	UpdatedBy           string            `json:"updatedBy"`
+	CreatedAt           time.Time         `json:"createdAt"`
+	UpdatedAt           time.Time         `json:"updatedAt"`
 }
 
 // PantryListResponse is returned by GET .../pantry.
@@ -119,16 +132,18 @@ func (n *Nullable[T]) UnmarshalJSON(b []byte) error {
 
 // UpdatePantryItemRequest is the body of PATCH .../pantry/{itemId}. Absent
 // fields are unchanged. quantity, expiresOn, and note may be null (or "") to
-// clear them; clearing quantity also clears unit.
+// clear them; clearing quantity also clears unit. lowThresholdPercent null
+// returns the item to the household threshold.
 type UpdatePantryItemRequest struct {
-	DisplayName Nullable[string] `json:"displayName"`
-	Category    Nullable[string] `json:"category"`
-	Quantity    Nullable[string] `json:"quantity"`
-	Unit        Nullable[string] `json:"unit"`
-	Status      Nullable[Status] `json:"status"`
-	IsStaple    Nullable[bool]   `json:"isStaple"`
-	ExpiresOn   Nullable[string] `json:"expiresOn"`
-	Note        Nullable[string] `json:"note"`
+	DisplayName         Nullable[string] `json:"displayName"`
+	Category            Nullable[string] `json:"category"`
+	Quantity            Nullable[string] `json:"quantity"`
+	Unit                Nullable[string] `json:"unit"`
+	Status              Nullable[Status] `json:"status"`
+	IsStaple            Nullable[bool]   `json:"isStaple"`
+	ExpiresOn           Nullable[string] `json:"expiresOn"`
+	Note                Nullable[string] `json:"note"`
+	LowThresholdPercent Nullable[int]    `json:"lowThresholdPercent"`
 }
 
 // BulkStatusRequest is the body of POST .../pantry/bulk.
@@ -160,7 +175,15 @@ func newItemResponse(item Item) PantryItemResponse {
 	resp := PantryItemResponse{
 		ID: item.ID, HouseholdID: item.HouseholdID, Key: item.Key, DisplayName: item.DisplayName, Category: item.Category,
 		Status: item.Status, IsStaple: item.IsStaple, Note: item.Note, UpdatedBy: item.UpdatedBy,
+		StatusSource: item.StatusSource, UnitSize: unitSizeResponse(item.UnitSize),
 		CreatedAt: item.CreatedAt.UTC(), UpdatedAt: item.UpdatedAt.UTC(),
+	}
+	if resp.StatusSource == "" {
+		resp.StatusSource = StatusSourcePerson
+	}
+	if item.LowThresholdPercent != 0 {
+		pct := item.LowThresholdPercent
+		resp.LowThresholdPercent = &pct
 	}
 	if item.IngredientID != "" {
 		id := item.IngredientID
@@ -181,14 +204,6 @@ func newItemResponse(item Item) PantryItemResponse {
 	return resp
 }
 
-func itemResponses(items []Item) []PantryItemResponse {
-	out := make([]PantryItemResponse, 0, len(items))
-	for _, item := range items {
-		out = append(out, newItemResponse(item))
-	}
-	return out
-}
-
 func (req UpdatePantryItemRequest) input() (UpdateInput, error) {
 	var in UpdateInput
 	var err error
@@ -206,6 +221,13 @@ func (req UpdatePantryItemRequest) input() (UpdateInput, error) {
 	}
 	in.Quantity, in.Unit = clearable(req.Quantity), clearable(req.Unit)
 	in.ExpiresOn, in.Note = clearable(req.ExpiresOn), clearable(req.Note)
+	if req.LowThresholdPercent.Set {
+		pct := req.LowThresholdPercent.Value // null is 0, which clears the override
+		if !req.LowThresholdPercent.Null && pct == 0 {
+			return UpdateInput{}, invalid("lowThresholdPercent must be between 1 and 100, or null")
+		}
+		in.LowThresholdPercent = &pct
+	}
 	if in == (UpdateInput{}) {
 		return UpdateInput{}, invalid("the request must change at least one field")
 	}
@@ -246,7 +268,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "list pantry items failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, PantryListResponse{Items: itemResponses(items)})
+	httpx.WriteJSON(w, http.StatusOK, PantryListResponse{Items: h.itemResponses(r, actor.HouseholdID, items)})
 }
 
 func parseListQuery(v url.Values) (ListQuery, error) {
@@ -276,7 +298,7 @@ func (h *Handler) add(w http.ResponseWriter, r *http.Request) {
 	if created {
 		status = http.StatusCreated
 	}
-	httpx.WriteJSON(w, status, newItemResponse(item))
+	httpx.WriteJSON(w, status, h.itemResponse(r, item))
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -295,7 +317,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "update pantry item failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, newItemResponse(item))
+	httpx.WriteJSON(w, http.StatusOK, h.itemResponse(r, item))
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
@@ -326,7 +348,7 @@ func (h *Handler) bulk(w http.ResponseWriter, r *http.Request) {
 	if missing == nil {
 		missing = []string{}
 	}
-	httpx.WriteJSON(w, http.StatusOK, BulkStatusResponse{Items: itemResponses(res.Items), Missing: missing})
+	httpx.WriteJSON(w, http.StatusOK, BulkStatusResponse{Items: h.itemResponses(r, actor.HouseholdID, res.Items), Missing: missing})
 }
 
 func (h *Handler) addDefaultStaples(w http.ResponseWriter, r *http.Request) {
@@ -336,7 +358,7 @@ func (h *Handler) addDefaultStaples(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "add default staples failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, DefaultStaplesResponse{Items: itemResponses(res.Added), Skipped: res.Skipped})
+	httpx.WriteJSON(w, http.StatusOK, DefaultStaplesResponse{Items: h.itemResponses(r, actor.HouseholdID, res.Added), Skipped: res.Skipped})
 }
 
 // writeError maps service errors to responses. msg is logged for unexpected

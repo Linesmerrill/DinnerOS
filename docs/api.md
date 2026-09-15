@@ -112,10 +112,17 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/ingredients` `?q&limit` → `{items: [{id, key, name, category, categoryConfident, imageUrl?}]}` | bearer | 7 | ✅ |
 | GET | `/api/v1/households/{householdId}/pantry` `?status&category&staple&q` → `{items}` | `household.view` | 7 | ✅ |
 | POST | `/api/v1/households/{householdId}/pantry` `{ingredientId? or name, category?, quantity?, unit?, status?, isStaple?, expiresOn?, note?}` → `201` item, or `200` when merged | `pantry.edit` | 7 | ✅ |
-| PATCH | `/api/v1/households/{householdId}/pantry/{itemId}` `{displayName?, category?, quantity?, unit?, status?, isStaple?, expiresOn?, note?}` → item | `pantry.edit` | 7 | ✅ |
+| PATCH | `/api/v1/households/{householdId}/pantry/{itemId}` `{displayName?, category?, quantity?, unit?, status?, isStaple?, expiresOn?, note?, lowThresholdPercent?}` → item | `pantry.edit` | 7 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/pantry/{itemId}` → `204` | `pantry.edit` | 7 | ✅ |
 | POST | `/api/v1/households/{householdId}/pantry/bulk` `{items: [{id, status}]}` → `{items, missing}` | `pantry.edit` | 7 | ✅ |
 | POST | `/api/v1/households/{householdId}/pantry/staples/defaults` → `{items, skipped}` | `pantry.edit` | 7 | ✅ |
+| POST | `/api/v1/households/{householdId}/pantry/purchases` `{itemId? or ingredientId?/name?, source, quantity?, unit?, unitSize?, week?, clientPurchaseId?}` → `201 {purchase, item}`, or `200` for a repeated `clientPurchaseId` | `pantry.edit` | 7 | ✅ |
+| GET | `/api/v1/households/{householdId}/pantry/{itemId}/purchases` → `{items}` (newest 20) | `household.view` | 7 | ✅ |
+| GET | `/api/v1/households/{householdId}/pantry/settings` → `{lowThresholdPercent, defaultLowThresholdPercent, updatedBy, updatedAt}` | `household.view` | 7 | ✅ |
+| PUT | `/api/v1/households/{householdId}/pantry/settings` `{lowThresholdPercent}` → settings | `pantry.edit` | 7 | ✅ |
+| GET | `/api/v1/households/{householdId}/notifications` `?unread&limit&before` → `{items, nextCursor}` | `household.view` | 7 | ✅ |
+| GET | `/api/v1/households/{householdId}/notifications/unread-count` → `{unreadCount}` | `household.view` | 7 | ✅ |
+| POST | `/api/v1/households/{householdId}/notifications/read` `{ids}` or `{all: true}` → `{unreadCount}` | `household.view` | 7 | ✅ |
 | PUT | `/api/v1/households/{householdId}/recipes/{recipeId}/rating` `{score, comment?, tags?}` → rating | `household.view` | 9 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/recipes/{recipeId}/rating` → `204` | `household.view` | 9 | ✅ |
 | GET | `/api/v1/households/{householdId}/recipes/{recipeId}/ratings` → `{householdRating, items}` | `household.view` | 9 | ✅ |
@@ -530,6 +537,174 @@ Rules:
 | 403 | `forbidden` | Changing the pantry without `pantry.edit` |
 | 404 | `not_found` | Not a member of the household; no such item in its pantry |
 | 409 | `conflict` | The item kept changing concurrently; retry |
+
+### Usage estimates
+
+Pantry items estimate what's left from purchases, cooked recipes, and learned
+use, and are marked `low` automatically at a threshold
+([pantry-usage.md](pantry-usage.md)). Every item response (list, add, update,
+bulk, staples, purchases) has these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `statusSource` | `person`, or `estimate` when the usage estimate marked it `low` |
+| `lowThresholdPercent` | The item's own threshold (1–100), or `null` to use the household's |
+| `unitSize` | `{per, quantity, quantityValue, unit}`: one `per` ("count") holds `quantity` `unit` ("1/2" "cup"), or `null` |
+| `estimate` | `null` when no amount is recorded; otherwise the object below |
+
+| `estimate` field | Meaning |
+| --- | --- |
+| `cycleId`, `cycleSource`, `cycleStartedAt` | The current cycle: the purchase ID and source (`grocery_list`, `manual`, `provider`), or `edit` when a person set the amount without a purchase |
+| `adjustedAt` | When a person last corrected the amount in this cycle, or `null` |
+| `unit` | Every amount below is in this unit code |
+| `startAmount` | 100%: the amount bought (exact) |
+| `remaining` | Estimated amount left, rounded to hundredths |
+| `percentRemaining`, `percentUsed` | Whole percents that add up to 100 |
+| `recipeUse` | `{count, quantity, quantityValue}`: cooked recipes deducted this cycle |
+| `otherUse` | Learned non-recipe use applied since the last purchase or correction |
+| `dailyRate` | `{quantity, quantityValue, basedOnSegments}`, or `null` until at least 2 usage periods are known |
+| `skippedRecipes` | Cooked recipes that used the item but couldn't be deducted (no amount, or units that don't convert) |
+| `lowThresholdPercent`, `thresholdSource` | The threshold in effect and whether it's the `item`'s or the `household`'s |
+| `belowThreshold` | At least `lowThresholdPercent` of `startAmount` is used |
+| `summary` | English explanation: "About 31% left: 2 recipes used 6 tbsp, plus about 1 tbsp a day of other use." |
+| `estimatedAt` | The moment the estimate describes (response time) |
+
+- Reading the pantry first applies time-based decay: an item that crossed its
+  threshold since the last read comes back `low` with `statusSource:
+  estimate`, and a notification is created.
+- `PATCH` with `lowThresholdPercent` sets the item's threshold; `null`
+  returns it to the household's. `0` is invalid.
+- A person's `quantity` becomes the new starting point for the estimate, and
+  a person's `status` always replaces an estimated one.
+- Cooking deducts automatically: a `recipe.cooked` event with `entryId` (or a
+  `clientEventId`) and `servings` deducts once per entry. There's nothing
+  else to call.
+
+### Purchases
+
+`POST .../pantry/purchases` (`pantry.edit`) records that the household bought
+an item. The item is added if needed, set `in_stock` with the bought amount,
+and a new usage cycle starts.
+
+```json
+{
+  "ingredientId": "66e5a1f2c3b4a5d6e7f80a14",
+  "source": "grocery_list",
+  "quantity": "4",
+  "unit": "count",
+  "unitSize": { "quantity": "1/2", "unit": "cup" },
+  "week": "2026-W38",
+  "clientPurchaseId": "5b0c7c52-3f6e-4d8e-9f0a-8d7f1c2b3a41"
+}
+```
+
+```json
+{
+  "purchase": {
+    "id": "66e5a1f2c3b4a5d6e7f80f01",
+    "householdId": "66e5a1f2c3b4a5d6e7f80913",
+    "itemId": "66e5a1f2c3b4a5d6e7f80d01",
+    "source": "grocery_list",
+    "quantity": "4",
+    "quantityValue": 4,
+    "unit": "count",
+    "unitSize": { "per": "count", "quantity": "1/2", "quantityValue": 0.5, "unit": "cup" },
+    "week": "2026-W38",
+    "clientPurchaseId": "5b0c7c52-3f6e-4d8e-9f0a-8d7f1c2b3a41",
+    "recordedBy": "66e5a1f2c3b4a5d6e7f80912",
+    "purchasedAt": "2026-09-15T18:30:00Z"
+  },
+  "item": { "id": "66e5a1f2c3b4a5d6e7f80d01", "status": "in_stock", "estimate": { "unit": "cup", "startAmount": { "quantity": "2", "quantityValue": 2 }, "…": "…" }, "…": "…" }
+}
+```
+
+- Identify the item with `itemId` (restocking from the Pantry tab), or with
+  `ingredientId` or `name` (checking off a grocery line), not both.
+- `source` is `grocery_list` or `manual`. `provider` is reserved for shopping
+  providers and rejected.
+- `quantity` and `unit` follow the pantry rules. Without `quantity` the item
+  is in stock but untracked.
+- `unitSize` applies to a discrete `unit` (`count`, `package`, `can`, …) and
+  must be a volume or weight. The item remembers it, and its estimate is kept
+  in that unit.
+- `week` is optional and only for `grocery_list`.
+- `clientPurchaseId` (optional, at most 64 characters, per member) makes
+  retries safe: a repeat returns `200` with the first purchase and the item as
+  it is now, and changes nothing.
+- **Grocery check-off flow:** after a member checks a line, ask "Add to
+  pantry?" with the line's first amount prefilled and editable. On confirm,
+  send the line's `ingredientId` (or its `name` for an uncatalogued line), the
+  amount, `source: grocery_list`, the week, and a new `clientPurchaseId`.
+  Declining sends nothing.
+
+`GET .../pantry/{itemId}/purchases` (`household.view`) returns the item's
+newest 20 purchases: `{"items": [purchase, ...]}`.
+
+### Settings
+
+`GET .../pantry/settings` (`household.view`) and `PUT .../pantry/settings`
+(`pantry.edit`) read and set the household's threshold:
+
+```json
+{ "lowThresholdPercent": 80, "defaultLowThresholdPercent": 80, "updatedBy": null, "updatedAt": null }
+```
+
+`PUT` takes `{"lowThresholdPercent": 70}`, from 1 to 100. `updatedBy` and
+`updatedAt` are `null` until someone changes it.
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `validation_failed` | Unknown or `provider` source; both or neither of `itemId` and `ingredientId`/`name`; bad amount, unit size, week, or `clientPurchaseId`; threshold missing or outside 1–100 |
+| 403 | `forbidden` | Recording a purchase or changing settings without `pantry.edit` |
+| 404 | `not_found` | Not a member of the household; `itemId` isn't in its pantry |
+| 409 | `conflict` | The item kept changing concurrently; retry |
+
+## Notifications
+
+Household notifications, such as "Butter is running low". Every member sees
+the same list and reads it separately. All routes need `household.view`.
+Reading the list or the unread count first applies the pantry's time-based
+low-stock check.
+
+`GET /api/v1/households/{householdId}/notifications?unread=true&limit=50&before=<cursor>`
+
+```json
+{
+  "items": [
+    {
+      "id": "66e5a1f2c3b4a5d6e7f81001",
+      "householdId": "66e5a1f2c3b4a5d6e7f80913",
+      "type": "pantry.low",
+      "title": "Butter is running low",
+      "body": "About 19% left: 4 recipes used 0.81 cup.",
+      "subject": { "kind": "pantry_item", "id": "66e5a1f2c3b4a5d6e7f80d01" },
+      "read": false,
+      "createdAt": "2026-09-18T18:30:00Z"
+    }
+  ],
+  "nextCursor": null
+}
+```
+
+- Newest first. `limit` is 1–100 (default 50). Pass `nextCursor` as `before`
+  for the next page; it's `null` on the last page.
+- `unread=true` keeps notifications the caller hasn't read.
+- `read` is for the caller. `subject` says what to open: `pantry_item` is a
+  pantry item ID.
+- `type` is stable. Only `pantry.low` exists today; show unknown types with
+  their title and body.
+
+`GET .../notifications/unread-count` returns `{"unreadCount": 3}`.
+
+`POST .../notifications/read` with `{"ids": ["..."]}` (at most 100) or
+`{"all": true}` marks them read for the caller and returns
+`{"unreadCount": 0}`. Unknown IDs are ignored.
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `validation_failed` | `limit` out of range; malformed `before`; `unread` not a boolean; neither or both of `ids` and `all`; empty or too many IDs |
+| 400 | `invalid_request` | Malformed body or unknown field |
+| 404 | `not_found` | Not a member of the household |
 
 ## Ingredient catalog
 

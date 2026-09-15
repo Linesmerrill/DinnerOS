@@ -132,7 +132,10 @@ that `Aggregate` takes:
   later still matches.
 - **Amounts are informational.** The engine doesn't yet compare the pantry's
   amount with what recipes need: 1 tbsp of olive oil in stock makes a recipe's
-  ½ cup `inPantry`. Mark the item `low` or `out` to put it on the list.
+  ½ cup `inPantry`. Mark the item `low` or `out` to put it on the list. Usage
+  tracking ([pantry-usage.md](pantry-usage.md)) marks items `low` on its own
+  when the estimate crosses the household's threshold, which puts them back
+  on the list.
 
 ## Rules
 

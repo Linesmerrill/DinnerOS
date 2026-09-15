@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: DinnerOS API
-  version: 0.6.0
+  version: 0.7.0
   description: |
     Backend for the DinnerOS iOS app. "DinnerOS" is a working name.
 
@@ -34,7 +34,14 @@ tags:
   - name: pantry
     description: |
       A household's pantry: one item per ingredient, with a status that
-      decides grocery list statuses (docs/grocery-engine.md#pantry).
+      decides grocery list statuses (docs/grocery-engine.md#pantry). Items
+      with a recorded amount estimate what's left from purchases, cooked
+      recipes, and learned use, and are marked low at a threshold
+      (docs/pantry-usage.md).
+  - name: notifications
+    description: |
+      Household notifications (such as a pantry item running low). Every
+      member sees the same notifications and reads them separately.
   - name: ingredients
     description: The global ingredient catalog.
   - name: ratings
@@ -1036,6 +1043,10 @@ paths:
         Every matching item in the household's pantry, in aisle order and then
         by name. A pantry holds at most 1000 items, so the list isn't
         paginated. Requires `household.view`.
+
+        Before responding, the low-stock check runs: a tracked item whose
+        estimate crossed its threshold is marked `low` (`statusSource:
+        estimate`) and the household is notified once per cycle.
       operationId: listPantryItems
       tags: [pantry]
       security:
@@ -1132,6 +1143,11 @@ paths:
         Changes the fields sent. `quantity`, `expiresOn`, and `note` may be
         `null` (or `""`) to clear them; clearing `quantity` also clears `unit`.
         Setting `status` to `out` clears the amount. Requires `pantry.edit`.
+
+        A new `quantity` becomes the usage estimate's starting point, and a
+        `status` sent here replaces one the estimate set.
+        `lowThresholdPercent` sets the item's own threshold; `null` returns
+        it to the household's.
       operationId: updatePantryItem
       tags: [pantry]
       security:
@@ -1233,6 +1249,132 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DefaultStaplesResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/pantry/purchases:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    post:
+      summary: Record a purchase
+      description: |
+        Records that the household bought an item: after a member checks off a
+        grocery line and confirms "Add to pantry?" (`source: grocery_list`),
+        or restocks from the Pantry tab (`source: manual`). `provider` is
+        reserved for shopping providers and rejected.
+
+        The item (added when `ingredientId` or `name` isn't in the pantry yet)
+        is set `in_stock` with the bought amount, and a new usage cycle starts
+        from that amount. Without `quantity` the item is in stock but
+        untracked. Repeating a `clientPurchaseId` returns 200 with the first
+        purchase and changes nothing. Requires `pantry.edit`.
+      operationId: recordPantryPurchase
+      tags: [pantry]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordPantryPurchaseRequest"
+      responses:
+        "201":
+          description: Recorded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordPantryPurchaseResponse"
+        "200":
+          description: The `clientPurchaseId` was already recorded; the first purchase and the item as it is now.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordPantryPurchaseResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/PantryConflict"
+  /api/v1/households/{householdId}/pantry/{itemId}/purchases:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/PantryItemID"
+    get:
+      summary: List an item's purchases
+      description: The item's 20 most recent purchases, newest first. Requires `household.view`.
+      operationId: listPantryPurchases
+      tags: [pantry]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The purchases.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PantryPurchaseListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/pantry/settings:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: Get pantry settings
+      description: The household's low-stock threshold. Requires `household.view`.
+      operationId: getPantrySettings
+      tags: [pantry]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The settings (defaults until changed).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PantrySettings"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update pantry settings
+      description: |
+        Sets the household's low-stock threshold. Estimates use it from the
+        next read. Requires `pantry.edit`.
+      operationId: updatePantrySettings
+      tags: [pantry]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePantrySettingsRequest"
+      responses:
+        "200":
+          description: The updated settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PantrySettings"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -1369,6 +1511,104 @@ paths:
           $ref: "#/components/responses/PayloadTooLarge"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /api/v1/households/{householdId}/notifications:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: List notifications
+      description: |
+        The household's notifications, newest first, with `read` for the
+        caller. Before reading, the pantry's low-stock check runs, so items
+        that ran low as time passed are included. Requires `household.view`.
+      operationId: listNotifications
+      tags: [notifications]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: unread
+          in: query
+          description: "`true` keeps notifications the caller hasn't read."
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: before
+          in: query
+          description: The previous page's `nextCursor`.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of notifications.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/notifications/unread-count:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: Count unread notifications
+      description: |
+        How many of the household's notifications the caller hasn't read,
+        after the pantry's low-stock check. Requires `household.view`.
+      operationId: countUnreadNotifications
+      tags: [notifications]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The unread count.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationUnreadCount"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/notifications/read:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    post:
+      summary: Mark notifications read
+      description: |
+        Marks the given notifications, or all of them, read for the caller.
+        Unknown IDs are ignored. Requires `household.view`.
+      operationId: markNotificationsRead
+      tags: [notifications]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkNotificationsReadRequest"
+      responses:
+        "200":
+          description: The caller's unread count afterwards.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationUnreadCount"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
 components:
   securitySchemes:
@@ -2592,7 +2832,7 @@ components:
         staple, otherwise `toBuy`). `out`: always `toBuy`.
     PantryItem:
       type: object
-      required: [id, householdId, ingredientId, key, displayName, category, quantity, quantityValue, unit, status, isStaple, expiresOn, note, updatedBy, createdAt, updatedAt]
+      required: [id, householdId, ingredientId, key, displayName, category, quantity, quantityValue, unit, status, isStaple, expiresOn, note, statusSource, lowThresholdPercent, unitSize, estimate, updatedBy, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -2632,9 +2872,25 @@ components:
           format: date
         note:
           type: string
+        statusSource:
+          $ref: "#/components/schemas/PantryStatusSource"
+        lowThresholdPercent:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 100
+          description: The item's own low-stock threshold; null uses the household's.
+        unitSize:
+          oneOf:
+            - $ref: "#/components/schemas/PantryUnitSize"
+            - type: "null"
+        estimate:
+          oneOf:
+            - $ref: "#/components/schemas/PantryEstimate"
+            - type: "null"
+          description: The usage estimate; null when no amount is recorded.
         updatedBy:
           type: string
-          description: User ID of the last change.
+          description: User ID of the last change by a person.
         createdAt:
           type: string
           format: date-time
@@ -2706,6 +2962,11 @@ components:
         note:
           type: [string, "null"]
           maxLength: 500
+        lowThresholdPercent:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 100
+          description: The item's own low-stock threshold; null returns it to the household's.
     BulkPantryStatusRequest:
       type: object
       required: [items]
@@ -2747,6 +3008,312 @@ components:
         skipped:
           type: integer
           description: Default staples the pantry already had.
+    PantryStatusSource:
+      type: string
+      enum: [person, estimate]
+      description: "`estimate` when the usage estimate marked the item low; `person` otherwise."
+    PantryAmount:
+      type: object
+      required: [quantity, quantityValue]
+      properties:
+        quantity:
+          type: string
+          description: Exact amount as "n" or "n/d".
+          example: "5"
+        quantityValue:
+          type: number
+          description: The same amount as a number, for display only.
+          example: 5
+    PantryUnitSize:
+      type: object
+      description: One `per` unit holds `quantity` `unit` ("1 count = 1/2 cup").
+      required: [per, quantity, quantityValue, unit]
+      properties:
+        per:
+          type: string
+          description: A discrete unit code (count, package, can, …).
+          example: count
+        quantity:
+          type: string
+          example: "1/2"
+        quantityValue:
+          type: number
+          example: 0.5
+        unit:
+          type: string
+          description: A volume or weight unit code.
+          example: cup
+    PantryEstimate:
+      type: object
+      description: |
+        The estimated amount left (docs/pantry-usage.md). Every amount is in
+        `unit`. `remaining` and `otherUse` are rounded to hundredths and
+        `dailyRate` to thousandths; `startAmount` and `recipeUse` are exact.
+      required: [cycleId, cycleSource, cycleStartedAt, adjustedAt, unit, startAmount, remaining, percentRemaining, percentUsed, recipeUse, otherUse, dailyRate, skippedRecipes, lowThresholdPercent, thresholdSource, belowThreshold, summary, estimatedAt]
+      properties:
+        cycleId:
+          type: string
+          description: The purchase ID that started the cycle, or a generated ID when a person set the amount.
+        cycleSource:
+          type: string
+          enum: [grocery_list, manual, provider, edit]
+        cycleStartedAt:
+          type: string
+          format: date-time
+        adjustedAt:
+          type: [string, "null"]
+          format: date-time
+          description: When a person last corrected the amount in this cycle.
+        unit:
+          type: string
+          example: tbsp
+        startAmount:
+          $ref: "#/components/schemas/PantryAmount"
+        remaining:
+          $ref: "#/components/schemas/PantryAmount"
+        percentRemaining:
+          type: integer
+          minimum: 0
+          maximum: 100
+          example: 31
+        percentUsed:
+          type: integer
+          minimum: 0
+          maximum: 100
+          example: 69
+        recipeUse:
+          type: object
+          required: [count, quantity, quantityValue]
+          description: Cooked recipes deducted this cycle.
+          properties:
+            count:
+              type: integer
+              example: 2
+            quantity:
+              type: string
+              example: "6"
+            quantityValue:
+              type: number
+              example: 6
+        otherUse:
+          $ref: "#/components/schemas/PantryAmount"
+        dailyRate:
+          type: [object, "null"]
+          description: Learned non-recipe use per day; null until at least 2 usage periods are known.
+          required: [quantity, quantityValue, basedOnSegments]
+          properties:
+            quantity:
+              type: string
+              example: "1"
+            quantityValue:
+              type: number
+              example: 1
+            basedOnSegments:
+              type: integer
+              example: 3
+        skippedRecipes:
+          type: integer
+          description: Cooked recipes that used the item but couldn't be deducted (no amount, or units that don't convert).
+        lowThresholdPercent:
+          type: integer
+          description: The threshold in effect.
+          example: 80
+        thresholdSource:
+          type: string
+          enum: [item, household]
+        belowThreshold:
+          type: boolean
+          description: At least `lowThresholdPercent` of `startAmount` is used.
+        summary:
+          type: string
+          example: "About 31% left: 2 recipes used 6 tbsp, plus about 1 tbsp a day of other use."
+        estimatedAt:
+          type: string
+          format: date-time
+    RecordPantryPurchaseRequest:
+      type: object
+      description: "`itemId`, or `ingredientId` or `name`, identifies the item (not both)."
+      required: [source]
+      properties:
+        itemId:
+          type: string
+          description: A pantry item (restocking from the Pantry tab).
+        ingredientId:
+          type: string
+          description: A catalog ingredient (a checked-off grocery line).
+        name:
+          type: string
+          maxLength: 100
+          description: A free-text ingredient (an uncatalogued grocery line).
+        source:
+          type: string
+          enum: [grocery_list, manual]
+        quantity:
+          type: string
+          maxLength: 32
+          description: A positive amount; omit when unknown (the item won't be tracked).
+          example: "4"
+        unit:
+          type: string
+          description: DinnerOS unit code; defaults to `count` when `quantity` is given.
+          example: count
+        unitSize:
+          type: object
+          description: How much one `unit` holds; only for a discrete `unit`.
+          required: [quantity, unit]
+          properties:
+            quantity:
+              type: string
+              example: "1/2"
+            unit:
+              type: string
+              description: A volume or weight unit code.
+              example: cup
+        week:
+          $ref: "#/components/schemas/IsoWeek"
+        clientPurchaseId:
+          type: string
+          maxLength: 64
+          description: Idempotency key, unique per member.
+    PantryPurchase:
+      type: object
+      required: [id, householdId, itemId, source, quantity, quantityValue, unit, unitSize, week, clientPurchaseId, recordedBy, purchasedAt]
+      properties:
+        id:
+          type: string
+          description: Also the ID of the usage cycle it started.
+        householdId:
+          type: string
+        itemId:
+          type: string
+        source:
+          type: string
+          enum: [grocery_list, manual, provider]
+        quantity:
+          type: [string, "null"]
+        quantityValue:
+          type: [number, "null"]
+        unit:
+          type: [string, "null"]
+        unitSize:
+          oneOf:
+            - $ref: "#/components/schemas/PantryUnitSize"
+            - type: "null"
+        week:
+          type: [string, "null"]
+        clientPurchaseId:
+          type: [string, "null"]
+        recordedBy:
+          type: string
+        purchasedAt:
+          type: string
+          format: date-time
+    RecordPantryPurchaseResponse:
+      type: object
+      required: [purchase, item]
+      properties:
+        purchase:
+          $ref: "#/components/schemas/PantryPurchase"
+        item:
+          $ref: "#/components/schemas/PantryItem"
+    PantryPurchaseListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PantryPurchase"
+    PantrySettings:
+      type: object
+      required: [lowThresholdPercent, defaultLowThresholdPercent, updatedBy, updatedAt]
+      properties:
+        lowThresholdPercent:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Percent of an item's starting amount used before the estimate marks it low.
+          example: 80
+        defaultLowThresholdPercent:
+          type: integer
+          example: 80
+        updatedBy:
+          type: [string, "null"]
+          description: Null until someone changes the defaults.
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+    UpdatePantrySettingsRequest:
+      type: object
+      required: [lowThresholdPercent]
+      properties:
+        lowThresholdPercent:
+          type: integer
+          minimum: 1
+          maximum: 100
+    Notification:
+      type: object
+      required: [id, householdId, type, title, body, subject, read, createdAt]
+      properties:
+        id:
+          type: string
+        householdId:
+          type: string
+        type:
+          type: string
+          description: Stable type. Only `pantry.low` exists today; show unknown types by title and body.
+          example: pantry.low
+        title:
+          type: string
+          example: Butter is running low
+        body:
+          type: string
+          example: "About 19% left: 4 recipes used 0.81 cup."
+        subject:
+          type: object
+          required: [kind, id]
+          description: What to open. `pantry_item` is a pantry item ID.
+          properties:
+            kind:
+              type: string
+              example: pantry_item
+            id:
+              type: string
+        read:
+          type: boolean
+          description: Whether the caller has read it.
+        createdAt:
+          type: string
+          format: date-time
+    NotificationListResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Notification"
+        nextCursor:
+          type: [string, "null"]
+          description: Pass as `before` for the next page; null on the last page.
+    NotificationUnreadCount:
+      type: object
+      required: [unreadCount]
+      properties:
+        unreadCount:
+          type: integer
+    MarkNotificationsReadRequest:
+      type: object
+      description: "Send `ids`, or `all: true`."
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: string
+        all:
+          type: boolean
     CatalogIngredient:
       type: object
       required: [id, key, name, category, categoryConfident]

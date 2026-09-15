@@ -8,6 +8,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
+	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
+	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ratings"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
@@ -21,6 +23,8 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 	r.Route("/api/v1", func(r chi.Router) {
 		recipes.NewHandler(recipes.HandlerOptions{}).Mount(r)
 		planning.NewHandler(planning.HandlerOptions{}).Mount(r)
+		pantry.NewHandler(pantry.HandlerOptions{}).Mount(r)
+		notifications.NewHandler(notifications.HandlerOptions{}).Mount(r)
 		ratings.NewHandler(ratings.HandlerOptions{}).Mount(r)
 		events.NewHandler(events.HandlerOptions{}).Mount(r)
 	})
@@ -38,6 +42,14 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		"DELETE /api/v1/households/{householdId}/recipes/{recipeId}/rating",
 		"GET /api/v1/households/{householdId}/recipes/{recipeId}/ratings",
 		"POST /api/v1/households/{householdId}/events",
+		"PATCH /api/v1/households/{householdId}/pantry/{itemId}",
+		"POST /api/v1/households/{householdId}/pantry/purchases",
+		"GET /api/v1/households/{householdId}/pantry/settings",
+		"PUT /api/v1/households/{householdId}/pantry/settings",
+		"GET /api/v1/households/{householdId}/pantry/{itemId}/purchases",
+		"GET /api/v1/households/{householdId}/notifications",
+		"GET /api/v1/households/{householdId}/notifications/unread-count",
+		"POST /api/v1/households/{householdId}/notifications/read",
 	} {
 		if !slices.Contains(routes, want) {
 			t.Errorf("route %q not mounted; have %v", want, routes)
