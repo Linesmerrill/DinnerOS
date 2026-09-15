@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/mail"
 	"net/url"
 	"strconv"
 	"strings"
@@ -57,7 +58,27 @@ type Config struct {
 	// AuthDevLoginEnabled requests the unverified development sign-in route.
 	// Use DevLoginEnabled, which also requires the development environment.
 	AuthDevLoginEnabled bool
+
+	// EmailProvider is EmailProviderResend or EmailProviderLog.
+	EmailProvider string
+	// ResendAPIKey authenticates to Resend. Never log it.
+	ResendAPIKey string
+	// EmailFrom is the sender address, e.g. "DinnerOS <invites@example.com>".
+	EmailFrom string
+	// InviteURLBase is prepended to an invitation token to form the link in
+	// invitation emails.
+	InviteURLBase string
 }
+
+// Email providers.
+const (
+	EmailProviderResend = "resend"
+	EmailProviderLog    = "log"
+)
+
+// DefaultInviteURLBase opens the iOS app's custom URL scheme. Universal links
+// can replace it later without a code change.
+const DefaultInviteURLBase = "dinneros://invite?token="
 
 // Default and minimum values for authentication settings.
 const (
@@ -79,7 +100,7 @@ func (c Config) DevLoginEnabled() bool {
 func (c Config) Addr() string { return ":" + strconv.Itoa(c.Port) }
 
 // LogValue implements slog.LogValuer. Credentials embedded in connection
-// strings and the token signing key are never included.
+// strings, the token signing key, and the Resend API key are never included.
 func (c Config) LogValue() slog.Value {
 	signingKey := "configured"
 	if c.AuthSigningKeyEphemeral {
@@ -90,6 +111,9 @@ func (c Config) LogValue() slog.Value {
 		slog.String("appleBundleId", c.AppleBundleID),
 		slog.Bool("googleSignInEnabled", c.GoogleClientID != ""),
 		slog.Bool("devLoginEnabled", c.DevLoginEnabled()),
+		slog.String("emailProvider", c.EmailProvider),
+		slog.String("emailFrom", c.EmailFrom),
+		slog.String("inviteURLBase", c.InviteURLBase),
 		slog.String("appName", c.AppName),
 		slog.String("env", string(c.Env)),
 		slog.String("version", c.Version),
@@ -165,6 +189,7 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 
 	errs = append(errs, loadAuth(&cfg, get)...)
+	errs = append(errs, loadEmail(&cfg, get)...)
 
 	if err := errors.Join(errs...); err != nil {
 		return Config{}, fmt.Errorf("invalid configuration: %w", err)
@@ -207,6 +232,56 @@ func loadAuth(cfg *Config, get func(key, fallback string) string) []error {
 		cfg.AuthTokenSigningKey = key
 	}
 	return errs
+}
+
+// loadEmail reads email and invitation settings into cfg. cfg.Env must
+// already be set. Error messages never include the API key.
+func loadEmail(cfg *Config, get func(key, fallback string) string) []error {
+	var errs []error
+
+	cfg.ResendAPIKey = get("RESEND_API_KEY", "")
+	cfg.EmailFrom = get("EMAIL_FROM", "")
+	defaultProvider := EmailProviderLog
+	if cfg.ResendAPIKey != "" {
+		defaultProvider = EmailProviderResend
+	}
+	cfg.EmailProvider = strings.ToLower(get("EMAIL_PROVIDER", defaultProvider))
+
+	switch cfg.EmailProvider {
+	case EmailProviderResend:
+		if cfg.ResendAPIKey == "" {
+			errs = append(errs, errors.New("RESEND_API_KEY is required when EMAIL_PROVIDER=resend"))
+		}
+		if cfg.EmailFrom == "" {
+			errs = append(errs, errors.New("EMAIL_FROM is required when EMAIL_PROVIDER=resend"))
+		}
+	case EmailProviderLog:
+		if cfg.IsProduction() {
+			errs = append(errs, errors.New("EMAIL_PROVIDER must be resend in production (set RESEND_API_KEY and EMAIL_FROM)"))
+		}
+	default:
+		errs = append(errs, fmt.Errorf("EMAIL_PROVIDER must be %q or %q, got %q", EmailProviderResend, EmailProviderLog, cfg.EmailProvider))
+	}
+
+	if cfg.EmailFrom != "" {
+		if _, err := mail.ParseAddress(cfg.EmailFrom); err != nil {
+			errs = append(errs, fmt.Errorf("EMAIL_FROM must be an address like %q, got %q", "DinnerOS <invites@example.com>", cfg.EmailFrom))
+		}
+	}
+
+	cfg.InviteURLBase = get("APP_INVITE_URL_BASE", DefaultInviteURLBase)
+	if u, err := url.Parse(cfg.InviteURLBase); err != nil || u.Scheme == "" || unsafeLinkScheme(u.Scheme) {
+		errs = append(errs, fmt.Errorf("APP_INVITE_URL_BASE must be an absolute URL such as %q", DefaultInviteURLBase))
+	}
+	return errs
+}
+
+func unsafeLinkScheme(scheme string) bool {
+	switch strings.ToLower(scheme) {
+	case "javascript", "vbscript", "data", "file":
+		return true
+	}
+	return false
 }
 
 // decodeSigningKey accepts standard or URL-safe base64, padded or not, and

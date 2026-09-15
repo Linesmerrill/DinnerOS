@@ -10,6 +10,97 @@ import (
 // testSigningKey is 48 random-looking bytes, base64-encoded.
 const testSigningKey = "q83vEjRWeJq83vEjRWeJq83vEjRWeJq83vEjRWeJq83vEjRWeJq83vEjRWeJq83v"
 
+// testResendKey is a fake Resend API key.
+const testResendKey = "re_test_0123456789abcdef"
+
+func TestLoadEmailDefaults(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.EmailProvider != EmailProviderLog || cfg.InviteURLBase != DefaultInviteURLBase || cfg.EmailFrom != "" {
+		t.Errorf("EmailProvider = %q InviteURLBase = %q EmailFrom = %q", cfg.EmailProvider, cfg.InviteURLBase, cfg.EmailFrom)
+	}
+
+	cfg, err = Load(env(map[string]string{"RESEND_API_KEY": testResendKey, "EMAIL_FROM": "DinnerOS <invites@example.com>"}))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.EmailProvider != EmailProviderResend || cfg.ResendAPIKey != testResendKey {
+		t.Errorf("with key: EmailProvider = %q, want resend by default", cfg.EmailProvider)
+	}
+}
+
+func TestLoadEmail(t *testing.T) {
+	prod := func(extra map[string]string) map[string]string {
+		values := map[string]string{
+			"APP_ENV":                "production",
+			"MONGODB_URI":            "mongodb+srv://cluster.example.net",
+			"AUTH_TOKEN_SIGNING_KEY": testSigningKey,
+		}
+		for k, v := range extra {
+			values[k] = v
+		}
+		return values
+	}
+	tests := []struct {
+		name         string
+		env          map[string]string
+		wantErr      string
+		wantProvider string
+	}{
+		{name: "explicit log with key", env: map[string]string{"EMAIL_PROVIDER": "log", "RESEND_API_KEY": testResendKey}, wantProvider: EmailProviderLog},
+		{name: "provider is case-insensitive", env: map[string]string{"EMAIL_PROVIDER": "LOG"}, wantProvider: EmailProviderLog},
+		{name: "resend without key", env: map[string]string{"EMAIL_PROVIDER": "resend", "EMAIL_FROM": "a@example.com"}, wantErr: "RESEND_API_KEY is required"},
+		{name: "resend without from", env: map[string]string{"RESEND_API_KEY": testResendKey}, wantErr: "EMAIL_FROM is required"},
+		{name: "unknown provider", env: map[string]string{"EMAIL_PROVIDER": "smtp"}, wantErr: "EMAIL_PROVIDER must be"},
+		{name: "invalid from", env: map[string]string{"EMAIL_FROM": "not an address"}, wantErr: "EMAIL_FROM must be"},
+		{name: "custom invite URL", env: map[string]string{"APP_INVITE_URL_BASE": "https://example.com/invite?token="}, wantProvider: EmailProviderLog},
+		{name: "relative invite URL", env: map[string]string{"APP_INVITE_URL_BASE": "/invite?token="}, wantErr: "APP_INVITE_URL_BASE"},
+		{name: "script invite URL", env: map[string]string{"APP_INVITE_URL_BASE": "javascript:alert(1)//"}, wantErr: "APP_INVITE_URL_BASE"},
+		{name: "production resend", env: prod(map[string]string{"RESEND_API_KEY": testResendKey, "EMAIL_FROM": "invites@example.com"}), wantProvider: EmailProviderResend},
+		{name: "production defaults to log without key", env: prod(nil), wantErr: "EMAIL_PROVIDER must be resend in production"},
+		{name: "production explicit log", env: prod(map[string]string{"EMAIL_PROVIDER": "log", "RESEND_API_KEY": testResendKey, "EMAIL_FROM": "a@example.com"}), wantErr: "EMAIL_PROVIDER must be resend in production"},
+		{name: "production resend without from", env: prod(map[string]string{"RESEND_API_KEY": testResendKey}), wantErr: "EMAIL_FROM is required"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := Load(env(tt.env))
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("Load() error = %v, want %q", err, tt.wantErr)
+				}
+				if strings.Contains(err.Error(), testResendKey) {
+					t.Errorf("error leaks the Resend key: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if cfg.EmailProvider != tt.wantProvider {
+				t.Errorf("EmailProvider = %q, want %q", cfg.EmailProvider, tt.wantProvider)
+			}
+		})
+	}
+}
+
+func TestLogValueOmitsResendKey(t *testing.T) {
+	cfg, err := Load(env(map[string]string{"RESEND_API_KEY": testResendKey, "EMAIL_FROM": "DinnerOS <invites@example.com>"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	slog.New(slog.NewJSONHandler(&buf, nil)).Info("config", "config", cfg)
+	out := buf.String()
+	if strings.Contains(out, testResendKey) {
+		t.Fatalf("log output leaks Resend key: %s", out)
+	}
+	if !strings.Contains(out, `"emailProvider":"resend"`) {
+		t.Errorf("log output missing email provider: %s", out)
+	}
+}
+
 func env(values map[string]string) func(string) string {
 	return func(key string) string { return values[key] }
 }
@@ -53,6 +144,8 @@ func TestLoadProduction(t *testing.T) {
 		"PORT":                   "5000",
 		"MONGODB_URI":            "mongodb+srv://user:secret@cluster.example.net",
 		"AUTH_TOKEN_SIGNING_KEY": testSigningKey,
+		"RESEND_API_KEY":         testResendKey,
+		"EMAIL_FROM":             "Renamed <invites@example.com>",
 		"HEROKU_BUILD_COMMIT":    "abc123",
 		"HEROKU_SLUG_COMMIT":     "ignored-when-build-commit-set",
 	}))
@@ -173,6 +266,8 @@ func TestLoadDevLogin(t *testing.T) {
 		"APP_ENV":                "production",
 		"MONGODB_URI":            "mongodb+srv://cluster.example.net",
 		"AUTH_TOKEN_SIGNING_KEY": testSigningKey,
+		"RESEND_API_KEY":         testResendKey,
+		"EMAIL_FROM":             "invites@example.com",
 	}
 
 	cfg, err := Load(env(map[string]string{"AUTH_DEV_LOGIN_ENABLED": "true"}))
