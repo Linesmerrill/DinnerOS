@@ -831,7 +831,7 @@ func (h *Handler) generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m := actor(r)
-	p, err := h.opts.Service.Generate(r.Context(), m.HouseholdID, m.UserID, chi.URLParam(r, "week"), GenerateOptions{AvoidPrevious: req.AvoidPrevious})
+	p, err := h.opts.Service.Generate(r.Context(), m.HouseholdID, m.UserID, chi.URLParam(r, "week"), GenerateOptions(req))
 	if err != nil {
 		h.writeError(w, r, "generate autopilot week failed", err)
 		return
