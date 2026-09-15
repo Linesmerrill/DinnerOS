@@ -18,6 +18,25 @@ nonisolated struct APIRequest: Sendable {
     /// Sent in order. Names and values are percent-encoded strictly, so `+` and `&` in a
     /// value arrive as written.
     var queryItems: [URLQueryItem] = []
+    /// `path` is already percent-encoded (see `encodePathSegment`) and is sent as is. Otherwise
+    /// the path is encoded when the URL is built, which would encode a `%` a second time.
+    var isPathPercentEncoded = false
+
+    /// A path segment with every character outside RFC 3986's unreserved set and `:`
+    /// percent-encoded, so a `/`, `%`, or space inside an ID arrives as one segment.
+    static func encodePathSegment(_ segment: String) -> String {
+        segment.addingPercentEncoding(withAllowedCharacters: pathSegmentAllowed) ?? ""
+    }
+
+    private static let pathSegmentAllowed = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~:")
+
+    /// Marks `path` as already percent-encoded.
+    func withPercentEncodedPath() -> APIRequest {
+        var copy = self
+        copy.isPathPercentEncoded = true
+        return copy
+    }
 
     static func get(_ path: String) -> APIRequest {
         APIRequest(method: .get, path: path, body: nil, bearerToken: nil)
@@ -82,6 +101,11 @@ nonisolated struct APIClient: Sendable {
     func makeURLRequest(for request: APIRequest, requestID: String) -> URLRequest {
         let relativePath = request.path.hasPrefix("/") ? String(request.path.dropFirst()) : request.path
         var url = baseURL.appending(path: relativePath)
+        if request.isPathPercentEncoded, var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) {
+            let basePath = components.percentEncodedPath
+            components.percentEncodedPath = (basePath.hasSuffix("/") ? basePath : basePath + "/") + relativePath
+            url = components.url ?? url
+        }
         if !request.queryItems.isEmpty, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
             components.percentEncodedQuery = request.queryItems
                 .map { Self.encodeQueryComponent($0.name) + "=" + Self.encodeQueryComponent($0.value ?? "") }

@@ -1,0 +1,141 @@
+import SwiftUI
+
+/// The household's saved Walmart products, to change or remove.
+struct SavedProductsView: View {
+    @Environment(ShoppingStore.self) private var shopping
+    @Environment(HouseholdStore.self) private var households
+
+    @State private var editing: ProductChoice?
+    @State private var actionError: String?
+
+    var body: some View {
+        content
+            .navigationTitle("Saved Products")
+            .navigationBarTitleDisplayMode(.inline)
+            .task {
+                await shopping.loadPreferences()
+            }
+            .sheet(item: $editing) { choice in
+                ChooseProductSheet(choice: choice)
+            }
+            .alert("Couldn't Remove the Product", isPresented: Binding(presenting: $actionError)) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(actionError ?? "")
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch shopping.preferencesPhase {
+        case .idle, .loading:
+            ProgressView("Loading saved products…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .failed(let message):
+            ContentUnavailableView {
+                Label("Couldn't Load Saved Products", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(message)
+            } actions: {
+                Button("Try Again") {
+                    Task { await shopping.loadPreferences() }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        case .loaded:
+            if shopping.preferences.isEmpty {
+                ContentUnavailableView(
+                    "No Saved Products", systemImage: "bookmark",
+                    description: Text(
+                        "Choose a product for an ingredient on the Shop tab, and it's saved here for every week.")
+                )
+            } else {
+                list
+            }
+        }
+    }
+
+    private var list: some View {
+        List {
+            if let refreshError = shopping.preferencesRefreshError {
+                FormErrorLabel(message: refreshError)
+            }
+            Section {
+                ForEach(shopping.preferences) { preference in
+                    row(preference)
+                }
+            } footer: {
+                if shopping.canEdit {
+                    Text("Swipe to remove a product. Its ingredient goes back to Needs a Product.")
+                }
+            }
+        }
+        .refreshable {
+            await shopping.loadPreferences()
+        }
+    }
+
+    @ViewBuilder
+    private func row(_ preference: ShoppingPreference) -> some View {
+        if shopping.canEdit {
+            Button {
+                editing = ProductChoice(preference: preference)
+            } label: {
+                SavedProductRow(preference: preference)
+            }
+            .accessibilityHint("Changes the product")
+            .swipeActions(edge: .trailing) {
+                Button("Remove", systemImage: "trash", role: .destructive) {
+                    remove(preference)
+                }
+            }
+        } else {
+            SavedProductRow(preference: preference)
+        }
+    }
+
+    private func remove(_ preference: ShoppingPreference) {
+        Task {
+            do {
+                try await shopping.deletePreference(ingredientKey: preference.ingredientKey)
+            } catch is CancellationError {
+                return
+            } catch {
+                actionError = ShopErrors.message(for: error, households: households)
+            }
+        }
+    }
+}
+
+private struct SavedProductRow: View {
+    let preference: ShoppingPreference
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(preference.ingredientName)
+                Text(preference.displayName)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text(preference.packageSize?.text ?? String(localized: "Package size unknown"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        // Inside a list Button, hierarchical styles resolve against the tint; anchoring them to
+        // the primary color keeps the details gray.
+        .foregroundStyle(Color.primary)
+        .contentShape(.rect)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+#Preview {
+    let session = HouseholdPreviewData.session()
+    NavigationStack {
+        SavedProductsView()
+    }
+    .environment(HouseholdPreviewData.store(session: session))
+    .environment(ShopPreviewData.store(session: session))
+}

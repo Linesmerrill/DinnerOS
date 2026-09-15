@@ -1,8 +1,8 @@
 # Shopping providers (Phase 8)
 
-Status: **Phase 8a API implemented** (Walmart cart links without keys; see
-[Implemented in 8a](#implemented-in-8a)). The iOS Shop tab, 8.0 spike, and
-8b–8d are still plans. Research as of 2026-09-15. This document says what
+Status: **Phase 8a implemented**: the API and the iOS Shop tab (Walmart cart
+links without keys; see [Implemented in 8a](#implemented-in-8a)). The 8.0
+spike and 8b–8d are still plans. Research as of 2026-09-15. This document says what
 third-party grocery services actually allow today, and how DinnerOS should use
 them, starting with Walmart.
 
@@ -448,6 +448,13 @@ credentials.
 - **Affiliate:** the Impact wrapper runs only when all three
   `WALMART_IMPACT_*` config vars are set; responses carry `affiliateTracked`
   for the disclosure.
+- **iOS Shop tab** (decisions #200–#207): store setup with an optional store
+  number; the week's match with "Needs a Product", "Ready" (package steppers
+  and "Check amount" badges), and "Not Included"; Choose Product from a pasted
+  link, with a plain "Search on Walmart" link; Saved Products; "Open in
+  Walmart", stepping through several cart links; and "Did you order these?"
+  when the app returns, which checks confirmed lines off on the device. The
+  commission line shows only when `affiliateTracked` is true.
 - **Not done yet:** recording that the member opened the links, an
   out-of-stock or alternates flow, and the 8.0 spike's answers (whether the
   `goto.walmart.com` wrapper still opens the app, and the real URL limits).

@@ -44,7 +44,7 @@ nonisolated struct HouseholdRole: RawRepresentable, Codable, Hashable, Sendable,
         case .admin:
             HouseholdPermission.allKnown
         case .member:
-            [.householdView, .membersView, .planEdit, .pantryEdit, .recipesEdit, .recipesImport]
+            [.householdView, .membersView, .planEdit, .pantryEdit, .recipesEdit, .recipesImport, .shoppingEdit]
         default:
             nil
         }
@@ -69,10 +69,12 @@ nonisolated struct HouseholdPermission: RawRepresentable, Codable, Hashable, Sen
     static let pantryEdit = HouseholdPermission(rawValue: "pantry.edit")
     static let recipesEdit = HouseholdPermission(rawValue: "recipes.edit")
     static let recipesImport = HouseholdPermission(rawValue: "recipes.import")
+    /// Store settings, saved provider products, and handing a list off to a store.
+    static let shoppingEdit = HouseholdPermission(rawValue: "shopping.edit")
 
     static let allKnown: Set<HouseholdPermission> = [
         .householdView, .householdUpdate, .membersView, .membersInvite, .membersRemove, .membersChangeRole,
-        .planEdit, .pantryEdit, .recipesEdit, .recipesImport,
+        .planEdit, .pantryEdit, .recipesEdit, .recipesImport, .shoppingEdit,
     ]
 }
 

@@ -11,6 +11,7 @@ struct RootView: View {
     @Environment(AutopilotStore.self) private var autopilot
     @Environment(EventReporter.self) private var events
     @Environment(NotificationStore.self) private var notifications
+    @Environment(ShoppingStore.self) private var shopping
 
     var body: some View {
         content
@@ -28,6 +29,7 @@ struct RootView: View {
                     specialties.reset()
                     autopilot.reset()
                     notifications.reset()
+                    shopping.reset()
                     // At launch there's no user while the session restores; only a real
                     // sign-out discards queued events.
                     if session.state == .signedOut {
@@ -88,6 +90,7 @@ struct RootView: View {
         .environment(AutopilotPreviewData.store(session: session))
         .environment(EventReporter.preview(session: session))
         .environment(NotificationPreviewData.store(session: session))
+        .environment(ShopPreviewData.store(session: session))
 }
 
 #Preview("Signed out") {
@@ -102,4 +105,5 @@ struct RootView: View {
         .environment(AutopilotStore.preview(session: session, profile: nil, vocabulary: nil))
         .environment(EventReporter.preview(session: session))
         .environment(NotificationStore.preview(session: session, phase: .idle))
+        .environment(ShopPreviewData.store(session: session, configured: false))
 }
