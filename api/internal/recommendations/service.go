@@ -63,7 +63,10 @@ type ServiceOptions struct {
 	Plans      Planner
 	// Pantry is optional; without it, low pantry items aren't a signal.
 	Pantry PantryReader
-	Logger *slog.Logger
+	// Pairings stores each week's pairing state. When nil, Store is used if
+	// it implements PairingStore; without either, pairings are off.
+	Pairings PairingStore
+	Logger   *slog.Logger
 	// Now is the clock. Default time.Now.
 	Now func() time.Time
 }
@@ -79,6 +82,7 @@ type Service struct {
 	events     EventLog
 	plans      Planner
 	pantry     PantryReader
+	pairings   PairingStore
 	logger     *slog.Logger
 	now        func() time.Time
 }
@@ -98,6 +102,10 @@ func NewService(opts ServiceOptions) *Service {
 	}
 	if s.now == nil {
 		s.now = time.Now
+	}
+	s.pairings = opts.Pairings
+	if s.pairings == nil {
+		s.pairings, _ = opts.Store.(PairingStore)
 	}
 	return s
 }
@@ -151,6 +159,7 @@ type ProfileUpdate struct {
 	Novelty      *string
 	Equipment    *[]string
 	WeekdayRules *[]WeekdayRule
+	Pairings     *[]PairingRule
 }
 
 func (u ProfileUpdate) sections() []Section {
@@ -158,7 +167,7 @@ func (u ProfileUpdate) sections() []Section {
 	for section, set := range map[Section]bool{
 		SectionTaste: u.Taste != nil, SectionRestrictions: u.Restrictions != nil, SectionSchedule: u.Schedule != nil,
 		SectionCookTime: u.CookTime != nil, SectionNovelty: u.Novelty != nil, SectionEquipment: u.Equipment != nil,
-		SectionWeekdayRules: u.WeekdayRules != nil,
+		SectionWeekdayRules: u.WeekdayRules != nil, SectionPairings: u.Pairings != nil,
 	} {
 		if set {
 			out = append(out, section)
@@ -179,7 +188,9 @@ func (s *Service) UpdateProfile(ctx context.Context, householdID, userID string,
 	}
 	written := u.sections()
 	if replace {
-		written = Sections
+		// Replacing keeps the pairing rules unless it sends them: onboarding
+		// doesn't edit them, and they are mostly made from suggestions.
+		written = slices.DeleteFunc(slices.Clone(Sections), func(section Section) bool { return section == SectionPairings && u.Pairings == nil })
 	} else if len(written) == 0 {
 		return Profile{}, invalidf("provide at least one section to change")
 	}
@@ -203,8 +214,14 @@ func (s *Service) UpdateProfile(ctx context.Context, householdID, userID string,
 		next.Novelty = pick(u.Novelty, current.Novelty, def.Novelty, replace)
 		next.Equipment = pick(u.Equipment, current.Equipment, def.Equipment, replace)
 		next.WeekdayRules = pick(u.WeekdayRules, current.WeekdayRules, def.WeekdayRules, replace)
+		next.Pairings = pick(u.Pairings, current.Pairings, current.Pairings, replace)
 		if next, err = normalizeProfile(next); err != nil {
 			return Profile{}, err
+		}
+		if u.Pairings != nil {
+			if next.Pairings, err = s.resolvePairingTargets(ctx, householdID, next.Pairings); err != nil {
+				return Profile{}, err
+			}
 		}
 		diffs := diffProfile(current, next)
 		if exists && len(diffs) == 0 {
@@ -271,6 +288,7 @@ type HistoryEntry struct {
 	Changes    []events.FieldChange
 	Cleared    bool
 	Method     string
+	Category   string
 	Value      string
 	Previous   string
 }
@@ -298,7 +316,7 @@ func (s *Service) History(ctx context.Context, householdID string, limit int) ([
 		case events.AutopilotWeekContextUpdated:
 			h.Changes, h.Cleared = payload.Changes, payload.Cleared
 		case events.AutopilotRecipeOverrideUpdated:
-			h.Method, h.Value, h.Previous = payload.Method, payload.Value, payload.Previous
+			h.Method, h.Category, h.Value, h.Previous = payload.Method, payload.Category, payload.Value, payload.Previous
 		}
 		out = append(out, h)
 	}
@@ -311,7 +329,9 @@ func (s *Service) Vocabulary(ctx context.Context, householdID string) (Vocabular
 	if err != nil {
 		return Vocabulary{}, fmt.Errorf("load catalog: %w", err)
 	}
-	return buildVocabulary(catalog), nil
+	v := buildVocabulary(catalog)
+	v.MealCategories, v.PairingFrequencies = mealCategoryVocabulary(catalog), PairingFrequencyOptions
+	return v, nil
 }
 
 // --- week context -----------------------------------------------------------------
@@ -488,6 +508,7 @@ func (s *Service) Generate(ctx context.Context, householdID, userID, week string
 	for _, m := range res.Messages {
 		p.Messages = append(p.Messages, Message{Code: m.Code, Text: m.Text})
 	}
+	s.attachProposalPairings(ctx, &p, plan, "")
 	saved, err := s.store.SaveProposal(ctx, p)
 	if errors.Is(err, ErrConflict) {
 		return Proposal{}, ErrProposalChanged
@@ -507,6 +528,7 @@ func (s *Service) Generate(ctx context.Context, householdID, userID, week string
 		})
 	}
 	s.record(ctx, events.Event{HouseholdID: householdID, UserID: userID, Type: events.TypeWeekGenerated, Week: w.String(), OccurredAt: now, Payload: generated})
+	s.recordProposalSuggestions(ctx, saved, userID, "", now)
 	return saved, nil
 }
 
@@ -592,6 +614,7 @@ func (s *Service) Swap(ctx context.Context, householdID, userID, week, slotID st
 	now := s.now().UTC()
 	p.Slots = slices.Clone(p.Slots)
 	p.Slots[i] = next
+	s.attachProposalPairings(ctx, &p, plan, next.ID)
 	p.SwapCount++
 	p.UpdatedAt = now
 	saved, err := s.store.SaveProposal(ctx, p)
@@ -608,6 +631,7 @@ func (s *Service) Swap(ctx context.Context, householdID, userID, week, slotID st
 			PreviousRecipeID: current.RecipeID, ModelVersion: res.ModelVersion, SwapNumber: next.SwapCount,
 		},
 	})
+	s.recordProposalSuggestions(ctx, saved, userID, next.ID, now)
 	return saved, nil
 }
 
@@ -630,15 +654,31 @@ const (
 type AcceptResult struct {
 	Proposal Proposal
 	Plan     planning.Plan
-	Added    []planning.Entry
-	Skipped  []SkippedSlot
+	// Added are the meals' new plan entries.
+	Added   []planning.Entry
+	Skipped []SkippedSlot
+	// PairingsAdded are the add-ons and grocery items added with the meals;
+	// PairingsSkipped the chosen ones that weren't.
+	PairingsAdded   []AddedPairing
+	PairingsSkipped []SkippedPairing
 }
 
-// Accept adds the proposal's meals to the week's draft plan as autopilot
-// entries, in one atomic change, except the excluded slots. Meals whose day
-// has been planned since, or whose recipe is already in the week, are
-// skipped: accepting never replaces or duplicates entries.
+// Accept adds the proposal's meals, with their included pairings, to the
+// week's draft plan (AcceptWithPairings).
 func (s *Service) Accept(ctx context.Context, householdID, userID, week string, version int64, excludeSlotIDs []string) (AcceptResult, error) {
+	return s.AcceptWithPairings(ctx, householdID, userID, week, version, excludeSlotIDs, nil)
+}
+
+// AcceptWithPairings adds the proposal's meals to the week's draft plan as
+// autopilot entries, in one atomic change, except the excluded slots. Meals
+// whose day has been planned since, or whose recipe is already in the week,
+// are skipped: accepting never replaces or duplicates entries.
+//
+// The meals' pairings are added too: add-on recipes as entries on the meal's
+// day in the same change, grocery items on the week's list. pairingIDs
+// (ProposalPairingID) chooses them; nil means the pairings the proposal
+// includes (always rules).
+func (s *Service) AcceptWithPairings(ctx context.Context, householdID, userID, week string, version int64, excludeSlotIDs []string, pairingIDs *[]string) (AcceptResult, error) {
 	if err := required(householdID, userID); err != nil {
 		return AcceptResult{}, err
 	}
@@ -663,12 +703,20 @@ func (s *Service) Accept(ctx context.Context, householdID, userID, week string, 
 	if err != nil {
 		return AcceptResult{}, err
 	}
+	addons, err := s.addonRecipes(ctx, householdID, plan)
+	if err != nil {
+		return AcceptResult{}, fmt.Errorf("load catalog: %w", err)
+	}
+	chosen, err := chooseProposalPairings(p, excluded, pairingIDs)
+	if err != nil {
+		return AcceptResult{}, err
+	}
 	var entries []planning.NewEntry
 	var skipped []SkippedSlot
 	for _, sl := range p.Slots {
 		switch {
 		case slices.Contains(excluded, sl.ID):
-		case slices.ContainsFunc(plan.Entries, func(e planning.Entry) bool { return string(e.Day) == sl.Day }):
+		case slices.ContainsFunc(plan.Entries, func(e planning.Entry) bool { return string(e.Day) == sl.Day && !addons[e.RecipeID] }):
 			skipped = append(skipped, SkippedSlot{SlotID: sl.ID, Day: sl.Day, Reason: SkipDayTaken})
 		case slices.ContainsFunc(plan.Entries, func(e planning.Entry) bool { return e.RecipeID == sl.RecipeID }):
 			skipped = append(skipped, SkippedSlot{SlotID: sl.ID, Day: sl.Day, Reason: SkipAlreadyPlanned})
@@ -681,6 +729,13 @@ func (s *Service) Accept(ctx context.Context, householdID, userID, week string, 
 	if len(entries) == 0 {
 		return AcceptResult{}, ErrNothingToAccept
 	}
+	mealCount := len(entries)
+	addedSlots := make([]string, 0, mealCount)
+	for _, e := range entries {
+		addedSlots = append(addedSlots, e.Day)
+	}
+	pairingEntries, addonChoices, groceryChoices, pairingsSkipped := s.plannedPairings(ctx, householdID, p, plan, chosen, addedSlots)
+	entries = append(entries, pairingEntries...)
 
 	// Claim the proposal first, so two members accepting at once can't both
 	// add its meals; give the claim back if the plan change fails.
@@ -709,10 +764,15 @@ func (s *Service) Accept(ctx context.Context, householdID, userID, week string, 
 		}
 		return AcceptResult{}, err
 	}
+	mealAdded := added[:mealCount]
+	mealEntries := make(map[string]planning.Entry, mealCount)
+	for _, e := range mealAdded {
+		mealEntries[string(e.Day)] = e
+	}
 	s.record(ctx, events.Event{
 		HouseholdID: householdID, UserID: userID, Type: events.TypeWeekAccepted, Week: w.String(), OccurredAt: now,
 		Payload: events.WeekAccepted{
-			ProposalID: saved.ID, ModelVersion: saved.ModelVersion, Planned: len(saved.Slots), Added: len(added),
+			ProposalID: saved.ID, ModelVersion: saved.ModelVersion, Planned: len(saved.Slots), Added: len(mealAdded),
 			Excluded: len(excluded), Skipped: len(skipped), Swaps: saved.SwapCount,
 		},
 	})
@@ -723,7 +783,11 @@ func (s *Service) Accept(ctx context.Context, householdID, userID, week string, 
 			Payload: events.MealRejected{ProposalID: saved.ID, SlotID: sl.ID, Day: sl.Day, Date: w.Date(planning.Day(sl.Day)), ModelVersion: saved.ModelVersion},
 		})
 	}
-	return AcceptResult{Proposal: saved, Plan: updated, Added: added, Skipped: skipped}, nil
+	pairingsAdded := s.finishProposalPairings(ctx, householdID, userID, saved, w, mealEntries, addonChoices, added[mealCount:],
+		groceryChoices, chosen, pairingIDs != nil, now)
+	return AcceptResult{
+		Proposal: saved, Plan: updated, Added: mealAdded, Skipped: skipped, PairingsAdded: pairingsAdded, PairingsSkipped: pairingsSkipped,
+	}, nil
 }
 
 // Reject dismisses a pending proposal.
@@ -782,7 +846,9 @@ func (s *Service) RecipeAttributes(ctx context.Context, householdID, recipeID st
 	} else if !errors.Is(err, ErrNotFound) {
 		return RecipeAttributes{}, err
 	}
-	return attributes(r, override, profile.bands()), nil
+	a := attributes(r, override, profile.bands())
+	a.MealCategories = mealCategoryAttributes(r, override)
+	return a, nil
 }
 
 func overrideValue(methods map[string]bool, method string) string {
@@ -839,7 +905,7 @@ func (s *Service) SetRecipeOverride(ctx context.Context, householdID, userID, re
 	}
 	if len(changes) > 0 {
 		now := s.now().UTC()
-		o := RecipeOverride{HouseholdID: householdID, RecipeID: recipeID, Methods: next, UpdatedBy: userID, UpdatedAt: now}
+		o := RecipeOverride{HouseholdID: householdID, RecipeID: recipeID, Methods: next, MealCategories: current.MealCategories, UpdatedBy: userID, UpdatedAt: now}
 		if err := s.store.SaveOverride(ctx, o); err != nil {
 			return RecipeAttributes{}, err
 		}

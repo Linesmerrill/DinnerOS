@@ -36,7 +36,9 @@ type RecipeAttributes struct {
 	// SpicyEvidence is the tag or ingredient that made it spicy.
 	SpicyEvidence string
 	Methods       []MethodAttribute
-	Override      *RecipeOverride
+	// MealCategories are set by Service.RecipeAttributes (pairings_categories.go).
+	MealCategories []MealCategoryAttribute
+	Override       *RecipeOverride
 }
 
 // MethodAttribute says whether a recipe suits a cooking method.

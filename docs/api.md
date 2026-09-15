@@ -584,6 +584,11 @@ the pantry. The change is recorded as a `meal.customized`
 - `pantryApplied` is `true` when the pantry decided the statuses. A server
   running without a pantry returns `false`, and statuses are then only
   `toBuy` or `pantryHint`.
+- `extras` on an item lists what put it on the list besides a recipe: an
+  accepted Autopilot [pairing](#add-on-pairings) shows
+  `{"id": "…", "origin": "pairing", "text": "Club crackers for Chicken Noodle Soup"}`.
+  It is empty for ordinary items, and the item is aggregated, checked off, and
+  handed to a store like any other line.
 - `skipped` lists entries that couldn't contribute: `recipeUnavailable` (the
   recipe is no longer in the household) or `servingsUnavailable` (the recipe
   no longer offers that serving size).
@@ -1841,6 +1846,155 @@ is none).
 | 409 | `proposal_stale` | A proposed recipe was removed or lost its serving size; generate again |
 | 409 | `conflict` | The profile or context kept changing concurrently; retry |
 
+### Add-on pairings
+
+Pairings suggest an add-on recipe ("Garlic Bread") or a grocery item ("Club
+crackers") with a main meal, from the household's rules and from what it
+usually has ([autopilot.md](autopilot.md#add-on-pairings)).
+
+`GET .../autopilot/weeks/{week}/pairings[?entryId=…]` (`household.view`)
+
+```json
+{
+  "week": "2026-W38",
+  "startDate": "2026-09-14",
+  "endDate": "2026-09-20",
+  "meals": [
+    {
+      "entryId": "66e5a1f2c3b4a5d6e7f80c01",
+      "day": "mon",
+      "date": "2026-09-14",
+      "recipe": { "id": "66e5a1f2c3b4a5d6e7f80915", "name": "Creamy Garlic Spaghetti" },
+      "servings": 2,
+      "mealCategories": ["pasta"],
+      "pairings": [
+        {
+          "key": "recipe:66e5a1f2c3b4a5d6e7f81008",
+          "target": {
+            "kind": "recipe",
+            "recipe": { "id": "66e5a1f2c3b4a5d6e7f81008", "name": "Garlic Bread", "imageUrl": "https://img.example.com/garlic-bread.jpg",
+                        "cookMinutes": 15, "timesOrdered": 203, "lastOrderedWeek": "2026-W37", "isAddon": true, "tags": [] }
+          },
+          "servings": 2,
+          "source": "learned",
+          "frequency": "suggest",
+          "mealCategory": "pasta",
+          "confidence": 0.95,
+          "learned": { "weeksTogether": 186, "mealCategoryWeeks": 195, "otherWeeks": 35, "otherWeeksRate": 0.49 },
+          "reason": "You usually have Garlic Bread with pasta (95% of pasta weeks)",
+          "ruleId": null,
+          "inPlan": false,
+          "canMakeRule": true
+        }
+      ]
+    }
+  ],
+  "groceryItems": [
+    {
+      "id": "66e5a1f2c3b4a5d6e7f80f02",
+      "key": "grocery:club crackers",
+      "groceryItem": { "name": "Club crackers", "quantity": 1, "unit": "package" },
+      "entryId": "66e5a1f2c3b4a5d6e7f80c02",
+      "recipe": { "id": "66e5a1f2c3b4a5d6e7f80916", "name": "Chicken Noodle Soup" },
+      "source": "rule",
+      "ruleId": "66e5a1f2c3b4a5d6e7f80f01",
+      "text": "Club crackers for Chicken Noodle Soup",
+      "addedBy": "66e5a1f2c3b4a5d6e7f80912",
+      "addedAt": "2026-09-14T19:10:00Z"
+    }
+  ]
+}
+```
+
+- One entry per planned **main meal**, in plan order; add-on entries aren't
+  meals. `entryId` narrows it to one meal, for the "you added a pasta dish"
+  prompt.
+- At most 3 `pairings` per meal: rules first (`always`, then `suggest`), then
+  learned ones by confidence. `source` is `rule` or `learned`; `target.kind`
+  is `recipe` or `grocery_item`; `confidence` and `learned` are present when
+  history backs the pairing (also for a rule).
+- Pairings already in the week or dismissed are left out here. An add-on
+  counts as "in the week" only on that meal's **day**; a grocery item counts
+  for the whole week.
+- `groceryItems` are the accepted grocery items on this week's list. They
+  disappear from it when their meal is unplanned.
+- Reading records `pairing.suggested` once per meal and target.
+
+| Endpoint | Body | What it does |
+| --- | --- | --- |
+| `POST .../pairings/accept` | `{"entryId": "…", "key": "…"}` | Adds it: an add-on becomes a plan entry on the meal's day (`origin: autopilot`), a grocery item joins the week's list. Returns `{status, pairing, entry, groceryItem, plan}` with `status` `added` or `alreadyAdded`. |
+| `POST .../pairings/dismiss` | `{"entryId": "…", "key": "…"}` | Hides it for that meal this week. Returns the week's pairings. |
+| `POST .../pairings/rules` | `{"entryId"` **or** `"slotId", "key", "frequency"?}` | Turns a learned pairing into a household rule for its meal category. Returns `{status, rule, profile}`, `status` `created`, `merged` (added to the rule that item already had), or `unchanged`. |
+| `DELETE .../pairings/grocery-items/{itemId}` | — | Takes a paired grocery item off the week (`204`). |
+
+All four need `plan.edit`. `404 not_found`: no such plan entry, pairing, or
+item. `409 plan_finalized`: accepting or removing in a finalized week.
+
+`GET /api/v1/households/{householdId}/recipes/{recipeId}/pairings?week=2026-W38`
+(`household.view`) is the recipe detail's "Tastes even better with" carousel:
+
+```json
+{
+  "recipeId": "66e5a1f2c3b4a5d6e7f80915",
+  "week": "2026-W38",
+  "entryId": "66e5a1f2c3b4a5d6e7f80c01",
+  "mealCategories": ["pasta"],
+  "items": [ { "key": "recipe:66e5…", "target": { "kind": "recipe", "recipe": { "…": "…" } }, "source": "learned",
+               "confidence": 0.95, "reason": "You usually have Garlic Bread with pasta (95% of pasta weeks)",
+               "inPlan": false, "ruleId": null, "canMakeRule": true } ]
+}
+```
+
+- `week` is optional. With one, `inPlan` says whether the target is already
+  planned (on the recipe's day when it is planned, otherwise anywhere that
+  week) or on the week's list, and `entryId` is the recipe's plan entry when
+  it has one. Without a week, nothing is in the plan and `entryId` is `null`.
+- Unlike the week endpoint, items already in the week are **included** with
+  `inPlan: true`, so the carousel is stable; show them as checked.
+- At most 6 items. Add-on recipes have none.
+
+### Pairing rules in the profile
+
+Rules are the profile's `pairings` section, edited with `PATCH .../profile`
+like any other section:
+
+```json
+{
+  "pairings": [
+    { "id": "66e5a1f2c3b4a5d6e7f80f01", "label": "Pasta night",
+      "when": { "mealCategories": ["pasta"], "cuisines": [], "tags": [], "proteins": [] },
+      "add": { "kind": "recipe", "recipeId": "66e5a1f2c3b4a5d6e7f81008", "recipeName": "Garlic Bread", "groceryItem": null },
+      "frequency": "always" },
+    { "id": "66e5a1f2c3b4a5d6e7f80f03", "label": "",
+      "when": { "mealCategories": ["soup"], "cuisines": [], "tags": [], "proteins": [] },
+      "add": { "kind": "grocery_item", "recipeId": null, "recipeName": null,
+               "groceryItem": { "name": "Club crackers", "quantity": 1, "unit": "package" } },
+      "frequency": "suggest" }
+  ]
+}
+```
+
+- `id` is `null` (or absent) for a new rule and assigned by the server; send a
+  rule's `id` back to keep it. `recipeName` and `add.kind` are read-only.
+- A meal matches when it matches every group `when` sets; within a group any
+  value matches, and cuisines match a recipe's cuisines or their regions. A
+  rule needs at least one condition.
+- `add` is exactly one of `recipeId` (an add-on of this household with serving
+  sizes) or `groceryItem` (`name` 1–60 characters, optional `quantity`
+  0 < q ≤ 99 and `unit` from the ingredient units; a unit needs a quantity).
+- `frequency`: `always` (included with a proposed meal unless taken out) or
+  `suggest` (offered). Default `suggest`. At most 20 rules, and two rules
+  can't repeat the same meals and item.
+- **`PUT .../profile` keeps `pairings` when it doesn't send them**, unlike
+  every other section, so onboarding never deletes rules.
+- `mealCategories` values, `pairingFrequencies`, and the limits
+  (`maxPairingRules`, `maxGroceryItemNameLength`, `maxGroceryItemQuantity`)
+  come from the [vocabulary](#vocabulary). A recipe's categories and their
+  overrides are on its [attributes](#recipe-attributes-and-overrides):
+  `mealCategories: [{category, label, suits, source, heuristicSuits, evidence}]`,
+  written with `PUT .../recipes/{id}/override` `{"mealCategories": {"pasta": true}}`
+  (`null` returns one to the heuristic; the same request may carry `methods`).
+
 ### Contract notes for the app
 
 - **Onboarding modal.**
@@ -1892,8 +2046,46 @@ is none).
   6. "Regenerate" calls generate again; "Dismiss" calls reject.
   7. On `409 plan_finalized`, explain that the week is finalized and offer to
      reopen it (`PUT .../plans/{week}/status` `{"status": "draft"}`).
-- **Events.** The server records generation, swaps, acceptance, rejection, and
-  preference changes itself. Keep sending `recipe.cooked` and
+- **Pairings in the review screen.** Each slot carries `pairings[]` with an
+  `id` and `included`. Show them under the meal as "Add Garlic Bread?" with a
+  checkmark, pre-checked when `included` (the household's `always` rules) and
+  visibly secondary to the meal itself. Accepting sends `pairingIds` with
+  exactly the ones checked, for slots that are still included; leave the field
+  out to accept the pre-checked ones. The response's `pairingsAdded` names
+  each added add-on entry or grocery item, and `pairingsSkipped` the ones that
+  no longer fit (`alreadyPlanned`, `unavailable`). Excluding a slot drops its
+  pairings, so uncheck the meal rather than its pairings when both go.
+- **The manual-add prompt.** After a member adds a meal to the week, call
+  `GET .../weeks/{week}/pairings?entryId={the new entry}`. When it returns
+  pairings, offer the first one ("Add Garlic Bread?" / "Add Club crackers to
+  the list?"); accepting posts to `pairings/accept`, and "Not this time" to
+  `pairings/dismiss`, which hides it for that meal this week. Don't prompt
+  again for the same entry and key; the API leaves accepted and dismissed
+  pairings out of later reads.
+- **The recipe carousel.** `GET .../recipes/{id}/pairings?week=` backs "Tastes
+  even better with": a row of cards with the add-on's image, name,
+  `cookMinutes`, and a checkmark, using `reason` as the caption. Items with
+  `inPlan: true` are already in the week; show them checked, not hidden.
+  Tapping one **when the recipe is planned that week** (`entryId` is set)
+  accepts through `POST .../weeks/{week}/pairings/accept` with that `entryId`.
+  When the recipe isn't planned (`entryId` is `null`), plan the main recipe
+  first (`POST .../plans/{week}/entries`), then accept the pairing with the
+  new entry's id: a pairing always belongs to a planned meal.
+- **Pairing rules in preferences.** Add a "Pairings" row to Autopilot
+  Preferences, backed by the profile's `pairings` section: one line per rule
+  ("Pasta → Garlic Bread · Always"), edited as when (meal categories from the
+  vocabulary, plus cuisines, tags, proteins), what to add (an add-on recipe
+  picker, or a grocery item with an optional quantity and unit), and
+  `frequency`. Save the whole section with `PATCH .../profile`, keeping each
+  rule's `id`. "Changed by" comes from `sections.pairings` like every other
+  section, and the change history lists added and removed rules. A learned
+  suggestion can be kept from the week screen with `pairings/rules`, which
+  returns the updated profile.
+- **Add-on entries in the week.** An accepted add-on is an ordinary plan entry
+  with `origin: autopilot` on the meal's day. Show it attached to its meal
+  rather than as a separate dinner; removing it is a normal entry delete.
+- **Events.** The server records generation, swaps, acceptance, rejection,
+  pairing suggestions and decisions, and preference changes itself. Keep sending `recipe.cooked` and
   `recipe.skipped` with the plan entry's `entryId`: that is how Autopilot learns
   which accepted meals were actually cooked.
 

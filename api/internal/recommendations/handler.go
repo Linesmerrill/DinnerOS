@@ -67,6 +67,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(edit).Post(base+"/weeks/{week}/proposal/slots/{slotId}/swap", h.swap)
 		r.With(edit).Post(base+"/weeks/{week}/proposal/accept", h.accept)
 		r.With(edit).Post(base+"/weeks/{week}/proposal/reject", h.reject)
+		h.mountPairings(r, view, edit)
 	})
 }
 
@@ -144,6 +145,7 @@ type ProfileResponse struct {
 	Novelty      string            `json:"novelty"`
 	Equipment    []string          `json:"equipment"`
 	WeekdayRules []WeekdayRuleJSON `json:"weekdayRules"`
+	Pairings     []PairingRuleJSON `json:"pairings"`
 	// Sections has every section; a section never set is null.
 	Sections  map[string]*ChangeJSON `json:"sections"`
 	Effective EffectiveJSON          `json:"effective"`
@@ -166,6 +168,7 @@ type profileRequest struct {
 	Novelty      *string            `json:"novelty"`
 	Equipment    *[]string          `json:"equipment"`
 	WeekdayRules *[]WeekdayRuleJSON `json:"weekdayRules"`
+	Pairings     *[]PairingRuleJSON `json:"pairings"`
 }
 
 // DayOverrideJSON is a day's context.
@@ -230,6 +233,8 @@ type SlotJSON struct {
 	Signals     map[string]float64 `json:"signals"`
 	Reasons     []TextJSON         `json:"reasons"`
 	SwapCount   int                `json:"swapCount"`
+	// Pairings are add-ons and grocery items offered with the meal.
+	Pairings []ProposalPairingJSON `json:"pairings"`
 }
 
 // UnfilledJSON is a day the proposal couldn't fill.
@@ -292,6 +297,9 @@ type AcceptResponse struct {
 	Plan     planning.PlanResponse    `json:"plan"`
 	Added    []planning.EntryResponse `json:"added"`
 	Skipped  []SkippedSlotJSON        `json:"skipped"`
+	// PairingsAdded and PairingsSkipped report the meals' pairings.
+	PairingsAdded   []AddedPairingJSON   `json:"pairingsAdded"`
+	PairingsSkipped []SkippedPairingJSON `json:"pairingsSkipped"`
 }
 
 type generateRequest struct {
@@ -305,6 +313,9 @@ type versionRequest struct {
 type acceptRequest struct {
 	Version        *int64   `json:"version"`
 	ExcludeSlotIDs []string `json:"excludeSlotIds"`
+	// PairingIDs chooses the slots' pairings to add; null means the included
+	// ones.
+	PairingIDs *[]string `json:"pairingIds"`
 }
 
 // MethodJSON says whether a recipe suits a cooking method.
@@ -319,10 +330,11 @@ type MethodJSON struct {
 
 // OverrideJSON is a recipe's cooking-method override.
 type OverrideJSON struct {
-	RecipeID  string          `json:"recipeId"`
-	Methods   map[string]bool `json:"methods"`
-	UpdatedBy string          `json:"updatedBy"`
-	UpdatedAt time.Time       `json:"updatedAt"`
+	RecipeID       string          `json:"recipeId"`
+	Methods        map[string]bool `json:"methods"`
+	MealCategories map[string]bool `json:"mealCategories"`
+	UpdatedBy      string          `json:"updatedBy"`
+	UpdatedAt      time.Time       `json:"updatedAt"`
 }
 
 // AttributesResponse is what Autopilot derives from a recipe.
@@ -332,19 +344,22 @@ type AttributesResponse struct {
 	TimeBand    string   `json:"timeBand"`
 	Cuisines    []string `json:"cuisines"`
 	// CuisineRegions are the broader regions Autopilot also matches.
-	CuisineRegions []string      `json:"cuisineRegions"`
-	Tags           []string      `json:"tags"`
-	Proteins       []string      `json:"proteins"`
-	Allergens      []string      `json:"allergens"`
-	Diets          []string      `json:"diets"`
-	Spicy          bool          `json:"spicy"`
-	SpicyEvidence  string        `json:"spicyEvidence,omitempty"`
-	Methods        []MethodJSON  `json:"methods"`
-	Override       *OverrideJSON `json:"override"`
+	CuisineRegions []string     `json:"cuisineRegions"`
+	Tags           []string     `json:"tags"`
+	Proteins       []string     `json:"proteins"`
+	Allergens      []string     `json:"allergens"`
+	Diets          []string     `json:"diets"`
+	Spicy          bool         `json:"spicy"`
+	SpicyEvidence  string       `json:"spicyEvidence,omitempty"`
+	Methods        []MethodJSON `json:"methods"`
+	// MealCategories lists every meal category, like Methods.
+	MealCategories []MealCategoryJSON `json:"mealCategories"`
+	Override       *OverrideJSON      `json:"override"`
 }
 
 type overrideRequest struct {
-	Methods map[string]*bool `json:"methods"`
+	Methods        map[string]*bool `json:"methods"`
+	MealCategories map[string]*bool `json:"mealCategories"`
 }
 
 // OverrideListResponse lists recipe overrides.
@@ -363,6 +378,7 @@ type HistoryItemJSON struct {
 	Changes    []ChangeEntry `json:"changes,omitempty"`
 	Cleared    bool          `json:"cleared,omitempty"`
 	Method     string        `json:"method,omitempty"`
+	Category   string        `json:"category,omitempty"`
 	Value      string        `json:"value,omitempty"`
 	Previous   string        `json:"previous,omitempty"`
 }
@@ -401,6 +417,8 @@ type VocabularyResponse struct {
 	TimeBands          []OptionJSON `json:"timeBands"`
 	Frequencies        []OptionJSON `json:"frequencies"`
 	Days               []OptionJSON `json:"days"`
+	MealCategories     []OptionJSON `json:"mealCategories"`
+	PairingFrequencies []OptionJSON `json:"pairingFrequencies"`
 	CatalogRecipeCount int          `json:"catalogRecipeCount"`
 	Limits             LimitsJSON   `json:"limits"`
 }
@@ -417,6 +435,9 @@ type LimitsJSON struct {
 	MinCookMinutes         int `json:"minCookMinutes"`
 	MaxCookMinutes         int `json:"maxCookMinutes"`
 	MaxServings            int `json:"maxServings"`
+	MaxPairingRules        int `json:"maxPairingRules"`
+	MaxGroceryItemName     int `json:"maxGroceryItemNameLength"`
+	MaxGroceryItemQuantity int `json:"maxGroceryItemQuantity"`
 }
 
 // --- conversions ------------------------------------------------------------------
@@ -482,6 +503,7 @@ func newProfileResponse(p Profile, servings int) ProfileResponse {
 		Novelty:      p.Novelty,
 		Equipment:    orEmptyStrings(p.Equipment),
 		WeekdayRules: []WeekdayRuleJSON{},
+		Pairings:     pairingRulesJSON(p.Pairings),
 		Sections:     map[string]*ChangeJSON{},
 		Effective:    EffectiveJSON{DefaultServings: servings},
 		CreatedBy:    optionalString(p.CreatedBy), CreatedAt: optionalTime(p.CreatedAt),
@@ -544,6 +566,13 @@ func (req profileRequest) update() (ProfileUpdate, error) {
 		}
 		u.WeekdayRules = &rules
 	}
+	if req.Pairings != nil {
+		rules, err := pairingRulesFromJSON(*req.Pairings)
+		if err != nil {
+			return ProfileUpdate{}, err
+		}
+		u.Pairings = &rules
+	}
 	return u, nil
 }
 
@@ -601,7 +630,7 @@ func newProposalResponse(p Proposal) ProposalResponse {
 			ID: s.ID, Day: s.Day, Date: w.Date(planning.Day(s.Day)),
 			Recipe:   ProposalRecipeJSON{ID: s.RecipeID, Name: s.RecipeName, ImageURL: s.RecipeImageURL},
 			Servings: s.Servings, CookMinutes: optionalInt(s.CookMinutes), TimeBand: s.TimeBand, Score: s.Score,
-			Signals: s.Signals, Reasons: []TextJSON{}, SwapCount: s.SwapCount,
+			Signals: s.Signals, Reasons: []TextJSON{}, SwapCount: s.SwapCount, Pairings: proposalPairingsJSON(s.ID, s.Pairings),
 		}
 		if sj.Signals == nil {
 			sj.Signals = map[string]float64{}
@@ -621,11 +650,9 @@ func newProposalResponse(p Proposal) ProposalResponse {
 }
 
 func newOverrideJSON(o RecipeOverride) OverrideJSON {
-	methods := o.Methods
-	if methods == nil {
-		methods = map[string]bool{}
+	return OverrideJSON{
+		RecipeID: o.RecipeID, Methods: orEmptyMap(o.Methods), MealCategories: orEmptyMap(o.MealCategories), UpdatedBy: o.UpdatedBy, UpdatedAt: o.UpdatedAt,
 	}
-	return OverrideJSON{RecipeID: o.RecipeID, Methods: methods, UpdatedBy: o.UpdatedBy, UpdatedAt: o.UpdatedAt}
 }
 
 func newAttributesResponse(a RecipeAttributes) AttributesResponse {
@@ -633,7 +660,7 @@ func newAttributesResponse(a RecipeAttributes) AttributesResponse {
 		RecipeID: a.RecipeID, CookMinutes: optionalInt(a.CookMinutes), TimeBand: a.TimeBand,
 		Cuisines: orEmptyStrings(a.Cuisines), CuisineRegions: orEmptyStrings(a.CuisineRegions), Tags: orEmptyStrings(a.Tags), Proteins: orEmptyStrings(a.Proteins),
 		Allergens: orEmptyStrings(a.Allergens), Diets: orEmptyStrings(a.Diets), Spicy: a.Spicy, SpicyEvidence: a.SpicyEvidence,
-		Methods: []MethodJSON{},
+		Methods: []MethodJSON{}, MealCategories: newMealCategoriesJSON(a.MealCategories),
 	}
 	for _, m := range a.Methods {
 		resp.Methods = append(resp.Methods, MethodJSON{
@@ -641,7 +668,7 @@ func newAttributesResponse(a RecipeAttributes) AttributesResponse {
 			HeuristicSuits: m.HeuristicSuits, Evidence: m.Evidence,
 		})
 	}
-	if a.Override != nil && len(a.Override.Methods) > 0 {
+	if a.Override != nil && len(a.Override.Methods)+len(a.Override.MealCategories) > 0 {
 		o := newOverrideJSON(*a.Override)
 		resp.Override = &o
 	}
@@ -728,7 +755,7 @@ func (h *Handler) history(w http.ResponseWriter, r *http.Request) {
 	for _, it := range items {
 		hj := HistoryItemJSON{
 			Type: string(it.Type), UserID: it.UserID, OccurredAt: it.OccurredAt, Week: it.Week, RecipeID: it.RecipeID,
-			Sections: it.Sections, Cleared: it.Cleared, Method: it.Method, Value: it.Value, Previous: it.Previous,
+			Sections: it.Sections, Cleared: it.Cleared, Method: it.Method, Category: it.Category, Value: it.Value, Previous: it.Previous,
 		}
 		for _, c := range it.Changes {
 			hj.Changes = append(hj.Changes, ChangeEntry(c))
@@ -749,10 +776,12 @@ func (h *Handler) vocabulary(w http.ResponseWriter, r *http.Request) {
 		Diets: optionsJSON(v.Diets, false), Allergens: optionsJSON(v.Allergens, false), Equipment: optionsJSON(v.Equipment, false),
 		Novelty: optionsJSON(v.Novelty, false), TimeBands: optionsJSON(v.TimeBands, false), Frequencies: optionsJSON(v.Frequencies, false),
 		Days: optionsJSON(v.Days, false), CatalogRecipeCount: v.CatalogRecipes,
+		MealCategories: optionsJSON(v.MealCategories, true), PairingFrequencies: optionsJSON(v.PairingFrequencies, false),
 		Limits: LimitsJSON{
 			MaxListValues: MaxListValues, MaxExcludedIngredients: MaxExcludedIngredient, MaxValueLength: MaxValueLength,
 			MaxIngredientLength: MaxIngredientLength, MaxRuleValues: MaxRuleValues, MaxLabelLength: MaxLabelLength,
 			MaxNoteLength: MaxNoteLength, MinCookMinutes: MinCookMinutes, MaxCookMinutes: MaxCookMinutes, MaxServings: MaxServings,
+			MaxPairingRules: MaxPairingRules, MaxGroceryItemName: MaxGroceryItemNameLength, MaxGroceryItemQuantity: MaxGroceryItemQuantity,
 		},
 	})
 }
@@ -785,7 +814,7 @@ func (h *Handler) setOverride(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m := actor(r)
-	a, err := h.opts.Service.SetRecipeOverride(r.Context(), m.HouseholdID, m.UserID, chi.URLParam(r, "recipeId"), req.Methods)
+	a, err := h.opts.Service.SetRecipeOverrides(r.Context(), m.HouseholdID, m.UserID, chi.URLParam(r, "recipeId"), req.Methods, req.MealCategories)
 	if err != nil {
 		h.writeError(w, r, "set recipe override failed", err)
 		return
@@ -903,7 +932,7 @@ func (h *Handler) accept(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m := actor(r)
-	res, err := h.opts.Service.Accept(r.Context(), m.HouseholdID, m.UserID, chi.URLParam(r, "week"), version, req.ExcludeSlotIDs)
+	res, err := h.opts.Service.AcceptWithPairings(r.Context(), m.HouseholdID, m.UserID, chi.URLParam(r, "week"), version, req.ExcludeSlotIDs, req.PairingIDs)
 	if err != nil {
 		h.writeError(w, r, "accept autopilot week failed", err)
 		return
@@ -912,6 +941,7 @@ func (h *Handler) accept(w http.ResponseWriter, r *http.Request) {
 		Proposal: newProposalResponse(res.Proposal), Plan: planning.NewPlanResponse(res.Plan),
 		Added: make([]planning.EntryResponse, 0, len(res.Added)), Skipped: make([]SkippedSlotJSON, 0, len(res.Skipped)),
 	}
+	resp.PairingsAdded, resp.PairingsSkipped = acceptPairingsJSON(res)
 	for _, e := range res.Added {
 		resp.Added = append(resp.Added, planning.NewEntryResponse(res.Plan.Week, e))
 	}
@@ -966,6 +996,8 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 		httpx.WriteError(w, r, http.StatusConflict, "proposal_stale", "a recipe in the proposal changed; generate the week again")
 	case errors.Is(err, ErrConflict):
 		httpx.WriteError(w, r, http.StatusConflict, "conflict", "the preferences kept changing; try again")
+	case errors.Is(err, ErrPairingsUnavailable):
+		httpx.WriteError(w, r, http.StatusServiceUnavailable, "unavailable", "pairings are unavailable")
 	default:
 		h.logger.ErrorContext(r.Context(), msg, "error", err)
 		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "internal server error")

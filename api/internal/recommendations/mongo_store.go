@@ -38,6 +38,7 @@ func Indexes() []mongodb.IndexSet {
 			Keys:    bson.D{{Key: "householdId", Value: 1}, {Key: "recipeId", Value: 1}},
 			Options: options.Index().SetUnique(true).SetName("householdId_recipeId_unique"),
 		}}},
+		weekPairingsIndexes(),
 	}
 }
 
@@ -48,6 +49,7 @@ type MongoStore struct {
 	contexts  *mongo.Collection
 	proposals *mongo.Collection
 	overrides *mongo.Collection
+	pairings  *mongo.Collection
 }
 
 var _ Store = (*MongoStore)(nil)
@@ -57,6 +59,7 @@ func NewMongoStore(db *mongo.Database) *MongoStore {
 	return &MongoStore{
 		profiles: db.Collection(ProfilesCollection), contexts: db.Collection(WeekContextsCollection),
 		proposals: db.Collection(ProposalsCollection), overrides: db.Collection(OverridesCollection),
+		pairings: db.Collection(WeekPairingsCollection),
 	}
 }
 
@@ -118,6 +121,7 @@ type profileDoc struct {
 	Novelty      string               `bson:"novelty"`
 	Equipment    []string             `bson:"equipment"`
 	WeekdayRules []ruleDoc            `bson:"weekdayRules"`
+	Pairings     []pairingRuleDoc     `bson:"pairings,omitempty"`
 	Sections     map[string]changeDoc `bson:"sections"`
 	Version      int64                `bson:"version"`
 	CreatedBy    bson.ObjectID        `bson:"createdBy"`
@@ -168,6 +172,7 @@ type slotDoc struct {
 	Reasons           []textDoc          `bson:"reasons"`
 	SwapCount         int                `bson:"swapCount"`
 	RejectedRecipeIDs []bson.ObjectID    `bson:"rejectedRecipeIds,omitempty"`
+	Pairings          []pairingDoc       `bson:"pairings,omitempty"`
 }
 
 type objectiveDoc struct {
@@ -206,11 +211,12 @@ type proposalDoc struct {
 }
 
 type overrideDoc struct {
-	HouseholdID bson.ObjectID   `bson:"householdId"`
-	RecipeID    bson.ObjectID   `bson:"recipeId"`
-	Methods     map[string]bool `bson:"methods"`
-	UpdatedBy   bson.ObjectID   `bson:"updatedBy"`
-	UpdatedAt   time.Time       `bson:"updatedAt"`
+	HouseholdID    bson.ObjectID   `bson:"householdId"`
+	RecipeID       bson.ObjectID   `bson:"recipeId"`
+	Methods        map[string]bool `bson:"methods"`
+	MealCategories map[string]bool `bson:"mealCategories,omitempty"`
+	UpdatedBy      bson.ObjectID   `bson:"updatedBy"`
+	UpdatedAt      time.Time       `bson:"updatedAt"`
 }
 
 // --- conversions ----------------------------------------------------------------
@@ -259,6 +265,7 @@ func newProfileDoc(p Profile) (profileDoc, error) {
 	for _, rule := range p.WeekdayRules {
 		d.WeekdayRules = append(d.WeekdayRules, ruleDoc(rule))
 	}
+	d.Pairings = newPairingRuleDocs(&in, p.Pairings)
 	for section, change := range p.Sections {
 		d.Sections[string(section)] = changeDoc{UpdatedBy: in.parse("section updated by", change.UpdatedBy), UpdatedAt: change.UpdatedAt}
 	}
@@ -290,6 +297,7 @@ func (d profileDoc) toProfile() Profile {
 		rule.Cuisines, rule.Tags, rule.Proteins, rule.Methods = nilIfEmpty(rule.Cuisines), nilIfEmpty(rule.Tags), nilIfEmpty(rule.Proteins), nilIfEmpty(rule.Methods)
 		p.WeekdayRules = append(p.WeekdayRules, WeekdayRule(rule))
 	}
+	p.Pairings = pairingRulesFromDocs(d.Pairings)
 	for section, change := range d.Sections {
 		p.Sections[Section(section)] = Change{UpdatedBy: hexOrEmpty(change.UpdatedBy), UpdatedAt: change.UpdatedAt.UTC()}
 	}
@@ -343,6 +351,7 @@ func newProposalDoc(p Proposal) (proposalDoc, error) {
 		for _, id := range s.RejectedRecipeIDs {
 			sd.RejectedRecipeIDs = append(sd.RejectedRecipeIDs, in.parse("rejected recipe id", id))
 		}
+		sd.Pairings = newPairingDocs(&in, s.Pairings)
 		d.Slots = append(d.Slots, sd)
 	}
 	for _, u := range p.Unfilled {
@@ -379,6 +388,7 @@ func (d proposalDoc) toProposal() Proposal {
 		for _, id := range sd.RejectedRecipeIDs {
 			s.RejectedRecipeIDs = append(s.RejectedRecipeIDs, id.Hex())
 		}
+		s.Pairings = pairingsFromDocs(sd.Pairings)
 		p.Slots = append(p.Slots, s)
 	}
 	for _, u := range d.Unfilled {
@@ -545,7 +555,7 @@ func (s *MongoStore) ListOverrides(ctx context.Context, householdID string) ([]R
 
 func (d overrideDoc) toOverride() RecipeOverride {
 	return RecipeOverride{
-		HouseholdID: d.HouseholdID.Hex(), RecipeID: d.RecipeID.Hex(), Methods: d.Methods,
+		HouseholdID: d.HouseholdID.Hex(), RecipeID: d.RecipeID.Hex(), Methods: d.Methods, MealCategories: d.MealCategories,
 		UpdatedBy: hexOrEmpty(d.UpdatedBy), UpdatedAt: d.UpdatedAt.UTC(),
 	}
 }
@@ -569,13 +579,13 @@ func (s *MongoStore) SaveOverride(ctx context.Context, o RecipeOverride) error {
 	var in ids
 	d := overrideDoc{
 		HouseholdID: in.parse("household id", o.HouseholdID), RecipeID: in.parse("recipe id", o.RecipeID),
-		Methods: o.Methods, UpdatedBy: in.parse("updated by", o.UpdatedBy), UpdatedAt: o.UpdatedAt,
+		Methods: orEmptyMap(o.Methods), MealCategories: o.MealCategories, UpdatedBy: in.parse("updated by", o.UpdatedBy), UpdatedAt: o.UpdatedAt,
 	}
 	if in.err != nil {
 		return in.err
 	}
 	filter := bson.D{{Key: "householdId", Value: d.HouseholdID}, {Key: "recipeId", Value: d.RecipeID}}
-	if len(o.Methods) == 0 {
+	if len(o.Methods) == 0 && len(o.MealCategories) == 0 {
 		_, err := s.overrides.DeleteOne(ctx, filter)
 		return translate(err)
 	}
@@ -592,6 +602,13 @@ func orEmpty[T any](s []T) []T {
 		return []T{}
 	}
 	return s
+}
+
+func orEmptyMap(m map[string]bool) map[string]bool {
+	if m == nil {
+		return map[string]bool{}
+	}
+	return m
 }
 
 func nilIfEmpty[T any](s []T) []T {

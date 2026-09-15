@@ -222,11 +222,11 @@ func (m *memoryStore) SaveOverride(_ context.Context, o RecipeOverride) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	key := o.HouseholdID + "/" + o.RecipeID
-	if len(o.Methods) == 0 {
+	if len(o.Methods) == 0 && len(o.MealCategories) == 0 {
 		delete(m.overrides, key)
 		return nil
 	}
-	o.Methods = maps.Clone(o.Methods)
+	o.Methods, o.MealCategories = maps.Clone(o.Methods), maps.Clone(o.MealCategories)
 	m.overrides[key] = o
 	return nil
 }

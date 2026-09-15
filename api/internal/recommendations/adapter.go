@@ -85,8 +85,10 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 	}
 	data := inputData{byID: make(map[string]recipes.Recipe, len(catalog))}
 	bands := profile.bands()
+	addonIDs := map[string]bool{}
 	for _, r := range catalog {
 		if r.IsAddon {
+			addonIDs[r.ID] = true
 			continue
 		}
 		var o *RecipeOverride
@@ -137,6 +139,11 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 		in.History = append(in.History, autopilot.Interaction{ItemID: e.RecipeID, Kind: kind, Week: week})
 	}
 	for _, e := range plan.Entries {
+		// Add-ons (a pairing's garlic bread) go with a meal; they don't take
+		// its day or count as a meal.
+		if addonIDs[e.RecipeID] {
+			continue
+		}
 		in.Fixed = append(in.Fixed, autopilot.Assignment{ItemID: e.RecipeID, Day: autopilot.Day(e.Day)})
 	}
 	return in, data, nil

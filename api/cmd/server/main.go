@@ -191,6 +191,9 @@ func run() error {
 		Pantry:     pantryService,
 		Logger:     logger,
 	})
+	// Grocery items accepted as Autopilot pairings join the week's list (and
+	// so the shopping handoff).
+	planService.WithExtras(autopilotService)
 	autopilotHandler := recommendations.NewHandler(recommendations.HandlerOptions{
 		Service:    autopilotService,
 		Authorizer: householdService,

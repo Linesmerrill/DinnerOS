@@ -378,7 +378,8 @@ Implemented in Phase 10 (`internal/recommendations`; see [autopilot.md](autopilo
 | `autopilot_profiles` | householdId, taste{likes, dislikes: {cuisines[], tags[], proteins[]}}, restrictions{diets[], allergens[], excludedIngredients[], excludedCuisines[], excludedProteins[], excludedTags[], noSpicy}, schedule{planDays[], weeknights[], mealsPerWeek, defaultServings, weeknightMaxMinutes}, cookTime{quickMaxMinutes, mediumMaxMinutes, maxLongPerWeek, minQuickPerWeek, avoidConsecutiveLong}, novelty, equipment[], weekdayRules[] (day, label, cuisines, tags, proteins, methods, timeBand, frequency), sections{<section>: {updatedBy, updatedAt}}, version, createdBy, createdAt, updatedBy, updatedAt | **unique** `{householdId}` |
 | `autopilot_week_contexts` | householdId, week, skip, busy, mealsPerWeek, maxMinutes, servings, days[] (day, skip, maxMinutes, servings), note, version, updatedBy, updatedAt | **unique** `{householdId, week}` |
 | `autopilot_proposals` | householdId, week, proposalId, status (`proposed`/`accepted`/`rejected`), version, attempt, modelVersion, inputsHash, requested, planned, candidates, coldStart, slots[] (id = day, day, recipeId, recipeName, recipeImageUrl, cookMinutes, timeBand, servings, score, signals{}, reasons[] (code, text), swapCount, rejectedRecipeIds[]), unfilled[], messages[], objective{}, swapCount, excludedSlots[], generatedBy, generatedAt, updatedAt, decidedBy, decidedAt | **unique** `{householdId, week}` |
-| `autopilot_recipe_overrides` | householdId, recipeId, methods{<method>: bool}, updatedBy, updatedAt | **unique** `{householdId, recipeId}` |
+| `autopilot_recipe_overrides` | householdId, recipeId, methods{<method>: bool}, mealCategories{<category>: bool}, updatedBy, updatedAt | **unique** `{householdId, recipeId}` |
+| `autopilot_week_pairings` | householdId, week, decisions[] (entryId, key, status (`accepted`/`dismissed`), addedEntryId, groceryItemId, decidedBy, decidedAt), groceryItems[] (id, key, name, quantity, unit, forEntryId, forRecipeId, forRecipeName, source, ruleId, addedBy, addedAt), version, updatedAt | **unique** `{householdId, week}` |
 
 - Every read is by its unique key, so no other indexes are needed. User and
   recipe IDs are ObjectIDs; `proposalId` is an ObjectID that changes each time
@@ -394,7 +395,21 @@ Implemented in Phase 10 (`internal/recommendations`; see [autopilot.md](autopilo
 - Only the latest proposal per week is kept. Earlier ones, every swap, and
   every preference change survive as events (`week.*`, `meal.*`,
   `autopilot.*`), so there is no separate history collection.
-- An override with no methods is deleted rather than stored empty.
+- An override with no methods and no meal categories is deleted rather than
+  stored empty.
+- **Pairings** ([autopilot.md](autopilot.md#add-on-pairings)) are stored in
+  three places: the profile's `pairings[]` rules (id, label, when{mealCategories,
+  cuisines, tags, proteins}, recipeId + recipeName **or** groceryItem{name,
+  quantity, unit}, frequency), a snapshot on each proposal slot
+  (`slots[].pairings[]`, so a review renders without recomputing), and the
+  week's decisions and grocery items in `autopilot_week_pairings`.
+- A week's document is versioned like the others, and accepting claims its
+  decision before the plan changes, so two members accepting the same pairing
+  add it once. Bounds: 20 rules per household, 200 decisions and 50 grocery
+  items per week, 3 pairings per meal.
+- A paired grocery item names the plan entry it is for. It leaves the grocery
+  list when that entry is unplanned, without being deleted, so replanning the
+  meal brings it back.
 
 ## Multi-tenancy
 

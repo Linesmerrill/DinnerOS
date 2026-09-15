@@ -3069,6 +3069,222 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/AutopilotConflict"
+  /api/v1/households/{householdId}/autopilot/weeks/{week}/pairings:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    get:
+      summary: Pairings for the week's meals
+      description: |
+        Add-ons and grocery items to have with the week's planned main meals,
+        from the household's pairing rules and from what it usually has
+        (docs/autopilot.md#add-on-pairings). At most 3 per meal; pairings
+        already in the week or dismissed are left out. Reading records
+        `pairing.suggested` once per meal and target. Requires
+        `household.view`.
+      operationId: listAutopilotWeekPairings
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: entryId
+          in: query
+          description: Only this plan entry's meal, for the "you added a pasta dish" prompt.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The week's pairings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotWeekPairings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/autopilot/weeks/{week}/pairings/accept:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    post:
+      summary: Add a pairing to the week
+      description: |
+        Requires `plan.edit`. An add-on recipe becomes a plan entry on the
+        meal's day with origin `autopilot` and the smallest authored serving
+        size that feeds the meal; a grocery item joins the week's grocery
+        list. Accepting something the week already has adds nothing and
+        returns `alreadyAdded`. 404 when the plan entry or the pairing is
+        unknown; 409 `plan_finalized`.
+      operationId: acceptAutopilotPairing
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutopilotPairingActionRequest"
+      responses:
+        "200":
+          description: What was added, and the week's plan.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotPairingAcceptResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/AutopilotConflict"
+  /api/v1/households/{householdId}/autopilot/weeks/{week}/pairings/dismiss:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    post:
+      summary: Dismiss a pairing for this week
+      description: |
+        Requires `plan.edit`. Hides the pairing for that meal this week and
+        returns the week's pairings. Dismissing again changes nothing.
+      operationId: dismissAutopilotPairing
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutopilotPairingActionRequest"
+      responses:
+        "200":
+          description: The week's pairings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotWeekPairings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/autopilot/weeks/{week}/pairings/rules:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    post:
+      summary: Keep a learned pairing as a rule
+      description: |
+        Requires `plan.edit`. Turns a learned pairing into a household rule
+        for its meal category, saved in the profile's `pairings` section. The
+        same item for a second category joins the rule it already has
+        (`merged`); a rule that already covers it is `unchanged`. 400 when the
+        pairing comes from a rule that no longer exists or has no meal
+        category.
+      operationId: createAutopilotPairingRule
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutopilotMakePairingRuleRequest"
+      responses:
+        "200":
+          description: The rule and the profile it was saved in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotMakePairingRuleResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/autopilot/weeks/{week}/pairings/grocery-items/{itemId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      summary: Take a paired grocery item off the week
+      description: Requires `plan.edit`. 404 when the week has no such item; 409 `plan_finalized`.
+      operationId: deleteAutopilotPairingGroceryItem
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Removed.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/AutopilotConflict"
+  /api/v1/households/{householdId}/recipes/{recipeId}/pairings:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/RecipeID"
+    get:
+      summary: What goes well with a recipe
+      description: |
+        The recipe detail's "Tastes even better with" list: add-ons and
+        grocery items the household pairs with this meal, whether or not it is
+        planned. Unlike the week's pairings, items already in the week are
+        included with `inPlan: true`. At most 6; add-ons have none. Requires
+        `household.view`.
+      operationId: listRecipePairings
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: week
+          in: query
+          description: Set `inPlan` against this week, and return the recipe's plan entry when it has one.
+          schema:
+            $ref: "#/components/schemas/IsoWeek"
+      responses:
+        "200":
+          description: The recipe's pairings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotRecipePairings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/reject:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -4697,7 +4913,7 @@ components:
             $ref: "#/components/schemas/GroceryItem"
     GroceryItem:
       type: object
-      required: [ingredientKey, name, amounts, quantityText, unquantified, status, recipes, specialty, specialtyDetail, via]
+      required: [ingredientKey, name, amounts, quantityText, unquantified, status, recipes, specialty, specialtyDetail, via, extras]
       properties:
         ingredientKey:
           type: string
@@ -4747,6 +4963,23 @@ components:
           description: The specialty ingredients this item stands in for. Empty for ordinary items.
           items:
             $ref: "#/components/schemas/GroceryVia"
+        extras:
+          type: array
+          description: What put the item on the list besides a recipe. Empty for ordinary items.
+          items:
+            type: object
+            required: [id, origin, text]
+            properties:
+              id:
+                type: string
+                description: Identifies the extra where it is stored, so it can be removed.
+              origin:
+                type: string
+                enum: [pairing]
+                description: "`pairing`: an accepted Autopilot pairing (docs/autopilot.md#add-on-pairings)."
+              text:
+                type: string
+                example: Club crackers for Chicken Noodle Soup
     GroceryAmount:
       type: object
       required: [quantity, quantityValue, unit, text]
@@ -5803,7 +6036,7 @@ components:
       description: Only a `proposed` proposal can be swapped, accepted, or rejected.
     AutopilotSection:
       type: string
-      enum: [taste, restrictions, schedule, cookTime, novelty, equipment, weekdayRules]
+      enum: [taste, restrictions, schedule, cookTime, novelty, equipment, weekdayRules, pairings]
     AutopilotChoices:
       type: object
       additionalProperties: false
@@ -6012,7 +6245,7 @@ components:
           format: date-time
     AutopilotProfile:
       type: object
-      required: [householdId, configured, taste, restrictions, schedule, cookTime, novelty, equipment, weekdayRules, sections, effective, createdBy, createdAt, updatedBy, updatedAt]
+      required: [householdId, configured, taste, restrictions, schedule, cookTime, novelty, equipment, weekdayRules, pairings, sections, effective, createdBy, createdAt, updatedBy, updatedAt]
       properties:
         householdId:
           type: string
@@ -6041,10 +6274,16 @@ components:
           description: At most one per day, in week order.
           items:
             $ref: "#/components/schemas/AutopilotWeekdayRule"
+        pairings:
+          type: array
+          maxItems: 20
+          description: Add-on pairing rules (docs/autopilot.md#pairing-rules).
+          items:
+            $ref: "#/components/schemas/AutopilotPairingRule"
         sections:
           type: object
           description: Who last changed each section and when; null for a section never set.
-          required: [taste, restrictions, schedule, cookTime, novelty, equipment, weekdayRules]
+          required: [taste, restrictions, schedule, cookTime, novelty, equipment, weekdayRules, pairings]
           properties:
             taste:
               oneOf:
@@ -6071,6 +6310,10 @@ components:
                 - $ref: "#/components/schemas/AutopilotChange"
                 - type: "null"
             weekdayRules:
+              oneOf:
+                - $ref: "#/components/schemas/AutopilotChange"
+                - type: "null"
+            pairings:
               oneOf:
                 - $ref: "#/components/schemas/AutopilotChange"
                 - type: "null"
@@ -6346,6 +6589,16 @@ components:
           description: At most one rule per day.
           items:
             $ref: "#/components/schemas/AutopilotWeekdayRuleInput"
+        pairings:
+          type: array
+          maxItems: 20
+          description: |
+            Add-on pairing rules, replaced whole like the other sections, with
+            one exception: a `PUT` that leaves them out **keeps** them, so
+            onboarding never deletes a household's rules. Send each saved
+            rule's `id` to keep it; a rule without one is created.
+          items:
+            $ref: "#/components/schemas/AutopilotPairingRule"
     AutopilotDayOverride:
       type: object
       additionalProperties: false
@@ -6477,7 +6730,7 @@ components:
           description: Human-readable text to show. Not stable; do not parse.
     AutopilotSlot:
       type: object
-      required: [id, day, date, recipe, servings, cookMinutes, timeBand, score, signals, reasons, swapCount]
+      required: [id, day, date, recipe, servings, cookMinutes, timeBand, score, signals, reasons, swapCount, pairings]
       properties:
         id:
           type: string
@@ -6554,6 +6807,15 @@ components:
           type: integer
           minimum: 0
           description: Times this slot was swapped.
+        pairings:
+          type: array
+          maxItems: 3
+          description: |
+            Add-ons and grocery items to offer with this meal ("Add Garlic
+            Bread?"). Ones with `included: true` are added when the proposal
+            is accepted unless the member takes them out.
+          items:
+            $ref: "#/components/schemas/AutopilotProposalPairing"
     AutopilotUnfilled:
       type: object
       description: A day the proposal wanted to plan but couldn't.
@@ -6729,6 +6991,16 @@ components:
           items:
             type: string
           example: [wed]
+        pairingIds:
+          type: [array, "null"]
+          description: |
+            The slots' pairings to add, by `AutopilotProposalPairing.id`. Null
+            or absent means the ones the proposal includes (the household's
+            `always` rules); an empty array adds none. Pairings of excluded
+            slots are ignored. 400 when an id isn't a pairing of this proposal.
+          items:
+            type: string
+          example: ["mon/recipe:66e5a1f2c3b4a5d6e7f81008"]
     AutopilotSkippedSlot:
       type: object
       required: [slotId, day, reason]
@@ -6744,7 +7016,7 @@ components:
           description: "`dayTaken`: the plan already has a meal that day. `alreadyPlanned`: the recipe is already in the week."
     AutopilotAcceptResult:
       type: object
-      required: [proposal, plan, added, skipped]
+      required: [proposal, plan, added, skipped, pairingsAdded, pairingsSkipped]
       properties:
         proposal:
           $ref: "#/components/schemas/AutopilotProposal"
@@ -6760,6 +7032,16 @@ components:
           description: Meals not added because their day or recipe was already planned. Excluded slots aren't listed.
           items:
             $ref: "#/components/schemas/AutopilotSkippedSlot"
+        pairingsAdded:
+          type: array
+          description: The pairings added with the meals: add-on plan entries and grocery items.
+          items:
+            $ref: "#/components/schemas/AutopilotAddedPairing"
+        pairingsSkipped:
+          type: array
+          description: Chosen pairings that weren't added.
+          items:
+            $ref: "#/components/schemas/AutopilotSkippedPairing"
     AutopilotMethod:
       type: object
       required: [method, label, suits, source, heuristicSuits]
@@ -6784,7 +7066,7 @@ components:
           example: pork shoulder
     AutopilotRecipeOverride:
       type: object
-      required: [recipeId, methods, updatedBy, updatedAt]
+      required: [recipeId, methods, mealCategories, updatedBy, updatedAt]
       properties:
         recipeId:
           type: string
@@ -6798,6 +7080,15 @@ components:
           example:
             smoker: true
             grill: false
+        mealCategories:
+          type: object
+          description: Whether the recipe is in each overridden meal category. Categories left out use the heuristic.
+          propertyNames:
+            $ref: "#/components/schemas/AutopilotMealCategory"
+          additionalProperties:
+            type: boolean
+          example:
+            pasta: true
         updatedBy:
           type: string
         updatedAt:
@@ -6814,8 +7105,19 @@ components:
     AutopilotRecipeOverrideRequest:
       type: object
       additionalProperties: false
-      required: [methods]
+      description: At least one of `methods` or `mealCategories` must name a value.
       properties:
+        mealCategories:
+          type: object
+          minProperties: 1
+          description: Meal category to whether the recipe is in it; null clears that category's override.
+          propertyNames:
+            $ref: "#/components/schemas/AutopilotMealCategory"
+          additionalProperties:
+            type: [boolean, "null"]
+          example:
+            pasta: true
+            soup: null
         methods:
           type: object
           minProperties: 1
@@ -6829,7 +7131,7 @@ components:
             air-fryer: null
     AutopilotRecipeAttributes:
       type: object
-      required: [recipeId, cookMinutes, timeBand, cuisines, cuisineRegions, tags, proteins, allergens, diets, spicy, methods, override]
+      required: [recipeId, cookMinutes, timeBand, cuisines, cuisineRegions, tags, proteins, allergens, diets, spicy, methods, mealCategories, override]
       properties:
         recipeId:
           type: string
@@ -6881,6 +7183,11 @@ components:
           description: One per equipment value, in vocabulary order, whether or not the household has it.
           items:
             $ref: "#/components/schemas/AutopilotMethod"
+        mealCategories:
+          type: array
+          description: One per meal category, in vocabulary order. The heuristic gives at most one; overrides can add more.
+          items:
+            $ref: "#/components/schemas/AutopilotMealCategoryAttribute"
         override:
           description: The household's override for this recipe, or null when it has none.
           oneOf:
@@ -6948,6 +7255,11 @@ components:
           description: True when the week context was cleared; omitted otherwise.
         method:
           $ref: "#/components/schemas/AutopilotEquipment"
+        category:
+          description: Present when a meal-category override changed instead of a method.
+          oneOf:
+            - $ref: "#/components/schemas/AutopilotMealCategory"
+            - type: "null"
         value:
           type: string
           enum: [auto, "yes", "no"]
@@ -6988,7 +7300,7 @@ components:
     AutopilotLimits:
       type: object
       description: Validation bounds, for input limits in the app.
-      required: [maxListValues, maxExcludedIngredients, maxValueLength, maxIngredientLength, maxRuleValues, maxLabelLength, maxNoteLength, minCookMinutes, maxCookMinutes, maxServings]
+      required: [maxListValues, maxExcludedIngredients, maxValueLength, maxIngredientLength, maxRuleValues, maxLabelLength, maxNoteLength, minCookMinutes, maxCookMinutes, maxServings, maxPairingRules, maxGroceryItemNameLength, maxGroceryItemQuantity]
       properties:
         maxListValues:
           type: integer
@@ -7020,9 +7332,18 @@ components:
         maxServings:
           type: integer
           example: 12
+        maxPairingRules:
+          type: integer
+          example: 20
+        maxGroceryItemNameLength:
+          type: integer
+          example: 60
+        maxGroceryItemQuantity:
+          type: integer
+          example: 99
     AutopilotVocabulary:
       type: object
-      required: [cuisines, tags, proteins, diets, allergens, equipment, novelty, timeBands, frequencies, days, catalogRecipeCount, limits]
+      required: [cuisines, tags, proteins, diets, allergens, equipment, novelty, timeBands, frequencies, days, mealCategories, pairingFrequencies, catalogRecipeCount, limits]
       properties:
         cuisines:
           type: array
@@ -7066,12 +7387,472 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AutopilotOption"
+        mealCategories:
+          type: array
+          description: The meal categories pairing rules match on, with how many main meals the heuristic puts in each.
+          items:
+            $ref: "#/components/schemas/AutopilotOption"
+        pairingFrequencies:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotOption"
         catalogRecipeCount:
           type: integer
           minimum: 0
           description: Main-meal recipes the counts cover.
         limits:
           $ref: "#/components/schemas/AutopilotLimits"
+    AutopilotMealCategory:
+      type: string
+      description: The kind of dinner pairings match on, derived from the recipe (docs/autopilot.md#meal-categories).
+      enum: [pasta, soup, salad, tacos, curry, bowl, stir-fry, sandwich, pizza]
+    AutopilotMealCategoryAttribute:
+      type: object
+      required: [category, label, suits, source, heuristicSuits]
+      properties:
+        category:
+          $ref: "#/components/schemas/AutopilotMealCategory"
+        label:
+          type: string
+          example: Pasta
+        suits:
+          type: boolean
+          description: Whether the recipe is in the category, after the household's override.
+        source:
+          type: string
+          enum: [heuristic, override]
+        heuristicSuits:
+          type: boolean
+        evidence:
+          type: string
+          description: What the heuristic matched. Omitted when nothing matched.
+          example: Named rigatoni
+    AutopilotPairingKind:
+      type: string
+      enum: [recipe, grocery_item]
+    AutopilotPairingSource:
+      type: string
+      description: "`rule`: a household rule. `learned`: the household's history."
+      enum: [rule, learned]
+    AutopilotPairingFrequency:
+      type: string
+      description: "`always`: included with a proposed meal unless taken out. `suggest`: offered."
+      enum: [always, suggest]
+    AutopilotGroceryItem:
+      type: object
+      additionalProperties: false
+      required: [name]
+      description: A grocery line that isn't a recipe.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 60
+          example: Club crackers
+        quantity:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+          maximum: 99
+          description: Null for no amount. A unit needs a quantity.
+          example: 1
+        unit:
+          type: [string, "null"]
+          description: An ingredient unit code (`count`, `package`, `oz`…). Defaults to `count` when a quantity is given without one.
+          example: package
+    AutopilotPairingRecipe:
+      type: object
+      description: An add-on recipe offered as a pairing; a recipe summary without ratings.
+      required: [id, name, timesOrdered, isAddon, tags]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          example: Garlic Bread
+        headline:
+          type: string
+        imageUrl:
+          type: string
+        cookMinutes:
+          type: integer
+          minimum: 1
+          description: Omitted when unknown.
+        timesOrdered:
+          type: integer
+        lastOrderedWeek:
+          type: string
+          example: 2026-W37
+        isAddon:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+    AutopilotPairingTarget:
+      type: object
+      description: What a pairing adds. `recipe` is set for `kind: recipe`, `groceryItem` for `kind: grocery_item`.
+      required: [kind]
+      properties:
+        kind:
+          $ref: "#/components/schemas/AutopilotPairingKind"
+        recipe:
+          $ref: "#/components/schemas/AutopilotPairingRecipe"
+        groceryItem:
+          $ref: "#/components/schemas/AutopilotGroceryItem"
+    AutopilotLearnedPairing:
+      type: object
+      description: The history behind a learned pairing (docs/autopilot.md#learned-pairings).
+      required: [weeksTogether, mealCategoryWeeks, otherWeeks, otherWeeksRate]
+      properties:
+        weeksTogether:
+          type: integer
+          description: Weeks with both the meal category and the add-on.
+          example: 186
+        mealCategoryWeeks:
+          type: integer
+          example: 195
+        otherWeeks:
+          type: integer
+          description: Weeks with a main meal but not the category.
+          example: 35
+        otherWeeksRate:
+          type: number
+          description: The add-on's share of those weeks. A pairing must beat it by 0.2.
+          example: 0.49
+    AutopilotPairing:
+      type: object
+      required: [key, target, servings, source, frequency, mealCategory, confidence, learned, reason, ruleId, inPlan, canMakeRule]
+      properties:
+        key:
+          type: string
+          description: Identifies the target; send it back to accept or dismiss.
+          example: "recipe:66e5a1f2c3b4a5d6e7f81008"
+        target:
+          $ref: "#/components/schemas/AutopilotPairingTarget"
+        servings:
+          type: [integer, "null"]
+          description: The add-on's serving size for this meal; null for a grocery item.
+          example: 2
+        source:
+          $ref: "#/components/schemas/AutopilotPairingSource"
+        frequency:
+          $ref: "#/components/schemas/AutopilotPairingFrequency"
+        mealCategory:
+          description: The meal category that matched, or null.
+          oneOf:
+            - $ref: "#/components/schemas/AutopilotMealCategory"
+            - type: "null"
+        confidence:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+          description: The share of the category's weeks that had the add-on; null without history.
+          example: 0.95
+        learned:
+          oneOf:
+            - $ref: "#/components/schemas/AutopilotLearnedPairing"
+            - type: "null"
+        reason:
+          type: string
+          description: Human-readable text to show. Not stable; do not parse.
+          example: You usually have Garlic Bread with pasta (95% of pasta weeks)
+        ruleId:
+          type: [string, "null"]
+          description: The household rule this came from, or null for a learned pairing.
+        inPlan:
+          type: boolean
+          description: The target is already planned for this meal's day, or on the week's list.
+        canMakeRule:
+          type: boolean
+          description: A learned pairing with a meal category, which `pairings/rules` can keep as a rule.
+    AutopilotProposalPairing:
+      allOf:
+        - $ref: "#/components/schemas/AutopilotPairing"
+        - type: object
+          required: [id, included]
+          properties:
+            id:
+              type: string
+              description: "`<slotId>/<key>`; send it in `pairingIds` when accepting."
+              example: "mon/recipe:66e5a1f2c3b4a5d6e7f81008"
+            included:
+              type: boolean
+              description: Accepting adds it unless the member takes it out (always rules).
+    AutopilotPairingRuleTarget:
+      type: object
+      additionalProperties: false
+      description: Exactly one of `recipeId` or `groceryItem`.
+      properties:
+        kind:
+          description: Read-only; ignored in requests.
+          oneOf:
+            - $ref: "#/components/schemas/AutopilotPairingKind"
+            - type: "null"
+        recipeId:
+          type: [string, "null"]
+          description: An add-on recipe of this household that has serving sizes.
+        recipeName:
+          type: [string, "null"]
+          description: Read-only; the recipe's name when the rule was saved.
+        groceryItem:
+          oneOf:
+            - $ref: "#/components/schemas/AutopilotGroceryItem"
+            - type: "null"
+    AutopilotPairingRule:
+      type: object
+      additionalProperties: false
+      description: |
+        A household pairing rule. A meal matches when it matches every group
+        `when` sets; within a group any value matches, and cuisines match a
+        recipe's cuisines or their regions. At least one condition is required.
+      required: [when, add]
+      properties:
+        id:
+          type: [string, "null"]
+          description: Null for a new rule; send a saved rule's id to keep it.
+        label:
+          type: string
+          maxLength: 40
+          example: Pasta night
+        when:
+          type: object
+          additionalProperties: false
+          properties:
+            mealCategories:
+              type: array
+              items:
+                $ref: "#/components/schemas/AutopilotMealCategory"
+            cuisines:
+              type: array
+              maxItems: 10
+              items:
+                type: string
+                maxLength: 40
+            tags:
+              type: array
+              maxItems: 10
+              items:
+                type: string
+                maxLength: 40
+            proteins:
+              type: array
+              items:
+                $ref: "#/components/schemas/AutopilotProtein"
+        add:
+          $ref: "#/components/schemas/AutopilotPairingRuleTarget"
+        frequency:
+          $ref: "#/components/schemas/AutopilotPairingFrequency"
+    AutopilotPairingGroceryItem:
+      type: object
+      description: A paired grocery item on the week's grocery list.
+      required: [id, key, groceryItem, entryId, recipe, source, ruleId, text, addedBy, addedAt]
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+          example: "grocery:club crackers"
+        groceryItem:
+          $ref: "#/components/schemas/AutopilotGroceryItem"
+        entryId:
+          type: string
+          description: The meal's plan entry. The item leaves the list when that entry is unplanned.
+        recipe:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+        source:
+          $ref: "#/components/schemas/AutopilotPairingSource"
+        ruleId:
+          type: [string, "null"]
+        text:
+          type: string
+          example: Club crackers for Chicken Noodle Soup
+        addedBy:
+          type: string
+        addedAt:
+          type: string
+          format: date-time
+    AutopilotMealPairings:
+      type: object
+      required: [entryId, day, date, recipe, servings, mealCategories, pairings]
+      properties:
+        entryId:
+          type: string
+        day:
+          oneOf:
+            - $ref: "#/components/schemas/AutopilotDay"
+            - type: "null"
+          description: Null for an unscheduled meal.
+        date:
+          type: [string, "null"]
+          format: date
+        recipe:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            imageUrl:
+              type: string
+        servings:
+          type: integer
+        mealCategories:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotMealCategory"
+        pairings:
+          type: array
+          maxItems: 3
+          description: Rules first (always, then suggest), then learned pairings by confidence.
+          items:
+            $ref: "#/components/schemas/AutopilotPairing"
+    AutopilotWeekPairings:
+      type: object
+      required: [week, startDate, endDate, meals, groceryItems]
+      properties:
+        week:
+          $ref: "#/components/schemas/IsoWeek"
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        meals:
+          type: array
+          description: One per planned main meal, in plan order. Add-on entries aren't meals.
+          items:
+            $ref: "#/components/schemas/AutopilotMealPairings"
+        groceryItems:
+          type: array
+          description: Accepted grocery items on this week's list.
+          items:
+            $ref: "#/components/schemas/AutopilotPairingGroceryItem"
+    AutopilotRecipePairings:
+      type: object
+      required: [recipeId, week, entryId, mealCategories, items]
+      properties:
+        recipeId:
+          type: string
+        week:
+          oneOf:
+            - $ref: "#/components/schemas/IsoWeek"
+            - type: "null"
+        entryId:
+          type: [string, "null"]
+          description: The recipe's plan entry in that week, when it is planned.
+        mealCategories:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotMealCategory"
+        items:
+          type: array
+          maxItems: 6
+          description: Includes pairings already in the week, with `inPlan: true`.
+          items:
+            $ref: "#/components/schemas/AutopilotPairing"
+    AutopilotPairingActionRequest:
+      type: object
+      additionalProperties: false
+      required: [entryId, key]
+      properties:
+        entryId:
+          type: string
+          description: The main meal's plan entry.
+        key:
+          type: string
+          description: The pairing's `key`.
+          example: "recipe:66e5a1f2c3b4a5d6e7f81008"
+    AutopilotPairingAcceptResult:
+      type: object
+      required: [status, pairing, entry, groceryItem, plan]
+      properties:
+        status:
+          type: string
+          enum: [added, alreadyAdded]
+          description: "`alreadyAdded`: the week already had it, and nothing changed."
+        pairing:
+          $ref: "#/components/schemas/AutopilotPairing"
+        entry:
+          description: The add-on's plan entry, with origin `autopilot`; null for a grocery item.
+          oneOf:
+            - $ref: "#/components/schemas/PlanEntry"
+            - type: "null"
+        groceryItem:
+          oneOf:
+            - $ref: "#/components/schemas/AutopilotPairingGroceryItem"
+            - type: "null"
+        plan:
+          $ref: "#/components/schemas/Plan"
+    AutopilotMakePairingRuleRequest:
+      type: object
+      additionalProperties: false
+      description: Exactly one of `entryId` (a planned meal) or `slotId` (a proposal slot).
+      required: [key]
+      properties:
+        entryId:
+          type: [string, "null"]
+        slotId:
+          type: [string, "null"]
+        key:
+          type: string
+        frequency:
+          description: Default `suggest`.
+          oneOf:
+            - $ref: "#/components/schemas/AutopilotPairingFrequency"
+            - type: "null"
+    AutopilotMakePairingRuleResult:
+      type: object
+      required: [status, rule, profile]
+      properties:
+        status:
+          type: string
+          enum: [created, merged, unchanged]
+          description: "`merged`: the category joined the rule that item already had. `unchanged`: a rule already covers it."
+        rule:
+          $ref: "#/components/schemas/AutopilotPairingRule"
+        profile:
+          $ref: "#/components/schemas/AutopilotProfile"
+    AutopilotAddedPairing:
+      type: object
+      required: [id, slotId, pairing, entry, groceryItem]
+      properties:
+        id:
+          type: string
+          example: "mon/recipe:66e5a1f2c3b4a5d6e7f81008"
+        slotId:
+          type: string
+        pairing:
+          $ref: "#/components/schemas/AutopilotPairing"
+        entry:
+          oneOf:
+            - $ref: "#/components/schemas/PlanEntry"
+            - type: "null"
+        groceryItem:
+          oneOf:
+            - $ref: "#/components/schemas/AutopilotPairingGroceryItem"
+            - type: "null"
+    AutopilotSkippedPairing:
+      type: object
+      required: [id, slotId, key, reason]
+      properties:
+        id:
+          type: string
+        slotId:
+          type: string
+        key:
+          type: string
+        reason:
+          type: string
+          enum: [alreadyPlanned, unavailable]
+          description: "`alreadyPlanned`: the add-on is already planned that day. `unavailable`: it can no longer be planned."
     PantryPurchaseProvider:
       type: object
       required: [key, handoffId, lineId, productId]

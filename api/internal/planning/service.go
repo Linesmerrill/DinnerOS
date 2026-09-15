@@ -56,6 +56,8 @@ type Service struct {
 	pantry PantrySource
 	// specialties is optional; without it specialty lines stay as they are.
 	specialties SpecialtySource
+	// extras is optional; without it the list has only recipe lines.
+	extras ExtrasSource
 	// customizations is optional; without it customized entries contribute
 	// their recipe as written (customization.go).
 	customizations CustomizationSource
@@ -484,6 +486,9 @@ func (s *Service) GroceryList(ctx context.Context, householdID, week string) (Gr
 		if selections, batches, err = grocery.ApplySpecialties(selections, specs); err != nil {
 			return GroceryList{}, err
 		}
+	}
+	if selections, err = s.appendExtras(ctx, p, selections); err != nil {
+		return GroceryList{}, fmt.Errorf("planning: load extra grocery items: %w", err)
 	}
 	g, err := aggregateGroceryList(p, selections, skipped, pantry)
 	if err != nil {
