@@ -108,6 +108,7 @@ nonisolated enum PantryUsageFormat {
         case .groceryList: String(localized: "Grocery list")
         case .manual: String(localized: "Restocked")
         case .provider: String(localized: "Online order")
+        case .houseMade: String(localized: "House-made batch")
         default: String(localized: "Purchase")
         }
     }

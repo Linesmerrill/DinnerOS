@@ -24,13 +24,17 @@ struct GroceryPurchaseBanner: View {
                     .accessibilityElement(children: .combine)
                 }
             } else if let recorded = model.lastRecordedPurchase {
-                recordedCard(recorded)
+                recordedCard(recorded) { model.dismissRecordedPurchase(id: $0) }
+            } else if let batch = model.lastRecordedBatch {
+                // "Made It" on a house-made batch.
+                recordedCard(batch) { model.dismissRecordedBatch(id: $0) }
             }
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))
         .animation(.snappy, value: model.purchasePrompt?.id)
         .animation(.snappy, value: model.purchaseFailure?.id)
         .animation(.snappy, value: model.lastRecordedPurchase?.id)
+        .animation(.snappy, value: model.lastRecordedBatch?.id)
     }
 
     private func failureCard(_ failure: GroceryListModel.PurchaseFailure) -> some View {
@@ -68,7 +72,9 @@ struct GroceryPurchaseBanner: View {
         }
     }
 
-    private func recordedCard(_ recorded: GroceryListModel.RecordedPurchase) -> some View {
+    private func recordedCard(
+        _ recorded: GroceryListModel.RecordedPurchase, dismiss: @escaping (String) -> Void
+    ) -> some View {
         BannerCard {
             HStack {
                 Label("Added \(recorded.name) to the pantry", systemImage: "checkmark.circle.fill")
@@ -83,7 +89,7 @@ struct GroceryPurchaseBanner: View {
         .task(id: recorded.id) {
             do {
                 try await Task.sleep(for: .seconds(3))
-                model.dismissRecordedPurchase(id: recorded.id)
+                dismiss(recorded.id)
             } catch {
                 // Replaced or dismissed.
             }

@@ -15,6 +15,7 @@ struct DinnerOSApp: App {
                 .environment(dependencies.recipes)
                 .environment(dependencies.plans)
                 .environment(dependencies.pantry)
+                .environment(dependencies.specialties)
                 .environment(dependencies.events)
                 .environment(dependencies.notifications)
                 .onChange(of: scenePhase, initial: true) { _, phase in

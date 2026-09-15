@@ -1,17 +1,25 @@
 import SwiftUI
 
-/// A week's grocery list, by aisle, with local check-off and plain-text sharing.
+/// A week's grocery list, by aisle, with local check-off and plain-text sharing. Specialty
+/// ingredients add a Choose action to lines without a choice, and a "Make This Week" section
+/// for house-made batches with the ingredients bought only for them.
 struct GroceryListView: View {
     let week: ISOWeek
 
     @Environment(PlanStore.self) private var plans
     @Environment(PantryStore.self) private var pantry
+    @Environment(SpecialtyStore.self) private var specialties
     @Environment(HouseholdStore.self) private var households
     @State private var model: GroceryListModel?
 
-    /// Hiding the "Add to pantry?" prompt is a convenience; the API enforces `pantry.edit`.
+    /// Hiding "Add to pantry?" and specialty actions is a convenience; the API enforces `pantry.edit`.
     private var canEditPantry: Bool {
         households.access?.can(.pantryEdit) == true
+    }
+
+    /// A change the list tried was refused for the member's role.
+    private var wasForbidden: Bool {
+        model?.purchaseFailure?.isForbidden == true || model?.specialtyFailure?.isForbidden == true
     }
 
     var body: some View {
@@ -27,14 +35,19 @@ struct GroceryListView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             if model == nil {
-                model = plans.makeGroceryList(week: week, purchases: pantry, canAddToPantry: canEditPantry)
+                model = plans.makeGroceryList(
+                    week: week, purchases: pantry, specialties: specialties, canAddToPantry: canEditPantry)
             }
             await model?.load()
         }
         .onChange(of: canEditPantry) { _, canEdit in
             model?.setCanAddToPantry(canEdit)
         }
-        .onChange(of: model?.purchaseFailure?.isForbidden == true) { _, isForbidden in
+        .onChange(of: specialties.revision) {
+            // The setup screen changed a choice or recorded a batch.
+            Task { await model?.specialtiesDidChange() }
+        }
+        .onChange(of: wasForbidden) { _, isForbidden in
             // The role changed elsewhere; reload it so the rest of the app matches.
             if isForbidden {
                 Task { await households.load() }
@@ -50,6 +63,10 @@ struct GroceryListContent: View {
 
     /// Items whose contributing recipes are shown.
     @State private var expanded: Set<String> = []
+    /// The line whose quick picker is open.
+    @State private var picker: GrocerySpecialty?
+    @State private var showsSpecialtySetup = false
+    @State private var confirmingBatch: GroceryBatch?
 
     var body: some View {
         content
@@ -74,6 +91,45 @@ struct GroceryListContent: View {
                         }
                     }
                 }
+            }
+            .sheet(item: $picker) { specialty in
+                SpecialtyQuickPicker(specialty: specialty, model: model)
+            }
+            .sheet(isPresented: $showsSpecialtySetup) {
+                SpecialtyIngredientsSheet()
+            }
+            .confirmationDialog(
+                confirmingBatch.map { String(localized: "Made \($0.specialtyName)?") } ?? "",
+                isPresented: Binding(presenting: $confirmingBatch),
+                titleVisibility: .visible,
+                presenting: confirmingBatch
+            ) { batch in
+                Button("Made It") {
+                    Task { await model.recordBatch(batch) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { batch in
+                Text(
+                    "Adds \(SpecialtyFormat.batchCount(max(batch.batches, 1), yield: batch.batchYield)) of \(batch.specialtyName) to the pantry."
+                )
+            }
+            .alert(
+                model.specialtyFailure?.title ?? "",
+                isPresented: Binding(
+                    get: { model.specialtyFailure != nil },
+                    set: { isPresented in
+                        if !isPresented { model.dismissSpecialtyFailure() }
+                    }),
+                presenting: model.specialtyFailure
+            ) { failure in
+                if !failure.isForbidden {
+                    Button("Try Again") {
+                        Task { await model.retrySpecialtyAction(failure) }
+                    }
+                }
+                Button("OK", role: .cancel) {}
+            } message: { failure in
+                Text(failure.message)
             }
     }
 
@@ -102,7 +158,8 @@ struct GroceryListContent: View {
     }
 
     private func listView(_ list: GroceryList) -> some View {
-        List {
+        let layout = GroceryListLayout(list)
+        return List {
             if let refreshError = model.refreshError {
                 FormErrorLabel(message: refreshError)
             }
@@ -131,17 +188,46 @@ struct GroceryListContent: View {
                 )
                 .listRowBackground(Color.clear)
             }
-            ForEach(list.categories) { category in
+            if model.canChangeSpecialties && !layout.needsChoice.isEmpty {
+                Section {
+                    SpecialtyChoiceNotice(count: layout.needsChoice.count) {
+                        showsSpecialtySetup = true
+                    }
+                }
+            }
+            ForEach(Array(layout.toMake.enumerated()), id: \.element.id) { index, group in
+                Section {
+                    GroceryBatchRow(
+                        batch: group.batch,
+                        canMake: model.canChangeSpecialties,
+                        isWorking: model.isChangingSpecialty(withID: group.batch.specialtyID)
+                    ) {
+                        confirmingBatch = group.batch
+                    }
+                    ForEach(group.ingredients) { item in
+                        itemRow(item)
+                    }
+                } header: {
+                    if index == 0 {
+                        Text("Make This Week")
+                    }
+                } footer: {
+                    if !group.ingredients.isEmpty {
+                        Text("The items above are only for making \(group.batch.specialtyName).")
+                    }
+                }
+            }
+            if !layout.alreadyMade.isEmpty {
+                Section("Already Made") {
+                    ForEach(layout.alreadyMade) { batch in
+                        GroceryMadeBatchRow(batch: batch)
+                    }
+                }
+            }
+            ForEach(layout.categories) { category in
                 Section(category.title) {
                     ForEach(category.items) { item in
-                        GroceryItemRow(
-                            item: item,
-                            isChecked: model.isChecked(item),
-                            isExpanded: expandedBinding(for: item.ingredientKey),
-                            toggle: {
-                                model.toggle(item)
-                                events.groceryItemChecked(item, checked: model.isChecked(item), week: model.week)
-                            })
+                        itemRow(item)
                     }
                 }
             }
@@ -152,6 +238,22 @@ struct GroceryListContent: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             GroceryPurchaseBanner(model: model)
         }
+    }
+
+    private func itemRow(_ item: GroceryItem) -> some View {
+        GroceryItemRow(
+            item: item,
+            isChecked: model.isChecked(item),
+            isExpanded: expandedBinding(for: item.ingredientKey),
+            canChooseSpecialty: model.canChangeSpecialties,
+            isChangingSpecialty: item.specialtyDetail.map { model.isChangingSpecialty(withID: $0.id) } ?? false,
+            toggle: {
+                model.toggle(item)
+                events.groceryItemChecked(item, checked: model.isChecked(item), week: model.week)
+            },
+            choose: {
+                picker = item.specialtyDetail
+            })
     }
 
     private func expandedBinding(for key: String) -> Binding<Bool> {
@@ -171,7 +273,10 @@ private struct GroceryItemRow: View {
     let item: GroceryItem
     let isChecked: Bool
     @Binding var isExpanded: Bool
+    let canChooseSpecialty: Bool
+    let isChangingSpecialty: Bool
     let toggle: () -> Void
+    let choose: () -> Void
 
     private var amount: String? {
         GroceryListText.amountText(for: item)
@@ -194,8 +299,15 @@ private struct GroceryItemRow: View {
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
+                            ForEach(Array(item.via.enumerated()), id: \.offset) { _, via in
+                                Text(via.text)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
                             statusLabel
                         }
+                        // Keeps secondary text gray inside the Button.
+                        .foregroundStyle(Color.primary)
                         Spacer(minLength: 0)
                     }
                     .contentShape(.rect)
@@ -218,6 +330,9 @@ private struct GroceryItemRow: View {
                     .accessibilityLabel(isExpanded ? "Hide Recipes" : "Show Recipes")
                 }
             }
+            if item.needsSpecialtyChoice, let specialty = item.specialtyDetail {
+                specialtyPrompt(specialty)
+            }
             if isExpanded {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(item.recipes) { recipe in
@@ -233,6 +348,31 @@ private struct GroceryItemRow: View {
         }
     }
 
+    private func specialtyPrompt(_ specialty: GrocerySpecialty) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(specialty.text, systemImage: "sparkles")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            if canChooseSpecialty {
+                if isChangingSpecialty {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                        Text("Saving your choice…")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                } else {
+                    Button("Choose", action: choose)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .accessibilityLabel("Choose an Option for \(specialty.name)")
+                }
+            }
+        }
+        .padding(.leading, 36)
+    }
+
     @ViewBuilder
     private var statusLabel: some View {
         switch item.status {
@@ -240,6 +380,10 @@ private struct GroceryItemRow: View {
             Text("Pantry staple, check before buying")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        case .inPantry where item.isHouseMade:
+            Label("In pantry (house-made)", systemImage: "house.fill")
+                .font(.caption)
+                .foregroundStyle(.tint)
         case .inPantry:
             Label("In your pantry", systemImage: "checkmark.seal")
                 .font(.caption)
@@ -254,8 +398,10 @@ private struct GroceryItemRow: View {
         if let amount {
             parts.append(amount)
         }
+        parts += item.via.map(\.text)
         switch item.status {
         case .pantryHint: parts.append(String(localized: "Pantry staple"))
+        case .inPantry where item.isHouseMade: parts.append(String(localized: "In pantry, house-made"))
         case .inPantry: parts.append(String(localized: "In your pantry"))
         default: break
         }
@@ -293,4 +439,6 @@ private struct SkippedEntriesNotice: View {
             model: .preview(session: session, list: PlanPreviewData.groceryList, checked: ["garlic"]))
     }
     .environment(EventReporter.preview(session: session))
+    .environment(HouseholdPreviewData.store(session: session))
+    .environment(SpecialtyPreviewData.store(session: session))
 }

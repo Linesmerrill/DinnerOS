@@ -184,10 +184,35 @@ nonisolated struct GroceryList: Decodable, Equatable, Sendable {
     /// In aisle order; empty categories are left out.
     let categories: [GroceryCategory]
     let skipped: [GrocerySkippedEntry]
+    /// The household's specialty ingredient choices were applied. `false` from a server without
+    /// specialty ingredients.
+    var specialtiesApplied = false
+    /// The house-made specialty ingredients the week uses (docs/specialty-ingredients.md).
+    var batches: [GroceryBatch] = []
 
-    var isEmpty: Bool { categories.allSatisfy { $0.items.isEmpty } }
+    var isEmpty: Bool { categories.allSatisfy { $0.items.isEmpty } && batches.isEmpty }
 
     var allItems: [GroceryItem] { categories.flatMap(\.items) }
+}
+
+extension GroceryList {
+    private enum CodingKeys: String, CodingKey {
+        case week, status, pantryApplied, categories, skipped, specialtiesApplied, batches
+    }
+
+    /// The specialty fields are additive, so they're read leniently: a response without them, or
+    /// with batches this build can't read, still shows the list.
+    nonisolated init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            week: try container.decode(String.self, forKey: .week),
+            status: try container.decode(PlanStatus.self, forKey: .status),
+            pantryApplied: try container.decode(Bool.self, forKey: .pantryApplied),
+            categories: try container.decode([GroceryCategory].self, forKey: .categories),
+            skipped: try container.decode([GrocerySkippedEntry].self, forKey: .skipped),
+            specialtiesApplied: (try? container.decodeIfPresent(Bool.self, forKey: .specialtiesApplied)) ?? false,
+            batches: (try? container.decodeIfPresent([GroceryBatch].self, forKey: .batches)) ?? [])
+    }
 }
 
 nonisolated struct GroceryCategory: Decodable, Equatable, Sendable, Identifiable {
@@ -243,8 +268,47 @@ nonisolated struct GroceryItem: Decodable, Equatable, Sendable, Identifiable {
     let unquantified: Bool
     let status: GroceryItemStatus
     let recipes: [GroceryRecipe]
+    /// A specialty ingredient by its own name: not chosen yet, kept as is, or covered by a
+    /// house-made batch in the pantry.
+    var specialty = false
+    var specialtyDetail: GrocerySpecialty?
+    /// The specialty ingredients this item stands in for ("for Tex-Mex Paste in Smoky Pork
+    /// Tacos"). Empty for ordinary items.
+    var via: [GroceryVia] = []
 
     var id: String { ingredientKey }
+
+    /// A specialty ingredient the household hasn't chosen an option for.
+    var needsSpecialtyChoice: Bool {
+        specialty && specialtyDetail != nil && specialtyDetail?.choiceType == nil
+    }
+
+    /// Covered by a house-made batch in the pantry ("In pantry (house-made)").
+    var isHouseMade: Bool {
+        specialtyDetail?.houseMade == true
+    }
+}
+
+extension GroceryItem {
+    private enum CodingKeys: String, CodingKey {
+        case ingredientKey, name, amounts, quantityText, unquantified, status, recipes, specialty, specialtyDetail, via
+    }
+
+    /// The specialty fields are additive, so they're read leniently, like `GroceryList`'s.
+    nonisolated init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            ingredientKey: try container.decode(String.self, forKey: .ingredientKey),
+            name: try container.decode(String.self, forKey: .name),
+            amounts: try container.decode([GroceryAmount].self, forKey: .amounts),
+            quantityText: try container.decode(String.self, forKey: .quantityText),
+            unquantified: try container.decode(Bool.self, forKey: .unquantified),
+            status: try container.decode(GroceryItemStatus.self, forKey: .status),
+            recipes: try container.decode([GroceryRecipe].self, forKey: .recipes),
+            specialty: (try? container.decodeIfPresent(Bool.self, forKey: .specialty)) ?? false,
+            specialtyDetail: (try? container.decodeIfPresent(GrocerySpecialty.self, forKey: .specialtyDetail)) ?? nil,
+            via: (try? container.decodeIfPresent([GroceryVia].self, forKey: .via)) ?? [])
+    }
 }
 
 nonisolated struct GroceryAmount: Decodable, Equatable, Sendable {
