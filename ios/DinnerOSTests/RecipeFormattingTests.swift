@@ -105,6 +105,29 @@ struct QuantityFormattingTests {
             lastOrderedWeek: "2026-W37", isAddon: true, tags: [])
         #expect(RecipeRow.details(for: summary, locale: locale) == "Add-on · Ordered 3 times · Last Sep 2026")
     }
+
+    @Test(
+        arguments: [
+            (40, nil, 10, 40),
+            (nil, nil, 30, 30),
+            (nil, 25, 10, 25),
+            (0, 15, nil, 15),
+            (nil, nil, nil, nil),
+            (nil, 0, 0, nil),
+        ] as [(Int?, Int?, Int?, Int?)])
+    func displayMinutesPreferCookMinutes(cook: Int?, prep: Int?, total: Int?, expected: Int?) {
+        #expect(RecipeFormat.displayMinutes(cook: cook, prep: prep, total: total) == expected)
+    }
+
+    @Test func rowsShowCookMinutesInsteadOfTheUnreliableTotal() {
+        var summary = RecipeSummary(
+            id: "r", name: "Test", headline: nil, imageURLString: nil, totalMinutes: 10, cookMinutes: 40,
+            timesOrdered: 0, lastOrderedWeek: nil, isAddon: false, tags: [])
+        #expect(RecipeRow.details(for: summary, locale: locale) == "40 min · Not ordered yet")
+
+        summary.cookMinutes = nil
+        #expect(summary.displayMinutes == 10)
+    }
 }
 
 struct ServingsTests {

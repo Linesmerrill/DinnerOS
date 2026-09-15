@@ -53,6 +53,19 @@ nonisolated struct PlanEntryRecipe: Decodable, Hashable, Sendable {
     }
 }
 
+/// How an entry was added (`PlanEntry.origin`). Unknown values decode as-is.
+nonisolated struct PlanEntryOrigin: RawRepresentable, Codable, Hashable, Sendable {
+    let rawValue: String
+
+    init(rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    static let manual = PlanEntryOrigin(rawValue: "manual")
+    /// Added by accepting an Autopilot proposal.
+    static let autopilot = PlanEntryOrigin(rawValue: "autopilot")
+}
+
 /// A planned recipe (`PlanEntry`).
 nonisolated struct PlanEntry: Decodable, Hashable, Sendable, Identifiable {
     let id: String
@@ -65,6 +78,10 @@ nonisolated struct PlanEntry: Decodable, Hashable, Sendable, Identifiable {
     let note: String
     let addedBy: String
     let addedAt: Date
+    /// `nil` from a server older than Autopilot, which only had manual entries.
+    var origin: PlanEntryOrigin?
+
+    var isFromAutopilot: Bool { origin == .autopilot }
 }
 
 /// A household's plan for one ISO week (`Plan`).

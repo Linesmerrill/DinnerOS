@@ -129,9 +129,9 @@ private struct RecipeFacts: View {
 
     @ViewBuilder
     private var facts: some View {
-        if let total = recipe.totalMinutes, total > 0 {
-            Label(RecipeFormat.minutes(total), systemImage: "clock")
-                .accessibilityLabel("Total time \(RecipeFormat.minutes(total))")
+        if let minutes = recipe.displayMinutes {
+            Label(RecipeFormat.minutes(minutes), systemImage: "clock")
+                .accessibilityLabel("Cook time \(RecipeFormat.minutes(minutes))")
         }
         if let difficulty = recipe.difficulty, difficulty > 0 {
             Label(RecipeFormat.difficulty(difficulty, source: recipe.source), systemImage: "chart.bar")

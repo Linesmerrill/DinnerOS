@@ -6,7 +6,11 @@ nonisolated struct RecipeSummary: Decodable, Hashable, Sendable, Identifiable {
     let name: String
     let headline: String?
     let imageURLString: String?
+    /// The source's total time. Unreliable (often below prep); show `displayMinutes`.
     let totalMinutes: Int?
+    /// The effective cook time the API derives from prep and total time; `nil` when
+    /// unknown or from a server that doesn't send it.
+    var cookMinutes: Int? = nil
     let timesOrdered: Int
     /// An ISO week such as `2026-W30`; `nil` when never ordered.
     let lastOrderedWeek: String?
@@ -23,7 +27,12 @@ nonisolated struct RecipeSummary: Decodable, Hashable, Sendable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case id, name, headline
         case imageURLString = "imageUrl"
-        case totalMinutes, timesOrdered, lastOrderedWeek, isAddon, tags, householdRating, myRating
+        case totalMinutes, cookMinutes, timesOrdered, lastOrderedWeek, isAddon, tags, householdRating, myRating
+    }
+
+    /// The time to show: `cookMinutes`, falling back to `totalMinutes` for an older server.
+    var displayMinutes: Int? {
+        RecipeFormat.displayMinutes(cook: cookMinutes, prep: nil, total: totalMinutes)
     }
 }
 
@@ -47,7 +56,10 @@ nonisolated struct Recipe: Decodable, Equatable, Sendable, Identifiable {
     /// Serving sizes with authored amounts, for example `[2, 4]`.
     let servings: [Int]
     let prepMinutes: Int?
+    /// Unreliable in imported data; show `displayMinutes`.
     let totalMinutes: Int?
+    /// The effective cook time; `nil` when unknown or from an older server.
+    var cookMinutes: Int? = nil
     /// On the source's own scale.
     let difficulty: Int?
     let cuisines: [String]
@@ -74,9 +86,14 @@ nonisolated struct Recipe: Decodable, Equatable, Sendable, Identifiable {
         case householdID = "householdId"
         case source, name, headline, description
         case imageURLString = "imageUrl"
-        case isAddon, servings, prepMinutes, totalMinutes, difficulty, cuisines, tags, utensils, allergens,
-            nutritionPerServing, ingredients, steps, orderWeeks, timesOrdered, lastOrderedWeek, createdAt, updatedAt,
-            householdRating, myRating
+        case isAddon, servings, prepMinutes, totalMinutes, cookMinutes, difficulty, cuisines, tags, utensils,
+            allergens, nutritionPerServing, ingredients, steps, orderWeeks, timesOrdered, lastOrderedWeek, createdAt,
+            updatedAt, householdRating, myRating
+    }
+
+    /// The time to show: `cookMinutes`, else the larger of prep and total time.
+    var displayMinutes: Int? {
+        RecipeFormat.displayMinutes(cook: cookMinutes, prep: prepMinutes, total: totalMinutes)
     }
 }
 

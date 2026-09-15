@@ -69,6 +69,8 @@ struct RecipesAPITests {
         #expect(item.headline == "with Test Sauce")
         #expect(item.imageURL == URL(string: "https://img.example.test/r1.jpg"))
         #expect(item.totalMinutes == 30)
+        #expect(item.cookMinutes == 35)
+        #expect(item.displayMinutes == 35)
         #expect(item.timesOrdered == 3)
         #expect(item.lastOrderedWeek == "2026-W30")
         #expect(item.tags == ["Quick"])
@@ -85,6 +87,8 @@ struct RecipesAPITests {
         #expect(item.headline == nil)
         #expect(item.imageURL == nil)
         #expect(item.totalMinutes == nil)
+        #expect(item.cookMinutes == nil)
+        #expect(item.displayMinutes == nil)
         #expect(item.lastOrderedWeek == nil)
         #expect(item.isAddon)
     }

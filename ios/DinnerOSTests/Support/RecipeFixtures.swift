@@ -14,7 +14,7 @@ nonisolated enum RecipeFixtures {
         let week = lastOrderedWeek.map { #","lastOrderedWeek":"\#($0)""# } ?? ""
         return #"""
             {"id":"\#(id)","name":"\#(name)","headline":"with Test Sauce",
-             "imageUrl":"https://img.example.test/\#(id).jpg","totalMinutes":30,
+             "imageUrl":"https://img.example.test/\#(id).jpg","totalMinutes":30,"cookMinutes":35,
              "timesOrdered":\#(timesOrdered)\#(week),"isAddon":\#(isAddon),"tags":["Quick"],
              "householdRating":\#(householdRating),"myRating":\#(myRating)}
             """#
@@ -56,7 +56,7 @@ nonisolated enum RecipeFixtures {
               "sourceRecipeId": "src-1", "sourceAliases": ["src-1-clone"],
               "name": "Test Kitchen Tacos", "headline": "with Synthetic Salsa",
               "imageUrl": "https://img.example.test/tacos.jpg",
-              "isAddon": false, "servings": \#(servings), "prepMinutes": 10, "totalMinutes": 30, "difficulty": 1,
+              "isAddon": false, "servings": \#(servings), "prepMinutes": 10, "totalMinutes": 30, "cookMinutes": 30, "difficulty": 1,
               "cuisines": ["Mexican"], "tags": ["Quick"], "utensils": ["Skillet"], "allergens": ["Milk", "Wheat"],
               "nutritionPerServing": [
                 {"name": "Calories", "amount": 640, "unit": "kcal"},

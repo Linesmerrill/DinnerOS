@@ -80,6 +80,20 @@ extension APIError: LocalizedError {
                 )
             case "conflict":
                 String(localized: "Someone else changed this at the same time. Refresh and try again.")
+            case "proposal_changed":
+                String(localized: "Someone else changed these suggestions. Showing the latest.")
+            case "proposal_not_pending":
+                String(localized: "These suggestions were already accepted or dismissed.")
+            case "no_alternative" where !message.isEmpty:
+                // The API explains which day has nothing else that fits.
+                message
+            case "no_alternative":
+                String(localized: "No other recipe fits that day, so the meal stays.")
+            case "nothing_to_accept":
+                String(
+                    localized: "Nothing to add: every meal is switched off, or its day or recipe is already planned.")
+            case "proposal_stale":
+                String(localized: "A suggested recipe changed or was removed. Plan the week again.")
             case "validation_failed" where !message.isEmpty:
                 // The API documents validation messages as safe to show.
                 message
