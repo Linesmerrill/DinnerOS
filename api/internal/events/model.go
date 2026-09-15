@@ -112,29 +112,38 @@ type RecipeUnrated struct {
 	PreviousScore int `json:"previousScore" bson:"previousScore"`
 }
 
-// RecipePlanned is the payload of recipe.planned.
+// RecipePlanned is the payload of recipe.planned. EntryID, Day, and Date
+// match the planning module's entry; Event.Week holds the plan's ISO week.
 type RecipePlanned struct {
-	// Date is the planned day, YYYY-MM-DD in the household's time zone.
+	EntryID string `json:"entryId,omitempty" bson:"entryId,omitempty"`
+	// Day is one of PlanDays, or empty for "this week, not scheduled".
+	Day string `json:"day,omitempty" bson:"day,omitempty"`
+	// Date is Day's YYYY-MM-DD in the household's time zone, or empty.
 	Date     string `json:"date,omitempty" bson:"date,omitempty"`
 	Servings int    `json:"servings,omitempty" bson:"servings,omitempty"`
-	// Origin is manual or autopilot.
+	// Origin is one of PlanOrigins. Optional.
 	Origin string `json:"origin,omitempty" bson:"origin,omitempty"`
 }
 
-// RecipeUnplanned is the payload of recipe.unplanned.
+// RecipeUnplanned is the payload of recipe.unplanned (an entry was removed).
 type RecipeUnplanned struct {
-	Date string `json:"date,omitempty" bson:"date,omitempty"`
+	EntryID string `json:"entryId,omitempty" bson:"entryId,omitempty"`
+	Day     string `json:"day,omitempty" bson:"day,omitempty"`
+	Date    string `json:"date,omitempty" bson:"date,omitempty"`
 }
 
-// RecipeCooked is the payload of recipe.cooked.
+// RecipeCooked is the payload of recipe.cooked. EntryID links it to a plan
+// entry when the meal was planned.
 type RecipeCooked struct {
+	EntryID  string `json:"entryId,omitempty" bson:"entryId,omitempty"`
 	Date     string `json:"date,omitempty" bson:"date,omitempty"`
 	Servings int    `json:"servings,omitempty" bson:"servings,omitempty"`
 }
 
 // RecipeSkipped is the payload of recipe.skipped (planned but not cooked).
 type RecipeSkipped struct {
-	Date string `json:"date,omitempty" bson:"date,omitempty"`
+	EntryID string `json:"entryId,omitempty" bson:"entryId,omitempty"`
+	Date    string `json:"date,omitempty" bson:"date,omitempty"`
 	// Reason is one of SkipReasons. Optional.
 	Reason string `json:"reason,omitempty" bson:"reason,omitempty"`
 }
@@ -160,6 +169,7 @@ type ImportCompleted struct {
 // Allowed values for optional enumerated payload fields.
 var (
 	ViewSurfaces = []string{"detail", "plan", "search", "recommendation"}
+	PlanDays     = []string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 	PlanOrigins  = []string{"manual", "autopilot"}
 	SkipReasons  = []string{"no-time", "ate-out", "missing-ingredients", "not-in-the-mood", "other"}
 )
@@ -215,17 +225,20 @@ func (p RecipeUnrated) validate() error {
 }
 
 func (p RecipePlanned) validate() error {
-	return errors.Join(validDate(p.Date), validServings(p.Servings), optionalEnum("origin", p.Origin, PlanOrigins))
+	return errors.Join(validEntryID(p.EntryID), optionalEnum("day", p.Day, PlanDays), validDate(p.Date),
+		validServings(p.Servings), optionalEnum("origin", p.Origin, PlanOrigins))
 }
 
-func (p RecipeUnplanned) validate() error { return validDate(p.Date) }
+func (p RecipeUnplanned) validate() error {
+	return errors.Join(validEntryID(p.EntryID), optionalEnum("day", p.Day, PlanDays), validDate(p.Date))
+}
 
 func (p RecipeCooked) validate() error {
-	return errors.Join(validDate(p.Date), validServings(p.Servings))
+	return errors.Join(validEntryID(p.EntryID), validDate(p.Date), validServings(p.Servings))
 }
 
 func (p RecipeSkipped) validate() error {
-	return errors.Join(validDate(p.Date), optionalEnum("reason", p.Reason, SkipReasons))
+	return errors.Join(validEntryID(p.EntryID), validDate(p.Date), optionalEnum("reason", p.Reason, SkipReasons))
 }
 
 func (p GroceryItemChecked) validate() error {
@@ -377,6 +390,13 @@ func validDate(s string) error {
 func validServings(n int) error {
 	if n < 0 || n > maxServings {
 		return invalid(fmt.Sprintf("servings must be between 1 and %d when present", maxServings))
+	}
+	return nil
+}
+
+func validEntryID(id string) error {
+	if len(id) > MaxClientEventIDLength {
+		return invalid(fmt.Sprintf("entryId must be at most %d characters", MaxClientEventIDLength))
 	}
 	return nil
 }

@@ -113,6 +113,8 @@ func TestRecordRejectsInvalidEvents(t *testing.T) {
 		{"unrated without previous score", func(e *Event) { e.Type, e.Payload = TypeRecipeUnrated, nil }, "previousScore"},
 		{"bad skip reason", func(e *Event) { e.Type, e.Payload = TypeRecipeSkipped, RecipeSkipped{Reason: "bored"} }, "reason must be one of"},
 		{"bad plan origin", func(e *Event) { e.Type, e.Payload = TypeRecipePlanned, RecipePlanned{Origin: "robot"} }, "origin must be one of"},
+		{"bad plan day", func(e *Event) { e.Type, e.Payload = TypeRecipePlanned, RecipePlanned{Day: "monday"} }, "day must be one of mon, tue"},
+		{"long entry id", func(e *Event) { e.Payload = RecipeCooked{EntryID: strings.Repeat("x", 65)} }, "entryId must be at most 64"},
 		{"import without source", func(e *Event) { e.Type, e.RecipeID, e.Payload = TypeImportCompleted, "", ImportCompleted{} }, "source is required"},
 		{"long client event id", func(e *Event) { e.ClientEventID = strings.Repeat("x", 65) }, "clientEventId"},
 	}
@@ -130,6 +132,26 @@ func TestRecordRejectsInvalidEvents(t *testing.T) {
 				t.Error("invalid event was stored")
 			}
 		})
+	}
+}
+
+// TestPlanPayloadsMatchThePlanner records the events the planning module will
+// send for an entry: its ID, day, date, and servings, with the plan's week.
+func TestPlanPayloadsMatchThePlanner(t *testing.T) {
+	store := &memoryStore{}
+	svc, _ := newTestService(store)
+	ctx := context.Background()
+	planned := Event{HouseholdID: hhA, UserID: userA, Type: TypeRecipePlanned, RecipeID: recipeA, Week: "2026-W38",
+		Payload: RecipePlanned{EntryID: "66e5a1f2c3b4a5d6e7f80c01", Day: "tue", Date: "2026-09-15", Servings: 2, Origin: "manual"}}
+	unscheduled := Event{HouseholdID: hhA, UserID: userA, Type: TypeRecipeUnplanned, RecipeID: recipeA, Week: "2026-W38",
+		Payload: RecipeUnplanned{EntryID: "66e5a1f2c3b4a5d6e7f80c02"}}
+	for _, e := range []Event{planned, unscheduled} {
+		if err := svc.Record(ctx, e); err != nil {
+			t.Fatalf("Record(%s) error = %v", e.Type, err)
+		}
+	}
+	if got := store.all(); len(got) != 2 || got[0].Payload != planned.Payload || got[1].Week != "2026-W38" {
+		t.Errorf("stored = %+v", got)
 	}
 }
 
