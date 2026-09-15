@@ -41,6 +41,9 @@ struct GroceryBatchRow: View {
                     }
                     Button("Made It", systemImage: "checkmark.seal", action: madeIt)
                         .buttonStyle(.borderedProminent)
+                        // In a list row the symbol otherwise takes the tint and vanishes on the
+                        // tinted fill.
+                        .foregroundStyle(.white)
                         .controlSize(.small)
                         .disabled(isWorking)
                         .accessibilityLabel("Made \(batch.specialtyName)")
