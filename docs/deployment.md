@@ -103,8 +103,16 @@ Heroku terminates TLS, so the API is only reachable over HTTPS in production.
 ## iOS on TestFlight
 
 The `iOS CI` workflow always runs lint and tests. Its `testflight` job runs on
-pushes to `main` **only** after the repository variable `TESTFLIGHT_ENABLED` is
-set to `true`, so `main` stays green before Apple setup is done.
+pushes to `main`, or on a manual dispatch from `main`, **only** when the
+repository variable `TESTFLIGHT_ENABLED` is `true`.
+
+Status: ✅ enabled and working. The first build was uploaded on 2026-09-15 by run
+34927108505, and internal testers in "Household" receive new builds
+automatically once Apple finishes processing. Retry a failed upload from
+Actions → iOS CI → Run workflow on `main`.
+
+Note: gym forwards `xcargs` to both archive and export, so the Fastfile passes
+the `-authenticationKey*` flags only once. Duplicating them fails the export.
 
 The job runs `bundle exec fastlane beta`, which:
 
