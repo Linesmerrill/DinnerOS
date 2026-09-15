@@ -154,6 +154,44 @@ func TestNormalizeRecipe(t *testing.T) {
 	}
 }
 
+func TestNormalizeFlagsDeliveredVariants(t *testing.T) {
+	recipe := strings.Replace(syntheticRecipe, `"id": "aaaaaaaaaaaaaaaaaaaaaaaa-en-US",`, `"id": "aaaaaaaaaaaaaaaaaaaaaaaa-en-US", "slug": "synthetic-taco-night",`, 1)
+	history := History{Weeks: []HistoryWeek{
+		{Week: "2026-W01", Meals: []HistoryMeal{{ID: "bbbbbbbbbbbbbbbbbbbbbbbb", Name: "synthetic taco night"}}},
+		{Week: "2026-W02", Meals: []HistoryMeal{{ID: "cccccccccccccccccccccccc", Name: "Pork & Synthetic Taco Night"}}},
+		{Week: "2026-W03", Meals: []HistoryMeal{{ID: "dddddddddddddddddddddddd", Name: "pork and synthetic taco night"}}},
+	}}
+	file, err := Normalize([]RawRecipe{
+		rawFrom(t, "bbbbbbbbbbbbbbbbbbbbbbbb", recipe),
+		rawFrom(t, "cccccccccccccccccccccccc", recipe),
+		rawFrom(t, "dddddddddddddddddddddddd", recipe),
+	}, history, time.Now())
+	if err != nil {
+		t.Fatalf("Normalize() error = %v", err)
+	}
+	var variants []ReviewItem
+	for _, rv := range file.Review {
+		if rv.Field == "variant" {
+			variants = append(variants, rv)
+		}
+	}
+	if len(variants) != 1 || variants[0].Value != "Pork & Synthetic Taco Night" {
+		t.Errorf("variant review items = %+v, want exactly one for the pork variant", variants)
+	}
+}
+
+func TestSlugify(t *testing.T) {
+	for in, want := range map[string]string{
+		"One-Pan Pork & Green Pepper Tacos":   "one-pan-pork-and-green-pepper-tacos",
+		"one pan pork and green pepper tacos": "one-pan-pork-and-green-pepper-tacos",
+		"  Che Buono!  Chicken ":              "che-buono-chicken",
+	} {
+		if got := slugify(in); got != want {
+			t.Errorf("slugify(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestParseISODurationMinutes(t *testing.T) {
 	tests := []struct {
 		in   string

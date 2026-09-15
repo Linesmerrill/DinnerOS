@@ -1,6 +1,22 @@
 # Ingredient normalization and grocery engine
 
-Status: design. Units and normalization land in Phase 4; aggregation in Phase 7.
+Status:
+
+- **Implemented, pure logic with tests:**
+  - Exact quantities and units: `api/internal/ingredients` (`Quantity`, `Unit`, `Convert`, `Amount`).
+  - The aggregation engine: `api/internal/grocery` (`Aggregate`).
+- **Pending:**
+  - Canonical ingredient catalog and categories (Phase 4).
+  - Persistence, API, and UI (Phase 7).
+
+The implemented engine differs from the pipeline below in two ways:
+
+- The display unit for a combined amount is picked only from the units that
+  contributed: the largest unit in which the total is at least 1, otherwise the
+  smallest contributing unit. The choice never depends on input order.
+- Each item has a status: `inPantry` (in the household pantry), `pantryHint`
+  (every source flagged it as a staple, but it isn't in the household pantry),
+  or `toBuy`.
 
 This is the heart of DinnerOS's usefulness. Ingredient **strings are not the
 grocery system**. Every recipe line keeps its raw text *and* a normalized,

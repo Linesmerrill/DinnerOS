@@ -122,6 +122,7 @@ var sourceUnits = map[string]string{
 type hfRecipe struct {
 	RecipeID      string  `json:"recipeId"`
 	ID            string  `json:"id"`
+	Slug          string  `json:"slug"`
 	Name          string  `json:"name"`
 	Headline      string  `json:"headline"`
 	Description   string  `json:"description"`
@@ -197,8 +198,10 @@ func LoadRawRecipes(dir string) ([]RawRecipe, error) {
 // Delivered menu clones of the same canonical recipe are merged into one recipe.
 func Normalize(raws []RawRecipe, history History, now time.Time) (ImportFile, error) {
 	weeksByDelivered := map[string][]string{}
+	namesByDelivered := map[string]string{}
 	for _, r := range history.UniqueRecipes() {
 		weeksByDelivered[r.DeliveredID] = r.Weeks
+		namesByDelivered[r.DeliveredID] = r.Name
 	}
 
 	groups := map[string][]parsedRaw{}
@@ -244,6 +247,27 @@ func Normalize(raws []RawRecipe, history History, now time.Time) (ImportFile, er
 		rec, review := normalizeRecipe(key, primary, group[0].raw)
 		rec.OrderWeeks = sortedKeys(weekSet)
 		rec.SourceAliases = sortedKeys(aliasSet)
+
+		// Recipe pages redirect weekly menu clones to a canonical recipe, which is
+		// occasionally a different variant (e.g. pork delivered, chicken page).
+		// Flag it so a person knows the stored details may not match the box.
+		canonicalSlug := slugify(firstNonEmpty(primary.Slug, primary.Name))
+		variants := map[string]bool{}
+		for _, g := range group {
+			delivered := namesByDelivered[g.raw.DeliveredID]
+			if delivered == "" || slugify(delivered) == canonicalSlug || variants[slugify(delivered)] {
+				continue
+			}
+			variants[slugify(delivered)] = true
+			review = append(review, ReviewItem{
+				SourceRecipeID: key,
+				RecipeName:     rec.Name,
+				Field:          "variant",
+				Value:          delivered,
+				Reason:         "delivered menu variant differs from the canonical recipe page; stored details reflect the canonical recipe",
+			})
+		}
+
 		file.Recipes = append(file.Recipes, rec)
 		file.Review = append(file.Review, review...)
 	}
@@ -493,6 +517,15 @@ func names(items []named) []string {
 		}
 	}
 	return out
+}
+
+var nonSlugRe = regexp.MustCompile(`[^a-z0-9]+`)
+
+// slugify reduces a name or slug to a comparable form: "Pork & Green Pepper
+// Tacos", "pork and green pepper tacos", and "pork-and-green-pepper-tacos" match.
+func slugify(s string) string {
+	s = strings.ToLower(strings.ReplaceAll(s, "&", " and "))
+	return strings.Trim(nonSlugRe.ReplaceAllString(s, "-"), "-")
 }
 
 func sortedKeys(m map[string]bool) []string {
