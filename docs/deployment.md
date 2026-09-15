@@ -120,8 +120,9 @@ The job runs `bundle exec fastlane beta`, which:
    enabled as a primary App ID. Other capabilities, such as Push Notifications
    and Associated Domains for universal invite links, get added when a phase
    needs them.
-2. **App Store Connect → Apps → +:** create the app with that bundle ID. The App
-   Store name must be globally unique and can differ from the display name.
+2. ✅ **App Store Connect → Apps → +:** the "DinnerOS" app record exists (Apple
+   ID `6812159676`, SKU `dinneros-ios`, bundle `com.linesmerrill.dinneros`, English
+   (U.S.)). The App Store name can still be changed before any public release.
 3. **App Store Connect → Users and Access → Integrations → App Store Connect API:**
    create a Team key with the **Admin** role (cloud-managed distribution signing
    requires it). Download the `.p8` file. Apple lets you download it only once.
