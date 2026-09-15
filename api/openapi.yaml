@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: DinnerOS API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Backend for the DinnerOS iOS app. "DinnerOS" is a working name.
 
@@ -18,6 +18,13 @@ tags:
   - name: operations
   - name: auth
     description: Sign-in, token refresh, logout, and the current user.
+  - name: households
+    description: |
+      Households, members, and roles. Routes under `/households/{householdId}`
+      return 404 to non-members and 403 to members whose role lacks the
+      required permission (see docs/authentication.md).
+  - name: invitations
+    description: Inviting people to a household by email, link, or code.
 paths:
   /health:
     get:
@@ -220,6 +227,276 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthenticated"
 
+  /api/v1/households:
+    post:
+      summary: Create a household
+      description: Creates a household with the caller as its first admin.
+      operationId: createHousehold
+      tags: [households]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateHouseholdRequest"
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateHouseholdResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+    get:
+      summary: List the caller's households
+      description: |
+        Every household the caller belongs to, oldest membership first. Not
+        paginated: a user belongs to a handful of households.
+      operationId: listHouseholds
+      tags: [households]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The caller's households.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HouseholdListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+  /api/v1/households/{householdId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: Get a household
+      description: The household, its members, and the caller's role. Requires `household.view`.
+      operationId: getHousehold
+      tags: [households]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The household.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HouseholdDetailResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      summary: Update household settings
+      description: Partial update; at least one field is required. Requires `household.update`.
+      operationId: updateHousehold
+      tags: [households]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateHouseholdRequest"
+      responses:
+        "200":
+          description: The updated household.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Household"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/members/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/UserID"
+    patch:
+      summary: Change a member's role
+      description: |
+        Requires `members.changeRole`, and the caller's role must include every
+        permission of both the member's current role and the new one. Setting
+        the current role is a no-op. Demoting the last admin returns
+        `409 last_admin`.
+      operationId: changeMemberRole
+      tags: [households]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeRoleRequest"
+      responses:
+        "200":
+          description: The member with the new role.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      summary: Remove a member, or leave
+      description: |
+        With the caller's own user ID, leaves the household (no permission
+        needed). Otherwise requires `members.remove` and a role that includes
+        the member's permissions. Removing the last admin, including the last
+        admin leaving when they are the only member, returns `409 last_admin`.
+      operationId: removeMember
+      tags: [households]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Removed.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/households/{householdId}/invitations:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    post:
+      summary: Invite someone by email
+      description: |
+        Requires `members.invite` and a role that includes the invited role's
+        permissions. Revokes any pending invitation for the same address, then
+        emails a link and code. The code is returned only in this response so
+        the admin can share it directly. If the email cannot be sent, the
+        invitation is still created and `emailDelivered` is false. Rate limited
+        per client IP.
+      operationId: createInvitation
+      tags: [invitations]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvitationRequest"
+      responses:
+        "201":
+          description: Invitation created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateInvitationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    get:
+      summary: List pending invitations
+      description: Unaccepted, unrevoked, unexpired invitations, newest first. Never includes tokens or codes. Requires `members.invite`.
+      operationId: listInvitations
+      tags: [invitations]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Pending invitations.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/invitations/{invitationId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/InvitationID"
+    delete:
+      summary: Revoke an invitation
+      description: |
+        Requires `members.invite`. Idempotent: revoking an invitation that is
+        already revoked, accepted, or expired also returns 204. An ID that
+        doesn't belong to the household returns 404.
+      operationId: revokeInvitation
+      tags: [invitations]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Revoked.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/invitations/accept:
+    post:
+      summary: Accept an invitation
+      description: |
+        Joins the household with the invited role, using the token from the
+        email link or the code. The signed-in user's email does not need to
+        match the invited address. If the caller is already a member, the
+        invitation is used up and their existing role is kept. Retrying an
+        invitation the caller already accepted returns the same result.
+        Rate limited per client IP.
+      operationId: acceptInvitation
+      tags: [invitations]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptInvitationRequest"
+      responses:
+        "200":
+          description: Joined (or already a member).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptInvitationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/InvitationInvalid"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -237,7 +514,286 @@ components:
         Every response includes it.
       schema:
         type: string
+  parameters:
+    HouseholdID:
+      name: householdId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: 66e5a1f2c3b4a5d6e7f80913
+    UserID:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: 66e5a1f2c3b4a5d6e7f80912
+    InvitationID:
+      name: invitationId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: 66e5a1f2c3b4a5d6e7f80914
   schemas:
+    Role:
+      type: string
+      enum: [admin, member]
+      description: |
+        A member's role. More roles (viewer, shopper, child, guest) may be
+        added later; clients should rely on `permissions`, not the role name.
+    Permission:
+      type: string
+      enum:
+        - household.view
+        - household.update
+        - members.view
+        - members.invite
+        - members.remove
+        - members.changeRole
+        - plan.edit
+        - pantry.edit
+        - recipes.edit
+        - recipes.import
+    Household:
+      type: object
+      required: [id, name, defaultServings, timeZone, createdBy, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          example: 66e5a1f2c3b4a5d6e7f80913
+        name:
+          type: string
+          maxLength: 100
+          example: The Lines
+        defaultServings:
+          type: integer
+          minimum: 1
+          maximum: 12
+          example: 2
+        timeZone:
+          type: string
+          description: IANA time zone name. Plan dates are interpreted in it.
+          example: America/Denver
+        createdBy:
+          type: string
+          description: User ID of the member who created the household.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Membership:
+      type: object
+      required: [id, householdId, userId, role, permissions, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        householdId:
+          type: string
+        userId:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+        permissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Permission"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Member:
+      type: object
+      required: [userId, displayName, role, joinedAt]
+      properties:
+        userId:
+          type: string
+        displayName:
+          type: string
+          description: May be empty when the user has no display name.
+          example: Ada Lovelace
+        role:
+          $ref: "#/components/schemas/Role"
+        joinedAt:
+          type: string
+          format: date-time
+    CreateHouseholdRequest:
+      type: object
+      additionalProperties: false
+      required: [name, timeZone]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Leading and trailing whitespace is trimmed.
+          example: The Lines
+        timeZone:
+          type: string
+          description: IANA time zone name (not an offset, not "Local").
+          example: America/Denver
+        defaultServings:
+          type: integer
+          minimum: 1
+          maximum: 12
+          default: 2
+    UpdateHouseholdRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        timeZone:
+          type: string
+          example: Europe/Paris
+        defaultServings:
+          type: integer
+          minimum: 1
+          maximum: 12
+    CreateHouseholdResponse:
+      type: object
+      required: [household, membership]
+      properties:
+        household:
+          $ref: "#/components/schemas/Household"
+        membership:
+          $ref: "#/components/schemas/Membership"
+    HouseholdListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [household, role, permissions]
+            properties:
+              household:
+                $ref: "#/components/schemas/Household"
+              role:
+                $ref: "#/components/schemas/Role"
+              permissions:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Permission"
+    HouseholdDetailResponse:
+      type: object
+      required: [household, role, permissions]
+      properties:
+        household:
+          $ref: "#/components/schemas/Household"
+        members:
+          type: array
+          description: Oldest member first. Omitted when the caller's role lacks `members.view`.
+          items:
+            $ref: "#/components/schemas/Member"
+        role:
+          $ref: "#/components/schemas/Role"
+        permissions:
+          type: array
+          description: What the caller may do in this household.
+          items:
+            $ref: "#/components/schemas/Permission"
+    ChangeRoleRequest:
+      type: object
+      additionalProperties: false
+      required: [role]
+      properties:
+        role:
+          $ref: "#/components/schemas/Role"
+    Invitation:
+      type: object
+      required: [id, email, role, expiresAt, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+          description: Trimmed and lowercased.
+        role:
+          $ref: "#/components/schemas/Role"
+        expiresAt:
+          type: string
+          format: date-time
+          description: Seven days after creation.
+        createdAt:
+          type: string
+          format: date-time
+    CreateInvitationRequest:
+      type: object
+      additionalProperties: false
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          description: A bare address (no display name).
+          example: bob@example.com
+        role:
+          $ref: "#/components/schemas/Role"
+    CreateInvitationResponse:
+      type: object
+      required: [invitation, code, emailDelivered]
+      properties:
+        invitation:
+          $ref: "#/components/schemas/Invitation"
+        code:
+          type: string
+          pattern: "^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$"
+          description: |
+            Invite code to share directly. Returned only in this response; it
+            can't be retrieved later. The email contains the same code.
+          example: 7K3QM-X9D2P
+        emailDelivered:
+          type: boolean
+          description: False when the email could not be sent. The invitation and code still work.
+    InvitationListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Invitation"
+    AcceptInvitationRequest:
+      type: object
+      additionalProperties: false
+      description: Exactly one of `token` or `code`.
+      properties:
+        token:
+          type: string
+          maxLength: 256
+          description: The token from the invitation link.
+        code:
+          type: string
+          maxLength: 64
+          description: The invite code. Case-insensitive; spaces and dashes are ignored.
+          example: 7k3qm x9d2p
+      oneOf:
+        - required: [token]
+        - required: [code]
+    AcceptInvitationResponse:
+      type: object
+      required: [household, role, permissions]
+      properties:
+        household:
+          $ref: "#/components/schemas/Household"
+        role:
+          $ref: "#/components/schemas/Role"
+        permissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Permission"
     ReadyResponse:
       type: object
       required: [status, checks]
@@ -413,6 +969,28 @@ components:
               description: Matches the X-Request-ID response header; quote it when reporting problems.
               example: 5f0c1e9a2b7d4c3e8f6a1b2c
   responses:
+    Forbidden:
+      description: "`forbidden`: the caller is a member of the household, but their role doesn't allow this action."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: |
+        `last_admin`: the change would leave the household without an admin.
+        `conflict`: the membership changed concurrently; reload and retry.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InvitationInvalid:
+      description: |
+        `invitation_invalid`: the token or code is unknown, expired, revoked,
+        or already used. The reasons are deliberately not distinguished.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     NotFound:
       description: The resource does not exist or is not visible to the caller.
       content:
@@ -447,7 +1025,7 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
     RateLimited:
-      description: "`rate_limited`: too many auth requests from this client IP."
+      description: "`rate_limited`: too many requests from this client IP (sign-in and invitation endpoints)."
       headers:
         Retry-After:
           description: Seconds to wait before retrying.

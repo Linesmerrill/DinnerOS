@@ -167,6 +167,8 @@ vars or GitHub Secrets.
 | `GOOGLE_CLIENT_ID` | Phase 2 | ✅ Created. Google Cloud project `dinneros-508702` → Google Auth Platform → Clients → "DinnerOS iOS" (bundle ID above, team `6VTPDG2HNK`). The value is `600707694145-ifi6jfhmial52rtjgrrs18eh5muiqsnt.apps.googleusercontent.com`. It's a public identifier, not a secret. The iOS app also needs the reversed client ID as a URL scheme: `com.googleusercontent.apps.600707694145-ifi6jfhmial52rtjgrrs18eh5muiqsnt`. |
 | `RESEND_API_KEY` | Phase 3 | ✅ Set (a send-only key). resend.com → **API Keys**. The verified sending domain is `api.tlps.dev`: its DKIM record (`resend._domainkey.api.tlps.dev`) and the SPF/MX records on `send.api.tlps.dev` are in Squarespace DNS. A DMARC record (`_dmarc.api.tlps.dev`) is optional and not yet added. |
 | `EMAIL_FROM` | Phase 3 | ✅ `DinnerOS <invites@api.tlps.dev>`. It must be an address on the verified Resend domain. |
+| `EMAIL_PROVIDER` | Phase 3 | Optional. Defaults to `resend` when `RESEND_API_KEY` is set. Production refuses `log`. |
+| `APP_INVITE_URL_BASE` | Phase 3 | Optional. The token is appended to it to form the invitation link. The default, `dinneros://invite?token=`, opens the iOS app. Change it (for example to an `https://` universal link) without a code change. |
 | `OPENAI_API_KEY` | future | platform.openai.com → API keys (backend only) |
 
 ### GitHub Actions

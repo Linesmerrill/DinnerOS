@@ -50,11 +50,36 @@ Implemented in Phase 2 (`internal/users`, `internal/auth`).
 
 ### Households
 
+Implemented in Phase 3 (`internal/households`, `internal/invitations`).
+
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `households` | name, defaultServings, timeZone | — |
-| `household_memberships` | householdId, userId, role | **unique** `{householdId, userId}`; `{userId}` |
-| `household_invitations` | householdId, email (normalized), role, tokenHash, codeHash, expiresAt, acceptedAt, revokedAt, createdBy | **unique** `{tokenHash}`; **unique** `{codeHash}`; `{householdId, email}` |
+| `households` | name, defaultServings (1–12, default 2), timeZone (IANA name), createdBy, adminCount, createdAt, updatedAt | — (looked up by `_id` only) |
+| `household_memberships` | householdId, userId, role (`admin`/`member`), createdAt, updatedAt | **unique** `{householdId, userId}`; `{userId}` |
+| `household_invitations` | householdId, email (trimmed, lowercase), role, tokenHash, codeHash, expiresAt, pending, acceptedAt, acceptedBy, revokedAt, createdBy, createdAt | **unique** `{tokenHash}`; **unique** `{codeHash}`; **unique partial** `{householdId, email}` where `pending: true` |
+
+- **At least one admin, without transactions.** `adminCount` backs this rule.
+  Before demoting or removing an admin, the service runs
+  `updateOne({_id, adminCount: {$gt: 1}}, {$inc: {adminCount: -1}})`. If
+  nothing matches, the request fails with `409 last_admin`. The membership
+  change is then conditional on the role read earlier, and if it fails the
+  count is added back. Promotions and admin joins increment the count after
+  the membership changes. If the process dies between the two writes, the
+  count ends up *lower* than the real number of admins, which only makes the
+  guard stricter. This works on a standalone local MongoDB.
+- A household can't become empty yet: its last admin can't leave, even as the
+  only member. Deleting households comes later.
+- Invitations store only the hex SHA-256 of the token and of the normalized
+  code. `pending: true` is set on insert and removed (`$unset`) when the
+  invitation is accepted or revoked; expiry doesn't clear it. The partial
+  unique index therefore allows one pending invitation per household and
+  address, and re-inviting revokes the old one first. The pending list
+  (`{householdId, pending: true, expiresAt: {$gt: now}}`) uses the same index.
+- Acceptance is a conditional update on `{_id, pending: true, expiresAt: {$gt: now}}`,
+  so only one acceptance can succeed. Accepted and revoked invitations are kept
+  as history; there is no TTL index yet.
+- `time/tzdata` is compiled into the API, so time-zone validation doesn't
+  depend on the container having zoneinfo.
 
 ### Recipes and ingredients
 
