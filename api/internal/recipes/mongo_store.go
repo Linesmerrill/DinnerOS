@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -552,6 +553,56 @@ func (s *MongoStore) ExistingRecipeIDs(ctx context.Context, householdID string, 
 	var out []string
 	for _, d := range docs {
 		out = append(out, d.ID.Hex())
+	}
+	return out, nil
+}
+
+// FindIngredientUse implements Store with one aggregation that returns only
+// recipe IDs and the matching ingredient IDs.
+func (s *MongoStore) FindIngredientUse(ctx context.Context, householdID string, ingredientIDs []string) ([]IngredientUse, error) {
+	hid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return nil, nil
+	}
+	oids := make([]bson.ObjectID, 0, len(ingredientIDs))
+	for _, id := range ingredientIDs {
+		if oid, err := mongodb.ParseID(id); err == nil {
+			oids = append(oids, oid)
+		}
+	}
+	if len(oids) == 0 {
+		return nil, nil
+	}
+	cur, err := s.recipes.Aggregate(ctx, mongo.Pipeline{
+		{{Key: "$match", Value: bson.D{
+			{Key: "householdId", Value: hid},
+			{Key: "ingredients.ingredientId", Value: bson.D{{Key: "$in", Value: oids}}},
+		}}},
+		// $setIntersection removes repeats; the IDs are a literal so no value
+		// is read as a field path.
+		{{Key: "$project", Value: bson.D{{Key: "ids", Value: bson.D{{Key: "$setIntersection", Value: bson.A{
+			"$ingredients.ingredientId", bson.D{{Key: "$literal", Value: oids}},
+		}}}}}}},
+		{{Key: "$sort", Value: bson.D{{Key: "_id", Value: 1}}}},
+	})
+	if err != nil {
+		return nil, translate(err)
+	}
+	var docs []struct {
+		ID  bson.ObjectID   `bson:"_id"`
+		IDs []bson.ObjectID `bson:"ids"`
+	}
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	var out []IngredientUse
+	for _, d := range docs {
+		use := IngredientUse{RecipeID: d.ID.Hex()}
+		for _, id := range d.IDs {
+			use.IngredientIDs = append(use.IngredientIDs, id.Hex())
+		}
+		slices.Sort(use.IngredientIDs)
+		out = append(out, use)
 	}
 	return out, nil
 }

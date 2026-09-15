@@ -20,11 +20,13 @@ type PurchaseSource string
 
 // Purchase sources. Clients may record grocery_list and manual purchases;
 // provider is reserved for shopping provider orders (Phase 8), which will
-// write the same record.
+// write the same record. house_made is a batch of a specialty ingredient the
+// household made, recorded through Service.RecordHouseMade.
 const (
 	PurchaseGroceryList PurchaseSource = PurchaseSource(CycleGroceryList)
 	PurchaseManual      PurchaseSource = PurchaseSource(CycleManual)
 	PurchaseProvider    PurchaseSource = PurchaseSource(CycleProvider)
+	PurchaseHouseMade   PurchaseSource = PurchaseSource(CycleHouseMade)
 )
 
 // Purchase is one recorded purchase of a pantry item. Its ID is also the ID
@@ -216,6 +218,8 @@ func validatePurchase(in PurchaseInput) (purchase, error) {
 		p.source = in.Source
 	case PurchaseProvider:
 		return purchase{}, invalid("source provider is recorded by shopping providers, not apps")
+	case PurchaseHouseMade:
+		return purchase{}, invalid("source house_made is recorded by POST .../specialty-ingredients/{specialtyId}/batches")
 	default:
 		return purchase{}, invalid("source must be grocery_list or manual")
 	}
@@ -282,7 +286,6 @@ func (s *Service) RecordPurchase(ctx context.Context, actor households.Membershi
 	if err != nil {
 		return PurchaseResult{}, err
 	}
-	hh := actor.HouseholdID
 	if p.clientID != "" {
 		if res, found, err := s.existingPurchase(ctx, actor, p.clientID); found || err != nil {
 			return res, err
@@ -295,8 +298,16 @@ func (s *Service) RecordPurchase(ctx context.Context, actor households.Membershi
 			return PurchaseResult{}, err
 		}
 	}
+	return s.recordPurchase(ctx, actor, p, itemID, a, nil)
+}
 
+// recordPurchase restocks the item itemID, or the item with a's key (added
+// when missing), and stores the purchase. prepare, when set, changes the item
+// before the restock.
+func (s *Service) recordPurchase(ctx context.Context, actor households.Membership, p purchase, itemID string, a addition, prepare func(*Item, time.Time)) (PurchaseResult, error) {
+	hh := actor.HouseholdID
 	purchaseID := s.newID()
+	var err error
 	var saved Item
 	for attempt := 0; ; attempt++ {
 		if attempt == maxWriteAttempts {
@@ -327,6 +338,9 @@ func (s *Service) RecordPurchase(ctx context.Context, actor households.Membershi
 		next := cloneItem(current)
 		if p.unitSize != nil {
 			next.UnitSize = p.unitSize
+		}
+		if prepare != nil {
+			prepare(&next, now)
 		}
 		restock(&next, purchaseID, CycleSource(p.source), p.quantity, p.unit, now)
 		next.UpdatedBy, next.UpdatedAt = actor.UserID, now

@@ -53,16 +53,86 @@ nonisolated struct PantryItem: Decodable, Hashable, Sendable, Identifiable {
     /// A calendar date, `YYYY-MM-DD`.
     let expiresOn: String?
     let note: String
+    /// The user ID of the last change by a person.
     let updatedBy: String
     let createdAt: Date
     let updatedAt: Date
+    /// Who set `status`. Responses from before usage tracking read as `person`.
+    let statusSource: PantryStatusSource
+    /// The item's own threshold, as percent used; `nil` uses the household's.
+    let lowThresholdPercent: Int?
+    /// How much one discrete unit holds, remembered from a purchase.
+    let unitSize: PantryUnitSize?
+    /// What's estimated to be left; `nil` when no amount is recorded.
+    let estimate: PantryEstimate?
+
+    init(
+        id: String, householdID: String, ingredientID: String?, key: String, displayName: String, category: String,
+        quantity: String?, quantityValue: Double?, unit: String?, status: PantryStatus, isStaple: Bool,
+        expiresOn: String?, note: String, updatedBy: String, createdAt: Date, updatedAt: Date,
+        statusSource: PantryStatusSource = .person, lowThresholdPercent: Int? = nil, unitSize: PantryUnitSize? = nil,
+        estimate: PantryEstimate? = nil
+    ) {
+        self.id = id
+        self.householdID = householdID
+        self.ingredientID = ingredientID
+        self.key = key
+        self.displayName = displayName
+        self.category = category
+        self.quantity = quantity
+        self.quantityValue = quantityValue
+        self.unit = unit
+        self.status = status
+        self.isStaple = isStaple
+        self.expiresOn = expiresOn
+        self.note = note
+        self.updatedBy = updatedBy
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.statusSource = statusSource
+        self.lowThresholdPercent = lowThresholdPercent
+        self.unitSize = unitSize
+        self.estimate = estimate
+    }
+
+    /// The usage estimate, not a person, marked the item low.
+    var isEstimatedLow: Bool {
+        status == .low && statusSource == .estimate
+    }
 
     private enum CodingKeys: String, CodingKey {
         case id
         case householdID = "householdId"
         case ingredientID = "ingredientId"
         case key, displayName, category, quantity, quantityValue, unit, status, isStaple, expiresOn, note, updatedBy,
-            createdAt, updatedAt
+            createdAt, updatedAt, statusSource, lowThresholdPercent, unitSize, estimate
+    }
+
+    /// The usage fields are additive, so they're read leniently: a response without them, or
+    /// with an estimate this build can't read, still shows the item.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(String.self, forKey: .id),
+            householdID: try container.decode(String.self, forKey: .householdID),
+            ingredientID: try container.decodeIfPresent(String.self, forKey: .ingredientID),
+            key: try container.decode(String.self, forKey: .key),
+            displayName: try container.decode(String.self, forKey: .displayName),
+            category: try container.decode(String.self, forKey: .category),
+            quantity: try container.decodeIfPresent(String.self, forKey: .quantity),
+            quantityValue: try container.decodeIfPresent(Double.self, forKey: .quantityValue),
+            unit: try container.decodeIfPresent(String.self, forKey: .unit),
+            status: try container.decode(PantryStatus.self, forKey: .status),
+            isStaple: try container.decode(Bool.self, forKey: .isStaple),
+            expiresOn: try container.decodeIfPresent(String.self, forKey: .expiresOn),
+            note: try container.decode(String.self, forKey: .note),
+            updatedBy: try container.decode(String.self, forKey: .updatedBy),
+            createdAt: try container.decode(Date.self, forKey: .createdAt),
+            updatedAt: try container.decode(Date.self, forKey: .updatedAt),
+            statusSource: (try? container.decodeIfPresent(PantryStatusSource.self, forKey: .statusSource)) ?? .person,
+            lowThresholdPercent: try? container.decodeIfPresent(Int.self, forKey: .lowThresholdPercent),
+            unitSize: try? container.decodeIfPresent(PantryUnitSize.self, forKey: .unitSize),
+            estimate: try? container.decodeIfPresent(PantryEstimate.self, forKey: .estimate))
     }
 }
 
@@ -103,9 +173,32 @@ nonisolated struct PantryItemChanges: Encodable, Equatable, Sendable {
     var isStaple: Bool?
     var expiresOn: String?
     var note: String?
+    /// `.household` sends `null`, which returns the item to the household's threshold.
+    var lowThresholdPercent: PantryThresholdChange?
 
     /// The API rejects a PATCH that changes nothing.
     var isEmpty: Bool { self == PantryItemChanges() }
+
+    private enum CodingKeys: String, CodingKey {
+        case displayName, category, quantity, unit, status, isStaple, expiresOn, note, lowThresholdPercent
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(displayName, forKey: .displayName)
+        try container.encodeIfPresent(category, forKey: .category)
+        try container.encodeIfPresent(quantity, forKey: .quantity)
+        try container.encodeIfPresent(unit, forKey: .unit)
+        try container.encodeIfPresent(status, forKey: .status)
+        try container.encodeIfPresent(isStaple, forKey: .isStaple)
+        try container.encodeIfPresent(expiresOn, forKey: .expiresOn)
+        try container.encodeIfPresent(note, forKey: .note)
+        switch lowThresholdPercent {
+        case .household: try container.encodeNil(forKey: .lowThresholdPercent)
+        case .percent(let percent): try container.encode(percent, forKey: .lowThresholdPercent)
+        case nil: break
+        }
+    }
 }
 
 /// One entry of `POST .../pantry/bulk`.

@@ -201,7 +201,7 @@ Implemented in `internal/pantry` ([pantry-usage.md](pantry-usage.md)).
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
 | `pantry_items` (usage fields) | statusSource (`person`/`estimate`; absent on older items, meaning person), statusSetAt, tracking{cycleId, cycleSource, cycleStartedAt, unit, reference, segmentStart, segmentStartedAt, segmentRecipeUsed, recipeUsed, recipeUses, skippedUses}, unitSize{unit, quantity, sizeUnit}, history[{startedAt, endedAt, unit, start, recipeUsed, remaining, observed}], rate{perDay, unit, segments, computedAt}, lowThresholdPercent, lowAlertCycleId | the item's unique key |
-| `pantry_purchases` | householdId, itemId, itemKey, source (`grocery_list`/`manual`/`provider`), quantity, quantityValue, unit, unitSize{}, week, clientPurchaseId, recordedBy, purchasedAt | `{householdId, itemId, purchasedAt: -1}`; **unique partial** `{householdId, recordedBy, clientPurchaseId}` where `clientPurchaseId` is a string |
+| `pantry_purchases` | householdId, itemId, itemKey, source (`grocery_list`/`manual`/`provider`/`house_made`), quantity, quantityValue, unit, unitSize{}, week, clientPurchaseId, recordedBy, purchasedAt | `{householdId, itemId, purchasedAt: -1}`; **unique partial** `{householdId, recordedBy, clientPurchaseId}` where `clientPurchaseId` is a string |
 | `pantry_cook_usage` | householdId, sourceKey, recipeId, entryId, userId, servings, scaledFrom, occurredAt, createdAt, lines[{itemId, ingredient, quantity, unit, deducted, trackingUnit, cycleId, skipReason}] | **unique** `{householdId, sourceKey}` |
 | `pantry_settings` | householdId, lowThresholdPercent, updatedBy, updatedAt | **unique** `{householdId}` |
 
@@ -223,6 +223,36 @@ Implemented in `internal/pantry` ([pantry-usage.md](pantry-usage.md)).
 - **Settings** are one document per household, upserted on its unique
   `householdId`. No document means the default threshold (80).
 - Deleting an item leaves its purchases and cook records.
+
+### Specialty ingredients
+
+Implemented in `internal/substitutes` ([specialty-ingredients.md](specialty-ingredients.md)).
+
+| Collection | Key fields | Indexes |
+| --- | --- | --- |
+| `specialty_ingredients` (global) | slug, key, name, aliases[], aliasKeys[], category, unitSizes[{per, quantity, quantityValue, unit}], defaultOptionId, options[{id, type, name, notes, per{quantity, quantityValue, unit}, ingredients[{name, quantity, quantityValue, unit, category}], steps[], yield{}, shelfLifeDays}], seedVersion, contentHash, retired, createdAt, updatedAt | **unique** `{slug}`; **unique** `{key}` |
+| `specialty_options` | householdId, specialtyId (slug), type, name, notes, per{}, ingredients[], steps[], yield{}, shelfLifeDays, basedOnOptionId, createdBy, updatedBy, createdAt, updatedAt | `{householdId, specialtyId, createdAt}` |
+| `specialty_choices` | householdId, specialtyId (slug), optionId (curated slug, option ObjectID hex, or `as_is`), chosenBy, chosenAt | **unique** `{householdId, specialtyId}`; `{householdId, optionId}` |
+
+- **Curated data is seeded.** `specialty_ingredients` is written only by the
+  seed sync (startup and `cmd/seedspecialties`): an upsert on `slug` that
+  `$setOnInsert`s `_id` and `createdAt`, guarded by `contentHash` so unchanged
+  specialties aren't written. Specialties the seed dropped get `retired: true`
+  and are never deleted. The collection is small (tens of documents) and read
+  whole.
+- Curated options are embedded (bounded by the seed); household options are
+  their own documents, at most 10 per household and specialty.
+- **Exact amounts** as elsewhere: `quantity` strings are authoritative,
+  `quantityValue` is a double copy.
+- A choice is one upserted document per household and specialty; applying
+  defaults uses `$setOnInsert`, so it never changes an existing choice.
+  Deleting a household option `deleteMany`s the choices of it.
+- **No flag on the catalog.** Whether an ingredient is a specialty ingredient
+  is decided at read time by comparing catalog keys and normalized names with
+  `key` and `aliasKeys`.
+- **Batches live in the pantry**: the batch is the `pantry_items` document
+  whose `key` is the specialty's `key`, and each batch made is a
+  `pantry_purchases` document with `source: house_made`.
 
 ### Notifications
 

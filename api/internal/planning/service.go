@@ -40,6 +40,13 @@ type PantrySource interface {
 	GroceryPantry(ctx context.Context, householdID string) (grocery.PantryStock, error)
 }
 
+// SpecialtySource resolves the specialty ingredients (meal-kit blends,
+// sauces, and concentrates) among a grocery list's lines, with the
+// household's choices. *substitutes.Service implements it.
+type SpecialtySource interface {
+	GrocerySpecialties(ctx context.Context, householdID string, lines []grocery.Line) (grocery.Specialties, error)
+}
+
 // Service implements the weekly planner. Like recipes.Service it takes a
 // household ID: HTTP routes authorize first with households.RequirePermission.
 type Service struct {
@@ -47,6 +54,8 @@ type Service struct {
 	recipes RecipeReader
 	// pantry is optional; without it grocery lists use an empty pantry.
 	pantry PantrySource
+	// specialties is optional; without it specialty lines stay as they are.
+	specialties SpecialtySource
 	// events is optional; without it entry changes record nothing.
 	events events.Recorder
 	logger *slog.Logger
@@ -62,6 +71,13 @@ func NewService(store Store, recipeReader RecipeReader) *Service {
 // returns s.
 func (s *Service) WithPantry(source PantrySource) *Service {
 	s.pantry = source
+	return s
+}
+
+// WithSpecialties makes GroceryList apply the household's specialty
+// ingredient choices from source (grocery.ApplySpecialties), and returns s.
+func (s *Service) WithSpecialties(source SpecialtySource) *Service {
+	s.specialties = source
 	return s
 }
 
@@ -400,6 +416,13 @@ func (s *Service) SetStatus(ctx context.Context, householdID, week, status strin
 // (see pantry.Service.GroceryPantry). Without one, items are toBuy, or
 // pantryHint when every source marks them as a staple. PantryApplied says
 // which happened. A pantry read failure fails the list.
+//
+// With a specialty source (WithSpecialties), specialty ingredient lines are
+// handled as the household chose before aggregating: replaced by a store
+// alternative's ingredients, kept as a house-made batch in the pantry, or
+// replaced by the ingredients to make one (Batches reports these). Lines
+// without a choice stay, marked with suggested options. SpecialtiesApplied
+// says whether this happened; a failure to load the choices fails the list.
 func (s *Service) GroceryList(ctx context.Context, householdID, week string) (GroceryList, error) {
 	w, err := s.parse(householdID, week)
 	if err != nil {
@@ -429,11 +452,28 @@ func (s *Service) GroceryList(ctx context.Context, householdID, week string) (Gr
 			pantry = stock
 		}
 	}
-	g, err := buildGroceryList(p, live, pantry)
+	selections, skipped := grocerySelections(p, live)
+	var batches []grocery.BatchPlan
+	if s.specialties != nil && len(selections) > 0 {
+		var lines []grocery.Line
+		for _, sel := range selections {
+			lines = append(lines, sel.Lines...)
+		}
+		specs, err := s.specialties.GrocerySpecialties(ctx, householdID, lines)
+		if err != nil {
+			return GroceryList{}, fmt.Errorf("planning: load specialty ingredients: %w", err)
+		}
+		if selections, batches, err = grocery.ApplySpecialties(selections, specs); err != nil {
+			return GroceryList{}, err
+		}
+	}
+	g, err := aggregateGroceryList(p, selections, skipped, pantry)
 	if err != nil {
 		return GroceryList{}, err
 	}
+	g.Batches = batches
 	g.PantryApplied = s.pantry != nil
+	g.SpecialtiesApplied = s.specialties != nil
 	return g, nil
 }
 

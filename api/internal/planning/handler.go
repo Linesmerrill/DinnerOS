@@ -14,6 +14,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
+	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
 )
 
@@ -120,9 +121,73 @@ type GroceryListResponse struct {
 	Week   string `json:"week"`
 	Status Status `json:"status"`
 	// PantryApplied is true when the household pantry decided statuses.
-	PantryApplied bool                      `json:"pantryApplied"`
-	Categories    []GroceryCategoryResponse `json:"categories"`
-	Skipped       []SkippedEntryResponse    `json:"skipped"`
+	PantryApplied bool `json:"pantryApplied"`
+	// SpecialtiesApplied is true when specialty ingredient choices were
+	// applied.
+	SpecialtiesApplied bool                      `json:"specialtiesApplied"`
+	Categories         []GroceryCategoryResponse `json:"categories"`
+	// Batches are the house-made specialty ingredients the week uses.
+	Batches []GroceryBatchResponse `json:"batches"`
+	Skipped []SkippedEntryResponse `json:"skipped"`
+}
+
+// GrocerySpecialtyResponse describes an item that is itself a specialty
+// ingredient.
+type GrocerySpecialtyResponse struct {
+	ID   string `json:"id"`
+	Key  string `json:"key"`
+	Name string `json:"name"`
+	// ChoiceType is null when the household hasn't chosen, as_is, or
+	// house_made_batch when a batch in the pantry covers the week.
+	ChoiceType *grocery.ChoiceType `json:"choiceType"`
+	OptionID   *string             `json:"optionId"`
+	HouseMade  bool                `json:"houseMade"`
+	// SuggestedOptions are offered when the household hasn't chosen.
+	SuggestedOptions []GroceryOptionRefResponse `json:"suggestedOptions"`
+	Text             string                     `json:"text"`
+}
+
+// GroceryOptionRefResponse names an option to suggest.
+type GroceryOptionRefResponse struct {
+	ID        string             `json:"id"`
+	Type      grocery.ChoiceType `json:"type"`
+	Name      string             `json:"name"`
+	IsDefault bool               `json:"isDefault"`
+}
+
+// GroceryViaResponse is an item's provenance when it stands in for a
+// specialty ingredient.
+type GroceryViaResponse struct {
+	Kind          grocery.ViaKind `json:"kind"`
+	SpecialtyID   string          `json:"specialtyId"`
+	SpecialtyKey  string          `json:"specialtyKey"`
+	SpecialtyName string          `json:"specialtyName"`
+	OptionID      string          `json:"optionId"`
+	OptionName    string          `json:"optionName"`
+	// Yield and Batches are set for house_made_batch.
+	Yield   *GroceryAmountResponse  `json:"yield"`
+	Batches *int                    `json:"batches"`
+	Recipes []GroceryRecipeResponse `json:"recipes"`
+	Text    string                  `json:"text"`
+}
+
+// GroceryBatchResponse is a house-made specialty ingredient the week uses.
+type GroceryBatchResponse struct {
+	SpecialtyID   string                `json:"specialtyId"`
+	SpecialtyKey  string                `json:"specialtyKey"`
+	SpecialtyName string                `json:"specialtyName"`
+	OptionID      string                `json:"optionId"`
+	OptionName    string                `json:"optionName"`
+	Yield         GroceryAmountResponse `json:"yield"`
+	// Status is inPantry or make; Reason explains it.
+	Status       grocery.BatchStatus     `json:"status"`
+	Reason       grocery.BatchReason     `json:"reason"`
+	Batches      int                     `json:"batches"`
+	PantryItemID *string                 `json:"pantryItemId"`
+	Remaining    *GroceryAmountResponse  `json:"remaining"`
+	Needed       *GroceryAmountResponse  `json:"needed"`
+	Recipes      []GroceryRecipeResponse `json:"recipes"`
+	Text         string                  `json:"text"`
 }
 
 // GroceryCategoryResponse is one aisle.
@@ -141,6 +206,12 @@ type GroceryItemResponse struct {
 	Unquantified bool                    `json:"unquantified"`
 	Status       grocery.Status          `json:"status"`
 	Recipes      []GroceryRecipeResponse `json:"recipes"`
+	// Specialty is true when the item is a specialty ingredient by its own
+	// name; SpecialtyDetail says more.
+	Specialty       bool                      `json:"specialty"`
+	SpecialtyDetail *GrocerySpecialtyResponse `json:"specialtyDetail"`
+	// Via lists the specialty ingredients the item stands in for.
+	Via []GroceryViaResponse `json:"via"`
 }
 
 // GroceryAmountResponse is a combined amount in one unit.
@@ -228,9 +299,13 @@ func newEntryResponse(w Week, e Entry) EntryResponse {
 
 func newGroceryListResponse(g GroceryList) GroceryListResponse {
 	resp := GroceryListResponse{
-		Week: g.Week.String(), Status: g.Status, PantryApplied: g.PantryApplied,
+		Week: g.Week.String(), Status: g.Status, PantryApplied: g.PantryApplied, SpecialtiesApplied: g.SpecialtiesApplied,
 		Categories: make([]GroceryCategoryResponse, 0, len(g.Categories)),
+		Batches:    make([]GroceryBatchResponse, 0, len(g.Batches)),
 		Skipped:    make([]SkippedEntryResponse, 0, len(g.Skipped)),
+	}
+	for _, b := range g.Batches {
+		resp.Batches = append(resp.Batches, newGroceryBatchResponse(b))
 	}
 	for _, c := range g.Categories {
 		cr := GroceryCategoryResponse{Category: c.Category, Items: make([]GroceryItemResponse, 0, len(c.Items))}
@@ -252,6 +327,13 @@ func newGroceryListResponse(g GroceryList) GroceryListResponse {
 			for _, src := range item.Sources {
 				ir.Recipes = append(ir.Recipes, GroceryRecipeResponse{ID: src.RecipeID, Name: src.RecipeName})
 			}
+			ir.Via = make([]GroceryViaResponse, 0, len(item.Via))
+			for _, v := range item.Via {
+				ir.Via = append(ir.Via, newGroceryViaResponse(v))
+			}
+			if s := item.Specialty; s != nil {
+				ir.Specialty, ir.SpecialtyDetail = true, newGrocerySpecialtyResponse(*s)
+			}
 			cr.Items = append(cr.Items, ir)
 		}
 		resp.Categories = append(resp.Categories, cr)
@@ -269,6 +351,123 @@ func amountText(a grocery.Amount) string {
 		text += " " + label
 	}
 	return text
+}
+
+func measureResponse(m grocery.Measure) GroceryAmountResponse {
+	unit, _ := ingredients.LookupUnit(m.Unit)
+	return GroceryAmountResponse{
+		Quantity: m.Quantity.String(), QuantityValue: m.Quantity.Float64(), Unit: m.Unit,
+		Text: amountText(grocery.Amount{Quantity: m.Quantity, Unit: unit}),
+	}
+}
+
+func optionalMeasure(m *grocery.Measure) *GroceryAmountResponse {
+	if m == nil {
+		return nil
+	}
+	r := measureResponse(*m)
+	return &r
+}
+
+func recipeResponses(sources []grocery.Source) []GroceryRecipeResponse {
+	out := make([]GroceryRecipeResponse, 0, len(sources))
+	for _, s := range sources {
+		out = append(out, GroceryRecipeResponse{ID: s.RecipeID, Name: s.RecipeName})
+	}
+	return out
+}
+
+// joinNames joins names as "A", "A and B", or "A, B, and C".
+func joinNames(sources []grocery.Source) string {
+	names := make([]string, 0, len(sources))
+	for _, s := range sources {
+		names = append(names, s.RecipeName)
+	}
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return names[0]
+	case 2:
+		return names[0] + " and " + names[1]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + ", and " + names[len(names)-1]
+}
+
+func newGroceryViaResponse(v grocery.ItemVia) GroceryViaResponse {
+	resp := GroceryViaResponse{
+		Kind: v.Kind, SpecialtyID: v.SpecialtyID, SpecialtyKey: v.SpecialtyKey, SpecialtyName: v.SpecialtyName,
+		OptionID: v.OptionID, OptionName: v.OptionName, Yield: optionalMeasure(v.Yield), Recipes: recipeResponses(v.Recipes),
+	}
+	switch v.Kind {
+	case grocery.ViaStoreAlternative:
+		resp.Text = "for " + v.SpecialtyName
+		if names := joinNames(v.Recipes); names != "" {
+			resp.Text += " in " + names
+		}
+	case grocery.ViaHouseMadeBatch:
+		batches := v.Batches
+		resp.Batches = &batches
+		yield := ""
+		if resp.Yield != nil {
+			yield = resp.Yield.Text
+		}
+		if batches > 1 {
+			resp.Text = fmt.Sprintf("to make %d batches of %s (each makes about %s)", batches, v.SpecialtyName, yield)
+		} else {
+			resp.Text = fmt.Sprintf("to make %s (makes about %s)", v.SpecialtyName, yield)
+		}
+	}
+	return resp
+}
+
+func newGrocerySpecialtyResponse(s grocery.LineSpecialty) *GrocerySpecialtyResponse {
+	resp := &GrocerySpecialtyResponse{
+		ID: s.ID, Key: s.Key, Name: s.Name, HouseMade: s.HouseMade,
+		SuggestedOptions: make([]GroceryOptionRefResponse, 0, len(s.Suggestions)),
+	}
+	if s.ChoiceType != "" {
+		choice := s.ChoiceType
+		resp.ChoiceType = &choice
+	}
+	if s.OptionID != "" {
+		id := s.OptionID
+		resp.OptionID = &id
+	}
+	for _, o := range s.Suggestions {
+		resp.SuggestedOptions = append(resp.SuggestedOptions, GroceryOptionRefResponse(o))
+	}
+	switch {
+	case s.HouseMade:
+		resp.Text = "In pantry (house-made)"
+	case s.ChoiceType == grocery.ChoiceAsIs:
+		resp.Text = "Specialty ingredient, bought as is"
+	default:
+		resp.Text = "Specialty ingredient: choose a store alternative or a house-made batch"
+	}
+	return resp
+}
+
+func newGroceryBatchResponse(b grocery.BatchPlan) GroceryBatchResponse {
+	resp := GroceryBatchResponse{
+		SpecialtyID: b.SpecialtyID, SpecialtyKey: b.SpecialtyKey, SpecialtyName: b.SpecialtyName,
+		OptionID: b.OptionID, OptionName: b.OptionName, Yield: measureResponse(b.Yield),
+		Status: b.Status, Reason: b.Reason, Batches: b.Batches,
+		Remaining: optionalMeasure(b.Remaining), Needed: optionalMeasure(b.Needed), Recipes: recipeResponses(b.Recipes),
+	}
+	if b.ItemID != "" {
+		id := b.ItemID
+		resp.PantryItemID = &id
+	}
+	switch {
+	case b.Status == grocery.BatchInPantry:
+		resp.Text = "In pantry (house-made)"
+	case b.Batches > 1:
+		resp.Text = fmt.Sprintf("Make %d batches (each makes about %s)", b.Batches, resp.Yield.Text)
+	default:
+		resp.Text = fmt.Sprintf("Make a batch (makes about %s)", resp.Yield.Text)
+	}
+	return resp
 }
 
 // --- Handlers -----------------------------------------------------------------

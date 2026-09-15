@@ -18,6 +18,9 @@ Status:
     and [api.md](api.md#pantry)). `planning.Service.GroceryList` passes it to
     `Aggregate`, so items get `inPantry`, and the list reports
     `pantryApplied: true`.
+  - Specialty ingredients (meal-kit blends, sauces, concentrates):
+    `grocery.ApplySpecialties` replaces or keeps those lines as the household
+    chose before `Aggregate` (see [Specialty ingredients](#specialty-ingredients)).
 - **Pending:**
   - Saved grocery lists with checked state, and the shopping UI (Phase 7).
   - Comparing pantry amounts with what the recipes need.
@@ -136,6 +139,34 @@ that `Aggregate` takes:
   tracking ([pantry-usage.md](pantry-usage.md)) marks items `low` on its own
   when the estimate crosses the household's threshold, which puts them back
   on the list.
+
+## Specialty ingredients
+
+`ApplySpecialties(selections, specialties)` runs before `Aggregate` when the
+planner has a specialty source ([specialty-ingredients.md](specialty-ingredients.md)).
+It's pure: the household's choices, option ingredients (already linked to
+catalog keys), and batch stock come in as `grocery.Specialties`, keyed by line
+key.
+
+- **No choice or `as_is`:** the line is kept and marked (`Line.Specialty`).
+- **Store alternative:** the line's amount is converted exactly to the
+  option's `per` unit (`ConvertMeasure`, through the specialty's packet sizes
+  for discrete units), and each option ingredient becomes a line scaled by
+  that ratio, with `Line.Via`. `Aggregate` then scales by servings as usual,
+  so a store alternative scales exactly like the recipe line it replaces.
+- **House-made batch:** the week's lines are totaled in the yield's unit. If
+  the batch item is in stock and covers the total, the lines are kept under
+  the batch's pantry key (`name:<key>`) and marked house-made, so the pantry
+  makes them `inPantry`. Otherwise they're removed and the option's
+  ingredients for `ceil(shortfall ÷ yield)` batches (at least 1) are added in
+  a synthetic selection whose lines carry `Line.Sources` (the recipes that
+  need the batch) instead of a recipe of their own. A `BatchPlan` reports
+  either outcome.
+
+`Aggregate` merges `Via` per item by kind, specialty, and option, with the
+recipes each is for, and keeps the `Specialty` marking. Lines without these
+fields aggregate exactly as before, and the output still doesn't depend on
+input order.
 
 ## Rules
 

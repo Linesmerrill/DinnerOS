@@ -73,6 +73,7 @@ api/
 │   ├── ingredients/     Ingredient, units, quantities, conversion
 │   ├── planning/        Week plans, entries, week grocery list
 │   ├── pantry/          PantryItem, default staples, pantry snapshot for grocery lists, purchases, usage estimates
+│   ├── substitutes/     specialty ingredients: curated seed, store alternatives, house-made batches, household choices
 │   ├── notifications/   household notifications and the push outbox
 │   ├── grocery/         aggregation engine, GroceryList
 │   ├── providers/       GroceryProvider implementations
@@ -213,7 +214,22 @@ ios/DinnerOS/
   week shown in the Week tab, which starts at this week in the household's time
   zone. Changes apply the plan the API returns; a delete, or a `403`/`404`/`409`,
   reloads the week. `GroceryListModel` backs one grocery list screen, keeps
-  check-offs on the device, and exports the list as plain text.
+  check-offs on the device, and exports the list as plain text. Checking off a
+  line asks "Add to pantry?" in a card at the bottom of the list and records the
+  purchase through `PantryPurchaseRecording` (#106).
+- **Pantry usage (`Core/Pantry`):** `PantryItem` decodes `statusSource`,
+  `lowThresholdPercent`, `unitSize`, and `estimate` leniently, so older
+  responses and unreadable estimates still show the item. `PantryStore` records
+  purchases (one `clientPurchaseId` per draft, so retries record once), loads an
+  item's purchase history on demand, and reads and updates the household
+  threshold. `PantryUsageFormat` builds short, localizable text from the
+  estimate's numbers; the API's English `summary` is shown only in the item's
+  detail. See [pantry-usage.md](pantry-usage.md#ios).
+- **Notifications (`Core/Notifications`):** `NotificationsAPI` wraps the
+  household notification endpoints. `NotificationStore` (`@Observable`, main
+  actor, app lifetime) holds the unread count for the bell badge and the paged
+  list, marks notifications read on screen before the request returns, and
+  resets on sign-out and household switches (#108, #109).
 - **Ratings (`Core/Recipes`):** recipe summaries and details carry
   `householdRating` and `myRating`. `RatingDraft` enforces the API's rating
   rules while the user edits. `RecipeLibrary` saves or removes a rating, then
@@ -223,8 +239,9 @@ ios/DinnerOS/
   `grocery.item_checked` into a JSON queue in Application Support. It sends
   batches when the app goes to the background, every 60 seconds while active,
   and at 20 queued events. The queue belongs to one user and household.
-- **Navigation:** a tab shell (Week, Recipes, Shop, Household) with
-  `NavigationStack` per tab, native sheets, and forms.
+- **Navigation:** a tab shell (Recipes, Week, Shop, Pantry, Household) with
+  `NavigationStack` per tab, native sheets, and forms. Notifications open from a
+  bell in the Pantry and Week toolbars (#108).
 - **Quality bar:** Dynamic Type, VoiceOver labels, dark mode, and explicit
   loading, empty, and error states for every screen.
 - **Visual identity:** Apple-native structure with DinnerOS's own herb-green
@@ -351,3 +368,20 @@ a versioned Autopilot API. See [autopilot.md](autopilot.md).
 | 103 | Time-based decay needs no scheduler: `GET .../pantry` and notification reads run the household's low-stock check first (bounded to 3 s for notifications, failures logged). Push will add an hourly Heroku Scheduler sweep calling the same idempotent `Refresh` | In-app alerts only matter when someone opens the app, and that request can do the check. Push must reach closed apps, which is when a sweep earns its cost. |
 | 104 | Notifications are their own module (`internal/notifications`): household-wide, with per-member `readBy`, and the collection is the push outbox (`push.status` starts `pending`, partial index for pending) | Other features will notify too, so it isn't pantry-specific. A household sees one alert, but each member dismisses it separately. Writing the push state with the notification means the APNs worker needs no second outbox and no producer changes. |
 | 105 | The low-stock threshold is a household setting (`pantry_settings`, default 80%, 1–100) with an optional per-item override, not an environment variable | Households differ, and so do items (running out of salt is not running out of milk). It's product data members change, not deployment configuration. |
+| 106 | iOS asks "Add to pantry?" after a grocery check-off in a card inset at the bottom of the list, not a sheet or alert. Confirming closes it at once and records the purchase in the background; checking another line replaces an unanswered card; a failure shows Try Again, which resends the same `clientPurchaseId`. "Don't ask during this trip" is in memory on that list screen's model, so leaving the list, switching households, or signing out ends it | A shopper checks off many lines in a row, often one-handed, and a modal after every tap would block the list. Recording in the background keeps the checklist responsive, and one ID per prompt makes a retry after a lost response record a single purchase (#96). A trip is one visit to the list; a stored preference would silently stop prompts on the next shop. |
+| 107 | The household low-stock threshold is edited from the Pantry tab's More menu ("Low-Stock Alerts…"), shown as percent used and read-only without `pantry.edit`. An item's own threshold is a toggle and stepper in its edit sheet, sent as an integer or `null` | The setting is guarded by `pantry.edit`, not `household.update`, and only changes pantry estimates, so it belongs beside the items it affects. Household settings stay about the household itself. |
+| 108 | In-app notifications open from a bell toolbar button with an unread badge on the Pantry and Week screens, as a sheet with the paged list. There's no notifications tab or tab badge. Tapping `pantry.low` marks it read and pushes that item's detail inside the sheet | The tab bar is full at five tabs, and a sixth would hide a tab behind More. Pantry and Week are where low stock matters (restocking and planning). Pushing inside the sheet works from either tab without switching tabs or losing the member's place. |
+| 109 | The unread count refreshes when a household is activated, when the app becomes active, after every pantry load or change (purchases and threshold changes included), after Mark as Cooked, and when the notifications sheet closes. There's no polling | Notifications are created only by pantry reads, changes, and cook deductions (#102, #103), so these are the moments the count can change. Polling costs requests and battery for alerts that aren't urgent until push exists. |
+| 110 | Mark as Cooked sends the event queue right away, then refreshes the pantry and the unread count | The API deducts a recipe when its `recipe.cooked` event is stored (#99), and the queue otherwise waits up to 60 seconds (#91), so the pantry would show a stale estimate right after cooking. The send still honors backoff. |
+| 111 | A low status the estimate set (`statusSource: estimate`) shows as an outlined, dashed "Estimated Low" pill with a trend icon; a person's status keeps the filled pill. Rows with an estimate show a small ring and "~N% left". The API's `summary`, recipe use, daily rate, the threshold and its source, and recent purchases are on the item's edit sheet, or a read-only detail for members without `pantry.edit`. Purchase history is loaded when that screen opens and isn't cached | Members need to tell at a glance which statuses a person confirmed and which are estimates they can correct (#102). Rows stay scannable and the explanation is one tap away. History is only read on that screen, so a cache would add invalidation without saving a visible request. |
+| 112 | Specialty ingredients are their own module (`internal/substitutes`). Planning reaches it through an optional `SpecialtySource` and the pantry through an optional `KeyResolver`; substitutes imports the pantry, never the reverse | The pantry and planner keep working without it, and there's no import cycle. Choices change grocery lists and batches change the pantry, so neither module should own the other's rules. |
+| 113 | The curated set is a versioned JSON seed (`internal/substitutes/seed`) embedded in the binary and synced on startup, guarded by a per-specialty content hash. Specialties the seed drops are retired, never deleted. `cmd/seedspecialties` previews or applies the same sync and reports catalog matches | Curated option IDs are part of the API contract (choices reference them), so the database must match the running binary, and Heroku runs no release phase. A hash-guarded sync writes nothing on a normal boot. Retiring keeps household choices resolvable. The command lets a seed change be checked against real data first. |
+| 114 | "Is this a specialty ingredient?" is decided at read time from curated names and aliases against catalog keys and normalized recipe names, not stored on catalog ingredients. Unknown specialty-looking names aren't flagged | Same reason as #57: an ingredient the catalog learns later matches with no backfill, and the global catalog isn't written by another module. Guessing from words like "paste" would flag store products. |
+| 115 | Curated defaults are suggestions: a list changes only after a member chooses (per ingredient, or all defaults at once with `POST .../choices/defaults`). `as_is` keeps the name and stops prompting. Households override curated options by adding their own (`basedOnOptionId`), not by editing them | Replacing what a recipe says without anyone deciding would surprise a household that buys the product elsewhere. One call still sets up a whole history. Read-only curated options stay comparable across households and safe to update in the seed. |
+| 116 | A store alternative is an exact ratio: `per` of the specialty is its ingredients. A recipe amount converts to `per` exactly, through the specialty's estimated packet sizes for `count`/`package`. An amount that doesn't convert lists the ingredients without amounts | Consistent with #98: nothing is guessed. Packet sizes are the one estimate, stored as data where they can be corrected. An ingredient without an amount still reaches the shopping list. |
+| 117 | A house-made batch is the pantry item keyed by the specialty's normalized name. Making one is a purchase with `source: house_made` through the existing restock (a new cycle at the yield, `expiresOn` from the shelf life), recorded only by `POST .../specialty-ingredients/{id}/batches` | The cook deduction already matches recipe lines to items by key, so batches deduct, estimate, and alert with no new pantry logic. One endpoint knows the yield, packet size, and shelf life, so apps can't record an inconsistent batch. |
+| 118 | The week's grocery list keeps a batch as one `inPantry` line when it's in stock and its estimate covers the week's total (or the amounts can't be compared); otherwise it lists the ingredients for enough batches to cover the shortfall, at least one. Low, out, or missing always means making one | The household's question is "do I need to make it this week?". Trusting status when amounts can't be compared matches #56. Several batches for a big week avoids a second trip. |
+| 119 | Grocery list changes are additive: every item gets `specialty`, `specialtyDetail`, and `via`; the list gets `specialtiesApplied` and `batches`. Item statuses are unchanged (no `toMake`), and provenance comes with English `text` | Existing clients keep decoding while the iOS work lands. The `batches` section carries "make" without overloading a shopping status, and ready text keeps explanations consistent across clients. |
+| 120 | `grocery.ApplySpecialties` is pure and runs in planning before `Aggregate`; `Aggregate` only gains `Line.Via`, `Line.Specialty`, and `Line.Sources` | The engine rules ([grocery-engine.md](grocery-engine.md#rules): deterministic, no I/O) still hold, the replacement is unit tested in isolation, and ordinary lines aggregate exactly as before. |
+| 121 | Reading specialty ingredients needs `household.view`; choosing, options, defaults, and batches need `pantry.edit` | Choices change what the household buys and batches change the pantry, which is what `pantry.edit` guards (#59). Members have it; viewers don't. |
+| 122 | A specialty's recipe count comes from one aggregation (`recipes.Service.FindIngredientUse`) over the household's recipes by catalog ingredient ID, counting each recipe once per specialty | The setup screen needs "used in 52 recipes" without loading every recipe. Counting by ID covers aliases; recipe lines without a catalog ID aren't counted, and imports always link one. |

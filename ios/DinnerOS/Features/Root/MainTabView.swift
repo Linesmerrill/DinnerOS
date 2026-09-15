@@ -3,6 +3,7 @@ import SwiftUI
 /// The signed-in tab shell. Shop is a placeholder until its phase is implemented.
 struct MainTabView: View {
     @Environment(HouseholdStore.self) private var households
+    @Environment(NotificationStore.self) private var notifications
     @State private var selection: AppTab = .recipes
 
     var body: some View {
@@ -39,6 +40,11 @@ struct MainTabView: View {
                     Label(tab.title, systemImage: tab.systemImage)
                 }
             }
+        }
+        // Another household clears the previous one's notifications and badge.
+        .task(id: households.current?.household.id) {
+            guard let householdID = households.current?.household.id else { return }
+            await notifications.activate(householdID: householdID)
         }
     }
 }

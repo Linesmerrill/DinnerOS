@@ -101,6 +101,8 @@ every credential and where to get it.
 - [API](docs/api.md): REST conventions and the OpenAPI spec
 - [Grocery engine](docs/grocery-engine.md): ingredient normalization, units, aggregation
 - [Pantry usage](docs/pantry-usage.md): purchases, cooking deductions, learned usage, low-stock alerts, notifications
+- [Shopping providers](docs/shopping-providers.md): Walmart, Instacart, and Kroger handoff research and the Phase 8 plan
+- [Specialty ingredients](docs/specialty-ingredients.md): meal-kit blends and sauces, store alternatives, house-made batches
 - [Autopilot](docs/autopilot.md): recommendation and week-optimization architecture
 - [Deployment](docs/deployment.md): Heroku, TestFlight, and required credentials
 

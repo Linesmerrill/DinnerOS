@@ -47,6 +47,11 @@ type Store interface {
 	// ID, without steps, nutrition, or descriptions. Ingredient lines are
 	// included (without categories).
 	ListCatalog(ctx context.Context, householdID string, limit int) ([]Recipe, error)
+	// FindIngredientUse returns one IngredientUse per household recipe that
+	// has a line with any of ingredientIDs, ordered by recipe ID. Each use
+	// lists which of those IDs the recipe has, sorted and without repeats.
+	// Malformed IDs are skipped.
+	FindIngredientUse(ctx context.Context, householdID string, ingredientIDs []string) ([]IngredientUse, error)
 
 	// SaveReviewItems records review items. Items already recorded for the
 	// household (same reviewKey) are left unchanged.

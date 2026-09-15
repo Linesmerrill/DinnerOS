@@ -5,7 +5,14 @@ struct GroceryListView: View {
     let week: ISOWeek
 
     @Environment(PlanStore.self) private var plans
+    @Environment(PantryStore.self) private var pantry
+    @Environment(HouseholdStore.self) private var households
     @State private var model: GroceryListModel?
+
+    /// Hiding the "Add to pantry?" prompt is a convenience; the API enforces `pantry.edit`.
+    private var canEditPantry: Bool {
+        households.access?.can(.pantryEdit) == true
+    }
 
     var body: some View {
         Group {
@@ -20,9 +27,18 @@ struct GroceryListView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             if model == nil {
-                model = plans.makeGroceryList(week: week)
+                model = plans.makeGroceryList(week: week, purchases: pantry, canAddToPantry: canEditPantry)
             }
             await model?.load()
+        }
+        .onChange(of: canEditPantry) { _, canEdit in
+            model?.setCanAddToPantry(canEdit)
+        }
+        .onChange(of: model?.purchaseFailure?.isForbidden == true) { _, isForbidden in
+            // The role changed elsewhere; reload it so the rest of the app matches.
+            if isForbidden {
+                Task { await households.load() }
+            }
         }
     }
 }
@@ -132,6 +148,9 @@ struct GroceryListContent: View {
         }
         .refreshable {
             await model.load()
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            GroceryPurchaseBanner(model: model)
         }
     }
 

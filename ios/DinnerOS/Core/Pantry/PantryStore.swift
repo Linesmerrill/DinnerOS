@@ -26,6 +26,12 @@ final class PantryStore {
     private(set) var items: [PantryItem] = []
     /// Set when a reload failed while items stayed on screen.
     private(set) var refreshError: String?
+    /// The household's low-stock setting; `nil` until `loadSettings()` succeeds.
+    private(set) var settings: PantrySettings?
+
+    /// Called after the pantry loads or changes, because both can create notifications (a
+    /// pantry read runs the API's low-stock check). The app refreshes the unread count here.
+    @ObservationIgnored var onChange: (() -> Void)?
 
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let api: PantryAPI?
@@ -101,6 +107,7 @@ final class PantryStore {
             items = PantryList.sorted(loaded)
             refreshError = nil
             phase = .loaded
+            onChange?()
         } catch is CancellationError {
             // A cancelled view task; the next activation loads again.
             if started == generation, phase == .loading { phase = .idle }
@@ -216,6 +223,66 @@ final class PantryStore {
         PantryList.existingItem(in: items, named: name, ingredientID: ingredientID)
     }
 
+    // MARK: - Usage
+
+    /// Records a purchase in `householdID`'s pantry (the shown pantry's when `nil`). A grocery
+    /// list can record one before the Pantry tab was ever opened; the returned item is applied
+    /// only when it belongs to the shown pantry.
+    @discardableResult
+    func recordPurchase(_ purchase: NewPantryPurchase, householdID: String? = nil) async throws
+        -> PantryPurchaseResponse
+    {
+        guard let api else { throw AuthSessionError.notConfigured }
+        guard let target = householdID ?? self.householdID else { throw AuthSessionError.signedOut }
+        let started = generation
+        let response: PantryPurchaseResponse
+        if target == self.householdID {
+            response = try await perform { token in
+                try await api.recordPurchase(householdID: target, purchase: purchase, accessToken: token)
+            }
+            if started == generation { apply([response.item]) }
+        } else {
+            response = try await session.authorized { token in
+                try await api.recordPurchase(householdID: target, purchase: purchase, accessToken: token)
+            }
+            onChange?()
+        }
+        Self.logger.info("Pantry purchase recorded (\(purchase.source.rawValue, privacy: .public))")
+        return response
+    }
+
+    /// The item's most recent purchases, newest first. Not cached.
+    func purchases(ofItemWithID itemID: String) async throws -> [PantryPurchase] {
+        let (api, householdID) = try requirePantry()
+        return try await session.authorized { token in
+            try await api.purchases(householdID: householdID, itemID: itemID, accessToken: token)
+        }
+    }
+
+    @discardableResult
+    func loadSettings() async throws -> PantrySettings {
+        let (api, householdID) = try requirePantry()
+        let started = generation
+        let loaded = try await session.authorized { token in
+            try await api.settings(householdID: householdID, accessToken: token)
+        }
+        if started == generation { settings = loaded }
+        return loaded
+    }
+
+    /// Sets the household's threshold, then reloads so every estimate uses it.
+    func updateSettings(lowThresholdPercent: Int) async throws {
+        let (api, householdID) = try requirePantry()
+        let started = generation
+        let updated = try await perform { token in
+            try await api.updateSettings(
+                householdID: householdID, lowThresholdPercent: lowThresholdPercent, accessToken: token)
+        }
+        guard started == generation else { return }
+        settings = updated
+        await load(showingProgress: false)
+    }
+
     // MARK: - Ingredient catalog
 
     func searchCatalog(_ query: String, limit: Int = IngredientSuggestions.resultLimit) async throws
@@ -243,6 +310,7 @@ final class PantryStore {
         phase = .idle
         items = []
         refreshError = nil
+        settings = nil
     }
 
     // MARK: - Helpers
@@ -257,7 +325,9 @@ final class PantryStore {
 
     private func perform<Result: Sendable>(_ operation: (String) async throws -> Result) async throws -> Result {
         do {
-            return try await session.authorized { token in try await operation(token) }
+            let result = try await session.authorized { token in try await operation(token) }
+            onChange?()
+            return result
         } catch let error as APIError where [403, 404, 409].contains(error.status) {
             Self.logger.notice("Pantry change rejected: \(Self.describe(error), privacy: .public)")
             await load(showingProgress: false)
@@ -287,3 +357,12 @@ final class PantryStore {
         }
     }
 }
+
+/// Records purchases in a household's pantry. `PantryStore` is the app's; grocery lists
+/// depend on this instead of the whole store.
+protocol PantryPurchaseRecording: AnyObject {
+    @discardableResult
+    func recordPurchase(_ purchase: NewPantryPurchase, householdID: String?) async throws -> PantryPurchaseResponse
+}
+
+extension PantryStore: PantryPurchaseRecording {}

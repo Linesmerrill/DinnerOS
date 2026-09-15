@@ -38,6 +38,12 @@ tags:
       with a recorded amount estimate what's left from purchases, cooked
       recipes, and learned use, and are marked low at a threshold
       (docs/pantry-usage.md).
+  - name: specialty-ingredients
+    description: |
+      Meal-kit blends, sauces, pastes, and concentrates that recipes name but
+      grocery stores don't sell under that name. Curated store alternatives
+      and house-made batches, household options and choices, and batches
+      recorded in the pantry (docs/specialty-ingredients.md).
   - name: notifications
     description: |
       Household notifications (such as a pantry item running low). Every
@@ -975,6 +981,14 @@ paths:
         items are `inPantry`, items marked out are `toBuy`, and the rest are
         `pantryHint` when every recipe marks them as staples, otherwise
         `toBuy`. Amounts whose units can't be combined stay separate.
+
+        Specialty ingredients are handled as the household chose first
+        (`specialtiesApplied: true`, docs/specialty-ingredients.md): a store
+        alternative is replaced by its regular ingredients (`via`); a
+        house-made batch stays as an `inPantry` item when the pantry batch
+        covers the week, or is replaced by the ingredients for enough batches
+        (`batches`); without a choice the item stays with `specialty: true`
+        and `specialtyDetail.suggestedOptions`.
       operationId: getPlanGroceryList
       tags: [plans]
       security:
@@ -1384,6 +1398,274 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/households/{householdId}/specialty-ingredients:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: List specialty ingredients
+      description: |
+        The specialty ingredients the household's recipes use, most used first
+        (`recipeCount`), then by name, each with the household's choice, every
+        option (curated, then the household's), and the batch item in the
+        pantry. `all=true` includes every curated specialty ingredient, used
+        or not. Requires `household.view`.
+      operationId: listSpecialtyIngredients
+      tags: [specialty-ingredients]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: all
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: The household's specialty ingredients.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecialtyIngredientList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/specialty-ingredients/choices/defaults:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    post:
+      summary: Choose the curated defaults
+      description: |
+        Chooses `defaultOptionId` for every specialty ingredient the
+        household's recipes use that has no choice yet. Existing choices are
+        never changed, so calling it again chooses nothing. Requires
+        `pantry.edit`.
+      operationId: applySpecialtyIngredientDefaults
+      tags: [specialty-ingredients]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The specialty ingredients that got their default, and how many already had a choice.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecialtyDefaultsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/SpecialtyID"
+    get:
+      summary: Get a specialty ingredient
+      description: One specialty ingredient with its options, the household's choice, and batch stock. Requires `household.view`.
+      operationId: getSpecialtyIngredient
+      tags: [specialty-ingredients]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The specialty ingredient.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecialtyIngredient"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/choice:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/SpecialtyID"
+    put:
+      summary: Choose an option
+      description: |
+        Sets the household's option: a curated option ID, one of the
+        household's options for this specialty ingredient, or `as_is` (keep it
+        on grocery lists by its own name and stop suggesting options).
+        Requires `pantry.edit`.
+      operationId: setSpecialtyIngredientChoice
+      tags: [specialty-ingredients]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetSpecialtyChoiceRequest"
+      responses:
+        "200":
+          description: The specialty ingredient with the new choice.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecialtyIngredient"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Clear the choice
+      description: Removes the household's choice; grocery lists suggest options again. Clearing twice is fine. Requires `pantry.edit`.
+      operationId: clearSpecialtyIngredientChoice
+      tags: [specialty-ingredients]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Cleared.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/options:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/SpecialtyID"
+    post:
+      summary: Add a household option
+      description: |
+        Adds the household's own store alternative or house-made batch, for
+        example a tweaked copy of a curated option (`basedOnOptionId`). At most
+        10 per specialty ingredient. Requires `pantry.edit`.
+      operationId: createSpecialtyIngredientOption
+      tags: [specialty-ingredients]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpecialtyOptionRequest"
+      responses:
+        "201":
+          description: The new option.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecialtyOption"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/options/{optionId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/SpecialtyID"
+      - $ref: "#/components/parameters/SpecialtyOptionID"
+    put:
+      summary: Replace a household option
+      description: Replaces a household option's content. Curated options can't be edited; copy one with `basedOnOptionId` instead. Requires `pantry.edit`.
+      operationId: updateSpecialtyIngredientOption
+      tags: [specialty-ingredients]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpecialtyOptionRequest"
+      responses:
+        "200":
+          description: The updated option.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecialtyOption"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete a household option
+      description: Deletes a household option and clears any choice of it. Requires `pantry.edit`.
+      operationId: deleteSpecialtyIngredientOption
+      tags: [specialty-ingredients]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Deleted.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/batches:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/SpecialtyID"
+    post:
+      summary: Record a batch made
+      description: |
+        Records that the household made a house-made batch: a pantry purchase
+        with `source: house_made` for the option's yield (times `batches`)
+        that starts a usage cycle on the batch item (key = the specialty
+        ingredient's `key`, added when missing), with the packet size from
+        `unitSizes` and `expiresOn` from the shelf life. Cooked recipes then
+        deduct from it and the low-stock alert works unchanged. `optionId`
+        defaults to the household's choice, which must be a
+        `house_made_batch`. Repeating a `clientPurchaseId` returns 200 and
+        changes nothing. Requires `pantry.edit`.
+      operationId: recordSpecialtyIngredientBatch
+      tags: [specialty-ingredients]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordSpecialtyBatchRequest"
+      responses:
+        "201":
+          description: Recorded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordSpecialtyBatchResponse"
+        "200":
+          description: The `clientPurchaseId` was already recorded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordSpecialtyBatchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/PantryConflict"
   /api/v1/households/{householdId}/recipes/{recipeId}/rating:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -1673,6 +1955,21 @@ components:
       name: itemId
       in: path
       required: true
+      schema:
+        type: string
+    SpecialtyID:
+      name: specialtyId
+      in: path
+      required: true
+      description: A specialty ingredient's stable slug.
+      schema:
+        type: string
+        example: southwest-spice-blend
+    SpecialtyOptionID:
+      name: optionId
+      in: path
+      required: true
+      description: A household option ID.
       schema:
         type: string
   schemas:
@@ -2716,7 +3013,7 @@ components:
             $ref: "#/components/schemas/PlanSummary"
     GroceryList:
       type: object
-      required: [week, status, pantryApplied, categories, skipped]
+      required: [week, status, pantryApplied, specialtiesApplied, categories, batches, skipped]
       properties:
         week:
           $ref: "#/components/schemas/IsoWeek"
@@ -2725,6 +3022,14 @@ components:
         pantryApplied:
           type: boolean
           description: True when the household pantry decided item statuses.
+        specialtiesApplied:
+          type: boolean
+          description: True when the household's specialty ingredient choices were applied.
+        batches:
+          type: array
+          description: The house-made specialty ingredients the week uses.
+          items:
+            $ref: "#/components/schemas/GroceryBatch"
         categories:
           type: array
           description: In aisle order; empty categories are omitted.
@@ -2747,7 +3052,7 @@ components:
             $ref: "#/components/schemas/GroceryItem"
     GroceryItem:
       type: object
-      required: [ingredientKey, name, amounts, quantityText, unquantified, status, recipes]
+      required: [ingredientKey, name, amounts, quantityText, unquantified, status, recipes, specialty, specialtyDetail, via]
       properties:
         ingredientKey:
           type: string
@@ -2785,6 +3090,18 @@ components:
                 type: string
               name:
                 type: string
+        specialty:
+          type: boolean
+          description: The item is a specialty ingredient by its own name (no choice, `as_is`, or a batch in the pantry).
+        specialtyDetail:
+          oneOf:
+            - $ref: "#/components/schemas/GrocerySpecialty"
+            - type: "null"
+        via:
+          type: array
+          description: The specialty ingredients this item stands in for. Empty for ordinary items.
+          items:
+            $ref: "#/components/schemas/GroceryVia"
     GroceryAmount:
       type: object
       required: [quantity, quantityValue, unit, text]
@@ -3056,7 +3373,7 @@ components:
           description: The purchase ID that started the cycle, or a generated ID when a person set the amount.
         cycleSource:
           type: string
-          enum: [grocery_list, manual, provider, edit]
+          enum: [grocery_list, manual, provider, edit, house_made]
         cycleStartedAt:
           type: string
           format: date-time
@@ -3188,7 +3505,8 @@ components:
           type: string
         source:
           type: string
-          enum: [grocery_list, manual, provider]
+          enum: [grocery_list, manual, provider, house_made]
+          description: "`house_made` is a batch recorded through POST .../specialty-ingredients/{specialtyId}/batches."
         quantity:
           type: [string, "null"]
         quantityValue:
@@ -3361,6 +3679,434 @@ components:
               type: string
               description: Matches the X-Request-ID response header; quote it when reporting problems.
               example: 5f0c1e9a2b7d4c3e8f6a1b2c
+    GrocerySpecialty:
+      type: object
+      required: [id, key, name, choiceType, optionId, houseMade, suggestedOptions, text]
+      properties:
+        id:
+          type: string
+          example: sweet-soy-glaze
+        key:
+          type: string
+        name:
+          type: string
+        choiceType:
+          type: [string, "null"]
+          enum: [as_is, house_made_batch, null]
+          description: Null when the household hasn't chosen; `house_made_batch` when a pantry batch covers the week.
+        optionId:
+          type: [string, "null"]
+        houseMade:
+          type: boolean
+          description: Covered by a house-made batch in the pantry ("In pantry (house-made)").
+        suggestedOptions:
+          type: array
+          description: Options to offer when the household hasn't chosen, the default first.
+          items:
+            type: object
+            required: [id, type, name, isDefault]
+            properties:
+              id:
+                type: string
+              type:
+                type: string
+                enum: [store_alternative, house_made_batch]
+              name:
+                type: string
+              isDefault:
+                type: boolean
+        text:
+          type: string
+          example: "Specialty ingredient: choose a store alternative or a house-made batch"
+    GroceryVia:
+      type: object
+      required: [kind, specialtyId, specialtyKey, specialtyName, optionId, optionName, yield, batches, recipes, text]
+      properties:
+        kind:
+          type: string
+          enum: [store_alternative, house_made_batch]
+        specialtyId:
+          type: string
+        specialtyKey:
+          type: string
+        specialtyName:
+          type: string
+          example: Tex-Mex Paste
+        optionId:
+          type: string
+        optionName:
+          type: string
+        yield:
+          description: What one batch makes; null for a store alternative.
+          oneOf:
+            - $ref: "#/components/schemas/GroceryAmount"
+            - type: "null"
+        batches:
+          type: [integer, "null"]
+          description: Batches the list asks for; null for a store alternative.
+        recipes:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+        text:
+          type: string
+          example: for Tex-Mex Paste in Smoky Pork Tacos
+    GroceryBatch:
+      type: object
+      required: [specialtyId, specialtyKey, specialtyName, optionId, optionName, yield, status, reason, batches, pantryItemId, remaining, needed, recipes, text]
+      properties:
+        specialtyId:
+          type: string
+        specialtyKey:
+          type: string
+        specialtyName:
+          type: string
+        optionId:
+          type: string
+        optionName:
+          type: string
+        yield:
+          $ref: "#/components/schemas/GroceryAmount"
+        status:
+          type: string
+          enum: [inPantry, make]
+        reason:
+          type: string
+          enum: [enough, inStock, notEnough, low, out, missing]
+          description: |
+            `enough`: in stock and the estimate covers the week. `inStock`: in
+            stock but amounts can't be compared. `notEnough`, `low`, `out`,
+            `missing`: the list asks for `batches` batches' ingredients.
+        batches:
+          type: integer
+          minimum: 0
+          description: Batches to make; 0 when in the pantry.
+        pantryItemId:
+          type: [string, "null"]
+        remaining:
+          description: The pantry estimate, or null when untracked or missing.
+          oneOf:
+            - $ref: "#/components/schemas/GroceryAmount"
+            - type: "null"
+        needed:
+          description: The week's total in the yield's unit, or null when a recipe gives no amount or units don't convert.
+          oneOf:
+            - $ref: "#/components/schemas/GroceryAmount"
+            - type: "null"
+        recipes:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+        text:
+          type: string
+          example: Make a batch (makes about 12 tbsp)
+    SpecialtyAmount:
+      type: object
+      required: [quantity, quantityValue, unit, text]
+      properties:
+        quantity:
+          type: string
+          example: "12"
+        quantityValue:
+          type: number
+          example: 12
+        unit:
+          type: string
+          example: tbsp
+        text:
+          type: string
+          example: 12 tbsp
+    SpecialtyOption:
+      type: object
+      required: [id, specialtyId, source, type, name, notes, isDefault, per, ingredients, steps, yield, shelfLifeDays, basedOnOptionId, summary, createdBy, updatedBy, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          description: A slug for curated options (`southwest-spice-blend.batch`), an ObjectID for household options.
+        specialtyId:
+          type: string
+        source:
+          type: string
+          enum: [curated, household]
+        type:
+          type: string
+          enum: [store_alternative, house_made_batch]
+        name:
+          type: string
+          example: Southwest spice blend (house blend)
+        notes:
+          type: string
+        isDefault:
+          type: boolean
+        per:
+          description: "Store alternatives: `per` of the specialty ingredient is `ingredients`."
+          oneOf:
+            - $ref: "#/components/schemas/SpecialtyAmount"
+            - type: "null"
+        ingredients:
+          type: array
+          description: Per `per` for a store alternative, or for one batch.
+          items:
+            type: object
+            required: [name, quantity, quantityValue, unit, text, category]
+            properties:
+              name:
+                type: string
+              quantity:
+                type: [string, "null"]
+                description: Null for "to taste".
+              quantityValue:
+                type: [number, "null"]
+              unit:
+                type: [string, "null"]
+              text:
+                type: string
+                example: 3 tbsp Chili Powder
+              category:
+                type: [string, "null"]
+        steps:
+          type: array
+          items:
+            type: string
+        yield:
+          oneOf:
+            - $ref: "#/components/schemas/SpecialtyAmount"
+            - type: "null"
+        shelfLifeDays:
+          type: [integer, "null"]
+        basedOnOptionId:
+          type: [string, "null"]
+        summary:
+          type: string
+          example: Makes about 12 tbsp and keeps 180 days.
+        createdBy:
+          type: [string, "null"]
+        updatedBy:
+          type: [string, "null"]
+        createdAt:
+          type: [string, "null"]
+          format: date-time
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+    SpecialtyIngredient:
+      type: object
+      required: [id, key, name, aliases, category, ingredientIds, recipeCount, unitSizes, defaultOptionId, retired, choice, options, batch]
+      properties:
+        id:
+          type: string
+          example: southwest-spice-blend
+        key:
+          type: string
+          description: The normalized name; also the batch's pantry item key.
+          example: southwest spice blend
+        name:
+          type: string
+          example: Southwest Spice Blend
+        aliases:
+          type: array
+          items:
+            type: string
+        category:
+          type: string
+        ingredientIds:
+          type: array
+          description: Catalog ingredients that are this specialty ingredient.
+          items:
+            type: string
+        recipeCount:
+          type: integer
+          description: The household's recipes that use it.
+        unitSizes:
+          type: array
+          description: Estimated packet sizes, so recipes that count packets convert.
+          items:
+            type: object
+            required: [per, quantity, quantityValue, unit, text]
+            properties:
+              per:
+                type: string
+                example: count
+              quantity:
+                type: string
+              quantityValue:
+                type: number
+              unit:
+                type: string
+              text:
+                type: string
+        defaultOptionId:
+          type: string
+        retired:
+          type: boolean
+        choice:
+          oneOf:
+            - type: object
+              required: [optionId, type, optionName, chosenBy, chosenAt]
+              properties:
+                optionId:
+                  type: string
+                type:
+                  type: string
+                  enum: [as_is, store_alternative, house_made_batch]
+                optionName:
+                  type: [string, "null"]
+                chosenBy:
+                  type: string
+                chosenAt:
+                  type: string
+                  format: date-time
+            - type: "null"
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpecialtyOption"
+        batch:
+          description: The batch item in the pantry, or null.
+          oneOf:
+            - type: object
+              required: [pantryItemId, status, remaining, percentRemaining, expiresOn]
+              properties:
+                pantryItemId:
+                  type: string
+                status:
+                  type: string
+                  enum: [in_stock, low, out]
+                remaining:
+                  oneOf:
+                    - $ref: "#/components/schemas/SpecialtyAmount"
+                    - type: "null"
+                percentRemaining:
+                  type: [integer, "null"]
+                expiresOn:
+                  type: [string, "null"]
+                  format: date
+            - type: "null"
+    SpecialtyIngredientList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpecialtyIngredient"
+    SpecialtyDefaultsResponse:
+      type: object
+      required: [items, skipped]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpecialtyIngredient"
+        skipped:
+          type: integer
+    SetSpecialtyChoiceRequest:
+      type: object
+      required: [optionId]
+      properties:
+        optionId:
+          type: string
+          description: A curated option ID, a household option ID, or `as_is`.
+    SpecialtyOptionRequest:
+      type: object
+      required: [type, name, ingredients]
+      properties:
+        type:
+          type: string
+          enum: [store_alternative, house_made_batch]
+        name:
+          type: string
+          maxLength: 100
+        notes:
+          type: string
+          maxLength: 500
+        per:
+          type: object
+          description: Required for store_alternative; not allowed for batches.
+          required: [quantity, unit]
+          properties:
+            quantity:
+              type: string
+            unit:
+              type: string
+        ingredients:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            type: object
+            required: [name]
+            properties:
+              name:
+                type: string
+                maxLength: 100
+              quantity:
+                type: string
+                description: Required for store alternatives; omit for "to taste" in a batch.
+              unit:
+                type: string
+                description: DinnerOS unit code; defaults to `count` with a quantity.
+              category:
+                type: string
+                description: A grocery category, used when the catalog doesn't know the ingredient.
+        steps:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            maxLength: 500
+        yield:
+          type: object
+          description: Required for house_made_batch.
+          required: [quantity, unit]
+          properties:
+            quantity:
+              type: string
+            unit:
+              type: string
+        shelfLifeDays:
+          type: integer
+          minimum: 1
+          maximum: 730
+          description: Required for house_made_batch.
+        basedOnOptionId:
+          type: string
+    RecordSpecialtyBatchRequest:
+      type: object
+      properties:
+        optionId:
+          type: string
+          description: A house_made_batch option; defaults to the household's choice.
+        batches:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 1
+        clientPurchaseId:
+          type: string
+          maxLength: 64
+    RecordSpecialtyBatchResponse:
+      type: object
+      required: [purchase, item, option]
+      properties:
+        purchase:
+          $ref: "#/components/schemas/PantryPurchase"
+        item:
+          $ref: "#/components/schemas/PantryItem"
+        option:
+          $ref: "#/components/schemas/SpecialtyOption"
   responses:
     Forbidden:
       description: "`forbidden`: the caller is a member of the household, but their role doesn't allow this action."

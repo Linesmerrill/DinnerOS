@@ -30,6 +30,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/ratelimit"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recommendations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/substitutes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/users"
 )
 
@@ -109,9 +110,16 @@ func run() error {
 		planning.Indexes(),
 		pantry.Indexes(),
 		notifications.Indexes(),
+		substitutes.Indexes(),
 		behaviorIndexes(),
 		recommendations.Indexes(),
 	)...); err != nil {
+		return err
+	}
+	// The curated specialty ingredients ship in the binary; syncing is
+	// idempotent and writes only what changed.
+	substitutesStore := substitutes.NewMongoStore(db.Database())
+	if err := substitutes.EnsureSeed(startupCtx, substitutesStore, logger); err != nil {
 		return err
 	}
 	cancelStartup()
@@ -145,6 +153,17 @@ func run() error {
 		Logger:   logger,
 	})
 	notificationService.SetRefresher(pantryService)
+	// Specialty ingredients read the catalog, recipe use, and batch stock;
+	// grocery lists apply the household's choices, and cook deductions match
+	// specialty aliases and packet sizes through them.
+	substitutesService := substitutes.NewService(substitutes.ServiceOptions{
+		Store:   substitutesStore,
+		Catalog: recipeService,
+		Recipes: recipeService,
+		Pantry:  pantryService,
+		Logger:  logger,
+	})
+	pantryService.SetKeyResolver(substitutesService)
 	behavior := newBehavior(db, recipeService, userService, householdService, tokens, logger, pantryService.CookedListener())
 	recipeHandler := recipes.NewHandler(recipes.HandlerOptions{
 		Service:        recipeService,
@@ -156,7 +175,8 @@ func run() error {
 		ImportMaxBytes: cfg.RecipeImportMaxBytes,
 		ImportTimeout:  recipeImportTimeout,
 	})
-	planService := planning.NewService(planning.NewMongoStore(db.Database()), recipeService).WithPantry(pantryService).WithEvents(behavior.events, logger)
+	planService := planning.NewService(planning.NewMongoStore(db.Database()), recipeService).
+		WithPantry(pantryService).WithSpecialties(substitutesService).WithEvents(behavior.events, logger)
 	planHandler := planning.NewHandler(planning.HandlerOptions{
 		Service:    planService,
 		Authorizer: householdService,
@@ -183,6 +203,13 @@ func run() error {
 	})
 	pantryHandler := pantry.NewHandler(pantry.HandlerOptions{
 		Service:    pantryService,
+		Authorizer: householdService,
+		Tokens:     tokens,
+		Logger:     logger,
+	})
+	specialtyHandler := substitutes.NewHandler(substitutes.HandlerOptions{
+		Service:    substitutesService,
+		Pantry:     pantryService,
 		Authorizer: householdService,
 		Tokens:     tokens,
 		Logger:     logger,
@@ -218,6 +245,7 @@ func run() error {
 				planHandler.Mount(r)
 				autopilotHandler.Mount(r)
 				pantryHandler.Mount(r)
+				specialtyHandler.Mount(r)
 				notificationHandler.Mount(r)
 				behavior.ratingHandler.Mount(r)
 				behavior.eventHandler.Mount(r)

@@ -8,6 +8,7 @@ struct RootView: View {
     @Environment(PlanStore.self) private var plans
     @Environment(PantryStore.self) private var pantry
     @Environment(EventReporter.self) private var events
+    @Environment(NotificationStore.self) private var notifications
 
     var body: some View {
         content
@@ -22,6 +23,7 @@ struct RootView: View {
                     recipes.reset()
                     plans.reset()
                     pantry.reset()
+                    notifications.reset()
                     // At launch there's no user while the session restores; only a real
                     // sign-out discards queued events.
                     if session.state == .signedOut {
@@ -79,6 +81,7 @@ struct RootView: View {
         .environment(PlanPreviewData.store(session: session))
         .environment(PantryPreviewData.store(session: session))
         .environment(EventReporter.preview(session: session))
+        .environment(NotificationPreviewData.store(session: session))
 }
 
 #Preview("Signed out") {
@@ -90,4 +93,5 @@ struct RootView: View {
         .environment(PlanStore.preview(session: session, plan: nil, phase: .idle))
         .environment(PantryStore.preview(session: session, phase: .idle))
         .environment(EventReporter.preview(session: session))
+        .environment(NotificationStore.preview(session: session, phase: .idle))
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/ratings"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recommendations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/substitutes"
 )
 
 // TestHouseholdRoutesMountTogether mounts the household-scoped handlers on one
@@ -25,6 +26,7 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		recipes.NewHandler(recipes.HandlerOptions{}).Mount(r)
 		planning.NewHandler(planning.HandlerOptions{}).Mount(r)
 		pantry.NewHandler(pantry.HandlerOptions{}).Mount(r)
+		substitutes.NewHandler(substitutes.HandlerOptions{}).Mount(r)
 		notifications.NewHandler(notifications.HandlerOptions{}).Mount(r)
 		recommendations.NewHandler(recommendations.HandlerOptions{}).Mount(r)
 		ratings.NewHandler(ratings.HandlerOptions{}).Mount(r)
@@ -49,6 +51,15 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		"GET /api/v1/households/{householdId}/pantry/settings",
 		"PUT /api/v1/households/{householdId}/pantry/settings",
 		"GET /api/v1/households/{householdId}/pantry/{itemId}/purchases",
+		"GET /api/v1/households/{householdId}/specialty-ingredients",
+		"POST /api/v1/households/{householdId}/specialty-ingredients/choices/defaults",
+		"GET /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}",
+		"PUT /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/choice",
+		"DELETE /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/choice",
+		"POST /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/options",
+		"PUT /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/options/{optionId}",
+		"DELETE /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/options/{optionId}",
+		"POST /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/batches",
 		"GET /api/v1/households/{householdId}/notifications",
 		"GET /api/v1/households/{householdId}/notifications/unread-count",
 		"POST /api/v1/households/{householdId}/notifications/read",
