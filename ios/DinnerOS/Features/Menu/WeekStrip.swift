@@ -10,6 +10,9 @@ struct WeekStrip: View {
 
     @State private var scrolledWeek: String?
 
+    /// Three short lines of text plus the pill's padding; grows with Dynamic Type.
+    @ScaledMetric(relativeTo: .footnote) private var pillHeight = 62
+
     var body: some View {
         HStack(spacing: 8) {
             NavigationLink(value: PastWeeksRoute()) {
@@ -52,6 +55,9 @@ struct WeekStrip: View {
             }
             .scrollIndicators(.hidden)
             .scrollPosition(id: $scrolledWeek, anchor: .center)
+            // A horizontal ScrollView takes all the height it is offered, and as a top
+            // safe-area inset that is the whole screen, so pin it to the pills' height.
+            .frame(height: pillHeight)
         }
         .padding(.vertical, 8)
         .background(.bar)
