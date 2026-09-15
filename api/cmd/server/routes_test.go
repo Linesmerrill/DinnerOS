@@ -13,6 +13,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ratings"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
+	"github.com/Linesmerrill/DinnerOS/api/internal/shopping"
 	"github.com/Linesmerrill/DinnerOS/api/internal/substitutes"
 )
 
@@ -26,6 +27,7 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		planning.NewHandler(planning.HandlerOptions{}).Mount(r)
 		pantry.NewHandler(pantry.HandlerOptions{}).Mount(r)
 		substitutes.NewHandler(substitutes.HandlerOptions{}).Mount(r)
+		shopping.NewHandler(shopping.HandlerOptions{}).Mount(r)
 		notifications.NewHandler(notifications.HandlerOptions{}).Mount(r)
 		ratings.NewHandler(ratings.HandlerOptions{}).Mount(r)
 		events.NewHandler(events.HandlerOptions{}).Mount(r)
@@ -61,6 +63,19 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		"GET /api/v1/households/{householdId}/notifications",
 		"GET /api/v1/households/{householdId}/notifications/unread-count",
 		"POST /api/v1/households/{householdId}/notifications/read",
+		"GET /api/v1/households/{householdId}/plans/{week}/grocery",
+		"GET /api/v1/shopping/providers",
+		"GET /api/v1/households/{householdId}/shopping/settings",
+		"PUT /api/v1/households/{householdId}/shopping/settings",
+		"GET /api/v1/households/{householdId}/shopping/{provider}/preferences",
+		"GET /api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}",
+		"PUT /api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}",
+		"DELETE /api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}",
+		"POST /api/v1/households/{householdId}/plans/{week}/shopping/{provider}/match",
+		"POST /api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs",
+		"GET /api/v1/households/{householdId}/shopping/handoffs",
+		"GET /api/v1/households/{householdId}/shopping/handoffs/{handoffId}",
+		"POST /api/v1/households/{householdId}/shopping/handoffs/{handoffId}/confirm",
 	} {
 		if !slices.Contains(routes, want) {
 			t.Errorf("route %q not mounted; have %v", want, routes)
