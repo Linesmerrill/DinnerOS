@@ -54,7 +54,7 @@ Imported files contain personal order history. They live under
 | --- | --- | --- |
 | `servings` | int | |
 | `quantity` | number or null | `null` means no amount was given ("to taste"). Nothing is invented. |
-| `unit` | string | DinnerOS unit code: `count`, `clove`, `can`, `package`, `slice`, `bunch`, `pinch`, `tsp`, `tbsp`, `cup`, `floz`, `oz`, `lb`, `g`, `kg`, `ml`, `l`. It's empty when the source has no unit or an unknown unit. |
+| `unit` | string | DinnerOS unit code: `count`, `clove`, `can`, `package`, `slice`, `bunch`, `pinch`, `thumb`, `tsp`, `tbsp`, `cup`, `floz`, `oz`, `lb`, `g`, `kg`, `ml`, `l`. It's empty when the source has no unit or an unknown unit. |
 | `sourceUnit` | string | Unit exactly as the source wrote it |
 | `rawText` | string | Human-readable source line, e.g. `½ ounce Parmesan Cheese` |
 

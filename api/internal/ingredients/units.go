@@ -61,6 +61,7 @@ var units = func() map[string]Unit {
 		{Code: "slice", Kind: KindDiscrete, Singular: "slice", Plural: "slices"},
 		{Code: "bunch", Kind: KindDiscrete, Singular: "bunch", Plural: "bunches"},
 		{Code: "pinch", Kind: KindDiscrete, Singular: "pinch", Plural: "pinches"},
+		{Code: "thumb", Kind: KindDiscrete, Singular: "thumb", Plural: "thumbs"},
 
 		{Code: "tsp", Kind: KindVolume, Singular: "tsp", Plural: "tsp", toBase: mul(mlPerFlOz, big.NewRat(1, 6))},
 		{Code: "tbsp", Kind: KindVolume, Singular: "tbsp", Plural: "tbsp", toBase: mul(mlPerFlOz, big.NewRat(1, 2))},
