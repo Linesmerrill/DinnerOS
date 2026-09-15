@@ -75,11 +75,27 @@ value to avoid producing one.
 
 ```text
 1. Export order history from the owner's signed-in browser session
-      → importers/hellofresh/data/order-history.json
-2. go run . fetch        public recipe pages → data/raw/recipes/<id>.json (idempotent)
-3. go run . normalize    → data/import/recipes.json (this format)
-4. Load into DinnerOS (below)
+      → data/history-part*.tsv (week, menuId, M|A, deliveredId, slug) or JSON
+2. go run . fetch -history 'data/history-part*.tsv'
+      public recipe pages → data/raw/recipes/<id>.json (idempotent)
+3. go run . variants -history ...    delivered IDs whose public page is a
+      different variant → data/variants-pending.json
+4. (optional) capture those from the signed-in past-deliveries view as
+      {deliveredId: recipe} JSON, then: go run . capture -in captures.json
+      → data/raw/delivered/<id>.json
+5. go run . normalize -history ...   → data/import/recipes.json (this format)
+6. Load into DinnerOS (below)
 ```
+
+Normalization rules worth knowing:
+
+- Weekly menu clones merge into their canonical recipe. Recipes with the same
+  name (a dish republished under new IDs) merge under the newest ID; older IDs
+  become `sourceAliases`.
+- An account capture is the exact variant delivered and replaces the public
+  page for that delivered ID. Uncaptured variants produce a `variant` review
+  item, because the stored details come from a different variant's page.
+- Names that differ only by "and"/"with" are the same variant.
 
 ## Loading into DinnerOS
 
