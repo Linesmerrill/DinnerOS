@@ -55,10 +55,14 @@ func (m *memoryStore) List(_ context.Context, q Query) ([]Event, error) {
 		out = append(out, e)
 	}
 	slices.SortStableFunc(out, func(a, b Event) int {
-		if c := a.OccurredAt.Compare(b.OccurredAt); c != 0 {
-			return c
+		c := a.OccurredAt.Compare(b.OccurredAt)
+		if c == 0 {
+			c = cmp.Compare(a.ID, b.ID)
 		}
-		return cmp.Compare(a.ID, b.ID)
+		if q.Newest {
+			c = -c
+		}
+		return c
 	})
 	limit := q.Limit
 	if limit <= 0 {

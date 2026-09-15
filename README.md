@@ -27,7 +27,8 @@ Autopilot's first customer.
 | 7 | Pantry and grocery engine | Grocery engine, pantry API, and iOS Pantry tab ✅ (applied to week grocery lists); saved lists pending |
 | 8 | Shopping providers | Planned |
 | 9 | Ratings and behavioral events | ✅ Done (API and iOS) |
-| 10–12 | Autopilot (deterministic V1, context, private service) | Later |
+| 10 | Autopilot V1: taste profile, week context, deterministic week proposals (generate, swap, accept) | API ✅ Done; iOS pending |
+| 11–12 | Autopilot context engine and private service | Later |
 
 ## Repository layout
 

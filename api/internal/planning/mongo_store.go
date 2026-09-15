@@ -64,6 +64,9 @@ type entryDoc struct {
 	Note           string        `bson:"note,omitempty"`
 	AddedBy        bson.ObjectID `bson:"addedBy"`
 	AddedAt        time.Time     `bson:"addedAt"`
+	// Origin is stored only for autopilot entries; absent means manual.
+	Origin     string `bson:"origin,omitempty"`
+	ProposalID string `bson:"proposalId,omitempty"`
 }
 
 type summaryDoc struct {
@@ -83,9 +86,14 @@ func (d planDoc) toPlan() (Plan, error) {
 		CreatedAt: d.CreatedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
 	}
 	for _, e := range d.Entries {
+		origin := Origin(e.Origin)
+		if origin == "" {
+			origin = OriginManual
+		}
 		p.Entries = append(p.Entries, Entry{
 			ID: e.ID.Hex(), RecipeID: e.RecipeID.Hex(), RecipeName: e.RecipeName, RecipeImageURL: e.RecipeImageURL,
 			Day: Day(e.Day), Servings: e.Servings, Note: e.Note, AddedBy: e.AddedBy.Hex(), AddedAt: e.AddedAt.UTC(),
+			Origin: origin, ProposalID: e.ProposalID,
 		})
 	}
 	return p, nil
@@ -157,20 +165,47 @@ func (s *MongoStore) ListSummaries(ctx context.Context, householdID string, from
 	return out, nil
 }
 
-// AddEntry implements Store. It makes sure the plan exists, then pushes the
-// entry in one update that only matches a draft with room left.
+// AddEntry implements Store with AddEntries.
 func (s *MongoStore) AddEntry(ctx context.Context, householdID string, w Week, e Entry, maxEntries int, now time.Time) (Plan, string, error) {
+	p, ids, err := s.AddEntries(ctx, householdID, w, []Entry{e}, maxEntries, now)
+	if err != nil {
+		return Plan{}, "", err
+	}
+	return p, ids[0], nil
+}
+
+// AddEntries implements Store. It makes sure the plan exists, then pushes all
+// entries in one update that only matches a draft with room for them.
+func (s *MongoStore) AddEntries(ctx context.Context, householdID string, w Week, entries []Entry, maxEntries int, now time.Time) (Plan, []string, error) {
 	hid, err := mongodb.ParseID(householdID)
 	if err != nil {
-		return Plan{}, "", ErrNotFound
+		return Plan{}, nil, ErrNotFound
 	}
-	recipeID, err := mongodb.ParseID(e.RecipeID)
-	if err != nil {
-		return Plan{}, "", fmt.Errorf("planning: recipe id: %w", err)
+	if len(entries) == 0 || len(entries) > maxEntries {
+		return Plan{}, nil, ErrPlanFull
 	}
-	addedBy, err := mongodb.ParseID(e.AddedBy)
-	if err != nil {
-		return Plan{}, "", fmt.Errorf("planning: added by: %w", err)
+	docs := make([]entryDoc, 0, len(entries))
+	ids := make([]string, 0, len(entries))
+	for _, e := range entries {
+		recipeID, err := mongodb.ParseID(e.RecipeID)
+		if err != nil {
+			return Plan{}, nil, fmt.Errorf("planning: recipe id: %w", err)
+		}
+		addedBy, err := mongodb.ParseID(e.AddedBy)
+		if err != nil {
+			return Plan{}, nil, fmt.Errorf("planning: added by: %w", err)
+		}
+		id := bson.NewObjectID()
+		doc := entryDoc{
+			ID: id, RecipeID: recipeID, RecipeName: e.RecipeName, RecipeImageURL: e.RecipeImageURL,
+			Day: string(e.Day), Servings: e.Servings, Note: e.Note, AddedBy: addedBy, AddedAt: e.AddedAt,
+			ProposalID: e.ProposalID,
+		}
+		if e.Origin == OriginAutopilot {
+			doc.Origin = string(OriginAutopilot)
+		}
+		docs = append(docs, doc)
+		ids = append(ids, id.Hex())
 	}
 	ensure := bson.D{{Key: "$setOnInsert", Value: append(insertOnly(w, now),
 		bson.E{Key: "status", Value: StatusDraft},
@@ -181,20 +216,15 @@ func (s *MongoStore) AddEntry(ctx context.Context, householdID string, w Week, e
 		return err
 	})
 	if err != nil {
-		return Plan{}, "", translate(err)
+		return Plan{}, nil, translate(err)
 	}
 
-	id := bson.NewObjectID()
-	doc := entryDoc{
-		ID: id, RecipeID: recipeID, RecipeName: e.RecipeName, RecipeImageURL: e.RecipeImageURL,
-		Day: string(e.Day), Servings: e.Servings, Note: e.Note, AddedBy: addedBy, AddedAt: e.AddedAt,
-	}
 	filter := append(planFilter(hid, w),
 		bson.E{Key: "status", Value: StatusDraft},
-		bson.E{Key: fmt.Sprintf("entries.%d", maxEntries-1), Value: bson.D{{Key: "$exists", Value: false}}},
+		bson.E{Key: fmt.Sprintf("entries.%d", maxEntries-len(entries)), Value: bson.D{{Key: "$exists", Value: false}}},
 	)
 	update := bson.D{
-		{Key: "$push", Value: bson.D{{Key: "entries", Value: doc}}},
+		{Key: "$push", Value: bson.D{{Key: "entries", Value: bson.D{{Key: "$each", Value: docs}}}}},
 		{Key: "$set", Value: bson.D{{Key: "updatedAt", Value: now}}},
 	}
 	var out planDoc
@@ -203,18 +233,47 @@ func (s *MongoStore) AddEntry(ctx context.Context, householdID string, w Week, e
 		p, err := s.GetPlan(ctx, householdID, w)
 		switch {
 		case err != nil:
-			return Plan{}, "", err
+			return Plan{}, nil, err
 		case p.Status == StatusFinalized:
-			return Plan{}, "", ErrFinalized
+			return Plan{}, nil, ErrFinalized
 		default:
-			return Plan{}, "", ErrPlanFull
+			return Plan{}, nil, ErrPlanFull
 		}
 	}
 	if err != nil {
-		return Plan{}, "", translate(err)
+		return Plan{}, nil, translate(err)
 	}
 	p, err := out.toPlan()
-	return p, id.Hex(), err
+	return p, ids, err
+}
+
+// ListPlans implements Store with one range query on the unique index.
+func (s *MongoStore) ListPlans(ctx context.Context, householdID string, from, to Week) ([]Plan, error) {
+	hid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return nil, nil
+	}
+	filter := bson.D{
+		{Key: "householdId", Value: hid},
+		{Key: "week", Value: bson.D{{Key: "$gte", Value: from.String()}, {Key: "$lte", Value: to.String()}}},
+	}
+	cur, err := s.plans.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "week", Value: 1}}))
+	if err != nil {
+		return nil, translate(err)
+	}
+	var docs []planDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	var out []Plan
+	for _, d := range docs {
+		p, err := d.toPlan()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, nil
 }
 
 // UpdateEntry implements Store with a positional update.

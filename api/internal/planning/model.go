@@ -48,6 +48,28 @@ func ParseStatus(s string) (Status, error) {
 	return "", fmt.Errorf("%w: status must be draft or finalized", ErrInvalidStatus)
 }
 
+// Origin says how an entry got into a plan.
+type Origin string
+
+// Entry origins.
+const (
+	// OriginManual entries were added by a member.
+	OriginManual Origin = "manual"
+	// OriginAutopilot entries were added by accepting an Autopilot proposal.
+	OriginAutopilot Origin = "autopilot"
+)
+
+// parseOrigin validates an origin; empty means manual.
+func parseOrigin(o Origin) (Origin, error) {
+	switch o {
+	case "":
+		return OriginManual, nil
+	case OriginManual, OriginAutopilot:
+		return o, nil
+	}
+	return "", fmt.Errorf("%w: origin must be manual or autopilot", ErrInvalidEntry)
+}
+
 // Plan is a household's plan for one ISO week. (HouseholdID, Week) is unique.
 // A week nobody has planned is returned as an empty draft with a zero
 // CreatedAt.
@@ -76,6 +98,11 @@ type Entry struct {
 	Note     string
 	AddedBy  string
 	AddedAt  time.Time
+	// Origin is how the entry was added. Entries stored before origins
+	// existed read as OriginManual.
+	Origin Origin
+	// ProposalID is the Autopilot proposal an autopilot entry came from.
+	ProposalID string
 }
 
 // EntryChanges is a partial update of an entry. Nil fields are unchanged; a

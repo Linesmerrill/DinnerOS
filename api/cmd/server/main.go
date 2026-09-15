@@ -17,6 +17,7 @@ import (
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/applinks"
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
+	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot/baseline"
 	"github.com/Linesmerrill/DinnerOS/api/internal/config"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/httpapi"
@@ -28,6 +29,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/ratelimit"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
+	"github.com/Linesmerrill/DinnerOS/api/internal/recommendations"
 	"github.com/Linesmerrill/DinnerOS/api/internal/substitutes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/users"
 )
@@ -110,6 +112,7 @@ func run() error {
 		notifications.Indexes(),
 		substitutes.Indexes(),
 		behaviorIndexes(),
+		recommendations.Indexes(),
 	)...); err != nil {
 		return err
 	}
@@ -172,9 +175,28 @@ func run() error {
 		ImportMaxBytes: cfg.RecipeImportMaxBytes,
 		ImportTimeout:  recipeImportTimeout,
 	})
+	planService := planning.NewService(planning.NewMongoStore(db.Database()), recipeService).
+		WithPantry(pantryService).WithSpecialties(substitutesService).WithEvents(behavior.events, logger)
 	planHandler := planning.NewHandler(planning.HandlerOptions{
-		Service: planning.NewService(planning.NewMongoStore(db.Database()), recipeService).
-			WithPantry(pantryService).WithSpecialties(substitutesService).WithEvents(behavior.events, logger),
+		Service:    planService,
+		Authorizer: householdService,
+		Tokens:     tokens,
+		Logger:     logger,
+	})
+	// Autopilot runs the local baseline provider. A remote provider can
+	// replace it behind the same autopilot.RecommendationProvider interface.
+	autopilotHandler := recommendations.NewHandler(recommendations.HandlerOptions{
+		Service: recommendations.NewService(recommendations.ServiceOptions{
+			Store:      recommendations.NewMongoStore(db.Database()),
+			Provider:   baseline.New(baseline.Options{}),
+			Households: householdService,
+			Recipes:    recipeService,
+			Ratings:    behavior.ratings,
+			Events:     behavior.events,
+			Plans:      planService,
+			Pantry:     pantryService,
+			Logger:     logger,
+		}),
 		Authorizer: householdService,
 		Tokens:     tokens,
 		Logger:     logger,
@@ -221,6 +243,7 @@ func run() error {
 				invitationHandler.Mount(r)
 				recipeHandler.Mount(r)
 				planHandler.Mount(r)
+				autopilotHandler.Mount(r)
 				pantryHandler.Mount(r)
 				specialtyHandler.Mount(r)
 				notificationHandler.Mount(r)

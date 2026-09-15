@@ -90,11 +90,14 @@ func (h *Handler) Mount(r chi.Router) {
 
 // RecipeSummaryResponse is a recipe in a list.
 type RecipeSummaryResponse struct {
-	ID              string   `json:"id"`
-	Name            string   `json:"name"`
-	Headline        string   `json:"headline,omitempty"`
-	ImageURL        string   `json:"imageUrl,omitempty"`
-	TotalMinutes    int      `json:"totalMinutes,omitempty"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Headline     string `json:"headline,omitempty"`
+	ImageURL     string `json:"imageUrl,omitempty"`
+	TotalMinutes int    `json:"totalMinutes,omitempty"`
+	// CookMinutes is the effective cook time, max(prepMinutes, totalMinutes),
+	// omitted when unknown.
+	CookMinutes     int      `json:"cookMinutes,omitempty"`
 	TimesOrdered    int      `json:"timesOrdered"`
 	LastOrderedWeek string   `json:"lastOrderedWeek,omitempty"`
 	IsAddon         bool     `json:"isAddon"`
@@ -127,6 +130,7 @@ type RecipeResponse struct {
 	Servings        []int                      `json:"servings"`
 	PrepMinutes     int                        `json:"prepMinutes,omitempty"`
 	TotalMinutes    int                        `json:"totalMinutes,omitempty"`
+	CookMinutes     int                        `json:"cookMinutes,omitempty"`
 	Difficulty      int                        `json:"difficulty,omitempty"`
 	Cuisines        []string                   `json:"cuisines"`
 	Tags            []string                   `json:"tags"`
@@ -211,7 +215,7 @@ func newRecipeResponse(r Recipe) RecipeResponse {
 		ID: r.ID, HouseholdID: r.HouseholdID, Source: r.Source, SourceRecipeID: r.SourceRecipeID,
 		SourceAliases: orEmpty(r.SourceAliases), SourceURL: r.SourceURL,
 		Name: r.Name, Headline: r.Headline, Description: r.Description, ImageURL: r.ImageURL, IsAddon: r.IsAddon,
-		Servings: orEmpty(r.Servings), PrepMinutes: r.PrepMinutes, TotalMinutes: r.TotalMinutes, Difficulty: r.Difficulty,
+		Servings: orEmpty(r.Servings), PrepMinutes: r.PrepMinutes, TotalMinutes: r.TotalMinutes, CookMinutes: r.CookMinutes(), Difficulty: r.Difficulty,
 		Cuisines: orEmpty(r.Cuisines), Tags: orEmpty(r.Tags), Utensils: orEmpty(r.Utensils), Allergens: orEmpty(r.Allergens),
 		Nutrition:   make([]NutrientResponse, 0, len(r.Nutrition)),
 		Ingredients: make([]RecipeIngredientResponse, 0, len(r.Ingredients)),
@@ -285,7 +289,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	resp := RecipeListResponse{Items: make([]RecipeSummaryResponse, 0, len(page.Items)), NextCursor: page.NextCursor}
 	for _, s := range page.Items {
 		item := RecipeSummaryResponse{
-			ID: s.ID, Name: s.Name, Headline: s.Headline, ImageURL: s.ImageURL, TotalMinutes: s.TotalMinutes,
+			ID: s.ID, Name: s.Name, Headline: s.Headline, ImageURL: s.ImageURL, TotalMinutes: s.TotalMinutes, CookMinutes: s.CookMinutes(),
 			TimesOrdered: s.TimesOrdered, LastOrderedWeek: s.LastOrderedWeek, IsAddon: s.IsAddon, Tags: orEmpty(s.Tags),
 		}
 		item.HouseholdRating, item.MyRating = ratingFields(summaries[s.ID])

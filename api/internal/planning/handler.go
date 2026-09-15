@@ -84,6 +84,9 @@ type EntryResponse struct {
 	Note     string    `json:"note"`
 	AddedBy  string    `json:"addedBy"`
 	AddedAt  time.Time `json:"addedAt"`
+	// Origin is manual, or autopilot for entries added by accepting an
+	// Autopilot proposal.
+	Origin Origin `json:"origin"`
 }
 
 // EntryRecipeResponse is the recipe snapshot stored on an entry.
@@ -258,6 +261,13 @@ func timePtr(t time.Time) *time.Time {
 	return &t
 }
 
+// NewPlanResponse returns the wire form of a plan, for other modules that
+// return plans (accepting an Autopilot proposal).
+func NewPlanResponse(p Plan) PlanResponse { return newPlanResponse(p) }
+
+// NewEntryResponse returns the wire form of an entry in week w.
+func NewEntryResponse(w Week, e Entry) EntryResponse { return newEntryResponse(w, e) }
+
 func newPlanResponse(p Plan) PlanResponse {
 	resp := PlanResponse{
 		HouseholdID: p.HouseholdID, Week: p.Week.String(),
@@ -275,7 +285,10 @@ func newEntryResponse(w Week, e Entry) EntryResponse {
 	resp := EntryResponse{
 		ID:       e.ID,
 		Recipe:   EntryRecipeResponse{ID: e.RecipeID, Name: e.RecipeName, ImageURL: e.RecipeImageURL},
-		Servings: e.Servings, Note: e.Note, AddedBy: e.AddedBy, AddedAt: e.AddedAt.UTC(),
+		Servings: e.Servings, Note: e.Note, AddedBy: e.AddedBy, AddedAt: e.AddedAt.UTC(), Origin: e.Origin,
+	}
+	if resp.Origin == "" {
+		resp.Origin = OriginManual
 	}
 	if e.Day != "" {
 		day, date := e.Day, w.Date(e.Day)

@@ -91,6 +91,9 @@ Implemented in Phase 4 (`internal/recipes`; categories and units from `internal/
 | `ingredients` | key, name, category, categoryConfident, sourceRefs[] (source, sourceIngredientId), imageUrl, createdAt, updatedAt | **unique** `{key}`; `{sourceRefs.source, sourceRefs.sourceIngredientId}`; `{categoryConfident, key}` |
 | `import_reviews` | householdId, key, source, sourceRecipeId, recipeName, field, value, reason, status (`open`), createdAt, updatedAt | **unique** `{householdId, key}`; `{householdId, status, createdAt}` |
 
+`cookMinutes` in API responses is computed as max(`prepMinutes`,
+`totalMinutes`) and isn't stored ([architecture.md](architecture.md#decision-log), #127).
+
 A recipe's ingredient lines and steps are small and bounded, so they are
 embedded. Embedded ingredient lines *reference* catalog `ingredients` by ID; the
 category is read from the catalog, not copied onto the recipe.
@@ -136,7 +139,7 @@ Implemented in Phase 6 (`internal/planning`).
 
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `weekly_plans` | householdId, week (`2026-W38`), startDate (Monday, `YYYY-MM-DD`), status (`draft`/`finalized`), entries[] (id, recipeId, recipeName, recipeImageUrl, day (`mon`–`sun`; absent when unscheduled), servings, note, addedBy, addedAt), createdAt, updatedAt | **unique** `{householdId, week}` |
+| `weekly_plans` | householdId, week (`2026-W38`), startDate (Monday, `YYYY-MM-DD`), status (`draft`/`finalized`), entries[] (id, recipeId, recipeName, recipeImageUrl, day (`mon`–`sun`; absent when unscheduled), servings, note, addedBy, addedAt, origin (`autopilot`; absent for manual), proposalId (autopilot entries)), createdAt, updatedAt | **unique** `{householdId, week}` |
 
 - One document per household and ISO week, created by the first added entry
   or status change. Reading an unplanned week writes nothing. ISO weeks have
@@ -159,6 +162,10 @@ Implemented in Phase 6 (`internal/planning`).
   plan_finalized`, or `409 plan_full`. If two first writes race to create a
   plan, the unique index rejects one and it retries once, matching the
   winner's document.
+- `origin` is stored only for entries added by accepting an Autopilot
+  proposal, with the proposal's `proposalId`; older and manual entries read as
+  `manual`. Accepting adds its entries in one `$push` with `$each`, conditioned
+  on the plan being a draft with room for all of them.
 - Entries snapshot the recipe's name and image for rendering. Recipe details
   and the grocery list read the live recipe, so re-imports show up there.
 
@@ -321,6 +328,33 @@ Implemented in Phase 9 (`internal/ratings`, `internal/events`).
 
 Events are designed to be forwarded to Autopilot later
 (see [autopilot.md](autopilot.md#signals-available-today)).
+
+### Autopilot
+
+Implemented in Phase 10 (`internal/recommendations`; see [autopilot.md](autopilot.md)).
+
+| Collection | Key fields | Indexes |
+| --- | --- | --- |
+| `autopilot_profiles` | householdId, taste{likes, dislikes: {cuisines[], tags[], proteins[]}}, restrictions{diets[], allergens[], excludedIngredients[], excludedCuisines[], excludedProteins[], excludedTags[], noSpicy}, schedule{planDays[], weeknights[], mealsPerWeek, defaultServings, weeknightMaxMinutes}, cookTime{quickMaxMinutes, mediumMaxMinutes, maxLongPerWeek, minQuickPerWeek, avoidConsecutiveLong}, novelty, equipment[], weekdayRules[] (day, label, cuisines, tags, proteins, methods, timeBand, frequency), sections{<section>: {updatedBy, updatedAt}}, version, createdBy, createdAt, updatedBy, updatedAt | **unique** `{householdId}` |
+| `autopilot_week_contexts` | householdId, week, skip, busy, mealsPerWeek, maxMinutes, servings, days[] (day, skip, maxMinutes, servings), note, version, updatedBy, updatedAt | **unique** `{householdId, week}` |
+| `autopilot_proposals` | householdId, week, proposalId, status (`proposed`/`accepted`/`rejected`), version, attempt, modelVersion, inputsHash, requested, planned, candidates, coldStart, slots[] (id = day, day, recipeId, recipeName, recipeImageUrl, cookMinutes, timeBand, servings, score, signals{}, reasons[] (code, text), swapCount, rejectedRecipeIds[]), unfilled[], messages[], objective{}, swapCount, excludedSlots[], generatedBy, generatedAt, updatedAt, decidedBy, decidedAt | **unique** `{householdId, week}` |
+| `autopilot_recipe_overrides` | householdId, recipeId, methods{<method>: bool}, updatedBy, updatedAt | **unique** `{householdId, recipeId}` |
+
+- Every read is by its unique key, so no other indexes are needed. User and
+  recipe IDs are ObjectIDs; `proposalId` is an ObjectID that changes each time
+  the week is generated, while the document (and `_id`) stays.
+- **Versioned documents.** Profiles, week contexts, and proposals carry
+  `version`. A first write inserts (the unique index rejects a concurrent
+  second insert); later writes replace the document on
+  `{householdId, [week,] version}` and store `version + 1`. Profile and context
+  writes are read-modify-write and retry up to 5 times; proposal writes
+  surface the conflict as `409 proposal_changed`.
+- Everything is bounded: profile lists have at most 30–50 values and 7 rules,
+  a proposal at most 7 slots, and each slot at most 20 swapped-out recipes.
+- Only the latest proposal per week is kept. Earlier ones, every swap, and
+  every preference change survive as events (`week.*`, `meal.*`,
+  `autopilot.*`), so there is no separate history collection.
+- An override with no methods is deleted rather than stored empty.
 
 ## Multi-tenancy
 

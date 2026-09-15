@@ -419,6 +419,20 @@ func (s *Service) GetMany(ctx context.Context, householdID string, ids []string)
 	return list, nil
 }
 
+// MaxCatalogRecipes bounds how many recipes Catalog returns.
+const MaxCatalogRecipes = 2000
+
+// Catalog returns the household's recipes (main meals and add-ons) ordered by
+// ID, for modules that look at the whole collection at once, such as the
+// recommender. Steps, nutrition, descriptions, and ingredient categories are
+// left out to keep the read small. At most MaxCatalogRecipes are returned.
+func (s *Service) Catalog(ctx context.Context, householdID string) ([]Recipe, error) {
+	if householdID == "" {
+		return nil, errHouseholdRequired
+	}
+	return s.store.ListCatalog(ctx, householdID, MaxCatalogRecipes)
+}
+
 // fillCategories sets each ingredient line's category from the catalog, with
 // one catalog query for all recipes.
 func (s *Service) fillCategories(ctx context.Context, list []Recipe) error {

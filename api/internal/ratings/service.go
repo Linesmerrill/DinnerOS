@@ -177,6 +177,24 @@ func (s *Service) Summaries(ctx context.Context, householdID, userID string, rec
 	return out, nil
 }
 
+// MaxHouseholdRatings bounds HouseholdRatings.
+const MaxHouseholdRatings = 20000
+
+// HouseholdRatings returns every member's ratings in the household, ordered by
+// recipe and then member, without comments. The recommender reads them as
+// preference signals. Callers must already have authorized access to the
+// household.
+func (s *Service) HouseholdRatings(ctx context.Context, householdID string) ([]Rating, error) {
+	if householdID == "" {
+		return nil, errors.New("ratings: household id is required")
+	}
+	list, err := s.store.ListForHousehold(ctx, householdID, MaxHouseholdRatings)
+	if err != nil {
+		return nil, fmt.Errorf("household ratings: %w", err)
+	}
+	return list, nil
+}
+
 func authorize(actor households.Membership) error {
 	if !actor.Role.Can(households.PermHouseholdView) {
 		return households.ErrForbidden

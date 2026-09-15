@@ -13,6 +13,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ratings"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
+	"github.com/Linesmerrill/DinnerOS/api/internal/recommendations"
 	"github.com/Linesmerrill/DinnerOS/api/internal/substitutes"
 )
 
@@ -27,6 +28,7 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		pantry.NewHandler(pantry.HandlerOptions{}).Mount(r)
 		substitutes.NewHandler(substitutes.HandlerOptions{}).Mount(r)
 		notifications.NewHandler(notifications.HandlerOptions{}).Mount(r)
+		recommendations.NewHandler(recommendations.HandlerOptions{}).Mount(r)
 		ratings.NewHandler(ratings.HandlerOptions{}).Mount(r)
 		events.NewHandler(events.HandlerOptions{}).Mount(r)
 	})
@@ -61,6 +63,14 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		"GET /api/v1/households/{householdId}/notifications",
 		"GET /api/v1/households/{householdId}/notifications/unread-count",
 		"POST /api/v1/households/{householdId}/notifications/read",
+		"GET /api/v1/households/{householdId}/autopilot/profile",
+		"PATCH /api/v1/households/{householdId}/autopilot/profile",
+		"GET /api/v1/households/{householdId}/autopilot/vocabulary",
+		"PUT /api/v1/households/{householdId}/autopilot/recipes/{recipeId}/override",
+		"PUT /api/v1/households/{householdId}/autopilot/weeks/{week}/context",
+		"POST /api/v1/households/{householdId}/autopilot/weeks/{week}/generate",
+		"POST /api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/slots/{slotId}/swap",
+		"POST /api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/accept",
 	} {
 		if !slices.Contains(routes, want) {
 			t.Errorf("route %q not mounted; have %v", want, routes)

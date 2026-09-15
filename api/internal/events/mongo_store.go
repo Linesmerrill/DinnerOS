@@ -195,8 +195,12 @@ func (s *MongoStore) List(ctx context.Context, q Query) ([]Event, error) {
 	if limit <= 0 {
 		limit = DefaultListLimit
 	}
+	dir := 1
+	if q.Newest {
+		dir = -1
+	}
 	cur, err := s.events.Find(ctx, filter, options.Find().
-		SetSort(bson.D{{Key: "occurredAt", Value: 1}, {Key: "_id", Value: 1}}).
+		SetSort(bson.D{{Key: "occurredAt", Value: dir}, {Key: "_id", Value: dir}}).
 		SetLimit(int64(limit)))
 	if err != nil {
 		return nil, mongodb.TranslateError(err)

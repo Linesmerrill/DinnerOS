@@ -198,7 +198,15 @@ func (m *memoryStore) ListSummaries(_ context.Context, householdID string, from,
 	return out, nil
 }
 
-func (m *memoryStore) AddEntry(_ context.Context, householdID string, w Week, e Entry, maxEntries int, now time.Time) (Plan, string, error) {
+func (m *memoryStore) AddEntry(ctx context.Context, householdID string, w Week, e Entry, maxEntries int, now time.Time) (Plan, string, error) {
+	p, ids, err := m.AddEntries(ctx, householdID, w, []Entry{e}, maxEntries, now)
+	if err != nil {
+		return Plan{}, "", err
+	}
+	return p, ids[0], nil
+}
+
+func (m *memoryStore) AddEntries(_ context.Context, householdID string, w Week, entries []Entry, maxEntries int, now time.Time) (Plan, []string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	k := planKey(householdID, w)
@@ -208,16 +216,37 @@ func (m *memoryStore) AddEntry(_ context.Context, householdID string, w Week, e 
 	}
 	switch {
 	case p.Status == StatusFinalized:
-		return Plan{}, "", ErrFinalized
-	case len(p.Entries) >= maxEntries:
-		return Plan{}, "", ErrPlanFull
+		return Plan{}, nil, ErrFinalized
+	case len(p.Entries)+len(entries) > maxEntries:
+		return Plan{}, nil, ErrPlanFull
 	}
-	m.next++
-	e.ID = fmt.Sprintf("%024x", m.next)
-	p.Entries = append(slices.Clone(p.Entries), e)
+	p.Entries = slices.Clone(p.Entries)
+	var ids []string
+	for _, e := range entries {
+		m.next++
+		e.ID = fmt.Sprintf("%024x", m.next)
+		if e.Origin == "" {
+			e.Origin = OriginManual
+		}
+		p.Entries = append(p.Entries, e)
+		ids = append(ids, e.ID)
+	}
 	p.UpdatedAt = now
 	m.plans[k] = p
-	return clonePlan(p), e.ID, nil
+	return clonePlan(p), ids, nil
+}
+
+func (m *memoryStore) ListPlans(_ context.Context, householdID string, from, to Week) ([]Plan, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []Plan
+	for _, p := range m.plans {
+		if p.HouseholdID == householdID && from.WeeksUntil(p.Week) >= 0 && p.Week.WeeksUntil(to) >= 0 {
+			out = append(out, clonePlan(p))
+		}
+	}
+	slices.SortFunc(out, func(a, b Plan) int { return cmp.Compare(a.Week.String(), b.Week.String()) })
+	return out, nil
 }
 
 func (m *memoryStore) UpdateEntry(_ context.Context, householdID string, w Week, entryID string, c EntryChanges, now time.Time) (Plan, error) {

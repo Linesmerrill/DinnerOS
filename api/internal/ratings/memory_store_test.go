@@ -79,6 +79,29 @@ func (m *memoryStore) ListForRecipe(_ context.Context, householdID, recipeID str
 	return out, nil
 }
 
+func (m *memoryStore) ListForHousehold(_ context.Context, householdID string, limit int) ([]Rating, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []Rating
+	for _, r := range m.ratings {
+		if r.HouseholdID == householdID {
+			r = cloneRating(r)
+			r.Comment = ""
+			out = append(out, r)
+		}
+	}
+	slices.SortFunc(out, func(a, b Rating) int {
+		if c := cmp.Compare(a.RecipeID, b.RecipeID); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.UserID, b.UserID)
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 func (m *memoryStore) Summaries(_ context.Context, householdID, userID string, recipeIDs []string) (map[string]Summary, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

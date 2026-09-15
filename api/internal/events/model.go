@@ -36,6 +36,18 @@ const (
 	TypeRecipeSkipped      Type = "recipe.skipped"
 	TypeGroceryItemChecked Type = "grocery.item_checked"
 	TypeImportCompleted    Type = "import.completed"
+
+	// Autopilot preference changes (who changed what, as a diff summary).
+	TypeAutopilotPreferencesUpdated    Type = "autopilot.preferences_updated"
+	TypeAutopilotWeekContextUpdated    Type = "autopilot.week_context_updated"
+	TypeAutopilotRecipeOverrideUpdated Type = "autopilot.recipe_override_updated"
+
+	// Autopilot week generation and the household's response to it.
+	TypeWeekGenerated Type = "week.generated"
+	TypeWeekAccepted  Type = "week.accepted"
+	TypeWeekRejected  Type = "week.rejected"
+	TypeMealSwapped   Type = "meal.swapped"
+	TypeMealRejected  Type = "meal.rejected"
 )
 
 // Source says who observed an event.
@@ -123,6 +135,8 @@ type RecipePlanned struct {
 	Servings int    `json:"servings,omitempty" bson:"servings,omitempty"`
 	// Origin is one of PlanOrigins. Optional.
 	Origin string `json:"origin,omitempty" bson:"origin,omitempty"`
+	// ProposalID is the Autopilot proposal an accepted entry came from.
+	ProposalID string `json:"proposalId,omitempty" bson:"proposalId,omitempty"`
 }
 
 // RecipeUnplanned is the payload of recipe.unplanned (an entry was removed).
@@ -130,6 +144,8 @@ type RecipeUnplanned struct {
 	EntryID string `json:"entryId,omitempty" bson:"entryId,omitempty"`
 	Day     string `json:"day,omitempty" bson:"day,omitempty"`
 	Date    string `json:"date,omitempty" bson:"date,omitempty"`
+	// Origin is the removed entry's origin, one of PlanOrigins. Optional.
+	Origin string `json:"origin,omitempty" bson:"origin,omitempty"`
 }
 
 // RecipeCooked is the payload of recipe.cooked. EntryID links it to a plan
@@ -166,12 +182,126 @@ type ImportCompleted struct {
 	Rejected  int    `json:"rejected" bson:"rejected"`
 }
 
+// FieldChange summarizes how one preference field changed. List fields report
+// the Added and Removed values; scalar fields report From and To as text, with
+// "" for unset.
+type FieldChange struct {
+	Field   string   `json:"field" bson:"field"`
+	Added   []string `json:"added,omitempty" bson:"added,omitempty"`
+	Removed []string `json:"removed,omitempty" bson:"removed,omitempty"`
+	From    string   `json:"from,omitempty" bson:"from,omitempty"`
+	To      string   `json:"to,omitempty" bson:"to,omitempty"`
+}
+
+// Bounds for preference change summaries.
+const (
+	MaxFieldChanges = 40
+	MaxChangeValues = 30
+	maxSections     = 10
+)
+
+// AutopilotPreferencesUpdated is the payload of
+// autopilot.preferences_updated: which profile sections a member changed,
+// and how.
+type AutopilotPreferencesUpdated struct {
+	Sections []string      `json:"sections" bson:"sections"`
+	Changes  []FieldChange `json:"changes,omitempty" bson:"changes,omitempty"`
+}
+
+// AutopilotWeekContextUpdated is the payload of
+// autopilot.week_context_updated. Event.Week is the week; Cleared means the
+// context was removed.
+type AutopilotWeekContextUpdated struct {
+	Cleared bool          `json:"cleared,omitempty" bson:"cleared,omitempty"`
+	Changes []FieldChange `json:"changes,omitempty" bson:"changes,omitempty"`
+}
+
+// AutopilotRecipeOverrideUpdated is the payload of
+// autopilot.recipe_override_updated: a member said whether a recipe suits a
+// cooking method, overriding the heuristic.
+type AutopilotRecipeOverrideUpdated struct {
+	Method string `json:"method" bson:"method"`
+	// Value and Previous are one of OverrideValues; auto means no override.
+	Value    string `json:"value" bson:"value"`
+	Previous string `json:"previous,omitempty" bson:"previous,omitempty"`
+}
+
+// WeekGenerated is the payload of week.generated. Event.Week is the week.
+type WeekGenerated struct {
+	ProposalID   string `json:"proposalId" bson:"proposalId"`
+	ModelVersion string `json:"modelVersion" bson:"modelVersion"`
+	// Attempt counts generations for the week, starting at 1.
+	Attempt int `json:"attempt" bson:"attempt"`
+	// Requested is how many meals the week called for; Planned how many the
+	// proposal holds; Unfilled how many days it couldn't fill.
+	Requested int `json:"requested" bson:"requested"`
+	Planned   int `json:"planned" bson:"planned"`
+	Unfilled  int `json:"unfilled" bson:"unfilled"`
+	// Candidates is how many recipes passed the hard constraints.
+	Candidates int  `json:"candidates" bson:"candidates"`
+	ColdStart  bool `json:"coldStart,omitempty" bson:"coldStart,omitempty"`
+	// ReplacedProposalID is the pending proposal this one replaced.
+	ReplacedProposalID string `json:"replacedProposalId,omitempty" bson:"replacedProposalId,omitempty"`
+}
+
+// WeekAccepted is the payload of week.accepted.
+type WeekAccepted struct {
+	ProposalID   string `json:"proposalId" bson:"proposalId"`
+	ModelVersion string `json:"modelVersion" bson:"modelVersion"`
+	// Planned is the proposal's meal count; Added the entries added to the
+	// plan; Excluded the meals the member left out; Skipped the meals that
+	// no longer fit the plan; Swaps the swaps made before accepting.
+	Planned  int `json:"planned" bson:"planned"`
+	Added    int `json:"added" bson:"added"`
+	Excluded int `json:"excluded" bson:"excluded"`
+	Skipped  int `json:"skipped" bson:"skipped"`
+	Swaps    int `json:"swaps" bson:"swaps"`
+}
+
+// WeekRejected is the payload of week.rejected: a pending proposal was
+// dismissed, or replaced by generating again.
+type WeekRejected struct {
+	ProposalID   string `json:"proposalId" bson:"proposalId"`
+	ModelVersion string `json:"modelVersion" bson:"modelVersion"`
+	Planned      int    `json:"planned" bson:"planned"`
+	Swaps        int    `json:"swaps" bson:"swaps"`
+	// Reason is one of WeekRejectReasons.
+	Reason string `json:"reason" bson:"reason"`
+}
+
+// MealSwapped is the payload of meal.swapped. Event.RecipeID is the recipe
+// swapped in; PreviousRecipeID the one swapped out.
+type MealSwapped struct {
+	ProposalID       string `json:"proposalId" bson:"proposalId"`
+	SlotID           string `json:"slotId" bson:"slotId"`
+	Day              string `json:"day" bson:"day"`
+	Date             string `json:"date,omitempty" bson:"date,omitempty"`
+	PreviousRecipeID string `json:"previousRecipeId" bson:"previousRecipeId"`
+	ModelVersion     string `json:"modelVersion" bson:"modelVersion"`
+	// SwapNumber counts swaps of this slot, starting at 1.
+	SwapNumber int `json:"swapNumber" bson:"swapNumber"`
+}
+
+// MealRejected is the payload of meal.rejected: a member left a proposed
+// meal out when accepting the week. Event.RecipeID is the meal.
+type MealRejected struct {
+	ProposalID   string `json:"proposalId" bson:"proposalId"`
+	SlotID       string `json:"slotId" bson:"slotId"`
+	Day          string `json:"day" bson:"day"`
+	Date         string `json:"date,omitempty" bson:"date,omitempty"`
+	ModelVersion string `json:"modelVersion" bson:"modelVersion"`
+}
+
 // Allowed values for optional enumerated payload fields.
 var (
 	ViewSurfaces = []string{"detail", "plan", "search", "recommendation"}
 	PlanDays     = []string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 	PlanOrigins  = []string{"manual", "autopilot"}
 	SkipReasons  = []string{"no-time", "ate-out", "missing-ingredients", "not-in-the-mood", "other"}
+	// OverrideValues are a recipe override's states.
+	OverrideValues = []string{"yes", "no", "auto"}
+	// WeekRejectReasons say why a proposal was rejected.
+	WeekRejectReasons = []string{"dismissed", "regenerated"}
 )
 
 // EventType implements Payload.
@@ -201,6 +331,30 @@ func (GroceryItemChecked) EventType() Type { return TypeGroceryItemChecked }
 // EventType implements Payload.
 func (ImportCompleted) EventType() Type { return TypeImportCompleted }
 
+// EventType implements Payload.
+func (AutopilotPreferencesUpdated) EventType() Type { return TypeAutopilotPreferencesUpdated }
+
+// EventType implements Payload.
+func (AutopilotWeekContextUpdated) EventType() Type { return TypeAutopilotWeekContextUpdated }
+
+// EventType implements Payload.
+func (AutopilotRecipeOverrideUpdated) EventType() Type { return TypeAutopilotRecipeOverrideUpdated }
+
+// EventType implements Payload.
+func (WeekGenerated) EventType() Type { return TypeWeekGenerated }
+
+// EventType implements Payload.
+func (WeekAccepted) EventType() Type { return TypeWeekAccepted }
+
+// EventType implements Payload.
+func (WeekRejected) EventType() Type { return TypeWeekRejected }
+
+// EventType implements Payload.
+func (MealSwapped) EventType() Type { return TypeMealSwapped }
+
+// EventType implements Payload.
+func (MealRejected) EventType() Type { return TypeMealRejected }
+
 func (p RecipeViewed) validate() error {
 	return optionalEnum("surface", p.Surface, ViewSurfaces)
 }
@@ -226,11 +380,12 @@ func (p RecipeUnrated) validate() error {
 
 func (p RecipePlanned) validate() error {
 	return errors.Join(validEntryID(p.EntryID), optionalEnum("day", p.Day, PlanDays), validDate(p.Date),
-		validServings(p.Servings), optionalEnum("origin", p.Origin, PlanOrigins))
+		validServings(p.Servings), optionalEnum("origin", p.Origin, PlanOrigins), validID("proposalId", p.ProposalID, false))
 }
 
 func (p RecipeUnplanned) validate() error {
-	return errors.Join(validEntryID(p.EntryID), optionalEnum("day", p.Day, PlanDays), validDate(p.Date))
+	return errors.Join(validEntryID(p.EntryID), optionalEnum("day", p.Day, PlanDays), validDate(p.Date),
+		optionalEnum("origin", p.Origin, PlanOrigins))
 }
 
 func (p RecipeCooked) validate() error {
@@ -263,6 +418,61 @@ func (p ImportCompleted) validate() error {
 	return nil
 }
 
+func (p AutopilotPreferencesUpdated) validate() error {
+	if len(p.Sections) == 0 || len(p.Sections) > maxSections {
+		return invalid(fmt.Sprintf("sections must list 1 to %d sections", maxSections))
+	}
+	var errs []error
+	for _, section := range p.Sections {
+		if section == "" || len(section) > 32 {
+			errs = append(errs, invalid("each section must be 1 to 32 characters"))
+		}
+	}
+	return errors.Join(append(errs, validChanges(p.Changes))...)
+}
+
+func (p AutopilotWeekContextUpdated) validate() error {
+	return validChanges(p.Changes)
+}
+
+func (p AutopilotRecipeOverrideUpdated) validate() error {
+	if p.Method == "" || len(p.Method) > 32 {
+		return invalid("method must be 1 to 32 characters")
+	}
+	if p.Value == "" {
+		return invalid("value is required")
+	}
+	return errors.Join(optionalEnum("value", p.Value, OverrideValues), optionalEnum("previous", p.Previous, OverrideValues))
+}
+
+func (p WeekGenerated) validate() error {
+	return errors.Join(validProposal(p.ProposalID, p.ModelVersion), validID("replacedProposalId", p.ReplacedProposalID, false),
+		nonNegative(p.Attempt, p.Requested, p.Planned, p.Unfilled, p.Candidates))
+}
+
+func (p WeekAccepted) validate() error {
+	return errors.Join(validProposal(p.ProposalID, p.ModelVersion), nonNegative(p.Planned, p.Added, p.Excluded, p.Skipped, p.Swaps))
+}
+
+func (p WeekRejected) validate() error {
+	var reason error
+	if p.Reason == "" {
+		reason = invalid("reason is required")
+	}
+	return errors.Join(validProposal(p.ProposalID, p.ModelVersion), nonNegative(p.Planned, p.Swaps), reason,
+		optionalEnum("reason", p.Reason, WeekRejectReasons))
+}
+
+func (p MealSwapped) validate() error {
+	return errors.Join(validProposal(p.ProposalID, p.ModelVersion), validID("slotId", p.SlotID, true),
+		validID("previousRecipeId", p.PreviousRecipeID, true), requiredDay(p.Day), validDate(p.Date), nonNegative(p.SwapNumber))
+}
+
+func (p MealRejected) validate() error {
+	return errors.Join(validProposal(p.ProposalID, p.ModelVersion), validID("slotId", p.SlotID, true),
+		requiredDay(p.Day), validDate(p.Date))
+}
+
 // typeSpec describes the rules for one event type.
 type typeSpec struct {
 	// recipe events require RecipeID; other events must not carry one.
@@ -284,6 +494,15 @@ var typeSpecs = map[Type]typeSpec{
 	TypeRecipeSkipped:      {recipe: true, client: true, decode: decoder[RecipeSkipped]()},
 	TypeGroceryItemChecked: {client: true, decode: decoder[GroceryItemChecked]()},
 	TypeImportCompleted:    {decode: decoder[ImportCompleted]()},
+
+	TypeAutopilotPreferencesUpdated:    {decode: decoder[AutopilotPreferencesUpdated]()},
+	TypeAutopilotWeekContextUpdated:    {decode: decoder[AutopilotWeekContextUpdated]()},
+	TypeAutopilotRecipeOverrideUpdated: {recipe: true, decode: decoder[AutopilotRecipeOverrideUpdated]()},
+	TypeWeekGenerated:                  {decode: decoder[WeekGenerated]()},
+	TypeWeekAccepted:                   {decode: decoder[WeekAccepted]()},
+	TypeWeekRejected:                   {decode: decoder[WeekRejected]()},
+	TypeMealSwapped:                    {recipe: true, decode: decoder[MealSwapped]()},
+	TypeMealRejected:                   {recipe: true, decode: decoder[MealRejected]()},
 }
 
 func decoder[P Payload]() func([]byte, func([]byte, any) error) (Payload, error) {
@@ -390,6 +609,60 @@ func validDate(s string) error {
 func validServings(n int) error {
 	if n < 0 || n > maxServings {
 		return invalid(fmt.Sprintf("servings must be between 1 and %d when present", maxServings))
+	}
+	return nil
+}
+
+// validID checks an identifier field: at most MaxClientEventIDLength
+// characters, and present when required.
+func validID(field, id string, required bool) error {
+	switch {
+	case required && id == "":
+		return invalid(field + " is required")
+	case len(id) > MaxClientEventIDLength:
+		return invalid(fmt.Sprintf("%s must be at most %d characters", field, MaxClientEventIDLength))
+	}
+	return nil
+}
+
+func validProposal(proposalID, modelVersion string) error {
+	return errors.Join(validID("proposalId", proposalID, true), validID("modelVersion", modelVersion, true))
+}
+
+func requiredDay(day string) error {
+	if day == "" {
+		return invalid("day is required")
+	}
+	return optionalEnum("day", day, PlanDays)
+}
+
+func nonNegative(counts ...int) error {
+	for _, n := range counts {
+		if n < 0 {
+			return invalid("counts must not be negative")
+		}
+	}
+	return nil
+}
+
+func validChanges(changes []FieldChange) error {
+	if len(changes) > MaxFieldChanges {
+		return invalid(fmt.Sprintf("at most %d changes", MaxFieldChanges))
+	}
+	for _, c := range changes {
+		switch {
+		case c.Field == "" || utf8.RuneCountInString(c.Field) > maxShortText:
+			return invalid(fmt.Sprintf("each change needs a field of at most %d characters", maxShortText))
+		case len(c.Added) > MaxChangeValues || len(c.Removed) > MaxChangeValues:
+			return invalid(fmt.Sprintf("a change lists at most %d added and %d removed values", MaxChangeValues, MaxChangeValues))
+		case utf8.RuneCountInString(c.From) > maxShortText || utf8.RuneCountInString(c.To) > maxShortText:
+			return invalid(fmt.Sprintf("from and to must be at most %d characters", maxShortText))
+		}
+		for _, v := range slices.Concat(c.Added, c.Removed) {
+			if utf8.RuneCountInString(v) > maxShortText {
+				return invalid(fmt.Sprintf("change values must be at most %d characters", maxShortText))
+			}
+		}
 	}
 	return nil
 }
