@@ -35,6 +35,9 @@ type Line struct {
 	// Sources, when set, are the recipes the line is for, instead of the
 	// selection's recipe (a batch made for several recipes).
 	Sources []Source
+	// Extra is set on a line added to the week directly rather than from a
+	// recipe's ingredients (extras.go).
+	Extra *Extra
 }
 
 // RecipeSelection is a planned recipe with the servings to cook.
@@ -90,6 +93,9 @@ type Item struct {
 	// Specialty is set when the item is a specialty ingredient left on the
 	// list or kept as a house-made batch.
 	Specialty *LineSpecialty
+	// Extras are the week's extra lines this item includes, such as a paired
+	// grocery item. Empty for items only recipes ask for.
+	Extras []Extra
 }
 
 // List is the aggregated grocery list.
@@ -146,6 +152,7 @@ type accumulator struct {
 	sources             map[string]Source
 	via                 map[string]*ItemVia
 	specialty           *LineSpecialty
+	extras              map[string]Extra
 }
 
 // unitGroup sums quantities that convert to each other, exactly, in the kind's
@@ -199,6 +206,7 @@ func Aggregate(selections []RecipeSelection, pantry Pantry) (List, error) {
 				a.sources[src.RecipeID] = src
 			}
 			a.addVia(line.Via, lineSources)
+			a.addExtra(line.Extra)
 			if s := line.Specialty; s != nil && (a.specialty == nil || s.less(*a.specialty)) {
 				c := *s
 				a.specialty = &c
@@ -227,6 +235,7 @@ func Aggregate(selections []RecipeSelection, pantry Pantry) (List, error) {
 			Amounts:       a.amounts(),
 			Via:           a.itemVia(),
 			Specialty:     a.specialty,
+			Extras:        a.itemExtras(),
 		}
 		switch {
 		case pantry.Has(a.key):

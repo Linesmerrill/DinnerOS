@@ -221,6 +221,17 @@ type GroceryItemResponse struct {
 	SpecialtyDetail *GrocerySpecialtyResponse `json:"specialtyDetail"`
 	// Via lists the specialty ingredients the item stands in for.
 	Via []GroceryViaResponse `json:"via"`
+	// Extras are items added to the week directly, such as an Autopilot
+	// pairing ("Club crackers for Chicken Noodle Soup").
+	Extras []GroceryExtraResponse `json:"extras"`
+}
+
+// GroceryExtraResponse is an item added to the week directly.
+type GroceryExtraResponse struct {
+	ID string `json:"id"`
+	// Origin is pairing: an accepted Autopilot pairing.
+	Origin string `json:"origin"`
+	Text   string `json:"text"`
 }
 
 // GroceryAmountResponse is a combined amount in one unit.
@@ -342,6 +353,10 @@ func newGroceryListResponse(g GroceryList) GroceryListResponse {
 			ir.Via = make([]GroceryViaResponse, 0, len(item.Via))
 			for _, v := range item.Via {
 				ir.Via = append(ir.Via, newGroceryViaResponse(v))
+			}
+			ir.Extras = make([]GroceryExtraResponse, 0, len(item.Extras))
+			for _, e := range item.Extras {
+				ir.Extras = append(ir.Extras, GroceryExtraResponse(e))
 			}
 			if s := item.Specialty; s != nil {
 				ir.Specialty, ir.SpecialtyDetail = true, newGrocerySpecialtyResponse(*s)
