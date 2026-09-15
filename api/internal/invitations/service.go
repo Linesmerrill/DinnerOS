@@ -16,8 +16,20 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/users"
 )
 
-// DefaultAcceptURLBase is prepended to the token to form the emailed link.
-const DefaultAcceptURLBase = "dinneros://invite?token="
+// DefaultAcceptURLBase is the emailed link before the token. See AcceptURL.
+const DefaultAcceptURLBase = "https://api.tlps.dev/invite"
+
+// AcceptURL builds the emailed invitation link. The token is appended as a
+// "#token=" fragment, so browsers never send it to the server (Heroku's router
+// logs full request paths, including query strings). A base ending in "="
+// (the legacy "dinneros://invite?token=" form) has the token appended directly.
+func AcceptURL(base, token string) string {
+	escaped := url.QueryEscape(token)
+	if strings.HasSuffix(base, "=") {
+		return base + escaped
+	}
+	return base + "#token=" + escaped
+}
 
 const (
 	maxEmailLength = 254
@@ -170,12 +182,7 @@ func (s *Service) Create(ctx context.Context, actor households.Membership, email
 }
 
 func (s *Service) sendEmail(ctx context.Context, inv Invitation, household households.Household, inviterID, token, displayCode string) bool {
-	inviterName := ""
-	if s.users != nil {
-		if u, err := s.users.GetUser(ctx, inviterID); err == nil {
-			inviterName = u.DisplayName
-		}
-	}
+	inviterName := s.displayName(ctx, inviterID)
 	// Finish sending even if the client disconnects: the invitation exists.
 	sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), emailTimeout)
 	defer cancel()
@@ -185,7 +192,7 @@ func (s *Service) sendEmail(ctx context.Context, inv Invitation, household house
 		InviterName:   inviterName,
 		Role:          inv.Role,
 		Code:          displayCode,
-		AcceptURL:     s.acceptURLBase + url.QueryEscape(token),
+		AcceptURL:     AcceptURL(s.acceptURLBase, token),
 		ExpiresAt:     inv.ExpiresAt,
 	})
 	if err != nil {
@@ -239,18 +246,9 @@ type AcceptResult struct {
 // user already accepted returns their membership again, so a lost response can
 // be retried safely.
 func (s *Service) Accept(ctx context.Context, userID, token, code string) (AcceptResult, error) {
-	token, code = strings.TrimSpace(token), strings.TrimSpace(code)
-	if (token == "") == (code == "") {
-		return AcceptResult{}, invalidInput("provide exactly one of token or code")
-	}
-
-	inv, err := s.find(ctx, token, code)
-	if errors.Is(err, ErrNotFound) {
-		s.logger.InfoContext(ctx, "invitation rejected", "reason", "unknown", "userId", userID, "via", via(token))
-		return AcceptResult{}, ErrInvalid
-	}
+	inv, err := s.lookup(ctx, token, code, "invitation rejected", "userId", userID)
 	if err != nil {
-		return AcceptResult{}, fmt.Errorf("find invitation: %w", err)
+		return AcceptResult{}, err
 	}
 
 	now := s.now().UTC()
@@ -288,6 +286,78 @@ func (s *Service) Accept(ctx context.Context, userID, token, code string) (Accep
 		"invitationId", inv.ID, "householdId", inv.HouseholdID, "userId", userID,
 		"role", string(membership.Role), "alreadyMember", !joined)
 	return AcceptResult{Household: household, Membership: membership, Joined: joined}, nil
+}
+
+// PreviewResult describes a usable invitation to the holder of its secret.
+type PreviewResult struct {
+	HouseholdName string
+	// InviterName is empty when the inviter has no display name or can't be
+	// loaded.
+	InviterName string
+	Role        households.Role
+	ExpiresAt   time.Time
+}
+
+// Preview describes the invitation identified by exactly one of token or
+// code, without accepting it. It needs no signed-in user: as with Accept,
+// holding the secret is the proof. Unknown, expired, revoked, and used
+// invitations, and invitations whose household is gone, all return ErrInvalid,
+// so Preview tells a caller no more than Accept does.
+func (s *Service) Preview(ctx context.Context, token, code string) (PreviewResult, error) {
+	const rejected = "invitation preview rejected"
+	inv, err := s.lookup(ctx, token, code, rejected)
+	if err != nil {
+		return PreviewResult{}, err
+	}
+	if reason := inv.unusableReason(s.now().UTC()); reason != "" {
+		s.logger.InfoContext(ctx, rejected, "reason", reason, "invitationId", inv.ID, "householdId", inv.HouseholdID)
+		return PreviewResult{}, ErrInvalid
+	}
+	household, err := s.households.GetHousehold(ctx, inv.HouseholdID)
+	if errors.Is(err, households.ErrNotFound) {
+		s.logger.InfoContext(ctx, rejected, "reason", "household no longer exists", "invitationId", inv.ID, "householdId", inv.HouseholdID)
+		return PreviewResult{}, ErrInvalid
+	}
+	if err != nil {
+		return PreviewResult{}, fmt.Errorf("get household: %w", err)
+	}
+	return PreviewResult{
+		HouseholdName: household.Name,
+		InviterName:   s.displayName(ctx, inv.CreatedBy),
+		Role:          inv.Role,
+		ExpiresAt:     inv.ExpiresAt,
+	}, nil
+}
+
+// lookup returns the invitation for exactly one of token or code, whatever its
+// state. Input with neither or both is a ValidationError; an unknown secret is
+// logged as rejectedMsg with attrs (never the secret) and returns ErrInvalid.
+func (s *Service) lookup(ctx context.Context, token, code, rejectedMsg string, attrs ...any) (Invitation, error) {
+	token, code = strings.TrimSpace(token), strings.TrimSpace(code)
+	if (token == "") == (code == "") {
+		return Invitation{}, invalidInput("provide exactly one of token or code")
+	}
+	inv, err := s.find(ctx, token, code)
+	if errors.Is(err, ErrNotFound) {
+		s.logger.InfoContext(ctx, rejectedMsg, append([]any{"reason", "unknown", "via", via(token)}, attrs...)...)
+		return Invitation{}, ErrInvalid
+	}
+	if err != nil {
+		return Invitation{}, fmt.Errorf("find invitation: %w", err)
+	}
+	return inv, nil
+}
+
+// displayName returns a user's display name, or "" when it can't be loaded.
+func (s *Service) displayName(ctx context.Context, userID string) string {
+	if s.users == nil {
+		return ""
+	}
+	u, err := s.users.GetUser(ctx, userID)
+	if err != nil {
+		return ""
+	}
+	return u.DisplayName
 }
 
 func (s *Service) find(ctx context.Context, token, code string) (Invitation, error) {

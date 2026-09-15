@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/applinks"
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
 	"github.com/Linesmerrill/DinnerOS/api/internal/config"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
@@ -145,6 +146,12 @@ func run() error {
 			ReadinessChecks: []httpapi.ReadinessCheck{
 				{Name: "mongodb", Check: db.Ping},
 			},
+			WebRoutes: applinks.NewHandler(applinks.Options{
+				AppName:       cfg.AppName,
+				AppURLScheme:  cfg.AppURLScheme,
+				AppleTeamID:   cfg.AppleTeamID,
+				AppleBundleID: cfg.AppleBundleID,
+			}).Mount,
 			APIRoutes: func(r chi.Router) {
 				authHandler.Mount(r)
 				householdHandler.Mount(r)

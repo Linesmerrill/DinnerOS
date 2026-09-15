@@ -67,6 +67,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReadyResponse"
+  /invite:
+    get:
+      summary: Invitation landing page
+      description: |
+        HTML page that invitation emails link to as `/invite#token=<token>`. The
+        token stays in the URL fragment, which browsers never send. The page's
+        script reads it, links to the app's custom URL scheme
+        (`<APP_URL_SCHEME>://invite?token=`), explains how to install the app
+        through TestFlight or enter the invite code, and calls
+        `POST /api/v1/invitations/preview` to name the household. With the iOS
+        app installed, iOS opens this URL in the app instead (universal link).
+      operationId: getInvitePage
+      tags: [invitations]
+      security: []
+      responses:
+        "200":
+          description: The landing page.
+          headers:
+            Content-Security-Policy:
+              description: "`default-src 'none'`, with the inline script and style allowed by SHA-256 hash and `connect-src 'self'`."
+              schema:
+                type: string
+            Cache-Control:
+              description: Always `no-store`.
+              schema:
+                type: string
+            Referrer-Policy:
+              description: Always `no-referrer`.
+              schema:
+                type: string
+          content:
+            text/html:
+              schema:
+                type: string
+  /.well-known/apple-app-site-association:
+    get:
+      summary: Apple app site association
+      description: |
+        Associates `/invite` with the iOS app (`<APPLE_TEAM_ID>.<APPLE_BUNDLE_ID>`)
+        so invitation links open in the app. Served directly, without redirects.
+        Returns `404` until `APPLE_TEAM_ID` is set.
+      operationId: getAppleAppSiteAssociation
+      tags: [operations]
+      security: []
+      responses:
+        "200":
+          description: The association file, in the applinks `details` and `components` format.
+          content:
+            application/json:
+              schema:
+                type: object
+              example:
+                applinks:
+                  details:
+                    - appIDs: [6VTPDG2HNK.com.linesmerrill.dinneros]
+                      components:
+                        - "/": /invite
+                          comment: Household invitation links; the token is in the fragment
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/v1/auth/apple:
     post:
@@ -498,6 +558,44 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/InvitationInvalid"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/invitations/preview:
+    post:
+      summary: Preview an invitation
+      description: |
+        Describes the invitation for a token or code without accepting it, so
+        the invitation landing page and the app can name the household before
+        anyone joins. Needs no authentication. Every invitation accept would
+        reject as unusable (unknown, expired, revoked, used) returns the same
+        `404 invitation_invalid`, and malformed input gets the same `400`, so
+        preview reveals nothing accept doesn't. Rate limited per client IP,
+        sharing accept's bucket.
+      operationId: previewInvitation
+      tags: [invitations]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptInvitationRequest"
+      responses:
+        "200":
+          description: The invitation can be accepted.
+          headers:
+            Cache-Control:
+              description: Always `no-store`.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationPreviewResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/InvitationInvalid"
         "429":
@@ -1428,6 +1526,22 @@ components:
       oneOf:
         - required: [token]
         - required: [code]
+    InvitationPreviewResponse:
+      type: object
+      required: [householdName, inviterName, role, expiresAt]
+      properties:
+        householdName:
+          type: string
+          example: The Lines
+        inviterName:
+          type: string
+          description: The inviter's display name. Empty when they have none.
+          example: Merrill Lines
+        role:
+          $ref: "#/components/schemas/Role"
+        expiresAt:
+          type: string
+          format: date-time
     AcceptInvitationResponse:
       type: object
       required: [household, role, permissions]
