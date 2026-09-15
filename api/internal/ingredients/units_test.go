@@ -83,6 +83,7 @@ func TestQuantityFormat(t *testing.T) {
 	}{
 		{NewQuantity(1, 1), "1"}, {NewQuantity(1, 2), "½"}, {NewQuantity(3, 2), "1 ½"},
 		{NewQuantity(1, 3), "⅓"}, {NewQuantity(11, 4), "2 ¾"}, {NewQuantity(3, 10), "0.3"},
+		{NewQuantity(11, 6), "1.83"}, {NewQuantity(1, 6), "0.17"}, {NewQuantity(201, 100), "2.01"},
 		{Quantity{}, "0"},
 	}
 	for _, tt := range tests {
