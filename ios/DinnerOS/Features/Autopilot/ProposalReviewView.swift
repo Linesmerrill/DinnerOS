@@ -278,13 +278,18 @@ struct ProposalSlotRow: View {
 
     @ViewBuilder
     private var facts: some View {
+        // Short facts keep their natural width; otherwise "20 min" wraps onto two lines.
         Label(AutopilotFormat.cookTime(slot.cookMinutes), systemImage: "clock")
             .font(.caption)
             .foregroundStyle(Color.secondary)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
         TimeBandBadge(band: slot.timeBand)
         Text("\(slot.servings) servings")
             .font(.caption)
             .foregroundStyle(Color.secondary)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
     }
 
     private var accessibilityLabel: String {
