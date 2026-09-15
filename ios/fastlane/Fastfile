@@ -8,6 +8,10 @@
 # so no certificates or provisioning profiles live in the repository. Required
 # environment variables are documented in docs/deployment.md.
 
+require "base64"
+require "shellwords"
+require "tempfile"
+
 default_platform(:ios)
 
 PROJECT = "DinnerOS.xcodeproj"
