@@ -450,7 +450,8 @@ nonisolated struct MenuFilterOptions: Decodable, Equatable, Sendable {
 
     init(
         proteins: [MenuFilterOption] = [], cuisines: [MenuFilterOption] = [], tags: [MenuFilterOption] = [],
-        maxMinutes: [Int] = MenuFilterOptions.defaultMaxMinutes, sorts: [MenuSortOption] = MenuFilterOptions.defaultSorts
+        maxMinutes: [Int] = MenuFilterOptions.defaultMaxMinutes,
+        sorts: [MenuSortOption] = MenuFilterOptions.defaultSorts
     ) {
         self.proteins = proteins
         self.cuisines = cuisines

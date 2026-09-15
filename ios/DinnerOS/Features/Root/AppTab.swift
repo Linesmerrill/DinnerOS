@@ -2,8 +2,8 @@ import Foundation
 
 /// Top-level destinations in the app's tab bar, in display order.
 enum AppTab: String, CaseIterable, Hashable, Identifiable {
-    case recipes
-    case week
+    /// Recipes and the week in one screen, with the day-by-day week behind a toggle.
+    case menu
     case shop
     case pantry
     case household
@@ -12,8 +12,7 @@ enum AppTab: String, CaseIterable, Hashable, Identifiable {
 
     var title: LocalizedStringResource {
         switch self {
-        case .week: "Week"
-        case .recipes: "Recipes"
+        case .menu: "Menu"
         case .shop: "Shop"
         case .pantry: "Pantry"
         case .household: "Household"
@@ -22,8 +21,7 @@ enum AppTab: String, CaseIterable, Hashable, Identifiable {
 
     var systemImage: String {
         switch self {
-        case .week: "calendar"
-        case .recipes: "book.closed"
+        case .menu: "fork.knife"
         case .shop: "cart"
         case .pantry: "cabinet"
         case .household: "person.2"

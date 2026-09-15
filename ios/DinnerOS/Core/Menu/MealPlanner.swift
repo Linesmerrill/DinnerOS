@@ -93,7 +93,8 @@ final class MealPlanner {
                 } catch is CancellationError {
                 } catch {
                     errorMessage = String(
-                        localized: "\(name) was added, but its changes weren't saved. \(HouseholdStore.message(for: error))")
+                        localized:
+                            "\(name) was added, but its changes weren't saved. \(HouseholdStore.message(for: error))")
                 }
             }
             if showsToast {
