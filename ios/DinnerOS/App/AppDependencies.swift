@@ -19,7 +19,8 @@ final class AppDependencies {
             session: session,
             api: client.map { HouseholdsAPI(client: $0) },
             selection: UserDefaultsHouseholdSelection(),
-            inviteURLScheme: configuration.urlScheme)
+            inviteURLScheme: configuration.urlScheme,
+            inviteLinkHost: configuration.appLinkDomain)
         recipes = RecipeLibrary(session: session, api: client.map { RecipesAPI(client: $0) })
         googleSignIn = GoogleOAuthConfiguration(clientID: configuration.googleIOSClientID).map {
             GoogleSignInService(configuration: $0, transport: transport)

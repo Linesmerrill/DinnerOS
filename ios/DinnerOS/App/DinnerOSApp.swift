@@ -12,9 +12,16 @@ struct DinnerOSApp: App {
                 .environment(dependencies.session)
                 .environment(dependencies.households)
                 .environment(dependencies.recipes)
+                // Never log these URLs: invitation links carry a secret token.
                 .onOpenURL { url in
-                    // Never log the URL: invitation links carry a secret token.
+                    // Custom-scheme links (dinneros://invite?token=...).
                     dependencies.households.handleOpenURL(url)
+                }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    // Universal links (https://api.tlps.dev/invite#token=...).
+                    if let url = activity.webpageURL {
+                        dependencies.households.handleOpenURL(url)
+                    }
                 }
         }
     }

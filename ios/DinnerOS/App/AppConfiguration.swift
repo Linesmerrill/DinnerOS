@@ -20,8 +20,11 @@ struct AppConfiguration: Sendable, Equatable {
     /// Google's iOS OAuth client ID (a public identifier). `nil` hides Google sign-in.
     let googleIOSClientID: String?
     /// The custom URL scheme invitation links open (`dinneros://invite?token=...`). It must
-    /// match the API's `APP_INVITE_URL_BASE`.
+    /// match the API's `APP_URL_SCHEME`.
     let urlScheme: String
+    /// The universal-link domain for invitation links (`https://api.tlps.dev/invite`). It
+    /// must match the Associated Domains entitlement and the API's `APP_INVITE_URL_BASE`.
+    let appLinkDomain: String
     let version: String
     let build: String
 
@@ -35,13 +38,19 @@ struct AppConfiguration: Sendable, Equatable {
         apiBaseURL = Self.parseAPIBaseURL(info["APIBaseURL"] as? String, environment: environment)
         let googleClientID = (info["GoogleIOSClientID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         googleIOSClientID = googleClientID?.isEmpty == false ? googleClientID : nil
-        let scheme = (info["AppURLScheme"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        urlScheme = scheme.flatMap { $0.isEmpty ? nil : $0 } ?? InviteLink.defaultScheme
+        urlScheme = Self.lowercasedValue(info["AppURLScheme"]) ?? InviteLink.defaultScheme
+        appLinkDomain = Self.lowercasedValue(info["AppLinkDomain"]) ?? InviteLink.defaultWebHost
         version = info["CFBundleShortVersionString"] as? String ?? "0"
         build = info["CFBundleVersion"] as? String ?? "0"
     }
 
     static let main = AppConfiguration(infoDictionary: Bundle.main.infoDictionary ?? [:])
+
+    /// A trimmed, lowercased string, or `nil` when the value is missing or blank.
+    private static func lowercasedValue(_ value: Any?) -> String? {
+        let trimmed = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
 
     /// Validates the configured API URL. Production builds only accept https.
     static func parseAPIBaseURL(_ raw: String?, environment: Environment) -> URL? {

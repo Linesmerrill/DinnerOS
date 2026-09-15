@@ -6,6 +6,8 @@
 	<string>$(API_BASE_URL)</string>
 	<key>AppEnvironment</key>
 	<string>$(APP_ENVIRONMENT)</string>
+	<key>AppLinkDomain</key>
+	<string>$(APP_LINK_DOMAIN)</string>
 	<key>AppURLScheme</key>
 	<string>$(APP_URL_SCHEME)</string>
 	<key>CFBundleURLTypes</key>

@@ -1,8 +1,8 @@
 import Foundation
 
 /// Typed wrappers for the household and invitation endpoints (`/api/v1/households/*`,
-/// `/api/v1/invitations/accept`). Every call needs an access token; use them through
-/// `AuthSession.authorized`.
+/// `/api/v1/invitations/*`). Every call except `previewInvitation` needs an access token;
+/// use them through `AuthSession.authorized`.
 nonisolated struct HouseholdsAPI: Sendable {
     let client: APIClient
 
@@ -68,13 +68,15 @@ nonisolated struct HouseholdsAPI: Sendable {
 
     /// The token or code travels in the JSON body, never in the URL.
     func acceptInvitation(_ secret: InvitationSecret, accessToken: String) async throws -> AcceptInvitationResponse {
-        let body =
-            switch secret {
-            case .token(let token): AcceptInvitationBody(token: token, code: nil)
-            case .code(let code): AcceptInvitationBody(token: nil, code: code)
-            }
-        return try await client.send(
-            try APIRequest.post("/api/v1/invitations/accept", body: body).authorized(with: accessToken))
+        try await client.send(
+            try APIRequest.post("/api/v1/invitations/accept", body: InvitationSecretBody(secret))
+                .authorized(with: accessToken))
+    }
+
+    /// Describes an invitation without accepting it. It needs no access token, so it works
+    /// signed out. Unusable invitations fail with `404 invitation_invalid`, as accepting does.
+    func previewInvitation(_ secret: InvitationSecret) async throws -> InvitationPreview {
+        try await client.send(try APIRequest.post("/api/v1/invitations/preview", body: InvitationSecretBody(secret)))
     }
 }
 
@@ -95,7 +97,19 @@ private nonisolated struct CreateInvitationBody: Encodable {
     let role: HouseholdRole
 }
 
-private nonisolated struct AcceptInvitationBody: Encodable {
+/// Exactly one of `token` or `code`, for accepting or previewing an invitation.
+private nonisolated struct InvitationSecretBody: Encodable {
     let token: String?
     let code: String?
+
+    init(_ secret: InvitationSecret) {
+        switch secret {
+        case .token(let value):
+            token = value
+            code = nil
+        case .code(let value):
+            token = nil
+            code = value
+        }
+    }
 }
