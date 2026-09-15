@@ -24,12 +24,15 @@ mongo-down: ## Stop local MongoDB
 
 # --- API ----------------------------------------------------------------------
 
-.PHONY: api-run api-test api-lint api-build api-fmt
+.PHONY: api-run api-test api-test-integration api-lint api-build api-fmt
 api-run: ## Run the API locally (loads .env if present)
 	@set -a; [ -f .env ] && source .env; set +a; go -C $(API_DIR) run ./cmd/server
 
-api-test: ## Run API tests
+api-test: ## Run API unit tests (MongoDB integration tests skip)
 	go -C $(API_DIR) test ./...
+
+api-test-integration: ## Run API tests including MongoDB integration tests (needs `make mongo-up`)
+	MONGODB_TEST_URI=$${MONGODB_TEST_URI:-mongodb://localhost:27017} go -C $(API_DIR) test -race -count=1 ./...
 
 api-lint: ## gofmt check, go vet, staticcheck
 	@unformatted="$$(gofmt -l $(API_DIR))"; if [ -n "$$unformatted" ]; then echo "gofmt needed:"; echo "$$unformatted"; exit 1; fi

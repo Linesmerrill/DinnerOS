@@ -45,12 +45,12 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestLoadProduction(t *testing.T) {
 	cfg, err := Load(env(map[string]string{
-		"APP_ENV":              "production",
-		"APP_NAME":             "Renamed",
-		"PORT":                 "5000",
-		"MONGODB_URI":          "mongodb+srv://user:secret@cluster.example.net",
-		"HEROKU_SLUG_COMMIT":   "abc123",
-		"CORS_ALLOWED_ORIGINS": " https://a.example , ,https://b.example",
+		"APP_ENV":             "production",
+		"APP_NAME":            "Renamed",
+		"PORT":                "5000",
+		"MONGODB_URI":         "mongodb+srv://user:secret@cluster.example.net",
+		"HEROKU_BUILD_COMMIT": "abc123",
+		"HEROKU_SLUG_COMMIT":  "ignored-when-build-commit-set",
 	}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -63,9 +63,6 @@ func TestLoadProduction(t *testing.T) {
 	}
 	if cfg.AppName != "Renamed" || cfg.Port != 5000 || cfg.Version != "abc123" {
 		t.Errorf("got AppName=%q Port=%d Version=%q", cfg.AppName, cfg.Port, cfg.Version)
-	}
-	if got := strings.Join(cfg.CORSAllowedOrigins, "|"); got != "https://a.example|https://b.example" {
-		t.Errorf("CORSAllowedOrigins = %q", got)
 	}
 }
 

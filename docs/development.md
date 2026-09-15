@@ -26,14 +26,25 @@ make mongo-up
 ```bash
 make api-run
 make api-test
+make api-test-integration
 make api-lint
 make api-build
 ```
 
-`make api-run` loads `.env`. The API listens on `PORT` (default 8080):
+- `make api-run` loads `.env`, connects to MongoDB (it exits if MongoDB is
+  unreachable), and listens on `PORT` (default 8080).
+- `make api-test` runs unit tests. MongoDB integration tests skip unless
+  `MONGODB_TEST_URI` is set.
+- `make api-test-integration` sets `MONGODB_TEST_URI` to the docker-compose
+  MongoDB and runs everything with the race detector. Each test uses and drops
+  its own database. CI always runs the integration tests.
 
 ```bash
 curl -s localhost:8080/health
+```
+
+```bash
+curl -s localhost:8080/ready
 ```
 
 To run the API and MongoDB in containers instead:

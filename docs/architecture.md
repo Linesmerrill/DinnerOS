@@ -57,7 +57,12 @@ api/
 ├── cmd/server/          main: load config → build logger → router → graceful shutdown
 ├── internal/
 │   ├── config/          environment-driven configuration + validation
-│   ├── httpapi/         router, middleware, JSON/error conventions, route mounting
+│   ├── httpapi/         router assembly, middleware, /health and /ready, route mounting
+│   ├── platform/        domain-free infrastructure that domain packages may import
+│   │   ├── httpx/       JSON responses, error envelope, strict request decoding
+│   │   ├── logging/     slog construction; adds request ID from context
+│   │   ├── mongodb/     client lifecycle, IndexSet management, error translation
+│   │   └── requestid/   request correlation ID in context
 │   ├── auth/            provider token verification, DinnerOS sessions
 │   ├── users/           User, AuthIdentity
 │   ├── households/      Household, HouseholdMembership, roles/permissions
@@ -90,7 +95,8 @@ internal/<domain>/
 Dependency rules:
 
 - `httpapi` depends on domain packages (to mount handlers). Domain packages never
-  depend on `httpapi`.
+  depend on `httpapi`. They use `platform/httpx` for responses and decoding.
+- `platform/*` packages never import domain packages.
 - Domain packages talk to each other through small service interfaces, never by
   reaching into another package's store or collections.
 - `cmd/server` is the only place where concrete implementations are chosen and
@@ -108,9 +114,17 @@ Dependency rules:
 
 ### Cross-cutting concerns
 
-- **Logging:** `log/slog`, text locally and JSON in production. Every request is
-  logged with request ID, route, status, and latency (Phase 1). Tokens, cookies,
-  and credentials are never logged. `Config` redacts connection-string passwords.
+- **Middleware order:** `RequestID` → `RequestLogger` → `Recoverer` →
+  `MaxBodyBytes` → routes.
+- **Logging:** `log/slog`, text locally and JSON in production. Each request
+  produces one line with request ID, method, **route pattern**, status, bytes, and
+  latency. The raw path and query string are never logged because they can
+  contain tokens. `/health` and `/ready` log at debug level. Tokens, cookies, and
+  credentials are never logged, and `Config` redacts connection-string passwords.
+  Handlers log with `*Context` methods so the request ID is attached automatically.
+- **Startup:** the API connects to MongoDB, pings it, and ensures indexes before
+  listening. If that fails, it exits (fail fast). On SIGTERM it drains in-flight
+  requests for up to 25 seconds.
 - **Errors:** every non-2xx response uses `{"error": {"code", "message"}}`.
 - **Limits:** request body size (`HTTP_MAX_BODY_BYTES`), server timeouts, and rate
   limiting on auth and invitation endpoints.
@@ -169,3 +183,6 @@ a versioned Autopilot API. See [autopilot.md](autopilot.md).
 | 9 | Fastlane + App Store Connect API key + Xcode cloud-managed signing | No certificates or profiles in Git or a match repo. The key lives in GitHub Secrets. |
 | 10 | Opaque DinnerOS tokens separate from provider identities | Multiple login methods per user; provider data never becomes our identity |
 | 11 | No license yet | Owner has not chosen one |
+| 12 | Shared HTTP/Mongo helpers live in `internal/platform/*` | Domain handlers need response conventions without importing the router package, which would create an import cycle |
+| 13 | Heroku container deploy (`heroku.yml` + `api/Dockerfile`) | The same image is built in CI and locally; no third-party monorepo buildpack; non-root distroless runtime |
+| 14 | No CORS middleware | The only client is the native iOS app, which doesn't need CORS. Add it when a browser client exists. |

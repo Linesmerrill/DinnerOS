@@ -18,8 +18,8 @@ Autopilot's first customer.
 | Phase | Scope | State |
 | ----- | ----- | ----- |
 | 0 | Repository, architecture, tooling, CI | ✅ Done |
-| 1 | Backend foundation (config, Mongo, middleware, health/ready, Heroku) | Next |
-| 2 | Authentication (Sign in with Apple, Google) | Planned |
+| 1 | Backend foundation (config, Mongo, middleware, health/ready, Heroku) | ✅ Done; Heroku app and Atlas setup pending |
+| 2 | Authentication (Sign in with Apple, Google) | Next |
 | 3 | Households and invitations | Planned |
 | 4 | Recipes, ingredients, and units | Planned |
 | 5 | HelloFresh historical importer | Planned |

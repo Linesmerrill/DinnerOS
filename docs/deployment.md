@@ -13,27 +13,50 @@ all of them). `APP_ENV=production` switches to JSON logs and requires an explici
 
 ## Backend on Heroku
 
-Status: the container image builds in CI. The Heroku app itself is configured in
-Phase 1.
+The API deploys as a **container**. `heroku.yml` at the repository root builds
+`api/Dockerfile`, the same image CI builds. The image runs as a non-root
+distroless binary and listens on Heroku's `$PORT`.
 
-Planned approach:
+Status: everything in the repository is ready. The Heroku app has not been
+created yet; this needs the account steps below.
 
-1. Create the app. The name may need to differ if `dinneros-api` is taken:
+1. Create the app on the container stack. The name may need to differ if
+   `dinneros-api` is taken:
 
    ```bash
-   heroku create dinneros-api
+   heroku create dinneros-api --stack container
    ```
 
-2. Deploy the API from the `api/` subdirectory. The chosen option is verified and
-   documented here in Phase 1:
-   - **Container** (`heroku.yml` + `api/Dockerfile`, stack `container`), or
-   - **Go buildpack** with a monorepo `APP_BASE=api` buildpack and a `Procfile`.
-3. Enable **GitHub integration → automatic deploys from `main` → "Wait for CI to
-   pass"**. Heroku then never deploys a red build, and no Heroku API key is stored
-   in GitHub.
-4. Set config vars (`heroku config:set KEY=value`) from the credential table below.
-5. Point Heroku's health check and uptime monitoring at `GET /health`. `GET /ready`
-   also checks MongoDB.
+2. Set config vars from the credential table below. Replace the placeholder
+   values; the `$(...)` generates the signing key locally:
+
+   ```bash
+   heroku config:set -a dinneros-api APP_ENV=production MONGODB_URI='mongodb+srv://...' MONGODB_DATABASE=dinneros AUTH_TOKEN_SIGNING_KEY="$(openssl rand -base64 48)"
+   ```
+
+3. Expose the deployed commit as `HEROKU_BUILD_COMMIT`, which `/health`
+   reports as `version`:
+
+   ```bash
+   heroku labs:enable runtime-dyno-build-metadata -a dinneros-api
+   ```
+
+4. In the Heroku dashboard, go to **Deploy → GitHub**, connect
+   `Linesmerrill/DinnerOS`, enable **automatic deploys from `main`**, and tick
+   **"Wait for CI to pass"**. Heroku then never deploys a red build, and no
+   Heroku API key is stored in GitHub.
+5. Verify the deploy:
+
+   ```bash
+   curl -s https://<app>.herokuapp.com/ready
+   ```
+
+   Use `/health` for uptime monitoring. `/ready` also checks MongoDB.
+
+The API exits at startup if it can't reach MongoDB. A crash-looping dyno after a
+deploy almost always means `MONGODB_URI` is wrong or Atlas Network Access
+doesn't allow Heroku (Heroku dyno IPs are dynamic, so Atlas must allow
+`0.0.0.0/0`, protected by a strong database-user password).
 
 Heroku terminates TLS, so the API is only reachable over HTTPS in production.
 

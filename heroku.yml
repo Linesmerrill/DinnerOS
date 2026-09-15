@@ -1,0 +1,6 @@
+# Heroku container deployment for the API (app stack must be `container`).
+# The Docker build context is the Dockerfile's directory (api/).
+# See docs/deployment.md.
+build:
+  docker:
+    web: api/Dockerfile

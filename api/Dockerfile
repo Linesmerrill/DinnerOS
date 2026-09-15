@@ -10,4 +10,5 @@ FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/server /server
 EXPOSE 8080
 USER nonroot:nonroot
-ENTRYPOINT ["/server"]
+# Heroku injects PORT; the server reads it from the environment.
+CMD ["/server"]

@@ -22,12 +22,56 @@ paths:
       responses:
         "200":
           description: The API process is up.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      summary: Readiness check
+      description: Reports whether dependencies (MongoDB) are reachable. Failure details are logged, not returned.
+      operationId: getReady
+      tags: [operations]
+      responses:
+        "200":
+          description: All dependencies are available.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyResponse"
+        "503":
+          description: At least one dependency is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyResponse"
 components:
+  headers:
+    RequestID:
+      description: |
+        Request correlation ID. A well-formed incoming `X-Request-ID`
+        (8–128 chars of `A-Za-z0-9._-`) is reused; otherwise one is generated.
+        Every response includes it.
+      schema:
+        type: string
   schemas:
+    ReadyResponse:
+      type: object
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [ready, unavailable]
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [ok, unavailable]
+          example:
+            mongodb: ok
     HealthResponse:
       type: object
       required: [status, service, version]
@@ -59,6 +103,10 @@ components:
               type: string
               description: Human-readable description. Not stable; do not parse.
               example: resource not found
+            requestId:
+              type: string
+              description: Matches the X-Request-ID response header; quote it when reporting problems.
+              example: 5f0c1e9a2b7d4c3e8f6a1b2c
   responses:
     NotFound:
       description: The resource does not exist or is not visible to the caller.

@@ -31,14 +31,13 @@ const (
 
 // Config is the fully validated API configuration.
 type Config struct {
-	AppName            string
-	Env                Environment
-	Version            string
-	Port               int
-	LogLevel           slog.Level
-	LogFormat          string
-	MaxBodyBytes       int64
-	CORSAllowedOrigins []string
+	AppName      string
+	Env          Environment
+	Version      string
+	Port         int
+	LogLevel     slog.Level
+	LogFormat    string
+	MaxBodyBytes int64
 
 	MongoURI      string
 	MongoDatabase string
@@ -76,8 +75,10 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 
 	cfg := Config{
-		AppName:       get("APP_NAME", "DinnerOS"),
-		Version:       get("APP_VERSION", get("HEROKU_SLUG_COMMIT", "dev")),
+		AppName: get("APP_NAME", "DinnerOS"),
+		// Heroku exposes the deployed commit as HEROKU_BUILD_COMMIT (dyno metadata)
+		// or HEROKU_SLUG_COMMIT (buildpack builds). APP_VERSION overrides both.
+		Version:       get("APP_VERSION", get("HEROKU_BUILD_COMMIT", get("HEROKU_SLUG_COMMIT", "dev"))),
 		MongoDatabase: get("MONGODB_DATABASE", "dinneros"),
 	}
 
@@ -114,12 +115,6 @@ func Load(getenv func(string) string) (Config, error) {
 		errs = append(errs, fmt.Errorf("HTTP_MAX_BODY_BYTES must be a positive integer, got %q", getenv("HTTP_MAX_BODY_BYTES")))
 	}
 	cfg.MaxBodyBytes = maxBody
-
-	for _, origin := range strings.Split(getenv("CORS_ALLOWED_ORIGINS"), ",") {
-		if origin = strings.TrimSpace(origin); origin != "" {
-			cfg.CORSAllowedOrigins = append(cfg.CORSAllowedOrigins, origin)
-		}
-	}
 
 	// Production must be pointed at a real database explicitly; development
 	// falls back to the docker-compose MongoDB.

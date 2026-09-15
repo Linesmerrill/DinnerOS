@@ -10,7 +10,9 @@ any endpoint change.
   changes (new fields or endpoints) stay in v1.
 - Operational endpoints are unversioned:
   - `GET /health`: liveness. The process is serving HTTP; dependencies are not checked.
-  - `GET /ready`: readiness. Dependencies such as MongoDB are reachable (Phase 1).
+  - `GET /ready`: readiness. Returns `200 {"status":"ready","checks":{"mongodb":"ok"}}`,
+    or `503` with `"unavailable"` when a dependency is down. Failure details go
+    to the logs only.
 
 ## Requests
 
@@ -36,10 +38,15 @@ Every non-2xx response has the same shape:
 {
   "error": {
     "code": "not_found",
-    "message": "resource not found"
+    "message": "resource not found",
+    "requestId": "5f0c1e9a2b7d4c3e8f6a1b2c"
   }
 }
 ```
+
+Handlers decode request bodies with `httpx.DecodeJSON`. It rejects empty
+bodies, malformed JSON, unknown fields, wrong types, and trailing data with
+`400 invalid_request`, and bodies over the limit with `413 payload_too_large`.
 
 `code` is stable and machine-readable. `message` is for humans and may change.
 
@@ -60,7 +67,7 @@ Every non-2xx response has the same shape:
 | Method | Path | Phase | Status |
 | --- | --- | --- | --- |
 | GET | `/health` | 0 | ✅ |
-| GET | `/ready` | 1 | planned |
+| GET | `/ready` | 1 | ✅ |
 | POST | `/api/v1/auth/apple`, `/api/v1/auth/google` | 2 | planned |
 | POST | `/api/v1/auth/refresh`, `/api/v1/auth/logout` | 2 | planned |
 | GET | `/api/v1/me` | 2 | planned |
