@@ -5,6 +5,7 @@ enum AppTab: String, CaseIterable, Hashable, Identifiable {
     case recipes
     case week
     case shop
+    case pantry
     case household
 
     var id: String { rawValue }
@@ -14,6 +15,7 @@ enum AppTab: String, CaseIterable, Hashable, Identifiable {
         case .week: "Week"
         case .recipes: "Recipes"
         case .shop: "Shop"
+        case .pantry: "Pantry"
         case .household: "Household"
         }
     }
@@ -23,6 +25,7 @@ enum AppTab: String, CaseIterable, Hashable, Identifiable {
         case .week: "calendar"
         case .recipes: "book.closed"
         case .shop: "cart"
+        case .pantry: "cabinet"
         case .household: "person.2"
         }
     }

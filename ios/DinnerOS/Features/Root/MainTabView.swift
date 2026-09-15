@@ -22,6 +22,10 @@ struct MainTabView: View {
                             WeekView()
                         }
                         .id(households.current?.household.id)
+                    case .pantry:
+                        NavigationStack {
+                            PantryView()
+                        }
                     case .household:
                         NavigationStack {
                             HouseholdView()

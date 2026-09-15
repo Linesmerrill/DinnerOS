@@ -13,6 +13,7 @@ struct DinnerOSApp: App {
                 .environment(dependencies.households)
                 .environment(dependencies.recipes)
                 .environment(dependencies.plans)
+                .environment(dependencies.pantry)
                 // Never log these URLs: invitation links carry a secret token.
                 .onOpenURL { url in
                     // Custom-scheme links (dinneros://invite?token=...).
