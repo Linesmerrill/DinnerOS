@@ -733,7 +733,11 @@ nonisolated struct AutopilotRecipeAttributes: Decodable, Equatable, Sendable {
     let recipeID: String
     let cookMinutes: Int?
     let timeBand: AutopilotTimeBand
+    /// Canonical and lowercase, such as `north american`.
     let cuisines: [String]
+    /// Broader regions of `cuisines`, nearest first. Likes, exclusions, and rules match them too.
+    /// `nil` from a server older than canonical cuisines.
+    let cuisineRegions: [String]?
     let tags: [String]
     let proteins: [String]
     let allergens: [String]
@@ -746,8 +750,8 @@ nonisolated struct AutopilotRecipeAttributes: Decodable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case recipeID = "recipeId"
-        case cookMinutes, timeBand, cuisines, tags, proteins, allergens, diets, spicy, spicyEvidence, methods,
-            override
+        case cookMinutes, timeBand, cuisines, cuisineRegions, tags, proteins, allergens, diets, spicy, spicyEvidence,
+            methods, override
     }
 }
 

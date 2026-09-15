@@ -99,7 +99,9 @@ struct WeekContextSheet: View {
                 Section {
                     Toggle("Busy Week", isOn: $draft.busy)
                 } footer: {
-                    Text("Favors quick meals and skips long cooks, without a strict limit.")
+                    Text(
+                        "Quick weeknight meals and no long cooks on weeknights. Other days, like a smoker night, stay as usual."
+                    )
                 }
                 Section {
                     OptionalNumberRow(

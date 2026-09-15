@@ -230,7 +230,8 @@ private struct RestrictionsSectionForm: View {
                 kind == .protein ? settings.restrictions.excludedProteins : settings.restrictions.excludedCuisines
             },
             set: { newValue in
-                let old = kind == .protein ? settings.restrictions.excludedProteins : settings.restrictions.excludedCuisines
+                let old =
+                    kind == .protein ? settings.restrictions.excludedProteins : settings.restrictions.excludedCuisines
                 for value in old where !newValue.contains(value) {
                     settings.setExcluded(false, value: value, kind: kind, limits: limits)
                 }
@@ -305,7 +306,8 @@ private struct CookTimeSectionForm: View {
                 value: $settings.cookTime.quickMaxMinutes,
                 in: limits.minCookMinutes...max(cookTime.mediumMaxMinutes - 1, limits.minCookMinutes), step: 5
             ) {
-                LabeledContent("Quick", value: String(localized: "Up to \(RecipeFormat.minutes(cookTime.quickMaxMinutes))"))
+                LabeledContent(
+                    "Quick", value: String(localized: "Up to \(RecipeFormat.minutes(cookTime.quickMaxMinutes))"))
             }
             Stepper(
                 value: $settings.cookTime.mediumMaxMinutes,
@@ -480,7 +482,8 @@ struct WeekdayRuleEditor: View {
                 Picker("Cook Time", selection: $rule.timeBand) {
                     Text("No Preference").tag(AutopilotTimeBand?.none)
                     ForEach(AutopilotTimeBand.known, id: \.self) { band in
-                        Text(AutopilotFormat.timeBandLabel(band, vocabulary: vocabulary)).tag(AutopilotTimeBand?.some(band))
+                        Text(AutopilotFormat.timeBandLabel(band, vocabulary: vocabulary)).tag(
+                            AutopilotTimeBand?.some(band))
                     }
                 }
                 Picker("How Often", selection: $rule.frequency) {
@@ -489,7 +492,8 @@ struct WeekdayRuleEditor: View {
                     }
                 }
             } footer: {
-                Text("“Long cook OK” lifts the weeknight limit that day. “At most once a week” keeps it from repeating.")
+                Text(
+                    "“Long cook OK” lifts the weeknight limit that day. “At most once a week” keeps it from repeating.")
             }
             if settings.rule(for: day) != nil {
                 Section {

@@ -314,7 +314,9 @@ struct WeekAutopilotModifier: ViewModifier {
     private func message(_ alert: WeekAutopilotFlow.Alert) -> String {
         switch alert {
         case .finalized:
-            String(localized: "Its recipes are locked so the grocery list stays put. Reopen the week to plan with Autopilot.")
+            String(
+                localized:
+                    "Its recipes are locked so the grocery list stays put. Reopen the week to plan with Autopilot.")
         case .contextChanged(let hasSuggestions):
             hasSuggestions
                 ? String(localized: "Autopilot can suggest this week's meals again with your changes.")

@@ -174,6 +174,8 @@ struct AutopilotAPITests {
                 == "/api/v1/households/household-1/autopilot/recipes/recipe-3/attributes")
         #expect(attributes.cookMinutes == 90)
         #expect(attributes.timeBand == .long)
+        #expect(attributes.cuisines == ["north american"])
+        #expect(attributes.cuisineRegions == ["american"])
         #expect(attributes.methods.map(\.method) == ["smoker", "grill"])
         let smoker = try #require(attributes.methods.first)
         #expect(smoker.setting == .no)

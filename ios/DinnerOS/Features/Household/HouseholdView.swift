@@ -54,6 +54,17 @@ struct HouseholdView: View {
                     switcherSection(detail)
                 }
                 membersSection(detail)
+                Section {
+                    NavigationLink {
+                        AutopilotPreferencesView()
+                    } label: {
+                        Label("Autopilot Preferences", systemImage: "sparkles")
+                    }
+                } header: {
+                    Text("Autopilot")
+                } footer: {
+                    Text("What your household likes, your schedule, and weekly habits Autopilot plans around.")
+                }
                 if detail.access.can(.membersInvite) {
                     invitationsSection
                 }
@@ -489,4 +500,6 @@ private struct HouseholdConfirmations: ViewModifier {
     }
     .environment(session)
     .environment(HouseholdPreviewData.store(session: session))
+    .environment(RecipePreviewData.library(session: session))
+    .environment(AutopilotPreviewData.store(session: session))
 }

@@ -180,7 +180,12 @@ struct AutopilotStoreTests {
     }
 
     @Test func swapUpdatesTheSlotAndSendsTheCurrentVersion() async throws {
-        let harness = try await generated()
+        let server = FakeAutopilotServer(
+            .init(alternatives: [
+                AutopilotFixtures.Slot(day: "", recipeID: "recipe-4", name: "Swapped Stir Fry", cookMinutes: 15),
+                AutopilotFixtures.Slot(day: "", recipeID: "recipe-5", name: "Second Swap Salad", cookMinutes: 10),
+            ]))
+        let harness = try await generated(server)
         let store = harness.store
 
         try await store.swap(slotID: "sun")

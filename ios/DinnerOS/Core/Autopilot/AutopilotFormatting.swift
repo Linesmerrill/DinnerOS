@@ -31,7 +31,8 @@ nonisolated enum AutopilotFormat {
     static func dayTitle(date: String, day: PlanDay, locale: Locale = .autoupdatingCurrent) -> String {
         guard let parsed = try? Date(date, strategy: Date.ISO8601FormatStyle(timeZone: .gmt).year().month().day())
         else { return day.name(locale: locale) }
-        return parsed.formatted(Date.FormatStyle(locale: locale, timeZone: .gmt).weekday(.wide).month(.abbreviated).day())
+        return parsed.formatted(
+            Date.FormatStyle(locale: locale, timeZone: .gmt).weekday(.wide).month(.abbreviated).day())
     }
 
     // MARK: Minutes
@@ -59,7 +60,7 @@ nonisolated enum AutopilotFormat {
         }
         var parts: [String] = []
         if context.busy {
-            parts.append(String(localized: "Busy week"))
+            parts.append(String(localized: "Busy weeknights"))
         }
         if let maxMinutes = context.maxMinutes {
             parts.append(limit(maxMinutes, none: ""))
@@ -90,9 +91,11 @@ nonisolated enum AutopilotFormat {
     ) -> String {
         switch section {
         case .taste:
-            let liked = settings.taste.likes.cuisines.count + settings.taste.likes.tags.count
+            let liked =
+                settings.taste.likes.cuisines.count + settings.taste.likes.tags.count
                 + settings.taste.likes.proteins.count
-            let disliked = settings.taste.dislikes.cuisines.count + settings.taste.dislikes.tags.count
+            let disliked =
+                settings.taste.dislikes.cuisines.count + settings.taste.dislikes.tags.count
                 + settings.taste.dislikes.proteins.count
             if liked == 0 && disliked == 0 {
                 return String(localized: "No favorites yet")
@@ -103,7 +106,8 @@ nonisolated enum AutopilotFormat {
             var parts = (restrictions.diets + restrictions.allergens).map {
                 label($0, vocabulary?.diets ?? [], vocabulary?.allergens ?? [])
             }
-            let excluded = restrictions.excludedIngredients.count + restrictions.excludedCuisines.count
+            let excluded =
+                restrictions.excludedIngredients.count + restrictions.excludedCuisines.count
                 + restrictions.excludedProteins.count + restrictions.excludedTags.count
             if excluded > 0 {
                 parts.append(String(localized: "\(excluded) excluded"))
@@ -123,7 +127,8 @@ nonisolated enum AutopilotFormat {
                 ? String(localized: "any long meals")
                 : String(localized: "up to \(cookTime.maxLongPerWeek) long")
             return String(
-                localized: "Quick ≤ \(cookTime.quickMaxMinutes) min · Medium ≤ \(cookTime.mediumMaxMinutes) min · \(long)")
+                localized:
+                    "Quick ≤ \(cookTime.quickMaxMinutes) min · Medium ≤ \(cookTime.mediumMaxMinutes) min · \(long)")
         case .equipment:
             guard !settings.equipment.isEmpty else { return String(localized: "None") }
             return settings.equipment.map { label($0, vocabulary?.equipment ?? []) }.joined(separator: ", ")

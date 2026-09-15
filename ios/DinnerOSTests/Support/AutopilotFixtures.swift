@@ -171,7 +171,7 @@ nonisolated enum AutopilotFixtures {
 
     static let attributes = Data(
         #"""
-        {"recipeId":"recipe-3","cookMinutes":90,"timeBand":"long","cuisines":["american"],"tags":[],"proteins":["pork"],
+        {"recipeId":"recipe-3","cookMinutes":90,"timeBand":"long","cuisines":["north american"],"cuisineRegions":["american"],"tags":[],"proteins":["pork"],
          "allergens":[],"diets":["gluten-free","dairy-free"],"spicy":false,
          "methods":[
            {"method":"smoker","label":"Smoker","suits":false,"source":"override","heuristicSuits":true,"evidence":"Pork Shoulder"},

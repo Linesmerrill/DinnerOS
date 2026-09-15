@@ -10,6 +10,7 @@ final class AppDependencies {
     let plans: PlanStore
     let pantry: PantryStore
     let specialties: SpecialtyStore
+    let autopilot: AutopilotStore
     let events: EventReporter
     let notifications: NotificationStore
     /// `nil` when the build has no Google client ID; the Google button is then hidden.
@@ -45,6 +46,10 @@ final class AppDependencies {
         specialties.onBatchRecorded = { [pantry] item, householdID in
             pantry.applyChangedItem(item, householdID: householdID)
         }
+        autopilot = AutopilotStore(
+            session: session, api: client.map { AutopilotAPI(client: $0) }, prompts: UserDefaultsAutopilotPrompts())
+        // Accepting a proposal returns the plan, so the Week tab shows it without reloading.
+        autopilot.planDidChange = { [plans] plan in plans.present(plan) }
         events = EventReporter(
             session: session, api: client.map { EventsAPI(client: $0) },
             storage: FileEventQueueStorage.applicationSupport())
