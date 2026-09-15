@@ -146,8 +146,10 @@ shows the result and its evidence.
 | Spicy | a `spicy` tag or name, or a heat ingredient (sriracha, jalapeño, chili flakes…); chili powder and paprika don't count. |
 | Smoker | In order: (1) a `smoker` tag or utensil always counts. (2) A dish that isn't a smoker meal never counts, matched in the name's main part before "with", "over", or "in" (so a side doesn't count): pasta shapes and noodles, ramen, soup, stew, pot pie, casserole, bake, stir-fry, fried rice, skillet, tacos, taquitos, burritos, enchiladas, quesadillas, bowls, wraps, pitas, sandwiches, sliders, burgers, pizza, flatbread, meatballs, meatloaf, patties, sausage, dumplings, gyoza, wontons, bibimbap, donburi, katsu, schnitzel. The evidence names it ("Not a smoker dish: pot pie"). (3) A whole or large cut of chicken, pork, beef, or turkey: whole chicken, bone-in chicken, legs, quarters, drumsticks, wings, spatchcock; pork shoulder, butt, tenderloin, filet, loin, chops, steak, belly, and ribs; brisket, beef or short ribs, tri-tip, chuck roast; turkey breast or legs. The cut must not be ground, sliced, diced, cubed, chopped, strips, cutlets, shredded, pulled, minced, cooked, deli, sausage, a mix, patties, crumbles, or meatballs. (4) "smoked" in the name or tags together with chicken, pork, beef, or turkey (so smoked paprika and smoked salmon don't count). Fish isn't included: smoker rules are about large meat cuts. |
 | Grill, air fryer, slow cooker, pressure cooker | keywords in the name, tags, or utensils. |
+| Meal category | the kind of dinner a pairing matches on: the keyword that comes **last** in the name, then tags that point at exactly one category, then a Mexican cuisine ([Meal categories](#meal-categories)). |
 
-Households override methods per recipe ("good for smoker": yes/no/auto), and
+Households override methods and meal categories per recipe ("good for smoker",
+"this is a pasta dish": yes/no/auto), and
 overrides always win. Hard-constraint heuristics are conservative: when unsure,
 a recipe contains the allergen and doesn't satisfy the diet.
 
@@ -232,7 +234,9 @@ removed meal (tested by giving a forbidden meal every advantage).
   excludes "cremini mushrooms"); spicy when "no spicy" is set
 - over the week's or day's `maxMinutes`, or unknown cook time under a cap
 - already in this week's plan (a recipe appears at most once a week)
-- add-ons (sides, desserts) aren't dinner candidates
+- add-ons (sides, desserts) aren't dinner candidates. They reach a week as
+  [pairings](#add-on-pairings), and an add-on entry shares its meal's day
+  without taking it or counting as a meal
 
 ## Meal score
 
@@ -389,6 +393,167 @@ rejected        accepted ──▶ draft plan gains entries (origin autopilot, p
 - Accepted entries are ordinary plan entries: members edit or remove them as
   usual, and generating again treats them like manual entries.
 
+## Add-on pairings
+
+Households pair things with dinner: garlic bread with pasta, crackers with
+soup. Autopilot learns those pairs and offers them with the meal, from two
+sources — the household's **rules**, and what it **usually has** — and adds
+them as an add-on plan entry or a grocery line.
+
+```text
+main meal ──▶ meal category (pasta) ──┬─▶ rules      → "Your rule: pasta → Garlic Bread"
+                                      └─▶ history    → "You usually have Garlic Bread with pasta (95% of pasta weeks)"
+                                                ↓
+                             accept ──┬─▶ add-on recipe → plan entry, same day, origin autopilot
+                                      └─▶ grocery item  → the week's grocery list
+```
+
+### Meal categories
+
+Recipes don't carry a "kind of dish", so it is derived at read time from the
+name, then tags, then cuisines. The list is closed and small, and lives in the
+[vocabulary](#vocabulary) with a recipe count:
+
+| Category | Label | Keywords (plurals match) |
+| --- | --- | --- |
+| `pasta` | Pasta | pasta, spaghetti, penne, rigatoni, linguine, fettuccine, cavatappi, macaroni, mac & cheese, lasagna, ravioli, tortellini, gnocchi, orzo, ziti, carbonara… |
+| `soup` | Soup, stew & chili | soup, stew, chowder, bisque, gumbo, broth, pho, minestrone, pozole, chili con carne, chili verde, and `chili` as the last word |
+| `salad` | Salad | salad |
+| `tacos` | Tacos & Mexican | taco, burrito, enchilada, quesadilla, fajita, tostada, flauta, taquito, nacho, chimichanga, tamale; or a Mexican/Tex-Mex cuisine |
+| `curry` | Curry | curry, curried, masala, korma, vindaloo, dal |
+| `bowl` | Rice & grain bowls | bowl, fried rice, bibimbap, donburi, poke |
+| `stir-fry` | Stir-fry & noodles | stir fry, lo mein, chow mein, ramen, yakisoba, udon, soba, pad thai, noodle, vermicelli |
+| `sandwich` | Burgers & sandwiches | burger, sandwich, sando, wrap, pita, slider, panini, hoagie, gyro, banh mi |
+| `pizza` | Pizza & flatbread | pizza, flatbread, calzone |
+
+- **The last keyword wins**, because English dish names end with the dish:
+  "Spicy Beef Taco Rigatoni" is pasta, "Chicken Noodle Soup" is soup, "Chicken
+  & Greek Salad Pita Pockets" are sandwiches, and "Saucy Beef Burrito Bowls"
+  are bowls.
+- `chili` counts only as the name's last word, so "Turkey & Bean Chili" is a
+  soup and "Sweet Chili Pork Bowls" is not.
+- Without a keyword, tags decide when they point at exactly one category
+  (`soup-salad` is ambiguous and ignored), then a Mexican or Tex-Mex cuisine.
+- The heuristic gives at most one category. A household can override any of
+  them per recipe (yes/no/auto), exactly like cooking methods, and overrides
+  decide what history is counted under.
+
+### Learned pairings
+
+The unit is an **ISO week**: a week's main meals give their categories, and
+the add-ons ordered or planned that week are its add-ons. Order weeks
+(`recipes.orderWeeks`) and planned weeks (plan entries) are merged, each week
+counted once, and the week being planned is left out.
+
+For a category C and an add-on A:
+
+```text
+together      = weeks with C and A
+confidence    = together / weeks with C
+otherRate     = (weeks with A − together) / (weeks without C)
+baseRate      = weeks with A / weeks with a main meal
+lift          = confidence / baseRate
+```
+
+A pairing is suggested when **all** of these hold:
+
+| Threshold | Value | Why |
+| --- | --- | --- |
+| `together` | ≥ 3 weeks | one or two weeks is a coincidence |
+| `confidence` | ≥ 0.5 | it happens with most of those meals |
+| weeks without C | ≥ 4 | something to compare against |
+| `confidence − otherRate` | ≥ 0.2 | **the pairing is about C**, not a weekly habit |
+
+The last row is the important one. Raw confidence is inflated for an add-on
+the household orders nearly every week whatever it eats — imported meal-kit
+add-ons collapse many weekly menu aliases into one recipe, so a single add-on
+can carry an order week for most weeks in the history. In the owner's own
+history, "Garlic Bread" has 203 unique order weeks out of 230 weeks with a
+main meal (an 88% base rate), so its confidence is 0.88–1.00 for *every*
+category and its lift never exceeds 1.13. Only pasta stands out, and only
+because the comparison is against the weeks without pasta:
+
+| Category | together | category weeks | confidence | rate without the category | qualifies |
+| --- | --- | --- | --- | --- | --- |
+| pasta | 186 | 195 | 0.95 | 0.49 | **yes** |
+| tacos | 170 | 186 | 0.91 | 0.75 | no |
+| bowl | 87 | 97 | 0.90 | 0.87 | no |
+| soup | 70 | 80 | 0.88 | 0.89 | no |
+| stir-fry | 77 | 87 | 0.89 | 0.88 | no |
+
+So the household is offered garlic bread with pasta, and not with everything
+else it eats. Grocery items are never learned (nothing records that crackers
+were bought for a soup); they come from rules.
+
+### Pairing rules
+
+The profile's `pairings` section is a list of at most 20 rules, each with a
+stable `id`:
+
+```json
+{
+  "id": "66e5a1f2c3b4a5d6e7f80f01",
+  "label": "Pasta night",
+  "when": { "mealCategories": ["pasta"], "cuisines": [], "tags": [], "proteins": [] },
+  "add": { "kind": "recipe", "recipeId": "66e5…", "recipeName": "Garlic Bread", "groceryItem": null },
+  "frequency": "always"
+}
+```
+
+- A meal matches when it matches **every** group the rule sets; within a group
+  any value matches, and cuisines match a recipe's cuisines or their regions —
+  the same rule as weekday rules. A rule needs at least one condition.
+- `add` is exactly one of an add-on `recipeId` (an add-on of this household
+  that has serving sizes; its name is stored for display) or a `groceryItem`
+  (`{name, quantity?, unit?}`, at most 60 characters, an ingredient unit).
+- `frequency: always` is included with a proposed meal unless the member takes
+  it out; `suggest` is offered.
+- Two rules can't repeat the same meals and item. Changes are tracked like
+  every other section (who changed it, when, and an
+  `autopilot.preferences_updated` diff of added and removed rules).
+- `PUT .../profile` (onboarding) **keeps** the pairing rules when it doesn't
+  send them, unlike the other sections: rules are made from suggestions, not
+  in onboarding.
+
+### Suggestions and what a member can do
+
+Per planned main meal, at most 3 pairings: rules first (`always`, then
+`suggest`, in rule order), then learned ones by confidence. A target appears
+once, and a rule shows the learned confidence when history backs it.
+
+Already in the week, so not offered:
+
+- an add-on **planned on that meal's day** (the same add-on on another day
+  still is: two pasta nights can both have garlic bread);
+- a grocery item already on the week's list for a meal that is still planned,
+  or one a planned recipe already uses as an ingredient;
+- anything dismissed for that meal this week.
+
+| Action | What happens |
+| --- | --- |
+| Accept | An add-on becomes a plan entry on the meal's day, with the smallest authored size that feeds the meal (`origin: autopilot`); a grocery item joins the week's list. Accepting again adds nothing (`alreadyAdded`). |
+| Dismiss | Hidden for that meal this week. |
+| Make it a rule | A learned pairing becomes a household rule for its meal category. The same add-on for a second category joins the rule it already has (`merged`). |
+
+### Grocery items on the list
+
+Accepted grocery items are kept per week (`autopilot_week_pairings`) and
+join the grocery list through planning's extras hook, keyed like an
+uncatalogued ingredient (`name:club crackers`), so the pantry, check-offs, and
+the Walmart handoff treat them like any other line. Each carries its
+provenance in `extras[]` ("Club crackers for Chicken Noodle Soup"), and an
+item leaves the list when its meal is unplanned, without being deleted.
+
+### In a proposal
+
+Generating (and swapping) stores each slot's pairings on the proposal, so the
+review screen can ask "Add Garlic Bread?" without another round trip.
+`always` rules arrive `included: true`. Accepting adds the meals and their
+pairings in one atomic change; `pairingIds` chooses exactly which to add, and
+leaving the field out means the included ones. A pairing whose slot is
+excluded is dropped, and one whose add-on is already planned that day or can
+no longer be planned is reported in `pairingsSkipped`.
+
 ## Events and learning signals
 
 Everything is recorded in `events` ([database.md](database.md#behavior)).
@@ -403,7 +568,11 @@ Autopilot types are server-observed; clients can't send them.
 | `week.rejected` | dismissed, or replaced by generating again | `{proposalId, modelVersion, planned, swaps, reason}` |
 | `autopilot.preferences_updated` | a profile section changed | `{sections, changes: [{field, added?, removed?, from?, to?}]}` |
 | `autopilot.week_context_updated` | a week context changed or was cleared (`week`) | `{changes?, cleared?}` |
-| `autopilot.recipe_override_updated` | a method override changed (`recipeId`) | `{method, value: yes/no/auto, previous}` |
+| `autopilot.recipe_override_updated` | a method or meal-category override changed (`recipeId`) | `{method` **or** `category, value: yes/no/auto, previous}` |
+| `pairing.suggested` | a pairing was offered with a meal (`recipeId` is the meal) | `{key, kind, source, frequency, mealCategory?, ruleId?, confidence?, entryId?, proposalId?, slotId?, day?}` |
+| `pairing.accepted` | a pairing was added to the week | the same, plus `{addedEntryId?, groceryItemId?}` |
+| `pairing.dismissed` | a pairing was dismissed, or left out when accepting | the same, plus `{reason: dismissed/excluded}` |
+| `pairing.rule_created` | a learned pairing became a rule | `{ruleId, key, kind, mealCategory, frequency, confidence?, merged?}` |
 | `meal.customized` | a member swapped or doubled a planned meal's protein (`recipeId`, `week`) | `{entryId, changes: [{ingredientKey, from, to}]}` |
 
 `meal.customized` is recorded but not yet learned from. It's a direct
@@ -426,7 +595,8 @@ learn from them):
 | Cooked / skipped for autopilot entries | conversion of accepted suggestions |
 | Removing an accepted entry (`recipe.unplanned` with origin autopilot) | late rejection |
 | Preference diffs with timestamps | which stated preferences change and when |
-| Recipe method overrides | corrections to the attribute heuristics |
+| Recipe method and meal-category overrides | corrections to the attribute heuristics |
+| Pairings suggested, accepted, dismissed, and made into rules | which add-ons a household really wants with which meals, and where the learned thresholds sit |
 | Signals and model version on every stored proposal | the features behind each decision, for offline calibration |
 
 ## Success metrics
@@ -475,7 +645,17 @@ changed it first, the review reloads and says so. A finalized week offers
 - Cuisine canonicalization is a hand-kept table. Unknown labels are kept as
   normalized, and a recipe's cuisine can't be more specific than its source's
   label.
-- One weekday rule per day; one dinner per day; add-ons are never planned.
+- One weekday rule per day; one dinner per day. Add-ons reach a week only as
+  pairings, and nothing suggests a main meal for an add-on.
+- Meal categories are keyword-based and English-only, and the heuristic gives
+  a recipe at most one category (overrides add more). A dish the keywords
+  don't know ("Meatloaf à la Mom") has none, so only rules can pair with it.
+- Learned pairings need add-on history: a household whose add-ons were never
+  ordered or planned gets nothing until it makes rules. Grocery-item pairings
+  are never learned, because buying crackers for a soup isn't recorded.
+- Pairings are learned per meal category, not per recipe, and the week is the
+  unit: an add-on ordered in the same week as a pasta dish counts, even if it
+  was eaten on another night.
 - The week note is stored, not interpreted. There's no weather, season, or
   calendar context yet.
 - Only the latest proposal per week is stored; earlier ones survive only as
