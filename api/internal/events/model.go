@@ -49,6 +49,13 @@ const (
 	TypeMealSwapped   Type = "meal.swapped"
 	TypeMealRejected  Type = "meal.rejected"
 
+	// Autopilot add-on pairings: offered with a main meal, added, dismissed,
+	// and turned into household rules.
+	TypePairingSuggested   Type = "pairing.suggested"
+	TypePairingAccepted    Type = "pairing.accepted"
+	TypePairingDismissed   Type = "pairing.dismissed"
+	TypePairingRuleCreated Type = "pairing.rule_created"
+
 	// TypeMealCustomized: a member customized a planned meal's protein
 	// (swapped it or doubled it).
 	TypeMealCustomized Type = "meal.customized"
@@ -231,7 +238,10 @@ type AutopilotWeekContextUpdated struct {
 // autopilot.recipe_override_updated: a member said whether a recipe suits a
 // cooking method, overriding the heuristic.
 type AutopilotRecipeOverrideUpdated struct {
-	Method string `json:"method" bson:"method"`
+	// Method or Category (a meal category such as pasta) names what changed;
+	// exactly one is set.
+	Method   string `json:"method,omitempty" bson:"method,omitempty"`
+	Category string `json:"category,omitempty" bson:"category,omitempty"`
 	// Value and Previous are one of OverrideValues; auto means no override.
 	Value    string `json:"value" bson:"value"`
 	Previous string `json:"previous,omitempty" bson:"previous,omitempty"`
@@ -507,8 +517,11 @@ func (p AutopilotWeekContextUpdated) validate() error {
 }
 
 func (p AutopilotRecipeOverrideUpdated) validate() error {
-	if p.Method == "" || len(p.Method) > 32 {
-		return invalid("method must be 1 to 32 characters")
+	switch {
+	case (p.Method == "") == (p.Category == ""):
+		return invalid("exactly one of method or category is required")
+	case len(p.Method) > 32 || len(p.Category) > 32:
+		return invalid("method and category must be at most 32 characters")
 	}
 	if p.Value == "" {
 		return invalid("value is required")
@@ -617,6 +630,10 @@ var typeSpecs = map[Type]typeSpec{
 	TypeWeekRejected:                   {decode: decoder[WeekRejected]()},
 	TypeMealSwapped:                    {recipe: true, decode: decoder[MealSwapped]()},
 	TypeMealRejected:                   {recipe: true, decode: decoder[MealRejected]()},
+	TypePairingSuggested:               {recipe: true, decode: decoder[PairingSuggested]()},
+	TypePairingAccepted:                {recipe: true, decode: decoder[PairingAccepted]()},
+	TypePairingDismissed:               {recipe: true, decode: decoder[PairingDismissed]()},
+	TypePairingRuleCreated:             {decode: decoder[PairingRuleCreated]()},
 	TypeMealCustomized:                 {recipe: true, decode: decoder[MealCustomized]()},
 	TypeShoppingHandoffCreated:         {decode: decoder[ShoppingHandoffCreated]()},
 	TypeShoppingOrderConfirmed:         {decode: decoder[ShoppingOrderConfirmed]()},
