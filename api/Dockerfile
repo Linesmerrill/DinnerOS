@@ -6,9 +6,12 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
 
-FROM gcr.io/distroless/static-debian12:nonroot
+# Heroku starts containers with `/bin/sh -c <CMD>`, so the runtime image needs a
+# shell (distroless has none). Keep it minimal and non-root.
+FROM alpine:3.22
+RUN apk add --no-cache ca-certificates && adduser -D -H -u 10001 app
 COPY --from=build /out/server /server
 EXPOSE 8080
-USER nonroot:nonroot
+USER app
 # Heroku injects PORT; the server reads it from the environment.
 CMD ["/server"]

@@ -184,5 +184,5 @@ a versioned Autopilot API. See [autopilot.md](autopilot.md).
 | 10 | Opaque DinnerOS tokens separate from provider identities | Multiple login methods per user; provider data never becomes our identity |
 | 11 | No license yet | Owner has not chosen one |
 | 12 | Shared HTTP/Mongo helpers live in `internal/platform/*` | Domain handlers need response conventions without importing the router package, which would create an import cycle |
-| 13 | Heroku container deploy (`heroku.yml` + `api/Dockerfile`) | The same image is built in CI and locally; no third-party monorepo buildpack; non-root distroless runtime |
+| 13 | Heroku container deploy (`heroku.yml` + `api/Dockerfile`) | The same image is built in CI and locally, with no third-party monorepo buildpack. The runtime is non-root Alpine rather than distroless because Heroku launches `CMD` via `/bin/sh -c`; CI checks this. |
 | 14 | No CORS middleware | The only client is the native iOS app, which doesn't need CORS. Add it when a browser client exists. |
