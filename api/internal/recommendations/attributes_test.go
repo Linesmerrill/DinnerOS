@@ -130,10 +130,24 @@ func TestCookingMethods(t *testing.T) {
 		{"baby back ribs", recipeWith("Ribs", "Baby Back Ribs"), "smoker", true, "Baby Back Ribs"},
 		{"pork chops", recipeWith("Chops", "Pork Chops"), "smoker", true, "Pork Chops"},
 		{"brisket", recipeWith("Brisket", "Beef Brisket"), "smoker", true, "Beef Brisket"},
-		{"ground pork", recipeWith("Bowl", "Ground Pork"), "smoker", false, ""},
-		{"diced shoulder", recipeWith("Stew", "Diced Pork Shoulder"), "smoker", false, ""},
-		{"boneless thighs", recipeWith("Bowl", "Boneless Chicken Thighs"), "smoker", false, ""},
-		{"smoked name with chicken", recipeWith("Smoked Chicken Sandwich", "Chicken Breast", "Bun"), "smoker", true, "Tagged or named for smoking"},
+		{"pork filet", recipeWith("Maple Glazed Pork Filet", "Pork Filet"), "smoker", true, "Pork Filet"},
+		{"ground pork", recipeWith("Glazed Pork", "Ground Pork"), "smoker", false, ""},
+		{"diced shoulder", recipeWith("Braised Pork", "Diced Pork Shoulder"), "smoker", false, ""},
+		{"chopped loin", recipeWith("Glazed Pork", "Chopped Pork Loin"), "smoker", false, ""},
+		{"pulled shoulder", recipeWith("Glazed Pork", "Pulled Pork Shoulder"), "smoker", false, ""},
+		{"boneless thighs", recipeWith("Lemon Chicken", "Boneless Chicken Thighs"), "smoker", false, ""},
+		{"pot pie", recipeWith("Farmhouse Chicken & Dumpling Pot Pie", "Bone-In Chicken Thighs"), "smoker", false, "Not a smoker dish: pot pie"},
+		{"pasta with a chop", recipeWith("Creamy Linguine with Herbed Pork", "Pork Chops", "Linguine"), "smoker", false, "Not a smoker dish: linguine"},
+		{"stir-fry", recipeWith("Ginger Pork Tenderloin Stir-Fry", "Pork Tenderloin"), "smoker", false, "Not a smoker dish: stir fry"},
+		{"smoked tacos", recipeWith("Smoked Chicken Tacos", "Chicken Breast"), "smoker", false, "Not a smoker dish: taco"},
+		{"a side doesn't make it pasta", recipeWith("Pork Chops with Garlic Noodles", "Pork Chops", "Noodles"), "smoker", true, "Pork Chops"},
+		{"smoker tag wins", func() recipes.Recipe {
+			r := recipeWith("Pulled Pork Sandwiches", "Pork")
+			r.Tags = []string{"Smoker"}
+			return r
+		}(), "smoker", true, "Tagged or named for smoking"},
+		{"smoked name with chicken", recipeWith("Smoked Chicken with Corn", "Chicken Breast"), "smoker", true, "Tagged or named for smoking"},
+		{"a smoked sandwich is still a sandwich", recipeWith("Smoked Chicken Sandwich", "Chicken Breast", "Bun"), "smoker", false, "Not a smoker dish: sandwich"},
 		{"smoked salmon is not a smoker meal", recipeWith("Smoked Salmon Bagel", "Smoked Salmon", "Bagel"), "smoker", false, ""},
 		{"smoked paprika is not a smoker meal", recipeWith("Paprika Chicken", "Smoked Paprika", "Chicken Breast"), "smoker", false, ""},
 		{"grilled name", recipeWith("Grilled Steak Salad", "Steak"), "grill", true, "Named or tagged grilled steak salad"},
