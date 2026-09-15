@@ -1139,7 +1139,10 @@ every change needs `plan.edit`.
 - Validation (`400 validation_failed`):
   - Cuisines, tags, and excluded ingredients are free text, trimmed,
     lowercased, and deduplicated: at most 30 values of 40 characters (50
-    excluded ingredients of 60 characters).
+    excluded ingredients of 60 characters). Cuisines and tags are stored in
+    canonical form (`North America` → `north american`; see
+    [autopilot.md](autopilot.md#cuisines)), and stored profiles read that way
+    too.
   - Proteins, diets, allergens, equipment, days, `novelty`, `timeBand`, and
     `frequency` must come from the [vocabulary](#vocabulary).
   - A value can't be both liked and disliked, or liked and excluded.
@@ -1180,10 +1183,14 @@ preference screens:
 }
 ```
 
-- Cuisines and tags are counted across the household's main meals, most used
-  first, followed by a starter list (`recipeCount: 0`), at most 60 each, so
-  onboarding works before any recipes are imported. Proteins list every
-  protein with its recipe count.
+- Cuisines and tags are counted in canonical form across the household's main
+  meals, most used first, followed by a starter list (`recipeCount: 0`), at
+  most 60 each, so onboarding works before any recipes are imported. Proteins
+  list every protein with its recipe count.
+- A cuisine counts for its regions too: an Italian recipe counts for
+  `italian`, `southern european`, and `european`, so `recipeCount` is how many
+  recipes a like of the value matches. Known cuisines have title-case labels;
+  other values show the catalog's most common spelling.
 - Diets, allergens, proteins, equipment, novelty, time bands, frequencies, and
   days are fixed lists without `recipeCount`.
 
@@ -1219,7 +1226,8 @@ derives from a recipe:
   "recipeId": "66e5a1f2c3b4a5d6e7f80915",
   "cookMinutes": 90,
   "timeBand": "long",
-  "cuisines": ["american"],
+  "cuisines": ["southern"],
+  "cuisineRegions": ["north american"],
   "tags": [],
   "proteins": ["pork"],
   "allergens": [],
@@ -1233,6 +1241,9 @@ derives from a recipe:
 }
 ```
 
+- `cuisines` and `tags` are canonical. `cuisineRegions` are the broader
+  regions of `cuisines`, which likes, dislikes, exclusions, and weekday rules
+  also match.
 - `methods` lists every equipment option. `heuristicSuits` and `evidence` are
   the heuristic's answer and why; `suits` is what Autopilot uses, and `source`
   says whether the household overrode it. See
@@ -1279,8 +1290,13 @@ derives from a recipe:
 - `maxMinutes` (5–480) is a hard cap for every day; `days[].maxMinutes` is a
   hard cap for one day (the tighter applies). Recipes with an unknown cook time
   don't pass a cap.
-- `busy` is softer: no long meals and at least half quick ones, without a
-  cap.
+- `busy` is softer and about weeknights. On the profile's `weeknights` it
+  prefers quick meals, allows no long ones, and wants at least half of them
+  quick, without a cap. Other days keep their usual cook-time handling, and a
+  day whose rule has `timeBand: long` keeps its long cook (a Sunday smoker
+  night stays long). Only `maxMinutes` or `days[].maxMinutes` caps those days.
+  Reasons say "Quick for your busy week" on weeknights, and "Ready in 20 min
+  for Sunday" under a cap on other days.
 - `servings` (1–12) overrides the household's servings for the week, and
   `days[].servings` for one day (guests). Autopilot picks the smallest serving
   size a recipe offers that feeds that many.
