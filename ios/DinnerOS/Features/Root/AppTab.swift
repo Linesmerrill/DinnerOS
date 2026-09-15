@@ -1,9 +1,9 @@
 import Foundation
 
-/// Top-level destinations in the app's tab bar.
+/// Top-level destinations in the app's tab bar, in display order.
 enum AppTab: String, CaseIterable, Hashable, Identifiable {
-    case week
     case recipes
+    case week
     case shop
     case household
 

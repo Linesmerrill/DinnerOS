@@ -14,6 +14,9 @@ nonisolated struct APIRequest: Sendable {
     var path: String
     var body: Data?
     var bearerToken: String?
+    /// Sent in order. Names and values are percent-encoded strictly, so `+` and `&` in a
+    /// value arrive as written.
+    var queryItems: [URLQueryItem] = []
 
     static func get(_ path: String) -> APIRequest {
         APIRequest(method: .get, path: path, body: nil, bearerToken: nil)
@@ -73,7 +76,14 @@ nonisolated struct APIClient: Sendable {
 
     func makeURLRequest(for request: APIRequest, requestID: String) -> URLRequest {
         let relativePath = request.path.hasPrefix("/") ? String(request.path.dropFirst()) : request.path
-        var urlRequest = URLRequest(url: baseURL.appending(path: relativePath))
+        var url = baseURL.appending(path: relativePath)
+        if !request.queryItems.isEmpty, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            components.percentEncodedQuery = request.queryItems
+                .map { Self.encodeQueryComponent($0.name) + "=" + Self.encodeQueryComponent($0.value ?? "") }
+                .joined(separator: "&")
+            url = components.url ?? url
+        }
+        var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = request.method.rawValue
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
         urlRequest.setValue(requestID, forHTTPHeaderField: "X-Request-ID")
@@ -85,6 +95,15 @@ nonisolated struct APIClient: Sendable {
             urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         return urlRequest
+    }
+
+    /// RFC 3986 unreserved characters only. `URLQueryItem`'s default encoding leaves `+`
+    /// as is, which Go's query parser reads as a space.
+    private static let queryAllowed = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+
+    static func encodeQueryComponent(_ string: String) -> String {
+        string.addingPercentEncoding(withAllowedCharacters: queryAllowed) ?? ""
     }
 
     private func perform(_ request: APIRequest) async throws -> Data {
