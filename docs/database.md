@@ -83,14 +83,48 @@ Implemented in Phase 3 (`internal/households`, `internal/invitations`).
 
 ### Recipes and ingredients
 
+Implemented in Phase 4 (`internal/recipes`; categories and units from `internal/ingredients`).
+
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `recipes` | name, source, sourceRecipeId, sourceURL, servings, times, cuisine, tags, ingredients[] (RecipeIngredient), instructions[], historicalOrderDates[] | **unique partial** `{source, sourceRecipeId}`; `{tags}`; `{cuisine}` |
-| `ingredients` | name, normalizedName, aliases[], category, defaultPurchaseUnit, searchTerms[] | **unique** `{normalizedName}`; `{aliases}` |
-| `ingredient_review_queue` | rawText, recipeId, candidates[], status | `{status, createdAt}` |
+| `recipes` | householdId, source, sourceRecipeId, sourceAliases[], sourceUrl, name, headline, description, imageUrl, isAddon, servings[], prepMinutes, totalMinutes, difficulty, cuisines[], tags[], utensils[], allergens[], nutritionPerServing[], ingredients[] (ingredientId, name, pantryStaple, amounts[]: servings, quantity, quantityValue, unit, sourceUnit, rawText), steps[], orderWeeks[], timesOrdered, lastOrderedWeek, createdAt, updatedAt | **unique** `{householdId, source, sourceRecipeId}`; `{householdId, source, sourceAliases}`; with collation `en`/strength 2: `{householdId, name, _id}`, `{householdId, lastOrderedWeek: -1, name, _id}`, `{householdId, timesOrdered: -1, name, _id}`, `{householdId, tags}`, `{householdId, cuisines}` |
+| `ingredients` | key, name, category, categoryConfident, sourceRefs[] (source, sourceIngredientId), imageUrl, createdAt, updatedAt | **unique** `{key}`; `{sourceRefs.source, sourceRefs.sourceIngredientId}`; `{categoryConfident, key}` |
+| `import_reviews` | householdId, key, source, sourceRecipeId, recipeName, field, value, reason, status (`open`), createdAt, updatedAt | **unique** `{householdId, key}`; `{householdId, status, createdAt}` |
 
-A recipe's ingredient lines and instructions are small and bounded, so they are
-embedded. Embedded ingredient lines *reference* canonical `ingredients` by ID.
+A recipe's ingredient lines and steps are small and bounded, so they are
+embedded. Embedded ingredient lines *reference* catalog `ingredients` by ID; the
+category is read from the catalog, not copied onto the recipe.
+
+- **Exact quantities.** `quantity` is a reduced fraction string (`"3/4"`, `"2"`)
+  and is authoritative. `quantityValue` is the same amount as a double, for
+  display and ad-hoc queries. Both are absent when the source gave no amount.
+- **The ingredient catalog is global**, not household-scoped. `key` is
+  `ingredients.NormalizeName(name)`. An import line resolves by
+  `(source, sourceIngredientId)` first and falls back to `key`; a name match
+  gains the new source reference. New ingredients get a category from
+  `ingredients.Categorize`. When no rule matches, the category is `other` with
+  `categoryConfident: false`, so `{categoryConfident: false}` is the review
+  queue. Imports never overwrite a stored name or category.
+- **Idempotent imports.** A recipe matches a stored one when its
+  `sourceRecipeId` or any alias equals the stored `sourceRecipeId` or any
+  stored alias, so a later file with a different canonical ID updates the
+  recipe in place. `orderWeeks` and `sourceAliases` merge as sorted set
+  unions; every other field takes the file's value. Recipes that didn't change
+  aren't written. An import is five bulk round trips at most, whatever its
+  size: find ingredients, upsert ingredients (and re-read them), find recipes,
+  write recipes, and upsert review items.
+- `orderWeeks` holds one ISO week per delivery, so it stays small (a few dozen
+  entries at most). `timesOrdered` and `lastOrderedWeek` are derived from it
+  for sorting. `lastOrderedWeek` is stored as `""` for never-ordered recipes so
+  they sort last.
+- List sorting and the tag and cuisine filters are case-insensitive through the
+  collation, and list queries use the same collation so these indexes apply.
+  The unique import index has no collation, so source IDs match exactly. Name
+  search is a case-insensitive regex of the escaped search text within one
+  household.
+- `import_reviews` keeps importer review items per household. `key` is the hex
+  SHA-256 of source, sourceRecipeId, field, value, and reason. Re-imports use
+  `$setOnInsert`, so an item's status is never reset. No endpoint reads them yet.
 
 Ownership: recipes imported from our personal history belong to a household
 (`householdId`). A future shared or partner catalog will use an explicit

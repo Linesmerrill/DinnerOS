@@ -5,9 +5,11 @@ Status:
 - **Implemented, pure logic with tests:**
   - Exact quantities and units: `api/internal/ingredients` (`Quantity`, `Unit`, `Convert`, `Amount`).
   - The aggregation engine: `api/internal/grocery` (`Aggregate`).
+  - Ingredient categories: `api/internal/ingredients` (`Categorize`), stored in
+    the global `ingredients` catalog by `api/internal/recipes` (Phase 4; see
+    [database.md](database.md#recipes-and-ingredients)).
 - **Pending:**
-  - Canonical ingredient catalog and categories (Phase 4).
-  - Persistence, API, and UI (Phase 7).
+  - Grocery list persistence, API, and UI (Phase 7).
 
 The implemented engine differs from the pipeline below in two ways:
 
