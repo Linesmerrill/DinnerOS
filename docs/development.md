@@ -169,19 +169,27 @@ With the development API running and the app signed in with **Developer sign-in*
 
    Pull to refresh the Household tab to see the new member.
 
-Invitation links use the `dinneros://` scheme (`APP_URL_SCHEME` in
-`ios/Config/Shared.xcconfig`, which must match the API's `APP_INVITE_URL_BASE`).
-Open one in the booted simulator with:
+Invitation emails link to `https://api.tlps.dev/invite#token=TOKEN`, a universal
+link for `APP_LINK_DOMAIN` in `ios/Config/Shared.xcconfig`. The landing page's
+button, and emails sent before universal links, use the custom scheme
+`dinneros://` (`APP_URL_SCHEME`, which must match the API's `APP_URL_SCHEME`).
+Open a custom-scheme link in the booted simulator with:
 
 ```bash
 xcrun simctl openurl booted 'dinneros://invite?token=TOKEN'
 ```
 
-The app asks before joining. Because the log email provider never prints tokens,
-a made-up token exercises the prompt and the "Couldn't Join Household" error; a
-working link needs a real invitation email. To test a link that arrives while
-signed out, sign out, run the command, then sign in: the prompt appears once the
-household loads.
+A universal link opens the app only in a signed build whose Associated Domains
+entitlement iOS has verified against the live apple-app-site-association file.
+In an unsigned simulator build it opens Safari instead. The landing page for a
+local API is at `http://localhost:8080/invite#token=TOKEN`.
+
+The app checks the invitation with `POST /api/v1/invitations/preview`, then asks
+before joining. Because the log email provider never prints tokens, a made-up
+token exercises the progress state and "This invitation is no longer valid"; a
+working link needs a real invitation email, or the code with **Join with a
+Code**. To test a link that arrives while signed out, sign out, run the command,
+then sign in: the prompt appears once the household loads.
 
 ### Adding files
 

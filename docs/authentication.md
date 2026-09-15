@@ -327,23 +327,33 @@ Rules beyond the table:
   shown only once, so the admin can share it directly. The email contains the
   same code and a link with a separate **token** (32 random bytes, base64url).
   Only SHA-256 hashes of both are stored. Neither is logged or returned again.
-- The link is `APP_INVITE_URL_BASE` + token (default `dinneros://invite?token=`;
-  universal links can replace it later through configuration). The app posts
-  the token to `POST /api/v1/invitations/accept` in the body, never in a URL.
+- The link is `APP_INVITE_URL_BASE` + `#token=` + token, by default
+  `https://api.tlps.dev/invite#token=…` (see [Invitation links](#invitation-links)).
+  The token is in the URL fragment, which browsers never send, so it can't
+  reach the server or Heroku's router logs. The app posts the token to
+  `POST /api/v1/invitations/accept` in the body, never in a URL.
 - Invitations expire after 7 days. Re-inviting an address revokes its pending
   invitation. Admins can revoke invitations, and revoking is idempotent.
 - **Accepting requires a signed-in user, but not a matching email.** Sign in
   with Apple can hide the real address behind a private relay, and people often
   accept from a different account than the one that received the email.
   Holding the secret is the proof, as with any invite link.
+- **Previewing requires no sign-in.** `POST /api/v1/invitations/preview` with
+  `{token}` or `{code}` returns `{householdName, inviterName, role, expiresAt}`
+  for a usable invitation, so the landing page and a signed-out app can say
+  which household an invitation is for before anyone joins. It never uses the
+  invitation up. `inviterName` is empty when the inviter has no display name.
 - Unknown, expired, revoked, and used invitations all return
-  `404 invitation_invalid`. The reason is only logged. Codes are matched
-  case-insensitively, spaces and dashes are ignored, and O, I, and L are read as
-  0, 1, and 1.
-- Acceptance is rate limited per client IP before authentication runs: a burst
-  of 10, then 1 request every 6 seconds, the same budget as sign-in. That makes
-  guessing a 50-bit code infeasible. Creating invitations sends email, so it has
-  its own limit: a burst of 20, then 1 every 30 seconds.
+  `404 invitation_invalid`, from accept and preview alike, and both reject
+  malformed input with the same `400`. Preview therefore can't tell an expired
+  invitation from a nonexistent one any more than accept can. The reason is
+  only logged. Codes are matched case-insensitively, spaces and dashes are
+  ignored, and O, I, and L are read as 0, 1, and 1.
+- Acceptance and preview are rate limited per client IP before authentication
+  runs, and they **share one bucket**: a burst of 10, then 1 request every 6
+  seconds, the same budget as sign-in. Previewing adds no guesses, so guessing a
+  50-bit code stays infeasible. Creating invitations sends email, so it has its
+  own limit: a burst of 20, then 1 every 30 seconds.
 - The invitation is marked accepted with a conditional update *before* the
   membership is created, so two people can't both use it. If the user is
   already a member, the invitation is used up and their existing role is kept.
@@ -352,6 +362,47 @@ Rules beyond the table:
   household, the used invitation stops working.
 - If the email can't be sent, the invitation is kept and the response has
   `emailDelivered: false`, so the admin can still share the code.
+
+### Invitation links
+
+```text
+email: https://api.tlps.dev/invite#token=T
+  ├─ app installed → iOS opens the app (universal link)
+  │     app: preview → "Join <household>?" → accept
+  └─ no app → Safari opens GET /invite (landing page)
+        script reads #token → POST /api/v1/invitations/preview {token}
+        "Join <household> on DinnerOS" + inviter and role
+        Open in DinnerOS → dinneros://invite?token=T
+        no app yet → TestFlight steps, or open the app and enter the code
+```
+
+- `GET /invite` (`api/internal/applinks`) is a small server-rendered page,
+  styled like the email and named with `APP_NAME`. It sends
+  `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, and a strict CSP:
+  `default-src 'none'`, the one inline script and style allowed by SHA-256 hash,
+  and `connect-src 'self'`. Its script writes text only, sends the token nowhere
+  but the preview request body, and shows "This invitation is no longer valid"
+  when preview returns `400` or `404`. The server never receives the token, so
+  it can't log it.
+- `GET /.well-known/apple-app-site-association` returns the modern format,
+  `{"applinks":{"details":[{"appIDs":["<APPLE_TEAM_ID>.<APPLE_BUNDLE_ID>"],"components":[{"/":"/invite"}]}]}}`,
+  as `application/json` with no redirect. It returns `404` until
+  `APPLE_TEAM_ID` is set.
+- The app's Associated Domains entitlement is `applinks:$(APP_LINK_DOMAIN)`
+  (`api.tlps.dev`, set in `ios/Config/Shared.xcconfig`). `InviteLink` accepts
+  `https://<APP_LINK_DOMAIN>/invite` with the token in the fragment (or query),
+  and the custom scheme `dinneros://invite?token=` that the landing page and
+  emails sent before universal links use. The app receives universal links
+  through `onContinueUserActivity(NSUserActivityTypeBrowsingWeb)` and custom
+  scheme links through `onOpenURL`.
+- A link never joins silently. `HouseholdStore` previews it while showing
+  progress, then asks "Join <household>?" with "<inviter> invited you to join as
+  <role>. Joining shares your name with its members." An invalid or expired
+  invitation shows "This invitation is no longer valid" instead of a Join
+  button. A link opened while signed out waits in memory until sign-in and is
+  previewed then. Typed codes are previewed and confirmed the same way.
+- An `APP_INVITE_URL_BASE` ending in `=` (such as the old
+  `dinneros://invite?token=`) still gets the token appended directly.
 
 ### Email
 

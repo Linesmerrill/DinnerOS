@@ -130,8 +130,9 @@ Dependency rules:
   requests for up to 25 seconds.
 - **Errors:** every non-2xx response uses `{"error": {"code", "message"}}`.
 - **Limits:** request body size (`HTTP_MAX_BODY_BYTES`), server timeouts, and
-  per-IP rate limiting on auth endpoints, invitation acceptance, and invitation
-  creation. Each has its own limiter instance. The recipe import route has its
+  per-IP rate limiting on auth endpoints, invitation acceptance and preview
+  (which share one limiter), and invitation creation. Otherwise each has its own
+  limiter instance. The recipe import route has its
   own body limit (`RECIPE_IMPORT_MAX_BYTES`) and extends the server's read and
   write deadlines for that request with `http.ResponseController`.
 - **Household authorization:** routes under `/households/{householdId}` use
@@ -142,7 +143,10 @@ Dependency rules:
   `httpapi.Options.APIRoutes` and wrap protected routes in `auth.RequireAuth`,
   which puts the user ID in the request context (`auth.UserIDFromContext`).
 - **Versioning:** product routes live under `/api/v1`. Operational routes
-  (`/health`, `/ready`) are unversioned.
+  (`/health`, `/ready`) are unversioned. So are browser-facing routes
+  (`/invite` and `/.well-known/apple-app-site-association`, from
+  `api/internal/applinks`), which mount at the root through
+  `httpapi.Options.WebRoutes`.
 
 ## iOS (`ios/`)
 
@@ -187,10 +191,14 @@ ios/DinnerOS/
   user's households after every sign-in, remembers the selected household per
   user in `UserDefaults`, and reloads from the server after each change.
   `HouseholdAccess` turns the response's `permissions` into which actions the UI
-  shows. The API still authorizes every request. Invitation links
-  (`dinneros://invite?token=...`) arrive through `onOpenURL`. The app asks before
-  joining, and holds a link opened while signed out in memory until sign-in.
-  Tokens and invite codes are never logged.
+  shows. The API still authorizes every request. Invitation links arrive as
+  universal links (`https://api.tlps.dev/invite#token=...`, through
+  `onContinueUserActivity`) or custom-scheme links
+  (`dinneros://invite?token=...`, through `onOpenURL`). The app previews the
+  invitation and names the household and inviter before joining, and holds a
+  link opened while signed out in memory until sign-in. Typed codes are
+  previewed and confirmed the same way. Tokens and invite codes are never
+  logged.
 - **Navigation:** a tab shell (Week, Recipes, Shop, Household) with
   `NavigationStack` per tab, native sheets, and forms.
 - **Quality bar:** Dynamic Type, VoiceOver labels, dark mode, and explicit
@@ -268,3 +276,8 @@ a versioned Autopilot API. See [autopilot.md](autopilot.md).
 | 52 | `GET /plans/{week}` returns an empty draft for unplanned weeks, and `GET /plans` returns every week in the range (at most 26), not only stored plans | Clients render a calendar without special-casing missing weeks, and reading never writes. |
 | 53 | A `recipeId` in a plan request body that isn't in the household is `400 validation_failed`, not `404` | The path's household and week exist; the body is what's wrong. `404` stays reserved for the path (non-members, unknown entries). |
 | 54 | The week grocery list is computed on request with `recipes.Service.GetMany` (two round trips for the whole week) and an empty pantry | Nothing is persisted until Phase 7 adds the pantry and saved lists with checked state. Batch loading keeps a full week's cost constant instead of two queries per entry. |
+| 55 | Invitation emails link to `https://api.tlps.dev/invite#token=…`, a universal link backed by a server-rendered landing page, instead of the custom scheme from #41. The app still accepts `dinneros://invite?token=` | A custom-scheme link does nothing on a phone without the app, and during private TestFlight testing most invitees don't have it yet. One https link opens the app when it's installed and otherwise explains how to get it. The token goes in the fragment because browsers never send fragments, while Heroku's router logs full paths including query strings. Emails already sent keep working. |
+| 56 | `POST /api/v1/invitations/preview` requires no authentication and returns only the household name, inviter name, role, and expiry | The landing page and a signed-out app must name the household before anyone joins. Holding the secret is already enough to join (#30), so it's enough to see what you'd join. Preview reuses accept's lookup and returns the same `404 invitation_invalid` and `400` errors, so it can't distinguish expired from nonexistent invitations any more than accept can. It never uses the invitation up and exposes no IDs, emails, or members. |
+| 57 | Preview and accept share one per-IP rate-limit bucket | Separate buckets would double the guesses per IP against the 50-bit code. The app's preview-then-accept costs two requests out of a burst of 10. |
+| 58 | The landing page is rendered once at startup, with a hash-based CSP (`default-src 'none'`; script and style by SHA-256), `Cache-Control: no-store`, and `Referrer-Policy: no-referrer`. `apple-app-site-association` is built from `APPLE_TEAM_ID` and `APPLE_BUNDLE_ID` and isn't served until both are set | The page handles a secret, so nothing else may run on it or learn its URL, and hashes need no per-request nonce. An association file with a wrong app ID would silently break universal links, so an unconfigured API serves none. |
+| 59 | The app previews every invitation, from a link or a typed code, before asking to join. An `invitation_invalid` preview shows "This invitation is no longer valid" instead of a Join button | People see which household and inviter they're joining. An invitation that can't work never offers an action that would fail. |

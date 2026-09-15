@@ -100,6 +100,35 @@ doesn't allow Heroku (Heroku dyno IPs are dynamic, so Atlas must allow
 
 Heroku terminates TLS, so the API is only reachable over HTTPS in production.
 
+### Invitation links
+
+Invitation emails link to `https://api.tlps.dev/invite#token=…`. The API serves
+both halves of that link:
+
+- `GET /invite`, the landing page for people who don't have the app yet
+- `GET /.well-known/apple-app-site-association`, which lets iOS open the same
+  link in the app. Apple requires it at `https://api.tlps.dev` directly, with no
+  redirect, as `application/json`. It's served only when `APPLE_TEAM_ID` is set.
+
+The config vars involved are public identifiers, not secrets. Set them (they're
+already the defaults or already set, but explicit values document intent):
+
+```bash
+heroku config:set -a dinneros-api APPLE_TEAM_ID=6VTPDG2HNK APPLE_BUNDLE_ID=com.linesmerrill.dinneros APP_INVITE_URL_BASE=https://api.tlps.dev/invite
+```
+
+After the deploy, check the association file:
+
+```bash
+curl -si https://api.tlps.dev/.well-known/apple-app-site-association
+```
+
+Apple's CDN caches the file, so changes can take a while to reach devices.
+Invitation emails sent earlier used `dinneros://invite?token=…`; the app still
+accepts those links. If `APP_INVITE_URL_BASE` is still set to that old value, the
+API keeps appending the token directly, but those links do nothing on a phone
+without the app, so switch it to the value above.
+
 ## iOS on TestFlight
 
 The `iOS CI` workflow always runs lint and tests. Its `testflight` job runs on
@@ -127,9 +156,16 @@ The job runs `bundle exec fastlane beta`, which:
 
 1. ✅ **Apple Developer → Identifiers:** App ID `com.linesmerrill.dinneros`
    ("DinnerOS", team `6VTPDG2HNK`) is registered with **Sign in with Apple**
-   enabled as a primary App ID. Other capabilities, such as Push Notifications
-   and Associated Domains for universal invite links, get added when a phase
-   needs them.
+   enabled as a primary App ID. **Associated Domains** (universal invitation
+   links, `applinks:api.tlps.dev`) is expected to be enabled the same way Sign
+   in with Apple was: the entitlement is in `ios/Config/DinnerOS.entitlements`,
+   and cloud-managed signing with `-allowProvisioningUpdates` adds the capability
+   to the App ID during the next `beta` run. If that run fails to archive or
+   upload with a provisioning or entitlement error that mentions
+   `com.apple.developer.associated-domains`, open the App ID in **Certificates,
+   Identifiers & Profiles**, tick **Associated Domains**, save, and re-run
+   Actions → iOS CI → Run workflow on `main`. Other capabilities, such as Push
+   Notifications, get added when a phase needs them.
 2. ✅ **App Store Connect → Apps → +:** the "DinnerOS" app record exists (Apple
    ID `6812159676`, SKU `dinneros-ios`, bundle `com.linesmerrill.dinneros`, English
    (U.S.)). The App Store name can still be changed before any public release.
@@ -161,14 +197,15 @@ vars or GitHub Secrets.
 | `MONGODB_URI` | Phase 1 | MongoDB Atlas → your cluster → **Connect** → Drivers. Create a database user with a strong password and allow Heroku's egress in Network Access. |
 | `MONGODB_DATABASE` | Phase 1 | Your choice (default `dinneros`) |
 | `AUTH_TOKEN_SIGNING_KEY` | Phase 2 | Generate locally: `openssl rand -base64 48` |
-| `APPLE_TEAM_ID` | Phase 2 | developer.apple.com → Account → **Membership details** → Team ID |
+| `APPLE_TEAM_ID` | Phase 2 | developer.apple.com → Account → **Membership details** → Team ID (`6VTPDG2HNK`). Required for universal invitation links: without it, `/.well-known/apple-app-site-association` isn't served. |
 | `APPLE_BUNDLE_ID` | Phase 2 | `com.linesmerrill.dinneros` (must match the app) |
 | `APPLE_SERVICE_ID` | only for web sign-in | Identifiers → **Services IDs**. Not needed for native iOS. |
 | `GOOGLE_CLIENT_ID` | Phase 2 | ✅ Created. Google Cloud project `dinneros-508702` → Google Auth Platform → Clients → "DinnerOS iOS" (bundle ID above, team `6VTPDG2HNK`). The value is `600707694145-ifi6jfhmial52rtjgrrs18eh5muiqsnt.apps.googleusercontent.com`. It's a public identifier, not a secret. The iOS app also needs the reversed client ID as a URL scheme: `com.googleusercontent.apps.600707694145-ifi6jfhmial52rtjgrrs18eh5muiqsnt`. |
 | `RESEND_API_KEY` | Phase 3 | ✅ Set (a send-only key). resend.com → **API Keys**. The verified sending domain is `api.tlps.dev`: its DKIM record (`resend._domainkey.api.tlps.dev`) and the SPF/MX records on `send.api.tlps.dev` are in Squarespace DNS. A DMARC record (`_dmarc.api.tlps.dev`) is optional and not yet added. |
 | `EMAIL_FROM` | Phase 3 | ✅ `DinnerOS <invites@api.tlps.dev>`. It must be an address on the verified Resend domain. |
 | `EMAIL_PROVIDER` | Phase 3 | Optional. Defaults to `resend` when `RESEND_API_KEY` is set. Production refuses `log`. |
-| `APP_INVITE_URL_BASE` | Phase 3 | Optional. The token is appended to it to form the invitation link. The default, `dinneros://invite?token=`, opens the iOS app. Change it (for example to an `https://` universal link) without a code change. |
+| `APP_INVITE_URL_BASE` | Phase 3 | Set to `https://api.tlps.dev/invite` (also the default). The token is appended as `#token=…`, so it never reaches the server. A value ending in `=`, such as the old `dinneros://invite?token=`, gets the token appended directly, but such links do nothing without the app. See [Invitation links](#invitation-links). |
+| `APP_URL_SCHEME` | Phase 3 | Optional, default `dinneros`. Must match `APP_URL_SCHEME` in `ios/Config/Shared.xcconfig`; the `/invite` page's **Open** button uses it. |
 | `OPENAI_API_KEY` | future | platform.openai.com → API keys (backend only) |
 
 ### GitHub Actions
