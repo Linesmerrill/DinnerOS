@@ -86,6 +86,30 @@ func TestClientIP(t *testing.T) {
 	}
 }
 
+func TestMiddlewareByUsesTheKey(t *testing.T) {
+	l := New(Options{Burst: 1})
+	h := l.MiddlewareBy(func(r *http.Request) string { return r.Header.Get("X-User") })(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+
+	do := func(user string) int {
+		req := httptest.NewRequest(http.MethodPost, "/events", nil)
+		req.Header.Set("X-Forwarded-For", "203.0.113.1") // same IP for everyone
+		req.Header.Set("X-User", user)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if got := do("ada"); got != http.StatusNoContent {
+		t.Fatalf("ada first = %d, want 204", got)
+	}
+	if got := do("ada"); got != http.StatusTooManyRequests {
+		t.Errorf("ada second = %d, want 429", got)
+	}
+	if got := do("bob"); got != http.StatusNoContent {
+		t.Errorf("bob from the same IP = %d, want 204", got)
+	}
+}
+
 func TestMiddlewareReturns429(t *testing.T) {
 	l := New(Options{Burst: 1})
 	h := l.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))

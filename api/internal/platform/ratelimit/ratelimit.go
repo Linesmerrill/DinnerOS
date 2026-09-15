@@ -107,16 +107,25 @@ func (l *Limiter) Len() int {
 	return len(l.clients)
 }
 
-// Middleware rejects requests over the limit with 429 rate_limited.
+// Middleware rejects requests over the limit with 429 rate_limited, keyed by
+// client IP.
 func (l *Limiter) Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !l.Allow(ClientIP(r)) {
-			w.Header().Set("Retry-After", "6")
-			httpx.WriteError(w, r, http.StatusTooManyRequests, "rate_limited", "too many requests; try again shortly")
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return l.MiddlewareBy(ClientIP)(next)
+}
+
+// MiddlewareBy is Middleware with a caller-chosen key, such as the
+// authenticated user for routes that run after authentication.
+func (l *Limiter) MiddlewareBy(key func(*http.Request) string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !l.Allow(key(r)) {
+				w.Header().Set("Retry-After", "6")
+				httpx.WriteError(w, r, http.StatusTooManyRequests, "rate_limited", "too many requests; try again shortly")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // ClientIP returns the client address for rate limiting.
