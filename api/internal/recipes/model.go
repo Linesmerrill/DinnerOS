@@ -1,0 +1,167 @@
+package recipes
+
+import (
+	"errors"
+	"time"
+
+	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
+)
+
+// Errors returned by stores and the service.
+var (
+	ErrNotFound  = errors.New("recipes: not found")
+	ErrDuplicate = errors.New("recipes: duplicate")
+	// ErrInvalidImport means the import file as a whole is unusable (wrong
+	// version or source). Problems with individual recipes are reported in
+	// ImportResult.Errors instead.
+	ErrInvalidImport = errors.New("recipes: invalid import file")
+	// ErrInvalidQuery means list parameters, including the cursor, are invalid.
+	ErrInvalidQuery = errors.New("recipes: invalid query")
+
+	errHouseholdRequired = errors.New("recipes: household id is required")
+)
+
+// Recipe sources accepted by the import contract (docs/import-format.md).
+const (
+	SourceHelloFresh = "hellofresh"
+	SourceManual     = "manual"
+	SourceImport     = "import"
+	SourceUser       = "user"
+	SourceProvider   = "provider"
+	SourcePartner    = "partner"
+)
+
+func knownSource(s string) bool {
+	switch s {
+	case SourceHelloFresh, SourceManual, SourceImport, SourceUser, SourceProvider, SourcePartner:
+		return true
+	}
+	return false
+}
+
+// Recipe is a household's recipe. (HouseholdID, Source, SourceRecipeID) is
+// unique; SourceAliases holds other source IDs known to be the same recipe.
+type Recipe struct {
+	ID             string
+	HouseholdID    string
+	Source         string
+	SourceRecipeID string
+	SourceAliases  []string
+	SourceURL      string
+	Name           string
+	Headline       string
+	Description    string
+	ImageURL       string
+	IsAddon        bool
+	Servings       []int
+	PrepMinutes    int
+	TotalMinutes   int
+	Difficulty     int
+	Cuisines       []string
+	Tags           []string
+	Utensils       []string
+	Allergens      []string
+	Nutrition      []Nutrient
+	Ingredients    []RecipeIngredient
+	Steps          []Step
+	// OrderWeeks are the ISO weeks ("2026-W30") the household received this
+	// recipe, sorted. TimesOrdered and LastOrderedWeek are derived from it.
+	OrderWeeks      []string
+	TimesOrdered    int
+	LastOrderedWeek string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+// Nutrient is a per-serving nutrition value.
+type Nutrient struct {
+	Name   string
+	Amount float64
+	Unit   string
+}
+
+// Step is one ordered instruction.
+type Step struct {
+	Index    int
+	Text     string
+	ImageURL string
+}
+
+// RecipeIngredient is an ingredient line that references the catalog.
+type RecipeIngredient struct {
+	IngredientID string
+	Name         string
+	// Category comes from the ingredient catalog. Service.Get fills it in; it
+	// is not stored on the recipe.
+	Category     string
+	PantryStaple bool
+	// Amounts has one entry per serving size, ascending.
+	Amounts []Amount
+}
+
+// Amount is an ingredient quantity for one serving size.
+type Amount struct {
+	Servings int
+	// Quantity is the exact amount as "n" or "n/d". It is empty when the
+	// source gave no amount ("to taste").
+	Quantity   string
+	Unit       string
+	SourceUnit string
+	RawText    string
+}
+
+// ExactQuantity returns the parsed quantity. ok is false when there is none.
+func (a Amount) ExactQuantity() (q ingredients.Quantity, ok bool) {
+	if a.Quantity == "" {
+		return ingredients.Quantity{}, false
+	}
+	q, err := ingredients.ParseQuantity(a.Quantity)
+	return q, err == nil
+}
+
+// RecipeSummary is the list view of a recipe.
+type RecipeSummary struct {
+	ID              string
+	Name            string
+	Headline        string
+	ImageURL        string
+	TotalMinutes    int
+	TimesOrdered    int
+	LastOrderedWeek string
+	IsAddon         bool
+	Tags            []string
+}
+
+// Ingredient is a canonical catalog ingredient. The catalog is global, not
+// household-scoped. Key is ingredients.NormalizeName(Name) and is unique.
+type Ingredient struct {
+	ID   string
+	Key  string
+	Name string
+	// Category is assigned by ingredients.Categorize. When CategoryConfident is
+	// false no rule matched: the category is "other" and a person should
+	// review it.
+	Category          string
+	CategoryConfident bool
+	SourceRefs        []SourceRef
+	ImageURL          string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
+// SourceRef is a source's own identifier for an ingredient.
+type SourceRef struct {
+	Source             string
+	SourceIngredientID string
+}
+
+// ReviewItem is something an importer could not map confidently, kept so a
+// person can resolve it later.
+type ReviewItem struct {
+	Source         string
+	SourceRecipeID string
+	RecipeName     string
+	Field          string
+	Value          string
+	Reason         string
+}

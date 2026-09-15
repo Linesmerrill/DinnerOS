@@ -132,6 +132,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.MaxBodyBytes != 1<<20 {
 		t.Errorf("MaxBodyBytes = %d, want %d", cfg.MaxBodyBytes, 1<<20)
 	}
+	if cfg.RecipeImportMaxBytes != 32<<20 {
+		t.Errorf("RecipeImportMaxBytes = %d, want %d", cfg.RecipeImportMaxBytes, 32<<20)
+	}
 	if cfg.Version != "dev" {
 		t.Errorf("Version = %q, want dev", cfg.Version)
 	}
@@ -179,11 +182,13 @@ func TestLoadReportsAllInvalidValues(t *testing.T) {
 		"LOG_LEVEL":           "loud",
 		"LOG_FORMAT":          "xml",
 		"HTTP_MAX_BODY_BYTES": "-1",
+
+		"RECIPE_IMPORT_MAX_BYTES": "lots",
 	}))
 	if err == nil {
 		t.Fatal("Load() error = nil, want validation errors")
 	}
-	for _, key := range []string{"APP_ENV", "PORT", "LOG_LEVEL", "LOG_FORMAT", "HTTP_MAX_BODY_BYTES"} {
+	for _, key := range []string{"APP_ENV", "PORT", "LOG_LEVEL", "LOG_FORMAT", "HTTP_MAX_BODY_BYTES", "RECIPE_IMPORT_MAX_BYTES"} {
 		if !strings.Contains(err.Error(), key) {
 			t.Errorf("error %q does not mention %s", err, key)
 		}

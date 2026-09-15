@@ -23,6 +23,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/logging"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/ratelimit"
+	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/users"
 )
 
@@ -42,6 +43,9 @@ const (
 	// Creating invitations sends email; limit bursts from one client.
 	inviteCreateRateBurst = 20
 	inviteCreateRateEvery = 30 * time.Second
+	// A recipe import uploads a household's whole order history (10–15 MB), so
+	// that one route extends the server's ReadTimeout and WriteTimeout.
+	recipeImportTimeout = 5 * time.Minute
 )
 
 func main() {
@@ -95,6 +99,7 @@ func run() error {
 		auth.Indexes(),
 		households.Indexes(),
 		invitations.Indexes(),
+		recipes.Indexes(),
 	)...); err != nil {
 		return err
 	}
@@ -111,7 +116,15 @@ func run() error {
 	}
 
 	authHandler := newAuthHandler(cfg, userService, tokens, logger)
-	householdHandler, invitationHandler := newHouseholdHandlers(cfg, db, userService, tokens, logger)
+	householdService, householdHandler, invitationHandler := newHouseholdHandlers(cfg, db, userService, tokens, logger)
+	recipeHandler := recipes.NewHandler(recipes.HandlerOptions{
+		Service:        recipes.NewService(recipes.NewMongoStore(db.Database())),
+		Authorizer:     householdService,
+		Tokens:         tokens,
+		Logger:         logger,
+		ImportMaxBytes: cfg.RecipeImportMaxBytes,
+		ImportTimeout:  recipeImportTimeout,
+	})
 
 	srv := &http.Server{
 		Addr: cfg.Addr(),
@@ -127,6 +140,7 @@ func run() error {
 				authHandler.Mount(r)
 				householdHandler.Mount(r)
 				invitationHandler.Mount(r)
+				recipeHandler.Mount(r)
 			},
 		}),
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelWarn),
@@ -194,8 +208,9 @@ func newAuthHandler(cfg config.Config, userService *users.Service, tokens *auth.
 	})
 }
 
-// newHouseholdHandlers wires the households and invitations modules.
-func newHouseholdHandlers(cfg config.Config, db *mongodb.Client, userService *users.Service, tokens *auth.TokenService, logger *slog.Logger) (*households.Handler, *invitations.Handler) {
+// newHouseholdHandlers wires the households and invitations modules. The
+// household service is also the Authorizer for other household-scoped routes.
+func newHouseholdHandlers(cfg config.Config, db *mongodb.Client, userService *users.Service, tokens *auth.TokenService, logger *slog.Logger) (*households.Service, *households.Handler, *invitations.Handler) {
 	householdService := households.NewService(households.ServiceOptions{
 		Store:  households.NewMongoStore(db.Database()),
 		Users:  userService,
@@ -223,7 +238,7 @@ func newHouseholdHandlers(cfg config.Config, db *mongodb.Client, userService *us
 		AcceptRateLimit: ratelimit.New(ratelimit.Options{Burst: inviteAcceptRateBurst, Every: inviteAcceptRateEvery}).Middleware,
 		CreateRateLimit: ratelimit.New(ratelimit.Options{Burst: inviteCreateRateBurst, Every: inviteCreateRateEvery}).Middleware,
 	})
-	return householdHandler, invitationHandler
+	return householdService, householdHandler, invitationHandler
 }
 
 // newEmailProvider picks the EmailProvider named by EMAIL_PROVIDER. Config

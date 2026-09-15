@@ -25,6 +25,8 @@ tags:
       required permission (see docs/authentication.md).
   - name: invitations
     description: Inviting people to a household by email, link, or code.
+  - name: recipes
+    description: A household's recipes and recipe import (docs/import-format.md).
 paths:
   /health:
     get:
@@ -496,6 +498,151 @@ paths:
           $ref: "#/components/responses/InvitationInvalid"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /api/v1/households/{householdId}/recipes:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: List recipes
+      description: |
+        Recipe summaries for the household. Requires `household.view`.
+        `sort=name` (default) is alphabetical and case-insensitive, `recent` is
+        most recently ordered first with never-ordered recipes last, and
+        `popular` is most often ordered first. Ties break by name. For the next
+        page, send `nextCursor` as `cursor` with the same `sort` and filters.
+      operationId: listRecipes
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          description: Text the name must contain, case-insensitive. Literal text, not a pattern.
+          schema:
+            type: string
+            maxLength: 100
+        - name: addons
+          in: query
+          description: "`true` for add-ons only (sides, desserts), `false` for main meals only."
+          schema:
+            type: boolean
+        - name: tag
+          in: query
+          description: Tag to match, case-insensitive.
+          schema:
+            type: string
+            maxLength: 100
+        - name: cuisine
+          in: query
+          description: Cuisine to match, case-insensitive.
+          schema:
+            type: string
+            maxLength: 100
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [name, recent, popular]
+            default: name
+        - name: limit
+          in: query
+          description: Page size. Values above 200 are treated as 200.
+          schema:
+            type: integer
+            minimum: 1
+            default: 50
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of recipes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecipeListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/recipes/{recipeId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/RecipeID"
+    get:
+      summary: Get a recipe
+      description: |
+        The full recipe, with each ingredient's catalog category. Requires
+        `household.view`. Recipes of other households return 404.
+      operationId: getRecipe
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The recipe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recipe"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/recipes/import:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    post:
+      summary: Import recipes
+      description: |
+        Imports a recipe import file (docs/import-format.md, version 1) into the
+        household. Requires `recipes.import`. The body may be up to
+        `RECIPE_IMPORT_MAX_BYTES` (default 32 MB) instead of
+        `HTTP_MAX_BODY_BYTES`.
+
+        The import is idempotent: re-importing the same file reports every
+        recipe as unchanged. A file with the wrong version or an unknown source
+        is rejected with 400. Invalid recipes are listed in `errors`, and the
+        rest still import.
+      operationId: importRecipes
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportFile"
+      responses:
+        "200":
+          description: Import finished.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`conflict`: a concurrent import of the same recipes won; retry."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
 
 components:
   securitySchemes:
@@ -536,7 +683,260 @@ components:
       schema:
         type: string
         example: 66e5a1f2c3b4a5d6e7f80914
+    RecipeID:
+      name: recipeId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: 66e5a1f2c3b4a5d6e7f80915
   schemas:
+    RecipeSummary:
+      type: object
+      required: [id, name, timesOrdered, isAddon, tags]
+      properties:
+        id:
+          type: string
+          example: 66e5a1f2c3b4a5d6e7f80915
+        name:
+          type: string
+          example: Beef Tacos
+        headline:
+          type: string
+        imageUrl:
+          type: string
+        totalMinutes:
+          type: integer
+        timesOrdered:
+          type: integer
+          description: Number of distinct weeks the household received this recipe.
+        lastOrderedWeek:
+          type: string
+          description: ISO week of the latest delivery. Omitted when never ordered.
+          example: 2026-W30
+        isAddon:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+    RecipeListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecipeSummary"
+        nextCursor:
+          type: string
+          description: Present when another page exists.
+    Recipe:
+      type: object
+      required: [id, householdId, source, sourceRecipeId, sourceAliases, name, isAddon, servings, cuisines, tags, utensils, allergens, nutritionPerServing, ingredients, steps, orderWeeks, timesOrdered, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        householdId:
+          type: string
+        source:
+          type: string
+          enum: [hellofresh, manual, import, user, provider, partner]
+        sourceRecipeId:
+          type: string
+        sourceAliases:
+          type: array
+          description: Other source IDs known to be this recipe.
+          items:
+            type: string
+        sourceUrl:
+          type: string
+        name:
+          type: string
+        headline:
+          type: string
+        description:
+          type: string
+        imageUrl:
+          type: string
+        isAddon:
+          type: boolean
+        servings:
+          type: array
+          description: Serving sizes with authored amounts, ascending.
+          items:
+            type: integer
+        prepMinutes:
+          type: integer
+        totalMinutes:
+          type: integer
+        difficulty:
+          type: integer
+        cuisines:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        utensils:
+          type: array
+          items:
+            type: string
+        allergens:
+          type: array
+          items:
+            type: string
+        nutritionPerServing:
+          type: array
+          items:
+            type: object
+            required: [name, amount, unit]
+            properties:
+              name:
+                type: string
+              amount:
+                type: number
+              unit:
+                type: string
+        ingredients:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecipeIngredient"
+        steps:
+          type: array
+          items:
+            type: object
+            required: [index, text]
+            properties:
+              index:
+                type: integer
+              text:
+                type: string
+              imageUrl:
+                type: string
+        orderWeeks:
+          type: array
+          description: ISO weeks the household received this recipe, sorted.
+          items:
+            type: string
+            example: 2026-W30
+        timesOrdered:
+          type: integer
+        lastOrderedWeek:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    RecipeIngredient:
+      type: object
+      required: [ingredientId, name, category, pantryStaple, amounts]
+      properties:
+        ingredientId:
+          type: string
+          description: Catalog ingredient ID.
+        name:
+          type: string
+          example: Parmesan Cheese
+        category:
+          type: string
+          enum: [produce, meat-seafood, dairy-eggs, bakery, deli, pantry, spices, condiments, frozen, beverages, other]
+        pantryStaple:
+          type: boolean
+          description: Source hint that the ingredient is usually at home.
+        amounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/IngredientAmount"
+    IngredientAmount:
+      type: object
+      required: [servings, quantity, quantityValue, unit, sourceUnit, rawText]
+      properties:
+        servings:
+          type: integer
+          example: 2
+        quantity:
+          type: [string, "null"]
+          description: Exact amount as "n" or "n/d". Null when the source gave no amount.
+          example: 1/2
+        quantityValue:
+          type: [number, "null"]
+          description: The same amount as a number, for display only.
+          example: 0.5
+        unit:
+          type: string
+          description: DinnerOS unit code, or empty.
+          example: oz
+        sourceUnit:
+          type: string
+          example: ounce
+        rawText:
+          type: string
+          example: ½ ounce Parmesan Cheese
+    ImportFile:
+      type: object
+      description: The recipe import contract. Field-level rules are in docs/import-format.md.
+      additionalProperties: false
+      required: [version, source, recipes]
+      properties:
+        version:
+          type: integer
+          enum: [1]
+        source:
+          type: string
+          enum: [hellofresh, manual, import, user, provider, partner]
+        generatedAt:
+          type: string
+          format: date-time
+        recipes:
+          type: array
+          items:
+            type: object
+            description: ImportRecipe (docs/import-format.md).
+        review:
+          type: array
+          items:
+            type: object
+            description: ReviewItem (docs/import-format.md).
+    ImportResult:
+      type: object
+      required: [created, updated, unchanged, ingredientsCreated, reviewItems, errors]
+      properties:
+        created:
+          type: integer
+        updated:
+          type: integer
+        unchanged:
+          type: integer
+        ingredientsCreated:
+          type: integer
+          description: New ingredient catalog entries.
+        reviewItems:
+          type: integer
+          description: Distinct review items in the file. Items already recorded are not duplicated.
+        errors:
+          type: array
+          description: Rejected recipes, in file order.
+          items:
+            type: object
+            required: [index, problems]
+            properties:
+              index:
+                type: integer
+                description: Position in the file's `recipes` array.
+              sourceRecipeId:
+                type: string
+              name:
+                type: string
+              problems:
+                type: array
+                items:
+                  type: string
+                example: ['ingredients[3] (Mystery Paste): unit "dollop" is not a DinnerOS unit code']
     Role:
       type: string
       enum: [admin, member]
@@ -1019,7 +1419,7 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
     PayloadTooLarge:
-      description: "`payload_too_large`: the body exceeds HTTP_MAX_BODY_BYTES."
+      description: "`payload_too_large`: the body exceeds HTTP_MAX_BODY_BYTES (RECIPE_IMPORT_MAX_BYTES for recipe imports)."
       content:
         application/json:
           schema:

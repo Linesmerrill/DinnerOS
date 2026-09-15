@@ -116,7 +116,9 @@ Dependency rules:
 ### Cross-cutting concerns
 
 - **Middleware order:** `RequestID` → `RequestLogger` → `Recoverer` →
-  `MaxBodyBytes` → routes.
+  `MaxBodyBytes` → routes. A route that needs a different body limit replaces
+  it with `httpx.OverrideBodyLimit`, placed after authorization. Wrapping the
+  body in a second `http.MaxBytesReader` would enforce the smaller limit.
 - **Logging:** `log/slog`, text locally and JSON in production. Each request
   produces one line with request ID, method, **route pattern**, status, bytes, and
   latency. The raw path and query string are never logged because they can
@@ -129,7 +131,9 @@ Dependency rules:
 - **Errors:** every non-2xx response uses `{"error": {"code", "message"}}`.
 - **Limits:** request body size (`HTTP_MAX_BODY_BYTES`), server timeouts, and
   per-IP rate limiting on auth endpoints, invitation acceptance, and invitation
-  creation. Each has its own limiter instance.
+  creation. Each has its own limiter instance. The recipe import route has its
+  own body limit (`RECIPE_IMPORT_MAX_BYTES`) and extends the server's read and
+  write deadlines for that request with `http.ResponseController`.
 - **Household authorization:** routes under `/households/{householdId}` use
   `households.RequirePermission`, which returns 404 to non-members and 403 to
   members lacking the permission, and stores the membership in the request
@@ -233,3 +237,7 @@ a versioned Autopilot API. See [autopilot.md](autopilot.md).
 | 32 | One pending invitation per household and email, enforced by a partial unique index on a `pending` flag | Re-inviting revokes the previous invitation. The index makes that hold under concurrency and also serves the pending list. |
 | 33 | Email failures don't fail invitation creation (`emailDelivered: false`) | The admin already has the code, so a Resend outage shouldn't block inviting. |
 | 34 | `EMAIL_PROVIDER=log` for development; production requires Resend. `time/tzdata` is embedded | Local development and tests never send email or need a key. The Alpine runtime image has no zoneinfo, so `time.LoadLocation` would reject every time zone without the embedded data. |
+| 35 | The recipe import route replaces the body limit (`httpx.OverrideBodyLimit`, `RECIPE_IMPORT_MAX_BYTES`) and extends its own deadlines with `http.ResponseController`, rather than raising the global limit or server timeouts | Only one route legitimately receives 10–15 MB. Every other route keeps the 1 MB cap and 15s/30s timeouts, and the override runs after authorization, so anonymous clients never get the larger allowance. The initial bulk load uses `cmd/importrecipes`, which bypasses HTTP and Heroku's 30-second router timeout. |
+| 36 | Recipe identity is `(householdId, source, sourceRecipeId)` plus `sourceAliases`; imports compare the merged recipe with the stored one and bulk-write only changes | Sources republish recipes under new IDs (weekly menu clones), so aliases prevent duplicates. Comparing first makes re-imports no-ops, and bulk writes keep a 1000-recipe import to a handful of round trips. |
+| 37 | The ingredient catalog is global and keyed by normalized name; unmatched categories are stored as `other` with `categoryConfident: false` | Ingredients mean the same thing in every household, and grocery aggregation needs one ID per ingredient. Flagging instead of guessing keeps the core deterministic. |
+| 38 | `recipes.Service` takes a household ID, not a membership | HTTP routes authorize with `households.RequirePermission` (`household.view`, `recipes.import`). The `importrecipes` command has no signed-in user; it's an operator tool with direct database access, and it checks that the household exists. |

@@ -78,5 +78,42 @@ value to avoid producing one.
       → importers/hellofresh/data/order-history.json
 2. go run . fetch        public recipe pages → data/raw/recipes/<id>.json (idempotent)
 3. go run . normalize    → data/import/recipes.json (this format)
-4. Load into DinnerOS via the recipe import endpoint (Phase 4)
+4. Load into DinnerOS (below)
 ```
+
+## Loading into DinnerOS
+
+Both ways of loading run the same import (`recipes.Service.Import`). Loading the
+same file again changes nothing, and a newer file updates recipes in place (see
+[database.md](database.md#recipes-and-ingredients) for matching and merge rules).
+
+The whole file is rejected when `version` isn't `1` or `source` is unknown.
+Otherwise each recipe is checked on its own, and invalid ones are reported by
+index while the rest still import. A recipe is rejected when:
+
+- its `source` is unknown, or `sourceRecipeId` or `name` is empty
+- a serving size is not positive
+- a `unit` is not empty and not a DinnerOS unit code
+- a `quantity` is negative
+- an `orderWeeks` value is not an ISO week
+- it shares a source ID with an earlier recipe in the file
+
+Review items are stored per household in `import_reviews`.
+
+**Command (recommended for a full history).** It writes directly to MongoDB, so
+HTTP body limits and timeouts don't apply. The household must already exist.
+
+```bash
+MONGODB_URI='<connection string>' MONGODB_DATABASE=dinneros \
+  go -C api run ./cmd/importrecipes -file ../importers/hellofresh/data/import/recipes.json -household <householdId>
+```
+
+It prints the counts and every rejected recipe, and never prints the URI.
+
+**Endpoint.** `POST /api/v1/households/{householdId}/recipes/import` with the
+file as the body, as a member whose role has `recipes.import` (see
+[api.md](api.md#recipes)). This route accepts bodies up to
+`RECIPE_IMPORT_MAX_BYTES` (default 32 MB) instead of `HTTP_MAX_BODY_BYTES`, and
+extends the server's read and write timeouts to 5 minutes for the request.
+Heroku's router still times out requests after 30 seconds, so against
+production, load a multi-megabyte history with the command.
