@@ -9,6 +9,7 @@ final class AppDependencies {
     let recipes: RecipeLibrary
     let plans: PlanStore
     let pantry: PantryStore
+    let specialties: SpecialtyStore
     let events: EventReporter
     let notifications: NotificationStore
     /// `nil` when the build has no Google client ID; the Google button is then hidden.
@@ -38,6 +39,11 @@ final class AppDependencies {
         // Pantry reads and changes can create notifications, so the badge follows them.
         pantry.onChange = { [notifications] in
             Task { await notifications.refreshUnreadCount() }
+        }
+        specialties = SpecialtyStore(session: session, api: client.map { SpecialtiesAPI(client: $0) })
+        // A recorded batch restocks its pantry item.
+        specialties.onBatchRecorded = { [pantry] item, householdID in
+            pantry.applyChangedItem(item, householdID: householdID)
         }
         events = EventReporter(
             session: session, api: client.map { EventsAPI(client: $0) },

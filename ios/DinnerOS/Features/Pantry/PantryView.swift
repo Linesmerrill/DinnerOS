@@ -23,12 +23,14 @@ struct PantryView: View {
         case add
         case edit(PantryItem)
         case lowStockSettings
+        case specialties
 
         var id: String {
             switch self {
             case .add: "add"
             case .edit(let item): "edit-\(item.id)"
             case .lowStockSettings: "low-stock-settings"
+            case .specialties: "specialties"
             }
         }
     }
@@ -74,6 +76,7 @@ struct PantryView: View {
                 case .add: PantryAddSheet()
                 case .edit(let item): PantryEditSheet(item: item)
                 case .lowStockSettings: PantryThresholdSheet()
+                case .specialties: SpecialtyIngredientsSheet()
                 }
             }
             .alert(
@@ -276,6 +279,9 @@ struct PantryView: View {
                 Menu("More", systemImage: "ellipsis.circle") {
                     Button("Low-Stock Alerts…", systemImage: "gauge.with.dots.needle.33percent") {
                         sheet = .lowStockSettings
+                    }
+                    Button("Specialty Ingredients…", systemImage: "takeoutbag.and.cup.and.straw") {
+                        sheet = .specialties
                     }
                 }
             }
