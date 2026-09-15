@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"time"
 )
 
@@ -35,6 +36,8 @@ func main() {
 	switch os.Args[1] {
 	case "fetch":
 		err = runFetch(ctx, logger, os.Args[2:])
+	case "normalize":
+		err = runNormalize(logger, os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -53,8 +56,40 @@ func usage() {
 	fmt.Fprint(os.Stderr, `usage: hellofresh <command> [flags]
 
 commands:
-  fetch   save public recipe page data for every recipe in the order history
+  fetch       save public recipe page data for every recipe in the order history
+  normalize   convert raw recipes into the DinnerOS import format
 `)
+}
+
+func runNormalize(logger *slog.Logger, args []string) error {
+	fs := flag.NewFlagSet("normalize", flag.ContinueOnError)
+	historyPath := fs.String("history", "data/order-history.json", "order history exported from the browser")
+	rawDir := fs.String("raw", "data/raw", "directory containing raw recipe files")
+	outPath := fs.String("out", "data/import/recipes.json", "normalized import file to write")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	history, err := LoadHistory(*historyPath)
+	if err != nil {
+		return err
+	}
+	raws, err := LoadRawRecipes(*rawDir)
+	if err != nil {
+		return err
+	}
+	file, err := Normalize(raws, history, time.Now())
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(*outPath), 0o755); err != nil {
+		return err
+	}
+	if err := writeJSONAtomic(*outPath, file); err != nil {
+		return err
+	}
+	logger.Info("normalized", "rawFiles", len(raws), "recipes", len(file.Recipes), "reviewItems", len(file.Review), "out", *outPath)
+	return nil
 }
 
 func runFetch(ctx context.Context, logger *slog.Logger, args []string) error {
