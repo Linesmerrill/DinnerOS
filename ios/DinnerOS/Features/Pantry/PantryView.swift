@@ -117,6 +117,13 @@ struct PantryView: View {
             if let refreshError = pantry.refreshError {
                 FormErrorLabel(message: refreshError)
             }
+            // A list row, not a top safe-area inset: an inset hides the large navigation title.
+            if !pantry.items.isEmpty {
+                statusPicker
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .selectionDisabled()
+            }
             ForEach(visibleSections) { section in
                 Section(section.title) {
                     ForEach(section.items) { item in
@@ -127,11 +134,6 @@ struct PantryView: View {
         }
         .listStyle(.insetGrouped)
         .searchable(text: $searchText, prompt: "Search pantry")
-        .safeAreaInset(edge: .top) {
-            if !pantry.items.isEmpty {
-                statusPicker
-            }
-        }
         .overlay {
             if visibleSections.isEmpty {
                 emptyState
@@ -156,9 +158,7 @@ struct PantryView: View {
             }
         }
         .pickerStyle(.segmented)
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(.bar)
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder

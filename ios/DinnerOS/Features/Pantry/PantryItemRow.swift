@@ -8,8 +8,9 @@ struct PantryItemRow: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
+                    // A concrete color: `.primary` inside a list Button resolves to the tint.
                     Text(item.displayName)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.primary)
                     if item.isStaple {
                         StapleBadge()
                     }
