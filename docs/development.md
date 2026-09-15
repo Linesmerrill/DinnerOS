@@ -21,6 +21,18 @@ make mongo-up
 
 `.env` is git-ignored. The defaults work against the docker-compose MongoDB.
 
+> **Port clash:** if a MongoDB is already installed natively (for example, Homebrew
+> `mongod` bound to `127.0.0.1:27017`), `localhost:27017` reaches it instead of the
+> container. Either use that MongoDB, or move the container to another port:
+>
+> ```bash
+> MONGO_HOST_PORT=27018 make mongo-up
+> ```
+>
+> Then set `MONGODB_URI=mongodb://localhost:27018` in `.env`, and
+> `MONGODB_TEST_URI=mongodb://localhost:27018` for integration tests. Integration
+> tests only ever create and drop their own `dinneros_test_*` databases.
+
 ## Backend
 
 ```bash
