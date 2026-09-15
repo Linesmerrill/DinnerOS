@@ -84,6 +84,13 @@ struct AutopilotPreferencesView: View {
                     Label("Change History", systemImage: "clock.arrow.circlepath")
                 }
             }
+            if profile.configured, canEdit {
+                Section {
+                    Button("Run Setup Again", systemImage: "wand.and.stars") { isOnboarding = true }
+                } footer: {
+                    Text("Goes through every question again, starting from your current answers.")
+                }
+            }
         }
         .refreshable { await autopilot.reloadProfile() }
     }

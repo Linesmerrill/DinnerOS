@@ -213,8 +213,14 @@ struct WeekAutopilotMenuItems: View {
                     .disabled(!plans.isDraft || autopilot.isGenerating)
                 }
                 Button("This Week's Plans…", systemImage: "calendar.badge.clock") { flow.sheet = .context }
-                if autopilot.phase == .loaded, !autopilot.isConfigured {
-                    Button("Set Up Autopilot", systemImage: "wand.and.stars") { flow.sheet = .onboarding }
+                if autopilot.phase == .loaded {
+                    Button(
+                        autopilot.isConfigured
+                            ? String(localized: "Run Setup Again") : String(localized: "Set Up Autopilot"),
+                        systemImage: "wand.and.stars"
+                    ) {
+                        flow.sheet = .onboarding
+                    }
                 }
             }
             Button("Autopilot Preferences", systemImage: "slider.horizontal.3") { flow.isShowingPreferences = true }
