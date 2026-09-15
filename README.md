@@ -100,6 +100,7 @@ every credential and where to get it.
 - [Authentication](docs/authentication.md): identity providers, sessions, authorization
 - [API](docs/api.md): REST conventions and the OpenAPI spec
 - [Grocery engine](docs/grocery-engine.md): ingredient normalization, units, aggregation
+- [Pantry usage](docs/pantry-usage.md): purchases, cooking deductions, learned usage, low-stock alerts, notifications
 - [Autopilot](docs/autopilot.md): recommendation and week-optimization architecture
 - [Deployment](docs/deployment.md): Heroku, TestFlight, and required credentials
 

@@ -168,7 +168,7 @@ Implemented in Phase 7 (`internal/pantry`).
 
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `pantry_items` | householdId, ingredientId (catalog; absent for free text), key, displayName, category, quantity, quantityValue, unit, status (`in_stock`/`low`/`out`), isStaple, expiresOn (`YYYY-MM-DD`), note, version, createdAt, updatedBy, updatedAt | **unique** `{householdId, key}` |
+| `pantry_items` | householdId, ingredientId (catalog; absent for free text), key, displayName, category, quantity, quantityValue, unit, status (`in_stock`/`low`/`out`), isStaple, expiresOn (`YYYY-MM-DD`), note, statusSource, statusSetAt, tracking{}, unitSize{}, history[], rate{}, lowThresholdPercent, lowAlertCycleId (see [Pantry usage](#pantry-usage)), version, createdAt, updatedBy, updatedAt | **unique** `{householdId, key}` |
 
 - **One item per ingredient.** `key` is `ingredients.NormalizeName` of the
   name, or the catalog ingredient's `key` when the item references the
@@ -193,6 +193,56 @@ Implemented in Phase 7 (`internal/pantry`).
 - `ingredientId` references the global catalog but isn't required. A free-text
   name that matches no catalog ingredient is stored unlinked and is resolved
   against the catalog again whenever a grocery list is built.
+
+### Pantry usage
+
+Implemented in `internal/pantry` ([pantry-usage.md](pantry-usage.md)).
+
+| Collection | Key fields | Indexes |
+| --- | --- | --- |
+| `pantry_items` (usage fields) | statusSource (`person`/`estimate`; absent on older items, meaning person), statusSetAt, tracking{cycleId, cycleSource, cycleStartedAt, unit, reference, segmentStart, segmentStartedAt, segmentRecipeUsed, recipeUsed, recipeUses, skippedUses}, unitSize{unit, quantity, sizeUnit}, history[{startedAt, endedAt, unit, start, recipeUsed, remaining, observed}], rate{perDay, unit, segments, computedAt}, lowThresholdPercent, lowAlertCycleId | the item's unique key |
+| `pantry_purchases` | householdId, itemId, itemKey, source (`grocery_list`/`manual`/`provider`), quantity, quantityValue, unit, unitSize{}, week, clientPurchaseId, recordedBy, purchasedAt | `{householdId, itemId, purchasedAt: -1}`; **unique partial** `{householdId, recordedBy, clientPurchaseId}` where `clientPurchaseId` is a string |
+| `pantry_cook_usage` | householdId, sourceKey, recipeId, entryId, userId, servings, scaledFrom, occurredAt, createdAt, lines[{itemId, ingredient, quantity, unit, deducted, trackingUnit, cycleId, skipReason}] | **unique** `{householdId, sourceKey}` |
+| `pantry_settings` | householdId, lowThresholdPercent, updatedBy, updatedAt | **unique** `{householdId}` |
+
+- **Usage state lives on the item** and changes with it under the same
+  `version` check, so a purchase, a cook deduction, and a person's edit can't
+  overwrite each other. Absent fields are `$unset`. Every amount is an exact
+  fraction string, like `quantity`. `cycleId` is the purchase's `_id` as hex,
+  or a fresh ObjectID hex for a cycle a person started. `history` is capped
+  at 6 segments.
+- **Estimates aren't stored.** They're computed from these fields and the
+  clock on every read.
+- **Purchases** are append-only history. `_id` is generated before the item
+  write so the cycle can reference it. A retry with the same
+  `clientPurchaseId` finds the first purchase through the partial unique
+  index.
+- **Cook usage** is inserted before the items change. Its unique `sourceKey`
+  (`entry:<entryId>` or `event:<userId>:<clientEventId>`) is what makes a
+  meal deduct once.
+- **Settings** are one document per household, upserted on its unique
+  `householdId`. No document means the default threshold (80).
+- Deleting an item leaves its purchases and cook records.
+
+### Notifications
+
+Implemented in `internal/notifications`.
+
+| Collection | Key fields | Indexes |
+| --- | --- | --- |
+| `notifications` | householdId, type (`pantry.low`), title, body, subject{kind, id}, dedupeKey, readBy[] (user IDs), push{status (`pending`/`sent`/`failed`/`skipped`), attempts, lastAttemptAt, sentAt}, createdAt | **unique** `{householdId, dedupeKey}`; `{householdId, _id: -1}`; **partial** `{push.status, createdAt}` where `push.status` is `pending` |
+
+- **Household-wide, read per member.** Marking read is one `updateMany` with
+  `$addToSet: {readBy: userId}`. Unread means `readBy` doesn't contain the
+  caller, counted with `countDocuments`.
+- Lists page newest first by `_id` with a `before` cursor (the last `_id` of
+  the previous page).
+- **Idempotent creation.** A producer's retry hits the unique `dedupeKey` and
+  gets the existing notification.
+- **Push outbox.** Every notification is written with `push.status: pending`.
+  The partial index is for a future APNs worker to take pending
+  notifications oldest first ([pantry-usage.md](pantry-usage.md#future-apns-hook)).
+- Retention: kept indefinitely for now, like events.
 
 ### Grocery lists
 
