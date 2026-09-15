@@ -14,8 +14,13 @@ type GroceryList struct {
 	Status Status
 	// PantryApplied is true when the household pantry decided item statuses.
 	PantryApplied bool
+	// SpecialtiesApplied is true when the household's specialty ingredient
+	// choices were applied.
+	SpecialtiesApplied bool
 	// Categories are in grocery.CategoryOrder; empty categories are omitted.
 	Categories []GroceryCategory
+	// Batches are the house-made specialty ingredients the week uses.
+	Batches []grocery.BatchPlan
 	// Skipped lists entries that could not contribute.
 	Skipped []SkippedEntry
 }
@@ -49,23 +54,24 @@ type SkippedEntry struct {
 // unnamedKeyPrefix keys ingredient lines that have no catalog ID.
 const unnamedKeyPrefix = "name:"
 
-// buildGroceryList turns a plan and its live recipes into grocery selections
-// and aggregates them. Recipes not in live are skipped.
-func buildGroceryList(p Plan, live []recipes.Recipe, pantry grocery.Pantry) (GroceryList, error) {
+// grocerySelections turns a plan and its live recipes into grocery
+// selections. Entries whose recipe isn't in live, or no longer offers the
+// entry's serving size, are skipped.
+func grocerySelections(p Plan, live []recipes.Recipe) ([]grocery.RecipeSelection, []SkippedEntry) {
 	byID := make(map[string]recipes.Recipe, len(live))
 	for _, r := range live {
 		byID[r.ID] = r
 	}
-	out := GroceryList{Week: p.Week, Status: p.Status}
 	var selections []grocery.RecipeSelection
+	var skipped []SkippedEntry
 	for _, e := range p.Entries {
 		r, ok := byID[e.RecipeID]
 		switch {
 		case !ok:
-			out.Skipped = append(out.Skipped, SkippedEntry{EntryID: e.ID, RecipeID: e.RecipeID, RecipeName: e.RecipeName, Reason: SkipRecipeUnavailable})
+			skipped = append(skipped, SkippedEntry{EntryID: e.ID, RecipeID: e.RecipeID, RecipeName: e.RecipeName, Reason: SkipRecipeUnavailable})
 			continue
 		case !slices.Contains(r.Servings, e.Servings):
-			out.Skipped = append(out.Skipped, SkippedEntry{EntryID: e.ID, RecipeID: e.RecipeID, RecipeName: r.Name, Reason: SkipServingsUnavailable})
+			skipped = append(skipped, SkippedEntry{EntryID: e.ID, RecipeID: e.RecipeID, RecipeName: r.Name, Reason: SkipServingsUnavailable})
 			continue
 		}
 		// The authored amounts are for exactly this size, so no scaling.
@@ -75,6 +81,13 @@ func buildGroceryList(p Plan, live []recipes.Recipe, pantry grocery.Pantry) (Gro
 			Lines: groceryLines(r, e.Servings),
 		})
 	}
+	return selections, skipped
+}
+
+// aggregateGroceryList aggregates selections and groups the items by
+// category.
+func aggregateGroceryList(p Plan, selections []grocery.RecipeSelection, skipped []SkippedEntry, pantry grocery.Pantry) (GroceryList, error) {
+	out := GroceryList{Week: p.Week, Status: p.Status, Skipped: skipped}
 	list, err := grocery.Aggregate(selections, pantry)
 	if err != nil {
 		return GroceryList{}, err
