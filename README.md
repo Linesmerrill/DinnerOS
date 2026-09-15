@@ -17,16 +17,16 @@ Autopilot's first customer.
 
 | Phase | Scope | State |
 | ----- | ----- | ----- |
-| 0 | Repository, architecture, tooling, CI | ✅ Done |
-| 1 | Backend foundation (config, Mongo, middleware, health/ready, Heroku) | ✅ Done; Heroku app and Atlas setup pending |
-| 2 | Authentication (Sign in with Apple, Google) | Next |
-| 3 | Households and invitations | Planned |
-| 4 | Recipes, ingredients, and units | Planned |
-| 5 | HelloFresh historical importer | Planned |
-| 6 | Weekly planner | Planned |
-| 7 | Pantry and grocery engine | Planned |
+| 0 | Repository, architecture, tooling, CI, TestFlight | ✅ Done |
+| 1 | Backend foundation (config, Mongo, middleware, health/ready, Heroku at api.tlps.dev) | ✅ Done |
+| 2 | Authentication (Sign in with Apple, Google) — API and iOS | ✅ Done |
+| 3 | Households, roles, and invitations (Resend email) — API and iOS | ✅ Done |
+| 4 | Recipes, ingredient catalog, units, recipe import — API and iOS library | ✅ Done |
+| 5 | HelloFresh historical importer (full order history loaded) | ✅ Done; exact variant capture for some recipes pending |
+| 6 | Weekly planner and week grocery list | API ✅ Done; iOS in progress |
+| 7 | Pantry and grocery engine | Grocery engine ✅; pantry in progress |
 | 8 | Shopping providers | Planned |
-| 9 | Ratings and behavioral events | Planned |
+| 9 | Ratings and behavioral events | In progress |
 | 10–12 | Autopilot (deterministic V1, context, private service) | Later |
 
 ## Repository layout
