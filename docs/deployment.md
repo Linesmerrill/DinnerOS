@@ -123,12 +123,18 @@ The job runs `bundle exec fastlane beta`, which:
 2. ✅ **App Store Connect → Apps → +:** the "DinnerOS" app record exists (Apple
    ID `6812159676`, SKU `dinneros-ios`, bundle `com.linesmerrill.dinneros`, English
    (U.S.)). The App Store name can still be changed before any public release.
-3. **App Store Connect → Users and Access → Integrations → App Store Connect API:**
-   create a Team key with the **Admin** role (cloud-managed distribution signing
-   requires it). Download the `.p8` file. Apple lets you download it only once.
-4. **TestFlight → Internal Testing:** create a group (for example "Household")
-   with **automatic distribution** enabled, and add Merrill and Rachel. Internal
-   testers must be users on the App Store Connect team.
+3. ✅ **App Store Connect → Users and Access → Integrations → App Store Connect API:**
+   Team key "DinnerOS CI" (Key ID `5D9BNM3J38`, **Admin**, issuer
+   `8fd65765-270f-41f2-9f5a-7f5cbc65a8e7`) exists. The owner downloads the `.p8`
+   file, which Apple allows only once, and stores it only as the
+   `APP_STORE_CONNECT_PRIVATE_KEY` GitHub secret. Rachel
+   (`rachel.lines1@gmail.com`) is invited with the Marketing role and access to
+   DinnerOS only.
+4. ✅ **TestFlight → Internal Testing:** the group "Household" exists with
+   **automatic distribution** enabled. Apple doesn't allow changing that setting
+   later. Merrill (`merrilliscool@icloud.com`) is a tester. Rachel is added once
+   she accepts her App Store Connect invitation, because internal testers must be
+   users on the team.
 5. **GitHub → Settings → Secrets and variables → Actions:** add the values below
    and create an environment named `testflight`.
 
