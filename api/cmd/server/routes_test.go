@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
+	"github.com/Linesmerrill/DinnerOS/api/internal/menu"
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
@@ -33,6 +34,7 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		recommendations.NewHandler(recommendations.HandlerOptions{}).Mount(r)
 		ratings.NewHandler(ratings.HandlerOptions{}).Mount(r)
 		events.NewHandler(events.HandlerOptions{}).Mount(r)
+		menu.NewHandler(menu.HandlerOptions{}).Mount(r)
 	})
 
 	var routes []string
@@ -74,6 +76,10 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		"POST /api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/slots/{slotId}/swap",
 		"POST /api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/accept",
 		"GET /api/v1/households/{householdId}/plans/{week}/grocery",
+		"GET /api/v1/households/{householdId}/menu",
+		"GET /api/v1/households/{householdId}/menu/recipes",
+		"GET /api/v1/households/{householdId}/menu/filters",
+		"GET /api/v1/households/{householdId}/weeks",
 		"GET /api/v1/shopping/providers",
 		"GET /api/v1/households/{householdId}/shopping/settings",
 		"PUT /api/v1/households/{householdId}/shopping/settings",
