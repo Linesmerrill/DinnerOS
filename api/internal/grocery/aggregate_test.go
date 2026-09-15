@@ -189,6 +189,40 @@ func TestPantryStatus(t *testing.T) {
 	}
 }
 
+func TestPantryStockOutOverridesStapleHint(t *testing.T) {
+	salt := line("salt", "Salt", "spices", nil, "")
+	salt.PantryStaple = true
+	pepper := line("pepper", "Pepper", "spices", nil, "")
+	pepper.PantryStaple = true
+	oil := line("oil", "Oil", "pantry", q(2, 1), "tbsp")
+	oil.PantryStaple = true
+	butter := line("butter", "Butter", "dairy-eggs", q(1, 1), "tbsp")
+
+	stock := PantryStock{
+		InStock:    map[string]bool{"oil": true},
+		OutOfStock: map[string]bool{"salt": true, "butter": true},
+	}
+	l := mustAggregate(t, []RecipeSelection{
+		{RecipeID: "a", RecipeServings: 2, TargetServings: 2, Lines: []Line{salt, pepper, oil, butter}},
+	}, stock)
+
+	want := map[string]Status{
+		"oil":    StatusInPantry,   // in stock
+		"salt":   StatusToBuy,      // hinted, but the household recorded it as out
+		"pepper": StatusPantryHint, // hinted and unknown to the pantry
+		"butter": StatusToBuy,      // out, not hinted
+	}
+	for key, status := range want {
+		if got := find(t, l, key).Status; got != status {
+			t.Errorf("%s status = %s, want %s", key, got, status)
+		}
+	}
+	// A plain PantrySet has no out-of-stock knowledge, so hints still apply.
+	if got := find(t, mustAggregate(t, []RecipeSelection{{RecipeID: "a", RecipeServings: 2, TargetServings: 2, Lines: []Line{salt}}}, PantrySet{}), "salt").Status; got != StatusPantryHint {
+		t.Errorf("salt with PantrySet = %s, want pantryHint", got)
+	}
+}
+
 func TestOutputIsIndependentOfInputOrder(t *testing.T) {
 	sels := []RecipeSelection{
 		{RecipeID: "a", RecipeName: "Tacos", RecipeServings: 2, TargetServings: 4, Lines: []Line{

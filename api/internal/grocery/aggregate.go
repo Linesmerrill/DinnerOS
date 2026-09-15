@@ -94,6 +94,30 @@ type PantrySet map[string]bool
 // Has implements Pantry.
 func (p PantrySet) Has(key string) bool { return p[key] }
 
+// OutPantry is a Pantry that also knows which ingredients the household has
+// recorded as out. Aggregate lists those as toBuy even when every source flags
+// them as staples: the household knows it doesn't have them, so "probably have
+// it" would be wrong.
+type OutPantry interface {
+	Pantry
+	Out(ingredientKey string) bool
+}
+
+// PantryStock is a household pantry snapshot. Keys match Line.IngredientKey.
+// Ingredients in neither set (unknown to the pantry, or running low) get the
+// engine's default status: pantryHint when every source flags them as staples,
+// otherwise toBuy.
+type PantryStock struct {
+	InStock    map[string]bool
+	OutOfStock map[string]bool
+}
+
+// Has implements Pantry.
+func (p PantryStock) Has(key string) bool { return p.InStock[key] }
+
+// Out implements OutPantry.
+func (p PantryStock) Out(key string) bool { return p.OutOfStock[key] }
+
 // CategoryOrder is the aisle order used to sort the list.
 var CategoryOrder = []string{
 	"produce", "meat-seafood", "dairy-eggs", "bakery", "deli",
@@ -123,6 +147,8 @@ func Aggregate(selections []RecipeSelection, pantry Pantry) (List, error) {
 	if pantry == nil {
 		pantry = PantrySet{}
 	}
+	outPantry, _ := pantry.(OutPantry)
+	isOut := func(key string) bool { return outPantry != nil && outPantry.Out(key) }
 	acc := map[string]*accumulator{}
 
 	for _, sel := range selections {
@@ -176,7 +202,7 @@ func Aggregate(selections []RecipeSelection, pantry Pantry) (List, error) {
 		switch {
 		case pantry.Has(a.key):
 			item.Status = StatusInPantry
-		case a.allHinted:
+		case a.allHinted && !isOut(a.key):
 			item.Status = StatusPantryHint
 		default:
 			item.Status = StatusToBuy
