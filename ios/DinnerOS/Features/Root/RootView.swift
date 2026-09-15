@@ -4,6 +4,7 @@ import SwiftUI
 struct RootView: View {
     @Environment(AuthSession.self) private var session
     @Environment(HouseholdStore.self) private var households
+    @Environment(RecipeLibrary.self) private var recipes
 
     var body: some View {
         content
@@ -15,6 +16,7 @@ struct RootView: View {
                     await households.load()
                 } else {
                     households.reset()
+                    recipes.reset()
                 }
             }
             .inviteLinkPrompt()
@@ -42,6 +44,7 @@ struct RootView: View {
     RootView()
         .environment(session)
         .environment(HouseholdPreviewData.store(session: session))
+        .environment(RecipePreviewData.library(session: session))
 }
 
 #Preview("Signed out") {
@@ -49,4 +52,5 @@ struct RootView: View {
     RootView()
         .environment(session)
         .environment(HouseholdStore.preview(session: session, phase: .idle))
+        .environment(RecipeLibrary.preview(session: session, phase: .idle))
 }

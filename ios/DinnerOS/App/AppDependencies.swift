@@ -6,6 +6,7 @@ final class AppDependencies {
     let configuration: AppConfiguration
     let session: AuthSession
     let households: HouseholdStore
+    let recipes: RecipeLibrary
     /// `nil` when the build has no Google client ID; the Google button is then hidden.
     let googleSignIn: GoogleSignInService?
 
@@ -19,6 +20,7 @@ final class AppDependencies {
             api: client.map { HouseholdsAPI(client: $0) },
             selection: UserDefaultsHouseholdSelection(),
             inviteURLScheme: configuration.urlScheme)
+        recipes = RecipeLibrary(session: session, api: client.map { RecipesAPI(client: $0) })
         googleSignIn = GoogleOAuthConfiguration(clientID: configuration.googleIOSClientID).map {
             GoogleSignInService(configuration: $0, transport: transport)
         }
