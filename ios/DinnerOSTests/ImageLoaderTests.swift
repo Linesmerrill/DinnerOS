@@ -203,6 +203,18 @@ struct ImageLoaderCoalescingTests {
 /// deadline is an upper bound on a hang, not a guess at how slow the machine is — the loop leaves
 /// as soon as the count arrives, so a generous bound costs nothing when the code works. The
 /// assertion that follows stays exact.
+/// Waits for the fetch to actually start before a test cancels it.
+///
+/// Cancelling a fetch that has not begun releases it without ever entering the data loader, so
+/// nothing is there to record a cancellation — waiting longer afterwards can never fix that. A
+/// fixed sleep here assumed the fetch had started, which held locally and did not on CI.
+private func waitForCalls(_ data: FakeImageData, toReach count: Int) async throws {
+    let deadline = ContinuousClock.now + .seconds(60)
+    while data.calls < count, ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+}
+
 private func waitForCancellations(_ data: FakeImageData, toReach count: Int) async throws {
     let deadline = ContinuousClock.now + .seconds(60)
     while data.cancellations < count, ContinuousClock.now < deadline {
@@ -220,7 +232,7 @@ struct ImageLoaderCancellationTests {
         let key = ImageKey(url: try testURL(), pixelSize: 320)
 
         let request = Task { await loader.image(for: key) }
-        try await Task.sleep(for: .milliseconds(100))
+        try await waitForCalls(data, toReach: 1)
         request.cancel()
         #expect(await request.value == nil)
 
@@ -258,7 +270,7 @@ struct ImageLoaderCancellationTests {
         let key = ImageKey(url: try testURL(), pixelSize: 320)
 
         await loader.prefetch([key])
-        try await Task.sleep(for: .milliseconds(100))
+        try await waitForCalls(data, toReach: 1)
         await loader.cancelPrefetch([key])
         try await waitForCancellations(data, toReach: 1)
         #expect(data.cancellations == 1)
