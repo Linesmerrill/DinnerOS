@@ -237,6 +237,67 @@ func (s *MongoStore) MarkRead(ctx context.Context, householdID, userID string, i
 	return translate(err)
 }
 
+var _ Outbox = (*MongoStore)(nil)
+
+// PendingPush implements Outbox using the push_pending_createdAt index.
+func (s *MongoStore) PendingPush(ctx context.Context, limit int) ([]Notification, error) {
+	if limit <= 0 {
+		limit = DefaultListLimit
+	}
+	cur, err := s.notifications.Find(ctx, bson.D{{Key: "push.status", Value: string(PushPending)}},
+		options.Find().SetSort(bson.D{{Key: "createdAt", Value: 1}}).SetLimit(int64(limit)))
+	if err != nil {
+		return nil, translate(err)
+	}
+	var docs []notificationDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	out := make([]Notification, 0, len(docs))
+	for _, d := range docs {
+		out = append(out, d.toNotification())
+	}
+	return out, nil
+}
+
+// ClaimPush implements Outbox with one conditional update.
+func (s *MongoStore) ClaimPush(ctx context.Context, id string, at time.Time) (bool, error) {
+	oid, err := mongodb.ParseID(id)
+	if err != nil {
+		return false, nil
+	}
+	res, err := s.notifications.UpdateOne(ctx,
+		bson.D{{Key: "_id", Value: oid}, {Key: "push.status", Value: string(PushPending)}},
+		bson.D{
+			{Key: "$set", Value: bson.D{{Key: "push.status", Value: string(PushSending)}, {Key: "push.lastAttemptAt", Value: at}}},
+			{Key: "$inc", Value: bson.D{{Key: "push.attempts", Value: 1}}},
+		})
+	if err != nil {
+		return false, translate(err)
+	}
+	return res.ModifiedCount == 1, nil
+}
+
+// FinishPush implements Outbox.
+func (s *MongoStore) FinishPush(ctx context.Context, id string, status PushStatus, at time.Time) error {
+	oid, err := mongodb.ParseID(id)
+	if err != nil {
+		return ErrNotFound
+	}
+	set := bson.D{{Key: "push.status", Value: string(status)}}
+	if status == PushSent {
+		set = append(set, bson.E{Key: "push.sentAt", Value: at})
+	}
+	res, err := s.notifications.UpdateOne(ctx, bson.D{{Key: "_id", Value: oid}}, bson.D{{Key: "$set", Value: set}})
+	if err != nil {
+		return translate(err)
+	}
+	if res.MatchedCount == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func translate(err error) error {
 	err = mongodb.TranslateError(err)
 	switch {

@@ -7,6 +7,8 @@ struct HouseholdSettingsForm: View {
 
     @Environment(HouseholdStore.self) private var households
     @Environment(\.dismiss) private var dismiss
+    /// Optional so previews needn't supply one.
+    @Environment(PushNotificationStore.self) private var push: PushNotificationStore?
     @State private var name: String
     @State private var timeZone: String
     @State private var defaultServings: Int
@@ -67,7 +69,7 @@ struct HouseholdSettingsForm: View {
                 Text("Grocery Order")
             } footer: {
                 Text(
-                    "Pick the day you usually order. From that day, Shop reminds the household until someone marks the week ordered. Next week starts fresh."
+                    "Pick the day you usually order. From that day, Shop reminds the household until someone marks the week ordered, and phones that allow notifications get one that morning. Next week starts fresh."
                 )
             }
             if let errorMessage {
@@ -101,9 +103,15 @@ struct HouseholdSettingsForm: View {
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
+        let pickedOrderDay = changes.orderDay?.isEmpty == false
         do {
             try await households.updateHousehold(changes)
             dismiss()
+            // Picking an order day is asking to be reminded, so it's the moment to ask
+            // whether the reminder may reach a locked phone. Only asked once per device.
+            if pickedOrderDay {
+                await push?.requestAuthorizationIfNeeded()
+            }
         } catch is CancellationError {
             // The sheet went away.
         } catch {

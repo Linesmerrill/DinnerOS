@@ -47,7 +47,9 @@ tags:
   - name: notifications
     description: |
       Household notifications (such as a pantry item running low). Every
-      member sees the same notifications and reads them separately.
+      member sees the same notifications and reads them separately. Devices
+      register push tokens under `/me/device-tokens`, and an hourly sweep
+      pushes new notifications to them (docs/pantry-usage.md#push-delivery).
   - name: ingredients
     description: The global ingredient catalog.
   - name: ratings
@@ -334,6 +336,59 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+  /api/v1/me/device-tokens:
+    put:
+      summary: Register a push device token
+      description: |
+        Registers the caller's APNs device token so household notifications
+        can be pushed to the device (docs/api.md#push-device-tokens).
+        Idempotent and keyed by token: registering again updates the
+        environment and `updatedAt`, and a token registered by another user
+        moves to the caller. The token is in the body so it stays out of
+        request logs.
+      operationId: registerDeviceToken
+      tags: [notifications]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterDeviceTokenRequest"
+      responses:
+        "200":
+          description: The registered token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceToken"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+    delete:
+      summary: Delete a push device token
+      description: |
+        Removes the token if it belongs to the caller, for sign-out. A token
+        that isn't registered to the caller is not an error.
+      operationId: deleteDeviceToken
+      tags: [notifications]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteDeviceTokenRequest"
+      responses:
+        "204":
+          description: The token is no longer registered to the caller.
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
 
@@ -6071,6 +6126,52 @@ components:
       properties:
         unreadCount:
           type: integer
+    PushEnvironment:
+      type: string
+      enum: [sandbox, production]
+      description: |
+        The APNs gateway the token belongs to: `sandbox` for Xcode debug
+        builds, `production` for TestFlight and App Store builds.
+    RegisterDeviceTokenRequest:
+      type: object
+      additionalProperties: false
+      required: [token, environment]
+      properties:
+        token:
+          type: string
+          pattern: "^[0-9a-fA-F]{16,400}$"
+          description: The APNs device token as hex (stored lowercase).
+        environment:
+          $ref: "#/components/schemas/PushEnvironment"
+        platform:
+          type: string
+          enum: [ios]
+          default: ios
+    DeleteDeviceTokenRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token:
+          type: string
+          pattern: "^[0-9a-fA-F]{16,400}$"
+    DeviceToken:
+      type: object
+      required: [token, environment, platform, createdAt, updatedAt]
+      properties:
+        token:
+          type: string
+        environment:
+          $ref: "#/components/schemas/PushEnvironment"
+        platform:
+          type: string
+          enum: [ios]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     MarkNotificationsReadRequest:
       type: object
       description: "Send `ids`, or `all: true`."

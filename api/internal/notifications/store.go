@@ -1,6 +1,9 @@
 package notifications
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Store persists notifications.
 //
@@ -21,4 +24,21 @@ type Store interface {
 	// MarkRead records that userID read the notifications with ids, or every
 	// household notification when ids is nil. Unknown IDs are ignored.
 	MarkRead(ctx context.Context, householdID, userID string, ids []string) error
+}
+
+// Outbox is the push side of the notifications collection: the sweep
+// (cmd/sendreminders) takes pending notifications from it and records the
+// outcome. MongoStore implements it.
+type Outbox interface {
+	// PendingPush returns notifications whose push is pending, oldest first,
+	// at most limit of them.
+	PendingPush(ctx context.Context, limit int) ([]Notification, error)
+	// ClaimPush moves one notification from pending to sending, counting the
+	// attempt. It reports false when the notification is no longer pending
+	// (another sweep claimed it), which is what makes a push go out at most
+	// once.
+	ClaimPush(ctx context.Context, id string, at time.Time) (bool, error)
+	// FinishPush records the outcome of a claimed push: PushSent (sentAt is
+	// at), PushSkipped, or PushFailed.
+	FinishPush(ctx context.Context, id string, status PushStatus, at time.Time) error
 }

@@ -1,6 +1,8 @@
 #include "Shared.xcconfig"
 
 APP_ENVIRONMENT = production
+// Push Notifications: TestFlight and App Store builds get production device tokens.
+APS_ENVIRONMENT = production
 // Set once the production API exists (docs/deployment.md). CI may override via
 // the API_BASE_URL build setting. Production builds require https.
 API_BASE_URL =

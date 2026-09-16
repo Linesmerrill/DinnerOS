@@ -6,8 +6,12 @@
 package config
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -84,7 +88,25 @@ type Config struct {
 	// tracking links when all three IDs are set. Empty (the default) leaves
 	// links untracked; no Walmart setting is required.
 	WalmartImpact WalmartImpact
+
+	// APNs signs and addresses Apple push notifications. Unset (the default
+	// in development) makes push a logged no-op.
+	APNs APNs
 }
+
+// APNs holds the token-based APNs credentials (docs/deployment.md#push-notifications).
+// The one key signs for both the sandbox and production gateways.
+type APNs struct {
+	KeyID  string
+	TeamID string
+	// Topic is the app's bundle ID.
+	Topic string
+	// PrivateKey is the parsed .p8 (ES256) key. Never log it.
+	PrivateKey *ecdsa.PrivateKey
+}
+
+// Enabled reports whether APNs credentials are configured.
+func (a APNs) Enabled() bool { return a.PrivateKey != nil }
 
 // WalmartImpact holds the Impact affiliate IDs for Walmart links
 // (docs/shopping-providers.md#credentials). They are identifiers, not
@@ -164,6 +186,9 @@ func (c Config) LogValue() slog.Value {
 		slog.String("mongoURI", RedactURI(c.MongoURI)),
 		slog.String("mongoDatabase", c.MongoDatabase),
 		slog.Bool("walmartAffiliateLinks", c.WalmartImpact.Enabled()),
+		slog.Bool("apnsEnabled", c.APNs.Enabled()),
+		slog.String("apnsKeyId", c.APNs.KeyID),
+		slog.String("apnsTopic", c.APNs.Topic),
 	)
 }
 
@@ -239,11 +264,60 @@ func Load(getenv func(string) string) (Config, error) {
 	errs = append(errs, loadAuth(&cfg, get)...)
 	errs = append(errs, loadEmail(&cfg, get)...)
 	errs = append(errs, loadShopping(&cfg, get)...)
+	errs = append(errs, loadAPNs(&cfg, get)...)
 
 	if err := errors.Join(errs...); err != nil {
 		return Config{}, fmt.Errorf("invalid configuration: %w", err)
 	}
 	return cfg, nil
+}
+
+// loadAPNs reads the APNs credentials into cfg. cfg.AppleBundleID must
+// already be set. APNS_KEY_ID, APNS_TEAM_ID, and APNS_AUTH_KEY are all set or
+// all empty; error messages never include the key.
+func loadAPNs(cfg *Config, get func(key, fallback string) string) []error {
+	keyID, teamID, rawKey := get("APNS_KEY_ID", ""), get("APNS_TEAM_ID", ""), get("APNS_AUTH_KEY", "")
+	if keyID == "" && teamID == "" && rawKey == "" {
+		return nil
+	}
+	var errs []error
+	if !appleTeamIDPattern.MatchString(keyID) {
+		errs = append(errs, errors.New("APNS_KEY_ID must be the 10-character key ID of the APNs auth key"))
+	}
+	if !appleTeamIDPattern.MatchString(teamID) {
+		errs = append(errs, errors.New("APNS_TEAM_ID must be the 10-character Apple team ID"))
+	}
+	key, err := ParseAPNsKey(rawKey)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	if len(errs) > 0 {
+		return append(errs, errors.New("APNS_KEY_ID, APNS_TEAM_ID, and APNS_AUTH_KEY must all be set, or all be empty"))
+	}
+	cfg.APNs = APNs{KeyID: keyID, TeamID: teamID, Topic: get("APNS_TOPIC", cfg.AppleBundleID), PrivateKey: key}
+	return nil
+}
+
+// ParseAPNsKey parses the contents of an APNs .p8 file: a PKCS #8 P-256
+// private key in PEM. Escaped newlines (a literal backslash-n, as a
+// single-line config value may hold them) are accepted.
+func ParseAPNsKey(raw string) (*ecdsa.PrivateKey, error) {
+	if raw == "" {
+		return nil, errors.New("APNS_AUTH_KEY is required: the full contents of the .p8 file")
+	}
+	block, _ := pem.Decode([]byte(strings.ReplaceAll(raw, `\n`, "\n")))
+	if block == nil {
+		return nil, errors.New("APNS_AUTH_KEY must be the PEM contents of the .p8 file, including the BEGIN and END lines")
+	}
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, errors.New("APNS_AUTH_KEY is not a valid PKCS #8 private key")
+	}
+	key, ok := parsed.(*ecdsa.PrivateKey)
+	if !ok || key.Curve != elliptic.P256() {
+		return nil, errors.New("APNS_AUTH_KEY must be a P-256 (ES256) key")
+	}
+	return key, nil
 }
 
 // impactIDPattern matches one numeric Impact identifier.

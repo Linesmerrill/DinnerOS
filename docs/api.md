@@ -86,6 +86,8 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/auth/logout` `{refreshToken}` → `204` | rate limited | 2 | ✅ |
 | POST | `/api/v1/auth/dev` `{subject, email?, displayName?}` → session (development only) | rate limited | 2 | ✅ |
 | GET | `/api/v1/me` → `{user, identities}` | bearer | 2 | ✅ |
+| PUT | `/api/v1/me/device-tokens` `{token, environment, platform?}` → device token | bearer | 7 | ✅ |
+| DELETE | `/api/v1/me/device-tokens` `{token}` → `204` | bearer | 7 | ✅ |
 | POST | `/api/v1/households` `{name, timeZone, defaultServings?}` → `201 {household, membership}` | bearer | 3 | ✅ |
 | GET | `/api/v1/households` → `{items: [{household, role, permissions}]}` | bearer | 3 | ✅ |
 | GET | `/api/v1/households/{householdId}` → `{household, members, role, permissions}` | `household.view` | 3 | ✅ |
@@ -1657,7 +1659,10 @@ withdraw one household's requests:
 Household notifications, such as "Butter is running low". Every member sees
 the same list and reads it separately. All routes need `household.view`.
 Reading the list or the unread count first applies the pantry's time-based
-low-stock check.
+low-stock check and the grocery order reminder. The hourly push sweep applies
+the same checks for every household and pushes new notifications to members'
+registered devices ([Push device tokens](#push-device-tokens)); reading or
+marking notifications never depends on push.
 
 `GET /api/v1/households/{householdId}/notifications?unread=true&limit=50&before=<cursor>`
 
@@ -1699,6 +1704,49 @@ low-stock check.
 | 400 | `validation_failed` | `limit` out of range; malformed `before`; `unread` not a boolean; neither or both of `ids` and `all`; empty or too many IDs |
 | 400 | `invalid_request` | Malformed body or unknown field |
 | 404 | `not_found` | Not a member of the household |
+
+### Push device tokens
+
+A signed-in app registers its APNs device token so the push sweep can deliver
+household notifications to it ([pantry-usage.md](pantry-usage.md#push-delivery)).
+These routes need only a bearer token. The device token travels in the body,
+not the path, so it never appears in request logs.
+
+`PUT /api/v1/me/device-tokens`
+
+```json
+{ "token": "a1b2c3…64 hex digits…", "environment": "production", "platform": "ios" }
+```
+
+returns
+
+```json
+{
+  "token": "a1b2c3…",
+  "environment": "production",
+  "platform": "ios",
+  "createdAt": "2026-09-16T12:00:00Z",
+  "updatedAt": "2026-09-18T07:10:00Z"
+}
+```
+
+- `token` is the device token as hex; it is stored lowercase. `environment` is
+  `sandbox` (Xcode debug builds) or `production` (TestFlight and App Store); the
+  sweep sends each token to that APNs gateway. `platform` is optional and only
+  `ios`.
+- Idempotent, keyed by token: the app registers again on every launch, which
+  only updates `environment` and `updatedAt`. A token registered by another
+  user moves to the caller (a shared device that someone else signed in on).
+
+`DELETE /api/v1/me/device-tokens` with `{"token": "..."}` returns `204`. The
+app sends it at sign-out. It removes the token only if it belongs to the
+caller, and a token that isn't registered is not an error.
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `validation_failed` | `token` not hex (16–400 digits, even length); `environment` not `sandbox` or `production`; `platform` not `ios` |
+| 400 | `invalid_request` | Malformed body or unknown field |
+| 401 | `unauthenticated` | Missing or invalid access token |
 
 ## Ingredient catalog
 

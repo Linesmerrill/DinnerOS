@@ -173,6 +173,37 @@ func (s *MongoStore) ListHouseholds(ctx context.Context, ids []string) ([]Househ
 	return out, nil
 }
 
+// ListHouseholdIDs returns up to limit household IDs greater than after, in
+// ID order; pass the last ID of one page as after for the next. It is for
+// background sweeps over every household (cmd/sendreminders), which is why
+// it isn't part of Store: nothing serving a request lists all households.
+func (s *MongoStore) ListHouseholdIDs(ctx context.Context, after string, limit int) ([]string, error) {
+	filter := bson.D{}
+	if after != "" {
+		oid, err := mongodb.ParseID(after)
+		if err != nil {
+			return nil, fmt.Errorf("households: after: %w", err)
+		}
+		filter = bson.D{{Key: "_id", Value: bson.D{{Key: "$gt", Value: oid}}}}
+	}
+	cur, err := s.households.Find(ctx, filter, options.Find().
+		SetSort(bson.D{{Key: "_id", Value: 1}}).SetLimit(int64(limit)).SetProjection(bson.D{{Key: "_id", Value: 1}}))
+	if err != nil {
+		return nil, translate(err)
+	}
+	var docs []struct {
+		ID bson.ObjectID `bson:"_id"`
+	}
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	out := make([]string, 0, len(docs))
+	for _, d := range docs {
+		out = append(out, d.ID.Hex())
+	}
+	return out, nil
+}
+
 // UpdateHousehold implements Store.
 func (s *MongoStore) UpdateHousehold(ctx context.Context, id string, patch HouseholdPatch, at time.Time) (Household, error) {
 	oid, err := mongodb.ParseID(id)

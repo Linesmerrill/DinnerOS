@@ -504,9 +504,13 @@ reminder for the week once that day arrives — until someone says they ordered.
   "Did you order these?", so finishing a Walmart hand-off puts both in view and
   the mark is *offered* at that moment. The bell carries the same reminder
   (`shopping.order_due`) for members who aren't in the Shop tab.
-- **Push:** there is none. Like every notification today this is in-app only;
-  [pantry-usage.md](pantry-usage.md#what-real-push-still-needs) lists what real
-  push would still require.
+- **Push:** the hourly sweep (`cmd/sendreminders`) runs the reminder for every
+  household, so it is created on the order day even when nobody opens the app,
+  and pushes it once to the phones of members who haven't read it, after 08:00
+  in the household's time zone
+  ([pantry-usage.md](pantry-usage.md#push-delivery)). Tapping it opens the week
+  in Shop. If anyone marks the week ordered before the push goes out (it waits
+  out the night), nobody gets it.
 
 ## Demand signal
 

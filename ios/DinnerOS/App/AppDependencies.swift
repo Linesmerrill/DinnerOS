@@ -18,6 +18,8 @@ final class AppDependencies {
     let autopilot: AutopilotStore
     let events: EventReporter
     let notifications: NotificationStore
+    /// Push permission, this device's token, and tapped pushes.
+    let push: PushNotificationStore
     let shopping: ShoppingStore
     let menu: MenuStore
     let planner: MealPlanner
@@ -56,6 +58,15 @@ final class AppDependencies {
         let notifications = NotificationStore(
             session: session, api: client.map { NotificationsAPI(client: $0) })
         self.notifications = notifications
+        let push = PushNotificationStore(session: session, api: client.map { DeviceTokensAPI(client: $0) })
+        self.push = push
+        // Sign-out deletes this device's token while requests are still authorized.
+        session.willSignOut = { [push] in
+            await push.unregisterForSignOut()
+        }
+        push.onNotificationReceived = { [notifications] in
+            await notifications.refreshUnreadCount()
+        }
         // Pantry reads and changes can create notifications, so the badge follows them.
         pantry.onChange = { [notifications] in
             Task { await notifications.refreshUnreadCount() }

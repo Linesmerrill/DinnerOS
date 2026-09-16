@@ -204,6 +204,29 @@ final class NotificationStore {
         }
     }
 
+    /// Marks a notification read by ID, for a tapped push: it may not be loaded, and may
+    /// belong to a household that isn't shown yet. Best effort, like `markRead(_:)`.
+    func markRead(notificationID: String, householdID: String) async {
+        guard let api else { return }
+        if householdID == self.householdID, let index = items.firstIndex(where: { $0.id == notificationID }) {
+            await markRead(items[index])
+            return
+        }
+        do {
+            let count = try await session.authorized { token in
+                try await api.markRead(householdID: householdID, ids: [notificationID], accessToken: token)
+            }
+            if householdID == self.householdID {
+                countGeneration += 1
+                unreadCount = count
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            Self.logger.notice("Mark pushed notification read failed: \(Self.describe(error), privacy: .public)")
+        }
+    }
+
     /// Marks everything read on screen at once. A failure puts the unread state back and throws.
     func markAllRead() async throws {
         guard let api else { throw AuthSessionError.notConfigured }

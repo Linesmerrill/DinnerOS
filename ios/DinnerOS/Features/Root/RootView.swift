@@ -17,6 +17,8 @@ struct RootView: View {
     @Environment(MenuStore.self) private var menu
     @Environment(MealPlanner.self) private var planner
     @Environment(PairingsStore.self) private var pairings
+    /// Optional so previews needn't supply one.
+    @Environment(PushNotificationStore.self) private var push: PushNotificationStore?
 
     var body: some View {
         content
@@ -25,8 +27,12 @@ struct RootView: View {
             .task(id: session.currentUser?.id) {
                 // Runs at launch, after every sign-in, and after sign-out.
                 if session.currentUser != nil {
+                    // Only registers when this device already allowed alerts; the prompt
+                    // itself waits for an order day.
                     await households.load()
+                    await push?.refresh()
                 } else {
+                    push?.reset()
                     households.reset()
                     recipes.reset()
                     importReviews.reset()

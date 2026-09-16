@@ -100,6 +100,73 @@ doesn't allow Heroku (Heroku dyno IPs are dynamic, so Atlas must allow
 
 Heroku terminates TLS, so the API is only reachable over HTTPS in production.
 
+### Push notifications
+
+Pushes are sent by `/sendreminders`, a second binary in the same container
+image, run by **Heroku Scheduler** on a one-off dyno with the app's config
+vars. The web dyno never sends a push and starts without APNs credentials.
+What a run does is in [pantry-usage.md](pantry-usage.md#push-delivery).
+
+Status:
+
+- **Done:** the APNs auth key exists (one key, valid for sandbox and
+  production), and `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_TOPIC`
+  (`com.linesmerrill.dinneros`), and `APNS_AUTH_KEY` (the full `.p8` PEM) are
+  set on `dinneros-api`.
+- **Remaining:** the Scheduler job (step 1) and the App ID capability plus a
+  regenerated profile (step 3).
+
+1. Add the scheduler and one job:
+
+   ```bash
+   heroku addons:create scheduler:standard -a dinneros-api
+   ```
+
+   ```bash
+   heroku addons:open scheduler -a dinneros-api
+   ```
+
+   **Add Job** → schedule **Every hour at :00** → command `/sendreminders` →
+   dyno size **Eco** (or the app's smallest). Hourly is enough: the order
+   reminder is day-granular, the low-stock estimate changes slowly, and pushes
+   wait until 08:00 in each household's time zone anyway. A run takes seconds;
+   runs that overlap can't double-send, because each notification is claimed
+   before it's sent.
+
+2. Check a run by hand, then its log line:
+
+   ```bash
+   heroku run /sendreminders -a dinneros-api
+   ```
+
+   It ends with `sweep finished` and counts (`households`, `sent`, `skipped`,
+   `failed`, `deferred`, `deliveries`, `tokensRemoved`, `pushEnabled`).
+   `pushEnabled=false` means the `APNS_*` variables aren't set; the run then
+   only refreshes reminders and leaves notifications pending.
+
+3. **Apple:** in **Certificates, Identifiers & Profiles → Identifiers →
+   com.linesmerrill.dinneros**, tick **Push Notifications** and save. The app
+   now has the `aps-environment` entitlement (`development` in Debug,
+   `production` in Release, from `APS_ENVIRONMENT` in `ios/Config/*.xcconfig`),
+   so the App Store profile in fastlane match must be regenerated to include
+   it, or the next `beta` archive fails with a provisioning error naming
+   `aps-environment`. Changing the App ID's capabilities invalidates the old
+   profile, and match renews an invalid profile, so re-run the one writing
+   lane: Actions → iOS CI → Run workflow with **Create or renew the shared
+   signing certificate** ticked, or locally `bundle exec fastlane signing` in
+   `ios/` ([Signing](#signing-fastlane-match)). If `beta` still reports the
+   missing entitlement, the stored profile predates the change; run
+   `bundle exec fastlane match appstore --force` in `ios/` (it replaces only
+   the profile, not the certificate).
+
+   Xcode's automatic signing picks the capability up for local device builds.
+
+The key is valid for both gateways, and each device token carries its
+environment (`sandbox` from Xcode debug builds, `production` from TestFlight),
+so one deployment serves both kinds of build. Local development needs no APNs
+setup: without the variables the sweep is a logged no-op, and the simulator
+can't receive remote pushes anyway.
+
 ### Invitation links
 
 Invitation emails link to `https://api.tlps.dev/invite#token=…`. The API serves
@@ -183,8 +250,9 @@ Apple's per-account certificate limit and failed every archive.
    upload with a provisioning or entitlement error that mentions
    `com.apple.developer.associated-domains`, open the App ID in **Certificates,
    Identifiers & Profiles**, tick **Associated Domains**, save, and re-run
-   Actions → iOS CI → Run workflow on `main`. Other capabilities, such as Push
-   Notifications, get added when a phase needs them.
+   Actions → iOS CI → Run workflow on `main`. Push Notifications needs the same
+   treatment plus a regenerated profile; see
+   [Push notifications](#push-notifications).
 2. ✅ **App Store Connect → Apps → +:** the "DinnerOS" app record exists (Apple
    ID `6812159676`, SKU `dinneros-ios`, bundle `com.linesmerrill.dinneros`, English
    (U.S.)). The App Store name can still be changed before any public release.
@@ -229,6 +297,8 @@ vars or GitHub Secrets.
 | `WALMART_IMPACT_PUBLISHER_ID`, `WALMART_IMPACT_AD_ID`, `WALMART_IMPACT_CAMPAIGN_ID` | optional (Phase 8) | Walmart affiliate program on Impact (affiliates.walmart.com) → Impact dashboard. Numeric identifiers, not secrets. Set all three to wrap Walmart cart links in `goto.walmart.com` tracking links, or none (the default: untracked links). Walmart handoffs need no other Walmart setting. See [shopping-providers.md](shopping-providers.md#credentials). |
 | `APP_INVITE_URL_BASE` | Phase 3 | Set to `https://api.tlps.dev/invite` (also the default). The token is appended as `#token=…`, so it never reaches the server. A value ending in `=`, such as the old `dinneros://invite?token=`, gets the token appended directly, but such links do nothing without the app. See [Invitation links](#invitation-links). |
 | `APP_URL_SCHEME` | Phase 3 | Optional, default `dinneros`. Must match `APP_URL_SCHEME` in `ios/Config/Shared.xcconfig`; the `/invite` page's **Open** button uses it. |
+| `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_AUTH_KEY` | push | ✅ Set. developer.apple.com → Certificates, Identifiers & Profiles → **Keys** → a key with **Apple Push Notifications service (APNs)** enabled (one key serves sandbox and production). `APNS_KEY_ID` is its 10-character key ID, `APNS_TEAM_ID` is `6VTPDG2HNK`, and `APNS_AUTH_KEY` is the **entire** downloaded `AuthKey_XXXX.p8`, BEGIN and END lines included (literal `\n` escapes are accepted too). Apple allows downloading it once; store it only here. Set all three or none: none makes push a logged no-op, a partial or unparseable set stops the API and the sweep at startup. Read only by `/sendreminders`. See [Push notifications](#push-notifications). |
+| `APNS_TOPIC` | push | Optional; defaults to `APPLE_BUNDLE_ID` (`com.linesmerrill.dinneros`). |
 | `OPENAI_API_KEY` | future | platform.openai.com → API keys (backend only) |
 
 ### GitHub Actions

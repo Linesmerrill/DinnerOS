@@ -53,6 +53,17 @@ func TestIntegrationMongoStoreHouseholds(t *testing.T) {
 	if err != nil || len(list) != 2 {
 		t.Errorf("ListHouseholds() = %+v, %v", list, err)
 	}
+	// Paging over every household, in ID order.
+	page, err := store.ListHouseholdIDs(ctx, "", 1)
+	if err != nil || len(page) != 1 || page[0] != h.ID {
+		t.Errorf("ListHouseholdIDs(first) = %v, %v", page, err)
+	}
+	if page, err := store.ListHouseholdIDs(ctx, h.ID, 10); err != nil || len(page) != 1 || page[0] != other.ID {
+		t.Errorf("ListHouseholdIDs(after) = %v, %v", page, err)
+	}
+	if page, err := store.ListHouseholdIDs(ctx, other.ID, 10); err != nil || len(page) != 0 {
+		t.Errorf("ListHouseholdIDs(last) = %v, %v", page, err)
+	}
 
 	// Admin count starts at 1 and never drops below it.
 	if err := store.DecrementAdminCount(ctx, h.ID); !errors.Is(err, ErrLastAdmin) {

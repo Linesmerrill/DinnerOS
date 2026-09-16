@@ -7,12 +7,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
 	"github.com/Linesmerrill/DinnerOS/api/internal/customize"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/menu"
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
+	"github.com/Linesmerrill/DinnerOS/api/internal/push"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ratings"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recommendations"
@@ -37,6 +39,8 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		ratings.NewHandler(ratings.HandlerOptions{}).Mount(r)
 		events.NewHandler(events.HandlerOptions{}).Mount(r)
 		menu.NewHandler(menu.HandlerOptions{}).Mount(r)
+		auth.NewHandler(auth.HandlerOptions{}).Mount(r)
+		push.NewHandler(push.HandlerOptions{}).Mount(r)
 	})
 
 	var routes []string
@@ -66,6 +70,9 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		"PUT /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/options/{optionId}",
 		"DELETE /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/options/{optionId}",
 		"POST /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/batches",
+		"GET /api/v1/me",
+		"PUT /api/v1/me/device-tokens",
+		"DELETE /api/v1/me/device-tokens",
 		"GET /api/v1/households/{householdId}/notifications",
 		"GET /api/v1/households/{householdId}/notifications/unread-count",
 		"POST /api/v1/households/{householdId}/notifications/read",

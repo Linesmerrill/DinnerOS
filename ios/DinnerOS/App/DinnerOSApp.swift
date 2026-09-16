@@ -2,8 +2,11 @@ import SwiftUI
 
 @main
 struct DinnerOSApp: App {
-    @State private var dependencies = AppDependencies()
+    /// Owns `AppDependencies`, so the push device token and tapped pushes reach them.
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
+
+    private var dependencies: AppDependencies { appDelegate.dependencies }
 
     var body: some Scene {
         WindowGroup {
@@ -21,6 +24,7 @@ struct DinnerOSApp: App {
                 .environment(dependencies.autopilot)
                 .environment(dependencies.events)
                 .environment(dependencies.notifications)
+                .environment(dependencies.push)
                 .environment(dependencies.shopping)
                 .environment(dependencies.menu)
                 .environment(dependencies.planner)
@@ -32,6 +36,10 @@ struct DinnerOSApp: App {
                         events.appDidBecomeActive()
                         let notifications = dependencies.notifications
                         Task { await notifications.refreshUnreadCount() }
+                        // Notices permission changed in Settings, and re-registers so a
+                        // rotated device token reaches the API.
+                        let push = dependencies.push
+                        Task { await push.refresh() }
                         // Back from Walmart: "Did you order these?"
                         let shopping = dependencies.shopping
                         Task { await shopping.appDidBecomeActive() }

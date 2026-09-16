@@ -1,7 +1,8 @@
 # Smart pantry: usage tracking
 
 Status: API implemented (`api/internal/pantry`, `api/internal/notifications`)
-and iOS implemented ([iOS](#ios)). Push delivery (APNs) is later.
+and iOS implemented ([iOS](#ios)). Push delivery (APNs) is implemented
+(`api/internal/push`, `api/cmd/sendreminders`; [Push delivery](#push-delivery)).
 
 A pantry item knows how much the household bought, what cooked recipes used,
 and how fast the household uses it otherwise. From that it estimates what's
@@ -204,18 +205,12 @@ rate, and the clock:
 | `GET .../pantry` | the check runs for every tracked item before responding, so time-based decay is applied |
 | `GET .../notifications`, `GET .../notifications/unread-count` | the same household-wide check runs first (`notifications.Refresher`, bounded to 3 s, failures logged) |
 | Any item response | the estimate is computed at response time (`estimatedAt`) |
+| Push sweep (`cmd/sendreminders`, hourly) | the same household-wide check runs for **every** household, so an item that ran low while nobody had the app open still alerts |
 
-There's no scheduler. An item that crosses its threshold only because days
-passed is marked low the next time any member opens the pantry or
-notifications. That's enough for an in-app list.
-
-Push notifications will need a periodic check so an alert reaches a phone
-that isn't open. The plan is a small command (for example
-`cmd/pantrysweep`) that calls `pantry.Service.Refresh` for households with
-tracked items, run hourly by **Heroku Scheduler** (`heroku addons:create
-scheduler:standard`, then a job running `bin/pantrysweep`) on a one-off dyno
-with the same config vars. `Refresh` is idempotent, so overlapping runs and
-in-app reads are safe.
+An item that crosses its threshold only because days passed is marked low the
+next time any member opens the pantry or notifications, or at the next hourly
+push sweep, whichever comes first. `Refresh` is idempotent, so overlapping
+sweeps and in-app reads are safe.
 
 ## Notifications
 
@@ -224,57 +219,64 @@ notifications, and each member reads them separately (`readBy`).
 
 | Field | Meaning |
 | --- | --- |
-| `type` | `pantry.low` today; stable, so apps can choose an icon and destination |
+| `type` | `pantry.low` or `shopping.order_due`; stable, so apps can choose an icon and destination |
 | `title`, `body` | ready to display and to send as a push alert ("Butter is running low" / the estimate summary) |
 | `subject` | `{kind: "pantry_item", id}`: what to open |
 | `dedupeKey` | unique per household; a producer's retry returns the existing notification |
 | `readBy` | member IDs who've read it |
 | `push` | `{status, attempts, lastAttemptAt?, sentAt?}`; created `pending` |
 
-### Future APNs hook
+### Push delivery
 
-The collection is the push outbox. The partial index `push_pending_createdAt`
-finds pending notifications oldest first. A future worker will:
+The collection is the push outbox, and `cmd/sendreminders` is its sender.
+Heroku Scheduler runs it hourly ([deployment.md](deployment.md#push-notifications)).
+Producers change nothing: they create notifications `pending`, and in-app
+reads never touch `push`. Each run:
 
-1. claim a pending notification (`findOneAndUpdate` to set `attempts`,
-   `lastAttemptAt`, guarded by status and attempts);
-2. send it to every member's registered devices (device tokens are a later
-   collection) with `title`, `body`, and `subject` as the payload;
-3. set `push.status` to `sent` (`sentAt`), `skipped` (no devices), or back to
-   `pending` with backoff, giving up as `failed` after a few attempts.
+1. **Refreshes every household.** It pages through all households and runs
+   the same refreshers a notification read runs — the pantry's low-stock check
+   and shopping's order reminder (`notifications.Service.Refresh`). Both are
+   derived on read, so without this a closed app would never produce the
+   notification at all.
+2. **Takes pending notifications**, oldest first (partial index
+   `push_pending_createdAt`, up to 1000 a run).
+3. **Waits out the household's night.** Between 21:00 and 08:00 in the
+   household's time zone a notification stays `pending` for a later run, so an
+   order reminder that becomes due at midnight arrives with breakfast.
+4. **Claims it** with one conditional update, `pending` → `sending`, counting
+   the attempt. Only the run that wins the claim sends, which is what makes a
+   push go out **at most once**, even when runs overlap or a run is repeated.
+5. **Checks it's still true** (`push.Relevance`): an order reminder whose
+   week has since been marked ordered, or a low-stock alert whose item was
+   restocked or deleted, is `skipped`. A check that errors doesn't block the
+   push.
+6. **Sends it** to every registered device (`device_tokens`) of every current
+   member who hasn't read it, each token to its own APNs gateway (sandbox or
+   production). Members who already read it on the bell get nothing; neither do
+   people who left the household.
+7. **Records the outcome**: `sent` (`sentAt`) when any device accepted it,
+   `failed` when every send failed for another reason, `skipped` when nobody
+   was left to send to or the notification is more than 24 hours old (it's no
+   longer news — this also keeps notifications from before push existed from
+   arriving all at once).
 
-Nothing else changes for producers. In-app reads never touch `push`.
+There is no retry. A `failed` or `sending` push stays that way: sending again
+could alert the devices that did get it, and a missed alert still waits on the
+bell. APNs `BadDeviceToken` and `410 Unregistered` delete the token.
 
-#### What real push still needs
+The alert is the notification's `title` and `body`. Beside `aps` the payload
+carries `notificationId`, `householdId`, `type`, and `subject`, so tapping it
+opens what the row on the bell opens. `thread-id` is the type and
+`apns-collapse-id` the notification ID.
 
-Nothing in the repo sends a push today, and the gap is larger than the worker
-above. **Every notification is in-app only**: it appears on the bell when
-someone opens the app and reads the list. Nothing reaches a closed app, and no
-code asks iOS for permission to try. Shipping real push needs all of:
+Without `APNS_KEY_ID`, `APNS_TEAM_ID`, and `APNS_AUTH_KEY` (local development)
+the sweep still refreshes, logs that push is off, and leaves everything
+`pending`. The web server never needs APNs credentials.
 
-1. **An APNs auth key** (`.p8`) created in the owner's Apple Developer account,
-   with its key ID and team ID, stored as config the way other secrets are.
-   Only the owner can create it; nothing else on this list can be finished
-   without it.
-2. **The `aps-environment` entitlement** in `ios/Config/DinnerOS.entitlements`,
-   which today holds only Sign in with Apple and associated domains, plus the
-   matching provisioning profile.
-3. **A permission prompt**: no iOS source references
-   `UNUserNotificationCenter` or authorization options, so the app has never
-   asked. It must ask at a moment the member understands, and handle a refusal
-   (the bell keeps working; that is the whole product without push).
-4. **Device-token registration**: `registerForRemoteNotifications`, a
-   `device_tokens` collection keyed by user and household, and removal when a
-   token goes stale or a member leaves.
-5. **A sender**: the worker above, plus the Heroku Scheduler sweep (#103) that
-   calls each producer's idempotent `Refresh` so a condition that becomes true
-   while nobody has the app open is noticed at all. Derived-on-read reminders
-   — the pantry's low-stock check and shopping's order reminder — are computed
-   by a *read*, so without a sweep a closed app generates nothing to send.
-
-Until those exist, "reminder" in DinnerOS means a row on the bell and a banner
-in the app, and the docs should say so rather than imply an alert arrives on a
-locked phone.
+**Permission** is asked on iOS only at moments that explain themselves: after
+a member saves an order day in Household Settings, or taps **Notify Me on
+Order Day** on the Shop tab's order reminder. It is never asked at launch, and
+a refusal changes nothing else — the bell is the whole product without push.
 
 ## Estimate fields
 
@@ -321,10 +323,12 @@ apps may build their own text from the numbers.
 | Thresholds | Pantry → ⋯ → **Low-Stock Alerts…** (`PantryThresholdSheet`); item edit sheet (`PantryThresholdFields`) | The household's percent used (1–100, default 80), read-only without `pantry.edit`. An item toggles **Use Household Setting** off to set its own, which `PATCH`es an integer; turning it back on sends `null`. |
 | Notifications | Bell in the Pantry and Week toolbars (`NotificationsView`) | Unread badge from `unread-count`. The sheet lists notifications 50 at a time and loads the next page when the last row appears. Tapping a notification marks it read; `pantry.low` opens the item. **Mark All Read** sends `all: true`. |
 | Cooking | Week → swipe or long-press → **Mark as Cooked** | Sends the queued events right away, then refreshes the pantry and the unread count so the deduction shows. |
+| Push | Lock screen or Notification Center (`AppDelegate`, `PushNotificationStore`, `MainTabView`) | Tapping a push opens what its bell row opens — `pantry.low` the item (in a sheet), `shopping.order_due` that week in Shop, anything else the bell — switching to its household first if another one is shown, and marks it read. A push that arrives while the app is open still shows as a banner and refreshes the badge. |
+| Push registration | `PushNotificationStore`, `DeviceTokensAPI` | Once alerts are allowed, every sign-in and return to the foreground registers for a token and `PUT`s it (`sandbox` in Debug builds, `production` otherwise) once per launch; a rotated token replaces the old one. Sign-out `DELETE`s it before the session's tokens are cleared, waiting at most 3 s. |
 
 The unread count refreshes when a household is activated, when the app becomes
-active, after every pantry load or change, after cooking, and when the
-notifications sheet closes. Members without `pantry.edit` aren't asked "Add to
+active, after every pantry load or change, after cooking, when a push arrives
+while the app is open, and when the notifications sheet closes. Members without `pantry.edit` aren't asked "Add to
 pantry?" and don't see Restock or threshold controls; a `403` from a purchase
 also turns the prompt off and reloads the household's permissions.
 
@@ -335,7 +339,8 @@ also turns the prompt off and reloads the household's permissions.
   that use the same count unit.
 - **Restock assumption.** Purchases assume the old stock was used up (see
   [the learned rate](#the-learned-rate)).
-- **Alerts on time decay need a read** until the push sweep exists.
+- **Alerts on time decay** are noticed at the next read or hourly push sweep,
+  and pushed after 08:00 in the household's time zone.
 - **Deleting an item** leaves its purchases and cook records. They're
   history and are no longer reachable through the API.
 - **Un-cooking** isn't supported: there's no "unmark cooked" event, so a

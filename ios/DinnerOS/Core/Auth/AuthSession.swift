@@ -46,6 +46,9 @@ final class AuthSession {
     /// can't resurrect or overwrite a different session.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var hasRestored = false
+    /// Runs at the start of `signOut()`, while requests are still authorized. A sign-out
+    /// forced by a rejected refresh token can't make requests, so it doesn't run then.
+    @ObservationIgnored var willSignOut: (@MainActor () async -> Void)?
 
     private static let logger = Logger(subsystem: "DinnerOS", category: "auth")
 
@@ -127,9 +130,14 @@ final class AuthSession {
         Self.logger.info("Signed in (new user: \(response.isNewUser, privacy: .public))")
     }
 
-    /// Clears local credentials immediately, then revokes the sign-in on the server on
-    /// a best-effort basis. The Keychain is cleared even if the server call fails.
+    /// Runs `willSignOut`, clears local credentials, then revokes the sign-in on the server
+    /// on a best-effort basis. The Keychain is cleared even if the server call fails.
     func signOut() async {
+        // Still signed in here, so the hook can make authorized calls (the push store
+        // deletes this device's token). It bounds its own wait.
+        if currentUser != nil, let willSignOut {
+            await willSignOut()
+        }
         let refreshToken = tokens?.refreshToken
         clearLocalSession()
         guard let api, let refreshToken else { return }

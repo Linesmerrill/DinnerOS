@@ -183,6 +183,22 @@ func (s *Service) Refresh(ctx context.Context, householdID string) error {
 	return nil
 }
 
+// StillRelevant reports whether an order reminder should still be pushed:
+// the week isn't marked ordered and its reminder is still due. A reminder that
+// waited out the night isn't pushed after someone ordered at breakfast. Other
+// notification types are not shopping's to judge. It implements
+// push.Relevance.
+func (s *Service) StillRelevant(ctx context.Context, n notifications.Notification) (bool, error) {
+	if n.Type != notifications.TypeShoppingOrderDue {
+		return true, nil
+	}
+	r, err := s.OrderReminder(ctx, n.HouseholdID, n.Subject.ID)
+	if err != nil {
+		return true, err
+	}
+	return r.Remind, nil
+}
+
 // buildReminder answers the reminder question for one week.
 func (s *Service) buildReminder(hh households.Household, w planning.Week, ordered *OrderedWeek) OrderReminder {
 	r := OrderReminder{Week: w.String(), OrderDay: hh.OrderDay}

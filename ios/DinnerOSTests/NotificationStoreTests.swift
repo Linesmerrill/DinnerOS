@@ -85,6 +85,27 @@ struct NotificationStoreTests {
         #expect(harness.server.readBodies.count == 1)
     }
 
+    @Test func aTappedPushIsMarkedReadByIDEvenWhenNotLoaded() async throws {
+        let harness = try await makeHarness([
+            "household-1": FakeNotificationServer.entries(count: 3, unread: 3),
+            "household-2": FakeNotificationServer.entries(count: 2, unread: 2),
+        ])
+        let store = harness.store
+        await store.activate(householdID: "household-1")
+        #expect(store.unreadCount == 3)
+
+        // The shown household: the badge follows.
+        await store.markRead(notificationID: "n-2", householdID: "household-1")
+        #expect(store.unreadCount == 2)
+        #expect(harness.server.entries(in: "household-1")[1].read)
+
+        // Another household: marked on the server, this household's badge untouched.
+        await store.markRead(notificationID: "n-1", householdID: "household-2")
+        #expect(harness.server.entries(in: "household-2").first?.read == true)
+        #expect(store.unreadCount == 2)
+        #expect(harness.server.readBodies == [#"{"ids":["n-2"]}"#, #"{"ids":["n-1"]}"#])
+    }
+
     @Test func aFailedMarkReadPutsTheNotificationBack() async throws {
         let harness = try await makeHarness()
         let store = harness.store

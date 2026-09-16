@@ -31,6 +31,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/ratelimit"
 	"github.com/Linesmerrill/DinnerOS/api/internal/providers"
+	"github.com/Linesmerrill/DinnerOS/api/internal/push"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recommendations"
 	"github.com/Linesmerrill/DinnerOS/api/internal/shopping"
@@ -115,6 +116,7 @@ func run() error {
 		planning.Indexes(),
 		pantry.Indexes(),
 		notifications.Indexes(),
+		push.Indexes(),
 		substitutes.Indexes(),
 		shopping.Indexes(),
 		skips.Indexes(),
@@ -307,6 +309,13 @@ func run() error {
 		Tokens:     tokens,
 		Logger:     logger,
 	})
+	// Device tokens for push. Sending is cmd/sendreminders' job (Heroku
+	// Scheduler), so the web dyno needs no APNs credentials to start.
+	deviceTokenHandler := push.NewHandler(push.HandlerOptions{
+		Service: push.NewService(push.NewMongoStore(db.Database()), logger),
+		Tokens:  tokens,
+		Logger:  logger,
+	})
 
 	srv := &http.Server{
 		Addr: cfg.Addr(),
@@ -338,6 +347,7 @@ func run() error {
 				specialtyHandler.Mount(r)
 				shoppingHandler.Mount(r)
 				notificationHandler.Mount(r)
+				deviceTokenHandler.Mount(r)
 				behavior.ratingHandler.Mount(r)
 				behavior.eventHandler.Mount(r)
 			},

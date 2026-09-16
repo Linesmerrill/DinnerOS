@@ -297,11 +297,13 @@ Implemented in `internal/skips` ([api.md](api.md#skipped-ingredients),
 
 ### Notifications
 
-Implemented in `internal/notifications`.
+Implemented in `internal/notifications` and `internal/push` (device tokens and
+the push sweep).
 
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `notifications` | householdId, type (`pantry.low`), title, body, subject{kind, id}, dedupeKey, readBy[] (user IDs), push{status (`pending`/`sent`/`failed`/`skipped`), attempts, lastAttemptAt, sentAt}, createdAt | **unique** `{householdId, dedupeKey}`; `{householdId, _id: -1}`; **partial** `{push.status, createdAt}` where `push.status` is `pending` |
+| `notifications` | householdId, type (`pantry.low`, `shopping.order_due`), title, body, subject{kind, id}, dedupeKey, readBy[] (user IDs), push{status (`pending`/`sending`/`sent`/`failed`/`skipped`), attempts, lastAttemptAt, sentAt}, createdAt | **unique** `{householdId, dedupeKey}`; `{householdId, _id: -1}`; **partial** `{push.status, createdAt}` where `push.status` is `pending` |
+| `device_tokens` | token (APNs device token, lowercase hex), userId, environment (`sandbox`/`production`), platform (`ios`), createdAt, updatedAt | **unique** `{token}`; `{userId}` |
 
 - **Household-wide, read per member.** Marking read is one `updateMany` with
   `$addToSet: {readBy: userId}`. Unread means `readBy` doesn't contain the
@@ -311,8 +313,19 @@ Implemented in `internal/notifications`.
 - **Idempotent creation.** A producer's retry hits the unique `dedupeKey` and
   gets the existing notification.
 - **Push outbox.** Every notification is written with `push.status: pending`.
-  The partial index is for a future APNs worker to take pending
-  notifications oldest first ([pantry-usage.md](pantry-usage.md#future-apns-hook)).
+  The push sweep (`cmd/sendreminders`) reads pending notifications oldest first
+  through the partial index, claims each with one `updateOne` guarded by
+  `push.status: pending` (setting `sending`, `$inc` attempts), and then sets
+  `sent`, `failed`, or `skipped`. The guard is what keeps overlapping sweeps
+  from sending twice; nothing ever moves a push back to `pending`
+  ([pantry-usage.md](pantry-usage.md#push-delivery)).
+- **Device tokens** belong to users, not households: a push goes to the
+  devices of the household's *current* members, so leaving a household needs
+  no cleanup. The token is the key — registering is an upsert on it that keeps
+  `createdAt`, and a device signed in by someone else moves to them. A token is
+  deleted by its owner at sign-out (`DELETE /api/v1/me/device-tokens`) or by
+  the sweep when APNs answers `BadDeviceToken` or `410 Unregistered`. The sweep
+  finds a household's devices with `{userId: {$in: memberIds}}`.
 - Retention: kept indefinitely for now, like events.
 
 ### Grocery lists

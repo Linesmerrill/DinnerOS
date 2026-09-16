@@ -214,8 +214,13 @@ func (s *Service) MarkRead(ctx context.Context, actor households.Membership, ids
 	return n, nil
 }
 
-// refresh runs every refresher, each bounded by RefreshTimeout. One failing
-// is logged and never stops the others or the read.
+// Refresh brings the household's time-based notifications up to date without
+// reading them, for the push sweep: a reminder derived on read would
+// otherwise never exist while nobody opens the app. Failures are logged.
+func (s *Service) Refresh(ctx context.Context, householdID string) {
+	s.refresh(ctx, householdID)
+}
+
 // MarkReadByDedupeKey marks the household's notification with dedupeKey read
 // by the actor. A key with no notification is not an error: the producer may
 // never have created one, which is the same outcome the caller wanted.
@@ -239,6 +244,8 @@ func (s *Service) MarkReadByDedupeKey(ctx context.Context, actor households.Memb
 	return nil
 }
 
+// refresh runs every refresher, each bounded by RefreshTimeout. One failing
+// is logged and never stops the others or the read.
 func (s *Service) refresh(ctx context.Context, householdID string) {
 	for _, r := range s.refreshers {
 		func() {

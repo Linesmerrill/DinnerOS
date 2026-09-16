@@ -403,6 +403,8 @@ private struct OrderReminderBanner: View {
 
     @Environment(ShoppingStore.self) private var shopping
     @Environment(HouseholdStore.self) private var households
+    /// Optional so previews needn't supply one.
+    @Environment(PushNotificationStore.self) private var push: PushNotificationStore?
 
     @State private var errorMessage: String?
 
@@ -421,6 +423,16 @@ private struct OrderReminderBanner: View {
                 }
                 if shopping.canEdit {
                     action
+                }
+                // Every member sees the reminder, but only the one who picked the order
+                // day was asked about notifications; this asks the rest, on their tap.
+                if !reminder.ordered, let push, push.authorization == .notDetermined {
+                    Button("Notify Me on Order Day", systemImage: "bell.badge") {
+                        Task { await push.requestAuthorizationIfNeeded() }
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.subheadline)
+                    .accessibilityHint("Asks to send a notification when it's time to order.")
                 }
             }
             .padding(.vertical, 4)

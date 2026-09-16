@@ -524,6 +524,24 @@ func (s *Service) checkItemAlert(ctx context.Context, item Item) Item {
 	return s.checkAlerts(ctx, item.HouseholdID, []Item{item})[0]
 }
 
+// StillRelevant reports whether a low-stock alert should still be pushed: its
+// item exists and is still low or out, so a restock between the alert and the
+// push silences it. Other notification types are not the pantry's to judge.
+// It implements push.Relevance.
+func (s *Service) StillRelevant(ctx context.Context, n notifications.Notification) (bool, error) {
+	if n.Type != notifications.TypePantryLow {
+		return true, nil
+	}
+	item, err := s.store.GetItem(ctx, n.HouseholdID, n.Subject.ID)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return true, err
+	}
+	return item.Status == StatusLow || item.Status == StatusOut, nil
+}
+
 // Refresh runs the low-stock check for the whole household, so estimates that
 // crossed the threshold as time passed alert before notifications are read.
 // It implements notifications.Refresher.

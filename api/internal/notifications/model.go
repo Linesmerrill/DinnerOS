@@ -3,9 +3,9 @@
 // household, and each member reads it separately.
 //
 // The collection is also the outbox for push delivery. A notification is
-// created with a pending push status. A future APNs worker will send pending
-// notifications to members' devices and record the outcome. Nothing sends
-// pushes yet (docs/pantry-usage.md#notifications).
+// created with a pending push status, and the push sweep (cmd/sendreminders,
+// internal/push) claims it, sends it to members' devices, and records the
+// outcome (docs/pantry-usage.md#push-delivery).
 package notifications
 
 import (
@@ -65,13 +65,18 @@ type Subject struct {
 // PushStatus is where a notification is in push delivery.
 type PushStatus string
 
-// Push statuses. Only pending is written today; the others are reserved for
-// the APNs worker.
+// Push statuses. Producers write pending; the push sweep writes the rest.
 const (
 	PushPending PushStatus = "pending"
-	PushSent    PushStatus = "sent"
-	PushFailed  PushStatus = "failed"
-	// PushSkipped: nobody in the household had a device to send to.
+	// PushSending: a sweep claimed it. A sweep that dies mid-send leaves it
+	// here for good, so a push is never sent twice.
+	PushSending PushStatus = "sending"
+	// PushSent: at least one device accepted it.
+	PushSent PushStatus = "sent"
+	// PushFailed: every device send failed.
+	PushFailed PushStatus = "failed"
+	// PushSkipped: nothing was sent — no member who hadn't read it had a
+	// device, or it was too old to be news.
 	PushSkipped PushStatus = "skipped"
 )
 

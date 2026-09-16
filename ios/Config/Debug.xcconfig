@@ -1,6 +1,9 @@
 #include "Shared.xcconfig"
 
 APP_ENVIRONMENT = development
+// Push Notifications (aps-environment in DinnerOS.entitlements). Debug builds get
+// sandbox device tokens; PushEnvironment.current tells the API which gateway.
+APS_ENVIRONMENT = development
 // `/$()/` keeps xcconfig from treating `//` as a comment.
 API_BASE_URL = http:/$()/localhost:8080
 
