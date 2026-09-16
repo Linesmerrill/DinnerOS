@@ -93,14 +93,35 @@ platform :ios do
       }
     )
 
-    upload_to_testflight(
-      api_key: api_key,
-      app_identifier: bundle_id,
-      # Internal testers receive builds through an internal group with automatic
-      # distribution enabled in App Store Connect (see docs/deployment.md).
-      skip_waiting_for_build_processing: true,
-      distribute_external: false
-    )
+    # Internal testers receive builds through an internal group with automatic
+    # distribution enabled in App Store Connect (see docs/deployment.md).
+    # TESTFLIGHT_EXTERNAL_GROUPS (comma-separated group names) also hands each build to
+    # external groups and submits it for Beta App Review. External distribution needs
+    # the processed build, so that path waits for processing instead of skipping it.
+    external_groups = ENV.fetch("TESTFLIGHT_EXTERNAL_GROUPS", "").split(",").map(&:strip).reject(&:empty?)
+    if external_groups.empty?
+      upload_to_testflight(
+        api_key: api_key,
+        app_identifier: bundle_id,
+        skip_waiting_for_build_processing: true,
+        distribute_external: false
+      )
+    else
+      # The commit subject; the body and trailers are for developers, not testers.
+      changelog = ENV.fetch("TESTFLIGHT_CHANGELOG", "").lines.first.to_s.strip
+      changelog = "Bug fixes and improvements." if changelog.empty?
+      upload_to_testflight(
+        api_key: api_key,
+        app_identifier: bundle_id,
+        distribute_external: true,
+        groups: external_groups,
+        changelog: changelog,
+        notify_external_testers: true,
+        submit_beta_review: true,
+        uses_non_exempt_encryption: false,
+        wait_processing_timeout_duration: 2400
+      )
+    end
   end
 
   desc "Create or renew the shared signing certificate and profile in the match repository"

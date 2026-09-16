@@ -71,8 +71,9 @@ jobs:
     # Manual dispatch from main allows re-running an upload without a new commit.
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.TESTFLIGHT_ENABLED == 'true'
     runs-on: macos-26
-    # A signing prompt or a stuck archive should fail fast, not idle for hours.
-    timeout-minutes: 45
+    # A signing prompt or a stuck archive should fail fast, not idle for hours. The
+    # extra time covers waiting for build processing when external groups are set.
+    timeout-minutes: 75
     environment: testflight
     concurrency:
       group: testflight
@@ -109,6 +110,8 @@ jobs:
           APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
           API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
+          TESTFLIGHT_EXTERNAL_GROUPS: ${{ vars.TESTFLIGHT_EXTERNAL_GROUPS }}
+          TESTFLIGHT_CHANGELOG: ${{ github.event.head_commit.message }}
         run: bundle exec fastlane beta
 
   signing:

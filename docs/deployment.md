@@ -336,4 +336,5 @@ vars or GitHub Secrets.
 | `MATCH_DEPLOY_KEY` | Signing | The private half of the SSH deploy key with write access to `Linesmerrill/dinneros-certificates`. Generate with `ssh-keygen -t ed25519`, add the public half as a deploy key with write access. |
 | `DEVELOPMENT_TEAM` | secret | Apple Team ID (as above) |
 | `TESTFLIGHT_ENABLED` | variable | Set to `true` once the setup above is complete |
+| `TESTFLIGHT_EXTERNAL_GROUPS` | variable | Optional. Comma-separated external TestFlight group names (e.g. `Friends & Family`). When set, every main build is also distributed to those groups and submitted for Beta App Review, with the commit subject as "What to Test". The job then waits for build processing, so it takes longer. Empty keeps builds internal-only. |
 | `PRODUCTION_API_BASE_URL` | variable | The production API URL, e.g. `https://<app>.herokuapp.com` |
