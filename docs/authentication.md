@@ -251,9 +251,13 @@ the request ID for support.
 ### Developer sign-in (Debug builds only)
 
 When a `DEBUG` build has `AppEnvironment == development`, the sign-in screen shows
-**Developer sign-in**. It calls `POST /auth/dev` with subject `dev-simulator`. The
-button and the `AuthAPI.signInForDevelopment` method are both inside `#if DEBUG`,
-so Release binaries don't contain them. See
+**Developer sign-in**. It calls `POST /auth/dev` with the subject shown in the
+field under the button, which starts at `dev-simulator`; a menu offers the test
+subjects the two-person household is built from. `DeveloperIdentity` trims and
+lowercases the subject and derives the email and display name from it, so each
+subject is a distinct person and an unseen subject creates a new user. The button,
+the field, `DeveloperIdentity`, and the `AuthAPI.signInForDevelopment` method are
+all inside `#if DEBUG`, so Release binaries don't contain them. See
 [development.md](development.md#developer-sign-in-from-the-simulator).
 
 ## Authorization

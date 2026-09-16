@@ -87,15 +87,22 @@ final class SignInModel {
     // MARK: Development
 
     #if DEBUG
-        static let developerSubject = "dev-simulator"
+        /// The subject the developer button signs in as, editable on the screen. A subject
+        /// the API hasn't seen before creates a new user, which is how a second household
+        /// member's first run is reachable from the app at all.
+        var developerSubject = DeveloperIdentity.defaultSubject
+
+        /// The email and display name are derived, so two test users aren't the same person.
+        var developerIdentity: DeveloperIdentity { DeveloperIdentity(subject: developerSubject) }
 
         func signInForDevelopment() async {
+            let identity = developerIdentity
             await run(.developer) { [session] in
                 try await session.signIn { api in
                     try await api.signInForDevelopment(
-                        subject: Self.developerSubject,
-                        email: "dev-simulator@example.com",
-                        displayName: "Simulator Developer")
+                        subject: identity.subject,
+                        email: identity.email,
+                        displayName: identity.displayName)
                 }
             }
         }
