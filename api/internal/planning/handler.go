@@ -173,6 +173,9 @@ type GroceryViaResponse struct {
 	SpecialtyName string          `json:"specialtyName"`
 	OptionID      string          `json:"optionId"`
 	OptionName    string          `json:"optionName"`
+	// Strategy is the household strategy that picked the option ("similar" or
+	// "closest"), empty when a member chose it explicitly.
+	Strategy string `json:"strategy"`
 	// Yield and Batches are set for house_made_batch.
 	Yield   *GroceryAmountResponse  `json:"yield"`
 	Batches *int                    `json:"batches"`
@@ -437,13 +440,17 @@ func customizedViaText(v grocery.ItemVia) string {
 func newGroceryViaResponse(v grocery.ItemVia) GroceryViaResponse {
 	resp := GroceryViaResponse{
 		Kind: v.Kind, SpecialtyID: v.SpecialtyID, SpecialtyKey: v.SpecialtyKey, SpecialtyName: v.SpecialtyName,
-		OptionID: v.OptionID, OptionName: v.OptionName, Yield: optionalMeasure(v.Yield), Recipes: recipeResponses(v.Recipes),
+		OptionID: v.OptionID, OptionName: v.OptionName, Strategy: v.Strategy,
+		Yield: optionalMeasure(v.Yield), Recipes: recipeResponses(v.Recipes),
 	}
 	switch v.Kind {
 	case grocery.ViaStoreAlternative:
 		resp.Text = "for " + v.SpecialtyName
 		if names := joinNames(v.Recipes); names != "" {
 			resp.Text += " in " + names
+		}
+		if v.Strategy != "" {
+			resp.Text = "Store alternative " + resp.Text + " (your default)"
 		}
 	case grocery.ViaCustomized:
 		resp.Text = customizedViaText(v)
@@ -458,6 +465,9 @@ func newGroceryViaResponse(v grocery.ItemVia) GroceryViaResponse {
 			resp.Text = fmt.Sprintf("to make %d batches of %s (each makes about %s)", batches, v.SpecialtyName, yield)
 		} else {
 			resp.Text = fmt.Sprintf("to make %s (makes about %s)", v.SpecialtyName, yield)
+		}
+		if v.Strategy != "" {
+			resp.Text = "House-made batch " + resp.Text + " (your default)"
 		}
 	}
 	return resp

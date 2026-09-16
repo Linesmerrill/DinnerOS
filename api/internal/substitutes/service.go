@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
@@ -55,8 +56,18 @@ type Service struct {
 	catalog Catalog
 	recipes RecipeUsage
 	pantry  Pantry
-	logger  *slog.Logger
-	now     func() time.Time
+	// events is optional; without it a strategy change records nothing.
+	events events.Recorder
+	logger *slog.Logger
+	now    func() time.Time
+}
+
+// WithEvents makes SetStrategy record specialty.strategy_updated through
+// recorder, and returns s. Recording is best effort (events.RecordOrLog): a
+// failure is logged and never fails the change.
+func (s *Service) WithEvents(recorder events.Recorder) *Service {
+	s.events = recorder
+	return s
 }
 
 // NewService returns a Service.
@@ -89,10 +100,13 @@ type View struct {
 	RecipeCount int
 	// Options are the curated options, then the household's, oldest first.
 	Options []Option
-	// Choice is the household's choice, or nil.
+	// Choice is the household's explicit choice, or nil.
 	Choice *Choice
 	// ChoiceOption is the chosen option; nil for as_is or no choice.
 	ChoiceOption *Option
+	// Resolution is what currently applies: the explicit choice, the
+	// household's strategy, or nothing. It is resolved at read time.
+	Resolution Resolution
 	// Batch is the batch item in the pantry, or nil.
 	Batch *pantry.StockLevel
 }
@@ -198,6 +212,10 @@ func (s *Service) views(ctx context.Context, householdID string, sps []Specialty
 	if err != nil {
 		return nil, fmt.Errorf("list options: %w", err)
 	}
+	set, err := s.Settings(ctx, householdID)
+	if err != nil {
+		return nil, err
+	}
 	var levels map[string]pantry.StockLevel
 	if s.pantry != nil {
 		var batchKeys []string
@@ -228,8 +246,64 @@ func (s *Service) views(ctx context.Context, householdID string, sps []Specialty
 		if level, ok := levels[v.Specialty.Key]; ok {
 			v.Batch = &level
 		}
+		v.Resolution = resolve(v.Specialty, v.Choice, options, set.Strategy)
 	}
 	return views, nil
+}
+
+// --- Settings -------------------------------------------------------------------
+
+// Settings returns the household's specialty ingredient settings, or the
+// defaults when it never set any.
+func (s *Service) Settings(ctx context.Context, householdID string) (Settings, error) {
+	if householdID == "" {
+		return Settings{}, errHouseholdRequired
+	}
+	set, err := s.store.GetSettings(ctx, householdID)
+	if errors.Is(err, ErrNotFound) {
+		return DefaultSettings(householdID), nil
+	}
+	if err != nil {
+		return Settings{}, fmt.Errorf("get settings: %w", err)
+	}
+	if !set.Strategy.Valid() {
+		set.Strategy = DefaultStrategy
+	}
+	return set, nil
+}
+
+// SetStrategy sets the household's standing answer for specialty ingredients
+// nobody has chosen an option for, and records specialty.strategy_updated.
+// Nothing is written to the household's choices: the strategy is applied when
+// a grocery list is built, so changing it changes future lists.
+func (s *Service) SetStrategy(ctx context.Context, actor households.Membership, strategy string) (Settings, error) {
+	if err := authorizeEdit(actor); err != nil {
+		return Settings{}, err
+	}
+	next, err := normalizeStrategy(strategy)
+	if err != nil {
+		return Settings{}, err
+	}
+	previous, err := s.Settings(ctx, actor.HouseholdID)
+	if err != nil {
+		return Settings{}, err
+	}
+	saved, err := s.store.PutSettings(ctx, Settings{
+		HouseholdID: actor.HouseholdID, Strategy: next, UpdatedBy: actor.UserID, UpdatedAt: s.timestamp(),
+	})
+	if err != nil {
+		return Settings{}, fmt.Errorf("put settings: %w", err)
+	}
+	payload := events.SpecialtyStrategyUpdated{Strategy: string(next)}
+	if !previous.UpdatedAt.IsZero() {
+		payload.Previous = string(previous.Strategy)
+	}
+	events.RecordOrLog(ctx, s.events, s.logger, events.Event{
+		HouseholdID: actor.HouseholdID, UserID: actor.UserID, Type: events.TypeSpecialtyStrategyUpdated,
+		OccurredAt: s.timestamp(), Payload: payload,
+	})
+	s.logger.InfoContext(ctx, "specialty ingredient strategy set", "householdId", actor.HouseholdID, "strategy", next)
+	return saved, nil
 }
 
 // activeSpecialty returns a specialty that isn't retired.
@@ -625,35 +699,35 @@ func (s *Service) GrocerySpecialties(ctx context.Context, householdID string, li
 	if err != nil {
 		return nil, fmt.Errorf("list options: %w", err)
 	}
-	chosen := map[string]*Option{} // specialty ID → chosen option; nil value for as_is
+	set, err := s.Settings(ctx, householdID)
+	if err != nil {
+		return nil, err
+	}
+	// The household's explicit choice wins; where there is none, its strategy
+	// picks an option. Nothing is stored: a later list reflects a later
+	// setting.
+	resolutions := map[string]Resolution{} // specialty ID → what applies
 	var componentKeys, batchKeys []string
 	for _, sp := range matched {
-		if _, done := chosen[sp.ID]; done {
+		if _, done := resolutions[sp.ID]; done {
 			continue
 		}
-		for _, c := range choices {
-			if c.SpecialtyID != sp.ID {
-				continue
+		var choice *Choice
+		for i := range choices {
+			if choices[i].SpecialtyID == sp.ID {
+				choice = &choices[i]
 			}
-			if c.OptionID == OptionAsIs {
-				chosen[sp.ID] = nil
-				break
-			}
-			o, ok := sp.option(c.OptionID)
-			if !ok {
-				j := slices.IndexFunc(householdOptions, func(h Option) bool { return h.ID == c.OptionID && h.SpecialtyID == sp.ID })
-				if j < 0 {
-					break // a deleted option: treated as no choice
-				}
-				o = householdOptions[j]
-			}
-			chosen[sp.ID] = &o
-			for _, comp := range o.Ingredients {
-				componentKeys = append(componentKeys, ingredients.NormalizeName(comp.Name))
-			}
-			if o.Type == TypeHouseMadeBatch {
-				batchKeys = append(batchKeys, sp.Key)
-			}
+		}
+		r := resolve(*sp, choice, householdOptions, set.Strategy)
+		resolutions[sp.ID] = r
+		if r.Option == nil {
+			continue
+		}
+		for _, comp := range r.Option.Ingredients {
+			componentKeys = append(componentKeys, ingredients.NormalizeName(comp.Name))
+		}
+		if r.Option.Type == TypeHouseMadeBatch {
+			batchKeys = append(batchKeys, sp.Key)
 		}
 	}
 	componentCatalog := map[string]recipes.Ingredient{}
@@ -678,7 +752,7 @@ func (s *Service) GrocerySpecialties(ctx context.Context, householdID string, li
 	for lineKey, sp := range matched {
 		gs, ok := built[sp.ID]
 		if !ok {
-			gs = s.grocerySpecialty(*sp, householdOptions, chosen, componentCatalog, levels)
+			gs = s.grocerySpecialty(*sp, householdOptions, resolutions, componentCatalog, levels)
 			built[sp.ID] = gs
 		}
 		out[lineKey] = gs
@@ -686,7 +760,7 @@ func (s *Service) GrocerySpecialties(ctx context.Context, householdID string, li
 	return out, nil
 }
 
-func (s *Service) grocerySpecialty(sp Specialty, householdOptions []Option, chosen map[string]*Option, catalog map[string]recipes.Ingredient, levels map[string]pantry.StockLevel) *grocery.Specialty {
+func (s *Service) grocerySpecialty(sp Specialty, householdOptions []Option, resolutions map[string]Resolution, catalog map[string]recipes.Ingredient, levels map[string]pantry.StockLevel) *grocery.Specialty {
 	gs := &grocery.Specialty{ID: sp.ID, Key: sp.Key, Name: sp.Name, UnitSizes: groceryUnitSizes(sp.UnitSizes)}
 	for _, o := range append(slices.Clone(sp.Options), householdOptions...) {
 		if o.SpecialtyID == sp.ID {
@@ -702,15 +776,18 @@ func (s *Service) grocerySpecialty(sp Specialty, householdOptions []Option, chos
 		}
 		return 1
 	})
-	o, has := chosen[sp.ID]
+	r := resolutions[sp.ID]
 	switch {
-	case !has:
-		return gs
-	case o == nil:
+	case r.AsIs:
 		gs.Choice = &grocery.Choice{Type: grocery.ChoiceAsIs, OptionID: OptionAsIs}
 		return gs
+	case r.Option == nil:
+		return gs
 	}
-	choice := &grocery.Choice{Type: grocery.ChoiceType(o.Type), OptionID: o.ID, OptionName: o.Name}
+	o := *r.Option
+	choice := &grocery.Choice{
+		Type: grocery.ChoiceType(o.Type), OptionID: o.ID, OptionName: o.Name, Strategy: string(r.Strategy),
+	}
 	for _, c := range o.Ingredients {
 		key := ingredients.NormalizeName(c.Name)
 		comp := grocery.Component{IngredientKey: pantry.UnresolvedKeyPrefix + key, Name: c.Name, Category: c.Category, Unit: c.Unit}

@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "note": "Generic, general-knowledge approximations written for DinnerOS. Packet sizes are estimates. Amounts are exact fractions in DinnerOS unit codes.",
+  "version": 2,
+  "note": "Generic, general-knowledge approximations written for DinnerOS. Packet sizes are estimates. Amounts are exact fractions in DinnerOS unit codes. Every entry carries a store alternative a normal grocery store can fill; a per-specialty note flags the ones whose store route needs a caveat.",
   "specialties": [
     {
       "id": "chicken-stock-concentrate",
@@ -206,6 +206,7 @@
       "id": "sweet-thai-chili-sauce",
       "name": "Sweet Thai Chili Sauce",
       "category": "condiments",
+      "note": "Sold bottled with the Asian condiments. Nothing in a basic pantry tastes close, so this one is worth buying rather than improvising.",
       "unitSizes": [
         { "per": "count", "quantity": "2", "unit": "tbsp" },
         { "per": "package", "quantity": "2", "unit": "tbsp" }
@@ -226,6 +227,7 @@
       "id": "tex-mex-paste",
       "name": "Tex-Mex Paste",
       "category": "condiments",
+      "note": "Canned chipotle peppers in adobo are in the Latin or canned-vegetable aisle. Leave them out for a milder, still workable paste.",
       "unitSizes": [
         { "per": "count", "quantity": "2", "unit": "tbsp" },
         { "per": "package", "quantity": "2", "unit": "tbsp" }
@@ -235,10 +237,12 @@
         {
           "id": "tex-mex-paste.store",
           "type": "store_alternative",
-          "name": "Tomato paste and chili spices",
+          "name": "Tomato paste with chipotle and chili spices",
+          "notes": "The chipotle in adobo supplies the smoky heat; mash a little into the tomato paste before it goes in the pan.",
           "per": { "quantity": "1", "unit": "tbsp" },
           "ingredients": [
             { "name": "Tomato Paste", "quantity": "2", "unit": "tsp" },
+            { "name": "Chipotle Peppers in Adobo", "quantity": "1/4", "unit": "tsp", "category": "pantry" },
             { "name": "Chili Powder", "quantity": "1/2", "unit": "tsp" },
             { "name": "Ground Cumin", "quantity": "1/4", "unit": "tsp" },
             { "name": "Olive Oil", "quantity": "1/2", "unit": "tsp" }
@@ -272,6 +276,7 @@
       "id": "ponzu-sauce",
       "name": "Ponzu Sauce",
       "category": "condiments",
+      "note": "Bottled ponzu is in the Asian aisle. If your store doesn't carry it, the soy-and-citrus mix covers the same job.",
       "unitSizes": [
         { "per": "count", "quantity": "2", "unit": "tbsp" },
         { "per": "package", "quantity": "2", "unit": "tbsp" }
@@ -423,6 +428,7 @@
       "name": "Szechuan Paste",
       "aliases": ["Sichuan Paste"],
       "category": "condiments",
+      "note": "Chili garlic sauce is in the Asian aisle and does most of the work. Ground Sichuan peppercorns are a specialty buy; the blend is fine without them.",
       "unitSizes": [
         { "per": "count", "quantity": "1", "unit": "tbsp" },
         { "per": "package", "quantity": "1", "unit": "tbsp" }
@@ -799,6 +805,7 @@
       "id": "sesame-dressing",
       "name": "Sesame Dressing",
       "category": "condiments",
+      "note": "Bottled toasted sesame dressing sits with the salad dressings or in the Asian aisle, depending on the store.",
       "unitSizes": [
         { "per": "count", "quantity": "2", "unit": "tbsp" },
         { "per": "package", "quantity": "2", "unit": "tbsp" }
@@ -834,6 +841,7 @@
       "id": "miso-sauce-concentrate",
       "name": "Miso Sauce Concentrate",
       "category": "condiments",
+      "note": "White miso is refrigerated, usually near the tofu. No dry pantry staple stands in for it, so buy a tub and keep it.",
       "unitSizes": [
         { "per": "count", "quantity": "1", "unit": "tbsp" },
         { "per": "package", "quantity": "1", "unit": "tbsp" }
@@ -881,6 +889,7 @@
       "id": "garlic-ginger-scallion-paste",
       "name": "Garlic-Ginger Scallion Paste",
       "category": "condiments",
+      "note": "Garlic and ginger paste come as refrigerated tubes or small jars near the produce; grating them fresh works the same.",
       "unitSizes": [
         { "per": "count", "quantity": "1", "unit": "tbsp" },
         { "per": "package", "quantity": "1", "unit": "tbsp" }

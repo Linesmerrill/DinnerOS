@@ -105,17 +105,50 @@ func wantError(t *testing.T, rec *httptest.ResponseRecorder, status int, code st
 	}
 }
 
+// TestSettingsEndpoints covers the household strategy: reading the default,
+// changing it, and how it shows up on the list as a strategy-sourced choice.
+func TestSettingsEndpoints(t *testing.T) {
+	s := newTestServer(t)
+
+	set := decode[SpecialtySettingsResponse](t, s.do(t, http.MethodGet, "/settings", "", userViewer), http.StatusOK)
+	if set.Strategy != StrategyAsk || len(set.Options) != 3 || set.Options[0].Value != StrategySimilar ||
+		set.Options[0].Description == "" || set.Options[1].Value != StrategyClosest || set.Options[2].Value != StrategyAsk {
+		t.Fatalf("settings = %+v", set)
+	}
+	updated := decode[SpecialtySettingsResponse](t, s.do(t, http.MethodPut, "/settings", `{"strategy":"closest"}`, testUser), http.StatusOK)
+	if updated.Strategy != StrategyClosest || updated.UpdatedBy == nil || *updated.UpdatedBy != testUser || updated.UpdatedAt == nil {
+		t.Errorf("updated settings = %+v", updated)
+	}
+	// The static route wins over {specialtyId}, so this isn't a 404 lookup.
+	if got := decode[SpecialtySettingsResponse](t, s.do(t, http.MethodGet, "/settings", "", testUser), http.StatusOK); got.Strategy != StrategyClosest {
+		t.Errorf("settings after the change = %+v", got)
+	}
+	// With no explicit choice, the list now reports the strategy's pick.
+	list := decode[SpecialtyListResponse](t, s.do(t, http.MethodGet, "", "", testUser), http.StatusOK)
+	tex := list.Items[0]
+	if tex.ID != "tex-mex-paste" || tex.ChoiceSource != ChoiceSourceStrategy || tex.Choice == nil ||
+		tex.Choice.OptionID != "tex-mex-paste.batch" || tex.Choice.Strategy == nil || *tex.Choice.Strategy != StrategyClosest ||
+		tex.Choice.ChosenBy != nil || tex.Choice.ChosenAt != nil {
+		t.Errorf("tex-mex under closest = %+v choice %+v", tex, tex.Choice)
+	}
+	wantError(t, s.do(t, http.MethodPut, "/settings", `{"strategy":"maybe"}`, testUser), http.StatusBadRequest, "validation_failed")
+	wantError(t, s.do(t, http.MethodPut, "/settings", `{"nope":"x"}`, testUser), http.StatusBadRequest, "invalid_request")
+	wantError(t, s.do(t, http.MethodPut, "/settings", `{"strategy":"ask"}`, userViewer), http.StatusForbidden, "forbidden")
+	wantError(t, s.do(t, http.MethodGet, "/settings", "", userCat), http.StatusNotFound, "not_found")
+}
+
 func TestHandlersFlow(t *testing.T) {
 	s := newTestServer(t)
 
 	list := decode[SpecialtyListResponse](t, s.do(t, http.MethodGet, "", "", userViewer), http.StatusOK)
-	if len(list.Items) != 3 || list.Items[0].ID != "tex-mex-paste" || list.Items[0].RecipeCount != 2 || list.Items[0].Choice != nil {
+	if len(list.Items) != 3 || list.Items[0].ID != "tex-mex-paste" || list.Items[0].RecipeCount != 2 || list.Items[0].Choice != nil ||
+		list.Items[0].ChoiceSource != ChoiceSourceNone {
 		t.Fatalf("list = %+v", list.Items)
 	}
 	tex := list.Items[0]
 	if tex.DefaultOptionID != "tex-mex-paste.store" || len(tex.Options) != 2 || !tex.Options[0].IsDefault || tex.Options[0].Per == nil ||
 		tex.Options[0].Per.Text != "1 tbsp" || tex.Options[0].Ingredients[0].Text != "2 tsp Tomato Paste" ||
-		tex.Options[0].Summary != "1 tbsp = 2 tsp Tomato Paste + ½ tsp Chili Powder + ¼ tsp Ground Cumin + ½ tsp Olive Oil" ||
+		tex.Options[0].Summary != "1 tbsp = 2 tsp Tomato Paste + ¼ tsp Chipotle Peppers in Adobo + ½ tsp Chili Powder + ¼ tsp Ground Cumin + ½ tsp Olive Oil" ||
 		tex.Options[1].ShelfLifeDays == nil || *tex.Options[1].ShelfLifeDays != 14 || tex.Options[1].Summary != "Makes about 10 tbsp and keeps 14 days." ||
 		len(tex.UnitSizes) != 2 || tex.UnitSizes[0].Text != "2 tbsp" || tex.Batch != nil || tex.Aliases == nil {
 		t.Errorf("tex-mex = %+v", tex)
@@ -139,11 +172,13 @@ func TestHandlersFlow(t *testing.T) {
 	wantError(t, s.do(t, http.MethodPut, "/tex-mex-paste/choice", `{"optionId":"nope"}`, testUser), http.StatusBadRequest, "validation_failed")
 	wantError(t, s.do(t, http.MethodPut, "/tex-mex-paste/choice", `{"option":"x"}`, testUser), http.StatusBadRequest, "invalid_request")
 	chosen := decode[SpecialtyResponse](t, s.do(t, http.MethodPut, "/southwest-spice-blend/choice", `{"optionId":"southwest-spice-blend.batch"}`, testUser), http.StatusOK)
-	if c := chosen.Choice; c == nil || c.OptionID != "southwest-spice-blend.batch" || c.Type != "house_made_batch" || c.OptionName == nil || c.ChosenBy != testUser {
+	if c := chosen.Choice; c == nil || c.OptionID != "southwest-spice-blend.batch" || c.Type != "house_made_batch" || c.OptionName == nil ||
+		c.Source != ChoiceSourceHousehold || c.Strategy != nil || c.ChosenBy == nil || *c.ChosenBy != testUser || c.ChosenAt == nil ||
+		chosen.ChoiceSource != ChoiceSourceHousehold {
 		t.Errorf("choice = %+v", chosen.Choice)
 	}
 	asIs := decode[SpecialtyResponse](t, s.do(t, http.MethodPut, "/tex-mex-paste/choice", `{"optionId":"as_is"}`, testUser), http.StatusOK)
-	if c := asIs.Choice; c == nil || c.Type != "as_is" || c.OptionName != nil {
+	if c := asIs.Choice; c == nil || c.Type != "as_is" || c.OptionName != nil || c.Source != ChoiceSourceHousehold || c.OptionID != "as_is" {
 		t.Errorf("as-is choice = %+v", asIs.Choice)
 	}
 	if rec := s.do(t, http.MethodDelete, "/tex-mex-paste/choice", "", testUser); rec.Code != http.StatusNoContent {

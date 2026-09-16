@@ -200,6 +200,25 @@ func runStoreContract(t *testing.T, store Store) {
 	if choices, _ := store.ListChoices(ctx, otherHousehold); len(choices) != 1 {
 		t.Errorf("other household's choices = %+v", choices)
 	}
+
+	// --- Settings.
+	if _, err := store.GetSettings(ctx, testHousehold); !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetSettings() before any error = %v, want ErrNotFound", err)
+	}
+	set := Settings{HouseholdID: testHousehold, Strategy: StrategySimilar, UpdatedBy: testUser, UpdatedAt: testNow}
+	if got, err := store.PutSettings(ctx, set); err != nil || got != set {
+		t.Fatalf("PutSettings() = %+v, %v", got, err)
+	}
+	set.Strategy, set.UpdatedAt = StrategyClosest, testNow.Add(time.Minute)
+	if got, err := store.PutSettings(ctx, set); err != nil || got != set {
+		t.Errorf("replacing PutSettings() = %+v, %v", got, err)
+	}
+	if got, err := store.GetSettings(ctx, testHousehold); err != nil || got != set {
+		t.Errorf("GetSettings() = %+v, %v", got, err)
+	}
+	if _, err := store.GetSettings(ctx, otherHousehold); !errors.Is(err, ErrNotFound) {
+		t.Errorf("another household's settings error = %v, want ErrNotFound", err)
+	}
 }
 
 // runSeedSync checks that syncing the embedded seed is idempotent, that a

@@ -73,6 +73,7 @@ const (
 	MaxOptionsPerSpecialty = 10
 	MaxNameLength          = 100
 	MaxNotesLength         = 500
+	MaxNoteLength          = 300
 	MaxComponents          = 20
 	MaxSteps               = 20
 	MaxStepLength          = 500
@@ -144,6 +145,10 @@ type Specialty struct {
 	Aliases   []string
 	AliasKeys []string
 	Category  string
+	// Note is a short shopping note the app can show, for a specialty
+	// ingredient whose store route needs a caveat ("sold in the international
+	// aisle") or that has no honest store equivalent at all. Usually empty.
+	Note      string
 	UnitSizes []UnitSize
 	// DefaultOptionID is the curated option suggested first.
 	DefaultOptionID string

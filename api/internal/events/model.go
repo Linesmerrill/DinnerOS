@@ -69,6 +69,10 @@ const (
 	// TypeShoppingStoreRequested: a household asked DinnerOS to support a
 	// grocer or delivery service.
 	TypeShoppingStoreRequested Type = "shopping.store_requested"
+
+	// TypeSpecialtyStrategyUpdated: a member changed the household's standing
+	// answer for the specialty ingredients nobody has chosen an option for.
+	TypeSpecialtyStrategyUpdated Type = "specialty.strategy_updated"
 )
 
 // Source says who observed an event.
@@ -388,6 +392,16 @@ type ShoppingStoreRequested struct {
 	Catalog bool `json:"catalog" bson:"catalog"`
 }
 
+// SpecialtyStrategyUpdated is the payload of specialty.strategy_updated: a
+// member changed how the household handles specialty ingredients nobody has
+// chosen an option for. Strategy and Previous are one of SpecialtyStrategies
+// (internal/substitutes).
+type SpecialtyStrategyUpdated struct {
+	Strategy string `json:"strategy" bson:"strategy"`
+	// Previous is the strategy this replaced; empty for a household's first.
+	Previous string `json:"previous,omitempty" bson:"previous,omitempty"`
+}
+
 // Allowed values for optional enumerated payload fields.
 var (
 	ViewSurfaces = []string{"detail", "plan", "search", "recommendation"}
@@ -398,6 +412,9 @@ var (
 	OverrideValues = []string{"yes", "no", "auto"}
 	// WeekRejectReasons say why a proposal was rejected.
 	WeekRejectReasons = []string{"dismissed", "regenerated"}
+	// SpecialtyStrategies are a household's standing answers for specialty
+	// ingredients without an explicit choice (internal/substitutes).
+	SpecialtyStrategies = []string{"similar", "closest", "ask"}
 )
 
 // EventType implements Payload.
@@ -631,6 +648,17 @@ func (p ShoppingStoreRequested) validate() error {
 	return nil
 }
 
+// EventType implements Payload.
+func (SpecialtyStrategyUpdated) EventType() Type { return TypeSpecialtyStrategyUpdated }
+
+func (p SpecialtyStrategyUpdated) validate() error {
+	if p.Strategy == "" {
+		return invalid("strategy is required")
+	}
+	return errors.Join(optionalEnum("strategy", p.Strategy, SpecialtyStrategies),
+		optionalEnum("previous", p.Previous, SpecialtyStrategies))
+}
+
 // typeSpec describes the rules for one event type.
 type typeSpec struct {
 	// recipe events require RecipeID; other events must not carry one.
@@ -669,6 +697,7 @@ var typeSpecs = map[Type]typeSpec{
 	TypeShoppingHandoffCreated:         {decode: decoder[ShoppingHandoffCreated]()},
 	TypeShoppingOrderConfirmed:         {decode: decoder[ShoppingOrderConfirmed]()},
 	TypeShoppingStoreRequested:         {decode: decoder[ShoppingStoreRequested]()},
+	TypeSpecialtyStrategyUpdated:       {decode: decoder[SpecialtyStrategyUpdated]()},
 }
 
 func decoder[P Payload]() func([]byte, func([]byte, any) error) (Payload, error) {

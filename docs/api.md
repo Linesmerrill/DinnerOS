@@ -123,6 +123,8 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/pantry/settings` → `{lowThresholdPercent, defaultLowThresholdPercent, updatedBy, updatedAt}` | `household.view` | 7 | ✅ |
 | PUT | `/api/v1/households/{householdId}/pantry/settings` `{lowThresholdPercent}` → settings | `pantry.edit` | 7 | ✅ |
 | GET | `/api/v1/households/{householdId}/specialty-ingredients` `?all` → `{items}` | `household.view` | 7 | ✅ |
+| GET | `/api/v1/households/{householdId}/specialty-ingredients/settings` → `{strategy, updatedBy, updatedAt, options}` | `household.view` | 7 | ✅ |
+| PUT | `/api/v1/households/{householdId}/specialty-ingredients/settings` `{strategy}` → settings | `pantry.edit` | 7 | ✅ |
 | POST | `/api/v1/households/{householdId}/specialty-ingredients/choices/defaults` → `{items, skipped}` | `pantry.edit` | 7 | ✅ |
 | GET | `/api/v1/households/{householdId}/specialty-ingredients/{specialtyId}` → specialty ingredient | `household.view` | 7 | ✅ |
 | PUT | `/api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/choice` `{optionId}` → specialty ingredient | `pantry.edit` | 7 | ✅ |
@@ -689,6 +691,12 @@ fields, and the list has `batches`:
   the yield's unit (`null` when a recipe gives no amount), `remaining` the
   pantry estimate. Several batches are asked for when the shortfall exceeds
   one yield.
+- `via[].strategy` is set when the household's
+  [strategy](#settings-the-household-strategy) picked the option rather than a
+  member, and `via[].text` then says so: "Store alternative for Tex-Mex Paste
+  in Smoky Pork Tacos (your default)", or "House-made batch to make Southwest
+  Spice Blend (makes about 12 tbsp) (your default)". It is empty for an
+  explicit choice, whose text is unchanged.
 - Without the specialty module, `specialtiesApplied` is `false`, `batches` and
   `via` are empty, and `specialty` is `false`.
 
@@ -952,6 +960,43 @@ batches ([specialty-ingredients.md](specialty-ingredients.md)). Reads need
 `household.view`; every change needs `pantry.edit`. `specialtyId` is a stable
 slug (`southwest-spice-blend`).
 
+### Settings: the household strategy
+
+Deciding one ingredient at a time doesn't scale, so a household picks one
+standing answer. `GET .../specialty-ingredients/settings`:
+
+```json
+{
+  "strategy": "similar",
+  "updatedBy": "66e5…12",
+  "updatedAt": "2026-09-15T18:30:00Z",
+  "options": [
+    { "value": "similar", "label": "Something similar", "description": "Buy something close from the store — quicker, tastes a little different" },
+    { "value": "closest", "label": "As close as possible", "description": "Make a jar you reuse across several meals — more work, closest to the original" },
+    { "value": "ask", "label": "Ask me each time", "description": "Leave each specialty ingredient on the list until someone picks an option" }
+  ]
+}
+```
+
+- `strategy` is `similar` (the default), `closest`, or `ask`.
+  - **`similar`** prefers a store alternative wherever the curated set has
+    one, and falls back to a house-made batch when it doesn't.
+  - **`closest`** prefers a house-made batch, and falls back to a store
+    alternative.
+  - **`ask`** applies nothing: every unchosen specialty ingredient stays on
+    the list by its own name with `suggestedOptions`, as before this setting
+    existed.
+- `updatedBy` and `updatedAt` are `null` for a household that never set one.
+- `options` is the same three entries every time, in the order to offer them;
+  it's there so the app can show the trade-off without hardcoding the copy.
+- `PUT .../settings` `{"strategy": "closest"}` sets it (`pantry.edit`) and
+  returns the same shape.
+
+The strategy is resolved **when a grocery list is built**, never written to the
+household's choices. Changing it changes future lists, and nothing has to be
+migrated or re-chosen. A per-ingredient choice always wins over it, and `as_is`
+still means "leave the line alone".
+
 ### List and get
 
 `GET .../specialty-ingredients` returns the specialty ingredients the
@@ -969,8 +1014,10 @@ every curated one. `GET .../specialty-ingredients/{specialtyId}` returns one.
   "recipeCount": 52,
   "unitSizes": [{ "per": "count", "quantity": "1", "quantityValue": 1, "unit": "tbsp", "text": "1 tbsp" }],
   "defaultOptionId": "southwest-spice-blend.batch",
+  "note": "",
   "retired": false,
-  "choice": { "optionId": "southwest-spice-blend.batch", "type": "house_made_batch", "optionName": "Southwest spice blend (house blend)", "chosenBy": "66e5…12", "chosenAt": "2026-09-15T18:30:00Z" },
+  "choiceSource": "household",
+  "choice": { "source": "household", "optionId": "southwest-spice-blend.batch", "type": "house_made_batch", "optionName": "Southwest spice blend (house blend)", "strategy": null, "chosenBy": "66e5…12", "chosenAt": "2026-09-15T18:30:00Z" },
   "options": [
     {
       "id": "southwest-spice-blend.store", "specialtyId": "southwest-spice-blend", "source": "curated",
@@ -1003,8 +1050,19 @@ every curated one. `GET .../specialty-ingredients/{specialtyId}` returns one.
 - `options` are the curated options, then the household's (`source:
   household`, oldest first). `per` and the ingredient amounts are exact;
   ingredient `quantity` is `null` for "to taste".
-- `choice.type` is `as_is` or the chosen option's type; `null` when there's
-  no choice.
+- `choiceSource` says where the current plan comes from, and `choice` matches
+  it:
+  - `household` — a member chose it. `choice.chosenBy` and `choice.chosenAt`
+    are set, and `choice.strategy` is `null`.
+  - `strategy` — nobody chose, so the household's strategy picked the option.
+    `choice.strategy` is `similar` or `closest`, and `chosenBy`/`chosenAt` are
+    `null` because nobody decided it. A member can still override it.
+  - `none` — nothing applies (`ask`, or no curated option), and `choice` is
+    `null`.
+- `choice.type` is `as_is` or the option's type.
+- `note` is a short shopping note for the specialty ingredient ("Bottled
+  ponzu is in the Asian aisle…"), empty for most. It's there for the ones
+  whose store route needs a caveat.
 - `batch` is the pantry item holding the batch (key = `key`), or `null`.
   `remaining` is `null` when it has no recorded amount.
 - A `retired` specialty ingredient (removed from the curated set) is still
@@ -1075,7 +1133,7 @@ records a batch made and returns `201 {purchase, item, option}`:
 
 | Status | Code | When |
 | --- | --- | --- |
-| 400 | `validation_failed` | Unknown or wrong-specialty `optionId`; invalid option content; option limit reached; `all` not a boolean; `batches` out of range; recording a batch without a batch option |
+| 400 | `validation_failed` | Unknown or wrong-specialty `optionId`; invalid option content; option limit reached; `all` not a boolean; `batches` out of range; recording a batch without a batch option; `strategy` not one of `similar`, `closest`, `ask` |
 | 400 | `invalid_request` | Body is malformed or has unknown fields |
 | 403 | `forbidden` | Changing anything without `pantry.edit` |
 | 404 | `not_found` | Not a member; unknown or retired specialty ingredient (for changes); unknown household option |

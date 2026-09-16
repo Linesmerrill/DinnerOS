@@ -2,14 +2,175 @@ package substitutes
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
+	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 )
+
+// TestIntegrationSpecialtyStrategy runs the household strategy on MongoDB: the
+// settings endpoints, and a week's grocery list built under each strategy with
+// no per-ingredient choice at all.
+func TestIntegrationSpecialtyStrategy(t *testing.T) {
+	ctx := context.Background()
+	client := newTestMongoClient(t)
+	if err := client.EnsureIndexes(ctx, append(append(recipes.Indexes(), pantry.Indexes()...), planning.Indexes()...)...); err != nil {
+		t.Fatal(err)
+	}
+	db := client.Database()
+	recipeSvc := recipes.NewService(recipes.NewMongoStore(db))
+	if _, err := recipeSvc.Import(ctx, testHousehold, recipes.ImportFile{
+		Version: recipes.ImportVersion, Source: recipes.SourceHelloFresh, GeneratedAt: testNow,
+		Recipes: []recipes.ImportRecipe{
+			importRecipe("r-tacos", "Smoky Pork Tacos",
+				importLine("i-texmex", "Tex-Mex Paste", 2, "tbsp"),
+				importLine("i-southwest", "Southwest Spice Blend", 1, "tbsp")),
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	pantryStore := pantry.NewMongoStore(db)
+	pantrySvc := pantry.NewService(pantryStore, recipeSvc).WithUsage(pantry.UsageOptions{Store: pantryStore, Recipes: recipeSvc})
+	store := NewMongoStore(db)
+	if err := EnsureSeed(ctx, store, nil); err != nil {
+		t.Fatal(err)
+	}
+	rec := &fakeRecorder{}
+	svc := NewService(ServiceOptions{Store: store, Catalog: recipeSvc, Recipes: recipeSvc, Pantry: pantrySvc}).WithEvents(rec)
+	pantrySvc.SetKeyResolver(svc)
+	plans := planning.NewService(planning.NewMongoStore(db), recipeSvc).WithPantry(pantrySvc).WithSpecialties(svc)
+	actor := member(testHousehold)
+
+	page, err := recipeSvc.List(ctx, testHousehold, recipes.ListQuery{})
+	if err != nil || len(page.Items) != 1 {
+		t.Fatalf("recipes = %+v, %v", page.Items, err)
+	}
+	if _, _, err := plans.AddEntry(ctx, testHousehold, testUser, "2026-W38", planning.NewEntry{RecipeID: page.Items[0].ID, Servings: 2}); err != nil {
+		t.Fatal(err)
+	}
+
+	router := chi.NewRouter()
+	router.Route("/api/v1", NewHandler(HandlerOptions{
+		Service: svc, Pantry: pantrySvc, Tokens: fakeTokens{},
+		Authorizer: fakeAuthorizer{
+			testHousehold + "/" + testUser:   {households.PermHouseholdView, households.PermPantryEdit},
+			testHousehold + "/" + userViewer: {households.PermHouseholdView},
+		},
+	}).Mount)
+	do := func(method, path, body, userID string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/api/v1/households/"+testHousehold+"/specialty-ingredients"+path, strings.NewReader(body))
+		if userID != "" {
+			req.Header.Set("Authorization", "Bearer token-"+userID)
+		}
+		out := httptest.NewRecorder()
+		router.ServeHTTP(out, req)
+		return out
+	}
+
+	// A household that never set one defaults to similar, with no author.
+	if set := decode[SpecialtySettingsResponse](t, do(http.MethodGet, "/settings", "", userViewer), http.StatusOK); set.Strategy != StrategySimilar ||
+		len(set.Options) != 3 || set.UpdatedBy != nil || set.UpdatedAt != nil {
+		t.Fatalf("default settings = %+v", set)
+	}
+	wantError(t, do(http.MethodPut, "/settings", `{"strategy":"closest"}`, userViewer), http.StatusForbidden, "forbidden")
+
+	// The same week, resolved differently under each strategy, storing nothing.
+	for _, tc := range []struct {
+		strategy   Strategy
+		wantItems  []string
+		wantAbsent []string
+		batches    int
+	}{
+		{strategy: StrategySimilar, wantItems: []string{"Tomato Paste", "Chipotle Peppers in Adobo", "Chili Powder"},
+			wantAbsent: []string{"Tex-Mex Paste", "Southwest Spice Blend"}},
+		{strategy: StrategyClosest, wantItems: []string{"Tomato Paste", "Smoked Paprika", "Onion Powder"},
+			wantAbsent: []string{"Tex-Mex Paste", "Southwest Spice Blend"}, batches: 2},
+		{strategy: StrategyAsk, wantItems: []string{"Tex-Mex Paste", "Southwest Spice Blend"}},
+	} {
+		t.Run(string(tc.strategy), func(t *testing.T) {
+			set := decode[SpecialtySettingsResponse](t, do(http.MethodPut, "/settings", `{"strategy":"`+string(tc.strategy)+`"}`, testUser), http.StatusOK)
+			if set.Strategy != tc.strategy || set.UpdatedBy == nil || *set.UpdatedBy != testUser || set.UpdatedAt == nil {
+				t.Fatalf("settings = %+v", set)
+			}
+			g, err := plans.GroceryList(ctx, testHousehold, "2026-W38")
+			if err != nil {
+				t.Fatal(err)
+			}
+			items := groceryItems(g)
+			for _, name := range tc.wantItems {
+				if _, ok := items[name]; !ok {
+					t.Errorf("%q is missing from the list", name)
+				}
+			}
+			for _, name := range tc.wantAbsent {
+				if _, ok := items[name]; ok {
+					t.Errorf("%q is still on the list", name)
+				}
+			}
+			if len(g.Batches) != tc.batches {
+				t.Errorf("batches = %d, want %d", len(g.Batches), tc.batches)
+			}
+			// Resolved at read time: building a list stores no choice.
+			if choices, err := store.ListChoices(ctx, testHousehold); err != nil || len(choices) != 0 {
+				t.Errorf("stored choices = %+v, %v", choices, err)
+			}
+		})
+	}
+
+	// An explicit choice wins; the strategy still covers everything else.
+	if _, err := svc.SetChoice(ctx, actor, "tex-mex-paste", OptionAsIs); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetStrategy(ctx, actor, string(StrategySimilar)); err != nil {
+		t.Fatal(err)
+	}
+	g, err := plans.GroceryList(ctx, testHousehold, "2026-W38")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := groceryItems(g)
+	if _, ok := items["Tex-Mex Paste"]; !ok {
+		t.Error("an explicit as_is must keep Tex-Mex Paste on the list")
+	}
+	if _, ok := items["Southwest Spice Blend"]; ok {
+		t.Error("the strategy must still replace Southwest Spice Blend")
+	}
+	// Provenance says the strategy produced the line.
+	blend := items["Chili Powder"]
+	if len(blend.Via) == 0 || blend.Via[0].Strategy != string(StrategySimilar) {
+		t.Errorf("chili powder via = %+v", blend.Via)
+	}
+
+	list := decode[SpecialtyListResponse](t, do(http.MethodGet, "", "", testUser), http.StatusOK)
+	var tex, sw SpecialtyResponse
+	for _, it := range list.Items {
+		switch it.ID {
+		case "tex-mex-paste":
+			tex = it
+		case "southwest-spice-blend":
+			sw = it
+		}
+	}
+	if tex.ChoiceSource != ChoiceSourceHousehold || tex.Choice == nil || tex.Choice.Type != OptionAsIs || tex.Choice.ChosenBy == nil {
+		t.Errorf("tex-mex = %s choice %+v", tex.ChoiceSource, tex.Choice)
+	}
+	if sw.ChoiceSource != ChoiceSourceStrategy || sw.Choice == nil || sw.Choice.Strategy == nil ||
+		*sw.Choice.Strategy != StrategySimilar || sw.Choice.ChosenBy != nil {
+		t.Errorf("southwest = %s choice %+v", sw.ChoiceSource, sw.Choice)
+	}
+	if types := rec.types(); len(types) != 4 {
+		t.Errorf("recorded events = %v, want 4 strategy updates", types)
+	}
+}
 
 func importLine(id, name string, quantity float64, unit string) recipes.ImportIngredient {
 	return recipes.ImportIngredient{SourceIngredientID: id, Name: name, Amounts: []recipes.ImportAmount{

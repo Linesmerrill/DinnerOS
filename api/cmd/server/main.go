@@ -170,6 +170,9 @@ func run() error {
 	})
 	pantryService.SetKeyResolver(substitutesService)
 	behavior := newBehavior(db, recipeService, userService, householdService, tokens, logger, pantryService.CookedListener())
+	// A strategy change is a household preference signal, like an Autopilot
+	// one, so it is recorded server-side.
+	substitutesService.WithEvents(behavior.events)
 	planService := planning.NewService(planning.NewMongoStore(db.Database()), recipeService).
 		WithPantry(pantryService).WithSpecialties(substitutesService).WithEvents(behavior.events, logger)
 	planHandler := planning.NewHandler(planning.HandlerOptions{

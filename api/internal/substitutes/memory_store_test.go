@@ -17,12 +17,13 @@ type memoryStore struct {
 	specialties []Specialty
 	options     []Option
 	choices     []Choice
+	settings    map[string]Settings
 	upserts     int
 }
 
 var _ Store = (*memoryStore)(nil)
 
-func newMemoryStore() *memoryStore { return &memoryStore{} }
+func newMemoryStore() *memoryStore { return &memoryStore{settings: map[string]Settings{}} }
 
 func cloneSpecialty(sp Specialty) Specialty {
 	sp.Aliases, sp.AliasKeys, sp.UnitSizes = slices.Clone(sp.Aliases), slices.Clone(sp.AliasKeys), slices.Clone(sp.UnitSizes)
@@ -234,4 +235,24 @@ func (m *memoryStore) DeleteChoicesForOption(_ context.Context, householdID, opt
 	defer m.mu.Unlock()
 	m.choices = slices.DeleteFunc(m.choices, func(c Choice) bool { return c.HouseholdID == householdID && c.OptionID == optionID })
 	return nil
+}
+
+func (m *memoryStore) GetSettings(_ context.Context, householdID string) (Settings, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.settings[householdID]
+	if !ok {
+		return Settings{}, ErrNotFound
+	}
+	return s, nil
+}
+
+func (m *memoryStore) PutSettings(_ context.Context, s Settings) (Settings, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.settings == nil {
+		m.settings = map[string]Settings{}
+	}
+	m.settings[s.HouseholdID] = s
+	return s, nil
 }
