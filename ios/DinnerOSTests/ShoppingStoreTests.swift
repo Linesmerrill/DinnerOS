@@ -124,6 +124,100 @@ struct ShoppingStoreTests {
         #expect(store.proposal?.week == "2026-W38")
     }
 
+    // MARK: Following the plan
+
+    private func plan(week: String = "2026-W38", entries: [String]) throws -> Plan {
+        try JSONCoding.makeDecoder().decode(
+            Plan.self, from: Data(PlanFixtures.plan(week: week, entries: entries).utf8))
+    }
+
+    /// The match is computed from the week's grocery list, so a serving size changed on the
+    /// Menu changes every quantity here. Nothing used to ask again — the tab's `.task` is keyed
+    /// on the household and `load()` keeps a proposal it already has — so the list and its
+    /// exports kept the old numbers with no way to refresh them.
+    @Test func aServingSizeChangedOnTheMenuReMatchesTheShownWeek() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.load()
+        func matches() -> Int { harness.server.log.filter { $0 == Self.matchRoute }.count }
+        #expect(matches() == 1)
+        #expect(store.planRevision == 0)
+
+        // The first plan for the week is the one the tab's own load already matched.
+        await store.planDidChange(try plan(entries: [PlanFixtures.entry(id: "e1", servings: 2)]))
+        #expect(matches() == 1)
+        #expect(store.planRevision == 1)
+
+        // Every load hands the plan over again; an unchanged plan costs no request.
+        await store.planDidChange(try plan(entries: [PlanFixtures.entry(id: "e1", servings: 2)]))
+        #expect(matches() == 1)
+        #expect(store.planRevision == 1)
+
+        // A serving size change re-matches, and tells the export section to rebuild its list.
+        await store.planDidChange(try plan(entries: [PlanFixtures.entry(id: "e1", servings: 4)]))
+        #expect(matches() == 2)
+        #expect(store.planRevision == 2)
+
+        // A note can't change a quantity, so it doesn't buy a request.
+        await store.planDidChange(
+            try plan(entries: [PlanFixtures.entry(id: "e1", servings: 4, note: "extra hot")]))
+        #expect(matches() == 2)
+        #expect(store.planRevision == 2)
+
+        // Neither does a meal moved to another day.
+        await store.planDidChange(
+            try plan(entries: [PlanFixtures.entry(id: "e1", day: "thu", servings: 4, note: "extra hot")]))
+        #expect(matches() == 2)
+        #expect(store.planRevision == 2)
+
+        // Adding a meal does.
+        await store.planDidChange(
+            try plan(entries: [
+                PlanFixtures.entry(id: "e1", day: "thu", servings: 4, note: "extra hot"),
+                PlanFixtures.entry(id: "e2", recipeID: "recipe-2"),
+            ]))
+        #expect(matches() == 3)
+        #expect(store.planRevision == 3)
+    }
+
+    /// `planDidChange` is handed every week's plan, not only the shown one.
+    @Test func anotherWeeksPlanNeverDisturbsTheShownWeek() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.load()
+        func matches() -> Int { harness.server.log.filter { $0 == Self.matchRoute }.count }
+        await store.planDidChange(try plan(entries: [PlanFixtures.entry(id: "e1", servings: 2)]))
+        #expect(matches() == 1)
+
+        await store.planDidChange(try plan(week: "2026-W39", entries: [PlanFixtures.entry(id: "e9", servings: 8)]))
+        await store.planDidChange(try plan(week: "2026-W39", entries: [PlanFixtures.entry(id: "e9", servings: 6)]))
+
+        #expect(matches() == 1)
+        #expect(store.planRevision == 1)
+
+        // The shown week still re-matches afterwards: the other week didn't take its place.
+        await store.planDidChange(try plan(entries: [PlanFixtures.entry(id: "e1", servings: 4)]))
+        #expect(matches() == 2)
+        #expect(store.planRevision == 2)
+    }
+
+    /// A plan for a household this store isn't showing is ignored outright.
+    @Test func anotherHouseholdsPlanIsIgnored() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.load()
+
+        let other = try JSONCoding.makeDecoder().decode(
+            Plan.self,
+            from: Data(
+                PlanFixtures.plan(householdID: "household-2", entries: [PlanFixtures.entry(id: "e1", servings: 4)])
+                    .utf8))
+        await store.planDidChange(other)
+
+        #expect(harness.server.log.filter { $0 == Self.matchRoute }.count == 1)
+        #expect(store.planRevision == 0)
+    }
+
     // MARK: Package counts
 
     @Test func changedCountsNameEveryReadyLine() async throws {

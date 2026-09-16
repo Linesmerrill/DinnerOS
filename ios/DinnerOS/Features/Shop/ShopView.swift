@@ -157,7 +157,9 @@ private struct ShopWeekList: View {
             RequestStoreSheet(openStoreSetup: openStoreSetup)
         }
         .groceryExportPrompts(exportController)
-        .task(id: shopping.week) {
+        // The week, and the plan behind it: a serving size changed on the Menu changes every
+        // quantity the export writes, and the week alone can't see that.
+        .task(id: ShopListKey(week: shopping.week, planRevision: shopping.planRevision)) {
             guard
                 let model = plans.makeGroceryList(
                     week: shopping.week, purchases: pantry, specialties: specialties,
@@ -234,6 +236,12 @@ private struct ShopWeekList: View {
                 Text("Lines at home or checked off on the grocery list stay out of the cart.")
             }
         }
+    }
+
+    /// The week the export section's list is built for, and the plan it was built from.
+    private struct ShopListKey: Equatable {
+        let week: ISOWeek
+        let planRevision: Int
     }
 
     private func packagesBinding(for line: ShoppingHandoffLine) -> Binding<Int> {

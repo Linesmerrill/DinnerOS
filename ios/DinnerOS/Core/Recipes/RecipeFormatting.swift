@@ -122,6 +122,16 @@ nonisolated enum RecipeFormat {
 
     // MARK: Units
 
+    /// Whether a unit label should be plural for `value`.
+    ///
+    /// Only exactly one is singular: "0 cups", "½ cup", "1 cup", "1½ cups". A `> 1` test
+    /// reads zero as singular and renders "0 cup". `nil` keeps the singular label, because
+    /// an amount with no number to speak of has nothing to agree with.
+    static func isPlural(_ value: Double?) -> Bool {
+        guard let value else { return false }
+        return value == 0 || value > 1
+    }
+
     /// A label for a DinnerOS unit code. `count` has no label ("2 onions"). An unknown
     /// or empty code shows `sourceUnit` as written.
     static func unitLabel(_ unit: String, sourceUnit: String = "", plural: Bool) -> String {
@@ -154,8 +164,7 @@ nonisolated enum RecipeFormat {
         guard let quantity = quantity(amount.quantity, value: amount.quantityValue, locale: locale) else {
             return nil
         }
-        let plural = (amount.quantityValue ?? 0) > 1
-        let unit = unitLabel(amount.unit, sourceUnit: amount.sourceUnit, plural: plural)
+        let unit = unitLabel(amount.unit, sourceUnit: amount.sourceUnit, plural: isPlural(amount.quantityValue))
         return unit.isEmpty ? quantity : "\(quantity) \(unit)"
     }
 

@@ -2,6 +2,34 @@ import Foundation
 import Observation
 import os
 
+/// What one week's plan contributes to its grocery list, and so to the Shop tab's match.
+///
+/// Deliberately not the whole plan: a note, a move to another day, or an `updatedAt` changes
+/// the plan without changing a single quantity, and re-matching for those would put a request
+/// behind edits that can't affect the list. What's left is what the list is built from — which
+/// recipes, at what serving size, with which ingredient swaps.
+nonisolated struct PlanGrocerySignature: Equatable, Sendable {
+    /// One planned meal, as the grocery list sees it.
+    struct Entry: Equatable, Sendable {
+        let id: String
+        let recipeID: String
+        let servings: Int
+        let customizations: [PlanEntryCustomization]
+    }
+
+    let week: String
+    let entries: [Entry]
+
+    init(_ plan: Plan) {
+        week = plan.week
+        entries = plan.entries.map {
+            Entry(
+                id: $0.id, recipeID: $0.recipe.id, servings: $0.servings,
+                customizations: $0.customizations)
+        }
+    }
+}
+
 /// The current household's Walmart handoff: store setup, the week's match, cart links, and
 /// "Did you order these?" (Phase 8a; docs/shopping-providers.md).
 ///
@@ -47,6 +75,10 @@ final class ShoppingStore {
     private(set) var refreshError: String?
     /// Package counts the member changed, by `ingredientKey` (line IDs change between matches).
     private(set) var packageOverrides: [String: Int] = [:]
+    /// Bumped whenever the shown week's plan changes in a way that changes its grocery list.
+    /// The Shop tab's export section rebuilds its grocery list on it, the way the Menu rebuilds
+    /// its cards from `planDidChange`.
+    private(set) var planRevision = 0
 
     private(set) var isCreatingHandoff = false
     private(set) var linkProgress: LinkProgress?
@@ -109,6 +141,10 @@ final class ShoppingStore {
     @ObservationIgnored private var scope = 0
     /// Incremented by every match, so an older match can't replace a newer one.
     @ObservationIgnored private var proposalGeneration = 0
+    /// What each week's plan last contributed to its grocery list, so a plan that merely
+    /// arrived again doesn't cost a match. Kept per week because `planDidChange` is handed
+    /// every week's plan, not only the shown one.
+    @ObservationIgnored private var planSignatures: [String: PlanGrocerySignature] = [:]
 
     private static let logger = Logger(subsystem: "DinnerOS", category: "shopping")
 
@@ -645,6 +681,31 @@ final class ShoppingStore {
             note: item.note, requestedByHousehold: requested, requests: max(item.requests + delta, 0))
     }
 
+    // MARK: - Plan changes
+
+    /// Takes a plan `PlanStore` received, the way `MenuStore.applyPlan` does.
+    ///
+    /// The match is computed from the week's grocery list, so a serving size changed on the
+    /// Menu changes every quantity here — and nothing else would ever ask again: the tab's
+    /// `.task` is keyed on the household, and `load()` keeps a proposal it already has. So the
+    /// shown week re-matches, and `planRevision` tells the export section to rebuild its list.
+    ///
+    /// Only a real change costs a request. `planDidChange` fires on every load and every edit
+    /// of any week, including plans that are byte-for-byte what we already matched, so the
+    /// signature is compared first: what's planned, at what size, cooked which way.
+    func planDidChange(_ plan: Plan) async {
+        guard plan.householdID == householdID else { return }
+        let signature = PlanGrocerySignature(plan)
+        let previous = planSignatures[plan.week]
+        guard signature != previous else { return }
+        planSignatures[plan.week] = signature
+        guard plan.week == week.description else { return }
+        planRevision += 1
+        // The first plan for this week is the one the tab's own load matches anyway.
+        guard previous != nil, proposalPhase == .loaded, isConfigured else { return }
+        await loadProposal(clearing: false)
+    }
+
     // MARK: - Reset
 
     /// Forgets everything, for sign-out.
@@ -679,6 +740,7 @@ final class ShoppingStore {
         catalog = []
         storeRequests = []
         isCatalogAvailable = true
+        planSignatures = [:]
     }
 
     // MARK: - Helpers

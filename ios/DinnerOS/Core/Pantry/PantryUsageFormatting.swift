@@ -47,17 +47,18 @@ nonisolated enum PantryUsageFormat {
         }
     }
 
+    /// "5 tbsp": non-recipe use applied so far this cycle. This is what the Other Use row
+    /// counts; `dailyRate` is only the rate it was applied at.
+    static func otherUse(_ estimate: PantryEstimate, locale: Locale = .autoupdatingCurrent) -> String {
+        amount(
+            estimate.otherUse.quantity, value: estimate.otherUse.quantityValue, unit: estimate.unit, locale: locale)
+    }
+
     /// "About 1 tbsp a day", or that there isn't enough history yet.
     static func dailyRate(_ estimate: PantryEstimate, locale: Locale = .autoupdatingCurrent) -> String {
         guard let rate = estimate.dailyRate else { return String(localized: "Not enough history yet") }
         let perDay = amount(rate.quantity, value: rate.quantityValue, unit: estimate.unit, locale: locale)
         return String(localized: "About \(perDay) a day")
-    }
-
-    /// "Learned from 3 earlier periods", or `nil` without a rate.
-    static func dailyRateBasis(_ estimate: PantryEstimate) -> String? {
-        guard let rate = estimate.dailyRate else { return nil }
-        return String(localized: "Learned from \(rate.basedOnSegments) earlier periods")
     }
 
     /// "1 recipe couldn't be counted", or `nil` when every recipe was.
@@ -67,6 +68,14 @@ nonisolated enum PantryUsageFormat {
         case 1: String(localized: "1 recipe couldn't be counted")
         default: String(localized: "\(estimate.skippedRecipes) recipes couldn't be counted")
         }
+    }
+
+    /// What a pantry row says about an item whose estimate had to skip a cooked recipe, so
+    /// "~31% left" on an item that couldn't be counted doesn't read the same as one that was.
+    /// `nil` when every recipe was counted.
+    static func skippedRecipesShort(_ estimate: PantryEstimate) -> String? {
+        guard estimate.skippedRecipes > 0 else { return nil }
+        return String(localized: "some use not counted")
     }
 
     /// "80% used".
@@ -120,7 +129,7 @@ nonisolated enum PantryUsageFormat {
         _ quantity: String, value: Double?, unit: String, locale: Locale = .autoupdatingCurrent
     ) -> String {
         let number = RecipeFormat.quantity(quantity, value: value, locale: locale) ?? quantity
-        let label = RecipeFormat.unitLabel(unit, sourceUnit: unit, plural: (value ?? 0) > 1)
+        let label = RecipeFormat.unitLabel(unit, sourceUnit: unit, plural: RecipeFormat.isPlural(value))
         return label.isEmpty ? number : "\(number) \(label)"
     }
 

@@ -42,8 +42,6 @@ final class AppDependencies {
         self.plans = plans
         let menu = MenuStore(session: session, api: client.map { MenuAPI(client: $0) })
         self.menu = menu
-        // Every plan the server returns patches the Menu screen's cards and week counts.
-        plans.planDidChange = { [menu] plan in menu.applyPlan(plan) }
         planner = MealPlanner(plans: plans, library: recipes, households: households)
         let pantry = PantryStore(
             session: session,
@@ -86,10 +84,17 @@ final class AppDependencies {
         pairings.profileDidChange = { [autopilot] profile in
             autopilot.present(profile)
         }
-        shopping = ShoppingStore(
+        let shopping = ShoppingStore(
             session: session, api: client.map { ShoppingAPI(client: $0) }, checks: groceryChecks,
             // Cart links open the Walmart app when it's installed (a universal link), otherwise Safari.
             openURL: { url in await UIApplication.shared.open(url) })
+        self.shopping = shopping
+        // Every plan the server returns patches the Menu screen's cards and week counts, and
+        // re-matches the Shop tab when it changes what the week's grocery list asks for.
+        plans.planDidChange = { [menu, shopping] plan in
+            menu.applyPlan(plan)
+            Task { await shopping.planDidChange(plan) }
+        }
         // A confirmed order records pantry purchases.
         shopping.onPantryChanged = { [pantry, notifications] in
             await pantry.refresh()
