@@ -30,6 +30,8 @@ final class SpecialtyStore {
     private(set) var refreshError: String?
     /// Incremented after every change that can alter a grocery list or the pantry.
     private(set) var revision = 0
+    /// The household's standing strategy and the server's words for it; `nil` until it's loaded.
+    private(set) var settings: SpecialtySettings?
 
     /// Receives a batch's pantry item and household after "Made a Batch", so the pantry can show it.
     @ObservationIgnored var onBatchRecorded: ((PantryItem, String) -> Void)?
@@ -52,19 +54,21 @@ final class SpecialtyStore {
     /// A store frozen with the given items, for SwiftUI previews. It has no network access.
     static func preview(
         session: AuthSession, phase: Phase = .loaded, items: [SpecialtyIngredient] = [],
-        householdID: String = "household-1"
+        householdID: String = "household-1", settings: SpecialtySettings? = nil
     ) -> SpecialtyStore {
         let store = SpecialtyStore(session: session, api: nil)
         store.householdID = householdID
         store.userID = session.currentUser?.id
         store.phase = phase
         store.items = items
+        store.settings = settings
         return store
     }
 
-    /// Specialty ingredients without a choice.
+    /// Specialty ingredients nobody has chosen for. The strategy's picks count: nobody decided
+    /// them, and "Use Suggested for All" is exactly what still applies to them.
     var needsChoiceCount: Int {
-        items.count { $0.choice == nil }
+        items.count { !$0.hasHouseholdChoice }
     }
 
     func ingredient(withID id: String) -> SpecialtyIngredient? {
@@ -141,6 +145,37 @@ final class SpecialtyStore {
         }
         if started == generation { apply([loaded]) }
         return loaded
+    }
+
+    // MARK: - Settings
+
+    /// Loads the household's standing strategy and the server's words for every strategy.
+    @discardableResult
+    func loadSettings() async throws -> SpecialtySettings {
+        let (api, target) = try require(nil)
+        let started = generation
+        let loaded = try await session.authorized { token in
+            try await api.settings(householdID: target, accessToken: token)
+        }
+        if started == generation, target == householdID { settings = loaded }
+        return loaded
+    }
+
+    /// Sets the standing strategy. Nothing is stored per ingredient, so the whole list is
+    /// reloaded: every ingredient nobody chose for resolves again.
+    @discardableResult
+    func updateSettings(strategy: SpecialtyStrategy) async throws -> SpecialtySettings {
+        let (api, target) = try require(nil)
+        let started = generation
+        let updated = try await perform(target) { token in
+            try await api.setSettings(householdID: target, strategy: strategy, accessToken: token)
+        }
+        changed()
+        Self.logger.info("Specialty strategy set to \(strategy.rawValue, privacy: .public)")
+        guard started == generation, target == householdID else { return updated }
+        settings = updated
+        if phase == .loaded { await load(showingProgress: false) }
+        return updated
     }
 
     // MARK: - Choices
@@ -284,6 +319,7 @@ final class SpecialtyStore {
         phase = .idle
         items = []
         refreshError = nil
+        settings = nil
     }
 
     // MARK: - Helpers

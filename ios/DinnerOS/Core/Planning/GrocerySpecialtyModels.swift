@@ -40,13 +40,45 @@ nonisolated struct GroceryVia: Decodable, Equatable, Sendable {
     let specialtyName: String
     let optionID: String
     let optionName: String
+    /// The strategy that picked the option, as sent: empty when a member chose it explicitly.
+    /// Read `strategy`, which reads an empty string as "nobody chose".
+    private let strategyRawValue: String?
     /// What one batch makes; `nil` for a store alternative.
     let batchYield: GroceryAmount?
     /// Batches the list asks for; `nil` for a store alternative.
     let batches: Int?
     let recipes: [GroceryRecipe]
-    /// For example "for Tex-Mex Paste in Smoky Pork Tacos".
+    /// For example "for Tex-Mex Paste in Smoky Pork Tacos". The server already ends it with
+    /// "(your default)" when a strategy picked the option.
     let text: String
+
+    init(
+        kind: SpecialtyOptionType, specialtyID: String, specialtyKey: String, specialtyName: String,
+        optionID: String, optionName: String, batchYield: GroceryAmount?, batches: Int?,
+        recipes: [GroceryRecipe], text: String, strategy: SpecialtyStrategy? = nil
+    ) {
+        self.kind = kind
+        self.specialtyID = specialtyID
+        self.specialtyKey = specialtyKey
+        self.specialtyName = specialtyName
+        self.optionID = optionID
+        self.optionName = optionName
+        self.strategyRawValue = strategy?.rawValue
+        self.batchYield = batchYield
+        self.batches = batches
+        self.recipes = recipes
+        self.text = text
+    }
+
+    /// The household's standing strategy that put this line on the list; `nil` when a member
+    /// chose the option themselves.
+    var strategy: SpecialtyStrategy? {
+        guard let raw = strategyRawValue, !raw.isEmpty else { return nil }
+        return SpecialtyStrategy(rawValue: raw)
+    }
+
+    /// Nobody chose this option: the household's standing strategy picked it.
+    var isFromStrategy: Bool { strategy != nil }
 
     private enum CodingKeys: String, CodingKey {
         case kind
@@ -54,6 +86,7 @@ nonisolated struct GroceryVia: Decodable, Equatable, Sendable {
         case specialtyKey, specialtyName
         case optionID = "optionId"
         case optionName
+        case strategyRawValue = "strategy"
         case batchYield = "yield"
         case batches, recipes, text
     }

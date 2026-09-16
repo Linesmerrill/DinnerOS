@@ -157,6 +157,19 @@ struct SpecialtyDetailView: View {
             if let optionName = SpecialtyFormat.choiceOptionName(ingredient) {
                 LabeledContent("Option", value: optionName)
             }
+            // Nobody chose a strategy's pick, so it is never attributed to a member.
+            if let note = SpecialtyFormat.strategyNote(ingredient) {
+                Label(note, systemImage: "sparkles")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            if let attribution = SpecialtyFormat.choiceAttribution(
+                ingredient, members: households.current?.members, currentUserID: session.currentUser?.id)
+            {
+                Text(attribution)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             if let status = SpecialtyFormat.batchStatus(ingredient) {
                 LabeledContent("House-Made Batch", value: status)
                 if let expiry = PantryExpiry(expiresOn: ingredient.batch?.expiresOn) {
@@ -171,7 +184,9 @@ struct SpecialtyDetailView: View {
                 }
                 .accessibilityHint("Records a batch of \(ingredient.name) in the pantry.")
             }
-            if canEdit, ingredient.choice != nil {
+            // Only a member's own choice can be cleared: a strategy's pick isn't stored, so
+            // there would be nothing to un-pick.
+            if canEdit, ingredient.hasHouseholdChoice {
                 Button("Clear Choice", systemImage: "arrow.uturn.backward", role: .destructive) {
                     confirmsClear = true
                 }
@@ -187,9 +202,12 @@ struct SpecialtyDetailView: View {
 
     private func optionSection(_ option: SpecialtyOption, in ingredient: SpecialtyIngredient) -> some View {
         Section {
-            SpecialtyOptionCard(option: option, specialtyName: ingredient.name, isChosen: ingredient.isChosen(option))
+            SpecialtyOptionCard(
+                option: option, specialtyName: ingredient.name, isChosen: ingredient.isHouseholdChoice(option),
+                isStrategyPick: ingredient.isResolvedByStrategy && ingredient.isChosen(option))
             if canEdit {
-                if !ingredient.isChosen(option) {
+                // A strategy's pick stays offerable, so a member can make it their own choice.
+                if !ingredient.isHouseholdChoice(option) {
                     Button("Use This Option", systemImage: "checkmark.circle") {
                         choose(option.id, in: ingredient)
                     }
@@ -289,7 +307,10 @@ struct SpecialtyDetailView: View {
 struct SpecialtyOptionCard: View {
     let option: SpecialtyOption
     let specialtyName: String
+    /// A member chose this option.
     let isChosen: Bool
+    /// The household's standing strategy picked this option; nobody chose it.
+    var isStrategyPick = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -297,8 +318,8 @@ struct SpecialtyOptionCard: View {
                 Text(option.name)
                     .font(.headline)
                 Spacer(minLength: 4)
-                if isChosen {
-                    Image(systemName: "checkmark.circle.fill")
+                if isChosen || isStrategyPick {
+                    Image(systemName: isChosen ? "checkmark.circle.fill" : "sparkles")
                         .foregroundStyle(.tint)
                         .imageScale(.large)
                         .accessibilityHidden(true)
@@ -327,6 +348,7 @@ struct SpecialtyOptionCard: View {
     private var tags: [String] {
         var tags: [String] = []
         if isChosen { tags.append(String(localized: "Chosen")) }
+        if isStrategyPick { tags.append(String(localized: "Your Default")) }
         if option.isDefault { tags.append(String(localized: "Suggested")) }
         if option.isHousehold { tags.append(String(localized: "Your Household's")) }
         return tags
