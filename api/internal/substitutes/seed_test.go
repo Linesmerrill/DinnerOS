@@ -94,7 +94,7 @@ func TestEmbeddedSeed(t *testing.T) {
 		"mexican-spice-blend", "fajita-spice-blend", "shawarma-spice-blend", "bulgogi-sauce", "umami-ginger-sauce",
 		"blackening-spice", "brown-sugar-bourbon-seasoning", "sesame-dressing", "miso-sauce-concentrate",
 		"cheese-roux-concentrate", "garlic-ginger-scallion-paste", "sweet-and-smoky-bbq-seasoning",
-		"tunisian-spice-blend", "cuban-spice-blend",
+		"tunisian-spice-blend", "cuban-spice-blend", "garlic-herb-butter", "beef-demi-glace", "chicken-demi-glace",
 	} {
 		if _, ok := ids[id]; !ok {
 			t.Errorf("seed is missing %s", id)
@@ -141,9 +141,15 @@ func TestEmbeddedSeed(t *testing.T) {
 			switch o.Type {
 			case TypeStoreAlternative:
 				// Packet counts and the recipe's usual units convert to Per.
-				for _, from := range append([]string{"tsp", "tbsp"}, sp.UnitSizes[0].Per) {
-					if from == "tsp" || from == "tbsp" {
-						if u, _ := ingredients.LookupUnit(o.Per.Unit); u.Kind != ingredients.KindVolume && !u.Discrete() {
+				// A packet sized only by weight is measured in oz, not spoons.
+				kinds := map[ingredients.Kind]bool{}
+				for _, size := range sp.UnitSizes {
+					kinds[unitKind(size.Unit)] = true
+				}
+				for _, from := range append([]string{"tsp", "tbsp", "oz"}, sp.UnitSizes[0].Per) {
+					if u, _ := ingredients.LookupUnit(from); !u.Discrete() {
+						per, _ := ingredients.LookupUnit(o.Per.Unit)
+						if per.Kind != u.Kind && !(per.Discrete() && kinds[u.Kind]) {
 							continue
 						}
 					}
@@ -197,6 +203,10 @@ func TestParseSeedRejectsBadData(t *testing.T) {
 	if err != nil || len(seed.Specialties) != 1 {
 		t.Fatalf("valid seed: %+v, %v", seed, err)
 	}
+	both := strings.Replace(valid, `{"per": "count", "quantity": "2", "unit": "tbsp"}`, `{"per": "count", "quantity": "2", "unit": "tbsp"}, {"per": "count", "quantity": "1", "unit": "oz"}`, 1)
+	if s, err := ParseSeed([]byte(both)); err != nil || len(s.Specialties[0].UnitSizes) != 2 {
+		t.Errorf("a packet sized in both volume and weight: %+v, %v", s, err)
+	}
 	sp := seed.Specialties[0]
 	if sp.Key != "tex mex paste" || !slices.Equal(sp.AliasKeys, []string{"tex mex spice paste"}) || sp.Options[1].Ingredients[1].Quantity != "" || sp.SeedVersion != 1 {
 		t.Errorf("parsed = %+v", sp)
@@ -207,6 +217,7 @@ func TestParseSeedRejectsBadData(t *testing.T) {
 		"alias repeats name": {`"Tex Mex Spice Paste"`, `"Tex Mex Paste"`},
 		"unknown category":   {`"category": "condiments"`, `"category": "sauces"`},
 		"volume unit size":   {`"per": "count"`, `"per": "tbsp"`},
+		"repeated unit size": {`{"per": "count", "quantity": "2", "unit": "tbsp"}`, `{"per": "count", "quantity": "2", "unit": "tbsp"}, {"per": "count", "quantity": "6", "unit": "tsp"}`},
 		"missing default":    {`"defaultOptionId": "tex-mex-paste.store"`, `"defaultOptionId": "tex-mex-paste.other"`},
 		"option prefix":      {`"id": "tex-mex-paste.batch"`, `"id": "batch"`},
 		"unknown unit":       {`"quantity": "2", "unit": "tsp"`, `"quantity": "2", "unit": "dollop"`},

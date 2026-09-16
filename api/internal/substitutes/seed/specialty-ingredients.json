@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "note": "Generic, general-knowledge approximations written for DinnerOS, except where a per-specialty note records a ratio the household confirmed. Packet sizes are estimates. Amounts are exact fractions in DinnerOS unit codes. Every entry carries a store alternative a normal grocery store can fill; a per-specialty note flags the ones whose store route needs a caveat.",
   "specialties": [
     {
@@ -1012,6 +1012,73 @@
           "steps": ["Stir everything together.", "Store in an airtight jar."],
           "yield": { "quantity": "6", "unit": "tbsp" },
           "shelfLifeDays": 180
+        }
+      ]
+    },
+    {
+      "id": "garlic-herb-butter",
+      "name": "Garlic Herb Butter",
+      "category": "dairy-eggs",
+      "note": "One packet is 1 oz (28 g), about 2 tbsp; recipes list it either way and both convert. Not the larger 3.5 oz tub sold as an add-on. The household plans to make a batch and portion it into 2 tbsp chunks, one per packet; that batch recipe is pending.",
+      "unitSizes": [
+        { "per": "count", "quantity": "1", "unit": "oz" },
+        { "per": "count", "quantity": "2", "unit": "tbsp" },
+        { "per": "package", "quantity": "1", "unit": "oz" },
+        { "per": "package", "quantity": "2", "unit": "tbsp" }
+      ],
+      "defaultOptionId": "garlic-herb-butter.store",
+      "options": [
+        {
+          "id": "garlic-herb-butter.store",
+          "type": "store_alternative",
+          "name": "Garlic and herb butter from the dairy case",
+          "notes": "Use 2 tbsp for each packet the recipe calls for, softened if it goes on bread or melts over the top.",
+          "per": { "quantity": "1", "unit": "count" },
+          "ingredients": [{ "name": "Garlic and Herb Butter", "quantity": "2", "unit": "tbsp", "category": "dairy-eggs" }]
+        }
+      ]
+    },
+    {
+      "id": "beef-demi-glace",
+      "name": "Beef Demi-Glace",
+      "aliases": ["Demi-Glace Concentrate", "Beef Demi-Glace Concentrate"],
+      "category": "pantry",
+      "note": "A shelf-stable demi-glace concentrate sachet (Savory Choice make one) replaces this. One packet is about 37.5 g (1.32 oz), the same as one sachet, so they swap one for one.",
+      "unitSizes": [
+        { "per": "count", "quantity": "75/2", "unit": "g" },
+        { "per": "package", "quantity": "75/2", "unit": "g" }
+      ],
+      "defaultOptionId": "beef-demi-glace.store",
+      "options": [
+        {
+          "id": "beef-demi-glace.store",
+          "type": "store_alternative",
+          "name": "Beef demi-glace concentrate sachet",
+          "notes": "One 37.5 g sachet per packet. The sachet is a 2x concentrate; stir it in where the recipe adds the packet.",
+          "per": { "quantity": "1", "unit": "count" },
+          "ingredients": [{ "name": "Beef Demi-Glace Sachet", "quantity": "1", "unit": "count", "category": "pantry" }]
+        }
+      ]
+    },
+    {
+      "id": "chicken-demi-glace",
+      "name": "Chicken Demi-Glace",
+      "aliases": ["Chicken Demi-Glace Concentrate"],
+      "category": "pantry",
+      "note": "A chicken demi-glace concentrate sachet (Savory Choice make one) replaces this. The 37.5 g per packet is UNVERIFIED and less certain than beef: the supplier varies by region, so 37.5 g is the practical target. Weigh one packet and correct it here.",
+      "unitSizes": [
+        { "per": "count", "quantity": "75/2", "unit": "g" },
+        { "per": "package", "quantity": "75/2", "unit": "g" }
+      ],
+      "defaultOptionId": "chicken-demi-glace.store",
+      "options": [
+        {
+          "id": "chicken-demi-glace.store",
+          "type": "store_alternative",
+          "name": "Chicken demi-glace concentrate sachet",
+          "notes": "One 37.5 g sachet per packet. The sachet is a 2x concentrate; stir it in where the recipe adds the packet, and taste before adding more.",
+          "per": { "quantity": "1", "unit": "count" },
+          "ingredients": [{ "name": "Chicken Demi-Glace Sachet", "quantity": "1", "unit": "count", "category": "pantry" }]
         }
       ]
     }

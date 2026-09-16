@@ -153,8 +153,9 @@ func parseSeedSpecialty(ss seedSpecialty, version int, owners map[string]string)
 		if err != nil {
 			return Specialty{}, err
 		}
-		if slices.ContainsFunc(sp.UnitSizes, func(u UnitSize) bool { return u.Per == size.Per }) {
-			return Specialty{}, fmt.Errorf("unitSizes repeats %q", size.Per)
+		// One size per unit per kind: a packet may be both "1 oz" and "2 tbsp".
+		if slices.ContainsFunc(sp.UnitSizes, func(u UnitSize) bool { return u.Per == size.Per && unitKind(u.Unit) == unitKind(size.Unit) }) {
+			return Specialty{}, fmt.Errorf("unitSizes repeats %q in %s", size.Per, unitKind(size.Unit))
 		}
 		sp.UnitSizes = append(sp.UnitSizes, size)
 	}
@@ -206,6 +207,12 @@ func normalizeUnitSize(us seedUnitSize) (UnitSize, error) {
 		return UnitSize{}, fmt.Errorf("unitSizes for %q needs a positive volume or weight", us.Per)
 	}
 	return UnitSize{Per: us.Per, Quantity: q, Unit: unit}, nil
+}
+
+// unitKind is a normalized unit code's kind: volume, mass, or discrete.
+func unitKind(code string) ingredients.Kind {
+	u, _ := ingredients.LookupUnit(code)
+	return u.Kind
 }
 
 // contentHash identifies a specialty's curated content, so a sync writes only

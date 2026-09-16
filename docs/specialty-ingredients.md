@@ -88,7 +88,11 @@ previous}`) server-side.
   prompt (the household buys it somewhere, or doesn't want to be asked).
 - Amounts are exact fractions in DinnerOS unit codes, like everywhere else.
   Conversions are exact or not at all (decision 98); a packet counted as
-  `count` or `package` converts through the specialty's `unitSizes`.
+  `count` or `package` converts through the specialty's `unitSizes`. A unit
+  may have one size per kind (Garlic Herb Butter: 1 count = 1 oz and 1 count
+  = 2 tbsp), so a line in either weight or volume reaches a `count` option;
+  weight and volume still never convert to each other directly (decision
+  480).
 
 ## Curated seed
 
@@ -120,8 +124,10 @@ generic option names. Packet sizes are estimates.
 | Miso Sauce Concentrate, Cheese Roux Concentrate | store |
 | Garlic-Ginger Scallion Paste | store (garlic and ginger paste with scallions), batch |
 | Sweet and Smoky BBQ Seasoning, Tunisian, Cuban Spice Blend | batch, store |
+| Garlic Herb Butter | store (garlic and herb butter, 2 tbsp per 1 oz packet); batch recipe pending |
+| Beef Demi-Glace (alias Demi-Glace Concentrate), Chicken Demi-Glace | store (one 37.5 g concentrate sachet per packet; chicken size unverified) |
 
-29 specialty ingredients, 20 with a batch. Plain store products (hoisin, BBQ,
+32 specialty ingredients, 20 with a batch. Plain store products (hoisin, BBQ,
 gochujang, soy sauce, tomato paste, hot sauce, Italian seasoning) and produce
 mixes (coleslaw mix) aren't in it; `TestEmbeddedSeed` enforces that, and that
 no text names a meal-kit brand.

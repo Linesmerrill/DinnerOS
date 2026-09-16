@@ -44,6 +44,30 @@ func TestConvertMeasure(t *testing.T) {
 			t.Errorf("ConvertMeasure(%s %s → %s) = %v, %v; want %s", tt.q, tt.from, tt.to, got, ok, tt.want)
 		}
 	}
+
+	// A packet sized in both weight and volume converts from either, but
+	// weight still never becomes volume without the packet in between.
+	sizes = []UnitSize{{Unit: "count", Quantity: *pq("1"), SizeUnit: "oz"}, {Unit: "count", Quantity: *pq("2"), SizeUnit: "tbsp"}}
+	for _, tt := range []struct {
+		q, from, to string
+		want        string
+	}{
+		{"1", "oz", "count", "1"},
+		{"2", "tbsp", "count", "1"},
+		{"56.69904625", "g", "count", "2"},
+		{"3", "count", "tbsp", "6"},
+		{"3", "count", "oz", "3"},
+		{"1", "oz", "tbsp", ""},
+		{"1", "oz", "package", ""},
+	} {
+		got, ok := ConvertMeasure(pq(tt.q).Rat(), tt.from, tt.to, sizes)
+		switch {
+		case tt.want == "" && ok:
+			t.Errorf("ConvertMeasure(%s %s → %s) = %s, want no conversion", tt.q, tt.from, tt.to, got.RatString())
+		case tt.want != "" && (!ok || got.Cmp(pq(tt.want).Rat()) != 0):
+			t.Errorf("ConvertMeasure(%s %s → %s) = %v, %v; want %s", tt.q, tt.from, tt.to, got, ok, tt.want)
+		}
+	}
 }
 
 // --- Fixtures -------------------------------------------------------------------

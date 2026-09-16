@@ -457,7 +457,10 @@ func (b *batchAcc) plan() BatchPlan {
 
 // ConvertMeasure converts q from one unit code to another exactly, through
 // sizes for discrete units: with "1 count = 2 tsp", 3 count is 2 tbsp and
-// 1 tbsp is 3/2 count. ok is false when no exact conversion exists.
+// 1 tbsp is 3/2 count. A discrete unit may carry one size per kind ("1 count
+// = 1 oz" and "1 count = 2 tbsp"), so a packet a recipe measures in either
+// weight or volume converts; weight and volume never convert to each other
+// directly. ok is false when no exact conversion exists.
 func ConvertMeasure(q *big.Rat, from, to string, sizes []UnitSize) (*big.Rat, bool) {
 	if from == to {
 		return new(big.Rat).Set(q), true
@@ -470,42 +473,42 @@ func ConvertMeasure(q *big.Rat, from, to string, sizes []UnitSize) (*big.Rat, bo
 	if err != nil {
 		return nil, false
 	}
-	amount, unit := new(big.Rat).Set(q), fu
-	if fu.Discrete() {
-		size, ok := findSize(sizes, from)
-		if !ok {
-			return nil, false
-		}
-		if unit, err = ingredients.LookupUnit(size.SizeUnit); err != nil || unit.Discrete() {
-			return nil, false
-		}
-		amount.Mul(amount, size.Quantity.Rat())
+	type measured struct {
+		amount *big.Rat
+		unit   ingredients.Unit
 	}
-	if tu.Discrete() {
-		size, ok := findSize(sizes, to)
-		if !ok || size.Quantity.IsZero() {
-			return nil, false
-		}
-		inSize, ok := ConvertMeasure(amount, unit.Code, size.SizeUnit, nil)
-		if !ok {
-			return nil, false
-		}
-		return inSize.Quo(inSize, size.Quantity.Rat()), true
+	var sources []measured
+	if !fu.Discrete() {
+		sources = append(sources, measured{q, fu})
 	}
-	if !unit.CanConvertTo(tu) {
-		return nil, false
+	for _, size := range sizes {
+		if su, err := ingredients.LookupUnit(size.SizeUnit); fu.Discrete() && size.Unit == from && err == nil && !su.Discrete() {
+			sources = append(sources, measured{new(big.Rat).Mul(q, size.Quantity.Rat()), su})
+		}
 	}
-	amount.Mul(amount, unit.BaseFactor())
-	return amount.Quo(amount, tu.BaseFactor()), true
+	for _, src := range sources {
+		if !tu.Discrete() {
+			if src.unit.CanConvertTo(tu) {
+				return scaleUnit(src.amount, src.unit, tu), true
+			}
+			continue
+		}
+		for _, size := range sizes {
+			su, err := ingredients.LookupUnit(size.SizeUnit)
+			if size.Unit != to || err != nil || size.Quantity.IsZero() || su.Discrete() || !src.unit.CanConvertTo(su) {
+				continue
+			}
+			inSize := scaleUnit(src.amount, src.unit, su)
+			return inSize.Quo(inSize, size.Quantity.Rat()), true
+		}
+	}
+	return nil, false
 }
 
-func findSize(sizes []UnitSize, unit string) (UnitSize, bool) {
-	for _, s := range sizes {
-		if s.Unit == unit {
-			return s, true
-		}
-	}
-	return UnitSize{}, false
+// scaleUnit converts q between two convertible units of the same kind.
+func scaleUnit(q *big.Rat, from, to ingredients.Unit) *big.Rat {
+	r := new(big.Rat).Mul(q, from.BaseFactor())
+	return r.Quo(r, to.BaseFactor())
 }
 
 func viaKey(v Via) string {
