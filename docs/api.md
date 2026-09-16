@@ -109,7 +109,10 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | PATCH | `/api/v1/households/{householdId}/plans/{week}/entries/{entryId}` `{day?, servings?, note?}` → plan | `plan.edit` | 6 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/plans/{week}/entries/{entryId}` → `204` | `plan.edit` | 6 | ✅ |
 | PUT | `/api/v1/households/{householdId}/plans/{week}/status` `{status}` → plan | `plan.edit` | 6 | ✅ |
-| GET | `/api/v1/households/{householdId}/plans/{week}/grocery` → `{week, status, pantryApplied, categories, skipped}` | `household.view` | 6 | ✅ |
+| GET | `/api/v1/households/{householdId}/plans/{week}/grocery` → `{week, status, pantryApplied, categories, skipped, skippedItems}` | `household.view` | 6 | ✅ |
+| GET | `/api/v1/households/{householdId}/grocery-skips` → `{items}` | `household.view` | 6 | ✅ |
+| POST | `/api/v1/households/{householdId}/grocery-skips` `{ingredientKey, name?, scope, week?}` → `201` skip, or `200` when it replaced the ingredient's skip | `plan.edit` | 6 | ✅ |
+| DELETE | `/api/v1/households/{householdId}/grocery-skips/{skipId}` → `204` | `plan.edit` | 6 | ✅ |
 | GET | `/api/v1/households/{householdId}/recipes/{recipeId}/customizations` `?servings&entryId&week` → `{recipeId, servings, groups}` | `household.view` | 6 | ✅ |
 | PUT | `/api/v1/households/{householdId}/plans/{week}/entries/{entryId}/customization` `{selections}` → plan | `plan.edit` | 6 | ✅ |
 | GET | `/api/v1/ingredients` `?q&limit` → `{items: [{id, key, name, category, categoryConfident, imageUrl?}]}` | bearer | 7 | ✅ |
@@ -602,6 +605,13 @@ the pantry. The change is recorded as a `meal.customized`
 - `skipped` lists entries that couldn't contribute: `recipeUnavailable` (the
   recipe is no longer in the household) or `servingsUnavailable` (the recipe
   no longer offers that serving size).
+- `skippedItems` lists the ingredients the household chose not to buy
+  ([Skipped ingredients](#skipped-ingredients)). They are **not** in
+  `categories`, so nothing asks anyone to buy them, but each one is a full
+  grocery item — amounts, `recipes`, `via` — plus `skipScope` (`week` or
+  `always`) and `skipText`. Items in `categories` never carry those two
+  fields. This is a different thing from `skipped`, which is about plan
+  *entries*, not ingredients.
 
 #### Specialty ingredients on the list
 
@@ -712,6 +722,86 @@ fields, and the list has `batches`:
 | 404 | `not_found` | Not a member of the household; no such entry in that week |
 | 409 | `plan_finalized` | The plan is finalized; set its status to `draft` first |
 | 409 | `plan_full` | The week already has 50 entries |
+
+## Skipped ingredients
+
+Some ingredients a household will buy, throw away, and resent buying again. A
+**skip** leaves one off the grocery list on purpose, with two lifetimes: `week`
+("skip once", back next week with no action) and `always` ("skip forever",
+until someone resumes it).
+
+A skip is about an **ingredient for a household** — not a product, not one
+recipe, and not one line. It is a third state alongside the two that already
+exist, and the app should keep them apart:
+
+| State | Means | Where |
+| --- | --- | --- |
+| `inPantry` | the household **has** it | [pantry](#pantry) |
+| checked off | someone **bought** it | the app, per week |
+| skipped | the household never **wants** it | here |
+
+Skipping never rewrites a recipe: the recipe still lists the ingredient, and
+the week's list reports it in `skippedItems` rather than dropping it, so the
+two never disagree about what a meal needs.
+
+`GET /api/v1/households/{householdId}/grocery-skips` (`household.view`)
+
+```json
+{
+  "items": [
+    {
+      "id": "66e5a1f2c3b4a5d6e7f80c31",
+      "ingredientKey": "name:cilantro",
+      "key": "cilantro",
+      "name": "Cilantro",
+      "scope": "always",
+      "week": null,
+      "text": "Never buying this",
+      "createdBy": "66e5a1f2c3b4a5d6e7f80912",
+      "createdAt": "2026-09-15T18:30:00Z",
+      "updatedBy": "66e5a1f2c3b4a5d6e7f80912",
+      "updatedAt": "2026-09-15T18:30:00Z"
+    }
+  ]
+}
+```
+
+`POST /api/v1/households/{householdId}/grocery-skips` (`plan.edit`)
+`{ingredientKey, name?, scope, week?}`
+
+- `ingredientKey` is the grocery line's key, as the list gave it: a catalog
+  ingredient ID, or `name:<normalized name>`.
+- `name` is what to show on the review screen. It is required unless
+  `ingredientKey` is a `name:` key, which already carries one.
+- `scope` is `week` or `always`. `week` requires `week` (`"2026-W38"`);
+  `always` requires it to be absent.
+- One ingredient has at most one skip per household, so posting again
+  **replaces** it and answers `200` instead of `201`. That is how "skip once"
+  becomes "skip forever" — no delete first, and no two skips to reconcile.
+- A household may skip at most 500 ingredients. Changing a skip it already has
+  still works at the cap.
+
+`DELETE /api/v1/households/{householdId}/grocery-skips/{skipId}` → `204`
+(`plan.edit`) resumes the ingredient: it is back on the next list built.
+
+**Matching.** A skip is registered under the key it was made from, under
+`name:<normalized name>`, and under the catalog ingredient ID for that name
+when the catalog has one — the same three spellings the [pantry](#pantry)
+matches. So skipping cilantro from a free-text line also skips a recipe that
+reaches cilantro through the catalog.
+
+**Specialty ingredients.** Skips resolve *after* the household's
+[specialty choices](#specialty-ingredients) are applied, against the keys the
+list actually ends up with. Skipping an ingredient that only appears because a
+store alternative calls for it drops that one component and leaves the rest of
+the alternative on the list, with `via` still saying where it came from.
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `validation_failed` | Missing `ingredientKey`, unknown `scope`, `week` missing or given for the wrong scope, no usable `name`, or past the 500 cap |
+| 400 | `invalid_request` | Body is empty, malformed, has unknown fields, or wrong types |
+| 403 | `forbidden` | Skipping or resuming without `plan.edit` |
+| 404 | `not_found` | Not a member of the household; no such skip |
 
 ## Pantry
 

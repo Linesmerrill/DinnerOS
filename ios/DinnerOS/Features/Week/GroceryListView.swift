@@ -9,6 +9,7 @@ struct GroceryListView: View {
     @Environment(PlanStore.self) private var plans
     @Environment(PantryStore.self) private var pantry
     @Environment(SpecialtyStore.self) private var specialties
+    @Environment(GrocerySkipStore.self) private var grocerySkips
     @Environment(HouseholdStore.self) private var households
     @Environment(\.openShop) private var openShop
     @State private var model: GroceryListModel?
@@ -21,9 +22,15 @@ struct GroceryListView: View {
         households.access?.can(.pantryEdit) == true
     }
 
+    /// Hiding Skip is a convenience; the API enforces `plan.edit`.
+    private var canEditPlan: Bool {
+        households.access?.can(.planEdit) == true
+    }
+
     /// A change the list tried was refused for the member's role.
     private var wasForbidden: Bool {
         model?.purchaseFailure?.isForbidden == true || model?.specialtyFailure?.isForbidden == true
+            || model?.skipFailure?.isForbidden == true
     }
 
     var body: some View {
@@ -59,9 +66,16 @@ struct GroceryListView: View {
         .onChange(of: canEditPantry) { _, canEdit in
             model?.setCanAddToPantry(canEdit)
         }
+        .onChange(of: canEditPlan) { _, canEdit in
+            model?.setCanSkipIngredients(canEdit)
+        }
         .onChange(of: specialties.revision) {
             // The setup screen changed a choice or recorded a batch.
             Task { await model?.specialtiesDidChange() }
+        }
+        .onChange(of: grocerySkips.revision) {
+            // The review sheet resumed an ingredient or changed how long a skip lasts.
+            Task { await model?.skipsDidChange() }
         }
         .onChange(of: wasForbidden) { _, isForbidden in
             // The role changed elsewhere; reload it so the rest of the app matches.
@@ -77,10 +91,15 @@ struct GroceryListView: View {
     private func start() async {
         if model == nil {
             model = plans.makeGroceryList(
-                week: week, purchases: pantry, specialties: specialties, canAddToPantry: canEditPantry)
+                week: week, purchases: pantry, specialties: specialties, skips: grocerySkips,
+                canAddToPantry: canEditPantry, canSkipIngredients: canEditPlan)
         }
         couldNotStart = model == nil
         guard let model else { return }
+        // The review sheet reads the household's skips, and this screen is the only way in.
+        if let householdID = households.current?.household.id {
+            await grocerySkips.activate(householdID: householdID)
+        }
         // Lines confirmed as ordered on the Shop tab are checked off while this list was away.
         model.reloadChecks()
         await model.load()
@@ -106,6 +125,8 @@ struct GroceryListContent: View {
     /// The line whose quick picker is open.
     @State private var picker: GrocerySpecialty?
     @State private var showsSpecialtySetup = false
+    /// The "what aren't we buying?" sheet.
+    @State private var showsSkipped = false
     @State private var confirmingBatch: GroceryBatch?
     @State private var exportController = GroceryExportController(remindersStore: EventKitRemindersStore())
 
@@ -132,6 +153,9 @@ struct GroceryListContent: View {
                                 model.uncheckAll()
                             }
                         }
+                        Button("Not Buying", systemImage: "cart.badge.minus") {
+                            showsSkipped = true
+                        }
                     }
                 }
             }
@@ -146,6 +170,22 @@ struct GroceryListContent: View {
             }
             .sheet(isPresented: $showsSpecialtySetup) {
                 SpecialtyIngredientsSheet()
+            }
+            .sheet(isPresented: $showsSkipped) {
+                SkippedIngredientsSheet(week: model.week)
+            }
+            .alert(
+                model.skipFailure?.title ?? "",
+                isPresented: Binding(
+                    get: { model.skipFailure != nil },
+                    set: { isPresented in
+                        if !isPresented { model.dismissSkipFailure() }
+                    }),
+                presenting: model.skipFailure
+            ) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { failure in
+                Text(failure.message)
             }
             .confirmationDialog(
                 confirmingBatch.map { String(localized: "Made \($0.specialtyName)?") } ?? "",
@@ -280,6 +320,33 @@ struct GroceryListContent: View {
                     }
                 }
             }
+            // One quiet row, only when the week actually has something held back.
+            if !model.skippedItems.isEmpty {
+                Section {
+                    Button {
+                        showsSkipped = true
+                    } label: {
+                        HStack {
+                            Label(
+                                model.skippedItems.count == 1
+                                    ? String(localized: "1 ingredient you don't buy")
+                                    : String(localized: "\(model.skippedItems.count) ingredients you don't buy"),
+                                systemImage: "cart.badge.minus"
+                            )
+                            .font(.subheadline)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.footnote)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                } footer: {
+                    Text("The recipes still call for these. You're just not buying them.")
+                }
+            }
         }
         .refreshable {
             await model.load()
@@ -313,7 +380,29 @@ struct GroceryListContent: View {
                 }
             }
         }
+        // Skipping is the opposite edge from removing, because it means something else: the
+        // recipe still wants the ingredient, this household just never buys it.
+        .swipeActions(edge: .leading) {
+            if model.canSkip {
+                Button("Never Buy", systemImage: "nosign") {
+                    Task { await model.skip(item, scope: .always) }
+                }
+                .tint(.orange)
+                Button("Skip Once", systemImage: "calendar") {
+                    Task { await model.skip(item, scope: .week) }
+                }
+                .tint(.gray)
+            }
+        }
         .contextMenu {
+            if model.canSkip {
+                Button("Skip Just This Week", systemImage: "calendar") {
+                    Task { await model.skip(item, scope: .week) }
+                }
+                Button("Never Buy \(item.name)", systemImage: "nosign") {
+                    Task { await model.skip(item, scope: .always) }
+                }
+            }
             ForEach(removableExtras(item)) { extra in
                 Button("Remove from This Week", systemImage: "trash", role: .destructive) {
                     remove(extra)

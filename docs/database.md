@@ -270,6 +270,31 @@ Implemented in `internal/substitutes` ([specialty-ingredients.md](specialty-ingr
   whose `key` is the specialty's `key`, and each batch made is a
   `pantry_purchases` document with `source: house_made`.
 
+### Skipped ingredients
+
+Implemented in `internal/skips` ([api.md](api.md#skipped-ingredients),
+[grocery-engine.md](grocery-engine.md#skipped-ingredients)).
+
+| Collection | Key fields | Indexes |
+| --- | --- | --- |
+| `grocery_skips` | householdId, ingredientKey (catalog ingredient ID or `name:<normalized name>`), key (normalized name), name, scope (`week`/`always`), week (`YYYY-Www`, empty for `always`), createdBy, createdAt, updatedBy, updatedAt | **unique** `{householdId, ingredientKey}` |
+
+- **One skip per ingredient.** The unique index is what makes "skip once"
+  become "skip forever" a replacement rather than a second document, so there
+  are never two skips to reconcile for one ingredient. The write is an upsert
+  on that key which `$setOnInsert`s `_id`, `createdBy`, and `createdAt`, so
+  changing a skip keeps who first made it.
+- The unique index serves the only query: every read is
+  `{householdId}` for the whole list, capped at 500 per household, so nothing
+  is paginated.
+- **Week skips are not cleaned up.** A `week` skip for a past week simply stops
+  matching when a list is built. Nothing is deleted behind the household's
+  back, no write happens as a side effect of reading a list, and opening an
+  old week still shows what was skipped then.
+- **Keys**, as in `pantry_items`: a skip matches its own `ingredientKey`,
+  `name:<key>`, and the catalog ingredient ID resolved from `key` at read time,
+  so an ingredient the catalog learns later still matches.
+
 ### Notifications
 
 Implemented in `internal/notifications`.

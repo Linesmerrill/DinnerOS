@@ -288,6 +288,11 @@ nonisolated struct GroceryList: Decodable, Equatable, Sendable {
     var specialtiesApplied = false
     /// The house-made specialty ingredients the week uses (docs/specialty-ingredients.md).
     var batches: [GroceryBatch] = []
+    /// Ingredients the household chose not to buy. They are deliberately **not** in
+    /// `categories` or `allItems`, so nothing asks anyone to buy them, but they still carry
+    /// their amounts and recipes so the app can say what is being skipped and why it was
+    /// wanted. A different thing from `skipped`, which is about plan entries.
+    var skippedItems: [GroceryItem] = []
 
     var isEmpty: Bool { categories.allSatisfy { $0.items.isEmpty } && batches.isEmpty }
 
@@ -296,7 +301,7 @@ nonisolated struct GroceryList: Decodable, Equatable, Sendable {
 
 extension GroceryList {
     private enum CodingKeys: String, CodingKey {
-        case week, status, pantryApplied, categories, skipped, specialtiesApplied, batches
+        case week, status, pantryApplied, categories, skipped, specialtiesApplied, batches, skippedItems
     }
 
     /// The specialty fields are additive, so they're read leniently: a response without them, or
@@ -310,7 +315,8 @@ extension GroceryList {
             categories: try container.decode([GroceryCategory].self, forKey: .categories),
             skipped: try container.decode([GrocerySkippedEntry].self, forKey: .skipped),
             specialtiesApplied: (try? container.decodeIfPresent(Bool.self, forKey: .specialtiesApplied)) ?? false,
-            batches: (try? container.decodeIfPresent([GroceryBatch].self, forKey: .batches)) ?? [])
+            batches: (try? container.decodeIfPresent([GroceryBatch].self, forKey: .batches)) ?? [],
+            skippedItems: container.decodeLossyArray(GroceryItem.self, forKey: .skippedItems))
     }
 }
 
@@ -377,6 +383,10 @@ nonisolated struct GroceryItem: Decodable, Equatable, Sendable, Identifiable {
     /// What put the item on the list besides a recipe, such as an accepted pairing ("Club
     /// Crackers for Chicken Noodle Soup"). Empty for ordinary items.
     var extras: [GroceryExtra] = []
+    /// Set only on an item in `GroceryList.skippedItems`: which lifetime is skipping it.
+    var skipScope: GrocerySkipScope?
+    /// What the skip does, in the server's words. Set only on a skipped item.
+    var skipText: String?
 
     var id: String { ingredientKey }
 
@@ -399,7 +409,7 @@ nonisolated struct GroceryItem: Decodable, Equatable, Sendable, Identifiable {
 extension GroceryItem {
     private enum CodingKeys: String, CodingKey {
         case ingredientKey, name, amounts, quantityText, unquantified, status, recipes, specialty,
-            specialtyDetail, via, extras
+            specialtyDetail, via, extras, skipScope, skipText
     }
 
     /// The specialty fields are additive, so they're read leniently, like `GroceryList`'s.
@@ -416,7 +426,9 @@ extension GroceryItem {
             specialty: (try? container.decodeIfPresent(Bool.self, forKey: .specialty)) ?? false,
             specialtyDetail: (try? container.decodeIfPresent(GrocerySpecialty.self, forKey: .specialtyDetail)) ?? nil,
             via: (try? container.decodeIfPresent([GroceryVia].self, forKey: .via)) ?? [],
-            extras: container.decodeLossyArray(GroceryExtra.self, forKey: .extras))
+            extras: container.decodeLossyArray(GroceryExtra.self, forKey: .extras),
+            skipScope: (try? container.decodeIfPresent(GrocerySkipScope.self, forKey: .skipScope)) ?? nil,
+            skipText: (try? container.decodeIfPresent(String.self, forKey: .skipText)) ?? nil)
     }
 }
 

@@ -17,6 +17,7 @@ struct DinnerOSApp: App {
                 .environment(dependencies.plans)
                 .environment(dependencies.pantry)
                 .environment(dependencies.specialties)
+                .environment(dependencies.grocerySkips)
                 .environment(dependencies.autopilot)
                 .environment(dependencies.events)
                 .environment(dependencies.notifications)

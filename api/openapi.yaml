@@ -1365,6 +1365,107 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/grocery-skips:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: List the ingredients the household does not buy
+      description: |
+        The household's skipped ingredients, newest first. A skip leaves an
+        ingredient off the grocery list on purpose, and is a different state
+        from the pantry's "already at home" and from checking a line off.
+        Requires `household.view`.
+      operationId: listGrocerySkips
+      tags: [plans]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The household's skipped ingredients.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GrocerySkipList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      summary: Skip an ingredient
+      description: |
+        Leaves an ingredient off the grocery list, for one week or for good.
+        Requires `plan.edit`.
+
+        One ingredient has at most one skip per household, so posting again for
+        the same `ingredientKey` replaces it and answers 200 rather than 201.
+        That is how a skip-once becomes a skip-forever, with nothing to delete
+        first. A household may skip at most 500 ingredients; changing a skip it
+        already has still works at the cap.
+
+        The skip matches the key it was made from, `name:<normalized name>`,
+        and the catalog ingredient ID for that name, so it covers every way a
+        recipe reaches the ingredient. It is applied after specialty choices,
+        so skipping something a store alternative introduced drops only that
+        component.
+      operationId: setGrocerySkip
+      tags: [plans]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GrocerySkipRequest"
+      responses:
+        "200":
+          description: The ingredient's existing skip was replaced.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GrocerySkip"
+        "201":
+          description: The ingredient is now skipped.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GrocerySkip"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/grocery-skips/{skipId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - name: skipId
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      summary: Resume an ingredient
+      description: |
+        Removes the skip, so the ingredient is back on the next grocery list
+        built. Requires `plan.edit`.
+      operationId: deleteGrocerySkip
+      tags: [plans]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Resumed.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/ingredients:
     get:
       summary: Search the ingredient catalog
@@ -5166,7 +5267,7 @@ components:
             $ref: "#/components/schemas/PlanSummary"
     GroceryList:
       type: object
-      required: [week, status, pantryApplied, specialtiesApplied, categories, batches, skipped]
+      required: [week, status, pantryApplied, specialtiesApplied, categories, batches, skipped, skippedItems]
       properties:
         week:
           $ref: "#/components/schemas/IsoWeek"
@@ -5192,6 +5293,88 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SkippedPlanEntry"
+        skippedItems:
+          type: array
+          description: |
+            The ingredients the household chose not to buy. They are not in
+            `categories`, so nothing asks anyone to buy them, but each is a
+            full grocery item carrying `skipScope` and `skipText`. Not to be
+            confused with `skipped`, which is about plan entries.
+          items:
+            $ref: "#/components/schemas/GroceryItem"
+    GrocerySkipList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GrocerySkip"
+    GrocerySkipScope:
+      type: string
+      enum: [week, always]
+      description: |
+        How long a skip lasts. `week` leaves the ingredient off one week's list
+        and ends on its own the following week. `always` leaves it off every
+        list until someone resumes it.
+    GrocerySkip:
+      type: object
+      required: [id, ingredientKey, key, name, scope, week, text, createdBy, createdAt, updatedBy, updatedAt]
+      properties:
+        id:
+          type: string
+        ingredientKey:
+          type: string
+          description: The catalog ingredient ID, or `name:<normalized name>`, as the grocery line gave it.
+        key:
+          type: string
+          description: The normalized name the skip also matches.
+          example: cilantro
+        name:
+          type: string
+          example: Cilantro
+        scope:
+          $ref: "#/components/schemas/GrocerySkipScope"
+        week:
+          description: The ISO week a week-scoped skip covers, and null when the scope is always.
+          oneOf:
+            - $ref: "#/components/schemas/IsoWeek"
+            - type: "null"
+        text:
+          type: string
+          description: What the skip does, in the words the app shows.
+          example: Never buying this
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    GrocerySkipRequest:
+      type: object
+      required: [ingredientKey, scope]
+      properties:
+        ingredientKey:
+          type: string
+          description: The grocery line's key, as the list gave it.
+          example: name:cilantro
+        name:
+          type: string
+          description: |
+            What to show on the review screen. Required unless `ingredientKey`
+            is a `name:` key, which already carries a name.
+          example: Cilantro
+        scope:
+          $ref: "#/components/schemas/GrocerySkipScope"
+        week:
+          description: Required when the scope is week, and rejected when it is always.
+          oneOf:
+            - $ref: "#/components/schemas/IsoWeek"
+            - type: "null"
     GroceryCategory:
       type: object
       required: [category, items]
@@ -5227,12 +5410,14 @@ components:
           description: At least one recipe gave no amount ("salt to taste").
         status:
           type: string
-          enum: [toBuy, inPantry, pantryHint]
+          enum: [toBuy, inPantry, pantryHint, skipped]
           description: |
             `inPantry`: in stock in the household pantry. `toBuy`: not at home,
             including anything the pantry marks as out. `pantryHint`: every
             recipe marks it as a staple and the pantry doesn't list it as in
-            stock or out (or lists it as low).
+            stock or out (or lists it as low). `skipped`: the household chose
+            not to buy it, and the item is in `skippedItems` rather than in
+            `categories`.
         recipes:
           type: array
           items:
@@ -5272,6 +5457,15 @@ components:
               text:
                 type: string
                 example: Club crackers for Chicken Noodle Soup
+        skipScope:
+          $ref: "#/components/schemas/GrocerySkipScope"
+        skipText:
+          type: string
+          description: |
+            What the skip does, in the words the app shows. Present only on an
+            item in `skippedItems`, alongside `skipScope`; both are absent on
+            every item that is actually on the list.
+          example: Never buying this
     GroceryAmount:
       type: object
       required: [quantity, quantityValue, unit, text]

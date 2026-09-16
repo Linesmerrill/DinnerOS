@@ -47,6 +47,12 @@ type SpecialtySource interface {
 	GrocerySpecialties(ctx context.Context, householdID string, lines []grocery.Line) (grocery.Specialties, error)
 }
 
+// SkipSource provides the ingredients a household chose not to buy in week,
+// already narrowed to the skips that apply to it. *skips.Service implements it.
+type SkipSource interface {
+	GrocerySkips(ctx context.Context, householdID, week string) (grocery.SkipSet, error)
+}
+
 // Service implements the weekly planner. Like recipes.Service it takes a
 // household ID: HTTP routes authorize first with households.RequirePermission.
 type Service struct {
@@ -56,6 +62,8 @@ type Service struct {
 	pantry PantrySource
 	// specialties is optional; without it specialty lines stay as they are.
 	specialties SpecialtySource
+	// skips is optional; without it the household buys every ingredient.
+	skips SkipSource
 	// extras is optional; without it the list has only recipe lines.
 	extras ExtrasSource
 	// customizations is optional; without it customized entries contribute
@@ -83,6 +91,13 @@ func (s *Service) WithPantry(source PantrySource) *Service {
 // ingredient choices from source (grocery.ApplySpecialties), and returns s.
 func (s *Service) WithSpecialties(source SpecialtySource) *Service {
 	s.specialties = source
+	return s
+}
+
+// WithSkips makes GroceryList hold back the ingredients the household chose
+// not to buy, and returns s.
+func (s *Service) WithSkips(source SkipSource) *Service {
+	s.skips = source
 	return s
 }
 
@@ -439,6 +454,11 @@ func (s *Service) SetStatus(ctx context.Context, householdID, week, status strin
 // replaced by the ingredients to make one (Batches reports these). Lines
 // without a choice stay, marked with suggested options. SpecialtiesApplied
 // says whether this happened; a failure to load the choices fails the list.
+//
+// With a skip source (WithSkips), the ingredients the household chose not to
+// buy are held out of Categories and reported in SkippedItems instead, so the
+// list never asks anyone to buy them and never pretends the recipes stopped
+// needing them. A failure to load the skips fails the list.
 func (s *Service) GroceryList(ctx context.Context, householdID, week string) (GroceryList, error) {
 	w, err := s.parse(householdID, week)
 	if err != nil {
@@ -491,7 +511,18 @@ func (s *Service) GroceryList(ctx context.Context, householdID, week string) (Gr
 	if selections, err = s.appendExtras(ctx, p, selections); err != nil {
 		return GroceryList{}, fmt.Errorf("planning: load extra grocery items: %w", err)
 	}
-	g, err := aggregateGroceryList(p, selections, skipped, pantry)
+	// Skips resolve last, against the keys the list actually ends up with, so
+	// an ingredient a store alternative introduced can be skipped by its own
+	// name without disturbing the rest of that alternative.
+	var skips grocery.Skips
+	if s.skips != nil {
+		set, err := s.skips.GrocerySkips(ctx, householdID, w.String())
+		if err != nil {
+			return GroceryList{}, fmt.Errorf("planning: load skipped ingredients: %w", err)
+		}
+		skips = set
+	}
+	g, err := aggregateGroceryList(p, selections, skipped, pantry, skips)
 	if err != nil {
 		return GroceryList{}, err
 	}

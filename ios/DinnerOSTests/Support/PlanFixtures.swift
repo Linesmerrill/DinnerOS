@@ -63,6 +63,13 @@ nonisolated enum PlanFixtures {
           ],
           "skipped": [
             {"entryId": "entry-9", "recipeId": "recipe-9", "recipeName": "Retired Stew", "reason": "recipeUnavailable"}
+          ],
+          "skippedItems": [
+            {"ingredientKey": "i-cilantro", "name": "Cilantro",
+             "amounts": [{"quantity": "1", "quantityValue": 1, "unit": "count", "text": "1"}],
+             "quantityText": "1", "unquantified": false, "status": "skipped",
+             "recipes": [{"id": "recipe-1", "name": "Test Kitchen Tacos"}],
+             "skipScope": "always", "skipText": "Never buying this"}
           ]
         }
         """#.utf8)

@@ -34,6 +34,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recommendations"
 	"github.com/Linesmerrill/DinnerOS/api/internal/shopping"
+	"github.com/Linesmerrill/DinnerOS/api/internal/skips"
 	"github.com/Linesmerrill/DinnerOS/api/internal/substitutes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/users"
 )
@@ -116,6 +117,7 @@ func run() error {
 		notifications.Indexes(),
 		substitutes.Indexes(),
 		shopping.Indexes(),
+		skips.Indexes(),
 		behaviorIndexes(),
 		recommendations.Indexes(),
 	)...); err != nil {
@@ -173,10 +175,22 @@ func run() error {
 	// A strategy change is a household preference signal, like an Autopilot
 	// one, so it is recorded server-side.
 	substitutesService.WithEvents(behavior.events)
+	// Ingredients the household never wants bought (cilantro, for a household
+	// that tastes soap in it). Grocery lists hold them back instead of asking
+	// anyone to buy them; the catalog links a skip made from free text to the
+	// same ingredient reached through the catalog.
+	skipsService := skips.NewService(skips.NewMongoStore(db.Database()), recipeService, logger)
 	planService := planning.NewService(planning.NewMongoStore(db.Database()), recipeService).
-		WithPantry(pantryService).WithSpecialties(substitutesService).WithEvents(behavior.events, logger)
+		WithPantry(pantryService).WithSpecialties(substitutesService).WithSkips(skipsService).
+		WithEvents(behavior.events, logger)
 	planHandler := planning.NewHandler(planning.HandlerOptions{
 		Service:    planService,
+		Authorizer: householdService,
+		Tokens:     tokens,
+		Logger:     logger,
+	})
+	skipHandler := skips.NewHandler(skips.HandlerOptions{
+		Service:    skipsService,
 		Authorizer: householdService,
 		Tokens:     tokens,
 		Logger:     logger,
@@ -310,6 +324,7 @@ func run() error {
 				invitationHandler.Mount(r)
 				recipeHandler.Mount(r)
 				planHandler.Mount(r)
+				skipHandler.Mount(r)
 				customizeHandler.Mount(r)
 				autopilotHandler.Mount(r)
 				menuHandler.Mount(r)
