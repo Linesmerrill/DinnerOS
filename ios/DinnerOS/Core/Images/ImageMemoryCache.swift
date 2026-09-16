@@ -27,10 +27,12 @@ nonisolated final class ImageMemoryCache: Sendable {
         cache.countLimit = countLimit
         // NSCache already drops objects under pressure, but not promptly enough to keep a long
         // scroll from being the reason the app is killed.
+        // Capturing the cache itself would warn: `NSCache` isn't `Sendable`. The cache is, so
+        // the closure goes through it.
         notificationCenter.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: nil
-        ) { [cache] _ in
-            cache.removeAllObjects()
+        ) { [self] _ in
+            removeAll()
         }
     }
 
