@@ -7,8 +7,8 @@ import os
 ///
 /// Main-actor state that lives as long as the app, like `PlanStore`. The plan itself stays in
 /// `PlanStore`, which the Menu screen keeps on the same week; every plan `PlanStore` receives
-/// is handed to `applyPlan`, which patches the cards' `inPlan` flags and the strip's counts, so
-/// adding, moving, and removing never waits for a menu reload.
+/// is handed to `applyPlan`, which patches the cards' `inPlan` flags and is what the strip's
+/// counts are read from, so adding, moving, and removing never waits for a menu reload.
 @Observable
 final class MenuStore {
     enum Phase: Equatable {
@@ -66,7 +66,7 @@ final class MenuStore {
         var week = min(oldestWeek, selectedWeek)
         while week <= newest, items.count < 520 {
             items.append(
-                WeekStripItem(week: week, summary: weekSummaries[week.description], timing: timing(of: week)))
+                WeekStripItem(week: week, summary: summary(for: week), timing: timing(of: week)))
             week = week.next
         }
         return items
@@ -286,14 +286,6 @@ final class MenuStore {
 
     private func merge(_ response: WeekListResponse) {
         for summary in response.items {
-            var summary = summary
-            if let plan = knownPlans[summary.week] {
-                // The response's counts are authoritative; a plan already in hand is newer, and
-                // its add-ons are counted apart so the pill keeps reading meals.
-                let counts = mealCounts(of: plan.entries)
-                summary.plannedCount = counts.meals
-                summary.addOnCount = counts.addOns
-            }
             weekSummaries[summary.week] = summary
         }
         earliestWeek = response.earliestWeek.flatMap { ISOWeek($0) }
@@ -348,6 +340,30 @@ final class MenuStore {
         MealCounts.of(entries) { isAddOn($0) }
     }
 
+    /// What the strip should say about `week`: what the server sent, with a plan already in hand
+    /// applied over it.
+    ///
+    /// The split is worked out here rather than when the plan arrives, because whether an entry
+    /// is an add-on can only be answered once the entry says so or the menu's cards are loaded,
+    /// which may be after the plan. Reading it each time lets the pill settle on the same counts
+    /// the bottom bar and Your Meals show, instead of keeping a guess made too early.
+    func summary(for week: ISOWeek) -> WeekSummary? {
+        guard var summary = weekSummaries[week.description] else { return nil }
+        guard let plan = knownPlans[week.description] else { return summary }
+        summary.status = WeekStatus(rawValue: plan.status.rawValue)
+        let counts = mealCounts(of: plan.entries)
+        // Nothing on hand names this week's add-ons, and the plan hasn't changed since the
+        // server counted it, so keep the server's split rather than reading its add-ons as
+        // extra dinners.
+        guard counts.addOns < summary.addOnCount, counts.total == summary.plannedCount + summary.addOnCount
+        else {
+            summary.plannedCount = counts.meals
+            summary.addOnCount = counts.addOns
+            return summary
+        }
+        return summary
+    }
+
     func timing(of week: ISOWeek) -> WeekTiming {
         weekSummaries[week.description]?.timing ?? WeekTiming.of(week, current: currentWeek)
     }
@@ -359,13 +375,6 @@ final class MenuStore {
     func applyPlan(_ plan: Plan) {
         guard plan.householdID == householdID else { return }
         knownPlans[plan.week] = plan
-        if var summary = weekSummaries[plan.week] {
-            let counts = mealCounts(of: plan.entries)
-            summary.plannedCount = counts.meals
-            summary.addOnCount = counts.addOns
-            summary.status = WeekStatus(rawValue: plan.status.rawValue)
-            weekSummaries[plan.week] = summary
-        }
         if var shown = menu, shown.week == plan.week {
             shown.apply(plan)
             menu = shown
