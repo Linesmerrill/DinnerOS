@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// A recipe: an edge-to-edge hero photo, the title and headline, a stats row, tag chips, and
-/// the Overview, Ingredients, and Nutrition sections under a sticky picker, with a bottom bar
-/// that adds it to the week or changes the meal that's already there.
+/// the Customize, Description, Ingredients and Nutrition sections under a sticky picker, with
+/// a bottom bar that adds it to the week or changes the meal that's already there.
 ///
 /// The summary's name and photo show at once; everything else appears when the recipe loads
 /// (from the library's cache when it was opened before).
@@ -21,7 +21,9 @@ struct RecipeDetailView: View {
     @State private var recipe: Recipe?
     @State private var loadError: String?
     @State private var servings: Int?
-    @State private var tab: RecipeDetailTab = .overview
+    @State private var tab: RecipeDetailTab = .description
+    /// Until the member picks a tab, the screen follows the first one this recipe has.
+    @State private var hasPickedTab = false
     @State private var customizations: [CustomizationGroup] = []
     /// The chosen option per customizable ingredient, saved to the plan entry when there is one.
     @State private var selections: [String: String] = [:]
@@ -42,6 +44,26 @@ struct RecipeDetailView: View {
 
     private var name: String { recipe?.name ?? summary.name }
 
+    /// Customize is offered only when there is something to swap or pair, so a recipe with
+    /// neither doesn't show an empty tab.
+    private var availableTabs: [RecipeDetailTab] {
+        RecipeDetailTab.available(hasCustomizations: !customizations.isEmpty, hasPairings: !pairings.items.isEmpty)
+    }
+
+    /// The selection, corrected when the extras load and the tabs change under it.
+    private var shownTab: RecipeDetailTab {
+        RecipeDetailTab.resolve(tab, in: availableTabs)
+    }
+
+    private var tabSelection: Binding<RecipeDetailTab> {
+        Binding(
+            get: { shownTab },
+            set: { newValue in
+                tab = newValue
+                hasPickedTab = true
+            })
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -55,7 +77,7 @@ struct RecipeDetailView: View {
                             .padding(.horizontal, 16)
                             .padding(.top, 4)
                     } header: {
-                        RecipeDetailTabPicker(selection: $tab)
+                        RecipeDetailTabPicker(tabs: availableTabs, selection: tabSelection)
                     }
                     if let recipe, !recipe.steps.isEmpty {
                         CookingStepsSection(steps: recipe.steps, isExpanded: $stepsExpanded)
@@ -108,6 +130,11 @@ struct RecipeDetailView: View {
         }
         .onChange(of: plannedEntries.last?.customizations) { _, saved in
             applySavedCustomizations(saved)
+        }
+        .onChange(of: availableTabs) { _, tabs in
+            // The extras arrive after the recipe, so Customize appears a moment later.
+            guard !hasPickedTab, let first = tabs.first else { return }
+            tab = first
         }
     }
 
@@ -229,12 +256,13 @@ struct RecipeDetailView: View {
                 .buttonStyle(.bordered)
             }
         } else if let recipe {
-            switch tab {
-            case .overview:
-                RecipeOverviewSection(
-                    recipe: recipe, customizations: customizations, selections: $selections,
-                    choose: choose(group:choice:), pairings: pairings, summary: summary,
-                    reloadPairings: { await loadPairings() })
+            switch shownTab {
+            case .customization:
+                RecipeCustomizationSection(
+                    customizations: customizations, selections: $selections, choose: choose(group:choice:),
+                    pairings: pairings, summary: summary, reloadPairings: { await loadPairings() })
+            case .description:
+                RecipeDescriptionSection(recipe: recipe)
             case .ingredients:
                 RecipeIngredientsSection(recipe: recipe, servings: $servings)
             case .nutrition:
@@ -338,28 +366,43 @@ struct RecipeDetailView: View {
 
 /// Which part of the recipe is showing.
 enum RecipeDetailTab: String, CaseIterable, Identifiable {
-    case overview
+    case customization
+    case description
     case ingredients
     case nutrition
 
     var id: String { rawValue }
 
+    /// "Customize" rather than "Customization": four labels have to fit one segmented control
+    /// on a phone, and it reads as the same thing the section heading already says.
     var title: LocalizedStringKey {
         switch self {
-        case .overview: "Overview"
+        case .customization: "Customize"
+        case .description: "Description"
         case .ingredients: "Ingredients"
         case .nutrition: "Nutrition"
         }
+    }
+
+    /// The tabs this recipe has something to show in, in the order they appear.
+    static func available(hasCustomizations: Bool, hasPairings: Bool) -> [RecipeDetailTab] {
+        allCases.filter { $0 != .customization || hasCustomizations || hasPairings }
+    }
+
+    /// Keeps a selection valid when the extras load and Customize appears or goes away.
+    static func resolve(_ selection: RecipeDetailTab, in available: [RecipeDetailTab]) -> RecipeDetailTab {
+        available.contains(selection) ? selection : (available.first ?? .description)
     }
 }
 
 /// The segmented picker that sticks under the navigation bar while the recipe scrolls.
 struct RecipeDetailTabPicker: View {
+    let tabs: [RecipeDetailTab]
     @Binding var selection: RecipeDetailTab
 
     var body: some View {
         Picker("Section", selection: $selection) {
-            ForEach(RecipeDetailTab.allCases) { tab in
+            ForEach(tabs) { tab in
                 Text(tab.title).tag(tab)
             }
         }
@@ -427,11 +470,20 @@ private struct ViewedKey: Equatable {
     let isActive: Bool
 }
 
-#Preview("Recipe") {
+/// Already in the shown week: the bottom bar is the −/+ servings stepper, not Add.
+#Preview("Recipe, in your week") {
     NavigationStack {
         RecipeDetailView(summary: MenuPreviewData.cards[0].recipe)
     }
     .menuPreviewEnvironment()
+}
+
+/// Not in the week: the bottom bar offers servings and Add to Week.
+#Preview("Recipe, not in your week") {
+    NavigationStack {
+        RecipeDetailView(summary: MenuPreviewData.cards[1].recipe)
+    }
+    .menuPreviewEnvironment(plan: PlanPreviewData.emptyPlan)
 }
 
 #Preview("Recipe, dark") {

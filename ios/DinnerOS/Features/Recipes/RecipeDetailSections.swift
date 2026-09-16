@@ -1,10 +1,10 @@
 import SwiftUI
 
-// MARK: - Overview
+// MARK: - Customization
 
-/// Customize, pairings, the description, Autopilot, ratings, and order history.
-struct RecipeOverviewSection: View {
-    let recipe: Recipe
+/// Swap or double the protein, then the add-ons that go with the meal. The two belong
+/// together: both change what arrives with this meal, and neither is reading material.
+struct RecipeCustomizationSection: View {
     let customizations: [CustomizationGroup]
     @Binding var selections: [String: String]
     let choose: (CustomizationGroup, CustomizationChoice) -> Void
@@ -19,6 +19,19 @@ struct RecipeOverviewSection: View {
                 RecipeCustomizeSection(groups: customizations, selections: $selections, choose: choose)
             }
             RecipePairingsSection(pairings: pairings, recipe: summary, reload: reloadPairings)
+        }
+    }
+}
+
+// MARK: - Description
+
+/// What the meal is, what it's cooked with, how the household rated it, and when it was last
+/// ordered: everything about the recipe that is read rather than changed.
+struct RecipeDescriptionSection: View {
+    let recipe: Recipe
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 28) {
             if let description = recipe.description, !description.isEmpty {
                 Text(description)
                     .foregroundStyle(Color.secondary)
@@ -29,7 +42,7 @@ struct RecipeOverviewSection: View {
                         .foregroundStyle(Color.secondary)
                 }
             }
-            // After the steps and the meal itself, where someone who just cooked it finishes reading.
+            // After the meal itself, where someone who just cooked it finishes reading.
             RecipeRatingSection(recipe: recipe) { _ in }
             RecipeAutopilotSection(recipeID: recipe.id)
             DetailSection("Order History") {
