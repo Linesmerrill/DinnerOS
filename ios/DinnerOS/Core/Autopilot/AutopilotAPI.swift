@@ -105,12 +105,16 @@ nonisolated struct AutopilotAPI: Sendable {
         return try await client.send(request.authorized(with: accessToken))
     }
 
+    /// Adds the included slots and their chosen pairings. `pairingIDs` of `nil` leaves the
+    /// field out, which accepts the ones the proposal includes.
     func accept(
-        householdID: String, week: ISOWeek, version: Int, excludeSlotIDs: [String], accessToken: String
+        householdID: String, week: ISOWeek, version: Int, excludeSlotIDs: [String], pairingIDs: [String]? = nil,
+        accessToken: String
     ) async throws -> AutopilotAcceptResult {
         let request = try APIRequest.post(
             Self.weekPath(householdID, week, "/proposal/accept"),
-            body: AutopilotAcceptRequest(version: version, excludeSlotIDs: excludeSlotIDs))
+            body: AutopilotAcceptRequest(
+                version: version, excludeSlotIDs: excludeSlotIDs, pairingIDs: pairingIDs))
         return try await client.send(request.authorized(with: accessToken))
     }
 
@@ -120,6 +124,61 @@ nonisolated struct AutopilotAPI: Sendable {
         let request = try APIRequest.post(
             Self.weekPath(householdID, week, "/proposal/reject"), body: AutopilotVersionRequest(version: version))
         return try await client.send(request.authorized(with: accessToken))
+    }
+
+    // MARK: Pairings
+
+    /// The week's pairings: one entry per planned main meal, plus the accepted grocery items
+    /// on the week's list. `entryID` narrows it to one meal, for the "you added a pasta dish"
+    /// prompt. Needs `household.view`.
+    func weekPairings(
+        householdID: String, week: ISOWeek, entryID: String? = nil, accessToken: String
+    ) async throws -> WeekPairings {
+        var request = APIRequest.get(Self.weekPath(householdID, week, "/pairings"))
+        if let entryID {
+            request.queryItems = [URLQueryItem(name: "entryId", value: entryID)]
+        }
+        return try await client.send(request.authorized(with: accessToken))
+    }
+
+    /// Adds a pairing to the week: an add-on becomes a plan entry on the meal's day, a
+    /// grocery item joins the week's list. Needs `plan.edit`.
+    func acceptPairing(
+        householdID: String, week: ISOWeek, entryID: String, key: String, accessToken: String
+    ) async throws -> PairingAcceptResult {
+        let request = try APIRequest.post(
+            Self.weekPath(householdID, week, "/pairings/accept"),
+            body: PairingActionRequest(entryID: entryID, key: key))
+        return try await client.send(request.authorized(with: accessToken))
+    }
+
+    /// Hides a pairing for that meal this week and returns the week's pairings.
+    func dismissPairing(
+        householdID: String, week: ISOWeek, entryID: String, key: String, accessToken: String
+    ) async throws -> WeekPairings {
+        let request = try APIRequest.post(
+            Self.weekPath(householdID, week, "/pairings/dismiss"),
+            body: PairingActionRequest(entryID: entryID, key: key))
+        return try await client.send(request.authorized(with: accessToken))
+    }
+
+    /// Keeps a learned pairing as a household rule for its meal category.
+    func makePairingRule(
+        householdID: String, week: ISOWeek, request body: MakePairingRuleRequest, accessToken: String
+    ) async throws -> MakePairingRuleResult {
+        let request = try APIRequest.post(Self.weekPath(householdID, week, "/pairings/rules"), body: body)
+        return try await client.send(request.authorized(with: accessToken))
+    }
+
+    /// Takes a paired grocery item off the week's list (`204`).
+    func deletePairingGroceryItem(
+        householdID: String, week: ISOWeek, itemID: String, accessToken: String
+    ) async throws {
+        let path =
+            Self.weekPath(householdID, week, "/pairings/grocery-items/")
+            + APIRequest.encodePathSegment(itemID)
+        try await client.sendIgnoringBody(
+            APIRequest.delete(path).withPercentEncodedPath().authorized(with: accessToken))
     }
 
     // MARK: Paths

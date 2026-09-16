@@ -508,6 +508,9 @@ nonisolated enum GroceryListText {
         for via in item.via {
             text += "\n    " + via.text
         }
+        for extra in item.extras {
+            text += "\n    " + extra.text
+        }
         return text
     }
 

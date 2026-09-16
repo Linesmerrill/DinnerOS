@@ -109,24 +109,65 @@ enum MenuPreviewData {
             ])
     ]
 
+    /// A learned add-on already in the week, and a rule's grocery item that isn't.
     static let pairings = [
-        RecipePairing(
+        Pairing(
+            key: "recipe:addon-1",
             target: .recipe(
-                summary(
-                    id: "addon-1", name: "Sample Garlic Bread", headline: "with Herb Butter", minutes: 10,
-                    calories: 260, protein: 6)), reason: "Goes with pasta", inPlan: true),
-        RecipePairing(
-            target: .groceryItem(PairingGroceryItem(name: "Example Club Crackers", quantity: "1", unit: "box")),
-            inPlan: false),
+                PairingRecipe(
+                    id: "addon-1", name: "Sample Garlic Bread", headline: "with Herb Butter",
+                    imageURLString: "https://img.example.com/f_auto,q_auto,w_1200/addon-1.jpg", cookMinutes: 10)),
+            servings: 2, source: .learned, frequency: .suggest, mealCategory: .pasta, confidence: 0.95,
+            learned: LearnedPairing(
+                weeksTogether: 186, mealCategoryWeeks: 195, otherWeeks: 35, otherWeeksRate: 0.49),
+            reason: "You usually have Sample Garlic Bread with pasta (95% of pasta weeks)", inPlan: true,
+            canMakeRule: true),
+        Pairing(
+            key: "grocery:example club crackers",
+            target: .groceryItem(PairingGroceryItem(name: "Example Club Crackers", quantity: 1, unit: "package")),
+            source: .rule, frequency: .suggest, mealCategory: .soup,
+            reason: "Your rule: soup → Example Club Crackers", ruleID: "rule-1"),
     ]
+
+    static let recipePairings = RecipePairings(
+        recipeID: "recipe-3", week: week.description, entryID: "entry-2", mealCategories: [.pasta],
+        items: pairings)
+
+    /// The week's open suggestions, plus a grocery item already on the list.
+    static let weekPairings = WeekPairings(
+        week: week.description, startDate: "2026-09-14", endDate: "2026-09-20",
+        meals: [
+            MealPairings(
+                entryID: "entry-2", day: .wed, date: "2026-09-16",
+                recipe: PairingMealRecipe(id: "recipe-3", name: "Placeholder Pasta Bake"), servings: 2,
+                mealCategories: [.pasta],
+                pairings: [
+                    Pairing(
+                        key: "recipe:addon-1",
+                        target: .recipe(
+                            PairingRecipe(
+                                id: "addon-1", name: "Sample Garlic Bread", cookMinutes: 10)),
+                        servings: 2, source: .learned, mealCategory: .pasta, confidence: 0.95,
+                        reason: "You usually have Sample Garlic Bread with pasta (95% of pasta weeks)",
+                        canMakeRule: true)
+                ])
+        ],
+        groceryItems: [
+            PairingGroceryLine(
+                id: "item-1", key: "grocery:example club crackers",
+                groceryItem: PairingGroceryItem(name: "Example Club Crackers", quantity: 1, unit: "package"),
+                entryID: "entry-3", recipe: PairingMealRecipe(id: "recipe-2", name: "Sample Garden Salad"),
+                ruleID: "rule-1", text: "Example Club Crackers for Sample Garden Salad")
+        ])
 }
 
 extension View {
     /// Every store the Menu and recipe screens read, with synthetic data.
     func menuPreviewEnvironment(
-        plan: Plan? = PlanPreviewData.plan, menu: WeekMenu? = MenuPreviewData.menu, withProposal: Bool = false
+        plan: Plan? = PlanPreviewData.plan, menu: WeekMenu? = MenuPreviewData.menu, withProposal: Bool = false,
+        pairings: WeekPairings = .empty
     ) -> some View {
-        modifier(MenuPreviewEnvironment(plan: plan, menu: menu, withProposal: withProposal))
+        modifier(MenuPreviewEnvironment(plan: plan, menu: menu, withProposal: withProposal, pairings: pairings))
     }
 }
 
@@ -135,6 +176,7 @@ struct MenuPreviewEnvironment: ViewModifier {
     let plan: Plan?
     let menu: WeekMenu?
     var withProposal = false
+    var pairings: WeekPairings = .empty
 
     func body(content: Content) -> some View {
         let session = HouseholdPreviewData.session()
@@ -152,6 +194,7 @@ struct MenuPreviewEnvironment: ViewModifier {
             .environment(plans)
             .environment(menuStore)
             .environment(MealPlanner(plans: plans, library: library, households: households))
+            .environment(PairingsStore.preview(session: session, plans: plans, pairings: pairings))
             .environment(AutopilotPreviewData.store(session: session, withProposal: withProposal))
             .environment(EventReporter.preview(session: session))
             .environment(PantryPreviewData.store(session: session))

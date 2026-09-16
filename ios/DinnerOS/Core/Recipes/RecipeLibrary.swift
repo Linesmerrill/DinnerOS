@@ -233,16 +233,17 @@ final class RecipeLibrary {
         }
     }
 
-    /// Add-ons that go with the recipe, marked for `week`. Empty when there are none, including a
-    /// `404` from a server without pairings. Not cached.
-    func pairings(recipeID: String, week: ISOWeek?) async throws -> [RecipePairing] {
+    /// Add-ons that go with the recipe, marked for `week`. The whole response is returned, not
+    /// just the items: `entryId` says which planned meal an accept belongs to. Empty when there
+    /// are none, including a `404` from a server without pairings. Not cached.
+    func pairings(recipeID: String, week: ISOWeek?) async throws -> RecipePairings {
         guard let api, let householdID else { throw AuthSessionError.notConfigured }
         do {
             return try await session.authorized { token in
                 try await api.pairings(householdID: householdID, recipeID: recipeID, week: week, accessToken: token)
-            }.items
+            }
         } catch let error as APIError where error.status == 404 {
-            return []
+            return .empty
         }
     }
 

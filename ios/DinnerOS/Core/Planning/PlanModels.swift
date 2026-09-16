@@ -359,8 +359,16 @@ nonisolated struct GroceryItem: Decodable, Equatable, Sendable, Identifiable {
     /// The specialty ingredients this item stands in for ("for Tex-Mex Paste in Smoky Pork
     /// Tacos"). Empty for ordinary items.
     var via: [GroceryVia] = []
+    /// What put the item on the list besides a recipe, such as an accepted pairing ("Club
+    /// Crackers for Chicken Noodle Soup"). Empty for ordinary items.
+    var extras: [GroceryExtra] = []
 
     var id: String { ingredientKey }
+
+    /// The pairing extras on this item, which can be taken off the week's list.
+    var pairingExtras: [GroceryExtra] {
+        extras.filter { $0.origin == .pairing }
+    }
 
     /// A specialty ingredient the household hasn't chosen an option for.
     var needsSpecialtyChoice: Bool {
@@ -375,7 +383,8 @@ nonisolated struct GroceryItem: Decodable, Equatable, Sendable, Identifiable {
 
 extension GroceryItem {
     private enum CodingKeys: String, CodingKey {
-        case ingredientKey, name, amounts, quantityText, unquantified, status, recipes, specialty, specialtyDetail, via
+        case ingredientKey, name, amounts, quantityText, unquantified, status, recipes, specialty,
+            specialtyDetail, via, extras
     }
 
     /// The specialty fields are additive, so they're read leniently, like `GroceryList`'s.
@@ -391,8 +400,31 @@ extension GroceryItem {
             recipes: try container.decode([GroceryRecipe].self, forKey: .recipes),
             specialty: (try? container.decodeIfPresent(Bool.self, forKey: .specialty)) ?? false,
             specialtyDetail: (try? container.decodeIfPresent(GrocerySpecialty.self, forKey: .specialtyDetail)) ?? nil,
-            via: (try? container.decodeIfPresent([GroceryVia].self, forKey: .via)) ?? [])
+            via: (try? container.decodeIfPresent([GroceryVia].self, forKey: .via)) ?? [],
+            extras: container.decodeLossyArray(GroceryExtra.self, forKey: .extras))
     }
+}
+
+/// What put a grocery item on the list besides a recipe (`GroceryItem.extras`), separate
+/// from `via`. Rendered the same way: one quiet line under the item.
+nonisolated struct GroceryExtra: Decodable, Equatable, Sendable, Identifiable {
+    /// Why it's on the list. Unknown origins decode as-is and are shown but not removable.
+    nonisolated struct Origin: RawRepresentable, Decodable, Hashable, Sendable {
+        let rawValue: String
+
+        init(rawValue: String) {
+            self.rawValue = rawValue
+        }
+
+        /// An accepted Autopilot pairing (docs/autopilot.md#add-on-pairings).
+        static let pairing = Origin(rawValue: "pairing")
+    }
+
+    /// Identifies the extra where it is stored, so it can be removed.
+    let id: String
+    let origin: Origin
+    /// For example "Club Crackers for Chicken Noodle Soup".
+    let text: String
 }
 
 nonisolated struct GroceryAmount: Decodable, Equatable, Sendable {

@@ -264,6 +264,80 @@ struct AutopilotStoreTests {
         #expect(store.pendingProposal == nil)
     }
 
+    /// A slot's pairings start checked when the proposal includes them (the household's
+    /// `always` rules), and the member can switch each one.
+    @Test func slotPairingsStartFromTheProposalsIncludedOnes() async throws {
+        let harness = try await generated()
+        let store = harness.store
+        harness.server.update {
+            $0.proposal?.slots[0].pairings = [
+                .init(key: "recipe:addon-1", name: "Sample Garlic Bread", included: true)
+            ]
+            $0.proposal?.slots[1].pairings = [
+                .init(key: "grocery:club crackers", name: "Club Crackers", included: false, isRecipe: false)
+            ]
+        }
+        await store.reloadWeek()
+
+        #expect(store.chosenPairingIDs == ["mon/recipe:addon-1"])
+        #expect(store.isPairingChosen("mon/recipe:addon-1"))
+        #expect(!store.isPairingChosen("wed/grocery:club crackers"))
+
+        store.setPairing("wed/grocery:club crackers", included: true)
+        store.setPairing("mon/recipe:addon-1", included: false)
+        // An id that isn't a pairing of this proposal is ignored.
+        store.setPairing("nope/recipe:addon-9", included: true)
+
+        #expect(store.chosenPairingIDs == ["wed/grocery:club crackers"])
+        #expect(store.chosenPairings == ["wed/grocery:club crackers"])
+    }
+
+    /// Accepting sends exactly the checked pairings, never leaving the field out, and drops
+    /// the pairings of slots the member excluded (#315).
+    @Test func acceptSendsExactlyTheCheckedPairingsAndDropsExcludedSlots() async throws {
+        let harness = try await generated()
+        let store = harness.store
+        harness.server.update {
+            $0.proposal?.slots[0].pairings = [
+                .init(key: "recipe:addon-1", name: "Sample Garlic Bread", included: true)
+            ]
+            $0.proposal?.slots[1].pairings = [
+                .init(key: "grocery:club crackers", name: "Club Crackers", included: true, isRecipe: false)
+            ]
+        }
+        await store.reloadWeek()
+        #expect(store.chosenPairingIDs.count == 2)
+
+        // Wednesday's meal goes, so its add-on goes with it.
+        store.setSlot("wed", included: false)
+        let result = try #require(try await store.accept())
+
+        #expect(harness.server.acceptedPairingIDs == ["mon/recipe:addon-1"])
+        let body = try #require(
+            harness.server.body(of: "POST /households/household-1/autopilot/weeks/2026-W38/proposal/accept"))
+        #expect(body["pairingIds"] as? [String] == ["mon/recipe:addon-1"])
+        #expect(result.pairingsAdded.map(\.name) == ["Sample Garlic Bread"])
+    }
+
+    /// With every pairing switched off, an empty array is sent — which adds none, unlike
+    /// leaving the field out.
+    @Test func unpickingEveryPairingSendsAnEmptyArray() async throws {
+        let harness = try await generated()
+        let store = harness.store
+        harness.server.update {
+            $0.proposal?.slots[0].pairings = [
+                .init(key: "recipe:addon-1", name: "Sample Garlic Bread", included: true)
+            ]
+        }
+        await store.reloadWeek()
+        store.setPairing("mon/recipe:addon-1", included: false)
+
+        _ = try await store.accept()
+
+        #expect(harness.server.acceptedPairingIDs == [])
+        #expect(harness.store.chosenPairings.isEmpty)
+    }
+
     @Test func acceptingWhenSomeoneElseAlreadyDidReloadsInsteadOfFailing() async throws {
         let harness = try await generated()
         let store = harness.store

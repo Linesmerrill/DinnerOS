@@ -19,9 +19,21 @@ enum AutopilotPreviewData {
          "novelty":"balanced","equipment":["smoker"],
          "weekdayRules":[{"day":"sun","label":"Smoker night","cuisines":[],"tags":[],"proteins":["chicken","pork"],
                           "methods":["smoker"],"timeBand":"long","frequency":"every_week"}],
+         "pairings":[
+           {"id":"rule-1","label":"Pasta night",
+            "when":{"mealCategories":["pasta"],"cuisines":[],"tags":[],"proteins":[]},
+            "add":{"kind":"recipe","recipeId":"addon-1","recipeName":"Sample Garlic Bread","groceryItem":null},
+            "frequency":"always"},
+           {"id":"rule-2","label":"",
+            "when":{"mealCategories":["soup"],"cuisines":[],"tags":[],"proteins":[]},
+            "add":{"kind":"grocery_item","recipeId":null,"recipeName":null,
+                   "groceryItem":{"name":"Example Club Crackers","quantity":1,"unit":"package"}},
+            "frequency":"suggest"}
+         ],
          "sections":{"taste":{"updatedBy":"user-ada","updatedAt":"2026-09-14T18:30:00Z"},"restrictions":null,
                      "schedule":null,"cookTime":{"updatedBy":"user-charles","updatedAt":"2026-09-15T08:10:00Z"},
-                     "novelty":null,"equipment":null,"weekdayRules":null},
+                     "novelty":null,"equipment":null,"weekdayRules":null,
+                     "pairings":{"updatedBy":"user-ada","updatedAt":"2026-09-15T09:00:00Z"}},
          "effective":{"defaultServings":4},"createdBy":"user-ada","createdAt":"2026-09-14T18:30:00Z",
          "updatedBy":"user-charles","updatedAt":"2026-09-15T08:10:00Z"}
         """#)
@@ -44,11 +56,21 @@ enum AutopilotPreviewData {
          "timeBands":[{"value":"quick","label":"Quick"},{"value":"medium","label":"Medium"},
                       {"value":"long","label":"Long cook OK","description":"Longer than the medium limit"}],
          "frequencies":[{"value":"every_week","label":"Every week"},{"value":"at_most_once","label":"At most once a week"}],
-         "days":[{"value":"mon","label":"Monday"}],"catalogRecipeCount":3,
+         "days":[{"value":"mon","label":"Monday"}],
+         "mealCategories":[{"value":"pasta","label":"Pasta","recipeCount":57},
+                           {"value":"soup","label":"Soup, stew & chili","recipeCount":44},
+                           {"value":"tacos","label":"Tacos & Mexican","recipeCount":57},
+                           {"value":"bowl","label":"Rice & grain bowls","recipeCount":47}],
+         "pairingFrequencies":[{"value":"always","label":"Always","description":"Included with the meal unless you leave it out"},
+                               {"value":"suggest","label":"Suggest","description":"Offered with the meal"}],
+         "catalogRecipeCount":3,
          "limits":{"maxListValues":30,"maxExcludedIngredients":50,"maxValueLength":40,"maxIngredientLength":60,
                    "maxRuleValues":10,"maxLabelLength":40,"maxNoteLength":500,"minCookMinutes":5,"maxCookMinutes":480,
-                   "maxServings":12}}
+                   "maxServings":12,"maxPairingRules":20,"maxGroceryItemNameLength":60,"maxGroceryItemQuantity":99}}
         """#)
+
+    /// The household's rules, for the Pairings preference screens.
+    static let pairingRules: [PairingRule] = profile?.pairings ?? [.new()]
 
     static let proposal: AutopilotProposal? = decode(
         #"""

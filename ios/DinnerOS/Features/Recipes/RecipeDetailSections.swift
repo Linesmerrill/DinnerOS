@@ -8,8 +8,9 @@ struct RecipeOverviewSection: View {
     let customizations: [CustomizationGroup]
     @Binding var selections: [String: String]
     let choose: (CustomizationGroup, CustomizationChoice) -> Void
-    let pairings: [RecipePairing]
-    let mainEntry: PlanEntry?
+    let pairings: RecipePairings
+    /// The recipe as a summary, for planning it when a pairing is added before it is.
+    let summary: RecipeSummary
     let reloadPairings: () async -> Void
 
     var body: some View {
@@ -17,7 +18,7 @@ struct RecipeOverviewSection: View {
             if !customizations.isEmpty {
                 RecipeCustomizeSection(groups: customizations, selections: $selections, choose: choose)
             }
-            RecipePairingsSection(pairings: pairings, mainEntry: mainEntry, reload: reloadPairings)
+            RecipePairingsSection(pairings: pairings, recipe: summary, reload: reloadPairings)
             if let description = recipe.description, !description.isEmpty {
                 Text(description)
                     .foregroundStyle(Color.secondary)

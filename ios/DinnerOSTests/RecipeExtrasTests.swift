@@ -164,30 +164,22 @@ struct RecipeExtrasTests {
 
     // MARK: Pairings
 
-    @Test func decodesPairings() throws {
-        let pairings = try decode(
-            RecipePairings.self,
-            #"""
-            {"items":[
-              {"target":{"kind":"recipe","recipe":\#(MenuFixtures.summary(id: "addon-1", name: "Sample Garlic Bread"))},
-               "source":"rule","confidence":0.9,"reason":"Goes with pasta","inPlan":true,"ruleId":"rule-1"},
-              {"target":{"kind":"grocery_item","groceryItem":{"name":"Crackers","quantity":2,"unit":"box"}},
-               "source":"learned","confidence":0.4,"inPlan":false},
-              {"target":{"kind":"video","url":"https://example.test"},"source":"rule","inPlan":false}
-            ]}
-            """#)
+    /// The carousel's own response. The shared `Pairing` shapes are covered in `PairingTests`.
+    @Test func decodesRecipePairings() throws {
+        let pairings = try decode(RecipePairings.self, PairingFixtures.recipePairingsJSON)
 
-        #expect(pairings.items.map(\.id) == ["recipe:addon-1", "item:Crackers"])
+        #expect(pairings.recipeID == "recipe-1")
+        #expect(pairings.week == "2026-W38")
+        #expect(pairings.entryID == "entry-1")
+        #expect(pairings.mealCategories == [.pasta])
+        // The server's own keys, never synthesized: accept and dismiss send them back.
+        #expect(pairings.items.map(\.key) == ["recipe:addon-1", "grocery:club crackers"])
         let bread = try #require(pairings.items.first)
         #expect(bread.name == "Sample Garlic Bread")
         #expect(bread.inPlan)
-        #expect(bread.ruleID == "rule-1")
-        #expect(bread.reason == "Goes with pasta")
-        guard case .groceryItem(let item) = try #require(pairings.items.last).target else {
-            Issue.record("expected a grocery item")
-            return
-        }
-        #expect(item == PairingGroceryItem(name: "Crackers", quantity: "2", unit: "box"))
+        #expect(bread.canMakeRule)
+        let crackers = try #require(pairings.items.last)
+        #expect(crackers.groceryItem == PairingGroceryItem(name: "Club Crackers", quantity: 1, unit: "package"))
     }
 
     // MARK: Plan store
