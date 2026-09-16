@@ -501,3 +501,50 @@ func TestRecipeOverrides(t *testing.T) {
 		t.Errorf("Vocabulary() = %+v, %v", v, err)
 	}
 }
+
+// TestAutopilotCatalogExcludesAddons: add-ons never reach Autopilot's catalog,
+// so a 15-minute side can't be planned as dinner or counted as one of the
+// week's quick meals. A recipe with no cook time lands in the medium band, so
+// an unknown time can't masquerade as a fast weeknight either.
+func TestAutopilotCatalogExcludesAddons(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+
+	profile, err := env.svc.Profile(ctx, hhA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, _, err := env.svc.buildInput(ctx, hhA, mustWeek(t, "2026-W38"), profile, WeekContext{}, planning.Plan{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	catalogIDs := map[string]bool{}
+	for _, it := range in.Catalog {
+		catalogIDs[it.ID] = true
+	}
+	var planned []string
+	// The fixture's add-on is the shape that would distort the week's mix: a
+	// short prep time and no total, which max(prep, total) reads as 15 minutes.
+	sawSubQuickAddon := false
+	for _, r := range env.recipes.list {
+		if !r.IsAddon {
+			continue
+		}
+		if catalogIDs[r.ID] {
+			planned = append(planned, r.Name)
+		}
+		if r.CookMinutes() > 0 && r.CookMinutes() <= profile.CookTime.QuickMaxMinutes {
+			sawSubQuickAddon = true
+		}
+	}
+	if len(planned) != 0 {
+		t.Errorf("Autopilot catalog contains add-ons %v; a side is not a dinner", planned)
+	}
+	if !sawSubQuickAddon {
+		t.Fatal("fixture no longer has a sub-quick add-on, so this test proves nothing")
+	}
+	if b := profile.bands().Of(0); b != "medium" {
+		t.Errorf("unknown cook time band = %q, want medium", b)
+	}
+}
