@@ -179,3 +179,57 @@ func TestIntegrationListContract(t *testing.T) {
 	mustImport(t, svc, bson.NewObjectID().Hex(), testFile(testRecipe("r-other", "Another Household Recipe")))
 	runListContract(t, svc, hh)
 }
+
+func TestIntegrationImportReviews(t *testing.T) {
+	svc, _, _ := newTestMongoService(t)
+	ctx := context.Background()
+	hh, otherHH := bson.NewObjectID().Hex(), bson.NewObjectID().Hex()
+
+	// The stored recipe carries the review item's source ID as an alias, which
+	// is the real shape: weekly clones merge under the newest source ID.
+	tacos := testRecipe("canon-r1", "Tacos", "2026-W10")
+	tacos.SourceAliases = []string{"r1"}
+	file := testFile(tacos)
+	file.Review = []ImportReviewItem{
+		{SourceRecipeID: "r1", RecipeName: "Tacos", Field: "variant", Value: "pork tacos", Reason: "delivered menu variant differs"},
+		{SourceRecipeID: "gone", RecipeName: "Ghost", Field: "steps", Reason: "recipe has no steps"},
+	}
+	if res := mustImport(t, svc, hh, file); res.ReviewItems != 2 {
+		t.Fatalf("ReviewItems = %d, want 2", res.ReviewItems)
+	}
+
+	items, err := svc.ImportReviews(ctx, hh, ReviewStatusOpen, 0)
+	if err != nil {
+		t.Fatalf("ImportReviews() error = %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("items = %d, want 2", len(items))
+	}
+	byField := map[string]ReviewRecord{}
+	for _, it := range items {
+		byField[it.Field] = it
+		if it.Status != ReviewStatusOpen || it.CreatedAt.IsZero() {
+			t.Errorf("%s: status = %q, createdAt = %v", it.Field, it.Status, it.CreatedAt)
+		}
+	}
+	// The variant item resolves to its recipe through the alias.
+	stored, err := svc.List(ctx, hh, ListQuery{})
+	if err != nil || len(stored.Items) != 1 {
+		t.Fatalf("List() = %+v, %v", stored.Items, err)
+	}
+	if got := byField["variant"].RecipeID; got != stored.Items[0].ID {
+		t.Errorf("variant recipeId = %q, want %q", got, stored.Items[0].ID)
+	}
+	// An item whose recipe is not stored carries no ID rather than a wrong one.
+	if got := byField["steps"].RecipeID; got != "" {
+		t.Errorf("steps recipeId = %q, want empty", got)
+	}
+
+	// Items are scoped to the household, and limit caps the page.
+	if other, err := svc.ImportReviews(ctx, otherHH, ReviewStatusOpen, 0); err != nil || len(other) != 0 {
+		t.Errorf("other household items = %d, %v", len(other), err)
+	}
+	if one, err := svc.ImportReviews(ctx, hh, "", 1); err != nil || len(one) != 1 {
+		t.Errorf("limit=1 items = %d, %v", len(one), err)
+	}
+}

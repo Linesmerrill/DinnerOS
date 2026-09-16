@@ -120,7 +120,12 @@ index while the rest still import. A recipe is rejected when:
 - an `orderWeeks` value is not an ISO week
 - it shares a source ID with an earlier recipe in the file
 
-Review items are stored per household in `import_reviews`.
+Review items are stored per household in `import_reviews`, and read back with
+`GET /api/v1/households/{householdId}/recipes/import-reviews` (requires
+`recipes.import`). Nothing closes an item automatically: a `variant` item is
+resolved by capturing that delivered ID from the signed-in account
+(`go run . capture`, after `go run . variants` lists what is pending) and
+re-importing, which replaces the stored details with the delivered variant's.
 
 **Command (recommended for a full history).** It writes directly to MongoDB, so
 HTTP body limits and timeouts don't apply. The household must already exist.

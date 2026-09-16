@@ -87,10 +87,14 @@ func (h *Handler) Mount(r chi.Router) {
 		view := households.RequirePermission(h.opts.Authorizer, households.PermHouseholdView, h.logger)
 		r.With(view).Get("/households/{householdId}/recipes", h.list)
 		r.With(view).Get("/households/{householdId}/recipes/{recipeId}", h.get)
+		imports := households.RequirePermission(h.opts.Authorizer, households.PermRecipesImport, h.logger)
+		// Review items are import bookkeeping, so whoever may import may read
+		// them. The static path wins over /{recipeId} in chi.
+		r.With(imports).Get("/households/{householdId}/recipes/import-reviews", h.importReviews)
 		// The larger import body limit applies only after the caller is
 		// authenticated and authorized to import.
 		r.With(
-			households.RequirePermission(h.opts.Authorizer, households.PermRecipesImport, h.logger),
+			imports,
 			httpx.OverrideBodyLimit(h.opts.ImportMaxBytes),
 		).Post("/households/{householdId}/recipes/import", h.importRecipes)
 	})
@@ -305,6 +309,37 @@ func newImportResultResponse(res ImportResult) ImportResultResponse {
 	return resp
 }
 
+// ImportReviewResponse is one thing the importer could not map confidently.
+type ImportReviewResponse struct {
+	// RecipeID is the household recipe the item is about, omitted when no
+	// stored recipe carries the source ID any more.
+	RecipeID       string `json:"recipeId,omitempty"`
+	RecipeName     string `json:"recipeName"`
+	Source         string `json:"source"`
+	SourceRecipeID string `json:"sourceRecipeId"`
+	// Field is what could not be mapped: "variant", "steps", "cookTime", or
+	// "ingredients.<name>.unit".
+	Field string `json:"field"`
+	// Value is what the source said, empty when the source said nothing.
+	Value     string    `json:"value,omitempty"`
+	Reason    string    `json:"reason"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// ImportReviewListResponse is a page of review items.
+type ImportReviewListResponse struct {
+	Items []ImportReviewResponse `json:"items"`
+}
+
+func newImportReviewResponse(r ReviewRecord) ImportReviewResponse {
+	return ImportReviewResponse{
+		RecipeID: r.RecipeID, RecipeName: r.RecipeName, Source: r.Source,
+		SourceRecipeID: r.SourceRecipeID, Field: r.Field, Value: r.Value,
+		Reason: r.Reason, Status: r.Status, CreatedAt: r.CreatedAt,
+	}
+}
+
 // --- Handlers -----------------------------------------------------------------
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -383,6 +418,40 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := newRecipeResponse(recipe, h.timeBands(r.Context(), actor.HouseholdID))
 	resp.HouseholdRating, resp.MyRating = ratingFields(summaries[recipe.ID])
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) importReviews(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	status := ReviewStatusOpen
+	switch s := r.URL.Query().Get("status"); s {
+	case "":
+	case "all":
+		status = "" // every status
+	case ReviewStatusOpen:
+		status = s
+	default:
+		validationFailed(w, r, "status must be open or all")
+		return
+	}
+	limit := 0
+	if s := r.URL.Query().Get("limit"); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil || n < 1 {
+			validationFailed(w, r, "limit must be a positive integer")
+			return
+		}
+		limit = n
+	}
+	items, err := h.opts.Service.ImportReviews(r.Context(), actor.HouseholdID, status, limit)
+	if err != nil {
+		h.internalError(w, r, "list import reviews failed", err)
+		return
+	}
+	resp := ImportReviewListResponse{Items: make([]ImportReviewResponse, 0, len(items))}
+	for _, it := range items {
+		resp.Items = append(resp.Items, newImportReviewResponse(it))
+	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 

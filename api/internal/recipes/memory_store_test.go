@@ -19,13 +19,14 @@ type memoryStore struct {
 	ingredients []Ingredient
 	recipes     []Recipe
 	reviews     map[string]ReviewItem // householdID + "/" + reviewKey
+	reviewTimes map[string]time.Time  // same key, when the item was recorded
 
 	saveRecipesCalls int
 	upsertCalls      int
 }
 
 func newMemoryStore() *memoryStore {
-	return &memoryStore{reviews: map[string]ReviewItem{}}
+	return &memoryStore{reviews: map[string]ReviewItem{}, reviewTimes: map[string]time.Time{}}
 }
 
 func (m *memoryStore) id() string {
@@ -299,16 +300,54 @@ func compareListOrder(s Sort, a, b Position) int {
 	return cmp.Compare(a.ID, b.ID)
 }
 
-func (m *memoryStore) SaveReviewItems(_ context.Context, householdID string, items []ReviewItem, _ time.Time) error {
+func (m *memoryStore) SaveReviewItems(_ context.Context, householdID string, items []ReviewItem, now time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, it := range items {
 		key := householdID + "/" + reviewKey(it)
 		if _, ok := m.reviews[key]; !ok {
 			m.reviews[key] = it
+			m.reviewTimes[key] = now
 		}
 	}
 	return nil
+}
+
+func (m *memoryStore) ListReviewItems(_ context.Context, householdID, status string, limit int) ([]ReviewRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	type keyed struct {
+		key string
+		rec ReviewRecord
+	}
+	var rows []keyed
+	for key, it := range m.reviews {
+		hh, rk, ok := strings.Cut(key, "/")
+		if !ok || hh != householdID {
+			continue
+		}
+		if status != "" && status != ReviewStatusOpen {
+			continue
+		}
+		rows = append(rows, keyed{key: rk, rec: ReviewRecord{
+			ReviewItem: it, Status: ReviewStatusOpen, CreatedAt: m.reviewTimes[key],
+		}})
+	}
+	// Oldest first, then by review key, as MongoStore sorts.
+	slices.SortFunc(rows, func(a, b keyed) int {
+		if c := a.rec.CreatedAt.Compare(b.rec.CreatedAt); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.key, b.key)
+	})
+	if limit > 0 && len(rows) > limit {
+		rows = rows[:limit]
+	}
+	var out []ReviewRecord
+	for _, r := range rows {
+		out = append(out, r.rec)
+	}
+	return out, nil
 }
 
 func cloneIngredient(ing Ingredient) Ingredient {
