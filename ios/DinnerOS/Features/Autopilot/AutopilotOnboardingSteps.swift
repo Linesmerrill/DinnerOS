@@ -120,7 +120,7 @@ private struct CuisineTileView: View {
         if preference != .neutral {
             Image(systemName: preference == .liked ? "checkmark" : "hand.thumbsdown.fill")
                 .font(.footnote.weight(.bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.onAccent)
                 .frame(width: 28, height: 28)
                 .background {
                     Circle().fill(preference == .liked ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary))
@@ -228,10 +228,10 @@ private struct AvoidTile: View {
                 Image(systemName: systemImage)
                     .font(.title2)
                     .symbolVariant(.none)
-                    .foregroundStyle(isOn ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.accentColor))
+                    .foregroundStyle(isOn ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.accentColor))
                 Text(label)
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(isOn ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.primary))
+                    .foregroundStyle(isOn ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.primary))
                     .lineLimit(2)
                     .minimumScaleFactor(0.8)
                     .multilineTextAlignment(.center)
@@ -309,12 +309,13 @@ private struct NightTile: View {
             VStack(spacing: 6) {
                 Text(DayChipRow.shortName(day))
                     .font(.headline)
-                    .foregroundStyle(isOn ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.primary))
+                    .foregroundStyle(isOn ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.primary))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 Image(systemName: isOn ? "fork.knife" : "moon.zzz")
                     .font(.subheadline)
-                    .foregroundStyle(isOn ? AnyShapeStyle(Color.white.opacity(0.9)) : AnyShapeStyle(Color.secondary))
+                    .foregroundStyle(
+                        isOn ? AnyShapeStyle(Color.onAccent.opacity(0.9)) : AnyShapeStyle(Color.secondary))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)

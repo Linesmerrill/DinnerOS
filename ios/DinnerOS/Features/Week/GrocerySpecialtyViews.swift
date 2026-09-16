@@ -43,7 +43,7 @@ struct GroceryBatchRow: View {
                         .buttonStyle(.borderedProminent)
                         // In a list row the symbol otherwise takes the tint and vanishes on the
                         // tinted fill.
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.onAccent)
                         .controlSize(.small)
                         .disabled(isWorking)
                         .accessibilityLabel("Made \(batch.specialtyName)")

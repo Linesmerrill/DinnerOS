@@ -115,7 +115,12 @@ struct ShimmerView: View {
 
 // MARK: - Photo badges
 
-/// A capsule over a photo. It sits on a material so it stays legible over a bright image.
+/// A capsule over a photo.
+///
+/// A plain badge sits on a thick material, which is more opaque than the regular one and so keeps
+/// its contrast over a bright photo rather than borrowing the photo's brightness. A prominent one
+/// fills with the accent instead: accent-colored text on a material was about 4.3:1 in light and
+/// 3.1:1 in dark at 12 points, both under AA, and the filled version is 5.1:1 and 8.1:1.
 struct PhotoBadge: View {
     let text: String
     var systemImage: String?
@@ -131,10 +136,11 @@ struct PhotoBadge: View {
         }
         .labelStyle(.titleAndIcon)
         .font(.caption.weight(.semibold))
-        .foregroundStyle(isProminent ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.primary))
+        .foregroundStyle(isProminent ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.primary))
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(.regularMaterial, in: .capsule)
+        .background(
+            isProminent ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.thickMaterial), in: .capsule)
     }
 }
 
@@ -187,14 +193,23 @@ nonisolated enum MenuCardBadge {
 /// a carousel different heights. The photo has a fixed aspect ratio and the name a reserved
 /// height, which leaves nothing that varies per card.
 nonisolated enum MenuCardMetrics {
-    /// Lines reserved for a card's name. Accessibility sizes get a third line — every card in
-    /// the row reserves the same number, so they still match each other.
-    static func titleLines(for size: DynamicTypeSize) -> Int {
-        size.isAccessibilitySize ? 3 : 2
+    /// Lines reserved for a card's name, or `nil` at accessibility sizes, where the name takes
+    /// as many lines as it needs.
+    ///
+    /// Equal heights are a layout nicety; reading the name is the point of the card. At
+    /// `.accessibility3` a carousel card is 300 points wide and a line holds three or four
+    /// words, so clamping to two or three lines truncated most real names to "One-Pan Santa
+    /// Fe…" — the failure #447 fixed at the default size, back again where the text is largest
+    /// and the reader least able to guess the rest. The carousels lay their cards out
+    /// `.top`-aligned and Your Meals stacks vertically at these sizes, so cards of different
+    /// heights cost nothing there.
+    static func titleLines(for size: DynamicTypeSize) -> Int? {
+        size.isAccessibilitySize ? nil : 2
     }
 }
 
-/// A card's name, clamped and given a fixed height so cards line up.
+/// A card's name, clamped and given a fixed height so cards line up — until accessibility sizes,
+/// where it wraps freely instead.
 struct CardTitle: View {
     let name: String
 
@@ -218,13 +233,17 @@ struct CardTitle: View {
             // the height the reserved box offers — `lineLimit` is what bounds it, not the frame.
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: lineHeight * CGFloat(lines), alignment: .topLeading)
+            .frame(height: lines.map { lineHeight * CGFloat($0) }, alignment: .topLeading)
     }
 }
 
 // MARK: - Text and chips
 
 /// A small capsule, for badges and tags.
+///
+/// A prominent chip fills with the accent rather than tinting text on a 14%-accent wash: at 11
+/// points that wash was 4.4:1 in light and 3.6:1 in dark, and these chips sit over photography
+/// where the backdrop is not something the app controls.
 struct MenuChip: View {
     let text: String
     var systemImage: String?
@@ -242,8 +261,9 @@ struct MenuChip: View {
         .font(.caption2.weight(.semibold))
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .foregroundStyle(isProminent ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary))
-        .background(isProminent ? AnyShapeStyle(.tint.opacity(0.14)) : AnyShapeStyle(.quaternary), in: .capsule)
+        .foregroundStyle(isProminent ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.secondary))
+        .background(
+            isProminent ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary), in: .capsule)
     }
 }
 
@@ -268,6 +288,11 @@ struct ServingsStepper: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    /// The smallest a control may be and still be reliably tappable. The card stepper's buttons
+    /// were 24 points square, which is not something someone with a tremor can hit between a
+    /// minus and a plus eight points apart.
+    static let minimumTapTarget: CGFloat = 44
+
     var body: some View {
         HStack(spacing: style == .bar ? 12 : 8) {
             button(systemImage: "minus", label: String(localized: "Fewer servings"), action: decrease)
@@ -290,7 +315,8 @@ struct ServingsStepper: View {
         }
         .foregroundStyle(foreground)
         .padding(.horizontal, style == .bar ? 16 : 10)
-        .padding(.vertical, style == .bar ? 10 : 5)
+        // The buttons carry the height now, so the capsule adds almost none of its own.
+        .padding(.vertical, style == .bar ? 4 : 0)
         .background(.tint, in: .capsule)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Servings"))
@@ -304,13 +330,13 @@ struct ServingsStepper: View {
         }
     }
 
-    private var foreground: Color { .white }
+    private var foreground: Color { .onAccent }
 
     private func button(systemImage: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.footnote.weight(.bold))
-                .frame(minWidth: style == .bar ? 30 : 24, minHeight: style == .bar ? 30 : 24)
+                .frame(minWidth: Self.minimumTapTarget, minHeight: Self.minimumTapTarget)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -336,7 +362,7 @@ struct AddToWeekButton: View {
                         .font(.subheadline.weight(.bold))
                 }
             }
-            .foregroundStyle(isInPlan ? AnyShapeStyle(Color.white) : AnyShapeStyle(.tint))
+            .foregroundStyle(isInPlan ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(.tint))
             .frame(width: 32, height: 32)
             .background {
                 Circle()
@@ -459,6 +485,22 @@ struct MenuCardPlaceholders: View {
         .redacted(reason: .placeholder)
         .accessibilityHidden(true)
     }
+}
+
+#Preview("Components, accessibility size") {
+    ScrollView {
+        VStack(alignment: .leading, spacing: 20) {
+            CardTitle(name: "One-Pan Sample Santa Fe Pork Tacos with Charred Corn Salsa")
+                .frame(width: 300)
+                .border(.red.opacity(0.4))
+            PhotoBadge(text: "20 min", systemImage: "bolt.fill", isProminent: true)
+            MenuChip(text: "Thursday", systemImage: "calendar", isProminent: true)
+            ServingsStepper(label: "4 servings", decrease: {}, increase: {})
+            AddToWeekButton(isInPlan: true, isBusy: false, recipeName: "Tacos") {}
+        }
+        .padding()
+    }
+    .environment(\.dynamicTypeSize, .accessibility3)
 }
 
 #Preview("Components") {
