@@ -20,6 +20,12 @@ any endpoint change.
     [authentication.md](authentication.md#invitation-links).
   - `GET /.well-known/apple-app-site-association`: the iOS app's universal-link
     association, served as `application/json` once `APPLE_TEAM_ID` is set.
+  - `GET /`: a short home page (app name, one-line description, privacy link,
+    contact email). Google's OAuth consent screen lists it as the home page.
+    chi matches `/` exactly, so it shadows no other route.
+  - `GET /privacy`: the privacy policy, linked from the app's sign-in screen and
+    Household tab, TestFlight, and Google's consent screen. Both pages are
+    static HTML with no script (`default-src 'none'`, style by hash).
 
 ## Requests
 
@@ -86,6 +92,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/auth/logout` `{refreshToken}` → `204` | rate limited | 2 | ✅ |
 | POST | `/api/v1/auth/dev` `{subject, email?, displayName?}` → session (development only) | rate limited | 2 | ✅ |
 | GET | `/api/v1/me` → `{user, identities}` | bearer | 2 | ✅ |
+| DELETE | `/api/v1/me` → `204` ([delete account](#delete-account)) | bearer | 7 | ✅ |
 | PUT | `/api/v1/me/device-tokens` `{token, environment, platform?}` → device token | bearer | 7 | ✅ |
 | DELETE | `/api/v1/me/device-tokens` `{token}` → `204` | bearer | 7 | ✅ |
 | POST | `/api/v1/households` `{name, timeZone, defaultServings?}` → `201 {household, membership}`. When `STARTER_RECIPES_HOUSEHOLD_ID` is set, the new household's recipes are copied from that household; the response waits up to 3 s for the copy (typically under a second), and a slower copy finishes in the background | bearer | 3 | ✅ |
@@ -1758,6 +1765,35 @@ caller, and a token that isn't registered is not an error.
 | 400 | `validation_failed` | `token` not hex (16–400 digits, even length); `environment` not `sandbox` or `production`; `platform` not `ios` |
 | 400 | `invalid_request` | Malformed body or unknown field |
 | 401 | `unauthenticated` | Missing or invalid access token |
+
+### Delete account
+
+`DELETE /api/v1/me` (no body) permanently deletes the caller's account and
+returns `204`. The app offers it as **Delete Account** on the Household tab and
+on the no-household screen (App Review guideline 5.1.1(v)).
+
+- **A household the caller is the last member of** is deleted with everything
+  stored for it: recipes, plans, pantry, notifications, specialty choices,
+  shopping settings and handoffs, skips, ratings, events, Autopilot data, and
+  pending invitations.
+- **A household others still share** is left, and its shared data stays. If the
+  caller is its only admin, the longest-standing other member is made admin
+  first, so deletion never fails on the last-admin rule that blocks leaving.
+- **The caller's own records**: their ratings are deleted; their user ID is
+  removed from the events and cook usage they recorded in shared households and
+  from notification read receipts; their sessions, device tokens, sign-in
+  identities, and user record are deleted, in that order and last.
+
+Every step is idempotent, and the user record goes last, so a failure part-way
+(`500`) leaves an account that can sign in and delete again. Access tokens
+already issued stay valid until they expire (15 minutes), but no session can
+refresh and `GET /me` answers `401`. Apple sign-in tokens aren't revoked with
+Apple: the API never exchanges an authorization code, so it holds none.
+
+| Status | Code | When |
+| --- | --- | --- |
+| 401 | `unauthenticated` | Missing or invalid access token |
+| 500 | `internal` | A store failed part-way; retrying is safe |
 
 ## Ingredient catalog
 

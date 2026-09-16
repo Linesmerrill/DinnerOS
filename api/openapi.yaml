@@ -113,6 +113,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReadyResponse"
+  /:
+    get:
+      summary: Home page
+      description: |
+        Static HTML: the app name, a one-line description, a link to `/privacy`,
+        and the contact email. Google's OAuth consent screen lists it as the app
+        home page. Matches `/` exactly.
+      operationId: getHomePage
+      tags: [operations]
+      security: []
+      responses:
+        "200":
+          description: The home page. No script; `default-src 'none'` with the inline style allowed by hash.
+          content:
+            text/html:
+              schema:
+                type: string
+  /privacy:
+    get:
+      summary: Privacy policy
+      description: |
+        Static HTML privacy policy: what is collected, where it is stored and who
+        processes it, and how to delete it. Linked from the app, TestFlight, and
+        Google's OAuth consent screen.
+      operationId: getPrivacyPolicy
+      tags: [operations]
+      security: []
+      responses:
+        "200":
+          description: The privacy policy. No script; `default-src 'none'` with the inline style allowed by hash.
+          content:
+            text/html:
+              schema:
+                type: string
   /invite:
     get:
       summary: Invitation landing page
@@ -338,6 +372,32 @@ paths:
                 $ref: "#/components/schemas/MeResponse"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+    delete:
+      summary: Delete account
+      description: |
+        Permanently deletes the caller's account (App Review guideline 5.1.1(v)).
+        A household the caller is the last member of is deleted with all of its
+        data. A household others share is left and keeps its data; if the caller
+        is its only admin, the longest-standing other member becomes admin. The
+        caller's ratings, sessions, device tokens, sign-in identities, and user
+        record are deleted, and their ID is removed from events, cook usage, and
+        notification read receipts in shared households. Every step is
+        idempotent, so a `500` can be retried. See docs/api.md#delete-account.
+      operationId: deleteMe
+      tags: [auth]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: The account is deleted. Existing access tokens can no longer refresh.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          description: "`internal`: a store failed part-way. Retrying is safe."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/me/device-tokens:
     put:
       summary: Register a push device token

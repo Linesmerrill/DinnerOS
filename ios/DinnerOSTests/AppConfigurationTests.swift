@@ -22,6 +22,14 @@ struct AppConfigurationTests {
         #expect(configuration.build == "42")
     }
 
+    @Test func privacyPolicyIsServedByTheAPI() {
+        let production = AppConfiguration(infoDictionary: ["APIBaseURL": "https://api.tlps.dev"])
+        #expect(production.privacyPolicyURL == URL(string: "https://api.tlps.dev/privacy"))
+        let trailingSlash = AppConfiguration(infoDictionary: ["APIBaseURL": "https://api.tlps.dev/"])
+        #expect(trailingSlash.privacyPolicyURL == URL(string: "https://api.tlps.dev/privacy"))
+        #expect(AppConfiguration(infoDictionary: [:]).privacyPolicyURL == nil)
+    }
+
     @Test func missingValuesFallBackToProductionWithoutURL() {
         let configuration = AppConfiguration(infoDictionary: [:])
 

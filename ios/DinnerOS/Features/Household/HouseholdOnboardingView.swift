@@ -32,6 +32,11 @@ struct HouseholdOnboardingView: View {
                             systemImage: "envelope.open.fill")
                     }
                 }
+                // Reachable before any household exists, so an account can always be deleted.
+                Section("Account") {
+                    PrivacyPolicyLink()
+                    DeleteAccountButton()
+                }
             }
             .navigationTitle(configuration.displayName)
             .navigationBarTitleDisplayMode(.inline)

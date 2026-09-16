@@ -46,6 +46,12 @@ struct AppConfiguration: Sendable, Equatable {
 
     static let main = AppConfiguration(infoDictionary: Bundle.main.infoDictionary ?? [:])
 
+    /// The privacy policy the API serves at `/privacy` (`https://api.tlps.dev/privacy` in
+    /// production). `nil` without a valid API URL.
+    var privacyPolicyURL: URL? {
+        apiBaseURL?.appending(path: "privacy")
+    }
+
     /// A trimmed, lowercased string, or `nil` when the value is missing or blank.
     private static func lowercasedValue(_ value: Any?) -> String? {
         let trimmed = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()

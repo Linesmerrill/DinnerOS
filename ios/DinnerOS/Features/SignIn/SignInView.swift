@@ -102,6 +102,11 @@ private struct SignInScreen: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.top, 8)
+
+            if let privacyURL = configuration.privacyPolicyURL {
+                Link("Privacy Policy", destination: privacyURL)
+                    .font(.footnote)
+            }
         }
         .disabled(model.isWorking)
     }

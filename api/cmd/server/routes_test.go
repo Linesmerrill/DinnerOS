@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/account"
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
 	"github.com/Linesmerrill/DinnerOS/api/internal/customize"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
@@ -41,6 +42,7 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		menu.NewHandler(menu.HandlerOptions{}).Mount(r)
 		auth.NewHandler(auth.HandlerOptions{}).Mount(r)
 		push.NewHandler(push.HandlerOptions{}).Mount(r)
+		account.NewHandler(account.HandlerOptions{}).Mount(r)
 	})
 
 	var routes []string
@@ -71,6 +73,7 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		"DELETE /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/options/{optionId}",
 		"POST /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}/batches",
 		"GET /api/v1/me",
+		"DELETE /api/v1/me",
 		"PUT /api/v1/me/device-tokens",
 		"DELETE /api/v1/me/device-tokens",
 		"GET /api/v1/households/{householdId}/notifications",

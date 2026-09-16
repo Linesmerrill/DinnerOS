@@ -141,6 +141,41 @@ struct AuthSessionTests {
         #expect(store.session?.tokens.accessToken == "access-new")
     }
 
+    // MARK: Delete account
+
+    @Test func deleteAccountDeletesOnServerThenSignsOut() async throws {
+        let stored = StoredSession(tokens: Fixtures.tokens(access: "access-1"), user: Fixtures.user)
+        let (session, store, transport) = try makeSession(stored: stored) { _ in (204, Data()) }
+        await session.restore()
+        let hookRan = Counter()
+        session.willSignOut = { hookRan.increment() }
+
+        try await session.deleteAccount()
+
+        let request = try #require(transport.requests.first)
+        #expect(request.httpMethod == "DELETE")
+        #expect(request.url?.path() == meRequestPath)
+        #expect(request.bearerToken == "access-1")
+        #expect(hookRan.value == 1)
+        #expect(session.state == .signedOut)
+        #expect(store.session == nil)
+        // The server deleted every session; there's nothing to log out.
+        #expect(transport.requests(to: logoutPath).isEmpty)
+    }
+
+    @Test func failedDeleteAccountKeepsTheSession() async throws {
+        let stored = StoredSession(tokens: Fixtures.tokens(), user: Fixtures.user)
+        let (session, store, _) = try makeSession(stored: stored) { _ in
+            (500, Fixtures.errorJSON(code: "internal"))
+        }
+        await session.restore()
+
+        await #expect(throws: APIError.self) { try await session.deleteAccount() }
+
+        #expect(session.state == .signedIn(Fixtures.user))
+        #expect(store.session == stored)
+    }
+
     // MARK: Authorized requests
 
     @Test func concurrentUnauthorizedRequestsShareOneRefresh() async throws {

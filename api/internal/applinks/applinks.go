@@ -9,6 +9,9 @@
 //   - GET /.well-known/apple-app-site-association, which lets the iOS app
 //     claim /invite as a universal link, so the link opens the app directly
 //     when it's installed.
+//   - GET / and GET /privacy, a one-paragraph home page and the privacy
+//     policy, which the App Store, TestFlight, and Google's OAuth consent
+//     screen link to.
 package applinks
 
 import (
@@ -61,6 +64,9 @@ type Handler struct {
 	csp  string
 	// aasa is nil when the app ID isn't configured.
 	aasa []byte
+	// home and privacy are the site's static pages (pages.go).
+	home    staticPage
+	privacy staticPage
 }
 
 // NewHandler returns a Handler.
@@ -88,7 +94,12 @@ func NewHandler(opts Options) *Handler {
 		panic(fmt.Sprintf("applinks: render invite page: %v", err))
 	}
 
-	h := &Handler{page: page.Bytes(), csp: contentSecurityPolicy()}
+	h := &Handler{
+		page:    page.Bytes(),
+		csp:     contentSecurityPolicy(),
+		home:    renderStaticPage(homePage, appName),
+		privacy: renderStaticPage(privacyPage, appName),
+	}
 	if opts.AppleTeamID != "" && opts.AppleBundleID != "" {
 		h.aasa = encodeAppSiteAssociation(opts.AppleTeamID + "." + opts.AppleBundleID)
 	}
@@ -97,6 +108,9 @@ func NewHandler(opts Options) *Handler {
 
 // Mount registers the routes on r, which is expected to be the root router.
 func (h *Handler) Mount(r chi.Router) {
+	// chi matches "/" exactly, so the home page never shadows other routes.
+	r.Get(HomePath, h.home.serve)
+	r.Get(PrivacyPath, h.privacy.serve)
 	r.Get(InvitePath, h.serveInvitePage)
 	if h.aasa != nil {
 		r.Get(AASAPath, h.serveAASA)

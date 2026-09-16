@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/account"
 	"github.com/Linesmerrill/DinnerOS/api/internal/applinks"
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot/baseline"
@@ -106,23 +107,7 @@ func run() error {
 		}
 	}()
 
-	// Each domain package registers its IndexSets here as it is implemented.
-	if err := db.EnsureIndexes(startupCtx, slices.Concat(
-		users.Indexes(),
-		auth.Indexes(),
-		households.Indexes(),
-		invitations.Indexes(),
-		recipes.Indexes(),
-		planning.Indexes(),
-		pantry.Indexes(),
-		notifications.Indexes(),
-		push.Indexes(),
-		substitutes.Indexes(),
-		shopping.Indexes(),
-		skips.Indexes(),
-		behaviorIndexes(),
-		recommendations.Indexes(),
-	)...); err != nil {
+	if err := db.EnsureIndexes(startupCtx, indexSets()...); err != nil {
 		return err
 	}
 	// The curated specialty ingredients ship in the binary; syncing is
@@ -321,6 +306,13 @@ func run() error {
 	})
 	// Device tokens for push. Sending is cmd/sendreminders' job (Heroku
 	// Scheduler), so the web dyno needs no APNs credentials to start.
+	// DELETE /me: account deletion reaches every module's purge through
+	// newAccountService.
+	accountHandler := account.NewHandler(account.HandlerOptions{
+		Service: newAccountService(db.Database(), householdService, logger),
+		Tokens:  tokens,
+		Logger:  logger,
+	})
 	deviceTokenHandler := push.NewHandler(push.HandlerOptions{
 		Service: push.NewService(push.NewMongoStore(db.Database()), logger),
 		Tokens:  tokens,
@@ -358,6 +350,7 @@ func run() error {
 				shoppingHandler.Mount(r)
 				notificationHandler.Mount(r)
 				deviceTokenHandler.Mount(r)
+				accountHandler.Mount(r)
 				behavior.ratingHandler.Mount(r)
 				behavior.eventHandler.Mount(r)
 			},
@@ -395,6 +388,27 @@ func run() error {
 	}
 	logger.Info("api stopped")
 	return nil
+}
+
+// indexSets returns every module's indexes. Each domain package registers its
+// IndexSets here as it is implemented.
+func indexSets() []mongodb.IndexSet {
+	return slices.Concat(
+		users.Indexes(),
+		auth.Indexes(),
+		households.Indexes(),
+		invitations.Indexes(),
+		recipes.Indexes(),
+		planning.Indexes(),
+		pantry.Indexes(),
+		notifications.Indexes(),
+		push.Indexes(),
+		substitutes.Indexes(),
+		shopping.Indexes(),
+		skips.Indexes(),
+		behaviorIndexes(),
+		recommendations.Indexes(),
+	)
 }
 
 // newAuthHandler wires provider verifiers and the auth HTTP handler.

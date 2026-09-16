@@ -36,6 +36,12 @@ nonisolated struct AuthAPI: Sendable {
     func me(accessToken: String) async throws -> MeResponse {
         try await client.send(APIRequest.get("/api/v1/me").authorized(with: accessToken))
     }
+
+    /// `DELETE /me`: permanently deletes the account, its sessions and device tokens, and
+    /// any household it was the last member of.
+    func deleteAccount(accessToken: String) async throws {
+        try await client.sendIgnoringBody(APIRequest.delete("/api/v1/me").authorized(with: accessToken))
+    }
 }
 
 // Request bodies. The API rejects unknown fields; optional fields that are nil are

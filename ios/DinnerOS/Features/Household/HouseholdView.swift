@@ -98,6 +98,11 @@ struct HouseholdView: View {
                     Text("You'll need to sign in again to see your household.")
                 }
             }
+            Section {
+                DeleteAccountButton()
+            } footer: {
+                Text("Deletes your account and any household where you're the only member.")
+            }
         }
         .navigationTitle(households.current?.household.name ?? String(localized: "Household"))
         .toolbar {
@@ -348,6 +353,7 @@ struct HouseholdView: View {
                     }
                 }
             }
+            PrivacyPolicyLink()
         }
     }
 
