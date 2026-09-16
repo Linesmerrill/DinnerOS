@@ -99,20 +99,23 @@ generic option names. Packet sizes are estimates.
 
 | Specialty ingredient | Options (default first) |
 | --- | --- |
-| Chicken, Beef, Veggie, Mushroom, Pork Ramen Stock Concentrate | store (bouillon base, seasoned where needed) |
-| Sweet Soy Glaze | store (soy and honey), batch |
-| Southwest Spice Blend | batch (12 tbsp, 180 days), store |
+| Chicken, Beef, Veggie Stock Concentrate | store (concentrated bouillon base; packet→tsp conversion unverified) |
+| Mushroom, Pork Ramen Stock Concentrate | store (bouillon base, seasoned where needed; same unverified conversion) |
+| Sweet Soy Glaze | store (bottled sweet soy glaze), batch |
+| Southwest Spice Blend | batch (4 tbsp, 180 days), store |
 | Sweet Thai Chili Sauce | store (bottled sweet chili sauce) |
-| Tex-Mex Paste | store (tomato paste with chipotle and chili spices), batch |
+| Tex-Mex Paste | store (smoky chipotle base with tomato paste), batch |
 | Ponzu Sauce | store (soy with citrus), store (bottled ponzu), batch |
-| Cream Sauce Base | store (heavy cream with cream cheese) |
+| Cream Sauce Base | store (butter, flour, and milk, made in the pan — no batch by design) |
 | Smoky Red Pepper Crema | store (sour cream with roasted peppers), batch |
-| Fry Seasoning | batch, store |
+| Fry Seasoning | batch (1:1 paprika and garlic powder), store |
 | Szechuan Paste (alias Sichuan Paste) | store (chili garlic sauce with soy), batch |
-| Tuscan Heat Spice | store (Italian seasoning with chili flakes), batch |
-| Mexican, Fajita, Shawarma Spice Blend | batch, store |
+| Tuscan Heat Spice | batch (Italian seasoning, garlic powder, cayenne), store |
+| Mexican, Fajita Spice Blend | batch, store |
+| Shawarma Spice Blend | store (bought shawarma blend) |
 | Bulgogi Sauce, Umami Ginger Sauce | store, batch |
-| Blackening Spice, Brown Sugar Bourbon Seasoning | batch, store |
+| Blackening Spice | store (bought blackening or Cajun blend) |
+| Brown Sugar Bourbon Seasoning | batch, store |
 | Sesame Dressing | store (bottled toasted sesame dressing), batch |
 | Miso Sauce Concentrate, Cheese Roux Concentrate | store |
 | Garlic-Ginger Scallion Paste | store (garlic and ginger paste with scallions), batch |
