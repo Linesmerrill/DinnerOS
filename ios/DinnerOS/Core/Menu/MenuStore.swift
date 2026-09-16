@@ -288,7 +288,11 @@ final class MenuStore {
         for summary in response.items {
             var summary = summary
             if let plan = knownPlans[summary.week] {
-                summary.plannedCount = plan.entries.count
+                // The response's counts are authoritative; a plan already in hand is newer, and
+                // its add-ons are counted apart so the pill keeps reading meals.
+                let counts = mealCounts(of: plan.entries)
+                summary.plannedCount = counts.meals
+                summary.addOnCount = counts.addOns
             }
             weekSummaries[summary.week] = summary
         }
@@ -331,6 +335,19 @@ final class MenuStore {
         return allMeals.items.first { $0.recipe.id == recipeID }
     }
 
+    /// Whether a planned entry is an add-on rather than a main meal.
+    ///
+    /// A current server marks the entry itself; an older one doesn't, so the menu's own card
+    /// for that recipe answers instead. Either way an add-on is never counted as a dinner.
+    func isAddOn(_ entry: PlanEntry) -> Bool {
+        entry.recipe.isAddon || card(forRecipeID: entry.recipe.id)?.recipe.isAddon == true
+    }
+
+    /// `entries` split into meals and add-ons.
+    func mealCounts(of entries: [PlanEntry]) -> MealCounts {
+        MealCounts.of(entries) { isAddOn($0) }
+    }
+
     func timing(of week: ISOWeek) -> WeekTiming {
         weekSummaries[week.description]?.timing ?? WeekTiming.of(week, current: currentWeek)
     }
@@ -343,7 +360,9 @@ final class MenuStore {
         guard plan.householdID == householdID else { return }
         knownPlans[plan.week] = plan
         if var summary = weekSummaries[plan.week] {
-            summary.plannedCount = plan.entries.count
+            let counts = mealCounts(of: plan.entries)
+            summary.plannedCount = counts.meals
+            summary.addOnCount = counts.addOns
             summary.status = WeekStatus(rawValue: plan.status.rawValue)
             weekSummaries[plan.week] = summary
         }

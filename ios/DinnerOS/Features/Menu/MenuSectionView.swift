@@ -8,6 +8,10 @@ struct MenuSectionView: View {
     /// Past weeks and members without `plan.edit` see cards without the add control.
     var canAdd = true
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var photoURLs: [URL?] { section.items.map(\.recipe.imageURL) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             MenuSectionHeader(title: section.title, subtitle: section.subtitle) {
@@ -29,8 +33,11 @@ struct MenuSectionView: View {
             } else {
                 ScrollView(.horizontal) {
                     LazyHStack(alignment: .top, spacing: 12) {
-                        ForEach(section.items) { card in
+                        ForEach(Array(section.items.enumerated()), id: \.element.id) { index, card in
                             MenuRecipeCard(card: card, canAdd: canAdd)
+                                .prefetchesPhotos(
+                                    after: index, in: photoURLs,
+                                    pointWidth: MenuRecipeCard.carouselWidth(for: dynamicTypeSize))
                         }
                     }
                     .scrollTargetLayout()

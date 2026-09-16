@@ -21,6 +21,14 @@ struct YourMealsSection: View {
         households.access?.can(.planEdit) == true
     }
 
+    /// The same photo each `MealCard` will show, for warming the next few cards.
+    private var mealPhotoURLs: [URL?] {
+        entries.map { entry in
+            menu.card(forRecipeID: entry.recipe.id)?.recipe.imageURL
+                ?? entry.recipe.imageURLString.flatMap { URL(string: $0) }
+        }
+    }
+
     private var isEditable: Bool {
         canEdit && plans.isDraft && menu.selectedTiming != .past
     }
@@ -49,11 +57,11 @@ struct YourMealsSection: View {
     }
 
     private var subtitle: String {
+        let counts = menu.mealCounts(of: entries)
         if menu.selectedTiming == .past {
-            return MenuFormat.mealsPlanned(entries.count)
+            return MenuFormat.mealsPlanned(counts.meals)
         }
-        return MenuFormat.yourMealsSubtitle(
-            total: entries.count, fromAutopilot: entries.filter(\.isFromAutopilot).count)
+        return MenuFormat.yourMealsSubtitle(counts: counts)
     }
 
     @ViewBuilder
@@ -94,9 +102,10 @@ struct YourMealsSection: View {
         } else {
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 12) {
-                    ForEach(entries) { entry in
+                    ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                         card(entry)
                             .containerRelativeFrame(.horizontal) { width, _ in width * 0.84 }
+                            .prefetchesPhotos(after: index, in: mealPhotoURLs, pointWidth: MealCard.photoWidth)
                     }
                 }
                 .scrollTargetLayout()
@@ -217,12 +226,23 @@ struct MealCard: View {
         .accessibilityElement(children: .contain)
     }
 
+    /// A paging card is a little narrower than the screen; `RecipePhoto` refines this once the
+    /// card is laid out.
+    static let photoWidth: CGFloat = 340
+
     private var photo: some View {
-        RecipePhoto(url: summary.imageURL, pointWidth: 340)
+        RecipePhoto(url: summary.imageURL, pointWidth: MealCard.photoWidth)
             .overlay(alignment: .topLeading) {
-                MenuChip(text: dayLabel, systemImage: "calendar", isProminent: true)
-                    .background(.regularMaterial, in: .capsule)
-                    .padding(8)
+                HStack(spacing: 6) {
+                    MenuChip(text: dayLabel, systemImage: "calendar", isProminent: true)
+                        .background(.regularMaterial, in: .capsule)
+                    if isAddOn {
+                        AddOnLabel()
+                            .background(.regularMaterial, in: .capsule)
+                    }
+                }
+                .padding(8)
+                .accessibilityHidden(true)
             }
             .overlay(alignment: .topTrailing) {
                 if entry.isFromAutopilot {
@@ -236,9 +256,21 @@ struct MealCard: View {
                 }
             }
             .overlay(alignment: .bottomLeading) {
-                outcomeBadge
-                    .padding(8)
+                HStack(spacing: 6) {
+                    if let minutes = summary.displayMinutes, minutes > 0 {
+                        TimeBadge(minutes: minutes, isQuick: summary.timeBand == .quick)
+                    }
+                    outcomeBadge
+                }
+                .padding(8)
+                .accessibilityHidden(true)
             }
+    }
+
+    /// Garlic bread planned with the pasta is an add-on, not a sixth dinner. The entry says so
+    /// on a current server; the menu's card for the recipe answers on an older one.
+    private var isAddOn: Bool {
+        entry.recipe.isAddon || card?.recipe.isAddon == true
     }
 
     @ViewBuilder
@@ -258,36 +290,13 @@ struct MealCard: View {
         }
     }
 
+    /// The name only: the day, the time, and whether it's an add-on are badges on the photo,
+    /// and a customization or note would make this card a different height from its neighbours.
+    /// Both still reach VoiceOver through `accessibilityLabel`.
     private var text: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(entry.recipe.name)
-                .font(.headline)
-                .foregroundStyle(Color.primary)
-                .lineLimit(2)
-            if let headline = summary.headline, !headline.isEmpty {
-                Text(headline)
-                    .font(.subheadline)
-                    .foregroundStyle(Color.secondary)
-                    .lineLimit(1)
-            }
-            FactsRow(summary: summary)
-            if let customized = entry.customizations.first(where: { !$0.label.isEmpty }) {
-                Label("Customized: \(customized.label)", systemImage: "arrow.triangle.swap")
-                    .font(.caption)
-                    .foregroundStyle(Color.secondary)
-            }
-            if !entry.note.isEmpty {
-                Text(entry.note)
-                    .font(.caption)
-                    .italic()
-                    .foregroundStyle(Color.secondary)
-                    .lineLimit(2)
-            }
-            BadgeRow(badges: card?.badges ?? [])
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
+        CardTitle(name: entry.recipe.name)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilityLabel)
     }
 
     private var dayLabel: String {
@@ -296,9 +305,20 @@ struct MealCard: View {
 
     private var accessibilityLabel: String {
         var parts = [entry.recipe.name, dayLabel]
-        parts += MenuFormat.spokenFacts(
-            minutes: summary.displayMinutes, calories: summary.calories, proteinGrams: summary.proteinGrams)
+        parts += MenuFormat.spokenFacts(minutes: summary.displayMinutes, calories: nil, proteinGrams: nil)
+        if summary.timeBand == .quick {
+            parts.append(String(localized: "quick"))
+        }
+        if isAddOn {
+            parts.append(String(localized: "add-on"))
+        }
         parts.append(MenuFormat.servings(entry.servings))
+        if let customized = entry.customizations.first(where: { !$0.label.isEmpty }) {
+            parts.append(String(localized: "Customized: \(customized.label)"))
+        }
+        if !entry.note.isEmpty {
+            parts.append(entry.note)
+        }
         switch outcome {
         case .cooked: parts.append(String(localized: "Cooked"))
         case .skipped: parts.append(String(localized: "Skipped"))

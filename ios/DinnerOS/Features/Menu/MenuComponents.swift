@@ -2,50 +2,48 @@ import SwiftUI
 
 // MARK: - Photos
 
-/// A recipe photo, asked for at the size it's shown (`RecipeImageURL`), with a shimmering
-/// placeholder while it loads and a fallback glyph when there's no image.
+/// A recipe photo, asked for at the size it's shown (`RecipeImageURL`) and kept in memory once
+/// decoded (`ImageLoader`), with a shimmering placeholder for a slow load and a fallback glyph
+/// when there's no image.
 struct RecipePhoto: View {
     let url: URL?
     /// `nil` fills whatever frame the caller sets.
     var aspectRatio: CGFloat? = 4.0 / 3.0
-    /// The width the photo is shown at, in points.
+    /// The width the photo is shown at, in points. Callers that can't know it — a hero sized by
+    /// its container, a card sized by the layout — pass their best estimate and the view
+    /// refines it once the frame is measured.
     var pointWidth: CGFloat = 360
     var cornerRadius: CGFloat = 18
 
     @Environment(\.displayScale) private var displayScale
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The measured width, once there is one. Until then `pointWidth` stands in, so the first
+    /// frame asks the CDN for a card-sized photo rather than the 1200-pixel original.
+    @State private var measuredWidth: CGFloat?
 
     var body: some View {
         placeholder
             .overlay {
-                AsyncImage(
-                    url: sizedURL, transaction: Transaction(animation: reduceMotion ? nil : .easeIn(duration: 0.2))
-                ) {
-                    phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        fallbackGlyph
-                    case .empty:
-                        if url == nil {
-                            fallbackGlyph
-                        } else {
-                            ShimmerView()
-                        }
-                    @unknown default:
-                        fallbackGlyph
-                    }
+                CachedImage(key: key) {
+                    ShimmerView()
+                } fallback: {
+                    fallbackGlyph
                 }
             }
             .clipShape(.rect(cornerRadius: cornerRadius))
+            .onGeometryChange(for: CGFloat.self) {
+                $0.size.width
+            } action: { width in
+                guard width > 0 else { return }
+                measuredWidth = width
+            }
             .accessibilityHidden(true)
     }
 
-    private var sizedURL: URL? {
-        RecipeImageURL.sized(url, pointWidth: pointWidth, scale: displayScale)
+    /// Only a measured width that lands in a different bucket changes the key, so refining the
+    /// width usually costs nothing.
+    private var key: ImageKey? {
+        ImageKey(url: url, pointWidth: measuredWidth ?? pointWidth, scale: displayScale)
     }
 
     @ViewBuilder
@@ -77,20 +75,21 @@ struct IngredientPhoto: View {
             .fill(Color(.secondarySystemBackground))
             .frame(width: size, height: size)
             .overlay {
-                AsyncImage(url: RecipeImageURL.sized(url, pointWidth: size, scale: displayScale)) { phase in
-                    if let image = phase.image {
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        Image(systemName: "carrot")
-                            .font(.system(size: size * 0.4))
-                            .foregroundStyle(.tertiary)
-                    }
+                CachedImage(key: ImageKey(url: url, pointWidth: size, scale: displayScale)) {
+                    carrotGlyph
+                } fallback: {
+                    carrotGlyph
                 }
             }
             .clipShape(.circle)
             .accessibilityHidden(true)
+    }
+
+    /// A thumbnail is too small for a shimmer to read as anything, so it waits behind the glyph.
+    private var carrotGlyph: some View {
+        Image(systemName: "carrot")
+            .font(.system(size: size * 0.4))
+            .foregroundStyle(.tertiary)
     }
 }
 
@@ -108,6 +107,107 @@ struct ShimmerView: View {
             reduceMotion ? nil : .easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: isAnimating
         )
         .onAppear { isAnimating = true }
+    }
+}
+
+// MARK: - Photo badges
+
+/// A capsule over a photo. It sits on a material so it stays legible over a bright image.
+struct PhotoBadge: View {
+    let text: String
+    var systemImage: String?
+    var isProminent = false
+
+    var body: some View {
+        Label {
+            Text(text)
+        } icon: {
+            if let systemImage {
+                Image(systemName: systemImage)
+            }
+        }
+        .labelStyle(.titleAndIcon)
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(isProminent ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.primary))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(.regularMaterial, in: .capsule)
+    }
+}
+
+/// "20 min" over a card's photo, with a bolt and the accent colour when the recipe is quick.
+/// Medium and long times stay neutral, so the bolt means something.
+struct TimeBadge: View {
+    let minutes: Int
+    var isQuick = false
+
+    var body: some View {
+        PhotoBadge(
+            text: RecipeFormat.minutes(minutes), systemImage: isQuick ? "bolt.fill" : nil, isProminent: isQuick)
+    }
+}
+
+/// Marks a planned add-on, so a week that reads "5 meals · 1 add-on" and the cards agree.
+struct AddOnLabel: View {
+    var body: some View {
+        Text("Add-on")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(Color.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(.quaternary, in: .capsule)
+    }
+}
+
+/// Which single badge a card shows over its photo.
+nonisolated enum MenuCardBadge {
+    /// Most worth knowing first. Only the first match is shown, so a card never stacks badges
+    /// and every card in a row is the same shape.
+    static let priority: [MenuBadgeCode] = [.autopilotPick, .makeAgain, .oftenOrdered]
+
+    /// The one badge to show, or `nil` when none of the card's badges are worth the space.
+    static func context(in badges: [MenuBadge]) -> MenuBadge? {
+        for code in priority {
+            if let badge = badges.first(where: { $0.code == code }) {
+                return badge
+            }
+        }
+        return nil
+    }
+}
+
+// MARK: - Card shape
+
+/// Keeps every card in a row the same height.
+///
+/// Cards used to grow with their text, so a long name or a missing subtitle made neighbours in
+/// a carousel different heights. The photo has a fixed aspect ratio and the name a reserved
+/// height, which leaves nothing that varies per card.
+nonisolated enum MenuCardMetrics {
+    /// Lines reserved for a card's name. Accessibility sizes get a third line — every card in
+    /// the row reserves the same number, so they still match each other.
+    static func titleLines(for size: DynamicTypeSize) -> Int {
+        size.isAccessibilitySize ? 3 : 2
+    }
+}
+
+/// A card's name, clamped and given a fixed height so cards line up.
+struct CardTitle: View {
+    let name: String
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// One line of `.headline`, which grows with the text size.
+    @ScaledMetric(relativeTo: .headline) private var lineHeight = 21
+
+    var body: some View {
+        let lines = MenuCardMetrics.titleLines(for: dynamicTypeSize)
+        Text(name)
+            .font(.headline)
+            .foregroundStyle(Color.primary)
+            .lineLimit(lines)
+            .multilineTextAlignment(.leading)
+            .frame(height: lineHeight * CGFloat(lines), alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

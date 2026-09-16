@@ -27,7 +27,7 @@ struct MenuRecipeCard: View {
             NavigationLink(value: card.recipe) {
                 VStack(alignment: .leading, spacing: 8) {
                     photo
-                    text
+                    title
                 }
                 .contentShape(.rect)
             }
@@ -41,14 +41,24 @@ struct MenuRecipeCard: View {
         .accessibilityElement(children: .contain)
     }
 
-    private var carouselWidth: CGFloat {
+    /// Shared with the carousels that warm the next few photos, so a prefetch asks the CDN for
+    /// the same size the card will.
+    static func carouselWidth(for dynamicTypeSize: DynamicTypeSize) -> CGFloat {
         dynamicTypeSize.isAccessibilitySize ? 300 : 220
+    }
+
+    /// What a full-width card's photo is asked for before the layout measures it; `RecipePhoto`
+    /// refines it from the real frame.
+    static let fullWidthEstimate: CGFloat = 400
+
+    private var carouselWidth: CGFloat {
+        MenuRecipeCard.carouselWidth(for: dynamicTypeSize)
     }
 
     private var photo: some View {
         RecipePhoto(
             url: card.recipe.imageURL, aspectRatio: size == .carousel ? 4.0 / 3.0 : 16.0 / 10.0,
-            pointWidth: size == .carousel ? carouselWidth : 400
+            pointWidth: size == .carousel ? carouselWidth : MenuRecipeCard.fullWidthEstimate
         )
         .overlay(alignment: .topTrailing) {
             if size == .carousel, canAdd {
@@ -59,36 +69,40 @@ struct MenuRecipeCard: View {
                 .padding(4)
             }
         }
+        .overlay(alignment: .topLeading) {
+            if let contextBadge {
+                PhotoBadge(
+                    text: contextBadge.text, systemImage: contextBadge.code.systemImage,
+                    isProminent: contextBadge.code == .autopilotPick
+                )
+                .padding(8)
+                // Spoken as part of the card's label instead.
+                .accessibilityHidden(true)
+            }
+        }
+        .overlay(alignment: .bottomLeading) {
+            if let minutes = card.recipe.displayMinutes, minutes > 0 {
+                TimeBadge(minutes: minutes, isQuick: isQuick)
+                    .padding(8)
+                    .accessibilityHidden(true)
+            }
+        }
     }
 
-    private var text: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(card.recipe.name)
-                .font(.headline)
-                .foregroundStyle(Color.primary)
-                .lineLimit(2)
-            if let headline = card.recipe.headline, !headline.isEmpty {
-                Text(headline)
-                    .font(.subheadline)
-                    .foregroundStyle(Color.secondary)
-                    .lineLimit(1)
-            }
-            FactsRow(summary: card.recipe)
-            if let reason = card.reason {
-                Text(reason)
-                    .font(.caption)
-                    .foregroundStyle(.tint)
-                    .lineLimit(2)
-            }
-            BadgeRow(badges: card.badges)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            MenuFormat.cardAccessibilityLabel(
-                name: card.recipe.name, minutes: card.recipe.displayMinutes, calories: card.recipe.calories,
-                proteinGrams: card.recipe.proteinGrams, inPlan: card.inPlan))
+    /// The name is all a card says now: what it is and how long it takes, and the rest is on
+    /// the recipe screen.
+    private var title: some View {
+        CardTitle(name: card.recipe.name)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(
+                MenuFormat.cardAccessibilityLabel(
+                    name: card.recipe.name, minutes: card.recipe.displayMinutes, isQuick: isQuick,
+                    badge: contextBadge?.text, isAddOn: card.recipe.isAddon, inPlan: card.inPlan))
     }
+
+    private var contextBadge: MenuBadge? { MenuCardBadge.context(in: card.badges) }
+
+    private var isQuick: Bool { card.recipe.timeBand == .quick }
 
     private var addButton: some View {
         HStack(spacing: 12) {
@@ -178,12 +192,31 @@ struct MenuRecipeCard: View {
     .preferredColorScheme(.dark)
 }
 
+/// Mixed name lengths, a card with no cook time, and one with no photo — every card in the row
+/// has to be the same height.
+#Preview("Equal heights") {
+    NavigationStack {
+        ScrollView(.horizontal) {
+            HStack(alignment: .top, spacing: 12) {
+                ForEach(MenuPreviewData.cards) { card in
+                    MenuRecipeCard(card: card)
+                        .border(.red.opacity(0.4))
+                }
+            }
+            .padding()
+        }
+    }
+    .menuPreviewEnvironment()
+}
+
 #Preview("Accessibility size") {
     NavigationStack {
-        ScrollView {
-            VStack(spacing: 24) {
-                MenuRecipeCard(card: MenuPreviewData.cards[0], size: .fullWidth)
-                MenuRecipeCard(card: MenuPreviewData.cards[1])
+        ScrollView(.horizontal) {
+            HStack(alignment: .top, spacing: 12) {
+                ForEach(MenuPreviewData.cards) { card in
+                    MenuRecipeCard(card: card)
+                        .border(.red.opacity(0.4))
+                }
             }
             .padding()
         }

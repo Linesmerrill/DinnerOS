@@ -9,7 +9,8 @@ struct MenuBottomBar: View {
     @Environment(\.openShop) private var openShop
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private var count: Int { plans.plan?.entries.count ?? 0 }
+    /// Main meals and add-ons counted apart, so an add-on never reads as a sixth dinner.
+    private var counts: MealCounts { menu.mealCounts(of: plans.plan?.entries ?? []) }
 
     private var canShop: Bool {
         openShop != nil && households.access?.can(.shoppingEdit) == true
@@ -22,7 +23,7 @@ struct MenuBottomBar: View {
             : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
         layout {
             VStack(alignment: .leading, spacing: 2) {
-                Text(MenuFormat.bottomBarTitle(count: count, timing: menu.selectedTiming))
+                Text(MenuFormat.bottomBarTitle(counts: counts, timing: menu.selectedTiming))
                     .font(.headline)
                 Text(plans.week.rangeLabel())
                     .font(.caption)

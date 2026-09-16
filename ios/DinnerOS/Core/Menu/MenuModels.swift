@@ -485,7 +485,10 @@ nonisolated struct WeekSummary: Decodable, Hashable, Sendable, Identifiable {
     let weekStart: String
     let weekEnd: String
     let timing: WeekTiming
+    /// Main meals, not counting add-ons.
     var plannedCount: Int
+    /// Add-ons planned alongside those meals; `0` from a server that doesn't send it.
+    var addOnCount: Int
     var cookedCount: Int
     var orderedCount: Int
     var status: WeekStatus
@@ -494,18 +497,19 @@ nonisolated struct WeekSummary: Decodable, Hashable, Sendable, Identifiable {
     var isoWeek: ISOWeek? { ISOWeek(week) }
 
     private enum CodingKeys: String, CodingKey {
-        case week, weekStart, weekEnd, timing, plannedCount, cookedCount, orderedCount, status
+        case week, weekStart, weekEnd, timing, plannedCount, addOnCount, cookedCount, orderedCount, status
     }
 
     init(
         week: String, weekStart: String = "", weekEnd: String = "", timing: WeekTiming, plannedCount: Int = 0,
-        cookedCount: Int = 0, orderedCount: Int = 0, status: WeekStatus = .none
+        addOnCount: Int = 0, cookedCount: Int = 0, orderedCount: Int = 0, status: WeekStatus = .none
     ) {
         self.week = week
         self.weekStart = weekStart
         self.weekEnd = weekEnd
         self.timing = timing
         self.plannedCount = plannedCount
+        self.addOnCount = addOnCount
         self.cookedCount = cookedCount
         self.orderedCount = orderedCount
         self.status = status
@@ -518,6 +522,7 @@ nonisolated struct WeekSummary: Decodable, Hashable, Sendable, Identifiable {
         weekEnd = container.decodeLenient(String.self, forKey: .weekEnd) ?? ""
         timing = container.decodeLenient(WeekTiming.self, forKey: .timing) ?? .upcoming
         plannedCount = container.decodeLenientInt(forKey: .plannedCount) ?? 0
+        addOnCount = container.decodeLenientInt(forKey: .addOnCount) ?? 0
         cookedCount = container.decodeLenientInt(forKey: .cookedCount) ?? 0
         orderedCount = container.decodeLenientInt(forKey: .orderedCount) ?? 0
         status = container.decodeLenient(WeekStatus.self, forKey: .status) ?? .none
