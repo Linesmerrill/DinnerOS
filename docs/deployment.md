@@ -221,18 +221,14 @@ without the app, so switch it to the value above.
 
 ## iOS on TestFlight
 
-The `iOS CI` workflow runs lint and tests on every push and pull request that
-touches the app. Its `testflight` job **never runs on a push**: Apple limits
-uploads per app per day ("Upload limit reached … wait 1 day", error 90382, hit on
-2026-09-16 after a day of push-per-upload). It uploads only when
-`TESTFLIGHT_ENABLED` is `true` and either:
+The `iOS CI` workflow always runs lint and tests. Its `testflight` job runs on
+pushes to `main`, or on a manual dispatch from `main`, **only** when the
+repository variable `TESTFLIGHT_ENABLED` is `true`.
 
-- the **nightly schedule** (10:00 UTC, 3am Pacific) finds commits under `ios/` or
-  the workflow in the last 24 hours, using those commit subjects as "What to Test"; or
-- someone **dispatches it manually** from `main` (Actions → iOS CI → Run workflow)
-  to ship now.
-
-So at most one scheduled upload a day, plus deliberate manual ones.
+Apple limits uploads per app per day ("Upload limit reached … wait 1 day",
+error 90382; hit on 2026-09-16 after about eight uploads). Every push to `main`
+that touches `ios/` uploads, so batch app changes into a few larger pushes a day
+rather than pushing each small fix.
 
 Status: ✅ enabled and working. The first build was uploaded on 2026-09-15 by run
 34927108505, and internal testers in "Household" receive new builds
@@ -345,5 +341,5 @@ vars or GitHub Secrets.
 | `MATCH_DEPLOY_KEY` | Signing | The private half of the SSH deploy key with write access to `Linesmerrill/dinneros-certificates`. Generate with `ssh-keygen -t ed25519`, add the public half as a deploy key with write access. |
 | `DEVELOPMENT_TEAM` | secret | Apple Team ID (as above) |
 | `TESTFLIGHT_ENABLED` | variable | Set to `true` once the setup above is complete |
-| `TESTFLIGHT_EXTERNAL_GROUPS` | variable | Optional. Comma-separated external TestFlight group names (e.g. `Friends & Family`). When set, every uploaded build is also distributed to those groups and submitted for Beta App Review, with the day's commit subjects as "What to Test". The job then waits for build processing, so it takes longer. Empty keeps builds internal-only. |
+| `TESTFLIGHT_EXTERNAL_GROUPS` | variable | Optional. Comma-separated external TestFlight group names (e.g. `Friends & Family`). When set, every main build is also distributed to those groups and submitted for Beta App Review, with the commit subject as "What to Test". The job then waits for build processing, so it takes longer. Empty keeps builds internal-only. |
 | `PRODUCTION_API_BASE_URL` | variable | The production API URL, e.g. `https://<app>.herokuapp.com` |
