@@ -12,6 +12,40 @@ nonisolated struct ShoppingAPI: Sendable {
         return response.items
     }
 
+    /// Every store DinnerOS knows about, supported or not. `query` is the API's `q` filter;
+    /// the Shop tab loads the whole catalog once and filters as the member types.
+    func catalog(query: String? = nil, accessToken: String) async throws -> [ShoppingCatalogItem] {
+        var request = APIRequest.get("/api/v1/shopping/catalog")
+        if let query, !query.isEmpty {
+            request.queryItems = [URLQueryItem(name: "q", value: query)]
+        }
+        let response: ShoppingCatalogList = try await client.send(request.authorized(with: accessToken))
+        return response.items
+    }
+
+    /// The stores this household has asked for.
+    func storeRequests(householdID: String, accessToken: String) async throws -> [ShoppingStoreRequest] {
+        let response: ShoppingStoreRequestList = try await client.send(
+            APIRequest.get(Self.path(householdID) + "/requests").authorized(with: accessToken))
+        return response.items
+    }
+
+    /// Asks for a store, by catalog `key` or by a name the member typed.
+    func createStoreRequest(
+        householdID: String, request: CreateShoppingStoreRequest, accessToken: String
+    ) async throws -> ShoppingStoreRequest {
+        let response: ShoppingStoreRequestEnvelope = try await client.send(
+            try APIRequest.post(Self.path(householdID) + "/requests", body: request).authorized(with: accessToken))
+        return response.request
+    }
+
+    /// Takes a request back (`204`).
+    func deleteStoreRequest(householdID: String, requestID: String, accessToken: String) async throws {
+        let request = APIRequest.delete(
+            Self.path(householdID) + "/requests/" + APIRequest.encodePathSegment(requestID))
+        try await client.sendIgnoringBody(request.withPercentEncodedPath().authorized(with: accessToken))
+    }
+
     func settings(householdID: String, accessToken: String) async throws -> ShoppingSettings {
         try await client.send(APIRequest.get(Self.path(householdID) + "/settings").authorized(with: accessToken))
     }

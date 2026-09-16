@@ -62,6 +62,14 @@ final class ShoppingStore {
     private(set) var preferences: [ShoppingPreference] = []
     private(set) var preferencesRefreshError: String?
 
+    /// The store catalog behind "Don't see your store?", and this household's requests.
+    private(set) var catalogPhase: Phase = .idle
+    private(set) var catalog: [ShoppingCatalogItem] = []
+    private(set) var storeRequests: [ShoppingStoreRequest] = []
+    /// Cleared by a `404`: this API doesn't have the catalog yet, so the section hides instead
+    /// of showing an error for something that isn't built.
+    private(set) var isCatalogAvailable = true
+
     /// `shopping.edit`: store setup, saved products, and handoffs. The API enforces it.
     private(set) var canEdit = false
     /// `pantry.edit`: confirming an order records pantry purchases.
@@ -119,7 +127,8 @@ final class ShoppingStore {
     /// A store frozen in the given state, for SwiftUI previews. It has no network access.
     static func preview(
         session: AuthSession, settings: ShoppingSettings?, providers: [ShoppingProvider],
-        proposal: ShoppingProposal? = nil, openHandoff: ShoppingHandoff? = nil, preferences: [ShoppingPreference] = []
+        proposal: ShoppingProposal? = nil, openHandoff: ShoppingHandoff? = nil, preferences: [ShoppingPreference] = [],
+        catalog: [ShoppingCatalogItem] = [], storeRequests: [ShoppingStoreRequest] = []
     ) -> ShoppingStore {
         let store = ShoppingStore(session: session, api: nil, checks: InMemoryGroceryChecks(), openURL: { _ in false })
         store.householdID = "household-preview"
@@ -135,6 +144,9 @@ final class ShoppingStore {
         store.openHandoff = openHandoff
         store.preferences = preferences
         store.preferencesPhase = .loaded
+        store.catalog = catalog
+        store.storeRequests = storeRequests
+        store.catalogPhase = .loaded
         store.canEdit = true
         store.canConfirm = true
         return store
@@ -533,6 +545,106 @@ final class ShoppingStore {
         await loadProposal(clearing: false)
     }
 
+    // MARK: - Store requests
+
+    /// Asking for a store needs only membership: it changes nothing the household owns, and
+    /// the API counts demand per household.
+    var canRequestStore: Bool { householdID != nil }
+
+    /// The catalog with this household's requests folded in, so a row reads "Requested" even
+    /// when the response was cached before the request.
+    var catalogWithRequests: [ShoppingCatalogItem] {
+        let requestedKeys = Set(storeRequests.compactMap(\.key))
+        return catalog.map { item in
+            guard requestedKeys.contains(item.key), !item.requestedByHousehold else { return item }
+            return ShoppingCatalogItem(
+                key: item.key, name: item.name, kind: item.kind, status: item.status, aliases: item.aliases,
+                note: item.note, requestedByHousehold: true, requests: max(item.requests, 1))
+        }
+    }
+
+    /// This household's request for a catalog entry, which Undo takes back.
+    func storeRequest(forKey key: String) -> ShoppingStoreRequest? {
+        storeRequests.first { $0.key == key }
+    }
+
+    /// Loads the catalog and this household's requests. A `404` means the API doesn't have
+    /// the endpoints yet, which hides the section rather than failing.
+    func loadCatalog() async {
+        guard let api, let householdID else { return }
+        let started = scope
+        if catalogPhase != .loaded {
+            catalogPhase = .loading
+        }
+        do {
+            let items = try await session.authorized { token in try await api.catalog(accessToken: token) }
+            let requests = try await session.authorized { token in
+                try await api.storeRequests(householdID: householdID, accessToken: token)
+            }
+            guard started == scope else { return }
+            catalog = items
+            storeRequests = requests
+            isCatalogAvailable = true
+            catalogPhase = .loaded
+        } catch let error as APIError where error.status == 404 {
+            guard started == scope else { return }
+            Self.logger.info("Store catalog isn't available on this API yet")
+            catalog = []
+            storeRequests = []
+            isCatalogAvailable = false
+            catalogPhase = .loaded
+        } catch is CancellationError {
+            if started == scope, catalogPhase == .loading { catalogPhase = .idle }
+        } catch {
+            guard started == scope else { return }
+            Self.logger.notice("Store catalog load failed: \(Self.describe(error), privacy: .public)")
+            catalogPhase = .failed(Self.message(for: error))
+        }
+    }
+
+    /// Asks for a store. The row shows "Requested" as soon as this returns.
+    @discardableResult
+    func requestStore(_ request: CreateShoppingStoreRequest) async throws -> ShoppingStoreRequest {
+        let (api, householdID) = try requireHousehold()
+        let started = scope
+        let created = try await session.authorized { token in
+            try await api.createStoreRequest(householdID: householdID, request: request, accessToken: token)
+        }
+        guard started == scope else { return created }
+        Self.logger.info("Store requested")
+        storeRequests.removeAll { $0.id == created.id }
+        storeRequests.append(created)
+        applyRequestedCount(forKey: created.key, delta: 1, requested: true)
+        return created
+    }
+
+    /// Undo: takes a request back. One someone else already removed (`404`) counts as removed.
+    func undoStoreRequest(_ request: ShoppingStoreRequest) async throws {
+        let (api, householdID) = try requireHousehold()
+        let started = scope
+        do {
+            try await session.authorized { token in
+                try await api.deleteStoreRequest(
+                    householdID: householdID, requestID: request.id, accessToken: token)
+            }
+        } catch let error as APIError where error.status == 404 {
+            Self.logger.notice("Store request was already taken back")
+        }
+        guard started == scope else { return }
+        storeRequests.removeAll { $0.id == request.id }
+        applyRequestedCount(forKey: request.key, delta: -1, requested: false)
+    }
+
+    /// Keeps the shown count and flag in step with a request the member just made or undid,
+    /// so the row doesn't need the catalog loaded again.
+    private func applyRequestedCount(forKey key: String?, delta: Int, requested: Bool) {
+        guard let key, let index = catalog.firstIndex(where: { $0.key == key }) else { return }
+        let item = catalog[index]
+        catalog[index] = ShoppingCatalogItem(
+            key: item.key, name: item.name, kind: item.kind, status: item.status, aliases: item.aliases,
+            note: item.note, requestedByHousehold: requested, requests: max(item.requests + delta, 0))
+    }
+
     // MARK: - Reset
 
     /// Forgets everything, for sign-out.
@@ -563,6 +675,10 @@ final class ShoppingStore {
         preferencesPhase = .idle
         preferences = []
         preferencesRefreshError = nil
+        catalogPhase = .idle
+        catalog = []
+        storeRequests = []
+        isCatalogAvailable = true
     }
 
     // MARK: - Helpers
