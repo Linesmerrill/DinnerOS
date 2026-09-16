@@ -7,7 +7,7 @@ import (
 
 func TestCatalogIntegrityAndOrder(t *testing.T) {
 	list := CatalogEntries()
-	if len(list) < 38 {
+	if len(list) < 80 {
 		t.Fatalf("the catalog has %d entries, want the curated list", len(list))
 	}
 	seen := map[string]bool{}
@@ -33,9 +33,13 @@ func TestCatalogIntegrityAndOrder(t *testing.T) {
 		if rank < lastRank || (rank == lastRank && e.Name < lastName) {
 			t.Errorf("%s (%s) sorts after %s", e.Name, e.Status, lastName)
 		}
-		// An unsupported store has nothing researched to say.
+		// An unsupported store has nothing researched to say, and a store we
+		// did assess has to say what the research found.
 		if e.Status == StatusUnsupported && e.Note != "" {
 			t.Errorf("%s is unsupported but carries a note", e.Key)
+		}
+		if e.Status != StatusUnsupported && e.Note == "" {
+			t.Errorf("%s is %q but carries no note", e.Key, e.Status)
 		}
 		lastRank, lastName = rank, e.Name
 	}
@@ -120,6 +124,26 @@ func TestSearchCatalog(t *testing.T) {
 				break
 			}
 			last = statusRank(e.Status)
+		}
+	}
+}
+
+// TestCatalogAliasesAreUnambiguous guards the index built in init(): two
+// entries claiming the same normalized text would silently give one of them
+// the other's requests, since catalogByAlias keeps whichever was indexed last.
+func TestCatalogAliasesAreUnambiguous(t *testing.T) {
+	owner := map[string]string{}
+	for _, e := range CatalogEntries() {
+		for _, text := range append([]string{e.Name, e.Key}, e.Aliases...) {
+			n := normalizeStoreText(text)
+			if n == "" {
+				t.Errorf("%s has the unmatchable text %q", e.Key, text)
+				continue
+			}
+			if prev, ok := owner[n]; ok && prev != e.Key {
+				t.Errorf("%q matches both %s and %s", n, prev, e.Key)
+			}
+			owner[n] = e.Key
 		}
 	}
 }

@@ -167,6 +167,18 @@ func (s *Service) DeleteStoreRequest(ctx context.Context, actor households.Membe
 	return s.store.DeleteStoreRequest(ctx, actor.HouseholdID, id)
 }
 
+// rejectSupported refuses a request for a store DinnerOS can already hand a
+// list to. Asking for one records demand for work that is finished, which
+// both misleads the member and inflates the counts that decide what gets
+// built next. It covers an explicit key and a typed name alike, because
+// matchCatalogName resolves "walmart" onto the same entry the key names.
+func rejectSupported(e CatalogEntry) error {
+	if e.Status == StatusAvailable {
+		return invalid("that store is already supported; %s is ready to set up in store settings", e.Name)
+	}
+	return nil
+}
+
 // newStoreRequest validates and normalizes a request. A typed name is matched
 // against catalog names, keys, and aliases first, so "frys" records as Fry's
 // rather than a second entry for the same store.
@@ -182,11 +194,17 @@ func newStoreRequest(actor households.Membership, in StoreRequestInput) (StoreRe
 		if !ok {
 			return StoreRequest{}, invalid("key isn't a store in the catalog; send the name instead")
 		}
+		if err := rejectSupported(e); err != nil {
+			return StoreRequest{}, err
+		}
 		req.Key, req.Name = e.Key, e.Name
 	case utf8.RuneCountInString(name) > MaxStoreNameLength:
 		return StoreRequest{}, invalid("name must be at most %d characters", MaxStoreNameLength)
 	default:
 		if e, ok := matchCatalogName(name); ok {
+			if err := rejectSupported(e); err != nil {
+				return StoreRequest{}, err
+			}
 			req.Key, req.Name = e.Key, e.Name
 			break
 		}

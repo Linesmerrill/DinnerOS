@@ -85,7 +85,7 @@ type CatalogEntry struct {
 var storeCatalog = []CatalogEntry{
 	{
 		Key: "walmart", Name: "Walmart", Kind: KindGrocer, Status: StatusAvailable,
-		Aliases: []string{"wal mart", "walmart supercenter", "walmart neighborhood market"},
+		Aliases: []string{"wal mart", "walmart supercenter", "walmart neighborhood market", "walmart plus", "walmart grocery"},
 		Note:    "Add-to-cart link handoff, built from products the household saved",
 	},
 
@@ -135,6 +135,38 @@ var storeCatalog = []CatalogEntry{
 		Aliases: []string{"dillons food"},
 		Note:    "Kroger banner; covered by Kroger's cart-write API",
 	},
+	{
+		Key: "city-market", Name: "City Market", Kind: KindGrocer, Status: StatusResearched,
+		Note: "Kroger banner; covered by Kroger's cart-write API",
+	},
+	{
+		Key: "marianos", Name: "Mariano's", Kind: KindGrocer, Status: StatusResearched,
+		Aliases: []string{"marianos fresh market"},
+		Note:    "Kroger banner; covered by Kroger's cart-write API",
+	},
+	{
+		Key: "pick-n-save", Name: "Pick 'n Save", Kind: KindGrocer, Status: StatusResearched,
+		Aliases: []string{"picknsave"},
+		Note:    "Kroger banner; covered by Kroger's cart-write API",
+	},
+	{
+		Key: "metro-market", Name: "Metro Market", Kind: KindGrocer, Status: StatusResearched,
+		Note: "Kroger banner; covered by Kroger's cart-write API",
+	},
+	{
+		Key: "bakers", Name: "Baker's", Kind: KindGrocer, Status: StatusResearched,
+		Aliases: []string{"bakers supermarkets"},
+		Note:    "Kroger banner; covered by Kroger's cart-write API",
+	},
+	{
+		Key: "food-4-less", Name: "Food 4 Less", Kind: KindGrocer, Status: StatusResearched,
+		Aliases: []string{"food four less", "food4less"},
+		Note:    "Kroger banner; covered by Kroger's cart-write API",
+	},
+	{
+		Key: "foods-co", Name: "Foods Co", Kind: KindGrocer, Status: StatusResearched,
+		Note: "Kroger banner; covered by Kroger's cart-write API",
+	},
 
 	// Albertsons and its banners: no public cart API, reachable through
 	// Instacart.
@@ -157,6 +189,50 @@ var storeCatalog = []CatalogEntry{
 		Aliases: []string{"jewel", "osco"},
 		Note:    "Albertsons banner; no public cart API, reachable through Instacart",
 	},
+	{
+		Key: "acme", Name: "Acme Markets", Kind: KindGrocer, Status: StatusResearched,
+		Aliases: []string{"acme", "acme market"},
+		Note:    "Albertsons banner; no public cart API, reachable through Instacart",
+	},
+	{
+		Key: "shaws", Name: "Shaw's", Kind: KindGrocer, Status: StatusResearched,
+		Aliases: []string{"shaws supermarket"},
+		Note:    "Albertsons banner; no public cart API, reachable through Instacart",
+	},
+	{
+		Key: "star-market", Name: "Star Market", Kind: KindGrocer, Status: StatusResearched,
+		Note: "Albertsons banner; no public cart API, reachable through Instacart",
+	},
+	{
+		Key: "randalls", Name: "Randalls", Kind: KindGrocer, Status: StatusResearched,
+		Note: "Albertsons banner; no public cart API, reachable through Instacart",
+	},
+	{
+		Key: "tom-thumb", Name: "Tom Thumb", Kind: KindGrocer, Status: StatusResearched,
+		Note: "Albertsons banner; no public cart API, reachable through Instacart",
+	},
+	{
+		Key: "pavilions", Name: "Pavilions", Kind: KindGrocer, Status: StatusResearched,
+		Note: "Albertsons banner; no public cart API, reachable through Instacart",
+	},
+	{
+		Key: "haggen", Name: "Haggen", Kind: KindGrocer, Status: StatusResearched,
+		Note: "Albertsons banner; no public cart API, reachable through Instacart",
+	},
+	{
+		Key: "carrs", Name: "Carrs", Kind: KindGrocer, Status: StatusResearched,
+		Aliases: []string{"carrs safeway"},
+		Note:    "Albertsons banner; no public cart API, reachable through Instacart",
+	},
+	{
+		Key: "united-supermarkets", Name: "United Supermarkets", Kind: KindGrocer, Status: StatusResearched,
+		Aliases: []string{"united"},
+		Note:    "Albertsons banner; no public cart API, reachable through Instacart",
+	},
+	{
+		Key: "market-street", Name: "Market Street", Kind: KindGrocer, Status: StatusResearched,
+		Note: "Albertsons banner (United Supermarkets); no public cart API, reachable through Instacart",
+	},
 
 	// Assessed, and not a fit today.
 	{
@@ -170,20 +246,47 @@ var storeCatalog = []CatalogEntry{
 		Note:    "No public grocery cart API; Amazon's Creators API needs Associates sales history",
 	},
 
-	// Grocers no one has assessed yet.
-	{Key: "publix", Name: "Publix", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"publix super markets"}},
-	{Key: "heb", Name: "H-E-B", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"heb", "central market"}},
-	{Key: "meijer", Name: "Meijer", Kind: KindGrocer, Status: StatusUnsupported},
+	// Grocers no one has assessed yet. These carry no note: "unsupported"
+	// means nobody has looked, and a note would imply otherwise.
+	{Key: "publix", Name: "Publix", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"publix super markets", "publix supermarket", "publix grocery"}},
+	{Key: "heb", Name: "H-E-B", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"heb", "heb plus", "central market"}},
+	{Key: "meijer", Name: "Meijer", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"meijers"}},
 	{Key: "hy-vee", Name: "Hy-Vee", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"hyvee"}},
 	{Key: "wegmans", Name: "Wegmans", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"wegmans food markets"}},
-	{Key: "giant", Name: "Giant", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"giant food", "giant food stores"}},
-	{Key: "stop-and-shop", Name: "Stop & Shop", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"stop shop"}},
+	{Key: "giant", Name: "Giant", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"giant food", "giant food stores", "giant martins"}},
+	{Key: "stop-and-shop", Name: "Stop & Shop", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"stop shop", "stop n shop", "stopandshop"}},
 	{Key: "food-lion", Name: "Food Lion", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"foodlion"}},
+	{Key: "hannaford", Name: "Hannaford", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"hannafords"}},
 	{Key: "winn-dixie", Name: "Winn-Dixie", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"winndixie"}},
+	{Key: "harveys", Name: "Harveys Supermarket", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"harveys"}},
 	{Key: "sprouts", Name: "Sprouts Farmers Market", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"sprouts"}},
-	{Key: "trader-joes", Name: "Trader Joe's", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"traderjoes", "tj"}},
-	{Key: "aldi", Name: "Aldi", Kind: KindGrocer, Status: StatusUnsupported},
+	{Key: "trader-joes", Name: "Trader Joe's", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"traderjoes", "trader joe", "tj", "tjs"}},
+	{Key: "aldi", Name: "Aldi", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"aldis"}},
 	{Key: "lidl", Name: "Lidl", Kind: KindGrocer, Status: StatusUnsupported},
+	{Key: "giant-eagle", Name: "Giant Eagle", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"gianteagle", "market district"}},
+	{Key: "fresh-market", Name: "The Fresh Market", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"fresh market"}},
+	{Key: "natural-grocers", Name: "Natural Grocers", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"vitamin cottage"}},
+	{Key: "grocery-outlet", Name: "Grocery Outlet", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"bargain market"}},
+	{Key: "smart-and-final", Name: "Smart & Final", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"smart final", "smartandfinal"}},
+	{Key: "winco", Name: "WinCo Foods", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"winco"}},
+	{Key: "stater-bros", Name: "Stater Bros", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"stater brothers", "staters"}},
+	{Key: "raleys", Name: "Raley's", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"bel air"}},
+	{Key: "save-mart", Name: "Save Mart", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"savemart", "lucky supermarkets"}},
+	{Key: "market-basket", Name: "Market Basket", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"demoulas"}},
+	{Key: "wakefern", Name: "ShopRite", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"shoprite", "shop rite", "price rite"}},
+	{Key: "weis", Name: "Weis Markets", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"weis"}},
+	{Key: "price-chopper", Name: "Price Chopper", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"pricechopper", "market 32"}},
+	{Key: "tops", Name: "Tops Friendly Markets", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"tops", "tops markets"}},
+	{Key: "schnucks", Name: "Schnucks", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"schnuck markets"}},
+	{Key: "ingles", Name: "Ingles Markets", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"ingles"}},
+	{Key: "save-a-lot", Name: "Save A Lot", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"savealot"}},
+	{Key: "piggly-wiggly", Name: "Piggly Wiggly", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"pigglywiggly"}},
+	{Key: "cub-foods", Name: "Cub Foods", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"cub"}},
+	{Key: "lowes-foods", Name: "Lowes Foods", Kind: KindGrocer, Status: StatusUnsupported},
+	{Key: "brookshires", Name: "Brookshire's", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"brookshire grocery"}},
+	{Key: "bashas", Name: "Bashas'", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"bashas food"}},
+	{Key: "festival-foods", Name: "Festival Foods", Kind: KindGrocer, Status: StatusUnsupported},
+	{Key: "sedanos", Name: "Sedano's", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"sedanos supermarkets"}},
 
 	// Warehouse clubs.
 	{Key: "costco", Name: "Costco", Kind: KindWarehouse, Status: StatusUnsupported, Aliases: []string{"costco wholesale"}},
@@ -206,9 +309,11 @@ var storeCatalog = []CatalogEntry{
 		Aliases: []string{"shipt delivery"},
 		Note:    "Partner-only developer program; no public cart handoff",
 	},
-	{Key: "doordash", Name: "DoorDash", Kind: KindDelivery, Status: StatusUnsupported, Aliases: []string{"door dash"}},
+	{Key: "doordash", Name: "DoorDash", Kind: KindDelivery, Status: StatusUnsupported, Aliases: []string{"door dash", "dashmart"}},
 	{Key: "uber-eats", Name: "Uber Eats", Kind: KindDelivery, Status: StatusUnsupported, Aliases: []string{"ubereats", "uber"}},
 	{Key: "gopuff", Name: "Gopuff", Kind: KindDelivery, Status: StatusUnsupported, Aliases: []string{"go puff"}},
+	{Key: "freshdirect", Name: "FreshDirect", Kind: KindDelivery, Status: StatusUnsupported, Aliases: []string{"fresh direct"}},
+	{Key: "weee", Name: "Weee!", Kind: KindDelivery, Status: StatusUnsupported, Aliases: []string{"weee asian market", "sayweee"}},
 	{Key: "misfits-market", Name: "Misfits Market", Kind: KindDelivery, Status: StatusUnsupported, Aliases: []string{"misfits"}},
 	{Key: "thrive-market", Name: "Thrive Market", Kind: KindDelivery, Status: StatusUnsupported, Aliases: []string{"thrive"}},
 }
