@@ -66,22 +66,25 @@ struct AutopilotPreferencesView: View {
                     .padding(.vertical, 4)
                 }
             }
+            // Setup's three questions first, then everything it no longer asks — which is
+            // where the cook-time mix, equipment, weekday rules, and pairings now live.
             Section {
-                ForEach(AutopilotSection.allCases) { section in
-                    NavigationLink {
-                        // Pairing rules are a list of rules, not one form, so they have
-                        // their own screen.
-                        if section == .pairings {
-                            PairingRulesView()
-                        } else {
-                            AutopilotSectionEditor(section: section)
-                        }
-                    } label: {
-                        SectionRow(section: section, profile: profile, vocabulary: autopilot.vocabulary)
-                    }
+                ForEach(AutopilotSection.allCases.filter(\.isInSetup)) { section in
+                    row(section, profile: profile)
                 }
+            } header: {
+                Text("From Setup")
+            }
+            Section {
+                ForEach(AutopilotSection.allCases.filter { !$0.isInSetup }) { section in
+                    row(section, profile: profile)
+                }
+            } header: {
+                Text("Fine-tune Autopilot")
             } footer: {
-                Text("Every change records who made it and when, so Autopilot can learn what your household prefers.")
+                Text(
+                    "Setup doesn't ask about these; Autopilot uses sensible defaults until you change them. Every change records who made it and when."
+                )
             }
             Section {
                 NavigationLink {
@@ -94,11 +97,24 @@ struct AutopilotPreferencesView: View {
                 Section {
                     Button("Run Setup Again", systemImage: "wand.and.stars") { isOnboarding = true }
                 } footer: {
-                    Text("Goes through every question again, starting from your current answers.")
+                    Text("Asks the three setup questions again, starting from your current answers.")
                 }
             }
         }
         .refreshable { await autopilot.reloadProfile() }
+    }
+
+    private func row(_ section: AutopilotSection, profile: AutopilotProfile) -> some View {
+        NavigationLink {
+            // Pairing rules are a list of rules, not one form, so they have their own screen.
+            if section == .pairings {
+                PairingRulesView()
+            } else {
+                AutopilotSectionEditor(section: section)
+            }
+        } label: {
+            SectionRow(section: section, profile: profile, vocabulary: autopilot.vocabulary)
+        }
     }
 }
 
@@ -111,6 +127,9 @@ private struct SectionRow: View {
         Label {
             VStack(alignment: .leading, spacing: 2) {
                 Text(section.title)
+                Text(section.detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                 Text(AutopilotFormat.sectionSummary(section, settings: profile.settings, vocabulary: vocabulary))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
