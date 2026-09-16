@@ -31,6 +31,8 @@ final class MealPlanner {
     private(set) var busyEntryIDs: Set<String> = []
     /// A failed change, for an alert.
     var errorMessage: String?
+    /// The household these leftovers belong to.
+    private(set) var householdID: String?
 
     @ObservationIgnored private let plans: PlanStore
     @ObservationIgnored private let library: RecipeLibrary
@@ -219,8 +221,24 @@ final class MealPlanner {
         }
     }
 
-    /// Forgets everything, for sign-out and household switches.
+    /// Scopes the planner to `householdID`, forgetting another household's leftovers.
+    ///
+    /// The toast and its undo name a plan entry of the household they were made in, so neither
+    /// may survive a switch: `RootView` resets the planner only at sign-out, which the same
+    /// user changing households never reaches.
+    func activate(householdID: String) {
+        guard householdID != self.householdID else { return }
+        clear()
+        self.householdID = householdID
+    }
+
+    /// Forgets everything, for sign-out.
     func reset() {
+        clear()
+        householdID = nil
+    }
+
+    private func clear() {
         toast = nil
         busyRecipeIDs = []
         busyEntryIDs = []

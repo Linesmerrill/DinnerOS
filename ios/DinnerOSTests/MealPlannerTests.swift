@@ -112,4 +112,28 @@ struct MealPlannerTests {
         planner.reset()
         #expect(planner.toast == nil)
     }
+
+    @Test func switchingHouseholdsDropsTheOtherOnesToastAndError() async throws {
+        let harness = try await makeHarness()
+        let planner = harness.planner
+        planner.activate(householdID: "household-1")
+        await planner.add(recipeID: "recipe-1", name: "Tacos", to: harness.plans.week, servings: 2)
+        planner.errorMessage = "Couldn't change your meals."
+        #expect(planner.toast != nil)
+
+        planner.activate(householdID: "household-2")
+
+        #expect(planner.householdID == "household-2")
+        #expect(planner.toast == nil)
+        #expect(planner.errorMessage == nil)
+
+        // Undo has nothing left to send: the entry belonged to the household we left.
+        let requests = harness.planServer.log.count
+        await planner.undo()
+        #expect(harness.planServer.log.count == requests)
+
+        // Coming back doesn't bring the old toast with it.
+        planner.activate(householdID: "household-1")
+        #expect(planner.toast == nil)
+    }
 }
