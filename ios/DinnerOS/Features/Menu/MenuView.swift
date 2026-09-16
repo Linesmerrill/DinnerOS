@@ -15,11 +15,30 @@ struct MenuView: View {
     @Environment(PairingsStore.self) private var pairings
     @Environment(\.appConfiguration) private var configuration
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
 
     @State private var mode: MenuMode = .menu
     @State private var autopilotFlow = WeekAutopilotFlow()
     @State private var isAddingRecipes = false
     @State private var actionError: String?
+
+    /// Whether the week strip is showing its pills, and where the menu is scrolled to.
+    @State private var collapse = MenuChromeCollapse()
+    @State private var scrollOffset: CGFloat = 0
+
+    /// VoiceOver always gets the pills. Collapsing would take away an element a reader may be
+    /// focused on, or be sitting next to, and the screen space it buys is not what someone
+    /// moving element by element is short of.
+    private var isStripExpanded: Bool {
+        voiceOverEnabled || collapse.isExpanded
+    }
+
+    /// Changes the strip's form, animated unless Reduce Motion is on (#458).
+    private func changeStrip(_ change: () -> Void) {
+        withAnimation(MenuScroll.collapseAnimation(reduceMotion: reduceMotion)) {
+            change()
+        }
+    }
 
     private var household: Household? {
         households.current?.household
@@ -37,7 +56,16 @@ struct MenuView: View {
         content
             .navigationTitle(mode == .menu ? "Menu" : "By Day")
             .navigationBarTitleDisplayMode(.inline)
-            .safeAreaInset(edge: .top, spacing: 0) { WeekStrip() }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                WeekStrip(isExpanded: isStripExpanded) {
+                    changeStrip { collapse.expand(offset: scrollOffset) }
+                }
+            }
+            // By Day scrolls itself and reports no offset, so leave it showing the strip — and
+            // come back to the menu showing it too, rather than in whatever form you left it.
+            .onChange(of: mode) { _, _ in
+                changeStrip { collapse.expand(offset: scrollOffset) }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) { MenuBottomBar() }
             .overlay(alignment: .bottom) { toast }
             .toolbar { toolbar }
@@ -138,11 +166,26 @@ struct MenuView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 24)
             }
+            // How far the menu is scrolled decides the week strip's form, and nothing else
+            // reads it; `MenuChromeCollapse` holds the rule.
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top
+            } action: { _, offset in
+                scrollOffset = offset
+                changeStrip { collapse.update(offset: offset) }
+            }
             // Changing a filter reloads All Meals from its first page. Without this the
             // screen stays scrolled past that page and looks empty until you scroll back.
             .onChange(of: menu.allMeals.query) { _, _ in
+                // The jump is not the reader scrolling, so the strip must not read it as a
+                // gesture and collapse in the same instant they asked for different meals.
+                changeStrip { collapse.hold() }
                 withAnimation(MenuScroll.animation(reduceMotion: reduceMotion)) {
                     proxy.scrollTo(Self.allMealsAnchor, anchor: .top)
+                }
+                Task {
+                    try? await Task.sleep(for: MenuScroll.jumpSettle)
+                    collapse.release(offset: scrollOffset)
                 }
             }
         }
@@ -276,6 +319,18 @@ nonisolated enum MenuScroll {
     static func animation(reduceMotion: Bool) -> Animation? {
         reduceMotion ? nil : .easeInOut(duration: 0.2)
     }
+
+    /// The week strip's change between its pills and its one-line form, or `nil` under Reduce
+    /// Motion — the strip still changes, because the space is the point; the sliding is the part
+    /// someone turned the setting off for, exactly as for the jump above (#458).
+    static func collapseAnimation(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.22)
+    }
+
+    /// How long the jump to All Meals is given to settle before scroll offsets decide the
+    /// strip's form again. Longer than the jump's own animation, so every offset it produces is
+    /// absorbed rather than read as a gesture.
+    static let jumpSettle = Duration.milliseconds(350)
 }
 
 #Preview("Menu") {
