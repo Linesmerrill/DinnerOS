@@ -85,14 +85,23 @@ func (f *fakePlans) SetEntryCustomizations(_ context.Context, householdID, week,
 	return p, nil
 }
 
-func (f *fakePlans) FindEntry(_ context.Context, householdID, id string, _ time.Time) (planning.Plan, planning.Entry, bool, error) {
+// entrySearchWeeks mirrors planning's entry lookup window, so a test can tell
+// a plan that is still reachable from one that is too old.
+const entrySearchWeeks = 8
+
+func (f *fakePlans) FindEntry(_ context.Context, householdID, id string, near time.Time) (planning.Plan, planning.Entry, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.err != nil {
 		return planning.Plan{}, planning.Entry{}, false, f.err
 	}
+	w := planning.WeekOf(near)
+	first, last := w.AddWeeks(-entrySearchWeeks).Monday(), w.AddWeeks(1).Monday()
 	for _, p := range f.plans {
 		if p.HouseholdID != householdID {
+			continue
+		}
+		if monday := p.Week.Monday(); monday.Before(first) || monday.After(last) {
 			continue
 		}
 		for _, e := range p.Entries {
@@ -565,6 +574,69 @@ func TestAdjustCookedRecipe(t *testing.T) {
 	f.plans.err = errors.New("plans down")
 	if _, err := f.svc.AdjustCookedRecipe(f.ctx, hhAda, entryID, testNow, r); err == nil {
 		t.Error("AdjustCookedRecipe() ignored a plan failure")
+	}
+}
+
+// TestAdjustCookedRecipeTargets covers the identity a cooked line carries to
+// the pantry, which is what the deduction matches on: a swap the catalog knows
+// keeps the catalog ingredient's ID, a swap it doesn't know travels by name
+// alone, and a double portion keeps the line's own ingredient.
+func TestAdjustCookedRecipeTargets(t *testing.T) {
+	for _, tc := range []struct {
+		name, choice              string
+		wantID, wantName, wantKey string
+		wantSmall, wantLarge      string
+	}{
+		{"swap the catalog has", "swap:ground-beef", ingBeef, "Ground Beef", ingBeef, "10", "20"},
+		{"swap the catalog lacks", "swap:ground-turkey", "", "Ground Turkey", "name:ground turkey", "10", "20"},
+		{"double portion", "double", ingPork, "Ground Pork", ingPork, "20", "40"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t, planning.Entry{
+				ID: entryID, RecipeID: householdTacos().ID, Servings: 2,
+				Customizations: []planning.Customization{{IngredientKey: ingPork, ChoiceID: tc.choice}},
+			})
+			got, err := f.svc.AdjustCookedRecipe(f.ctx, hhAda, entryID, testNow, householdTacos())
+			if err != nil {
+				t.Fatal(err)
+			}
+			line := got.Ingredients[0]
+			if line.IngredientID != tc.wantID || line.Name != tc.wantName {
+				t.Errorf("cooked line = %+v, want id %q named %q", line, tc.wantID, tc.wantName)
+			}
+			// The pantry matches this line by catalog ID, else by this key.
+			if got := LineKey(line); got != tc.wantKey {
+				t.Errorf("line key = %q, want %q", got, tc.wantKey)
+			}
+			if line.Amounts[0].Quantity != tc.wantSmall || line.Amounts[1].Quantity != tc.wantLarge {
+				t.Errorf("amounts = %+v, want %s and %s", line.Amounts, tc.wantSmall, tc.wantLarge)
+			}
+		})
+	}
+}
+
+// TestAdjustCookedRecipeLaterWeek: a meal cooked in a later week still cooks
+// what was customized while its plan is within the entry lookup window.
+func TestAdjustCookedRecipeLaterWeek(t *testing.T) {
+	f := newFixture(t, planning.Entry{
+		ID: entryID, RecipeID: householdTacos().ID, Servings: 2,
+		Customizations: []planning.Customization{{IngredientKey: ingPork, ChoiceID: "swap:ground-beef"}},
+	})
+	got, err := f.svc.AdjustCookedRecipe(f.ctx, hhAda, entryID, testNow.AddDate(0, 0, 21), householdTacos())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if line := got.Ingredients[0]; line.IngredientID != ingBeef || line.Name != "Ground Beef" {
+		t.Errorf("cooked three weeks later = %+v", line)
+	}
+
+	// Past the window the plan is out of reach, and the meal cooks as written.
+	got, err = f.svc.AdjustCookedRecipe(f.ctx, hhAda, entryID, testNow.AddDate(0, 0, 7*(entrySearchWeeks+2)), householdTacos())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if line := got.Ingredients[0]; line.Name != "Ground Pork" {
+		t.Errorf("cooked past the window = %+v", line)
 	}
 }
 
