@@ -157,6 +157,23 @@ nonisolated struct MenuCard: Decodable, Hashable, Sendable, Identifiable {
         inPlan = container.decodeLenientBool(forKey: .inPlan) ?? !planEntryIDs.isEmpty
     }
 
+    /// Cards for `recipeID` carrying a rating the member just saved, so a rating given on a card
+    /// shows there at once instead of waiting for the next menu load. `household` is left alone
+    /// when the new average isn't known yet.
+    static func patchingRating(
+        _ cards: [MenuCard], recipeID: String, mine: RecipeRating?, household: HouseholdRating?
+    ) -> [MenuCard] {
+        cards.map { card in
+            guard card.recipe.id == recipeID else { return card }
+            var patched = card
+            patched.recipe.myRating = mine
+            if let household {
+                patched.recipe.householdRating = household
+            }
+            return patched
+        }
+    }
+
     /// Cards with `inPlan` and `planEntryIDs` recomputed from `plan`, the source of truth after a change.
     static func patching(_ cards: [MenuCard], with plan: Plan) -> [MenuCard] {
         var entryIDs: [String: [String]] = [:]
@@ -294,6 +311,14 @@ nonisolated struct WeekMenu: Decodable, Equatable, Sendable {
         plan = updated
         for index in sections.indices {
             sections[index].items = MenuCard.patching(sections[index].items, with: updated)
+        }
+    }
+
+    /// Shows a rating the member just saved on every card for that recipe.
+    mutating func applyRating(recipeID: String, mine: RecipeRating?, household: HouseholdRating?) {
+        for index in sections.indices {
+            sections[index].items = MenuCard.patchingRating(
+                sections[index].items, recipeID: recipeID, mine: mine, household: household)
         }
     }
 }

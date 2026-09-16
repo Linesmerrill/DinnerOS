@@ -380,6 +380,27 @@ final class MenuStore {
         }
     }
 
+    // MARK: - Rating changes
+
+    /// Shows a rating the member just saved, on the menu's cards and every All Meals list.
+    ///
+    /// A rating given on a meal card has to show on that card immediately, and the same recipe can
+    /// be on screen more than once — a card in Your Meals, a card in a carousel, a row in All
+    /// Meals — so all of them are patched rather than only the one that was tapped. `household` is
+    /// the new average when the reload behind the save produced one, and `nil` leaves the average
+    /// as it was until the next load.
+    func applyRating(recipeID: String, mine: RecipeRating?, household: HouseholdRating?) {
+        if var shown = menu {
+            shown.applyRating(recipeID: recipeID, mine: mine, household: household)
+            menu = shown
+        }
+        allMeals.applyRating(recipeID: recipeID, mine: mine, household: household)
+        extraLists.removeAll { $0.list == nil }
+        for box in extraLists {
+            box.list?.applyRating(recipeID: recipeID, mine: mine, household: household)
+        }
+    }
+
     // MARK: - Reset
 
     /// Forgets everything, for sign-out.

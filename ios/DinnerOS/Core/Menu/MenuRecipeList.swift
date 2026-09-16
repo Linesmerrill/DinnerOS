@@ -198,6 +198,12 @@ final class MenuRecipeList {
         items = MenuCard.patching(items, with: plan)
     }
 
+    /// Shows a rating the member just saved on this list's card for that recipe. Unlike a plan,
+    /// a rating belongs to the household rather than to one week, so every list patches it.
+    func applyRating(recipeID: String, mine: RecipeRating?, household: HouseholdRating?) {
+        items = MenuCard.patchingRating(items, recipeID: recipeID, mine: mine, household: household)
+    }
+
     /// Shows `items` without a request, for SwiftUI previews.
     func replaceForPreview(items cards: [MenuCard]) {
         items = cards

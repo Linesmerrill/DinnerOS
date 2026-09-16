@@ -192,12 +192,23 @@ struct MealCard: View {
     let edit: () -> Void
 
     @Environment(PlanStore.self) private var plans
+    @Environment(MenuStore.self) private var menu
     @Environment(MealPlanner.self) private var planner
     @Environment(EventReporter.self) private var events
     @Environment(PantryStore.self) private var pantry
     @Environment(NotificationStore.self) private var notifications
 
     private var outcome: EventReporter.EntryOutcome? { events.outcomes[entry.id] }
+
+    /// Whether to ask how the meal went: only once its night has passed, and only when the menu
+    /// has a card for it, whose `myRating` is what the stars show. Without one the row would ask
+    /// again about a meal the member has already rated.
+    private var feedbackRecipe: RecipeSummary? {
+        guard MealFeedback.hasHappened(day: entry.day, timing: menu.selectedTiming, today: plans.today) else {
+            return nil
+        }
+        return card?.recipe
+    }
     private var isBusy: Bool { planner.busyEntryIDs.contains(entry.id) }
 
     private var summary: RecipeSummary {
@@ -220,6 +231,9 @@ struct MealCard: View {
                 ServingsStepper(
                     label: MenuFormat.servings(entry.servings), isBusy: isBusy,
                     decrease: { changeServings(-1) }, increase: { changeServings(1) })
+            }
+            if let feedbackRecipe {
+                MealRatingRow(recipe: feedbackRecipe)
             }
         }
         .contextMenu { menuItems }
