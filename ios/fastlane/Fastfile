@@ -110,17 +110,25 @@ platform :ios do
       # The commit subject; the body and trailers are for developers, not testers.
       changelog = ENV.fetch("TESTFLIGHT_CHANGELOG", "").lines.first.to_s.strip
       changelog = "Bug fixes and improvements." if changelog.empty?
-      upload_to_testflight(
-        api_key: api_key,
-        app_identifier: bundle_id,
-        distribute_external: true,
-        groups: external_groups,
-        changelog: changelog,
-        notify_external_testers: true,
-        submit_beta_review: true,
-        uses_non_exempt_encryption: false,
-        wait_processing_timeout_duration: 2400
-      )
+      begin
+        upload_to_testflight(
+          api_key: api_key,
+          app_identifier: bundle_id,
+          distribute_external: true,
+          groups: external_groups,
+          changelog: changelog,
+          notify_external_testers: true,
+          submit_beta_review: true,
+          uses_non_exempt_encryption: false,
+          wait_processing_timeout_duration: 2400
+        )
+      rescue => e
+        # Apple allows one build per version in Beta App Review at a time. The upload
+        # itself already succeeded and internal testers have the build, so a busy review
+        # queue is a warning: the next build is submitted once the review finishes.
+        raise unless e.message.include?("Another build is in review")
+        UI.important("Uploaded, but not sent to #{external_groups.join(', ')}: another build is still in Beta App Review.")
+      end
     end
   end
 
