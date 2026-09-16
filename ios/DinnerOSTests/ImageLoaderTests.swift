@@ -195,6 +195,19 @@ struct ImageLoaderCoalescingTests {
     }
 }
 
+/// Waits for the fetch to record its cancellation, rather than sleeping a fixed span and hoping.
+///
+/// A cancellation is recorded by another task, and a machine running several test suites at once
+/// can take longer than any constant we would pick: a fixed 200ms wait failed here while the same
+/// test passed in isolation. The assertion that follows stays exact — this only decides how long
+/// we are willing to wait for it.
+private func waitForCancellations(_ data: FakeImageData, toReach count: Int) async throws {
+    let deadline = ContinuousClock.now + .seconds(5)
+    while data.cancellations < count, ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+}
+
 struct ImageLoaderCancellationTests {
     @Test func scrollingPastTheLastWaiterCancelsTheFetch() async throws {
         let data = FakeImageData { _, _ in
@@ -209,7 +222,7 @@ struct ImageLoaderCancellationTests {
         request.cancel()
         #expect(await request.value == nil)
 
-        try await Task.sleep(for: .milliseconds(200))
+        try await waitForCancellations(data, toReach: 1)
         #expect(data.cancellations == 1)
         // A cancelled fetch isn't a failure, and leaves nothing cached.
         #expect(await loader.cachedImage(for: key) == nil)
@@ -245,7 +258,7 @@ struct ImageLoaderCancellationTests {
         await loader.prefetch([key])
         try await Task.sleep(for: .milliseconds(100))
         await loader.cancelPrefetch([key])
-        try await Task.sleep(for: .milliseconds(200))
+        try await waitForCancellations(data, toReach: 1)
         #expect(data.cancellations == 1)
     }
 }
