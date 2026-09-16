@@ -33,6 +33,26 @@ struct WeekContextSheet: View {
         draft.trimmedNote.count > limits.maxNoteLength
     }
 
+    /// What the Guests tile means here: the household's usual servings plus two.
+    private var guestServings: Int {
+        min((households.current?.household.defaultServings ?? 2) + 2, limits.maxServings)
+    }
+
+    /// One short line under the tiles, saying what the week is now.
+    private var presetFooter: String {
+        if draft.skip {
+            return String(localized: "Autopilot plans nothing, and the week says you're away.")
+        }
+        var parts: [String] = []
+        if draft.busy {
+            parts.append(String(localized: "Quick weeknights; a smoker night still cooks long."))
+        }
+        if draft.isOn(.guests) {
+            parts.append(String(localized: "Bigger servings, and the grocery list follows."))
+        }
+        return parts.isEmpty ? String(localized: "Tap what's different about this week.") : parts.joined(separator: " ")
+    }
+
     var body: some View {
         NavigationStack {
             content
@@ -89,20 +109,13 @@ struct WeekContextSheet: View {
     private var form: some View {
         Form {
             Section {
-                Toggle("Skip This Week", isOn: $draft.skip)
+                WeekPresetTiles(draft: $draft, guestServings: guestServings)
             } header: {
                 Text(week.weekOf())
             } footer: {
-                Text("Away or eating out? Autopilot won't plan anything this week.")
+                Text(presetFooter)
             }
             if !draft.skip {
-                Section {
-                    Toggle("Busy Week", isOn: $draft.busy)
-                } footer: {
-                    Text(
-                        "Quick weeknight meals and no long cooks on weeknights. Other days, like a smoker night, stay as usual."
-                    )
-                }
                 Section {
                     OptionalNumberRow(
                         title: String(localized: "Strict Time Limit"), value: $draft.maxMinutes,
@@ -114,8 +127,7 @@ struct WeekContextSheet: View {
                 Section {
                     OptionalNumberRow(
                         title: String(localized: "Servings This Week"), value: $draft.servings,
-                        range: 1...limits.maxServings,
-                        defaultValue: min((households.current?.household.defaultServings ?? 2) + 2, limits.maxServings),
+                        range: 1...limits.maxServings, defaultValue: guestServings,
                         format: { String(localized: "\($0) servings") })
                     OptionalNumberRow(
                         title: String(localized: "Meals This Week"), value: $draft.mealsPerWeek, range: 1...7,
@@ -239,6 +251,70 @@ struct WeekContextSheet: View {
                 errorMessage = HouseholdStore.message(for: error)
             }
         }
+    }
+}
+
+/// Busy, Guests, and Away as one row of tiles: the whole week in one tap, before any
+/// of the exact numbers below.
+private struct WeekPresetTiles: View {
+    @Binding var draft: AutopilotWeekContextDraft
+    let guestServings: Int
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        let tiles = ForEach(AutopilotWeekPreset.allCases) { preset in
+            WeekPresetTile(preset: preset, isOn: draft.isOn(preset)) {
+                draft.toggle(preset, guestServings: guestServings)
+            }
+        }
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 10) { tiles }
+            } else {
+                HStack(spacing: 10) { tiles }
+            }
+        }
+        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+    }
+}
+
+/// One preset tile, filled when the week is set up that way.
+private struct WeekPresetTile: View {
+    let preset: AutopilotWeekPreset
+    let isOn: Bool
+    let toggle: () -> Void
+
+    private static let cornerRadius: CGFloat = 18
+
+    var body: some View {
+        Button(action: toggle) {
+            VStack(spacing: 6) {
+                Image(systemName: preset.systemImage)
+                    .font(.title3)
+                    .foregroundStyle(isOn ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.accentColor))
+                Text(preset.title)
+                    .font(.headline)
+                    .foregroundStyle(isOn ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.primary))
+                Text(preset.caption)
+                    .font(.caption)
+                    .foregroundStyle(
+                        isOn ? AnyShapeStyle(Color.onAccent.opacity(0.9)) : AnyShapeStyle(Color.secondary))
+            }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .padding(.horizontal, 6)
+            .background {
+                RoundedRectangle(cornerRadius: Self.cornerRadius)
+                    .fill(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color(.secondarySystemBackground)))
+            }
+            .contentShape(.rect(cornerRadius: Self.cornerRadius))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("\(preset.title): \(preset.caption)"))
+        .accessibilityValue(isOn ? Text("On") : Text("Off"))
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }
 

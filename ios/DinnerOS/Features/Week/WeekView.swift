@@ -120,22 +120,42 @@ struct WeekView: View {
         .sensoryFeedback(.success, trigger: events.outcomes)
     }
 
+    /// The household said it's away this week, so an empty week is the plan.
+    private var isSkippingWeek: Bool {
+        autopilot.week == plans.week && autopilot.context?.skip == true
+    }
+
     @ViewBuilder
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("Nothing Planned", systemImage: "calendar")
-        } description: {
-            if canEditEntries {
-                Text("Add recipes from your library to plan this week's dinners.")
-            } else {
-                Text("Nobody has planned this week yet.")
-            }
-        } actions: {
-            if canEditEntries {
-                Button("Add Recipes") {
-                    isAddingRecipes = true
+        if isSkippingWeek {
+            ContentUnavailableView {
+                Label("Skipping This Week", systemImage: "beach.umbrella")
+            } description: {
+                Text("Nothing planned, on purpose.")
+            } actions: {
+                if canEdit {
+                    Button("Change This Week") {
+                        flow.sheet = .context
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
-                .buttonStyle(.borderedProminent)
+            }
+        } else {
+            ContentUnavailableView {
+                Label("Nothing Planned", systemImage: "calendar")
+            } description: {
+                if canEditEntries {
+                    Text("Add recipes from your library to plan this week's dinners.")
+                } else {
+                    Text("Nobody has planned this week yet.")
+                }
+            } actions: {
+                if canEditEntries {
+                    Button("Add Recipes") {
+                        isAddingRecipes = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
             }
         }
     }

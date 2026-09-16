@@ -659,6 +659,77 @@ nonisolated struct AutopilotWeekContextDraft: Encodable, Hashable, Sendable {
     }
 }
 
+/// The three things a week is usually special for, each one tap in "This Week's Plans":
+/// a lot going on, people over, or away.
+///
+/// A tile only puts the week into that shape; the rows below it still set exact numbers.
+nonisolated enum AutopilotWeekPreset: String, CaseIterable, Identifiable, Sendable {
+    case busy, guests, away
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .busy: String(localized: "Busy")
+        case .guests: String(localized: "Guests")
+        case .away: String(localized: "Away")
+        }
+    }
+
+    /// One line under the tile, so the sheet doesn't need a paragraph.
+    var caption: String {
+        switch self {
+        case .busy: String(localized: "Quick weeknights")
+        case .guests: String(localized: "Cook for more")
+        case .away: String(localized: "Plan nothing")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .busy: "bolt.fill"
+        case .guests: "person.2.fill"
+        case .away: "beach.umbrella.fill"
+        }
+    }
+}
+
+extension AutopilotWeekContextDraft {
+    /// Whether the week is already set up this way.
+    func isOn(_ preset: AutopilotWeekPreset) -> Bool {
+        switch preset {
+        case .busy: busy && !skip
+        case .guests: !skip && (servings != nil || days.contains { $0.servings != nil })
+        case .away: skip
+        }
+    }
+
+    /// Turns a preset on or off.
+    ///
+    /// Away is exclusive: a week with no meals can't also be busy or have guests, so
+    /// turning it on clears the others and turning another on clears it. `guestServings`
+    /// is what "Guests" means for this household; the servings row still changes it.
+    mutating func toggle(_ preset: AutopilotWeekPreset, guestServings: Int) {
+        let turningOn = !isOn(preset)
+        switch preset {
+        case .busy:
+            skip = false
+            busy = turningOn
+        case .guests:
+            skip = false
+            servings = turningOn ? guestServings : nil
+            if !turningOn {
+                for index in days.indices {
+                    days[index].servings = nil
+                }
+                days.removeAll(where: \.isEmpty)
+            }
+        case .away:
+            skip = turningOn
+        }
+    }
+}
+
 // MARK: - Proposals
 
 /// A code with display text (`AutopilotText`). Show `text`; branch only on `code`.
