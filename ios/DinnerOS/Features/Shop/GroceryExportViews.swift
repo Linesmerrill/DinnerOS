@@ -20,6 +20,26 @@ final class GroceryExportController {
         var id: String { name }
     }
 
+    /// What "Add to Reminders" is about to do, shown once per device before anything is written
+    /// or Reminders access is asked for.
+    struct Explainer: Identifiable, Equatable {
+        /// The exact list name that will be created.
+        let name: String
+        let drafts: [GroceryReminderDraft]
+
+        var id: String { name }
+
+        /// The first few reminders, as they'll appear.
+        var preview: [GroceryReminderDraft] { Array(drafts.prefix(Self.previewCount)) }
+        /// How many aren't in the preview.
+        var moreCount: Int { max(drafts.count - Self.previewCount, 0) }
+
+        static let previewCount = 4
+    }
+
+    /// The `UserDefaults` key set once Reminders export has worked on this device.
+    static let explainedKey = "groceryExport.remindersExplained"
+
     /// For example "Added 14 items to Reminders".
     private(set) var message: String?
     private(set) var errorMessage: String?
@@ -27,16 +47,32 @@ final class GroceryExportController {
     /// The member denied access, so only Settings can undo it.
     var showsAccessDenied = false
     var existingList: ExistingList?
+    /// The first-time explainer, while it's showing.
+    var explainer: Explainer?
 
     @ObservationIgnored private let export: GroceryRemindersExport
+    /// The `UserDefaults` suite, `nil` for standard. A name rather than the object, which isn't
+    /// `Sendable`, so the initializer can stay `nonisolated`.
+    @ObservationIgnored private let defaultsSuite: String?
 
-    /// `nonisolated` so a SwiftUI view can build one in a `@State` initializer.
-    nonisolated init(remindersStore: any GroceryRemindersStore) {
-        export = GroceryRemindersExport(store: remindersStore)
+    private var defaults: UserDefaults {
+        defaultsSuite.flatMap(UserDefaults.init(suiteName:)) ?? .standard
     }
 
-    /// Sends the unchecked lines to a Reminders list named for the week. Offers Replace or Add
-    /// when a list with that name is already there.
+    /// `nonisolated` so a SwiftUI view can build one in a `@State` initializer.
+    nonisolated init(remindersStore: any GroceryRemindersStore, defaultsSuite: String? = nil) {
+        export = GroceryRemindersExport(store: remindersStore)
+        self.defaultsSuite = defaultsSuite
+    }
+
+    /// Whether Reminders export has already worked on this device, so the explainer is skipped.
+    var hasExplained: Bool {
+        defaults.bool(forKey: Self.explainedKey)
+    }
+
+    /// Sends the unchecked lines to a Reminders list named for the week. The first time on a
+    /// device it explains what will happen first, before Reminders access is asked for. Offers
+    /// Replace or Add when a list with that name is already there.
     func addToReminders(list: GroceryList, week: ISOWeek, checked: Set<String>, appName: String) async {
         let name = GroceryReminderPlan.listName(appName: appName, week: week)
         let drafts = GroceryReminderPlan.drafts(for: list, checked: checked)
@@ -44,6 +80,20 @@ final class GroceryExportController {
             report(error: String(localized: "Nothing to add: every item is checked off."))
             return
         }
+        guard hasExplained else {
+            explainer = Explainer(name: name, drafts: drafts)
+            return
+        }
+        await send(drafts, to: name)
+    }
+
+    /// The member tapped Add to Reminders in the explainer.
+    func confirmExplainer(_ pending: Explainer) async {
+        explainer = nil
+        await send(pending.drafts, to: pending.name)
+    }
+
+    private func send(_ drafts: [GroceryReminderDraft], to name: String) async {
         isWorking = true
         defer { isWorking = false }
         message = nil
@@ -105,6 +155,7 @@ final class GroceryExportController {
     }
 
     private func report(added count: Int) {
+        defaults.set(true, forKey: Self.explainedKey)
         report(
             message: count == 1
                 ? String(localized: "Added 1 item to Reminders")
@@ -202,6 +253,15 @@ struct GroceryExportPrompts: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .sheet(
+                item: Binding(
+                    get: { controller.explainer },
+                    set: { controller.explainer = $0 })
+            ) { pending in
+                RemindersExplainerSheet(explainer: pending) {
+                    Task { await controller.confirmExplainer(pending) }
+                }
+            }
             .alert(
                 "Reminders Access Is Off",
                 isPresented: Binding(
@@ -244,6 +304,73 @@ struct GroceryExportPrompts: ViewModifier {
             } message: { pending in
                 Text("Replacing removes the \(pending.drafts.count) reminders already in that list.")
             }
+    }
+}
+
+/// Shown the first time "Add to Reminders" is tapped on a device: the list it creates, what
+/// each reminder is, and the first few as they'll look.
+private struct RemindersExplainerSheet: View {
+    let explainer: GroceryExportController.Explainer
+    let confirm: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text(
+                        "Creates a new list in Reminders called “\(explainer.name)”. Each grocery item becomes a reminder you can tick off while you shop."
+                    )
+                    .padding(.vertical, 2)
+                }
+                Section {
+                    ForEach(Array(explainer.preview.enumerated()), id: \.offset) { _, draft in
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(draft.title)
+                                if let notes = draft.notes {
+                                    Text(notes)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        } icon: {
+                            Image(systemName: "circle")
+                                .foregroundStyle(.secondary)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                    if explainer.moreCount > 0 {
+                        Text("and \(explainer.moreCount) more")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Preview")
+                }
+            }
+            .navigationTitle("Add to Reminders")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                Button {
+                    dismiss()
+                    confirm()
+                } label: {
+                    Text("Add to Reminders")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding()
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 }
 

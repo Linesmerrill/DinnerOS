@@ -196,6 +196,82 @@ struct GroceryExportTests {
         #expect(try export.hasExistingList(named: "DinnerOS · Sep 14 – 20") == false)
     }
 
+    // MARK: First-time explainer
+
+    /// A `UserDefaults` suite no other test shares, so the explainer starts unseen.
+    private func freshDefaults() -> String {
+        "GroceryExportTests.\(UUID().uuidString)"
+    }
+
+    @Test func theExplainerShowsBeforeTheFirstExportOnlyAndBeforeAccessIsAsked() async throws {
+        let store = FakeRemindersStore()
+        let controller = GroceryExportController(remindersStore: store, defaultsSuite: freshDefaults())
+        let week = try week()
+        let expectedName = GroceryReminderPlan.listName(appName: "DinnerOS", week: week)
+
+        await controller.addToReminders(list: try list(), week: week, checked: [], appName: "DinnerOS")
+
+        // Nothing is written, and the system's access prompt waits for the explainer.
+        let explainer = try #require(controller.explainer)
+        #expect(explainer.name == expectedName)
+        #expect(explainer.preview.map(\.title) == ["1 ½ + 8 oz Yellow Onion", "Salt"])
+        #expect(explainer.moreCount == 0)
+        #expect(store.accessRequests == 0)
+        #expect(store.lists.isEmpty)
+
+        await controller.confirmExplainer(explainer)
+
+        #expect(controller.explainer == nil)
+        #expect(store.createdLists == [expectedName])
+        #expect(controller.hasExplained)
+
+        // Later taps go straight through.
+        await controller.addToReminders(list: try list(), week: week, checked: [], appName: "DinnerOS")
+        #expect(controller.explainer == nil)
+        #expect(controller.existingList?.name == expectedName)
+    }
+
+    @Test func cancellingTheExplainerDoesntCountAsSeen() async throws {
+        let store = FakeRemindersStore()
+        let controller = GroceryExportController(remindersStore: store, defaultsSuite: freshDefaults())
+
+        await controller.addToReminders(list: try list(), week: try week(), checked: [], appName: "DinnerOS")
+        controller.explainer = nil
+        await controller.addToReminders(list: try list(), week: try week(), checked: [], appName: "DinnerOS")
+
+        #expect(controller.explainer != nil)
+        #expect(!controller.hasExplained)
+        #expect(store.accessRequests == 0)
+    }
+
+    @Test func remindersFollowTheStoreAisleOrder() throws {
+        let json = #"""
+            {"week": "2026-W38", "status": "draft", "pantryApplied": true,
+             "categories": [
+               {"category": "produce", "items": [
+                 {"ingredientKey": "i-zucchini", "name": "Zucchini", "amounts": [], "quantityText": "",
+                  "unquantified": true, "status": "toBuy", "recipes": []},
+                 {"ingredientKey": "i-pepper", "name": "Pepper", "amounts": [], "quantityText": "",
+                  "unquantified": true, "status": "toBuy", "recipes": []}]},
+               {"category": "bakery", "items": [
+                 {"ingredientKey": "i-tortillas", "name": "Tortillas", "amounts": [], "quantityText": "",
+                  "unquantified": true, "status": "toBuy", "recipes": []}]},
+               {"category": "pantry", "items": [
+                 {"ingredientKey": "i-cavatappi", "name": "Cavatappi", "amounts": [], "quantityText": "",
+                  "unquantified": true, "status": "toBuy", "recipes": []},
+                 {"ingredientKey": "i-oil", "name": "Cooking Oil", "amounts": [], "quantityText": "",
+                  "unquantified": true, "status": "inPantry", "recipes": []}]}
+             ],
+             "skipped": [], "skippedItems": []}
+            """#
+        let list = try JSONCoding.makeDecoder().decode(GroceryList.self, from: Data(json.utf8))
+
+        let drafts = GroceryReminderPlan.drafts(for: list, checked: [])
+
+        #expect(drafts.map(\.title) == ["Zucchini", "Pepper", "Tortillas", "Cavatappi"])
+        #expect(drafts.map(\.notes) == ["Produce", "Produce", "Bakery", "Pantry"])
+    }
+
     // MARK: Share and copy text
 
     @Test func shareAndCopyTextIsExactlyTheGroceryListFormatterOutput() throws {

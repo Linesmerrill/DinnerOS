@@ -209,14 +209,15 @@ nonisolated struct GroceryRemindersExport: Sendable {
             guard let calendar = eventStore.calendar(withIdentifier: id) else {
                 throw GroceryRemindersError.accessDenied
             }
+            // Committed one at a time, in aisle order: reminders saved in a single commit share
+            // a creation time, and Reminders then shows them in no particular order.
             for draft in drafts {
                 let reminder = EKReminder(eventStore: eventStore)
                 reminder.title = draft.title
                 reminder.notes = draft.notes
                 reminder.calendar = calendar
-                try eventStore.save(reminder, commit: false)
+                try eventStore.save(reminder, commit: true)
             }
-            try eventStore.commit()
         }
     }
 #endif
