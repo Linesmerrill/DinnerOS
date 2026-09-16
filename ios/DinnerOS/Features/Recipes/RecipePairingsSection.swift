@@ -128,9 +128,9 @@ struct RecipePairingsSection: View {
     private func photo(_ pairing: Pairing) -> some View {
         switch pairing.target {
         case .recipe(let addon):
-            RecipePhoto(url: addon.imageURL, pointWidth: cardWidth, cornerRadius: 14)
+            RecipePhoto(url: addon.imageURL, pointWidth: cardWidth)
         case .groceryItem:
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: 18)
                 .fill(Color(.secondarySystemBackground))
                 .aspectRatio(4.0 / 3.0, contentMode: .fit)
                 .overlay {
