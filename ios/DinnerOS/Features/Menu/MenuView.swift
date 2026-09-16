@@ -59,6 +59,9 @@ struct MenuView: View {
             }
             .task(id: household?.id) {
                 guard let household else { return }
+                // A toast and its undo name this household's plan entries, so they don't
+                // carry over to the next one.
+                planner.activate(householdID: household.id)
                 // The editor and quick add read serving sizes through the library's cache.
                 async let recipes: Void = library.activate(householdID: household.id)
                 async let menuLoad: Void = menu.activate(
