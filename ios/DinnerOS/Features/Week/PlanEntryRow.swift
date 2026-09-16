@@ -6,6 +6,7 @@ struct PlanEntryRow: View {
     let entry: PlanEntry
     var outcome: EventReporter.EntryOutcome?
 
+    @Environment(MenuStore.self) private var menu
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var thumbnailWidth = 64.0
 
@@ -21,6 +22,9 @@ struct PlanEntryRow: View {
                     .font(.headline)
                 HStack(spacing: 6) {
                     Text("\(entry.servings) servings")
+                    if menu.isAddOn(entry) {
+                        AddOnLabel()
+                    }
                     if entry.isFromAutopilot {
                         AutopilotEntryBadge()
                     }
@@ -68,4 +72,6 @@ struct PlanEntryRow: View {
     List(Array(PlanPreviewData.plan.entries.enumerated()), id: \.element.id) { index, entry in
         PlanEntryRow(entry: entry, outcome: index == 0 ? .cooked : index == 1 ? .skipped(.noTime) : nil)
     }
+    // The row asks the menu whether an entry is an add-on.
+    .menuPreviewEnvironment()
 }
