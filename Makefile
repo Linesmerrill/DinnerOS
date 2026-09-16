@@ -49,11 +49,16 @@ api-build: ## Build the API binary into api/bin/
 
 .PHONY: ios-build ios-test ios-lint ios-fmt
 ios-build: ## Build the iOS app for the simulator
-	xcodebuild -project $(IOS_DIR)/DinnerOS.xcodeproj -scheme $(IOS_SCHEME) -destination '$(IOS_DESTINATION)' build CODE_SIGNING_ALLOWED=NO | xcbeautify 2>/dev/null || \
+	# pipefail is set inline, not via .SHELLFLAGS: macOS ships GNU Make 3.81, which
+	# ignores it. Without it a failed build whose output xcbeautify formatted fine
+	# would exit 0.
+	set -o pipefail; xcodebuild -project $(IOS_DIR)/DinnerOS.xcodeproj -scheme $(IOS_SCHEME) -destination '$(IOS_DESTINATION)' build CODE_SIGNING_ALLOWED=NO | xcbeautify 2>/dev/null || \
 	xcodebuild -project $(IOS_DIR)/DinnerOS.xcodeproj -scheme $(IOS_SCHEME) -destination '$(IOS_DESTINATION)' -quiet build CODE_SIGNING_ALLOWED=NO
 
 ios-test: ## Run iOS unit tests on the simulator
-	xcodebuild -project $(IOS_DIR)/DinnerOS.xcodeproj -scheme $(IOS_SCHEME) -destination '$(IOS_DESTINATION)' -quiet test CODE_SIGNING_ALLOWED=NO
+	# No -quiet: it suppresses the "** TEST SUCCEEDED **" banner, so a passing run
+	# and a failing one look identical to anything reading the output.
+	xcodebuild -project $(IOS_DIR)/DinnerOS.xcodeproj -scheme $(IOS_SCHEME) -destination '$(IOS_DESTINATION)' test CODE_SIGNING_ALLOWED=NO
 
 ios-lint: ## Lint Swift sources with swift-format (bundled with Xcode)
 	xcrun swift-format lint --strict --recursive --configuration $(IOS_DIR)/.swift-format $(IOS_DIR)/DinnerOS $(IOS_DIR)/DinnerOSTests
