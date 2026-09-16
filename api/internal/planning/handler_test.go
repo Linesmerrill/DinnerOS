@@ -276,3 +276,39 @@ func TestPlanHandlerErrors(t *testing.T) {
 		})
 	}
 }
+
+// An add-on is a plan entry like any other, so the plan itself has to say which
+// entries are add-ons: without it a client can only tell them apart once the
+// menu's cards are loaded, and a week of seven meals and one add-on read as
+// eight meals in the app's week strip.
+func TestPlanEntryRecipeMarksAddOns(t *testing.T) {
+	router := newPlanTestRouter(t)
+	plan := plansPath(hhAda) + "/" + testWeek
+
+	rec := do(t, router, http.MethodPost, plan+"/entries", `{"recipeId":"`+recipeTacos+`","day":"tue","servings":2}`, userAda)
+	wantStatus(t, rec, http.StatusCreated)
+	if meal := decodeBody[AddEntryResponse](t, rec).Entry; meal.Recipe.IsAddon {
+		t.Errorf("meal recipe = %+v, want isAddon false", meal.Recipe)
+	}
+	// The field is always sent, so nothing has to work it out from the catalog.
+	if !strings.Contains(rec.Body.String(), `"isAddon":false`) {
+		t.Errorf("meal entry %s lacks an isAddon of false", rec.Body.String())
+	}
+
+	rec = do(t, router, http.MethodPost, plan+"/entries", `{"recipeId":"`+recipeBread+`","servings":2}`, userAda)
+	wantStatus(t, rec, http.StatusCreated)
+	if addOn := decodeBody[AddEntryResponse](t, rec).Entry; !addOn.Recipe.IsAddon {
+		t.Errorf("add-on recipe = %+v, want isAddon true", addOn.Recipe)
+	}
+
+	// And the whole plan says so, which is what a week's counts are read from.
+	rec = do(t, router, http.MethodGet, plan, "", userViewer)
+	wantStatus(t, rec, http.StatusOK)
+	addOns := map[string]bool{}
+	for _, e := range decodeBody[PlanResponse](t, rec).Entries {
+		addOns[e.Recipe.Name] = e.Recipe.IsAddon
+	}
+	if len(addOns) != 2 || addOns["Beef Tacos"] || !addOns["Garlic Bread"] {
+		t.Errorf("plan add-on flags = %+v", addOns)
+	}
+}

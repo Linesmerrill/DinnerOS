@@ -100,8 +100,12 @@ type EntryCustomizationResponse struct {
 
 // EntryRecipeResponse is the recipe snapshot stored on an entry.
 type EntryRecipeResponse struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// IsAddon is true for a pairing's add-on, which is planned with a meal and
+	// never counted as one. Always sent, so a client never has to work it out
+	// from the catalog.
+	IsAddon  bool   `json:"isAddon"`
 	ImageURL string `json:"imageUrl,omitempty"`
 }
 
@@ -306,8 +310,10 @@ func newPlanResponse(p Plan) PlanResponse {
 
 func newEntryResponse(w Week, e Entry) EntryResponse {
 	resp := EntryResponse{
-		ID:       e.ID,
-		Recipe:   EntryRecipeResponse{ID: e.RecipeID, Name: e.RecipeName, ImageURL: e.RecipeImageURL},
+		ID: e.ID,
+		Recipe: EntryRecipeResponse{
+			ID: e.RecipeID, Name: e.RecipeName, IsAddon: e.RecipeIsAddon, ImageURL: e.RecipeImageURL,
+		},
 		Servings: e.Servings, Note: e.Note, AddedBy: e.AddedBy, AddedAt: e.AddedAt.UTC(), Origin: e.Origin,
 	}
 	if resp.Origin == "" {

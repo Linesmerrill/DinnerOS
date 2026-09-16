@@ -170,6 +170,13 @@ struct SpecialtyDetailView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+            // Without a store alternative there's no option row to hang the shopping note on,
+            // and it usually says why there isn't one, so it goes with the choice instead.
+            if !ingredient.note.isEmpty, noteOption(ingredient) == nil {
+                Label(ingredient.note, systemImage: "info.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             if let status = SpecialtyFormat.batchStatus(ingredient) {
                 LabeledContent("House-Made Batch", value: status)
                 if let expiry = PantryExpiry(expiresOn: ingredient.batch?.expiresOn) {
@@ -229,7 +236,18 @@ struct SpecialtyDetailView: View {
             }
         } header: {
             Text(option.type.title)
+        } footer: {
+            // The note is a caveat about buying it, so it sits under the store route it's about.
+            if !ingredient.note.isEmpty, option.id == noteOption(ingredient)?.id {
+                Label(ingredient.note, systemImage: "info.circle")
+            }
         }
+    }
+
+    /// The option the shopping note belongs with: the first store alternative, since the note is
+    /// about buying the ingredient. `nil` when there is none.
+    private func noteOption(_ ingredient: SpecialtyIngredient) -> SpecialtyOption? {
+        ingredient.options.first { $0.type == .storeAlternative }
     }
 
     private func asIsSection(_ ingredient: SpecialtyIngredient) -> some View {

@@ -329,8 +329,9 @@ final class MenuStore {
 
     /// Whether a planned entry is an add-on rather than a main meal.
     ///
-    /// A current server marks the entry itself; an older one doesn't, so the menu's own card
-    /// for that recipe answers instead. Either way an add-on is never counted as a dinner.
+    /// The entry itself says so. The menu's own card still answers for an entry planned before
+    /// the API marked add-ons, which is stored unmarked and stays that way. Either way an add-on
+    /// is never counted as a dinner.
     func isAddOn(_ entry: PlanEntry) -> Bool {
         entry.recipe.isAddon || card(forRecipeID: entry.recipe.id)?.recipe.isAddon == true
     }
@@ -343,24 +344,17 @@ final class MenuStore {
     /// What the strip should say about `week`: what the server sent, with a plan already in hand
     /// applied over it.
     ///
-    /// The split is worked out here rather than when the plan arrives, because whether an entry
-    /// is an add-on can only be answered once the entry says so or the menu's cards are loaded,
-    /// which may be after the plan. Reading it each time lets the pill settle on the same counts
-    /// the bottom bar and Your Meals show, instead of keeping a guess made too early.
+    /// The split is worked out here rather than when the plan arrives, because a plan can reach
+    /// the store before the menu it belongs to. Every entry names itself an add-on or a meal, so
+    /// the counts are read straight off the plan and the pill settles on the same numbers the
+    /// bottom bar and Your Meals show.
     func summary(for week: ISOWeek) -> WeekSummary? {
         guard var summary = weekSummaries[week.description] else { return nil }
         guard let plan = knownPlans[week.description] else { return summary }
         summary.status = WeekStatus(rawValue: plan.status.rawValue)
         let counts = mealCounts(of: plan.entries)
-        // Nothing on hand names this week's add-ons, and the plan hasn't changed since the
-        // server counted it, so keep the server's split rather than reading its add-ons as
-        // extra dinners.
-        guard counts.addOns < summary.addOnCount, counts.total == summary.plannedCount + summary.addOnCount
-        else {
-            summary.plannedCount = counts.meals
-            summary.addOnCount = counts.addOns
-            return summary
-        }
+        summary.plannedCount = counts.meals
+        summary.addOnCount = counts.addOns
         return summary
     }
 

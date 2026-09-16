@@ -29,6 +29,8 @@ struct SpecialtiesAPITests {
         #expect(blend.ingredientIDs == ["i-southwest"])
         #expect(blend.recipeCount == 52)
         #expect(blend.unitSizes.first?.text == "1 tbsp")
+        // Required by the API and empty for most: this one needs no shopping caveat.
+        #expect(blend.note.isEmpty)
         #expect(blend.defaultOptionID == "southwest-spice-blend.batch")
         #expect(!blend.retired)
 

@@ -91,6 +91,11 @@ type Entry struct {
 	// grocery list) always use the live recipe.
 	RecipeName     string
 	RecipeImageURL string
+	// RecipeIsAddon marks a pairing's add-on (garlic bread alongside the
+	// pasta), copied from the recipe with the rest of the snapshot so a plan
+	// says what each entry is without loading the catalog. Entries stored
+	// before add-ons were marked read as false.
+	RecipeIsAddon bool
 	// Day is empty for "this week, not scheduled".
 	Day Day
 	// Servings is one of the recipe's authored serving sizes.
