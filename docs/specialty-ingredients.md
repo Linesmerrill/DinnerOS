@@ -2,7 +2,9 @@
 
 Status: API implemented (`api/internal/substitutes`, with changes in
 `internal/grocery`, `internal/planning`, `internal/pantry`, and
-`internal/recipes`) and iOS implemented ([iOS](#ios)).
+`internal/recipes`) and iOS implemented ([iOS](#ios)). The
+[household strategy](#the-household-strategy) is API-only so far; the iOS
+contract notes below say what the app has to change.
 
 Recipes imported from a meal-kit history name items a grocery store doesn't
 sell under that name: "Tex-Mex Paste", "Southwest Spice Blend", "Chicken Stock
@@ -23,6 +25,44 @@ a 12 tbsp pantry cycle. Next week the blend shows as "In pantry (house-made)".
 Tacos cooked with 1 packet deduct 1 tbsp. When the estimate crosses the low
 threshold, the pantry marks it low, notifies the household, and the list asks
 for the ingredients again.
+
+## The household strategy
+
+Choosing an option for 29 blends one at a time is a wall, so a household picks
+one standing answer instead. `GET`/`PUT
+.../specialty-ingredients/settings` holds it:
+
+| Strategy | What it does |
+| --- | --- |
+| `similar` (default) | Prefer a **store alternative** wherever the curated set has one; fall back to a house-made batch only when there is no store option. "Buy something close from the store — quicker, tastes a little different." |
+| `closest` | Prefer a **house-made batch** wherever there is one; fall back to a store alternative. "Make a jar you reuse across several meals — more work, closest to the original." |
+| `ask` | Apply nothing. Every unchosen specialty ingredient stays on the list by its own name with suggestions — the behavior before this setting existed. |
+
+The settings response carries `options[]` (`value`, `label`, `description`)
+with exactly that wording, so the app shows the trade-off without hardcoding
+copy.
+
+**How it resolves.** For each specialty ingredient on a week's list:
+
+1. An explicit household choice wins, including `as_is` ("leave the line
+   alone"). A choice of an option that has since been deleted counts as no
+   choice, so the strategy takes over rather than the line silently staying.
+2. Otherwise the strategy picks a **curated** option: its preferred kind if
+   the specialty has one, else the other kind. It never picks a household's
+   own option — a household that wrote one chooses it deliberately.
+3. Otherwise nothing applies and the line stays with its suggestions.
+
+**Nothing is stored.** The strategy is resolved when the list is built, not
+written to `specialty_choices`. Changing the setting changes future lists with
+no migration, and there is no stored choice to un-pick (decision 440).
+
+The list response reports which happened per ingredient: `choiceSource` is
+`household`, `strategy`, or `none`, and `choice.source` matches it, with
+`choice.strategy` naming the strategy and `chosenBy`/`chosenAt` null when
+nobody chose (decision 442).
+
+A strategy change records `specialty.strategy_updated` (`{strategy,
+previous}`) server-side.
 
 ## Data model
 
@@ -63,7 +103,7 @@ generic option names. Packet sizes are estimates.
 | Sweet Soy Glaze | store (soy and honey), batch |
 | Southwest Spice Blend | batch (12 tbsp, 180 days), store |
 | Sweet Thai Chili Sauce | store (bottled sweet chili sauce) |
-| Tex-Mex Paste | store (tomato paste and chili spices), batch |
+| Tex-Mex Paste | store (tomato paste with chipotle and chili spices), batch |
 | Ponzu Sauce | store (soy with citrus), store (bottled ponzu), batch |
 | Cream Sauce Base | store (heavy cream with cream cheese) |
 | Smoky Red Pepper Crema | store (sour cream with roasted peppers), batch |
@@ -82,6 +122,25 @@ generic option names. Packet sizes are estimates.
 gochujang, soy sauce, tomato paste, hot sauce, Italian seasoning) and produce
 mixes (coleslaw mix) aren't in it; `TestEmbeddedSeed` enforces that, and that
 no text names a meal-kit brand.
+
+**The shopping audit.** A household on `similar` must have something to buy
+for every entry, so `TestSeedStoreAlternatives` requires each one to carry a
+store alternative **or** an explicit `note` saying why there isn't an honest
+one. All 29 already had a store alternative when the rule was added, so seed
+v2 changed two things rather than adding options:
+
+- **A `note` field** (≤ 300 characters, shown by the app) on the six entries
+  whose store route needs a caveat — Sweet Thai Chili Sauce, Ponzu Sauce,
+  Szechuan Paste, Sesame Dressing, Miso Sauce Concentrate, and
+  Garlic-Ginger Scallion Paste. These depend on an international-aisle or
+  refrigerated product, which is a shopping caveat, not a missing
+  alternative. Tex-Mex Paste carries one for the canned chipotle.
+- **A better Tex-Mex paste**: its store alternative gained chipotle peppers
+  in adobo, since the old version had chili powder and cumin but no smoky
+  element.
+
+The rule is a test rather than a one-off review, so a new curated entry can't
+ship batch-only without saying so.
 
 **Loading.** The API syncs the embedded seed on startup, after indexes
 (`substitutes.EnsureSeed`). Each specialty carries a SHA-256 of its content, so
@@ -109,9 +168,14 @@ ingredients (with the household's choices, option ingredients linked to the
 catalog, and batch stock from the pantry), and runs the pure
 `grocery.ApplySpecialties` before `Aggregate`. Ordinary lines aren't touched.
 
+What counts as "the choice" below is the resolved one: the household's
+explicit choice, or the option its
+[strategy](#the-household-strategy) picked when there is none. A line the
+strategy produced carries `via[].strategy` and reads "(your default)".
+
 | Choice | What the list does |
 | --- | --- |
-| none | The item stays, `specialty: true`, with `specialtyDetail.suggestedOptions` (default first) |
+| none (`ask`, or no curated option) | The item stays, `specialty: true`, with `specialtyDetail.suggestedOptions` (default first) |
 | `as_is` | The item stays, `specialty: true`, `choiceType: as_is`, no suggestions |
 | store alternative | The line becomes the option's ingredients, scaled by the line's amount converted to `per` (through `unitSizes` for packets), aggregated with everything else. Each carries `via` ("for Tex-Mex Paste in Smoky Pork Tacos"). A line without an amount, or in units that don't convert, lists the ingredients without amounts |
 | house-made batch | The week's amounts are totaled in the yield's unit. If the batch item is `in_stock` and its estimate covers the total (or can't be compared), the lines stay as one `inPantry` item keyed `name:<key>`, `houseMade: true` ("In pantry (house-made)"). If it's low, out, missing, or short, the lines are replaced by the ingredients for enough batches to cover the shortfall (at least one), each with `via` ("to make Southwest Spice Blend (makes about 12 tbsp)") |
@@ -148,6 +212,24 @@ sizes. The learned rate, low threshold, and notifications then work unchanged.
 
 ## iOS contract notes
 
+- **Settings (new).** `GET .../specialty-ingredients/settings` returns
+  `strategy` and `options[]` (`value`, `label`, `description`). Show the three
+  as a picker with the descriptions as subtitles — they are the trade-off in
+  the owner's words — and save with
+  `PUT .../settings {"strategy": "closest"}` (`pantry.edit`). Put it at the
+  top of the setup screen: it's the decision that saves a member from the
+  per-ingredient ones.
+- **`choice` now covers the default, so read `choiceSource`.** A specialty
+  ingredient nobody chose for still returns a `choice` when the strategy
+  applies one. Branch on `choiceSource`: `household` is a member's decision
+  (badge as today), `strategy` is the default (badge it as such, e.g. "Store
+  Alternative · default", and keep the option pickable so a member can
+  override), `none` is Not Set. **`choice.chosenBy` and `choice.chosenAt` are
+  now null** on a strategy-sourced choice, so they must decode as optional —
+  this is the one breaking change (decision 442).
+- **`note`.** Each specialty ingredient may carry a short `note` (usually
+  empty). Show it on the detail screen near the store alternative; it says
+  things like which aisle a bottled product is in.
 - **Setup screen.** `GET .../specialty-ingredients` lists what the household's
   recipes use, most used first. Show `name`, `recipeCount`, and the choice
   (`choice.type`, `choice.optionName`). Offer `options` (curated first; the
@@ -198,6 +280,15 @@ sign-out and when the household changes. Decisions 139–144 in
   counts are estimates too.
 - **Only curated specialties are flagged.** A household can't flag a new
   specialty ingredient yet, and unknown names aren't guessed.
+- **The strategy is all-or-nothing per household.** There is one setting, not
+  one per category, so a household that wants to buy its spice blends but make
+  its sauces still chooses those ingredients individually. The per-ingredient
+  choice is the escape hatch.
+- **The strategy never picks a household's own option.** Only curated options
+  are considered, so a household that wrote its own has to choose it.
+- **Changing the strategy changes past weeks' lists too.** Lists are built on
+  request, so reopening last week's list after a change shows the new
+  resolution. Only an explicit choice pins an ingredient.
 - **Store alternatives don't deduct** their ingredients from the pantry when
   cooked; only a batch (or an item with the specialty's own name) does.
 - **One pantry unit size** per batch item. Other packet units convert only

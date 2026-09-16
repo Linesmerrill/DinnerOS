@@ -1766,6 +1766,65 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/specialty-ingredients/settings:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: Get the specialty ingredient settings
+      description: |
+        The household's standing answer for specialty ingredients nobody has
+        chosen an option for, with short descriptions of each strategy so the
+        app can show the trade-off. Requires `household.view`.
+      operationId: getSpecialtyIngredientSettings
+      tags: [specialty-ingredients]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The household's settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecialtySettings"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Set the specialty ingredient strategy
+      description: |
+        Sets one standing answer for the whole household: `similar` prefers a
+        store alternative wherever there is one, `closest` prefers a
+        house-made batch, and `ask` applies nothing until a member chooses.
+        The strategy is resolved when a grocery list is built, so it is never
+        written to the household's choices and changing it changes future
+        lists. An explicit per-ingredient choice always wins over it.
+        Requires `pantry.edit`.
+      operationId: setSpecialtyIngredientStrategy
+      tags: [specialty-ingredients]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetSpecialtySettingsRequest"
+      responses:
+        "200":
+          description: The household's settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpecialtySettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/specialty-ingredients/{specialtyId}:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -5612,7 +5671,7 @@ components:
           example: "Specialty ingredient: choose a store alternative or a house-made batch"
     GroceryVia:
       type: object
-      required: [kind, specialtyId, specialtyKey, specialtyName, optionId, optionName, yield, batches, recipes, text]
+      required: [kind, specialtyId, specialtyKey, specialtyName, optionId, optionName, strategy, yield, batches, recipes, text]
       properties:
         kind:
           type: string
@@ -5632,6 +5691,13 @@ components:
           type: string
         optionName:
           type: string
+        strategy:
+          type: string
+          enum: ["", similar, closest]
+          description: |
+            The household strategy that picked the option, empty when a member
+            chose it explicitly. When set, `text` says so ("Store alternative
+            for Tex-Mex Paste in Smoky Pork Tacos (your default)").
         yield:
           description: What one batch makes; null for a store alternative.
           oneOf:
@@ -5799,7 +5865,7 @@ components:
           format: date-time
     SpecialtyIngredient:
       type: object
-      required: [id, key, name, aliases, category, ingredientIds, recipeCount, unitSizes, defaultOptionId, retired, choice, options, batch]
+      required: [id, key, name, aliases, category, note, ingredientIds, recipeCount, unitSizes, defaultOptionId, retired, choiceSource, choice, options, batch]
       properties:
         id:
           type: string
@@ -5817,6 +5883,14 @@ components:
             type: string
         category:
           type: string
+        note:
+          type: string
+          description: |
+            A short shopping note for the app, empty for most. It flags the
+            specialty ingredients whose store route needs a caveat ("bottled
+            ponzu is in the Asian aisle") or that have no honest store
+            equivalent.
+          example: ""
         ingredientIds:
           type: array
           description: Catalog ingredients that are this specialty ingredient.
@@ -5847,11 +5921,25 @@ components:
           type: string
         retired:
           type: boolean
+        choiceSource:
+          type: string
+          enum: [household, strategy, none]
+          description: |
+            Where the current plan comes from: `household` (a member chose it,
+            including `as_is`), `strategy` (the household's standing strategy
+            picked it, and a member can still override it), or `none` (nothing
+            applies, so `choice` is null and the ingredient stays on the list).
         choice:
+          description: |
+            What currently applies, whoever decided it. Null when
+            `choiceSource` is `none`.
           oneOf:
             - type: object
-              required: [optionId, type, optionName, chosenBy, chosenAt]
+              required: [source, optionId, type, optionName, strategy, chosenBy, chosenAt]
               properties:
+                source:
+                  type: string
+                  enum: [household, strategy]
                 optionId:
                   type: string
                 type:
@@ -5859,10 +5947,17 @@ components:
                   enum: [as_is, store_alternative, house_made_batch]
                 optionName:
                   type: [string, "null"]
+                strategy:
+                  description: The strategy that picked it; null when a member chose it.
+                  oneOf:
+                    - type: string
+                      enum: [similar, closest]
+                    - type: "null"
                 chosenBy:
-                  type: string
+                  description: Null for a strategy, which nobody chose.
+                  type: [string, "null"]
                 chosenAt:
-                  type: string
+                  type: [string, "null"]
                   format: date-time
             - type: "null"
         options:
@@ -5915,6 +6010,51 @@ components:
         optionId:
           type: string
           description: A curated option ID, a household option ID, or `as_is`.
+    SetSpecialtySettingsRequest:
+      type: object
+      required: [strategy]
+      properties:
+        strategy:
+          type: string
+          enum: [similar, closest, ask]
+    SpecialtySettings:
+      type: object
+      required: [strategy, updatedBy, updatedAt, options]
+      properties:
+        strategy:
+          type: string
+          enum: [similar, closest, ask]
+          default: similar
+          description: |
+            The household's standing answer for specialty ingredients without
+            an explicit choice. `similar` prefers a store alternative and falls
+            back to a house-made batch; `closest` prefers a batch and falls
+            back to a store alternative; `ask` applies nothing.
+        updatedBy:
+          type: [string, "null"]
+          description: Null for a household that never set one.
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+        options:
+          type: array
+          description: |
+            Every strategy with the words to show, in the order to offer them.
+            The same three entries every time, so the app needn't hardcode the
+            trade-off copy.
+          items:
+            type: object
+            required: [value, label, description]
+            properties:
+              value:
+                type: string
+                enum: [similar, closest, ask]
+              label:
+                type: string
+                example: Something similar
+              description:
+                type: string
+                example: Buy something close from the store — quicker, tastes a little different
     SpecialtyOptionRequest:
       type: object
       required: [type, name, ingredients]
