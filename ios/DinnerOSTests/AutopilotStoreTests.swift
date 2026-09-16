@@ -129,6 +129,35 @@ struct AutopilotStoreTests {
         #expect(!store.shouldOfferOnboarding)
     }
 
+    /// Setup asks three questions, but the `PUT` still sends every replaceable section: the
+    /// three it asked about, and the API's defaults for the ones that moved to preferences,
+    /// which is also what a skipped step leaves behind (#330).
+    @Test func finishingThreeStepSetupSendsDefaultsForWhatItNoLongerAsks() async throws {
+        let harness = try await activated()
+        let store = harness.store
+        var settings = try #require(store.profile?.settings)
+        settings.setPreference(.liked, for: "mexican", kind: .cuisine, limits: store.limits)
+        settings.restrictions.allergens = ["peanuts"]
+        settings.schedule.mealsPerWeek = 3
+
+        try await store.saveProfile(settings)
+
+        let line = "PUT /households/household-1/autopilot/profile"
+        let body = try #require(harness.server.body(of: line))
+        #expect(
+            Set(body.keys) == ["taste", "restrictions", "schedule", "cookTime", "novelty", "equipment", "weekdayRules"])
+        let likes = try #require((body["taste"] as? [String: Any])?["likes"] as? [String: Any])
+        #expect(likes["cuisines"] as? [String] == ["mexican"])
+        #expect((body["restrictions"] as? [String: Any])?["allergens"] as? [String] == ["peanuts"])
+        #expect((body["schedule"] as? [String: Any])?["mealsPerWeek"] as? Int == 3)
+        // Moved to preferences: the defaults go up untouched.
+        #expect(body["equipment"] as? [String] == [])
+        #expect((body["weekdayRules"] as? [[String: Any]])?.isEmpty == true)
+        #expect(body["novelty"] as? String == "balanced")
+        #expect((body["cookTime"] as? [String: Any])?["maxLongPerWeek"] as? Int == 2)
+        #expect(store.isConfigured)
+    }
+
     @Test func savingASectionPatchesOnlyThatSection() async throws {
         let server = FakeAutopilotServer(.init(profile: AutopilotFixtures.profile(configured: true)))
         let harness = try await activated(server)
