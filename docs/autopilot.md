@@ -135,6 +135,17 @@ their usual cook-time handling, and a day whose rule has `timeBand: long`
 keeps its long cook, even on a weeknight. Only `maxMinutes` or a day's
 `maxMinutes` caps those days.
 
+The three cases the household actually has — a lot on, people over, away — are
+one tap each in the app (`AutopilotWeekPreset`): **Busy** sets `busy`,
+**Guests** sets the week's `servings` to the household's usual plus two, and
+**Away** sets `skip`. Away is exclusive, since a week with no meals can't also
+be busy or have guests. A skipped week plans nothing and says so rather than
+reading as an empty or failed week: the Week tab replaces **Plan with
+Autopilot** with "Skipping this week", disables it in the ⋯ menu, and its
+empty state is "Skipping This Week — nothing planned, on purpose" with
+**Change This Week**. Generating anyway returns an empty proposal
+(`week_skipped`), which the app doesn't offer for review.
+
 ### Recipe attributes
 
 Recipes don't carry these fields, so the adapter derives them from names, tags,
@@ -671,7 +682,7 @@ baseline alone plans a 500-recipe, 5000-interaction week in a few milliseconds
 | --- | --- | --- |
 | Onboarding | Offered once on the Week tab's first visit while the profile isn't configured; also **Set Up Autopilot** (**Run Setup Again** once set up) in the Week menu (⋯) and Preferences (`AutopilotOnboardingView`, `AutopilotOnboardingSteps`) | **Three** one-screen questions, opening straight on the first, with a progress bar and a "2 of 3" count, and every screen answered by tapping tiles rather than reading: **What do you like?** (a grid of cuisine tiles, each a real catalog photo under a scrim — tap to like, again for "no thanks", again to clear, or long-press to pick), **Anything to avoid?** (allergen and diet tiles, each with its own SF Symbol, plus one "Add an ingredient" field), and **How do your weeks look?** (seven night tiles — the nights picked are the dinners Autopilot plans, so meals per week follows the count). The grid offers the specific cuisines people recognize, using a region only when nothing under it has enough recipes, and every tile gets a distinct photo — a plain tinted tile when none is left (#334, #335). A symbol the app doesn't know falls back to a neutral glyph, and a test checks every symbol is real (#337). At most one subtitle line per screen; longer explanations sit behind an info button. **Skip** is in the nav bar on every step and keeps that section's server defaults; **Set Up Later** is on the first step. **Finish** saves every section with one `PUT` and offers **Plan My Week**, plus a quiet **Fine-tune Autopilot** row. Setup no longer asks for meals per week, servings, the cook-time mix, equipment, weekday rules, novelty, or pairings — they keep the API's defaults and live in Preferences (#330, #337). |
 | Plan and review | Week → **Plan with Autopilot** row or ⋯ menu; **Autopilot suggested N meals → Review** (`WeekAutopilotSection`, `ProposalReviewView`) | Generates the shown week and opens the review: `messages` as notes, each slot's date, photo, name, `cookMinutes` with a Quick/Medium/Long badge, servings, and reasons joined with " · ", and `unfilled` days with their text. Each slot has an include checkmark and **Swap**; ⋯ has **Plan Again** and **Dismiss Suggestions**; **Add N Meals to Week** accepts with `excludeSlotIds`. The plan then shows the new entries with a sparkles badge, and skipped meals are explained. |
-| This Week's Plans | Week → **This Week's Plans…** row or ⋯ menu (`WeekContextSheet`) | Skip the week, busy weeknights, a strict time limit, servings and meals for the week, per-day skip, limit, and servings, and a note. **Save** sends the whole context; **Clear This Week's Plans** deletes it. Afterward the Week tab offers **Regenerate** or **Plan with Autopilot**. |
+| This Week's Plans | Week → **This Week's Plans…** row or ⋯ menu (`WeekContextSheet`) | Opens on three tiles — **Busy**, **Guests**, **Away** — that set the whole week in one tap, under one short line saying what the week is now; the exact numbers stay below them (a strict time limit, servings and meals for the week, per-day skip, limit, and servings, and a note). The tiles read the week back, so Guests is on when the week or any day serves extra, and turning it off clears both. **Save** sends the whole context; **Clear This Week's Plans** deletes it. Afterward the Week tab offers **Regenerate** or **Plan with Autopilot**, unless the week is skipped. |
 | Preferences | Household → **Autopilot Preferences**; Week → ⋯ → **Fine-tune Autopilot** (`AutopilotPreferencesView`, `AutopilotSectionEditor`) | Every section, in two groups: **From Setup** (taste, restrictions, schedule) and **Fine-tune Autopilot** (cook-time mix, equipment, weekday rules, novelty, pairings — what setup doesn't ask, kept at the API's defaults until changed). Each row carries a one-line description, a summary, and "Changed by *name* · *date*", and opens controls that save that section with `PATCH`. **Change History** lists profile, week context, and recipe override changes with who made them. |
 | Recipe methods | A recipe → **Autopilot** (`RecipeAutopilotSection`) | Cook time and band, and **Good for Smoker** (and the household's other equipment): Automatic (Yes/No), Yes, or No, saved with `PUT .../override`. |
 

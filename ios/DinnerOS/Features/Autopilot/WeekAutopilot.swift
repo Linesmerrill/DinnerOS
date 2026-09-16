@@ -100,9 +100,16 @@ struct WeekAutopilotSection: View {
     @Environment(AutopilotStore.self) private var autopilot
     @Environment(PlanStore.self) private var plans
 
+    /// A skipped week generates an empty proposal, which is nothing to review.
     private var proposal: AutopilotProposal? {
-        guard let proposal = autopilot.pendingProposal, proposal.week == plans.week.description else { return nil }
+        guard let proposal = autopilot.pendingProposal, proposal.week == plans.week.description,
+            !proposal.slots.isEmpty
+        else { return nil }
         return proposal
+    }
+
+    private var isSkipping: Bool {
+        autopilot.week == plans.week && autopilot.context?.skip == true
     }
 
     private var contextSummary: String? {
@@ -111,7 +118,17 @@ struct WeekAutopilotSection: View {
     }
 
     var body: some View {
-        if autopilot.weekError != nil || proposal != nil || (canEdit && plans.isDraft) || contextSummary != nil {
+        // A skipped week is deliberate, so it says so instead of offering to plan. A week whose
+        // context failed to load isn't skipping — `isSkipping` needs the context — so the error
+        // below still gets its say.
+        if isSkipping {
+            Section {
+                skippingRow
+                contextRow
+            }
+        } else if autopilot.weekError != nil || proposal != nil || (canEdit && plans.isDraft)
+            || contextSummary != nil
+        {
             Section {
                 // The week's suggestions and context failed to load. Without this the rows below
                 // simply read as "nothing suggested", which is a different thing entirely.
@@ -134,6 +151,12 @@ struct WeekAutopilotSection: View {
                 }
             }
         }
+    }
+
+    private var skippingRow: some View {
+        row(
+            systemImage: "beach.umbrella", title: String(localized: "Skipping this week"),
+            subtitle: String(localized: "Autopilot won't plan or suggest anything."))
     }
 
     private func suggestionsRow(_ proposal: AutopilotProposal) -> some View {
@@ -214,16 +237,23 @@ struct WeekAutopilotMenuItems: View {
     @Environment(AutopilotStore.self) private var autopilot
     @Environment(PlanStore.self) private var plans
 
+    private var isSkipping: Bool {
+        autopilot.week == plans.week && autopilot.context?.skip == true
+    }
+
     var body: some View {
         Section("Autopilot") {
             if canEdit {
-                if autopilot.pendingProposal?.week == plans.week.description {
+                if autopilot.pendingProposal?.week == plans.week.description,
+                    autopilot.pendingProposal?.slots.isEmpty == false
+                {
                     Button("Review Suggestions", systemImage: "sparkles") { flow.sheet = .review }
                 } else {
                     Button("Plan with Autopilot", systemImage: "sparkles") {
                         flow.plan(autopilot: autopilot, plans: plans)
                     }
-                    .disabled(!plans.isDraft || autopilot.isGenerating)
+                    // Nothing to plan on a week the household is away for.
+                    .disabled(!plans.isDraft || autopilot.isGenerating || isSkipping)
                 }
                 Button("This Week's Plans…", systemImage: "calendar.badge.clock") { flow.sheet = .context }
                 if autopilot.phase == .loaded {
