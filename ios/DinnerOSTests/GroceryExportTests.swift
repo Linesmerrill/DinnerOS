@@ -67,9 +67,20 @@ struct GroceryExportTests {
     @Test func draftsSkipCheckedLinesAndKeepAisleOrderWithAmountsInTheTitle() throws {
         let drafts = GroceryReminderPlan.drafts(for: try list(), checked: ["i-salt"])
 
-        // Produce before Spices, the server's aisle order; Salt is checked off so it's gone.
-        #expect(drafts.map(\.title) == ["1 ½ + 8 oz Yellow Onion", "1 tsp + as needed Black Pepper"])
-        #expect(drafts.map(\.notes) == ["Produce", "Spices"])
+        // Produce before Spices, the server's aisle order. Salt is checked off, and Black
+        // Pepper is already in the pantry, so neither is a reminder to buy.
+        #expect(drafts.map(\.title) == ["1 ½ + 8 oz Yellow Onion"])
+        #expect(drafts.map(\.notes) == ["Produce"])
+    }
+
+    @Test func aLineThePantryAlreadyHasIsNotAReminderToBuy() throws {
+        let drafts = GroceryReminderPlan.drafts(for: try list(), checked: [])
+
+        // Black Pepper is `inPantry`: the screen says "in your pantry" and the shared text
+        // says "(in pantry)", so a reminder saying "buy this" would contradict both. Salt is
+        // only a `pantryHint` — a guess that it's a staple — so it stays.
+        #expect(!drafts.map(\.title).contains { $0.contains("Black Pepper") })
+        #expect(drafts.map(\.title) == ["1 ½ + 8 oz Yellow Onion", "Salt"])
     }
 
     @Test func aLineWithNoAmountIsJustItsName() throws {
@@ -118,10 +129,10 @@ struct GroceryExportTests {
 
         let count = try await export.export(drafts, to: name, merge: .add)
 
-        #expect(count == 2)
+        #expect(count == 1)
         #expect(store.createdLists == [name])
         #expect(store.clearedLists.isEmpty)
-        #expect(store.lists[name]?.map(\.title) == ["1 ½ + 8 oz Yellow Onion", "1 tsp + as needed Black Pepper"])
+        #expect(store.lists[name]?.map(\.title) == ["1 ½ + 8 oz Yellow Onion"])
     }
 
     @Test func anExistingListIsEmptiedFirstWhenReplacing() async throws {
@@ -134,11 +145,11 @@ struct GroceryExportTests {
         #expect(try export.hasExistingList(named: name))
         let count = try await export.export(drafts, to: name, merge: .replace)
 
-        #expect(count == 2)
+        #expect(count == 1)
         // No second list with the same name, and the hand-added reminder is gone.
         #expect(store.createdLists.isEmpty)
         #expect(store.clearedLists == [name])
-        #expect(store.lists[name]?.map(\.title) == ["1 ½ + 8 oz Yellow Onion", "1 tsp + as needed Black Pepper"])
+        #expect(store.lists[name]?.map(\.title) == ["1 ½ + 8 oz Yellow Onion"])
     }
 
     @Test func anExistingListKeepsItsItemsWhenAdding() async throws {
@@ -152,7 +163,7 @@ struct GroceryExportTests {
 
         #expect(store.clearedLists.isEmpty)
         #expect(store.lists[name]?.first?.title == "Old item")
-        #expect(store.lists[name]?.count == 3)
+        #expect(store.lists[name]?.count == 2)
     }
 
     @Test func alreadyGrantedAccessIsNotAskedForAgain() async throws {

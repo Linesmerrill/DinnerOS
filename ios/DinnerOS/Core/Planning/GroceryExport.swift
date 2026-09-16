@@ -64,21 +64,32 @@ nonisolated enum GroceryReminderPlan {
         "\(appName) · \(week.rangeLabel(locale: locale))"
     }
 
-    /// The unchecked lines, in the server's aisle order, so Reminders shows them grouped by
+    /// The lines still to buy, in the server's aisle order, so Reminders shows them grouped by
     /// aisle without needing sublists.
     static func drafts(for list: GroceryList, checked: Set<String>) -> [GroceryReminderDraft] {
         let layout = GroceryListLayout(list)
         var drafts: [GroceryReminderDraft] = []
         for group in layout.toMake {
             let aisle = String(localized: "Make This Week")
-            drafts += group.ingredients.filter { !checked.contains($0.ingredientKey) }
+            drafts += group.ingredients.filter { needsBuying($0, checked: checked) }
                 .map { draft(for: $0, aisle: aisle) }
         }
         for category in layout.categories {
-            drafts += category.items.filter { !checked.contains($0.ingredientKey) }
+            drafts += category.items.filter { needsBuying($0, checked: checked) }
                 .map { draft(for: $0, aisle: category.title) }
         }
         return drafts
+    }
+
+    /// Whether a line belongs in Reminders: not checked off, and not one the pantry already
+    /// has.
+    ///
+    /// A reminder is an instruction to buy something, and it carries no status of its own, so
+    /// an `inPantry` line would read as "buy this" even though the list says "in your pantry"
+    /// and the shared text says "(in pantry)". A `pantryHint` is only the recipe's guess that
+    /// it's a staple the household keeps, so it stays.
+    private static func needsBuying(_ item: GroceryItem, checked: Set<String>) -> Bool {
+        item.status != .inPantry && !checked.contains(item.ingredientKey)
     }
 
     private static func draft(for item: GroceryItem, aisle: String) -> GroceryReminderDraft {

@@ -7,9 +7,10 @@ struct GroceryListModelTests {
     private let week = ISOWeek("2026-W38")
 
     private func makeModel(
-        checks: any GroceryCheckStorage, householdID: String = "household-1", week: ISOWeek? = nil
+        checks: any GroceryCheckStorage, householdID: String = "household-1", week: ISOWeek? = nil,
+        server: FakePlanServer? = nil
     ) async throws -> GroceryListModel {
-        let server = FakePlanServer()
+        let server = server ?? FakePlanServer()
         let transport = StubTransport { request in server.handle(request) }
         let client = APIClient(baseURL: try #require(URL(string: Fixtures.baseURLString)), transport: transport)
         let stored = StoredSession(tokens: Fixtures.tokens(), user: Fixtures.user)
@@ -70,6 +71,50 @@ struct GroceryListModelTests {
             #expect(
                 defaults.object(
                     forKey: UserDefaultsGroceryChecks.key(householdID: "household-1", week: try #require(week))) == nil)
+        }
+    }
+
+    /// A week without Yellow Onion, for the line that leaves the list below.
+    private static let listWithoutOnion = Data(
+        #"""
+        {
+          "week": "2026-W38", "status": "draft", "pantryApplied": false,
+          "categories": [
+            {"category": "spices", "items": [
+              {"ingredientKey": "i-salt", "name": "Salt", "amounts": [], "quantityText": "", "unquantified": true,
+               "status": "pantryHint", "recipes": [{"id": "recipe-1", "name": "Test Kitchen Tacos"}]}
+            ]}
+          ],
+          "skipped": []
+        }
+        """#.utf8)
+
+    @Test func aCheckIsForgottenWhenItsLineLeavesTheWeek() async throws {
+        try await withDefaults { defaults in
+            let server = FakePlanServer()
+            let model = try await makeModel(checks: UserDefaultsGroceryChecks(defaults: defaults), server: server)
+            await model.load()
+            let onion = try #require(model.list?.allItems.first { $0.ingredientKey == "i-onion" })
+            model.toggle(onion)
+            #expect(model.checked == ["i-onion"])
+
+            // The meal that needed the onion is dropped, so the line goes.
+            let withoutOnion = Self.listWithoutOnion
+            server.update { $0.groceryList = withoutOnion }
+            await model.load()
+
+            #expect(model.checked.isEmpty)
+            #expect(
+                defaults.object(
+                    forKey: UserDefaultsGroceryChecks.key(householdID: "household-1", week: try #require(week))) == nil)
+
+            // Adding the meal back brings the onion back unchecked, not already crossed off.
+            let withOnion = PlanFixtures.groceryList
+            server.update { $0.groceryList = withOnion }
+            await model.load()
+
+            let returned = try #require(model.list?.allItems.first { $0.ingredientKey == "i-onion" })
+            #expect(!model.isChecked(returned))
         }
     }
 }
