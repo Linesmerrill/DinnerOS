@@ -19,12 +19,13 @@ struct AutopilotOnboardingView: View {
     static let steps = AutopilotOnboardingStep.allCases
 
     private enum Stage: Hashable {
-        case welcome
         case step(AutopilotOnboardingStep)
         case finished
     }
 
-    @State private var stage = Stage.welcome
+    /// Setup opens on the first question: a welcome screen was one more tap before anything
+    /// happened, and "Skip" and "Set Up Later" are on the step itself (#336).
+    @State private var stage = Stage.step(.taste)
     @State private var settings: AutopilotSettings?
     /// What skipping a step restores: the profile as loaded, which is the API's defaults
     /// for a household that never saved one.
@@ -55,8 +56,6 @@ struct AutopilotOnboardingView: View {
     private var content: some View {
         if let vocabulary = autopilot.vocabulary, let binding = Binding($settings) {
             switch stage {
-            case .welcome:
-                welcome
             case .step(let step):
                 self.step(step, settings: binding, vocabulary: vocabulary)
             case .finished:
@@ -87,45 +86,11 @@ struct AutopilotOnboardingView: View {
                 Button("Skip") { skipCurrent() }
                     .disabled(isSaving)
                     .accessibilityHint("Keeps the usual settings for this question")
-            } else if stage != .finished {
-                Button("Not Now") { dismiss() }
-                    .disabled(isSaving)
             }
         }
     }
 
     // MARK: - Stages
-
-    private var welcome: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Spacer()
-            Image(systemName: "sparkles")
-                .font(.system(size: 44))
-                .foregroundStyle(.tint)
-                .accessibilityHidden(true)
-            Text("Let Autopilot Plan Your Week")
-                .font(.largeTitle.bold())
-            Text("Three quick questions. Skip any of them.")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-            Spacer()
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .safeAreaInset(edge: .bottom) {
-            bottomBar {
-                Button {
-                    withAnimation { stage = .step(Self.steps[0]) }
-                } label: {
-                    Text("Get Started").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                Button("Set Up Later") { dismiss() }
-                    .controlSize(.large)
-            }
-        }
-    }
 
     private func step(
         _ step: AutopilotOnboardingStep, settings: Binding<AutopilotSettings>, vocabulary: AutopilotVocabulary
@@ -152,6 +117,10 @@ struct AutopilotOnboardingView: View {
                 HStack(spacing: 12) {
                     if step.index > 0 {
                         Button("Back") { move(to: step.index - 1) }
+                            .disabled(isSaving)
+                    } else {
+                        // Setup opens here, so leaving it entirely belongs on this step.
+                        Button("Set Up Later") { dismiss() }
                             .disabled(isSaving)
                     }
                     Spacer()
@@ -287,9 +256,8 @@ struct AutopilotOnboardingView: View {
 
     private func move(to index: Int) {
         errorMessage = nil
-        if index < 0 {
-            withAnimation { stage = .welcome }
-        } else if index >= Self.steps.count {
+        guard index >= 0 else { return }
+        if index >= Self.steps.count {
             finish()
         } else {
             withAnimation { stage = .step(Self.steps[index]) }
