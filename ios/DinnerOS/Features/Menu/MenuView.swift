@@ -12,6 +12,7 @@ struct MenuView: View {
     @Environment(RecipeLibrary.self) private var library
     @Environment(AutopilotStore.self) private var autopilot
     @Environment(MealPlanner.self) private var planner
+    @Environment(PairingsStore.self) private var pairings
     @Environment(\.appConfiguration) private var configuration
 
     @State private var mode: MenuMode = .menu
@@ -69,6 +70,15 @@ struct MenuView: View {
             .onChange(of: plans.week) { _, week in
                 Task { await menu.select(week: week) }
             }
+            // The week's suggestions follow the same week, and reload when its meals change:
+            // a meal added or removed changes what's offered with it.
+            .task(id: PairingsKey(householdID: household?.id, week: plans.week)) {
+                guard let householdID = household?.id else { return }
+                await pairings.showWeek(plans.week, householdID: householdID)
+            }
+            .onChange(of: plans.plan?.entries.map(\.id) ?? []) { _, _ in
+                Task { await pairings.reload() }
+            }
             .sheet(isPresented: $isAddingRecipes) {
                 AddRecipesSheet(week: plans.week)
             }
@@ -103,6 +113,7 @@ struct MenuView: View {
                         .padding(.horizontal, 16)
                 }
                 YourMealsSection(flow: autopilotFlow)
+                PairingSuggestionsSection()
                 sections
                 if menu.selectedTiming != .past {
                     AllMealsSection(list: menu.allMeals, canAdd: canAddMeals)
@@ -212,6 +223,12 @@ struct MenuView: View {
         } label: {
             Label("Week Menu", systemImage: "ellipsis.circle")
         }
+    }
+
+    /// The household and week the suggestions belong to.
+    private struct PairingsKey: Equatable {
+        let householdID: String?
+        let week: ISOWeek
     }
 
     private func perform(_ change: @escaping () async throws -> Void) {
