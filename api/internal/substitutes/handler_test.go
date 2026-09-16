@@ -147,9 +147,9 @@ func TestHandlersFlow(t *testing.T) {
 	}
 	tex := list.Items[0]
 	if tex.DefaultOptionID != "tex-mex-paste.store" || len(tex.Options) != 2 || !tex.Options[0].IsDefault || tex.Options[0].Per == nil ||
-		tex.Options[0].Per.Text != "1 tbsp" || tex.Options[0].Ingredients[0].Text != "2 tsp Tomato Paste" ||
-		tex.Options[0].Summary != "1 tbsp = 2 tsp Tomato Paste + ¼ tsp Chipotle Peppers in Adobo + ½ tsp Chili Powder + ¼ tsp Ground Cumin + ½ tsp Olive Oil" ||
-		tex.Options[1].ShelfLifeDays == nil || *tex.Options[1].ShelfLifeDays != 14 || tex.Options[1].Summary != "Makes about 10 tbsp and keeps 14 days." ||
+		tex.Options[0].Per.Text != "1 tbsp" || tex.Options[0].Ingredients[0].Text != "2 tsp Smoky Chipotle Bouillon Base" ||
+		tex.Options[0].Summary != "1 tbsp = 2 tsp Smoky Chipotle Bouillon Base + 1 tsp Tomato Paste" ||
+		tex.Options[1].ShelfLifeDays == nil || *tex.Options[1].ShelfLifeDays != 14 || tex.Options[1].Summary != "Makes about 8 tbsp and keeps 14 days." ||
 		len(tex.UnitSizes) != 2 || tex.UnitSizes[0].Text != "2 tbsp" || tex.Batch != nil || tex.Aliases == nil {
 		t.Errorf("tex-mex = %+v", tex)
 	}
@@ -216,7 +216,7 @@ func TestHandlersFlow(t *testing.T) {
 
 	// Batches.
 	batch := decode[RecordBatchResponse](t, s.do(t, http.MethodPost, "/southwest-spice-blend/batches", `{"clientPurchaseId":"b1"}`, testUser), http.StatusCreated)
-	if batch.Purchase.Source != pantry.PurchaseHouseMade || batch.Purchase.Quantity == nil || *batch.Purchase.Quantity != "12" ||
+	if batch.Purchase.Source != pantry.PurchaseHouseMade || batch.Purchase.Quantity == nil || *batch.Purchase.Quantity != "4" ||
 		batch.Item.Key != "southwest spice blend" || batch.Option.ID != "southwest-spice-blend.batch" {
 		t.Errorf("batch = %+v", batch)
 	}

@@ -90,9 +90,9 @@ func TestIntegrationSpecialtyStrategy(t *testing.T) {
 		wantAbsent []string
 		batches    int
 	}{
-		{strategy: StrategySimilar, wantItems: []string{"Tomato Paste", "Chipotle Peppers in Adobo", "Chili Powder"},
+		{strategy: StrategySimilar, wantItems: []string{"Tomato Paste", "Smoky Chipotle Bouillon Base", "Chili Powder"},
 			wantAbsent: []string{"Tex-Mex Paste", "Southwest Spice Blend"}},
-		{strategy: StrategyClosest, wantItems: []string{"Tomato Paste", "Smoked Paprika", "Onion Powder"},
+		{strategy: StrategyClosest, wantItems: []string{"Tomato Paste", "Smoked Paprika", "Garlic Powder"},
 			wantAbsent: []string{"Tex-Mex Paste", "Southwest Spice Blend"}, batches: 2},
 		{strategy: StrategyAsk, wantItems: []string{"Tex-Mex Paste", "Southwest Spice Blend"}},
 	} {
@@ -275,25 +275,26 @@ func TestIntegrationGroceryAndBatchDeduction(t *testing.T) {
 	if _, ok := items["Tex-Mex Paste"]; ok {
 		t.Error("Tex-Mex Paste is still listed")
 	}
-	// 2 tbsp of paste is 4 tsp of tomato paste, plus the bowls' own 1 tbsp.
-	if paste := items["Tomato Paste"]; len(paste.Amounts) != 1 || amountsOf(paste)[0] != "7/3 tbsp" || len(paste.Via) != 1 || len(paste.Sources) != 2 {
+	// 2 tbsp of paste is 2 tsp of tomato paste, plus the bowls' own 1 tbsp.
+	if paste := items["Tomato Paste"]; len(paste.Amounts) != 1 || amountsOf(paste)[0] != "5/3 tbsp" || len(paste.Via) != 1 || len(paste.Sources) != 2 {
 		t.Errorf("tomato paste = %+v", paste)
 	}
-	if cumin := items["Ground Cumin"]; len(cumin.Via) != 2 {
-		t.Errorf("cumin = %+v, want a store and a batch provenance", cumin)
+	// The store route for the paste is a bouillon base now, so cumin comes only from the batch.
+	if cumin := items["Ground Cumin"]; len(cumin.Via) != 1 {
+		t.Errorf("cumin = %+v, want the batch provenance", cumin)
 	}
 	if b := g.Batches[0]; b.Status != grocery.BatchMake || b.Reason != grocery.BatchMissing || b.Batches != 1 || b.Needed == nil ||
 		b.Needed.Quantity.String() != "2" || len(b.Recipes) != 2 {
 		t.Errorf("batch plan = %+v", b)
 	}
 
-	// Make a batch: a house_made purchase starts a 12 tbsp cycle.
+	// Make a batch: a house_made purchase starts a 4 tbsp cycle.
 	res, err := svc.RecordBatch(ctx, actor, "southwest-spice-blend", BatchInput{ClientPurchaseID: "b1"})
 	if err != nil || !res.Created {
 		t.Fatalf("RecordBatch() = %+v, %v", res, err)
 	}
 	item := res.Item
-	if tr := item.Tracking; tr == nil || tr.CycleSource != pantry.CycleHouseMade || tr.Reference != "12" || tr.Unit != "tbsp" ||
+	if tr := item.Tracking; tr == nil || tr.CycleSource != pantry.CycleHouseMade || tr.Reference != "4" || tr.Unit != "tbsp" ||
 		item.Key != "southwest spice blend" || item.ExpiresOn == "" || item.IngredientID == "" {
 		t.Fatalf("batch item = %+v tracking %+v", item, item.Tracking)
 	}
@@ -313,8 +314,10 @@ func TestIntegrationGroceryAndBatchDeduction(t *testing.T) {
 	if blend.Status != grocery.StatusInPantry || blend.Specialty == nil || !blend.Specialty.HouseMade || len(blend.Sources) != 2 {
 		t.Errorf("batch line = %+v", blend)
 	}
-	if cumin := items["Ground Cumin"]; len(cumin.Via) != 1 || cumin.Via[0].Kind != grocery.ViaStoreAlternative {
-		t.Errorf("cumin with a batch in the pantry = %+v", cumin)
+	// The batch covers the blend and the paste's store route is a bouillon base, so nothing on
+	// the list calls for cumin any more.
+	if cumin, ok := items["Ground Cumin"]; ok {
+		t.Errorf("cumin with a batch in the pantry = %+v, want it off the list", cumin)
 	}
 
 	// Cooking deducts: 1 packet (1 tbsp) for the tacos, and 1 tbsp named by the
@@ -328,7 +331,7 @@ func TestIntegrationGroceryAndBatchDeduction(t *testing.T) {
 		}
 	}
 	levels, err := pantrySvc.StockLevels(ctx, testHousehold, []string{"southwest spice blend"})
-	if l := levels["southwest spice blend"]; err != nil || l.Remaining == nil || l.Remaining.RatString() != "10" || l.PercentRemaining != 83 {
+	if l := levels["southwest spice blend"]; err != nil || l.Remaining == nil || l.Remaining.RatString() != "2" || l.PercentRemaining != 50 {
 		t.Errorf("after cooking = %+v, %v", l, err)
 	}
 

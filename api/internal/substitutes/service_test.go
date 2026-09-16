@@ -409,7 +409,7 @@ func TestRecordBatch(t *testing.T) {
 	}
 	in := f.pantry.recorded[0]
 	if in.Key != "southwest spice blend" || in.DisplayName != "Southwest Spice Blend (house-made)" || in.Category != "spices" ||
-		in.Quantity != "24" || in.Unit != "tbsp" || in.ShelfLifeDays != 180 || in.ClientPurchaseID != "b1" ||
+		in.Quantity != "8" || in.Unit != "tbsp" || in.ShelfLifeDays != 180 || in.ClientPurchaseID != "b1" ||
 		in.UnitSize == nil || *in.UnitSize != (pantry.UnitSize{Unit: "count", Quantity: "1", SizeUnit: "tbsp"}) {
 		t.Errorf("pantry input = %+v", in)
 	}
@@ -486,18 +486,18 @@ func TestGrocerySpecialties(t *testing.T) {
 	}
 	tex := specs[texID]
 	if tex.ID != "tex-mex-paste" || tex.Choice == nil || tex.Choice.Type != grocery.ChoiceStoreAlternative || tex.Choice.Per.Unit != "tbsp" ||
-		len(tex.UnitSizes) != 2 || len(tex.Choice.Components) != 5 {
+		len(tex.UnitSizes) != 2 || len(tex.Choice.Components) != 2 {
 		t.Fatalf("tex-mex = %+v choice %+v", tex, tex.Choice)
 	}
-	paste, cumin := tex.Choice.Components[0], tex.Choice.Components[3]
-	if paste.IngredientKey != f.catalog.id("Tomato Paste") || paste.Name != "Tomato Paste" || quantityOf(paste.Quantity) != "2" || paste.Unit != "tsp" {
+	base, paste := tex.Choice.Components[0], tex.Choice.Components[1]
+	if base.Name != "Smoky Chipotle Bouillon Base" || base.Category != "condiments" || quantityOf(base.Quantity) != "2" || base.Unit != "tsp" {
+		t.Errorf("chipotle base = %+v", base)
+	}
+	if paste.IngredientKey != f.catalog.id("Tomato Paste") || paste.Name != "Tomato Paste" || quantityOf(paste.Quantity) != "1" || paste.Unit != "tsp" {
 		t.Errorf("tomato paste = %+v", paste)
 	}
-	if cumin.IngredientKey != "name:ground cumin" || cumin.Category != "spices" || quantityOf(cumin.Quantity) != "1/4" {
-		t.Errorf("cumin = %+v", cumin)
-	}
 	sw := specs[southwestID]
-	if c := sw.Choice; c == nil || c.Type != grocery.ChoiceHouseMadeBatch || c.PantryKey != "name:southwest spice blend" || c.Yield.Quantity.String() != "12" ||
+	if c := sw.Choice; c == nil || c.Type != grocery.ChoiceHouseMadeBatch || c.PantryKey != "name:southwest spice blend" || c.Yield.Quantity.String() != "4" ||
 		c.Stock == nil || c.Stock.ItemID != "batch-item" || c.Stock.Status != "in_stock" || quantityOf(c.Stock.Remaining) != "9" || c.Stock.UnitSize == nil {
 		t.Errorf("southwest choice = %+v", sw.Choice)
 	}

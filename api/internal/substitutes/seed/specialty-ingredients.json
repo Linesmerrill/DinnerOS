@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "note": "Generic, general-knowledge approximations written for DinnerOS. Packet sizes are estimates. Amounts are exact fractions in DinnerOS unit codes. Every entry carries a store alternative a normal grocery store can fill; a per-specialty note flags the ones whose store route needs a caveat.",
+  "version": 3,
+  "note": "Generic, general-knowledge approximations written for DinnerOS, except where a per-specialty note records a ratio the household confirmed. Packet sizes are estimates. Amounts are exact fractions in DinnerOS unit codes. Every entry carries a store alternative a normal grocery store can fill; a per-specialty note flags the ones whose store route needs a caveat.",
   "specialties": [
     {
       "id": "chicken-stock-concentrate",
@@ -115,6 +115,7 @@
       "id": "sweet-soy-glaze",
       "name": "Sweet Soy Glaze",
       "category": "condiments",
+      "note": "This one is just bought: a bottled sweet soy glaze (Kikkoman make one) swaps 1:1. Buy the bottle labelled sweet soy glaze rather than sweet soy sauce for rice, which is thinner. Refrigerate after opening and use within about a month.",
       "unitSizes": [
         { "per": "count", "quantity": "2", "unit": "tbsp" },
         { "per": "package", "quantity": "2", "unit": "tbsp" }
@@ -124,13 +125,11 @@
         {
           "id": "sweet-soy-glaze.store",
           "type": "store_alternative",
-          "name": "Soy and honey",
-          "notes": "Simmer briefly with the dish so it turns glossy.",
+          "name": "Bottled sweet soy glaze",
+          "notes": "Straight from the bottle, tablespoon for tablespoon. An 11.8 oz bottle is roughly 17 tbsp, so it replaces a lot of packets.",
           "per": { "quantity": "1", "unit": "tbsp" },
           "ingredients": [
-            { "name": "Soy Sauce", "quantity": "2", "unit": "tsp" },
-            { "name": "Honey", "quantity": "1", "unit": "tsp" },
-            { "name": "Rice Vinegar", "quantity": "1/4", "unit": "tsp" }
+            { "name": "Bottled Sweet Soy Glaze", "quantity": "1", "unit": "tbsp", "category": "condiments" }
           ]
         },
         {
@@ -165,18 +164,18 @@
         { "per": "count", "quantity": "1", "unit": "tbsp" },
         { "per": "package", "quantity": "1", "unit": "tbsp" }
       ],
+      "note": "Three pantry spices in a 2:1:1 ratio of garlic powder, cumin and chili powder. Both options use the same three; the batch is only a jar mixed ahead.",
       "defaultOptionId": "southwest-spice-blend.batch",
       "options": [
         {
           "id": "southwest-spice-blend.store",
           "type": "store_alternative",
-          "name": "Southwest blend from the spice rack",
+          "name": "Measured from the spice rack",
           "per": { "quantity": "1", "unit": "tbsp" },
           "ingredients": [
-            { "name": "Chili Powder", "quantity": "3/2", "unit": "tsp" },
+            { "name": "Garlic Powder", "quantity": "3/2", "unit": "tsp" },
             { "name": "Ground Cumin", "quantity": "3/4", "unit": "tsp" },
-            { "name": "Smoked Paprika", "quantity": "1/2", "unit": "tsp" },
-            { "name": "Garlic Powder", "quantity": "1/4", "unit": "tsp" }
+            { "name": "Chili Powder", "quantity": "3/4", "unit": "tsp" }
           ]
         },
         {
@@ -184,20 +183,15 @@
           "type": "house_made_batch",
           "name": "Southwest spice blend (house blend)",
           "ingredients": [
-            { "name": "Chili Powder", "quantity": "3", "unit": "tbsp" },
-            { "name": "Ground Cumin", "quantity": "2", "unit": "tbsp" },
-            { "name": "Smoked Paprika", "quantity": "2", "unit": "tbsp" },
-            { "name": "Garlic Powder", "quantity": "3/2", "unit": "tbsp" },
-            { "name": "Onion Powder", "quantity": "3/2", "unit": "tbsp" },
-            { "name": "Dried Oregano", "quantity": "1", "unit": "tbsp" },
-            { "name": "Ground Coriander", "quantity": "2", "unit": "tsp" },
-            { "name": "Cayenne Pepper", "quantity": "1", "unit": "tsp" }
+            { "name": "Garlic Powder", "quantity": "2", "unit": "tbsp" },
+            { "name": "Ground Cumin", "quantity": "1", "unit": "tbsp" },
+            { "name": "Chili Powder", "quantity": "1", "unit": "tbsp" }
           ],
           "steps": [
             "Stir everything together in a bowl until evenly colored.",
             "Store in an airtight jar away from heat and light."
           ],
-          "yield": { "quantity": "12", "unit": "tbsp" },
+          "yield": { "quantity": "4", "unit": "tbsp" },
           "shelfLifeDays": 180
         }
       ]
@@ -227,7 +221,7 @@
       "id": "tex-mex-paste",
       "name": "Tex-Mex Paste",
       "category": "condiments",
-      "note": "Canned chipotle peppers in adobo are in the Latin or canned-vegetable aisle. Leave them out for a milder, still workable paste.",
+      "note": "The easiest store route is a smoky chipotle bouillon base (Better Than Bouillon make one) loosened with tomato paste; canned chipotles in adobo, for the jar, are in the Latin or canned-vegetable aisle. Follow the recipe's own amount — the options below are measured per tablespoon it asks for.",
       "unitSizes": [
         { "per": "count", "quantity": "2", "unit": "tbsp" },
         { "per": "package", "quantity": "2", "unit": "tbsp" }
@@ -237,37 +231,41 @@
         {
           "id": "tex-mex-paste.store",
           "type": "store_alternative",
-          "name": "Tomato paste with chipotle and chili spices",
-          "notes": "The chipotle in adobo supplies the smoky heat; mash a little into the tomato paste before it goes in the pan.",
+          "name": "Smoky chipotle base loosened with tomato paste",
+          "notes": "The base is very concentrated, so it goes in with a little tomato paste rather than straight. A chipotle pepper paste works too, but it is more chipotle-forward and less of a rounded Tex-Mex flavour.",
           "per": { "quantity": "1", "unit": "tbsp" },
           "ingredients": [
-            { "name": "Tomato Paste", "quantity": "2", "unit": "tsp" },
-            { "name": "Chipotle Peppers in Adobo", "quantity": "1/4", "unit": "tsp", "category": "pantry" },
-            { "name": "Chili Powder", "quantity": "1/2", "unit": "tsp" },
-            { "name": "Ground Cumin", "quantity": "1/4", "unit": "tsp" },
-            { "name": "Olive Oil", "quantity": "1/2", "unit": "tsp" }
+            { "name": "Smoky Chipotle Bouillon Base", "quantity": "2", "unit": "tsp", "category": "condiments" },
+            { "name": "Tomato Paste", "quantity": "1", "unit": "tsp" }
           ]
         },
         {
           "id": "tex-mex-paste.batch",
           "type": "house_made_batch",
           "name": "Tex-Mex paste (house blend)",
+          "notes": "Two weeks in the fridge, but the frozen portions keep for months, so a batch goes a long way.",
           "ingredients": [
-            { "name": "Tomato Paste", "quantity": "6", "unit": "tbsp" },
-            { "name": "Olive Oil", "quantity": "2", "unit": "tbsp" },
-            { "name": "Chili Powder", "quantity": "1", "unit": "tbsp" },
+            { "name": "Tomato Paste", "quantity": "8", "unit": "tbsp" },
+            { "name": "Chipotle Peppers in Adobo", "quantity": "2", "unit": "tbsp", "category": "pantry" },
+            { "name": "Adobo Sauce", "quantity": "1", "unit": "tbsp", "category": "pantry" },
+            { "name": "Apple Cider Vinegar", "quantity": "1", "unit": "tbsp" },
+            { "name": "Olive Oil", "quantity": "1", "unit": "tbsp" },
+            { "name": "Smoked Paprika", "quantity": "2", "unit": "tsp" },
             { "name": "Ground Cumin", "quantity": "2", "unit": "tsp" },
-            { "name": "Smoked Paprika", "quantity": "1", "unit": "tsp" },
+            { "name": "Brown Sugar", "quantity": "2", "unit": "tsp" },
+            { "name": "Chili Powder", "quantity": "1", "unit": "tsp" },
             { "name": "Garlic Powder", "quantity": "1", "unit": "tsp" },
+            { "name": "Onion Powder", "quantity": "1", "unit": "tsp" },
             { "name": "Dried Oregano", "quantity": "1/2", "unit": "tsp" },
             { "name": "Salt", "quantity": "1/2", "unit": "tsp" }
           ],
           "steps": [
-            "Warm the oil in a small pan over low heat and stir in the spices for 30 seconds.",
-            "Add the tomato paste and salt and cook, stirring, about 2 minutes until it darkens slightly.",
-            "Cool, then refrigerate in a sealed jar."
+            "Blend the chipotles and their adobo sauce completely smooth.",
+            "Stir everything together until no streaks remain, then taste and adjust the salt.",
+            "Keep about 2 tbsp in a sealed jar in the fridge and freeze the rest in 1 tbsp portions in an ice-cube tray.",
+            "Once solid, tip the portions into a freezer bag and take out as many tablespoons as the recipe asks for."
           ],
-          "yield": { "quantity": "10", "unit": "tbsp" },
+          "yield": { "quantity": "8", "unit": "tbsp" },
           "shelfLifeDays": 14
         }
       ]
