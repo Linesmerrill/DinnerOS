@@ -135,8 +135,10 @@ nonisolated struct SpecialtyChoice: Decodable, Hashable, Sendable {
     let type: SpecialtyChoiceType
     /// `nil` for `as_is`.
     let optionName: String?
-    let chosenBy: String
-    let chosenAt: Date
+    /// `nil` when the household's standing strategy picked the option rather than a member:
+    /// nobody chose it, so there is no chooser and no time they chose it.
+    let chosenBy: String?
+    let chosenAt: Date?
 
     private enum CodingKeys: String, CodingKey {
         case optionID = "optionId"

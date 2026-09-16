@@ -181,4 +181,22 @@ struct SpecialtiesAPITests {
         #expect(response.option.id == "southwest-spice-blend.batch")
         #expect(PantryUsageFormat.purchaseSource(response.purchase.source) == "House-made batch")
     }
+
+    /// The household's standing strategy can pick an option that nobody chose, so the API sends
+    /// a choice with no chooser and no time. Decoding those as non-optional failed the whole
+    /// screen the first time a strategy applied.
+    @Test func choiceDecodesWithoutAChooser() throws {
+        let json = #"""
+            {"optionId":"southwest-spice-blend.batch","type":"house_made_batch",
+             "optionName":"Southwest spice blend (house blend)","chosenBy":null,"chosenAt":null}
+            """#
+
+        let choice = try JSONCoding.makeDecoder().decode(
+            SpecialtyChoice.self, from: try #require(json.data(using: .utf8)))
+
+        #expect(choice.optionID == "southwest-spice-blend.batch")
+        #expect(choice.type == .houseMadeBatch)
+        #expect(choice.chosenBy == nil)
+        #expect(choice.chosenAt == nil)
+    }
 }
