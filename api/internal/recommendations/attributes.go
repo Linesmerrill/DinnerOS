@@ -433,9 +433,24 @@ func containsWords(name, words []string) bool {
 	return false
 }
 
+// sameWord compares without building the plural forms: this runs for every
+// ingredient word against every phrase rule of every recipe, and the three
+// concatenations were the menu's single largest cost (docs/architecture.md#453).
 func sameWord(got, want string) bool {
-	if got == want || got == want+"s" || got == want+"es" {
+	if got == want {
 		return true
 	}
-	return strings.HasSuffix(want, "y") && got == strings.TrimSuffix(want, "y")+"ies"
+	switch len(got) - len(want) {
+	case 1:
+		// want + "s"
+		return got[len(got)-1] == 's' && got[:len(got)-1] == want
+	case 2:
+		// want + "es", or want ending in "y" pluralized to "ies"
+		if got[len(got)-2:] == "es" && got[:len(got)-2] == want {
+			return true
+		}
+		return strings.HasSuffix(want, "y") && strings.HasSuffix(got, "ies") &&
+			got[:len(got)-3] == want[:len(want)-1]
+	}
+	return false
 }
