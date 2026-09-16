@@ -138,6 +138,27 @@ struct ImageLoaderCacheTests {
     }
 }
 
+struct ImageMemoryCacheLimitTests {
+    @Test func sizesTheLimitToTheDevice() {
+        let gigabyte = UInt64(1_024 * 1_024 * 1_024)
+        // A sixteenth of memory, once that lands between the floor and the ceiling.
+        #expect(ImageMemoryCache.costLimit(physicalMemory: 2 * gigabyte) == 128 * 1_024 * 1_024)
+        // A small device never drops below the floor…
+        #expect(ImageMemoryCache.costLimit(physicalMemory: gigabyte / 2) == ImageMemoryCache.minimumCostLimit)
+        // …and a large one never grows past the ceiling.
+        #expect(ImageMemoryCache.costLimit(physicalMemory: 16 * gigabyte) == ImageMemoryCache.maximumCostLimit)
+    }
+
+    @Test func holdsALongScrollOnAModernPhone() {
+        // A long All Meals scroll touches about 119 MB of decoded photos now that cards stop at
+        // the 1080 bucket. The old flat 64 MB limit sat under that, so photos about to be
+        // scrolled back to were evicted before they could be reused.
+        let workingSet = 119 * 1_024 * 1_024
+        #expect(ImageMemoryCache.costLimit(physicalMemory: 6 * UInt64(1_024 * 1_024 * 1_024)) >= workingSet)
+        #expect(64 * 1_024 * 1_024 < workingSet)
+    }
+}
+
 struct ImageLoaderCoalescingTests {
     @Test func oneFetchServesEveryCardAskingForThePhoto() async throws {
         let data = FakeImageData { _, _ in
@@ -295,6 +316,25 @@ struct ImageKeyTests {
         #expect(key.pixelSize == ImageKey.fallbackBucket)
         // Never the 1200-pixel original just because the layout hasn't measured yet.
         #expect(key.url.absoluteString.contains("w_640"))
+    }
+
+    @Test func capsACardAtTheLargestCardBucket() throws {
+        // A full-width card is about 370 points: 1110 pixels at @3x, which would otherwise round
+        // up to the 1200-pixel original the hero gets.
+        let card = try #require(ImageKey(url: try testURL(), pointWidth: 370, scale: 3))
+        #expect(card.pixelSize == ImageKey.cardBucketCap)
+        #expect(card.url.absoluteString.contains("w_1080"))
+    }
+
+    @Test func theHeroKeepsTheFullWidthOriginal() throws {
+        let hero = try #require(ImageKey(url: try testURL(), pointWidth: 393, scale: 3, maxBucket: nil))
+        #expect(hero.pixelSize == 1_200)
+        #expect(hero.url.absoluteString.contains("w_1200"))
+    }
+
+    @Test func theCapNeverEnlargesASmallerCard() throws {
+        let carousel = try #require(ImageKey(url: try testURL(), pointWidth: 220, scale: 3))
+        #expect(carousel.pixelSize == 800)
     }
 
     @Test func aRecipeWithNoPhotoHasNoKey() {

@@ -119,7 +119,9 @@ struct RecipeDetailView: View {
             let stretch = max(minY, 0)
             RecipePhoto(
                 url: recipe?.imageURL ?? summary.imageURL, aspectRatio: nil, pointWidth: geometry.size.width,
-                cornerRadius: 0
+                cornerRadius: 0,
+                // The hero fills the screen: it's the one photo worth the full-width original.
+                maxBucket: nil
             )
             .frame(width: geometry.size.width, height: geometry.size.height + stretch)
             .clipped()

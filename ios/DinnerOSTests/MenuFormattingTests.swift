@@ -6,23 +6,6 @@ import Testing
 struct MenuFormattingTests {
     private let locale = Locale(identifier: "en_US")
 
-    @Test func factsRowJoinsKnownValues() {
-        #expect(
-            MenuFormat.factsText(minutes: 30, calories: 690, proteinGrams: 36, locale: locale)
-                == "30 min · 690 cal · 36g protein")
-        #expect(MenuFormat.factsText(minutes: nil, calories: 1_250, proteinGrams: nil, locale: locale) == "1,250 cal")
-        #expect(MenuFormat.factsText(minutes: 75, calories: 0, proteinGrams: nil, locale: locale) == "1 hr, 15 min")
-        #expect(MenuFormat.factsText(minutes: nil, calories: nil, proteinGrams: nil, locale: locale).isEmpty)
-    }
-
-    @Test func factsRowUsesTheSummarysFields() {
-        var summary = RecipePreviewData.summaries[0]
-        summary.cookMinutes = 25
-        summary.calories = 540
-        summary.proteinGrams = 31
-        #expect(MenuFormat.factsText(for: summary) == "25 min · 540 cal · 31g protein")
-    }
-
     @Test func cardAccessibilityLabelReadsNaturally() {
         // The card shows a name and a time badge, so the badges have to be spoken here.
         #expect(

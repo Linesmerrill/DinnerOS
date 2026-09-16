@@ -24,22 +24,35 @@ nonisolated struct ImageKey: Hashable, Sendable {
     /// `nil` when there's no URL, which is how a recipe with no photo skips loading entirely.
     /// The URL is sized for the same bucket the image is decoded to, so the CDN sends roughly
     /// the pixels that are kept.
-    init?(url: URL?, pointWidth: CGFloat, scale: CGFloat) {
+    /// `maxBucket` is the widest bucket this photo is allowed to ask for. It defaults to the
+    /// card cap; the hero passes `nil` to keep the full-width original.
+    init?(url: URL?, pointWidth: CGFloat, scale: CGFloat, maxBucket: Int? = ImageKey.cardBucketCap) {
         guard let url else { return nil }
-        let bucket = ImageKey.bucket(pointWidth: pointWidth, scale: scale)
+        let bucket = ImageKey.bucket(pointWidth: pointWidth, scale: scale, maxBucket: maxBucket)
         guard let sized = RecipeImageURL.sized(url, pixelWidth: bucket) as URL? else { return nil }
         self.init(url: sized, pixelSize: bucket)
     }
 
-    /// The bucket covering `pointWidth` points on a `scale` display.
+    /// The bucket covering `pointWidth` points on a `scale` display, never wider than
+    /// `maxBucket`.
     ///
     /// A width that isn't known yet (zero, or a not-yet-measured layout) falls back to a
     /// mid-sized bucket instead of the 1200-pixel original, so a first frame never downloads a
     /// hero-sized photo for a card.
-    static func bucket(pointWidth: CGFloat, scale: CGFloat) -> Int {
+    static func bucket(pointWidth: CGFloat, scale: CGFloat, maxBucket: Int? = nil) -> Int {
         guard pointWidth.isFinite, pointWidth > 0 else { return fallbackBucket }
-        return RecipeImageURL.bucket(for: Int((pointWidth * max(scale, 1)).rounded(.up)))
+        let measured = RecipeImageURL.bucket(for: Int((pointWidth * max(scale, 1)).rounded(.up)))
+        guard let maxBucket else { return measured }
+        return min(measured, RecipeImageURL.bucket(for: maxBucket))
     }
+
+    /// The widest bucket a card asks for.
+    ///
+    /// A full-width card is about 370 points, which at @3x measures 1110 pixels and rounds up to
+    /// the 1200-pixel bucket — the original, the same photo the full-screen hero gets. One bucket
+    /// down is 1080 pixels: still more than the card can show on any phone, and about a fifth
+    /// fewer bytes to download and decode. The hero is the only photo big enough to want 1200.
+    static let cardBucketCap = 1080
 
     /// Used until a layout-dependent width is measured. Wide enough for a full-width card on a
     /// phone, far short of the original.
