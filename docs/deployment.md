@@ -140,17 +140,36 @@ Status: ✅ enabled and working. The first build was uploaded on 2026-09-15 by r
 automatically once Apple finishes processing. Retry a failed upload from
 Actions → iOS CI → Run workflow on `main`.
 
-Note: gym forwards `xcargs` to both archive and export, so the Fastfile passes
-the `-authenticationKey*` flags only once. Duplicating them fails the export.
-
 The job runs `bundle exec fastlane beta`, which:
 
 1. authenticates with an App Store Connect API key (no Apple ID password or 2FA)
-2. sets the build number to the latest TestFlight build + 1
-3. archives a Release build with Xcode **cloud-managed signing**
-   (`-allowProvisioningUpdates`), so no certificates or provisioning profiles are
-   stored anywhere
-4. uploads to TestFlight, where the internal group receives it automatically
+2. installs the shared certificate and profile with **fastlane match**, read-only
+3. sets the build number to the latest TestFlight build + 1
+4. archives a Release build with manual signing, using the match profile
+5. uploads to TestFlight, where the internal group receives it automatically
+
+### Signing (fastlane match)
+
+One Apple Distribution certificate and one App Store profile are shared by every
+machine and CI run. They live encrypted in the private repository
+`Linesmerrill/dinneros-certificates`, and CI reads them through an SSH deploy
+key. Cloud-managed signing used to request a new certificate per run, which hit
+Apple's per-account certificate limit and failed every archive.
+
+- **`ios/fastlane/Matchfile`** points at the storage repository and defaults to
+  read-only.
+- **`bundle exec fastlane beta`** never creates or revokes anything.
+- **`bundle exec fastlane signing`** (or Actions → iOS CI → Run workflow with
+  **Create or renew the shared signing certificate** ticked) is the only thing
+  that writes: it creates the certificate and profile if they are missing and
+  stores them encrypted.
+- **Apple's certificate limit:** an account may hold only so many distribution
+  certificates. If `signing` reports the limit is reached, revoke an unused
+  **Apple Distribution** certificate in Certificates, Identifiers & Profiles and
+  run it again. `bundle exec fastlane run match_nuke type:appstore` revokes every
+  distribution certificate and profile for the team, so use it only deliberately.
+- **Rotating the passphrase or the deploy key** means regenerating the secrets
+  below and re-running `signing`.
 
 ### One-time Apple setup (manual)
 
@@ -183,6 +202,9 @@ The job runs `bundle exec fastlane beta`, which:
    users on the team.
 5. **GitHub → Settings → Secrets and variables → Actions:** add the values below
    and create an environment named `testflight`.
+6. ✅ **Signing storage:** the private repository `Linesmerrill/dinneros-certificates`
+   holds the encrypted certificate and profile, with a write deploy key named
+   "DinnerOS CI (fastlane match)".
 
 ## Credential reference
 
@@ -216,6 +238,8 @@ vars or GitHub Secrets.
 | `APP_STORE_CONNECT_KEY_ID` | secret | App Store Connect → Integrations → the key's **Key ID** |
 | `APP_STORE_CONNECT_ISSUER_ID` | secret | Same page, **Issuer ID** at the top |
 | `APP_STORE_CONNECT_PRIVATE_KEY` | secret | Contents of `AuthKey_XXXX.p8`, base64-encoded: `base64 -i AuthKey_XXXX.p8 \| pbcopy` |
+| `MATCH_PASSWORD` | Signing | The passphrase that encrypts the match repository. Generate once (`LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom \| head -c 40`) and store it in a password manager; losing it means re-running `fastlane signing` after a `match_nuke`. |
+| `MATCH_DEPLOY_KEY` | Signing | The private half of the SSH deploy key with write access to `Linesmerrill/dinneros-certificates`. Generate with `ssh-keygen -t ed25519`, add the public half as a deploy key with write access. |
 | `DEVELOPMENT_TEAM` | secret | Apple Team ID (as above) |
 | `TESTFLIGHT_ENABLED` | variable | Set to `true` once the setup above is complete |
 | `PRODUCTION_API_BASE_URL` | variable | The production API URL, e.g. `https://<app>.herokuapp.com` |

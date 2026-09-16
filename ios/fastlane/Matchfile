@@ -1,0 +1,15 @@
+# fastlane match: one shared signing certificate and provisioning profile for
+# every machine and CI run, stored encrypted in a private repository.
+#
+# Storage:   MATCH_GIT_URL (default: the private dinneros-certificates repo)
+# Passphrase: MATCH_PASSWORD (GitHub secret; never committed)
+# Access:    an SSH deploy key with write access (MATCH_DEPLOY_KEY in CI)
+#
+# CI runs read-only, so a build never creates or revokes anything. Creating or
+# renewing certificates is the `signing` lane, run deliberately.
+git_url(ENV.fetch("MATCH_GIT_URL", "git@github.com:Linesmerrill/dinneros-certificates.git"))
+storage_mode("git")
+type("appstore")
+app_identifier([ENV.fetch("APP_BUNDLE_ID", "com.linesmerrill.dinneros")])
+team_id(ENV["DEVELOPMENT_TEAM"]) unless ENV["DEVELOPMENT_TEAM"].to_s.empty?
+readonly(ENV["MATCH_READONLY"].to_s.strip.downcase != "false")
