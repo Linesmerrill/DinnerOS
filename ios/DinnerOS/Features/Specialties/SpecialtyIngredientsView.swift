@@ -54,6 +54,9 @@ struct SpecialtyIngredientsView: View {
             .task(id: householdID) {
                 guard let householdID else { return }
                 await specialties.activate(householdID: householdID)
+                // The strategy decides every ingredient nobody chose for, so the summary row
+                // needs it. A failure leaves the row loading rather than blocking the list.
+                try? await specialties.loadSettings()
             }
             .confirmationDialog("Use Suggested Options?", isPresented: $confirmsDefaults, titleVisibility: .visible) {
                 Button("Use Suggested for All") { applyDefaults() }
@@ -118,6 +121,15 @@ struct SpecialtyIngredientsView: View {
                 )
                 .listRowBackground(Color.clear)
             } else {
+                Section {
+                    NavigationLink {
+                        SpecialtyStrategyView()
+                    } label: {
+                        SpecialtyStrategySummaryRow(settings: specialties.settings)
+                    }
+                } footer: {
+                    Text("What to do about the ones nobody has chosen an option for.")
+                }
                 Section {
                     Text(
                         "Meal-kit recipes call for blends, sauces, and concentrates that stores don't sell by that name. Choose a store alternative, a house-made batch, or keep one as is."
@@ -236,7 +248,7 @@ struct SpecialtyChoiceBadge: View {
     let ingredient: SpecialtyIngredient
 
     var body: some View {
-        Text(SpecialtyFormat.choiceKind(ingredient))
+        Text(SpecialtyFormat.choiceBadge(ingredient))
             .font(.caption.weight(.semibold))
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
@@ -294,10 +306,67 @@ enum SpecialtyPreviewData {
         ],
         batch: nil)
 
-    static let items = [southwest, glaze]
+    /// Nobody chose this one: the household's `similar` default picked the store alternative.
+    static let paste = SpecialtyIngredient(
+        id: "tex-mex-paste", key: "tex mex paste", name: "Tex-Mex Paste", aliases: [], category: "condiments",
+        ingredientIDs: [], recipeCount: 6, unitSizes: [], defaultOptionID: "tex-mex-paste.store", retired: false,
+        choice: SpecialtyChoice(
+            optionID: "tex-mex-paste.store", type: .storeAlternative, optionName: "Tomato paste and chili spices",
+            source: .strategy, strategy: .similar),
+        options: [
+            option(
+                id: "tex-mex-paste.store", specialtyID: "tex-mex-paste", type: .storeAlternative,
+                name: "Tomato paste and chili spices", isDefault: true, per: amount("1", "tbsp"),
+                ingredients: [("Tomato Paste", "2", "tsp", "2 tsp"), ("Chili Powder", "1/2", "tsp", "½ tsp")],
+                summary: "1 tbsp = 2 tsp Tomato Paste + ½ tsp Chili Powder")
+        ],
+        batch: nil,
+        choiceSource: .strategy)
 
-    static func store(session: AuthSession) -> SpecialtyStore {
-        .preview(session: session, items: items, householdID: HouseholdPreviewData.household.id)
+    static let items = [southwest, paste, glaze]
+
+    /// The three strategies as the server words them. Sample data standing in for a response:
+    /// the app itself never hardcodes this copy.
+    static let strategyOptions = [
+        SpecialtyStrategyOption(
+            value: .similar, label: "Something similar",
+            description: "Buy something close from the store — quicker, tastes a little different"),
+        SpecialtyStrategyOption(
+            value: .closest, label: "As close as possible",
+            description: "Make a jar you reuse across several meals — more work, closest to the original"),
+        SpecialtyStrategyOption(
+            value: .ask, label: "Ask me each time",
+            description: "Leave each specialty ingredient on the list until someone picks an option"),
+    ]
+
+    static func settings(strategy: SpecialtyStrategy = .similar, wasSet: Bool = true) -> SpecialtySettings {
+        SpecialtySettings(
+            strategy: strategy,
+            updatedBy: wasSet ? HouseholdPreviewData.user.id : nil,
+            updatedAt: wasSet ? .now : nil,
+            options: strategyOptions)
+    }
+
+    static func store(session: AuthSession, settings: SpecialtySettings? = nil) -> SpecialtyStore {
+        .preview(
+            session: session, items: items, householdID: HouseholdPreviewData.household.id, settings: settings)
+    }
+
+    /// A household store whose role may lack `pantry.edit`, for the read-only previews.
+    static func householdStore(session: AuthSession, canEdit: Bool = true) -> HouseholdStore {
+        guard !canEdit else { return HouseholdPreviewData.store(session: session) }
+        let detail = HouseholdDetail(
+            household: HouseholdPreviewData.household,
+            members: HouseholdPreviewData.detail.members,
+            role: .member,
+            permissions: [.householdView, .membersView])
+        return .preview(
+            session: session, phase: .ready, current: detail,
+            households: [
+                HouseholdListItem(
+                    household: HouseholdPreviewData.household, role: .member, permissions: detail.permissions)
+            ],
+            invitations: [])
     }
 
     private static func amount(_ quantity: String, _ unit: String) -> SpecialtyAmount {

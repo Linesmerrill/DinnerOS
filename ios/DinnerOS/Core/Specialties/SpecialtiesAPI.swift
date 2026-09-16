@@ -28,6 +28,23 @@ nonisolated struct SpecialtiesAPI: Sendable {
             APIRequest.get(Self.path(householdID, specialtyID)).authorized(with: accessToken))
     }
 
+    /// The household's standing answer for the specialty ingredients nobody has chosen for,
+    /// with the server's words for every strategy (`household.view`).
+    func settings(householdID: String, accessToken: String) async throws -> SpecialtySettings {
+        try await client.send(
+            APIRequest.get(Self.path(householdID) + "/settings").authorized(with: accessToken))
+    }
+
+    /// Sets the standing answer (`pantry.edit`). Nothing is written to the household's choices:
+    /// the strategy is resolved whenever a grocery list is built.
+    func setSettings(
+        householdID: String, strategy: SpecialtyStrategy, accessToken: String
+    ) async throws -> SpecialtySettings {
+        let request = try APIRequest.put(
+            Self.path(householdID) + "/settings", body: SpecialtySettingsUpdate(strategy: strategy))
+        return try await client.send(request.authorized(with: accessToken))
+    }
+
     /// Chooses `defaultOptionId` for every used specialty ingredient without a choice.
     func applyDefaults(householdID: String, accessToken: String) async throws -> SpecialtyDefaultsResponse {
         let request = APIRequest(

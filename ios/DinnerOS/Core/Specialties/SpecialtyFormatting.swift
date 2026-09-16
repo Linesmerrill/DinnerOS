@@ -56,6 +56,50 @@ nonisolated enum SpecialtyFormat {
         return ingredient.chosenOption?.name ?? choice.optionName
     }
 
+    /// The badge naming the current plan, marked "· Default" when the household's standing
+    /// strategy picked it rather than a member.
+    static func choiceBadge(_ ingredient: SpecialtyIngredient) -> String {
+        let kind = choiceKind(ingredient)
+        guard ingredient.isResolvedByStrategy else { return kind }
+        return String(localized: "\(kind) · Default")
+    }
+
+    /// "Chosen by Ada Lovelace · Sep 15, 2026".
+    ///
+    /// `nil` unless a member chose it: a strategy's pick has no chooser and no time, so it is
+    /// never attributed to anyone.
+    static func choiceAttribution(
+        _ ingredient: SpecialtyIngredient, members: [HouseholdMember]?, currentUserID: String?,
+        locale: Locale = .autoupdatingCurrent, timeZone: TimeZone = .autoupdatingCurrent
+    ) -> String? {
+        guard ingredient.hasHouseholdChoice, let choice = ingredient.choice, let userID = choice.chosenBy
+        else { return nil }
+        let name = AutopilotFormat.memberName(userID, members: members, currentUserID: currentUserID)
+        guard let chosenAt = choice.chosenAt else { return String(localized: "Chosen by \(name)") }
+        let date = chosenAt.formatted(
+            Date.FormatStyle(date: .abbreviated, time: .omitted, locale: locale, timeZone: timeZone))
+        return String(localized: "Chosen by \(name) · \(date)")
+    }
+
+    /// Why an ingredient nobody chose for still has a plan; `nil` when a member chose it.
+    static func strategyNote(_ ingredient: SpecialtyIngredient) -> String? {
+        guard ingredient.isResolvedByStrategy else { return nil }
+        return String(localized: "Nobody chose this — your household default picked it.")
+    }
+
+    /// "Changed by Ada Lovelace · Sep 15, 2026"; `nil` when nobody has ever set the strategy.
+    static func strategyAttribution(
+        _ settings: SpecialtySettings?, members: [HouseholdMember]?, currentUserID: String?,
+        locale: Locale = .autoupdatingCurrent, timeZone: TimeZone = .autoupdatingCurrent
+    ) -> String? {
+        guard let settings, let userID = settings.updatedBy else { return nil }
+        let name = AutopilotFormat.memberName(userID, members: members, currentUserID: currentUserID)
+        guard let updatedAt = settings.updatedAt else { return String(localized: "Changed by \(name)") }
+        let date = updatedAt.formatted(
+            Date.FormatStyle(date: .abbreviated, time: .omitted, locale: locale, timeZone: timeZone))
+        return String(localized: "Changed by \(name) · \(date)")
+    }
+
     /// The house-made batch in the pantry, when a batch is chosen or one exists.
     static func batchStatus(_ ingredient: SpecialtyIngredient) -> String? {
         guard let stock = ingredient.batch else {

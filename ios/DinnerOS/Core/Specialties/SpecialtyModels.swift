@@ -53,6 +53,109 @@ nonisolated struct SpecialtyOptionSource: RawRepresentable, Codable, Hashable, S
     static let household = SpecialtyOptionSource(rawValue: "household")
 }
 
+/// The household's standing answer for the specialty ingredients nobody has chosen an option for
+/// (`SpecialtySettings.strategy`). A value from a newer server keeps its raw value and reads as
+/// neither case.
+nonisolated struct SpecialtyStrategy: RawRepresentable, Codable, Hashable, Sendable {
+    let rawValue: String
+
+    init(rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    /// Prefer a curated store alternative: quicker, tastes a little different.
+    static let similar = SpecialtyStrategy(rawValue: "similar")
+    /// Prefer a curated house-made batch: more work, closest to the original.
+    static let closest = SpecialtyStrategy(rawValue: "closest")
+    /// Apply nothing, and keep asking about every specialty ingredient.
+    static let ask = SpecialtyStrategy(rawValue: "ask")
+
+    /// What a household gets before it sets one.
+    static let fallback = similar
+
+    var systemImage: String {
+        switch self {
+        case .similar: "cart"
+        case .closest: "house"
+        case .ask: "questionmark.circle"
+        default: "sparkles"
+        }
+    }
+}
+
+/// Where a specialty ingredient's current plan comes from (`SpecialtyIngredient.choiceSource`).
+nonisolated struct SpecialtyChoiceSource: RawRepresentable, Codable, Hashable, Sendable {
+    let rawValue: String
+
+    init(rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    /// A member chose the option, including `as_is`, so it can be attributed to them.
+    static let household = SpecialtyChoiceSource(rawValue: "household")
+    /// Nobody chose: the household's strategy picked the option, so nobody may be credited.
+    static let strategy = SpecialtyChoiceSource(rawValue: "strategy")
+    /// Nothing applies, so the ingredient stays on the list by its own name. Spelled `none` on
+    /// the wire; named `unset` here so it never reads as `Optional.none`.
+    static let unset = SpecialtyChoiceSource(rawValue: "none")
+}
+
+/// One strategy in the words to show. The server writes `label` and `description`, so the app
+/// renders the trade-off without hardcoding the copy.
+nonisolated struct SpecialtyStrategyOption: Decodable, Hashable, Sendable, Identifiable {
+    let value: SpecialtyStrategy
+    let label: String
+    let description: String
+
+    var id: String { value.rawValue }
+}
+
+/// The household's specialty ingredient settings (`GET`/`PUT .../specialty-ingredients/settings`).
+nonisolated struct SpecialtySettings: Decodable, Hashable, Sendable {
+    let strategy: SpecialtyStrategy
+    /// `nil` for a household that never set one: nobody has changed it, so nothing is attributed.
+    let updatedBy: String?
+    let updatedAt: Date?
+    /// Every strategy, in the order to offer them.
+    let options: [SpecialtyStrategyOption]
+
+    init(
+        strategy: SpecialtyStrategy, updatedBy: String? = nil, updatedAt: Date? = nil,
+        options: [SpecialtyStrategyOption] = []
+    ) {
+        self.strategy = strategy
+        self.updatedBy = updatedBy
+        self.updatedAt = updatedAt
+        self.options = options
+    }
+
+    /// The server's words for the current strategy, when it described it.
+    var currentOption: SpecialtyStrategyOption? {
+        options.first { $0.value == strategy }
+    }
+
+    /// Whether anyone has set the strategy. `false` means the household is on the API's default.
+    var wasSet: Bool { updatedBy != nil || updatedAt != nil }
+
+    private enum CodingKeys: String, CodingKey {
+        case strategy, updatedBy, updatedAt, options
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            strategy: try container.decodeIfPresent(SpecialtyStrategy.self, forKey: .strategy) ?? .fallback,
+            updatedBy: try container.decodeIfPresent(String.self, forKey: .updatedBy),
+            updatedAt: try container.decodeIfPresent(Date.self, forKey: .updatedAt),
+            options: try container.decodeIfPresent([SpecialtyStrategyOption].self, forKey: .options) ?? [])
+    }
+}
+
+/// The body of `PUT .../specialty-ingredients/settings`.
+nonisolated struct SpecialtySettingsUpdate: Encodable, Equatable, Sendable {
+    let strategy: SpecialtyStrategy
+}
+
 /// An exact amount with display text (`SpecialtyAmount`).
 nonisolated struct SpecialtyAmount: Decodable, Hashable, Sendable {
     /// Exact, as `"n"` or `"n/d"`.
@@ -126,23 +229,59 @@ nonisolated struct SpecialtyOption: Decodable, Hashable, Sendable, Identifiable 
     }
 }
 
-/// The household's choice for one specialty ingredient.
+/// What the household currently does about one specialty ingredient: the option a member chose,
+/// or the one the household's standing strategy picked.
 nonisolated struct SpecialtyChoice: Decodable, Hashable, Sendable {
     /// The option ID that means "keep as is".
     static let asIsOptionID = "as_is"
 
+    /// `household` when a member chose it, `strategy` when the household's standing answer picked
+    /// it. A server that doesn't send it only ever sent a member's own choice.
+    let source: SpecialtyChoiceSource
     let optionID: String
     let type: SpecialtyChoiceType
     /// `nil` for `as_is`.
     let optionName: String?
+    /// The strategy that picked the option; `nil` when a member chose it.
+    let strategy: SpecialtyStrategy?
     /// `nil` when the household's standing strategy picked the option rather than a member:
     /// nobody chose it, so there is no chooser and no time they chose it.
     let chosenBy: String?
     let chosenAt: Date?
 
+    init(
+        optionID: String, type: SpecialtyChoiceType, optionName: String?,
+        source: SpecialtyChoiceSource = .household, strategy: SpecialtyStrategy? = nil,
+        chosenBy: String? = nil, chosenAt: Date? = nil
+    ) {
+        self.source = source
+        self.optionID = optionID
+        self.type = type
+        self.optionName = optionName
+        self.strategy = strategy
+        self.chosenBy = chosenBy
+        self.chosenAt = chosenAt
+    }
+
+    /// Nobody chose this: the household's strategy picked it, so it must not be attributed.
+    var isFromStrategy: Bool { source == .strategy }
+
     private enum CodingKeys: String, CodingKey {
+        case source
         case optionID = "optionId"
-        case type, optionName, chosenBy, chosenAt
+        case type, optionName, strategy, chosenBy, chosenAt
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            optionID: try container.decode(String.self, forKey: .optionID),
+            type: try container.decode(SpecialtyChoiceType.self, forKey: .type),
+            optionName: try container.decodeIfPresent(String.self, forKey: .optionName),
+            source: try container.decodeIfPresent(SpecialtyChoiceSource.self, forKey: .source) ?? .household,
+            strategy: try container.decodeIfPresent(SpecialtyStrategy.self, forKey: .strategy),
+            chosenBy: try container.decodeIfPresent(String.self, forKey: .chosenBy),
+            chosenAt: try container.decodeIfPresent(Date.self, forKey: .chosenAt))
     }
 }
 
@@ -177,13 +316,39 @@ nonisolated struct SpecialtyIngredient: Decodable, Hashable, Sendable, Identifia
     let unitSizes: [SpecialtyUnitSize]
     let defaultOptionID: String
     let retired: Bool
-    /// `nil` until the household chooses.
+    /// Where `choice` comes from: a member (`household`), the household's standing strategy
+    /// (`strategy`), or nothing at all (`unset`).
+    let choiceSource: SpecialtyChoiceSource
+    /// The current plan, whoever or whatever produced it; `nil` when nothing applies.
     let choice: SpecialtyChoice?
     /// Curated options first, then the household's, oldest first.
     let options: [SpecialtyOption]
     let batch: SpecialtyBatchStock?
 
-    /// The chosen option; `nil` without a choice or for `as_is`.
+    init(
+        id: String, key: String, name: String, aliases: [String], category: String, ingredientIDs: [String],
+        recipeCount: Int, unitSizes: [SpecialtyUnitSize], defaultOptionID: String, retired: Bool,
+        choice: SpecialtyChoice?, options: [SpecialtyOption], batch: SpecialtyBatchStock?,
+        choiceSource: SpecialtyChoiceSource? = nil
+    ) {
+        self.id = id
+        self.key = key
+        self.name = name
+        self.aliases = aliases
+        self.category = category
+        self.ingredientIDs = ingredientIDs
+        self.recipeCount = recipeCount
+        self.unitSizes = unitSizes
+        self.defaultOptionID = defaultOptionID
+        self.retired = retired
+        // A server that doesn't say only ever sent a member's own choice.
+        self.choiceSource = choiceSource ?? (choice.map(\.source) ?? .unset)
+        self.choice = choice
+        self.options = options
+        self.batch = batch
+    }
+
+    /// The option in force; `nil` without one or for `as_is`.
     var chosenOption: SpecialtyOption? {
         guard let choice else { return nil }
         return options.first { $0.id == choice.optionID }
@@ -193,8 +358,22 @@ nonisolated struct SpecialtyIngredient: Decodable, Hashable, Sendable, Identifia
 
     var hasBatchChoice: Bool { choice?.type == .houseMadeBatch }
 
+    /// A member's own decision, as opposed to one the strategy picked or none at all. Only this
+    /// may be attributed to someone, and only this can be cleared.
+    var hasHouseholdChoice: Bool { choiceSource == .household && choice != nil }
+
+    /// The household's standing strategy picked the option. Nobody chose it, so nobody is
+    /// credited for it, and a member can still override it.
+    var isResolvedByStrategy: Bool { choiceSource == .strategy && choice != nil }
+
+    /// Whether `option` is the current plan, whoever or whatever produced it.
     func isChosen(_ option: SpecialtyOption) -> Bool {
         choice?.optionID == option.id
+    }
+
+    /// Whether a member chose `option`. A strategy's pick is not a choice, so it stays offerable.
+    func isHouseholdChoice(_ option: SpecialtyOption) -> Bool {
+        hasHouseholdChoice && choice?.optionID == option.id
     }
 
     /// The API allows `SpecialtiesAPI.maxHouseholdOptions` household options per ingredient.
@@ -207,7 +386,26 @@ nonisolated struct SpecialtyIngredient: Decodable, Hashable, Sendable, Identifia
         case ingredientIDs = "ingredientIds"
         case recipeCount, unitSizes
         case defaultOptionID = "defaultOptionId"
-        case retired, choice, options, batch
+        case retired, choiceSource, choice, options, batch
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(String.self, forKey: .id),
+            key: try container.decode(String.self, forKey: .key),
+            name: try container.decode(String.self, forKey: .name),
+            aliases: try container.decodeIfPresent([String].self, forKey: .aliases) ?? [],
+            category: try container.decodeIfPresent(String.self, forKey: .category) ?? "",
+            ingredientIDs: try container.decodeIfPresent([String].self, forKey: .ingredientIDs) ?? [],
+            recipeCount: try container.decodeIfPresent(Int.self, forKey: .recipeCount) ?? 0,
+            unitSizes: try container.decodeIfPresent([SpecialtyUnitSize].self, forKey: .unitSizes) ?? [],
+            defaultOptionID: try container.decodeIfPresent(String.self, forKey: .defaultOptionID) ?? "",
+            retired: try container.decodeIfPresent(Bool.self, forKey: .retired) ?? false,
+            choice: try container.decodeIfPresent(SpecialtyChoice.self, forKey: .choice),
+            options: try container.decodeIfPresent([SpecialtyOption].self, forKey: .options) ?? [],
+            batch: try container.decodeIfPresent(SpecialtyBatchStock.self, forKey: .batch),
+            choiceSource: try container.decodeIfPresent(SpecialtyChoiceSource.self, forKey: .choiceSource))
     }
 }
 

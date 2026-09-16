@@ -281,6 +281,69 @@ struct SpecialtyStoreTests {
         #expect(store.revision == 1)
     }
 
+    @Test func theStrategyIsLoadedChangedAndAppliedToEveryUnchosenIngredient() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+
+        let loaded = try await store.loadSettings()
+        #expect(loaded.strategy == .ask)
+        #expect(loaded.options.map(\.value) == [.similar, .closest, .ask])
+        #expect(store.settings?.strategy == .ask)
+        // `ask` applies nothing, so an ingredient nobody chose for has no plan at all.
+        #expect(store.ingredient(withID: "sweet-soy-glaze")?.choice == nil)
+
+        try await store.updateSettings(strategy: .closest)
+
+        #expect(harness.server.strategy == "closest")
+        #expect(harness.server.bodies(endingWith: "/settings").first?["strategy"] as? String == "closest")
+        #expect(store.settings?.strategy == .closest)
+        #expect(store.settings?.wasSet == true)
+        // Nothing is stored per ingredient, so the whole list is reloaded and resolves again.
+        #expect(harness.server.log.suffix(2) == ["PUT \(path)/settings", "GET \(path)"])
+        #expect(store.revision == 1)
+
+        let glaze = try #require(store.ingredient(withID: "sweet-soy-glaze"))
+        #expect(glaze.isResolvedByStrategy)
+        #expect(glaze.choice?.type == .houseMadeBatch)
+        #expect(glaze.choice?.strategy == .closest)
+        // Nobody chose it: there is no chooser, and it still counts as needing a choice.
+        #expect(glaze.choice?.chosenBy == nil)
+        #expect(glaze.choice?.chosenAt == nil)
+        #expect(!glaze.hasHouseholdChoice)
+        #expect(store.needsChoiceCount == 2)
+        // A member's own choice is untouched by the strategy.
+        #expect(store.ingredient(withID: "chicken-stock-concentrate")?.hasHouseholdChoice == true)
+    }
+
+    @Test func aForbiddenStrategyChangeChangesNothing() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        try await store.loadSettings()
+        harness.server.forbidChanges()
+
+        do {
+            try await store.updateSettings(strategy: .similar)
+            Issue.record("Expected a forbidden error")
+        } catch let error as APIError {
+            #expect(error.status == 403)
+        }
+
+        #expect(harness.server.strategy == "ask")
+        #expect(store.settings?.strategy == .ask)
+        #expect(store.revision == 0)
+    }
+
+    @Test func signingOutForgetsTheStrategy() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        try await store.loadSettings()
+        #expect(store.settings != nil)
+
+        store.reset()
+
+        #expect(store.settings == nil)
+    }
+
     @Test func resetAndAnotherHouseholdStartOver() async throws {
         let harness = try await makeHarness()
         let store = harness.store

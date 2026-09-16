@@ -53,9 +53,10 @@ nonisolated enum SpecialtyFixtures {
         {"id":"southwest-spice-blend","key":"southwest spice blend","name":"Southwest Spice Blend",
          "aliases":["Southwestern Spice Blend"],"category":"spices","ingredientIds":["i-southwest"],"recipeCount":52,
          "unitSizes":[{"per":"count","quantity":"1","quantityValue":1,"unit":"tbsp","text":"1 tbsp"}],
-         "defaultOptionId":"southwest-spice-blend.batch","retired":false,
-         "choice":{"optionId":"southwest-spice-blend.batch","type":"house_made_batch",
-           "optionName":"Southwest spice blend (house blend)","chosenBy":"user-1","chosenAt":"2026-09-15T18:30:00Z"},
+         "defaultOptionId":"southwest-spice-blend.batch","retired":false,"choiceSource":"household",
+         "choice":{"source":"household","optionId":"southwest-spice-blend.batch","type":"house_made_batch",
+           "optionName":"Southwest spice blend (house blend)","strategy":null,
+           "chosenBy":"user-1","chosenAt":"2026-09-15T18:30:00Z"},
          "options":[\#(storeOptionJSON),\#(batchOptionJSON),\#(householdOptionJSON)],
          "batch":{"pantryItemId":"item-southwest","status":"in_stock",
            "remaining":{"quantity":"9","quantityValue":9,"unit":"tbsp","text":"9 tbsp"},"percentRemaining":75,
@@ -63,6 +64,44 @@ nonisolated enum SpecialtyFixtures {
         """#
 
     static let defaultsJSON = Data(#"{"items":[\#(southwestJSON)],"skipped":2}"#.utf8)
+
+    /// Nobody chose: the household's `similar` strategy picked the store alternative, so there is
+    /// no chooser and no time they chose it.
+    static let strategySpecialtyJSON = #"""
+        {"id":"sweet-soy-glaze","key":"sweet soy glaze","name":"Sweet Soy Glaze","aliases":[],
+         "category":"condiments","ingredientIds":["i-glaze"],"recipeCount":8,"unitSizes":[],
+         "defaultOptionId":"sweet-soy-glaze.store","retired":false,"choiceSource":"strategy",
+         "choice":{"source":"strategy","optionId":"sweet-soy-glaze.store","type":"store_alternative",
+           "optionName":"Soy and honey","strategy":"similar","chosenBy":null,"chosenAt":null},
+         "options":[],"batch":null}
+        """#
+
+    /// Nothing applies (`ask`, or no curated option), so the line stays by its own name.
+    static let unresolvedSpecialtyJSON = #"""
+        {"id":"fry-seasoning","key":"fry seasoning","name":"Fry Seasoning","aliases":[],"category":"spices",
+         "ingredientIds":[],"recipeCount":3,"unitSizes":[],"defaultOptionId":"fry-seasoning.batch",
+         "retired":false,"choiceSource":"none","choice":null,"options":[],"batch":null}
+        """#
+
+    /// The server writes every label and description, so the app renders them as sent.
+    static let strategyOptionsJSON = #"""
+        [{"value":"similar","label":"Something similar",
+          "description":"Buy something close from the store — quicker, tastes a little different"},
+         {"value":"closest","label":"As close as possible",
+          "description":"Make a jar you reuse across several meals — more work, closest to the original"},
+         {"value":"ask","label":"Ask me each time",
+          "description":"Leave each specialty ingredient on the list until someone picks an option"}]
+        """#
+
+    static func settingsJSON(strategy: String = "similar", changed: Bool = true) -> Data {
+        let updatedBy = changed ? #""\#(Fixtures.user.id)""# : "null"
+        let updatedAt = changed ? #""2026-09-15T18:30:00Z""# : "null"
+        return Data(
+            #"""
+            {"strategy":"\#(strategy)","updatedBy":\#(updatedBy),"updatedAt":\#(updatedAt),
+             "options":\#(strategyOptionsJSON)}
+            """#.utf8)
+    }
 
     static let batchResponseJSON = Data(
         #"""
@@ -94,8 +133,17 @@ nonisolated enum SpecialtyFixtures {
     private static let storeVia = #"""
         {"kind":"store_alternative","specialtyId":"tex-mex-paste","specialtyKey":"tex mex paste",
          "specialtyName":"Tex-Mex Paste","optionId":"tex-mex-paste.store","optionName":"Tomato paste and chili spices",
-         "yield":null,"batches":null,"recipes":[{"id":"recipe-3","name":"Smoky Pork Tacos"}],
+         "strategy":"","yield":null,"batches":null,"recipes":[{"id":"recipe-3","name":"Smoky Pork Tacos"}],
          "text":"for Tex-Mex Paste in Smoky Pork Tacos"}
+        """#
+
+    /// Nobody chose this one: the household's `similar` strategy picked the store alternative, so
+    /// the server marks the line and ends its text with "(your default)".
+    static let strategyVia = #"""
+        {"kind":"store_alternative","specialtyId":"tex-mex-paste","specialtyKey":"tex mex paste",
+         "specialtyName":"Tex-Mex Paste","optionId":"tex-mex-paste.store","optionName":"Tomato paste and chili spices",
+         "strategy":"similar","yield":null,"batches":null,"recipes":[{"id":"recipe-3","name":"Smoky Pork Tacos"}],
+         "text":"Store alternative for Tex-Mex Paste in Smoky Pork Tacos (your default)"}
         """#
 
     private static func amount(_ quantity: String, _ value: Double, _ unit: String, _ text: String) -> String {
@@ -261,6 +309,13 @@ nonisolated final class FakeSpecialtyServer: Sendable {
         var specialties = FakeSpecialtyServer.sample
         var nextID = 1
         var requests: [SentRequest] = []
+        /// The household's standing strategy. The sample household is on `ask`, so nothing is
+        /// resolved for it and the per-ingredient tests see exactly the choices they make; the
+        /// strategy tests set this to `similar` or `closest`.
+        var strategy = "ask"
+        /// Who last set the strategy and when; both `nil` for a household that never set one.
+        var strategySetBy: String? = Fixtures.user.id
+        var strategySetAt: String? = "2026-09-15T18:30:00Z"
         /// Changes answer `403`, as for a member without `pantry.edit`.
         var forbidsChanges = false
         /// The next choice answers `500`.
@@ -279,6 +334,8 @@ nonisolated final class FakeSpecialtyServer: Sendable {
     /// `METHOD /path` for every request, in order.
     var log: [String] { state.withLock { $0.requests.map(\.line) } }
     var batches: [RecordedBatch] { state.withLock { $0.batches } }
+    /// The household's standing strategy as the server now holds it.
+    var strategy: String { state.withLock { $0.strategy } }
 
     func choice(for specialtyID: String) -> String? {
         state.withLock { state in state.specialties.first { $0.id == specialtyID }?.choice }
@@ -327,10 +384,31 @@ nonisolated final class FakeSpecialtyServer: Sendable {
             let rest = Array(route.dropFirst(3))
             if rest.isEmpty, method == "GET" {
                 let items = Self.mostUsedFirst(state.specialties).filter { includesAll || $0.recipeCount > 0 }
-                return (200, Data(#"{"items":[\#(items.map(Self.json).joined(separator: ","))]}"#.utf8))
+                let json = items.map { Self.json($0, strategy: state.strategy) }
+                return (200, Data(#"{"items":[\#(json.joined(separator: ","))]}"#.utf8))
             }
             if rest == ["choices", "defaults"], method == "POST" {
                 return Self.applyDefaults(&state)
+            }
+            if rest == ["settings"] {
+                switch method {
+                case "GET":
+                    return (200, Self.settingsJSON(state))
+                case "PUT":
+                    guard let strategy = body["strategy"] as? String,
+                        ["similar", "closest", "ask"].contains(strategy)
+                    else {
+                        return (400, Fixtures.errorJSON(code: "validation_failed", message: "unknown strategy"))
+                    }
+                    // Nothing is written to the household's choices: the strategy is resolved
+                    // whenever the list is built, so only the setting itself changes.
+                    state.strategy = strategy
+                    state.strategySetBy = Fixtures.user.id
+                    state.strategySetAt = "2026-09-15T18:30:00Z"
+                    return (200, Self.settingsJSON(state))
+                default:
+                    return (404, Fixtures.errorJSON(code: "not_found"))
+                }
             }
             guard let specialtyID = rest.first,
                 let index = state.specialties.firstIndex(where: { $0.id == specialtyID })
@@ -341,7 +419,7 @@ nonisolated final class FakeSpecialtyServer: Sendable {
 
             switch method {
             case "GET" where tail.isEmpty:
-                return (200, Data(Self.json(state.specialties[index]).utf8))
+                return (200, Data(Self.json(state.specialties[index], strategy: state.strategy).utf8))
             case "PUT" where tail == ["choice"]:
                 if state.failsNextChoice {
                     state.failsNextChoice = false
@@ -354,7 +432,7 @@ nonisolated final class FakeSpecialtyServer: Sendable {
                     return (400, Fixtures.errorJSON(code: "validation_failed", message: "unknown option"))
                 }
                 state.specialties[index].choice = optionID
-                return (200, Data(Self.json(state.specialties[index]).utf8))
+                return (200, Data(Self.json(state.specialties[index], strategy: state.strategy).utf8))
             case "DELETE" where tail == ["choice"]:
                 state.specialties[index].choice = nil
                 return (204, Data())
@@ -403,6 +481,27 @@ nonisolated final class FakeSpecialtyServer: Sendable {
 
     // MARK: - Endpoints
 
+    private static func settingsJSON(_ state: State) -> Data {
+        let updatedBy = state.strategySetBy.map { #""\#($0)""# } ?? "null"
+        let updatedAt = state.strategySetAt.map { #""\#($0)""# } ?? "null"
+        return Data(
+            (#"{"strategy":"\#(state.strategy)","updatedBy":\#(updatedBy),"updatedAt":\#(updatedAt),"#
+                + #""options":\#(SpecialtyFixtures.strategyOptionsJSON)}"#).utf8)
+    }
+
+    /// The curated option the strategy picks: its preferred kind if there is one, else the other
+    /// kind. It never picks a household's own option, and `ask` picks nothing.
+    private static func strategyPick(_ specialty: Specialty, strategy: String) -> Option? {
+        let preferred: String
+        switch strategy {
+        case "similar": preferred = "store_alternative"
+        case "closest": preferred = "house_made_batch"
+        default: return nil
+        }
+        let curated = specialty.options.filter { $0.source == "curated" }
+        return curated.first { $0.type == preferred } ?? curated.first { $0.type != preferred }
+    }
+
     private static func mostUsedFirst(_ specialties: [Specialty]) -> [Specialty] {
         specialties.sorted { first, second in
             first.recipeCount != second.recipeCount ? first.recipeCount > second.recipeCount : first.name < second.name
@@ -420,7 +519,7 @@ nonisolated final class FakeSpecialtyServer: Sendable {
             guard let index = state.specialties.firstIndex(where: { $0.id == specialty.id }) else { continue }
             if state.specialties[index].choice == nil {
                 state.specialties[index].choice = state.specialties[index].defaultOptionID
-                chosen.append(json(state.specialties[index]))
+                chosen.append(json(state.specialties[index], strategy: state.strategy))
             } else {
                 skipped += 1
             }
@@ -471,15 +570,23 @@ nonisolated final class FakeSpecialtyServer: Sendable {
                 .utf8)
     }
 
-    static func json(_ specialty: Specialty) -> String {
+    static func json(_ specialty: Specialty, strategy: String = "ask") -> String {
         var choice = "null"
+        var choiceSource = "none"
         if let optionID = specialty.choice {
             let option = specialty.options.first { $0.id == optionID }
             let type = option?.type ?? "as_is"
             let name = option.map { #""\#($0.name)""# } ?? "null"
+            choiceSource = "household"
             choice =
-                #"{"optionId":"\#(optionID)","type":"\#(type)","optionName":\#(name),"#
-                + #""chosenBy":"\#(Fixtures.user.id)","chosenAt":"2026-09-15T18:30:00Z"}"#
+                #"{"source":"household","optionId":"\#(optionID)","type":"\#(type)","optionName":\#(name),"#
+                + #""strategy":null,"chosenBy":"\#(Fixtures.user.id)","chosenAt":"2026-09-15T18:30:00Z"}"#
+        } else if let picked = strategyPick(specialty, strategy: strategy) {
+            // Nobody chose it, so there is no chooser and no time they chose it.
+            choiceSource = "strategy"
+            choice =
+                #"{"source":"strategy","optionId":"\#(picked.id)","type":"\#(picked.type)","#
+                + #""optionName":"\#(picked.name)","strategy":"\#(strategy)","chosenBy":null,"chosenAt":null}"#
         }
         let batch =
             specialty.batchRemaining.map { remaining in
@@ -493,7 +600,8 @@ nonisolated final class FakeSpecialtyServer: Sendable {
             + #""aliases":[],"category":"spices","ingredientIds":["i-\#(specialty.id)"],"#
             + #""recipeCount":\#(specialty.recipeCount),"#
             + #""unitSizes":[{"per":"count","quantity":"1","quantityValue":1,"unit":"tbsp","text":"1 tbsp"}],"#
-            + #""defaultOptionId":"\#(specialty.defaultOptionID)","retired":false,"choice":\#(choice),"#
+            + #""defaultOptionId":"\#(specialty.defaultOptionID)","retired":false,"#
+            + #""choiceSource":"\#(choiceSource)","choice":\#(choice),"#
             + #""options":[\#(options)],"batch":\#(batch)"#
             + "}"
     }
