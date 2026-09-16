@@ -36,6 +36,9 @@ final class AutopilotStore {
     private(set) var weekError: String?
     /// Slots the member switched off, sent as `excludeSlotIds` when accepting.
     private(set) var excludedSlotIDs: Set<String> = []
+    /// The slots' pairings the member has checked, sent as `pairingIds` when accepting. It
+    /// starts at the proposal's own `included` ones (the household's `always` rules).
+    private(set) var chosenPairingIDs: Set<String> = []
     private(set) var swappingSlotIDs: Set<String> = []
     private(set) var isGenerating = false
     /// Changes in flight.
@@ -176,6 +179,11 @@ final class AutopilotStore {
         }
         applyProfile(saved)
         Self.logger.info("Autopilot sections saved: \(sections.map(\.rawValue).sorted(), privacy: .public)")
+    }
+
+    /// Shows a profile another change returned, such as a learned pairing kept as a rule.
+    func present(_ updated: AutopilotProfile) {
+        applyProfile(updated)
     }
 
     private func applyProfile(_ saved: AutopilotProfile) {
@@ -345,6 +353,37 @@ final class AutopilotStore {
         }
     }
 
+    /// Switches one of a slot's pairings on or off.
+    func setPairing(_ pairingID: String, included: Bool) {
+        guard allPairingIDs.contains(pairingID) else { return }
+        if included {
+            chosenPairingIDs.insert(pairingID)
+        } else {
+            chosenPairingIDs.remove(pairingID)
+        }
+    }
+
+    func isPairingChosen(_ pairingID: String) -> Bool {
+        chosenPairingIDs.contains(pairingID)
+    }
+
+    /// Every pairing on the pending proposal, whatever its slot.
+    private var allPairingIDs: Set<String> {
+        Set(pendingProposal?.slots.flatMap { $0.pairings.map(\.id) } ?? [])
+    }
+
+    /// The pairings accepting would add: the checked ones, on slots that are still included.
+    /// Excluding a slot drops its pairings, so they are filtered out here too.
+    var chosenPairings: [String] {
+        guard let proposal = pendingProposal else { return [] }
+        return
+            proposal.slots
+            .filter { !excludedSlotIDs.contains($0.id) }
+            .flatMap { $0.pairings.map(\.id) }
+            .filter { chosenPairingIDs.contains($0) }
+            .sorted()
+    }
+
     /// Replaces a slot's meal with the next best one.
     func swap(slotID: String) async throws {
         guard pendingProposal?.slot(id: slotID) != nil, !swappingSlotIDs.contains(slotID) else { return }
@@ -365,9 +404,13 @@ final class AutopilotStore {
     func accept() async throws -> AutopilotAcceptResult? {
         guard let proposal = pendingProposal else { return nil }
         let excluded = proposal.slots.map(\.id).filter { excludedSlotIDs.contains($0) }
+        // Sent explicitly, never left out: the review sheet shows a toggle per pairing, so
+        // the checked ones are exactly what to add.
+        let pairings = chosenPairings
         let result = try await changeProposal { api, householdID, week, version, token in
             try await api.accept(
-                householdID: householdID, week: week, version: version, excludeSlotIDs: excluded, accessToken: token)
+                householdID: householdID, week: week, version: version, excludeSlotIDs: excluded,
+                pairingIDs: pairings, accessToken: token)
         }
         guard let result else { return nil }
         apply(result.proposal)
@@ -393,10 +436,21 @@ final class AutopilotStore {
         guard updated.householdID == householdID, updated.week == week?.description else { return }
         // Drops a load that started before this response.
         proposalGeneration += 1
+        let pairingIDs = Set(updated.slots.flatMap { $0.pairings.map(\.id) })
         if updated.id == proposal?.id {
             excludedSlotIDs.formIntersection(updated.slots.map(\.id))
+            // A swap replaces a slot's pairings; the member's choices on the ones that
+            // remain are kept, and a newly offered `always` pairing starts checked.
+            let known = Set(proposal?.slots.flatMap { $0.pairings.map(\.id) } ?? [])
+            chosenPairingIDs.formIntersection(pairingIDs)
+            chosenPairingIDs.formUnion(
+                updated.slots
+                    .flatMap(\.pairings)
+                    .filter { $0.included && !known.contains($0.id) }
+                    .map(\.id))
         } else {
             excludedSlotIDs = []
+            chosenPairingIDs = Set(updated.slots.flatMap(\.pairings).filter(\.included).map(\.id))
         }
         proposal = updated
         weekError = nil
@@ -437,6 +491,7 @@ final class AutopilotStore {
         isLoadingWeek = false
         weekError = nil
         excludedSlotIDs = []
+        chosenPairingIDs = []
         swappingSlotIDs = []
         notice = nil
     }

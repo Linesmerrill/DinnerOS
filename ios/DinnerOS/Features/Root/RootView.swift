@@ -14,6 +14,7 @@ struct RootView: View {
     @Environment(ShoppingStore.self) private var shopping
     @Environment(MenuStore.self) private var menu
     @Environment(MealPlanner.self) private var planner
+    @Environment(PairingsStore.self) private var pairings
 
     var body: some View {
         content
@@ -34,6 +35,7 @@ struct RootView: View {
                     shopping.reset()
                     menu.reset()
                     planner.reset()
+                    pairings.reset()
                     // At launch there's no user while the session restores; only a real
                     // sign-out discards queued events.
                     if session.state == .signedOut {

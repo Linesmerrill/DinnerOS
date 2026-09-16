@@ -17,6 +17,7 @@ final class AppDependencies {
     let shopping: ShoppingStore
     let menu: MenuStore
     let planner: MealPlanner
+    let pairings: PairingsStore
     /// `nil` when the build has no Google client ID; the Google button is then hidden.
     let googleSignIn: GoogleSignInService?
 
@@ -70,6 +71,20 @@ final class AppDependencies {
             if let week = ISOWeek(plan.week) {
                 Task { await menu.reloadWeek(week) }
             }
+        }
+        // Add-on pairings change the plan (an add-on entry) and the week's grocery list, so
+        // every result goes back through `PlanStore`, and a new rule refreshes the profile.
+        let pairings = PairingsStore(
+            session: session, api: client.map { AutopilotAPI(client: $0) }, plans: plans, planner: planner)
+        self.pairings = pairings
+        pairings.planDidChange = { [plans, menu] plan in
+            plans.present(plan)
+            if let week = ISOWeek(plan.week) {
+                Task { await menu.reloadWeek(week) }
+            }
+        }
+        pairings.profileDidChange = { [autopilot] profile in
+            autopilot.present(profile)
         }
         shopping = ShoppingStore(
             session: session, api: client.map { ShoppingAPI(client: $0) }, checks: groceryChecks,
