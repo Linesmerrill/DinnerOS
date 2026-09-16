@@ -2481,8 +2481,15 @@ paths:
         names, keys, and aliases first, so "frys" records as Fry's rather
         than a new entry. Idempotent per household and store: a second
         request updates the note and returns `200`, keeping the first
-        requester and time. At most 25 stores per household. Requires
-        `household.view`.
+        requester and time. At most 25 stores per household.
+
+        A store the catalog already lists as `available` cannot be requested
+        and comes back `400`, since DinnerOS supports it today and the demand
+        counts are what decide which store is built next. That covers a typed
+        `name` as well as a `key`, because a name is resolved against the
+        catalog first. The app should send the member to store setup instead.
+
+        Requires `household.view`.
       operationId: requestStore
       tags: [shopping]
       security:
@@ -4955,13 +4962,19 @@ components:
         recipe:
           type: object
           description: Snapshot taken when the entry was added. Load the recipe for details.
-          required: [id, name]
+          required: [id, name, isAddon]
           properties:
             id:
               type: string
             name:
               type: string
               example: Beef Tacos
+            isAddon:
+              type: boolean
+              description: |
+                True for a pairing's add-on (garlic bread alongside the pasta),
+                which is planned with a meal and never counted as one. False
+                for entries added before add-ons were marked.
             imageUrl:
               type: string
         day:

@@ -475,10 +475,27 @@ endpoints in [api.md](api.md#request-a-store), the collection in
     Instacart, Kroger, Albertsons, Target, Amazon Fresh and Whole Foods, and
     Shipt from the Target row. A banner inherits its parent's status, because
     the same API and the same terms cover it — Fry's, Ralphs, King Soopers,
-    Smith's, Fred Meyer, QFC, Harris Teeter, and Dillons under Kroger;
-    Safeway, Vons, and Jewel-Osco under Albertsons. Each entry's `note` is
-    the one-line version of what the research found.
-  - `unsupported` — no integration and no research yet. Everything else.
+    Smith's, Fred Meyer, QFC, Harris Teeter, Dillons, City Market, Mariano's,
+    Pick 'n Save, Metro Market, Baker's, Food 4 Less, and Foods Co under
+    Kroger; Safeway, Vons, Jewel-Osco, Acme, Shaw's, Star Market, Randalls,
+    Tom Thumb, Pavilions, Haggen, Carrs, United Supermarkets, and Market
+    Street under Albertsons. Each entry's `note` is the one-line version of
+    what the research found, and every researched entry carries one.
+  - `unsupported` — no integration and no research yet. Everything else: the
+    remaining national and regional chains (Publix, H-E-B, Meijer, Hy-Vee,
+    Wegmans, Giant, Stop & Shop, Food Lion, Hannaford, Winn-Dixie, Aldi,
+    Lidl, Trader Joe's, Sprouts, ShopRite, Giant Eagle and the rest), the
+    warehouse clubs, and the delivery services nobody has assessed
+    (DoorDash, Uber Eats, Gopuff, FreshDirect, Weee!). These carry **no**
+    `note`: a chain we have not looked at gets an honest blank rather than a
+    guess, and none of them is ever marked `available` on the strength of a
+    chain simply being large.
+- **A store that already works can't be requested.** Asking for an
+  `available` store is a `400`, whether it arrives as a `key` or as a typed
+  name that matches one — Walmart is supported today, so the request would
+  record demand for finished work and leave the member no closer to using it.
+  The Shop tab already routes those rows to store setup (decision #423); the
+  API now refuses them too, because the row is not the only way in.
 - **`status` is not a promise.** It says how far this document got, never what
   a member can do right now. Only `available` takes a list, and the app must
   not offer the others as usable.
