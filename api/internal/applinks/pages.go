@@ -127,6 +127,14 @@ var privacyPage = template.Must(template.New("privacy").Parse(`<!doctype html>
 </ul>
 <p>{{.AppName}} has no advertising, no analytics or tracking SDKs, and does not track you across other apps or websites.</p>
 
+<h2>Calendar and weather, processed on your iPhone</h2>
+<p>If you allow it, Autopilot reads your calendars and the forecast for your approximate location on your iPhone when it plans a week, to suggest quicker dinners on busy evenings and cozier ones on cold or rainy days. Both are optional, asked for the first time you plan with Autopilot, and can be turned off in the app's Autopilot settings or in iOS Settings.</p>
+<ul>
+<li><strong>Calendar-derived busyness.</strong> For each day being planned, the app works out on your phone how busy the evening is (free, some, or busy) and about how many minutes are free. Only those values are sent. Event titles, times, attendees, locations, and notes never leave your phone.</li>
+<li><strong>Approximate weather bands.</strong> The app uses reduced-accuracy location to get a forecast from Apple Weather on your phone and sends only a temperature band (cold, mild, or hot) and precipitation (none, rain, or snow) for each day. Your location and coordinates are never sent to us.</li>
+</ul>
+<p>These values are stored with that week's suggestions so swapping a meal uses the same context, and are deleted with them.</p>
+
 <h2>How it's used</h2>
 <p>Only to run the app for you and your household: signing you in, sharing plans with the members you invite, building grocery lists, suggesting meals, and sending the reminders you ask for. Members of your household can see its shared data and your name.</p>
 
@@ -134,7 +142,7 @@ var privacyPage = template.Must(template.New("privacy").Parse(`<!doctype html>
 <ul>
 <li><strong>MongoDB Atlas</strong> stores the database, and <strong>Heroku</strong> runs the server.</li>
 <li><strong>Resend</strong> sends invitation emails to the addresses you enter.</li>
-<li><strong>Apple</strong> delivers push notifications, and Apple or Google verify your sign-in.</li>
+<li><strong>Apple</strong> delivers push notifications, and Apple or Google verify your sign-in. If you allow weather, Apple Weather provides the forecast to your phone under Apple's privacy policy.</li>
 <li>When you shop at a store such as Walmart, the app opens that store's website or app with your list; that store's own privacy policy applies there. Store links may carry an affiliate tag.</li>
 </ul>
 <p>We don't sell, rent, or share your data with anyone else, except if required by law.</p>

@@ -49,6 +49,15 @@ type reason struct {
 	forced bool
 }
 
+// Long-cook rule days: a cook of at least genuineLongCookMinutes, or an item
+// marked LongCook (a whole bird or a pork shoulder), is a genuine long cook,
+// and a shorter meal outside the long band keeps shortOnLongRuleFactor of its
+// rule credit.
+const (
+	genuineLongCookMinutes = 60
+	shortOnLongRuleFactor  = 0.5
+)
+
 // Explanation limits: standard reasons, and reasons in all with learned and
 // context reasons included.
 const (
@@ -278,6 +287,13 @@ func (m *model) score(s *slot, it *item) cand {
 		case groups > 0:
 			ruleValue = float64(matched) / float64(groups)
 		}
+		// A long-cook rule ("Sunday is a longer meal") is about the long
+		// cook: a meal with a known cook time outside the long band earns
+		// only part of the credit, so a genuine long cook wins the day when
+		// one exists and a quicker match still fills it when none does.
+		if s.longOK && ruleValue > 0 && it.minutes > 0 && it.band != autopilot.BandLong && !it.longCook {
+			ruleValue *= shortOnLongRuleFactor
+		}
 		if s.longOK && it.band == autopilot.BandLong {
 			parts = append(parts, "Long cook OK")
 		}
@@ -305,8 +321,16 @@ func (m *model) score(s *slot, it *item) cand {
 	var timeFit float64
 	switch {
 	case s.longOK:
-		if it.band == autopilot.BandLong {
+		// Prefer genuinely long cooks on a long-cook day: an hour or more,
+		// or a whole or large cut, most; then anything in the long band. A
+		// known shorter cook is penalized, and an unknown time is neutral.
+		switch {
+		case it.longCook:
+			timeFit = 1
+		case it.band == autopilot.BandLong:
 			timeFit = 0.5
+		case it.minutes > 0:
+			timeFit = -0.5
 		}
 	case s.softLimit > 0 && it.minutes <= 0:
 		timeFit = -0.1

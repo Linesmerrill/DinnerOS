@@ -20,6 +20,7 @@ func TestStaticPages(t *testing.T) {
 		{path: PrivacyPath, want: []string{
 			"Privacy policy", "Sign in with Apple", "MongoDB Atlas", "Heroku", "Resend",
 			"Delete Account", "never sells", "mailto:" + ContactEmail, PrivacyEffectiveDate,
+			"Calendar-derived busyness", "Approximate weather bands", "never leave your phone", "never sent to us",
 		}},
 	} {
 		t.Run(tc.path, func(t *testing.T) {

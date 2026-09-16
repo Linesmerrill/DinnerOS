@@ -124,11 +124,14 @@ type item struct {
 	ingredients [][]string // tokenized names
 	minutes     int
 	band        autopilot.TimeBand
-	servings    []int
-	spicy       bool
-	tie         uint64
-	isNew       bool
-	st          stats
+	// longCook: the caller marked it a long cook, or it takes an hour or
+	// more (genuineLongCookMinutes).
+	longCook bool
+	servings []int
+	spicy    bool
+	tie      uint64
+	isNew    bool
+	st       stats
 }
 
 type stats struct {
@@ -224,6 +227,7 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 		}
 		it.spicy = ci.Spicy || slices.Contains(it.tags, "spicy")
 		it.band = m.prefs.bands.Of(it.minutes)
+		it.longCook = ci.LongCook || it.minutes >= genuineLongCookMinutes
 		for _, name := range ci.Ingredients {
 			if tokens := tokenize(name); len(tokens) > 0 {
 				it.ingredients = append(it.ingredients, tokens)

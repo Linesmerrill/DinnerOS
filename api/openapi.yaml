@@ -7764,7 +7764,7 @@ components:
           description: 1 for the week's first generation, then one more each time it's generated again.
         modelVersion:
           type: string
-          example: baseline-2026.6
+          example: baseline-2026.7
         inputsHash:
           type: string
           description: Fingerprint of the generation inputs; identical inputs give the same hash.
@@ -7921,7 +7921,7 @@ components:
       properties:
         modelVersion:
           type: string
-          example: baseline-2026.6
+          example: baseline-2026.7
         interactions:
           type: integer
           minimum: 0

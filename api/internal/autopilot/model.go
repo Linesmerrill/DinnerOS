@@ -78,6 +78,10 @@ type Item struct {
 	Methods []string
 	// CookMinutes is the effective cook time; 0 means unknown.
 	CookMinutes int
+	// LongCook marks a genuine long cook whatever CookMinutes says (a whole
+	// bird or a large roast). A long-cook weekday rule prefers these and
+	// meals of an hour or more.
+	LongCook bool
 	// Servings are the serving sizes the item can be made in.
 	Servings []int
 	// Allergens are allergen codes the item contains.

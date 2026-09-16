@@ -36,6 +36,10 @@ type RecipeAttributes struct {
 	// SpicyEvidence is the tag or ingredient that made it spicy.
 	SpicyEvidence string
 	Methods       []MethodAttribute
+	// LongCookCut names the whole or large cut that makes the recipe a
+	// genuine long cook whatever its stated time ("pork shoulder"); "" when
+	// it has none (longCookCut).
+	LongCookCut string
 	// MealCategories are set by Service.RecipeAttributes (pairings_categories.go).
 	MealCategories []MealCategoryAttribute
 	Override       *RecipeOverride
@@ -173,6 +177,18 @@ var smokerCuts = []phrase{
 	p("turkey breast", cutUnless...), p("whole turkey", cutUnless...), p("turkey leg", cutUnless...),
 }
 
+// longCuts are the smoker cuts that take a genuinely long cook: whole birds
+// and large roasts or ribs, not tenderloins, loins, chops, steaks, wings, or
+// drumsticks. A long-cook weekday rule ("Sunday is a longer meal") prefers
+// them even when a recipe card states a short time.
+var longCuts = []phrase{
+	p("whole chicken", cutUnless...), p("spatchcock", cutUnless...), p("whole turkey", cutUnless...), p("turkey breast", cutUnless...),
+	p("pork shoulder", cutUnless...), p("pork butt", cutUnless...), p("boston butt", cutUnless...), p("pork belly", cutUnless...),
+	p("baby back rib", cutUnless...), p("spare rib", cutUnless...), p("spareribs", cutUnless...), p("pork rib", cutUnless...),
+	p("country style rib", cutUnless...),
+	p("brisket", cutUnless...), p("beef rib", cutUnless...), p("short rib", cutUnless...), p("chuck roast", cutUnless...),
+}
+
 // notSmokerDishes are dish shapes that aren't smoker meals even when they use
 // a smokable cut: pasta, noodles, soups and stews, pies and casseroles,
 // stir-fries, tacos and other wrapped or bowl meals, and ground-meat dishes.
@@ -223,6 +239,7 @@ func attributes(r recipes.Recipe, override *RecipeOverride, bands autopilot.Time
 	for _, t := range append(slices.Clone(r.Tags), r.Utensils...) {
 		labelTokens = append(labelTokens, tokens(t))
 	}
+	a.LongCookCut = longCookCut(r, names, labelTokens[0])
 	for _, method := range optionValues(EquipmentOptions) {
 		m := MethodAttribute{Method: method, Source: SourceHeuristic}
 		m.HeuristicSuits, m.Evidence = heuristicMethod(method, r, names, labelTokens, a.Proteins)
@@ -243,8 +260,8 @@ func attributes(r recipes.Recipe, override *RecipeOverride, bands autopilot.Time
 func (a RecipeAttributes) item(r recipes.Recipe) autopilot.Item {
 	it := autopilot.Item{
 		ID: r.ID, Cuisines: a.Cuisines, CuisineRegions: a.CuisineRegions, Tags: a.Tags, Proteins: a.Proteins, CookMinutes: a.CookMinutes,
-		MealCategories: recipeMealCategories(r, a.Override),
-		Servings:       slices.Clone(r.Servings), Allergens: a.Allergens, Diets: a.Diets, Spicy: a.Spicy,
+		MealCategories: recipeMealCategories(r, a.Override), LongCook: a.LongCookCut != "",
+		Servings: slices.Clone(r.Servings), Allergens: a.Allergens, Diets: a.Diets, Spicy: a.Spicy,
 	}
 	for _, m := range a.Methods {
 		if m.Suits {
@@ -257,6 +274,24 @@ func (a RecipeAttributes) item(r recipes.Recipe) autopilot.Item {
 		}
 	}
 	return it
+}
+
+// longCookCut returns the ingredient that makes the recipe a whole or large
+// cut (longCuts), or "". Dishes that aren't smoker meals (a short rib ramen,
+// a brisket taco) don't count, matched in the name's main part.
+func longCookCut(r recipes.Recipe, names [][]string, name []string) string {
+	head := dishHead(name)
+	for _, dish := range notSmokerDishes {
+		if match(head, []phrase{dish}) {
+			return ""
+		}
+	}
+	for i, ingredient := range names {
+		if match(ingredient, longCuts) {
+			return r.Ingredients[i].Name
+		}
+	}
+	return ""
 }
 
 func heuristicMethod(method string, r recipes.Recipe, names, labels [][]string, proteins []string) (bool, string) {
