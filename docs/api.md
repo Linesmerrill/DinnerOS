@@ -166,6 +166,10 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/shopping/handoffs` `?week&status&limit` → `{items}` | `household.view` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/handoffs/{handoffId}` → handoff | `household.view` | 8a | ✅ |
 | POST | `/api/v1/households/{householdId}/shopping/handoffs/{handoffId}/confirm` `{all}` or `{lines: [{lineId, packages?}], skipRest?}` → `{handoff, purchases}` | `pantry.edit` | 8a | ✅ |
+| GET | `/api/v1/shopping/catalog` `?q` → `{items: [{key, name, kind, status, aliases, note, requestedByHousehold, requests}]}` | bearer | 8a | ✅ |
+| GET | `/api/v1/households/{householdId}/shopping/requests` → `{items}` | `household.view` | 8a | ✅ |
+| POST | `/api/v1/households/{householdId}/shopping/requests` `{key or name, note?}` → `201` `{request}`, or `200` when the note is updated | `household.view` | 8a | ✅ |
+| DELETE | `/api/v1/households/{householdId}/shopping/requests/{requestId}` → `204` | `household.view` | 8a | ✅ |
 | … | saved grocery lists, product search, other providers | | 8 | planned |
 
 Household-scoped routes return `404 not_found` to anyone who isn't a member,
@@ -1342,12 +1346,86 @@ from the stored line (the app can't send amounts):
 - After confirming, treat those grocery lines as checked off: don't also ask
   "Add to pantry?", which would record a second purchase.
 
+### Request a store
+
+The Shop tab supports Walmart only, so members can say what they'd use
+instead, and the counts decide what gets built next
+([shopping-providers.md](shopping-providers.md#demand-signal)).
+
+`GET /api/v1/shopping/catalog` (signed in, **not** household scoped):
+
+```json
+{
+  "items": [
+    {
+      "key": "kroger", "name": "Kroger", "kind": "grocer", "status": "researched",
+      "aliases": ["kroger co", "krogers"],
+      "note": "Public API with cart write; needs customer sign-in",
+      "requestedByHousehold": false, "requests": 3
+    }
+  ]
+}
+```
+
+- `status` is what
+  [shopping-providers.md](shopping-providers.md#demand-signal) concluded, not
+  live data: `available` (Walmart today), `researched` (that document
+  assessed it), or `unsupported` (no integration and no research yet). Only
+  `available` can take a list.
+- `kind` is `grocer`, `delivery`, `warehouse`, or `other`.
+- `?q=` is a case-insensitive prefix of the name, the key, or an alias
+  (`krog`, `fry's`, `quality food`), at most 100 characters. Without `q` the
+  whole list comes back, ordered by status then name.
+- `requests` counts the households that asked, across all of DinnerOS;
+  `requestedByHousehold` is whether the caller's own household did. The route
+  isn't household scoped, so `requestedByHousehold` uses the caller's first
+  household and is `false` for a user who belongs to none.
+
+`GET` and `POST .../shopping/requests` and `DELETE
+.../shopping/requests/{requestId}` (all `household.view`) read, record, and
+withdraw one household's requests:
+
+```json
+{ "request": { "id": "66e5a1f2c3b4a5d6e7f80d01", "key": "kroger", "name": "Kroger",
+               "status": "researched", "note": "closest to us",
+               "requestedBy": "66e5a1f2c3b4a5d6e7f80912", "requestedAt": "2026-09-15T18:30:00Z" } }
+```
+
+- Send `{"key": "kroger"}` for a store in the catalog, or `{"name": "Some
+  Local Market"}` for one that isn't — not both. `note` is optional, at most
+  280 characters.
+- A typed `name` is trimmed, its spaces collapsed, and matched against
+  catalog names, keys, and aliases first, so `"frys"` records as Fry's. Only
+  a name matching nothing becomes its own entry, keyed `some-local-market`
+  and title cased for display. It does **not** join the catalog.
+- **Idempotent per store:** `201` the first time, `200` when a later request
+  updates the note. The first requester and time are kept, whoever asks again.
+- `GET` returns `{"items": [...]}` newest first. `DELETE` is `204`.
+- A household can ask for at most 25 stores; a new one past that is `409`.
+  Updating a note still works at the cap.
+
+### Contract notes for iOS
+
+- **Search server-side.** Send `?q=` as the member types (debounced) instead
+  of fetching the catalog once and filtering on the device: aliases mean
+  "frys" and "quality food" match entries whose names don't contain the typed
+  text.
+- **Never offer a store as usable.** `status` is research, not capability.
+  Only `available` belongs in the store picker; the rest belong in "request a
+  store", with `note` as the explanation if you show one.
+- **Drive the button from `requestedByHousehold`** ("Request" vs
+  "Requested"). A second `POST` is safe — it just updates the note — so
+  retries and double taps are fine.
+- **Prefer `key`.** Send `name` only when the search returned nothing, so a
+  member tapping a catalog row never creates a duplicate free-text entry.
+- **`requests` is our demand signal**, not a promise about what ships next.
+
 | Status | Code | When |
 | --- | --- | --- |
-| 400 | `validation_failed` | Bad link, product ID, name, package size, key, store, week, `status`, or `limit`; both or neither of `productUrl`/`productId`; no line to hand off; confirm with neither `all`, `lines`, nor `skipRest`, both `all` and `lines`, an unknown or repeated `lineId`, or `packages` outside 1–99 |
+| 400 | `validation_failed` | Bad link, product ID, name, package size, key, store, week, `status`, or `limit`; both or neither of `productUrl`/`productId`; no line to hand off; confirm with neither `all`, `lines`, nor `skipRest`, both `all` and `lines`, an unknown or repeated `lineId`, or `packages` outside 1–99; a store request with both or neither of `key`/`name`, a `key` that isn't in the catalog, a `name` with no letter or digit, or a `q`, `name`, or `note` that is too long |
 | 403 | `forbidden` | Settings, saved products, or handoffs without `shopping.edit`; confirm without `pantry.edit` |
-| 404 | `not_found` | Not a member; unknown provider; no saved product or handoff |
-| 409 | `conflict` | Another request is confirming the same line, or a pantry item kept changing; retry |
+| 404 | `not_found` | Not a member; unknown provider; no saved product, handoff, or store request |
+| 409 | `conflict` | Another request is confirming the same line, or a pantry item kept changing; retry. Also a household past its 25-store request cap |
 | 503 | `provider_unavailable` | A planned provider that isn't enabled |
 
 ## Notifications
@@ -2313,6 +2391,7 @@ can observe.
 | `import.completed` | server (recipe import) | — | `{source, created, updated, unchanged, rejected}` |
 | `shopping.handoff_created` | server (shopping) | — | `{handoffId, provider, lines, packages, checkAmount, excluded, links}` (counts only, never product IDs) |
 | `shopping.order_confirmed` | server (shopping) | — | `{handoffId, provider, confirmed, packages, skipped}` |
+| `shopping.store_requested` | server (shopping) | — | `{key, catalog}` (`catalog` is false when a member typed a store the catalog doesn't list; the note is never recorded) |
 
 `date` is `YYYY-MM-DD`, `day` is `mon`–`sun`, and `servings` is 1–12.
 

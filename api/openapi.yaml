@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: DinnerOS API
-  version: 0.10.0
+  version: 0.11.0
   description: |
     Backend for the DinnerOS iOS app. "DinnerOS" is a working name.
 
@@ -2356,6 +2356,127 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/ShoppingConflict"
+  /api/v1/shopping/catalog:
+    get:
+      summary: The store catalog
+      description: |
+        The curated list of grocers and delivery services households ask for,
+        with the demand behind each one. Signed in, and not household scoped.
+        `status` is what docs/shopping-providers.md concluded, never live
+        capability: only `available` can take a list today. Without `q` the
+        whole list comes back, ordered by status then name.
+      operationId: listStoreCatalog
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          description: |
+            A case-insensitive prefix of a store's name, key, or one of its
+            aliases ("krog", "fry's", "quality food").
+          schema:
+            type: string
+            maxLength: 100
+            example: krog
+      responses:
+        "200":
+          description: The catalog.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoreCatalog"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+  /api/v1/households/{householdId}/shopping/requests:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: List the household's store requests
+      description: Newest first. Requires `household.view`.
+      operationId: listStoreRequests
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The household's store requests.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoreRequestList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      summary: Request a store
+      description: |
+        Asks DinnerOS to support a store, which is demand data and makes
+        nothing usable. Send `key` for a catalog entry, or `name` for a store
+        the catalog doesn't list; a typed name is matched against catalog
+        names, keys, and aliases first, so "frys" records as Fry's rather
+        than a new entry. Idempotent per household and store: a second
+        request updates the note and returns `200`, keeping the first
+        requester and time. At most 25 stores per household. Requires
+        `household.view`.
+      operationId: requestStore
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreRequestRequest"
+      responses:
+        "201":
+          description: Recorded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoreRequestEnvelope"
+        "200":
+          description: The note was updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoreRequestEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/StoreRequestLimit"
+  /api/v1/households/{householdId}/shopping/requests/{requestId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/StoreRequestID"
+    delete:
+      summary: Withdraw a store request
+      description: Requires `household.view`.
+      operationId: deleteStoreRequest
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Withdrawn.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/recipes/{recipeId}/rating:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -3437,6 +3558,13 @@ components:
       schema:
         type: string
         example: 66e5a1f2c3b4a5d6e7f80b01
+    StoreRequestID:
+      name: requestId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: 66e5a1f2c3b4a5d6e7f80d01
   schemas:
     RecipeSummary:
       type: object
@@ -8308,6 +8436,107 @@ components:
                 $ref: "#/components/schemas/PantryPurchase"
               item:
                 $ref: "#/components/schemas/PantryItem"
+    StoreCatalogEntry:
+      type: object
+      required: [key, name, kind, status, aliases, note, requestedByHousehold, requests]
+      properties:
+        key:
+          type: string
+          example: kroger
+        name:
+          type: string
+          example: Kroger
+        kind:
+          type: string
+          enum: [grocer, delivery, warehouse, other]
+        status:
+          type: string
+          enum: [available, researched, unsupported]
+          description: |
+            What docs/shopping-providers.md concluded, not live capability.
+            `available`: DinnerOS can hand a list to it today. `researched`:
+            that document assessed it. `unsupported`: no integration and no
+            research yet.
+        aliases:
+          type: array
+          description: Other spellings `?q=` matches.
+          items:
+            type: string
+        note:
+          type: [string, "null"]
+          description: One line on what the research found; null when there is none.
+          example: Public API with cart write; needs customer sign-in
+        requestedByHousehold:
+          type: boolean
+          description: Whether the caller's household already asked for this store.
+        requests:
+          type: integer
+          description: Households that asked for this store, across all of DinnerOS.
+    StoreCatalog:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoreCatalogEntry"
+    StoreRequestRequest:
+      type: object
+      description: Send `key` or `name`, not both.
+      properties:
+        key:
+          type: string
+          description: A catalog entry's key.
+          example: kroger
+        name:
+          type: string
+          maxLength: 100
+          description: |
+            A store the catalog doesn't list. Trimmed, spaces collapsed, and
+            matched against catalog names, keys, and aliases before it is
+            recorded as its own entry.
+          example: Some Local Market
+        note:
+          type: string
+          maxLength: 280
+          example: closest to us
+    StoreRequest:
+      type: object
+      required: [id, key, name, status, note, requestedBy, requestedAt]
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+          example: kroger
+        name:
+          type: string
+          example: Kroger
+        status:
+          type: string
+          enum: [available, researched, unsupported]
+        note:
+          type: [string, "null"]
+        requestedBy:
+          type: string
+          description: The member who asked first; a later note doesn't change it.
+        requestedAt:
+          type: string
+          format: date-time
+    StoreRequestEnvelope:
+      type: object
+      required: [request]
+      properties:
+        request:
+          $ref: "#/components/schemas/StoreRequest"
+    StoreRequestList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoreRequest"
   responses:
     Forbidden:
       description: "`forbidden`: the caller is a member of the household, but their role doesn't allow this action."
@@ -8407,6 +8636,15 @@ components:
       description: |
         `conflict`: another request is confirming the same handoff line, or a
         pantry item kept changing concurrently. Retry.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    StoreRequestLimit:
+      description: |
+        `conflict`: the household already asks for the most stores it can
+        (25). Withdraw one first. Updating an existing request's note still
+        works at the limit.
       content:
         application/json:
           schema:

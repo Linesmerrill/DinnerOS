@@ -21,6 +21,8 @@ const (
 	SettingsCollection    = "shopping_settings"
 	PreferencesCollection = "shopping_product_preferences"
 	HandoffsCollection    = "shopping_handoffs"
+	// StoreRequestsCollection holds which stores each household asked for.
+	StoreRequestsCollection = "shopping_store_requests"
 )
 
 // Indexes returns the indexes MongoStore relies on.
@@ -53,14 +55,33 @@ func Indexes() []mongodb.IndexSet {
 				},
 			},
 		},
+		{
+			Collection: StoreRequestsCollection,
+			Indexes: []mongo.IndexModel{
+				{
+					Keys:    bson.D{{Key: "householdId", Value: 1}, {Key: "key", Value: 1}},
+					Options: options.Index().SetUnique(true).SetName("householdId_key_unique"),
+				},
+				{
+					Keys:    bson.D{{Key: "householdId", Value: 1}, {Key: "requestedAt", Value: -1}},
+					Options: options.Index().SetName("householdId_requestedAt"),
+				},
+				{
+					// The global count groups by key.
+					Keys:    bson.D{{Key: "key", Value: 1}},
+					Options: options.Index().SetName("key"),
+				},
+			},
+		},
 	}
 }
 
 // MongoStore is the MongoDB implementation of Store.
 type MongoStore struct {
-	settings    *mongo.Collection
-	preferences *mongo.Collection
-	handoffs    *mongo.Collection
+	settings      *mongo.Collection
+	preferences   *mongo.Collection
+	handoffs      *mongo.Collection
+	storeRequests *mongo.Collection
 }
 
 var _ Store = (*MongoStore)(nil)
@@ -68,9 +89,10 @@ var _ Store = (*MongoStore)(nil)
 // NewMongoStore returns a store using db.
 func NewMongoStore(db *mongo.Database) *MongoStore {
 	return &MongoStore{
-		settings:    db.Collection(SettingsCollection),
-		preferences: db.Collection(PreferencesCollection),
-		handoffs:    db.Collection(HandoffsCollection),
+		settings:      db.Collection(SettingsCollection),
+		preferences:   db.Collection(PreferencesCollection),
+		handoffs:      db.Collection(HandoffsCollection),
+		storeRequests: db.Collection(StoreRequestsCollection),
 	}
 }
 

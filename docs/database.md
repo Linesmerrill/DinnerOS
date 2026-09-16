@@ -309,8 +309,18 @@ Implemented in `internal/shopping` (Phase 8a, [shopping-providers.md](shopping-p
 | `shopping_settings` | householdId, provider (`walmart`), storeId, updatedBy, updatedAt | **unique** `{householdId}` |
 | `shopping_product_preferences` | householdId, provider, ingredientKey, ingredientName, productId, displayName, packageSize{quantity, quantityValue, unit}, createdBy, createdAt, updatedBy, updatedAt | **unique** `{householdId, provider, ingredientKey}` |
 | `shopping_handoffs` | householdId, week, provider, storeId, lines[{id, ingredientKey, name, category, amounts[{quantity, quantityValue, unit}], unquantified, groceryStatus, productId, productName, packageSize{}, computedPackages, packages, reason, status (`pending`/`confirmed`/`skipped`), claimedAt, confirmedPackages, purchaseId, confirmedBy, confirmedAt, skippedBy, skippedAt}], excluded[{ingredientKey, name, category, amounts[], unquantified, groceryStatus, reason}], links[{url, lineIds[], itemCount}], affiliateTracked, createdBy, createdAt, updatedAt | `{householdId, createdAt: -1}`; `{householdId, week, createdAt: -1}` |
+| `shopping_store_requests` | householdId, key, name, note, requestedBy, requestedAt, updatedAt | **unique** `{householdId, key}`; `{householdId, requestedAt: -1}`; `{key}` |
 
 - **Settings** are one document per household, replaced with an upsert.
+- **Store requests** are the grocers and delivery services a household asked
+  DinnerOS to support: Phase 8a's demand signal, not a provider. They are
+  upserted on the unique key, so asking twice updates `note` and `updatedAt`
+  only — `_id`, `requestedBy`, and `requestedAt` are `$setOnInsert`. `key` is
+  a catalog key (`kroger`) or one normalized from a typed name
+  (`some-local-market`). The catalog itself lives in code, not in the
+  database, so `status` is never stored (it's read from the catalog) and
+  `name` matters for the free-text case. At most 25 per household. `{key}`
+  backs the global count, a `$group` over the collection.
 - **Saved products** are upserted on the unique key: `_id`, `createdBy`, and
   `createdAt` are `$setOnInsert`. `ingredientKey` is the grocery line key (a
   catalog ingredient ID hex, or `name:` + a normalized name). `productId` is
