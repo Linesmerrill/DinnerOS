@@ -69,7 +69,8 @@ platform :ios do
       "DEVELOPMENT_TEAM=#{ENV['DEVELOPMENT_TEAM'].shellescape}",
       "CURRENT_PROJECT_VERSION=#{build_number}",
       "CODE_SIGN_STYLE=Manual",
-      "CODE_SIGN_IDENTITY=Apple Distribution",
+      # The value has a space, so it has to survive the shell as one argument.
+      "CODE_SIGN_IDENTITY=#{'Apple Distribution'.shellescape}",
       "PROVISIONING_PROFILE_SPECIFIER=#{profile_name.shellescape}"
     ]
     build_settings << "API_BASE_URL=#{ENV['API_BASE_URL'].shellescape}" unless ENV["API_BASE_URL"].to_s.empty?
