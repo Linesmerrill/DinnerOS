@@ -1,11 +1,12 @@
 {
-  "version": 3,
+  "version": 4,
   "note": "Generic, general-knowledge approximations written for DinnerOS, except where a per-specialty note records a ratio the household confirmed. Packet sizes are estimates. Amounts are exact fractions in DinnerOS unit codes. Every entry carries a store alternative a normal grocery store can fill; a per-specialty note flags the ones whose store route needs a caveat.",
   "specialties": [
     {
       "id": "chicken-stock-concentrate",
       "name": "Chicken Stock Concentrate",
       "category": "pantry",
+      "note": "A jar of concentrated chicken bouillon base in the fridge replaces this. The 1 tsp per packet below is an UNVERIFIED placeholder, not a measured conversion: packet strength varies by supplier. Measure one packet against the jar once and correct it here.",
       "unitSizes": [
         { "per": "count", "quantity": "2", "unit": "tsp" },
         { "per": "package", "quantity": "2", "unit": "tsp" }
@@ -15,8 +16,8 @@
         {
           "id": "chicken-stock-concentrate.store",
           "type": "store_alternative",
-          "name": "Chicken bouillon base",
-          "notes": "Dissolve in the liquid the recipe already calls for. Low-sodium bases may need a little more.",
+          "name": "Concentrated chicken bouillon base",
+          "notes": "Dissolve in the liquid the recipe already calls for. Treat the amount as untested until a packet has been measured against the jar; taste and adjust rather than trusting it.",
           "per": { "quantity": "1", "unit": "count" },
           "ingredients": [{ "name": "Chicken Bouillon Base", "quantity": "1", "unit": "tsp" }]
         }
@@ -26,6 +27,7 @@
       "id": "beef-stock-concentrate",
       "name": "Beef Stock Concentrate",
       "category": "pantry",
+      "note": "A jar of concentrated beef bouillon base in the fridge replaces this. The 1 tsp per packet below is an UNVERIFIED placeholder, not a measured conversion: packet strength varies by supplier. Measure one packet against the jar once and correct it here.",
       "unitSizes": [
         { "per": "count", "quantity": "2", "unit": "tsp" },
         { "per": "package", "quantity": "2", "unit": "tsp" }
@@ -35,8 +37,8 @@
         {
           "id": "beef-stock-concentrate.store",
           "type": "store_alternative",
-          "name": "Beef bouillon base",
-          "notes": "Dissolve in the liquid the recipe already calls for.",
+          "name": "Concentrated beef bouillon base",
+          "notes": "Dissolve in the liquid the recipe already calls for. Treat the amount as untested until a packet has been measured against the jar; taste and adjust rather than trusting it.",
           "per": { "quantity": "1", "unit": "count" },
           "ingredients": [{ "name": "Beef Bouillon Base", "quantity": "1", "unit": "tsp" }]
         }
@@ -47,6 +49,7 @@
       "name": "Veggie Stock Concentrate",
       "aliases": ["Vegetable Stock Concentrate"],
       "category": "pantry",
+      "note": "A jar of concentrated vegetable bouillon base in the fridge replaces this. The 1 tsp per packet below is an UNVERIFIED placeholder, not a measured conversion: packet strength varies by supplier. Measure one packet against the jar once and correct it here.",
       "unitSizes": [
         { "per": "count", "quantity": "2", "unit": "tsp" },
         { "per": "package", "quantity": "2", "unit": "tsp" }
@@ -56,8 +59,8 @@
         {
           "id": "veggie-stock-concentrate.store",
           "type": "store_alternative",
-          "name": "Vegetable bouillon base",
-          "notes": "Dissolve in the liquid the recipe already calls for.",
+          "name": "Concentrated vegetable bouillon base",
+          "notes": "Dissolve in the liquid the recipe already calls for. Treat the amount as untested until a packet has been measured against the jar; taste and adjust rather than trusting it.",
           "per": { "quantity": "1", "unit": "count" },
           "ingredients": [{ "name": "Vegetable Bouillon Base", "quantity": "1", "unit": "tsp" }]
         }
@@ -67,6 +70,7 @@
       "id": "mushroom-stock-concentrate",
       "name": "Mushroom Stock Concentrate",
       "category": "pantry",
+      "note": "Not one of the household's own three bases, so the mix below is our approximation. The 1 tsp of base per packet carries the same UNVERIFIED conversion as the other stock concentrates: measure a packet against the jar before trusting it.",
       "unitSizes": [
         { "per": "count", "quantity": "2", "unit": "tsp" },
         { "per": "package", "quantity": "2", "unit": "tsp" }
@@ -90,6 +94,7 @@
       "id": "pork-ramen-stock-concentrate",
       "name": "Pork Ramen Stock Concentrate",
       "category": "pantry",
+      "note": "Not one of the household's own three bases, so the mix below is our approximation. The 1 tsp of base per packet carries the same UNVERIFIED conversion as the other stock concentrates: measure a packet against the jar before trusting it.",
       "unitSizes": [
         { "per": "count", "quantity": "2", "unit": "tsp" },
         { "per": "package", "quantity": "2", "unit": "tsp" }
@@ -211,9 +216,9 @@
           "id": "sweet-thai-chili-sauce.store",
           "type": "store_alternative",
           "name": "Bottled sweet chili sauce",
-          "notes": "Sold in most grocery stores' international aisle.",
+          "notes": "Sold in most grocery stores' international aisle. Straight from the bottle, tablespoon for tablespoon.",
           "per": { "quantity": "1", "unit": "tbsp" },
-          "ingredients": [{ "name": "Sweet Chili Sauce", "quantity": "1", "unit": "tbsp" }]
+          "ingredients": [{ "name": "Bottled Sweet Chili Sauce", "quantity": "1", "unit": "tbsp", "category": "condiments" }]
         }
       ]
     },
@@ -319,6 +324,7 @@
       "id": "cream-sauce-base",
       "name": "Cream Sauce Base",
       "category": "pantry",
+      "note": "Deliberately not stored: butter, then flour, then milk, made in the pan in about two minutes while the rest of the dish cooks. There is no batch option on purpose — this one does not earn a container in the fridge.",
       "unitSizes": [
         { "per": "count", "quantity": "3", "unit": "tbsp" },
         { "per": "package", "quantity": "3", "unit": "tbsp" }
@@ -328,12 +334,13 @@
         {
           "id": "cream-sauce-base.store",
           "type": "store_alternative",
-          "name": "Heavy cream with cream cheese",
-          "notes": "Stir in off the heat, or simmer gently so it doesn't split.",
+          "name": "Butter, flour, and milk, made in the pan",
+          "notes": "Melt the butter, stir in the flour and cook it for a minute, then whisk in the milk and let it thicken. Made fresh each time, not ahead.",
           "per": { "quantity": "1", "unit": "tbsp" },
           "ingredients": [
-            { "name": "Heavy Cream", "quantity": "2", "unit": "tsp" },
-            { "name": "Cream Cheese", "quantity": "1", "unit": "tsp" }
+            { "name": "Butter", "quantity": "1", "unit": "tsp" },
+            { "name": "All-Purpose Flour", "quantity": "1", "unit": "tsp" },
+            { "name": "Milk", "quantity": "2", "unit": "tsp" }
           ]
         }
       ]
@@ -390,33 +397,32 @@
         { "per": "count", "quantity": "1", "unit": "tbsp" },
         { "per": "package", "quantity": "1", "unit": "tbsp" }
       ],
+      "note": "Worth keeping a shaker of. It is primarily paprika and garlic, so the starting point is 1:1 paprika to garlic powder, with a little onion powder if you want it. Adjust the shaker from there rather than treating the ratio as fixed.",
       "defaultOptionId": "fry-seasoning.batch",
       "options": [
         {
           "id": "fry-seasoning.store",
           "type": "store_alternative",
-          "name": "Garlic paprika seasoning from the spice rack",
+          "name": "Equal paprika and garlic powder from the spice rack",
+          "notes": "Straight 1:1. A pinch of onion powder rounds it out, but it is optional and left out here so the amounts stay exact.",
           "per": { "quantity": "1", "unit": "tbsp" },
           "ingredients": [
-            { "name": "Paprika", "quantity": "1", "unit": "tsp" },
-            { "name": "Garlic Powder", "quantity": "1", "unit": "tsp" },
-            { "name": "Onion Powder", "quantity": "1/2", "unit": "tsp" },
-            { "name": "Black Pepper", "quantity": "1/2", "unit": "tsp" }
+            { "name": "Paprika", "quantity": "3/2", "unit": "tsp" },
+            { "name": "Garlic Powder", "quantity": "3/2", "unit": "tsp" }
           ]
         },
         {
           "id": "fry-seasoning.batch",
           "type": "house_made_batch",
-          "name": "Fry seasoning (house blend)",
+          "name": "Fry seasoning (house shaker)",
+          "notes": "Mix a shaker and keep it by the stove. The onion powder is the optional part; leave it out for a straight 1:1 shaker.",
           "ingredients": [
-            { "name": "Paprika", "quantity": "5/2", "unit": "tbsp" },
-            { "name": "Garlic Powder", "quantity": "5/2", "unit": "tbsp" },
-            { "name": "Onion Powder", "quantity": "3/2", "unit": "tbsp" },
-            { "name": "Black Pepper", "quantity": "1", "unit": "tbsp" },
-            { "name": "Dried Parsley", "quantity": "1/2", "unit": "tbsp", "category": "spices" }
+            { "name": "Paprika", "quantity": "4", "unit": "tbsp" },
+            { "name": "Garlic Powder", "quantity": "4", "unit": "tbsp" },
+            { "name": "Onion Powder", "quantity": "1", "unit": "tbsp" }
           ],
-          "steps": ["Stir everything together.", "Store in an airtight jar."],
-          "yield": { "quantity": "8", "unit": "tbsp" },
+          "steps": ["Stir everything together.", "Pour into a shaker or an airtight jar."],
+          "yield": { "quantity": "9", "unit": "tbsp" },
           "shelfLifeDays": 180
         }
       ]
@@ -472,32 +478,33 @@
         { "per": "count", "quantity": "1", "unit": "tbsp" },
         { "per": "package", "quantity": "1", "unit": "tbsp" }
       ],
-      "defaultOptionId": "tuscan-heat-spice.store",
+      "note": "The household's own shaker: 4 Tbsp Italian seasoning, 2 Tbsp garlic powder, and 1/2 to 1 tsp cayenne. The batch below uses 3/4 tsp cayenne, in the middle of that range; the store route is the same blend measured out per tablespoon.",
+      "defaultOptionId": "tuscan-heat-spice.batch",
       "options": [
         {
           "id": "tuscan-heat-spice.store",
           "type": "store_alternative",
-          "name": "Italian seasoning with chili flakes",
+          "name": "Italian seasoning, garlic powder, and cayenne",
+          "notes": "The shaker's own ratio, measured straight into the pan for one tablespoon.",
           "per": { "quantity": "1", "unit": "tbsp" },
           "ingredients": [
-            { "name": "Italian Seasoning", "quantity": "5/2", "unit": "tsp" },
-            { "name": "Red Pepper Flakes", "quantity": "1/2", "unit": "tsp" }
+            { "name": "Italian Seasoning", "quantity": "2", "unit": "tsp" },
+            { "name": "Garlic Powder", "quantity": "1", "unit": "tsp" },
+            { "name": "Cayenne Pepper", "quantity": "1/8", "unit": "tsp" }
           ]
         },
         {
           "id": "tuscan-heat-spice.batch",
           "type": "house_made_batch",
-          "name": "Spicy Italian herb blend (house blend)",
+          "name": "Tuscan heat spice (house shaker)",
+          "notes": "Use 1/2 tsp cayenne for a milder shaker or a full teaspoon for more heat.",
           "ingredients": [
-            { "name": "Dried Basil", "quantity": "2", "unit": "tbsp", "category": "spices" },
-            { "name": "Dried Oregano", "quantity": "2", "unit": "tbsp" },
-            { "name": "Garlic Powder", "quantity": "1", "unit": "tbsp" },
-            { "name": "Red Pepper Flakes", "quantity": "1", "unit": "tbsp" },
-            { "name": "Dried Rosemary", "quantity": "1", "unit": "tbsp" },
-            { "name": "Fennel Seed", "quantity": "1", "unit": "tbsp", "category": "spices" }
+            { "name": "Italian Seasoning", "quantity": "4", "unit": "tbsp" },
+            { "name": "Garlic Powder", "quantity": "2", "unit": "tbsp" },
+            { "name": "Cayenne Pepper", "quantity": "3/4", "unit": "tsp" }
           ],
-          "steps": ["Lightly crush the rosemary and fennel seed.", "Stir in everything else and store in an airtight jar."],
-          "yield": { "quantity": "8", "unit": "tbsp" },
+          "steps": ["Stir everything together.", "Pour into a shaker or an airtight jar."],
+          "yield": { "quantity": "6", "unit": "tbsp" },
           "shelfLifeDays": 180
         }
       ]
@@ -593,39 +600,18 @@
         { "per": "count", "quantity": "1", "unit": "tbsp" },
         { "per": "package", "quantity": "1", "unit": "tbsp" }
       ],
-      "defaultOptionId": "shawarma-spice-blend.batch",
+      "note": "Buy a good shawarma blend rather than cloning it: it takes too many separate spices to be worth mixing at home. Sold with the spices or in an international grocery.",
+      "defaultOptionId": "shawarma-spice-blend.store",
       "options": [
         {
           "id": "shawarma-spice-blend.store",
           "type": "store_alternative",
-          "name": "Warm spices from the spice rack",
+          "name": "Bought shawarma blend",
+          "notes": "Straight from the jar, tablespoon for tablespoon.",
           "per": { "quantity": "1", "unit": "tbsp" },
           "ingredients": [
-            { "name": "Ground Cumin", "quantity": "1", "unit": "tsp" },
-            { "name": "Ground Coriander", "quantity": "1/2", "unit": "tsp" },
-            { "name": "Smoked Paprika", "quantity": "1/2", "unit": "tsp" },
-            { "name": "Ground Turmeric", "quantity": "1/2", "unit": "tsp" },
-            { "name": "Garlic Powder", "quantity": "1/4", "unit": "tsp" },
-            { "name": "Ground Cinnamon", "quantity": "1/4", "unit": "tsp" }
+            { "name": "Shawarma Seasoning Blend", "quantity": "1", "unit": "tbsp", "category": "spices" }
           ]
-        },
-        {
-          "id": "shawarma-spice-blend.batch",
-          "type": "house_made_batch",
-          "name": "Shawarma-style spice blend (house blend)",
-          "ingredients": [
-            { "name": "Ground Cumin", "quantity": "2", "unit": "tbsp" },
-            { "name": "Ground Coriander", "quantity": "1", "unit": "tbsp" },
-            { "name": "Smoked Paprika", "quantity": "1", "unit": "tbsp" },
-            { "name": "Ground Turmeric", "quantity": "2", "unit": "tsp" },
-            { "name": "Garlic Powder", "quantity": "2", "unit": "tsp" },
-            { "name": "Ground Cinnamon", "quantity": "1", "unit": "tsp" },
-            { "name": "Ground Allspice", "quantity": "1/2", "unit": "tsp", "category": "spices" },
-            { "name": "Cayenne Pepper", "quantity": "1/2", "unit": "tsp" }
-          ],
-          "steps": ["Stir everything together.", "Store in an airtight jar."],
-          "yield": { "quantity": "6", "unit": "tbsp" },
-          "shelfLifeDays": 180
         }
       ]
     },
@@ -724,37 +710,18 @@
         { "per": "count", "quantity": "1", "unit": "tbsp" },
         { "per": "package", "quantity": "1", "unit": "tbsp" }
       ],
-      "defaultOptionId": "blackening-spice.batch",
+      "note": "Buy a standard blackening or Cajun blend off the shelf; the two are close enough to use interchangeably here. Not worth mixing at home.",
+      "defaultOptionId": "blackening-spice.store",
       "options": [
         {
           "id": "blackening-spice.store",
           "type": "store_alternative",
-          "name": "Smoky paprika rub from the spice rack",
+          "name": "Bought blackening or Cajun blend",
+          "notes": "Straight from the jar, tablespoon for tablespoon. Cajun blends run saltier, so hold back on added salt.",
           "per": { "quantity": "1", "unit": "tbsp" },
           "ingredients": [
-            { "name": "Smoked Paprika", "quantity": "3/2", "unit": "tsp" },
-            { "name": "Garlic Powder", "quantity": "1/2", "unit": "tsp" },
-            { "name": "Onion Powder", "quantity": "1/2", "unit": "tsp" },
-            { "name": "Dried Thyme", "quantity": "1/4", "unit": "tsp" },
-            { "name": "Cayenne Pepper", "quantity": "1/4", "unit": "tsp" }
+            { "name": "Cajun Blackening Seasoning", "quantity": "1", "unit": "tbsp", "category": "spices" }
           ]
-        },
-        {
-          "id": "blackening-spice.batch",
-          "type": "house_made_batch",
-          "name": "Blackening spice (house blend)",
-          "ingredients": [
-            { "name": "Smoked Paprika", "quantity": "3", "unit": "tbsp" },
-            { "name": "Garlic Powder", "quantity": "1", "unit": "tbsp" },
-            { "name": "Onion Powder", "quantity": "1", "unit": "tbsp" },
-            { "name": "Dried Thyme", "quantity": "1", "unit": "tsp" },
-            { "name": "Dried Oregano", "quantity": "1", "unit": "tsp" },
-            { "name": "Black Pepper", "quantity": "1", "unit": "tsp" },
-            { "name": "Cayenne Pepper", "quantity": "1", "unit": "tsp" }
-          ],
-          "steps": ["Stir everything together.", "Store in an airtight jar."],
-          "yield": { "quantity": "6", "unit": "tbsp" },
-          "shelfLifeDays": 180
         }
       ]
     },
