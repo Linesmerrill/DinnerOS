@@ -266,7 +266,7 @@ keep today's spelling — the most common one the catalog uses.
 | Ratings and feedback tags | `recipe_ratings` (every member) | `Rating{itemId, memberId, score, tags}` |
 | Order history | `recipes.orderWeeks` | `ordered` interactions |
 | Planned meals, weekday affinity | `weekly_plans` entries, previous 25 weeks | `planned` interactions with a day |
-| Cooked and skipped | `recipe.cooked` / `recipe.skipped` events, 52 weeks | `cooked` / `skipped` interactions |
+| Cooked and skipped | `recipe.cooked` / `recipe.skipped` events, 52 weeks | `cooked` / `skipped` interactions, a skip carrying its `reason` |
 | This week's plan | `weekly_plans` for the week | fixed meals (occupy days, count toward meals and variety) |
 | Pantry running low | pantry items with status `low` | `context.pantryLow` |
 
@@ -298,7 +298,7 @@ signals.
 | `rating` | −1…1 | (mean household score − 3) / 2 | 0.30 |
 | `feedback` | −1…1 | make-again +0.6, kid favorite +0.4, great leftovers +0.2, kids disliked −0.4, too spicy −0.3, too bland −0.2, too much work −0.3 (−0.6 on weeknights) | 0.20 |
 | `familiarity` | 0…1 | log₂(1 + ordered + planned + cooked) / log₂ 9 | 0.10 |
-| `conversion` | −1…1 | 2 × (cooked + 1) / (cooked + skipped + 2) − 1 | 0.10 |
+| `conversion` | −1…1 | 2 × (cooked + 1) / (cooked + skipped + 2) − 1, counting only skips that were about the meal. A skip whose reason was `ate-out`, `missing-ingredients`, or `no-time` is left out of both sides: it is evidence of neither. A skip with no reason, `not-in-the-mood`, or `other` counts as before | 0.10 |
 | `recency` | −1…0.3 | nearest week had: ≤1 → −1, 2 → −0.6, 3 → −0.4, 4 → −0.25, ≤8 → −0.1; ≥10 weeks for a familiar, well-rated meal → +0.3 | 0.25 |
 | `weekdayAffinity` | 0…1 | share of the meal's planned days that were this weekday (needs 2) | 0.10 |
 | `taste` | −1…1 | liked cuisine +0.4, tag +0.4, protein +0.3; each disliked −0.5 | 0.25 × (1 + (1 − confidence)) |
@@ -402,7 +402,7 @@ couldn't be filled are listed as `unfilled` (`no_candidates`,
   catalog, ratings, and history are normalized and ordered internally, so their
   order doesn't matter (tested). Ties break with an FNV-1a hash of
   household ID, week, attempt, model version, and item ID.
-- `modelVersion` (`baseline-2026.4`) is stored on every proposal and event.
+- `modelVersion` (`baseline-2026.5`) is stored on every proposal and event.
   `inputsHash` fingerprints the provider request, so identical inputs can be
   recognized.
 - **Tuning:** change `baseline.DefaultWeights` (or pass `Options.Weights`) and

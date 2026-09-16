@@ -122,6 +122,26 @@ const (
 	KindSkipped InteractionKind = "skipped"
 )
 
+// Skip reasons a KindSkipped interaction may carry, when the tenant knows why
+// a planned meal wasn't cooked. Only some of them say anything about the meal:
+// a meal nobody was in the mood for is evidence about the meal, while one the
+// household missed because it ate out, lacked an ingredient, or ran out of
+// time is evidence about the evening. A provider that receives no reason has
+// to read every skip the same way, so sending one is what lets a week the
+// household simply didn't get to stop looking like a dislike.
+const (
+	// SkipNoTime means the evening ran out of time.
+	SkipNoTime = "no-time"
+	// SkipAteOut means the household ate elsewhere.
+	SkipAteOut = "ate-out"
+	// SkipMissingIngredients means something the meal needed wasn't on hand.
+	SkipMissingIngredients = "missing-ingredients"
+	// SkipNotInTheMood is about the meal: nobody wanted it that night.
+	SkipNotInTheMood = "not-in-the-mood"
+	// SkipOther is a reason the household didn't classify.
+	SkipOther = "other"
+)
+
 // Interaction is one past event involving an item.
 type Interaction struct {
 	ItemID string
@@ -130,6 +150,9 @@ type Interaction struct {
 	Week string
 	// Day is the weekday, when known (planned meals with a day).
 	Day Day
+	// Reason is why a KindSkipped meal was skipped, when known: one of the
+	// Skip constants. Empty when unknown or not applicable.
+	Reason string
 }
 
 // Assignment is a meal fixed on a day of the week being planned. Day is empty

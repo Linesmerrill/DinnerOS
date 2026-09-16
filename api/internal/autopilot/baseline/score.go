@@ -137,10 +137,12 @@ func (m *model) score(s *slot, it *item) cand {
 	}
 	explain("familiar", familiarText, add(SignalFamiliarity, familiarity, w.Familiarity), false)
 
-	// Planned → cooked conversion.
+	// Planned → cooked conversion. Skips that were about the household's week
+	// rather than the meal don't count at all: a dinner the household missed
+	// because it ate out is evidence for nothing.
 	var conversion float64
 	var conversionText string
-	if n := st.cooked + st.skipped; n > 0 {
+	if n := st.cooked + st.skipped - st.skippedAside; n > 0 {
 		conversion = 2*(float64(st.cooked)+1)/(float64(n)+2) - 1
 		if conversion >= 0.3 {
 			conversionText = "You usually cook it when it's planned"
