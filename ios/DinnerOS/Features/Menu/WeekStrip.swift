@@ -44,6 +44,21 @@ nonisolated enum WeekStripMetrics {
         return (lines + lineSpacing * 2 + verticalPadding * 2).rounded(.up)
     }
 
+    /// The height to reserve for the collapsed strip at `size`: the one line it draws — the
+    /// selected week's dates, at the same `.subheadline` the pill uses for them — plus the same
+    /// vertical padding.
+    ///
+    /// Derived the same way as `height(for:)` and for the same reason (#455): a constant here
+    /// would be a constant that has to be right at every text size, and the last one was not.
+    /// Asking the font what the line measures means the collapsed bar is as tall as what it
+    /// draws, whatever the reader's text size.
+    static func collapsedHeight(for size: DynamicTypeSize) -> CGFloat {
+        let traits = UITraitCollection(
+            preferredContentSizeCategory: contentSizeCategory(for: min(size, largestTypeSize)))
+        let line = UIFont.preferredFont(forTextStyle: .subheadline, compatibleWith: traits).lineHeight
+        return (line + verticalPadding * 2).rounded(.up)
+    }
+
     private static func contentSizeCategory(for size: DynamicTypeSize) -> UIContentSizeCategory {
         switch size {
         case .xSmall: .extraSmall
@@ -66,7 +81,18 @@ nonisolated enum WeekStripMetrics {
 /// The week pills across the top of the Menu screen: a **Past** link, then one pill per week
 /// with its dates and counts. It scrolls to the selected week and loads earlier weeks when
 /// scrolled back, down to the household's first week.
+///
+/// It has two forms. Expanded, it is the pills. Collapsed — while the Menu is scrolled away from
+/// the top (`MenuChromeCollapse`) — it is one line naming the week you are on, which expands the
+/// pills again when tapped. The week itself never disappears: it is the context the rest of the
+/// screen is about, and the navigation stays one tap away rather than nowhere.
 struct WeekStrip: View {
+    /// Whether the pills are showing. `false` draws the one-line form instead.
+    var isExpanded = true
+
+    /// Tapped on the collapsed bar, to ask for the pills back.
+    var onExpand: () -> Void = {}
+
     @Environment(MenuStore.self) private var menu
     @Environment(PlanStore.self) private var plans
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -80,6 +106,76 @@ struct WeekStrip: View {
     }
 
     var body: some View {
+        Group {
+            if isExpanded {
+                pills
+            } else {
+                collapsedBar
+            }
+        }
+        .padding(.vertical, 8)
+        .background(.bar)
+        .overlay(alignment: .bottom) { Divider() }
+        .onChange(of: plans.week, initial: true) { _, week in
+            scrollTo(week)
+        }
+        .onChange(of: isExpanded) { _, expanded in
+            if expanded {
+                scrollTo(plans.week)
+            } else {
+                // There is no horizontal ScrollView while collapsed, and so nothing holding the
+                // position. Forget it, so the next strip to appear asks for the selected week
+                // instead of starting at its first pill.
+                scrolledWeek = nil
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Weeks")
+    }
+
+    /// The strip in one line: the week you are on, and a way back to the rest of them.
+    private var collapsedBar: some View {
+        Button(action: onExpand) {
+            HStack(spacing: 6) {
+                Text(collapsedTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            // Derived from the line it draws, for the same reason the pills' height is (#455).
+            .frame(height: WeekStripMetrics.collapsedHeight(for: dynamicTypeSize))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .dynamicTypeSize(...WeekStripMetrics.largestTypeSize)
+        .accessibilityLabel(collapsedLabel)
+        .accessibilityHint("Shows every week")
+    }
+
+    /// The shown week, named the way its pill names it.
+    private var collapsedTitle: String {
+        let range = plans.week.rangeLabel()
+        guard let name = MenuFormat.relativeWeekName(plans.week, current: menu.currentWeek) else {
+            return range
+        }
+        return "\(name) · \(range)"
+    }
+
+    /// The same, plus the count the pill shows, so collapsing costs VoiceOver nothing.
+    private var collapsedLabel: String {
+        var parts = [collapsedTitle]
+        let item = menu.stripItems.first { $0.week == plans.week }
+        if let item, let detail = MenuFormat.weekPillDetail(item.summary, timing: item.timing) {
+            parts.append(detail)
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    private var pills: some View {
         HStack(spacing: 8) {
             NavigationLink(value: PastWeeksRoute()) {
                 Label("Past", systemImage: "clock.arrow.circlepath")
@@ -127,14 +223,6 @@ struct WeekStrip: View {
         }
         // The pills stop growing where `pillHeight` stops, so they always fit what it reserves.
         .dynamicTypeSize(...WeekStripMetrics.largestTypeSize)
-        .padding(.vertical, 8)
-        .background(.bar)
-        .overlay(alignment: .bottom) { Divider() }
-        .onChange(of: plans.week, initial: true) { _, week in
-            scrollTo(week)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Weeks")
     }
 
     private func select(_ week: ISOWeek) {
@@ -243,4 +331,30 @@ struct WeekPill: View {
     }
     .menuPreviewEnvironment()
     .preferredColorScheme(.dark)
+}
+
+#Preview("Week strip, collapsed") {
+    NavigationStack {
+        Color(.systemGroupedBackground)
+            .safeAreaInset(edge: .top, spacing: 0) { WeekStrip(isExpanded: false) }
+    }
+    .menuPreviewEnvironment()
+}
+
+#Preview("Week strip, collapsed, accessibility size") {
+    NavigationStack {
+        Color(.systemGroupedBackground)
+            .safeAreaInset(edge: .top, spacing: 0) { WeekStrip(isExpanded: false) }
+    }
+    .menuPreviewEnvironment()
+    .environment(\.dynamicTypeSize, .accessibility3)
+}
+
+#Preview("Week strip, collapsed, largest accessibility size") {
+    NavigationStack {
+        Color(.systemGroupedBackground)
+            .safeAreaInset(edge: .top, spacing: 0) { WeekStrip(isExpanded: false) }
+    }
+    .menuPreviewEnvironment()
+    .environment(\.dynamicTypeSize, .accessibility5)
 }
