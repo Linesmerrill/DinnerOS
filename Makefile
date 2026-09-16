@@ -60,6 +60,10 @@ ios-test: ## Run iOS unit tests on the simulator
 	# and a failing one look identical to anything reading the output.
 	xcodebuild -project $(IOS_DIR)/DinnerOS.xcodeproj -scheme $(IOS_SCHEME) -destination '$(IOS_DESTINATION)' test CODE_SIGNING_ALLOWED=NO
 
+.PHONY: docs-check
+docs-check: ## Check the decision log for reused row numbers
+	./scripts/check-decision-rows.sh
+
 ios-lint: ## Lint Swift sources with swift-format (bundled with Xcode)
 	xcrun swift-format lint --strict --recursive --configuration $(IOS_DIR)/.swift-format $(IOS_DIR)/DinnerOS $(IOS_DIR)/DinnerOSTests
 
