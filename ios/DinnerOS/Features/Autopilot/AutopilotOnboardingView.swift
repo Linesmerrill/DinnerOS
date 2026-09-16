@@ -283,6 +283,8 @@ struct AutopilotOnboardingView: View {
         case .equipment: String(localized: "What do you cook with?")
         case .weekdayRules: String(localized: "Any weekly habits?")
         case .novelty: String(localized: "Favorites or something new?")
+        // Not a step: pairing rules are made from suggestions, not from setup (`steps`).
+        case .pairings: String(localized: "What goes with dinner?")
         }
     }
 
@@ -302,6 +304,8 @@ struct AutopilotOnboardingView: View {
             String(localized: "For example, “Sunday: smoker night, chicken or pork, long cook OK.”")
         case .novelty:
             String(localized: "Autopilot can stick to meals you know or mix in new ones.")
+        case .pairings:
+            String(localized: "Add-ons like garlic bread with pasta. Kept in Autopilot Preferences.")
         }
     }
 }

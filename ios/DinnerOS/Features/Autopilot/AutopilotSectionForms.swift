@@ -25,6 +25,10 @@ struct AutopilotSectionForm: View {
             WeekdayRulesSectionForm(settings: $settings, vocabulary: vocabulary)
         case .novelty:
             NoveltySectionForm(settings: $settings, vocabulary: vocabulary)
+        case .pairings:
+            // Pairing rules have their own screen (`PairingRulesView`); onboarding skips them
+            // because rules are made from suggestions, not from the setup questions.
+            EmptyView()
         }
     }
 }

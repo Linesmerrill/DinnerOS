@@ -69,7 +69,13 @@ struct AutopilotPreferencesView: View {
             Section {
                 ForEach(AutopilotSection.allCases) { section in
                     NavigationLink {
-                        AutopilotSectionEditor(section: section)
+                        // Pairing rules are a list of rules, not one form, so they have
+                        // their own screen.
+                        if section == .pairings {
+                            PairingRulesView()
+                        } else {
+                            AutopilotSectionEditor(section: section)
+                        }
                     } label: {
                         SectionRow(section: section, profile: profile, vocabulary: autopilot.vocabulary)
                     }

@@ -137,6 +137,8 @@ nonisolated enum AutopilotFormat {
             return settings.weekdayRules.map { ruleTitle($0) }.joined(separator: ", ")
         case .novelty:
             return label(settings.novelty.rawValue, vocabulary?.novelty ?? [])
+        case .pairings:
+            return PairingFormat.sectionSummary(settings.pairings, vocabulary: vocabulary)
         }
     }
 
