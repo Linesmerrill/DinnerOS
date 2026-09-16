@@ -66,12 +66,14 @@ nonisolated enum MenuFixtures {
         """#.utf8)
 
     static func weekSummary(
-        _ week: String, timing: String, planned: Int = 0, cooked: Int = 0, ordered: Int = 0, status: String = "none"
+        _ week: String, timing: String, planned: Int = 0, addOns: Int = 0, cooked: Int = 0, ordered: Int = 0,
+        status: String = "none"
     ) -> String {
         let (start, end) = PlanFixtures.dates(for: week)
         return #"""
             {"week":"\#(week)","weekStart":"\#(start)","weekEnd":"\#(end)","timing":"\#(timing)",
-             "plannedCount":\#(planned),"cookedCount":\#(cooked),"orderedCount":\#(ordered),"status":"\#(status)"}
+             "plannedCount":\#(planned),"addOnCount":\#(addOns),"cookedCount":\#(cooked),
+             "orderedCount":\#(ordered),"status":"\#(status)"}
             """#
     }
 }
@@ -86,6 +88,11 @@ nonisolated final class FakeMenuServer: Sendable {
             ("recipe-1", "Test Kitchen Tacos"), ("recipe-2", "Sample Soup"), ("recipe-3", "Placeholder Pasta"),
             ("recipe-4", "Example Stir Fry"), ("recipe-5", "Synthetic Salad"),
         ]
+        /// What the strip reports for the current week, and for every past week.
+        var plannedCount = 2
+        var addOnCount = 0
+        var pastCooked = 1
+        var pastOrdered = 0
         var failMenu = false
         var failWeeks = false
         var failFilters = false
@@ -198,10 +205,13 @@ nonisolated final class FakeMenuServer: Sendable {
         for offset in -before...after {
             let week = around.adding(weeks: offset)
             if let earliest, week < earliest { continue }
+            let isCurrent = week == current
             items.append(
                 MenuFixtures.weekSummary(
-                    week.description, timing: timing(week, current: current), planned: week == current ? 2 : 0,
-                    cooked: week < current ? 1 : 0))
+                    week.description, timing: timing(week, current: current),
+                    planned: isCurrent ? state.plannedCount : 0, addOns: isCurrent ? state.addOnCount : 0,
+                    cooked: week < current ? state.pastCooked : 0,
+                    ordered: week < current ? state.pastOrdered : 0))
         }
         let earliestJSON = state.earliestWeek.map { #""\#($0)""# } ?? "null"
         return Data(#"{"items":[\#(items.joined(separator: ","))],"earliestWeek":\#(earliestJSON)}"#.utf8)

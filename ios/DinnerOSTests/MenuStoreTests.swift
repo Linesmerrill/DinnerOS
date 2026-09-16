@@ -157,6 +157,60 @@ struct MenuStoreTests {
         #expect(store.oldestWeek.description == "2026-W21")
     }
 
+    /// A week of seven dinners and a pairing's add-on is seven meals in the strip, the same as
+    /// in the bottom bar and Your Meals, however the week's plan reaches the app.
+    @Test func theStripCountsAddOnsApartFromMeals() async throws {
+        let server = FakeMenuServer()
+        server.update {
+            $0.plannedCount = 7
+            $0.addOnCount = 1
+        }
+        let harness = try await activated(server)
+        let store = harness.store
+        let thisWeek = try week("2026-W38")
+        let mains = (1...7).map { PlanFixtures.entry(id: "e\($0)", recipeID: "recipe-\($0)", name: "Meal \($0)") }
+
+        // What the server counted, before any plan is in hand.
+        #expect(MenuFormat.weekPillDetail(store.summary(for: thisWeek), timing: .current) == "7 meals")
+
+        // An older server doesn't mark the add-on entry, and the menu has no card for it, so
+        // the eight entries mustn't be read as eight dinners.
+        let unmarked = PlanFixtures.entry(id: "e8", recipeID: "addon-1", name: "Garlic Bread")
+        store.applyPlan(try plan(entries: mains + [unmarked]))
+        #expect(store.summary(for: thisWeek)?.plannedCount == 7)
+        #expect(store.summary(for: thisWeek)?.addOnCount == 1)
+        #expect(MenuFormat.weekPillDetail(store.summary(for: thisWeek), timing: .current) == "7 meals")
+
+        // A current server marks the entry itself, and the week counts out the same way.
+        let marked = PlanFixtures.entry(id: "e8", recipeID: "addon-1", name: "Garlic Bread", isAddon: true)
+        store.applyPlan(try plan(entries: mains + [marked]))
+        #expect(store.summary(for: thisWeek)?.plannedCount == 7)
+        #expect(store.summary(for: thisWeek)?.addOnCount == 1)
+
+        // Planning another dinner counts right away, with the add-on still apart from it.
+        let ninth = PlanFixtures.entry(id: "e9", recipeID: "recipe-9", name: "Meal 9")
+        store.applyPlan(try plan(entries: mains + [marked, ninth]))
+        #expect(MenuFormat.weekPillDetail(store.summary(for: thisWeek), timing: .current) == "8 meals")
+        #expect(store.summary(for: thisWeek)?.addOnCount == 1)
+    }
+
+    @Test func aPastWeekStillReadsOrdered() async throws {
+        let server = FakeMenuServer()
+        server.update {
+            $0.pastCooked = 0
+            $0.pastOrdered = 2
+        }
+        let harness = try await activated(server)
+        let lastWeek = try week("2026-W37")
+
+        #expect(MenuFormat.weekPillDetail(harness.store.summary(for: lastWeek), timing: .past) == "Ordered")
+
+        // Nothing was planned that week, and the plan in hand doesn't erase the delivery.
+        harness.store.applyPlan(try plan(week: "2026-W37", entries: []))
+        #expect(MenuFormat.weekPillDetail(harness.store.summary(for: lastWeek), timing: .past) == "Ordered")
+        #expect(harness.store.summary(for: lastWeek)?.orderedCount == 2)
+    }
+
     @Test func pickingAWeekBeforeTheStripExtendsIt() async throws {
         let harness = try await activated()
         let store = harness.store
@@ -258,7 +312,7 @@ struct MenuStoreTests {
         #expect(store.allMeals.items.first { $0.id == "recipe-1" }?.inPlan == true)
         #expect(store.allMeals.items.first { $0.id == "recipe-2" }?.inPlan == false)
         #expect(more.items.first { $0.id == "recipe-1" }?.inPlan == true)
-        #expect(store.weekSummaries["2026-W38"]?.plannedCount == 1)
+        #expect(store.summary(for: try week("2026-W38"))?.plannedCount == 1)
         #expect(store.card(forRecipeID: "recipe-1")?.inPlan == true)
 
         try await plans.deleteEntry(id: entry.id)
@@ -273,7 +327,7 @@ struct MenuStoreTests {
         store.applyPlan(try plan(week: "2026-W39", entries: [PlanFixtures.entry(id: "e1", recipeID: "recipe-1")]))
 
         #expect(store.menu?.sections.first?.items.first?.inPlan == false)
-        #expect(store.weekSummaries["2026-W39"]?.plannedCount == 1)
+        #expect(store.summary(for: try week("2026-W39"))?.plannedCount == 1)
     }
 
     @Test func aMenuLoadedAfterAPlanChangeKeepsTheNewerPlan() async throws {

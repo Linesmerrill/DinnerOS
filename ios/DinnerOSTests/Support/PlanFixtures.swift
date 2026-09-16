@@ -7,13 +7,16 @@ import Synchronization
 nonisolated enum PlanFixtures {
     static func entry(
         id: String, recipeID: String = "recipe-1", name: String = "Test Kitchen Tacos", day: String? = "tue",
-        date: String? = "2026-09-15", servings: Int = 2, note: String = "", imageURL: String? = nil
+        date: String? = "2026-09-15", servings: Int = 2, note: String = "", imageURL: String? = nil,
+        isAddon: Bool = false
     ) -> String {
         let dayField = day.map { #""\#($0)""# } ?? "null"
         let dateField = date.map { #""\#($0)""# } ?? "null"
         let image = imageURL.map { #","imageUrl":"\#($0)""# } ?? ""
+        // A server that doesn't mark add-ons leaves the field out entirely.
+        let addon = isAddon ? #","isAddon":true"# : ""
         return #"""
-            {"id":"\#(id)","recipe":{"id":"\#(recipeID)","name":"\#(name)"\#(image)},
+            {"id":"\#(id)","recipe":{"id":"\#(recipeID)","name":"\#(name)"\#(image)\#(addon)},
              "day":\#(dayField),"date":\#(dateField),"servings":\#(servings),"note":"\#(note)",
              "addedBy":"66e5a1f2c3b4a5d6e7f80912","addedAt":"2026-09-14T18:30:00.123456789Z"}
             """#
