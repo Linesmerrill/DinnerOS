@@ -352,7 +352,15 @@ func (s *Service) AdjustCookedRecipe(ctx context.Context, householdID, entryID s
 	if err != nil {
 		return recipes.Recipe{}, fmt.Errorf("find plan entry: %w", err)
 	}
-	if !found || e.RecipeID != r.ID || len(e.Customizations) == 0 {
+	switch {
+	case !found:
+		s.logger.DebugContext(ctx, "cooked meal has no plan entry to customize", "entryId", entryID, "recipeId", r.ID)
+		return r, nil
+	case e.RecipeID != r.ID:
+		s.logger.WarnContext(ctx, "cooked meal is not the recipe its plan entry plans",
+			"entryId", entryID, "recipeId", r.ID, "entryRecipeId", e.RecipeID)
+		return r, nil
+	case len(e.Customizations) == 0:
 		return r, nil
 	}
 	var picks []Pick
@@ -360,10 +368,14 @@ func (s *Service) AdjustCookedRecipe(ctx context.Context, householdID, entryID s
 	for _, c := range e.Customizations {
 		i := slices.IndexFunc(r.Ingredients, func(ing recipes.RecipeIngredient) bool { return LineKey(ing) == c.IngredientKey })
 		if i < 0 {
+			s.logger.WarnContext(ctx, "meal customization names no line of the cooked recipe",
+				"entryId", entryID, "recipeId", r.ID, "ingredientKey", c.IngredientKey, "choiceId", c.ChoiceID)
 			continue
 		}
 		choice, ok := s.resolve(r.Ingredients[i].Name, c.ChoiceID)
 		if !ok {
+			s.logger.WarnContext(ctx, "meal customization no longer applies",
+				"entryId", entryID, "recipeId", r.ID, "ingredientKey", c.IngredientKey, "choiceId", c.ChoiceID)
 			continue
 		}
 		picks = append(picks, Pick{IngredientKey: c.IngredientKey, Choice: choice})
