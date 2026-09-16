@@ -64,6 +64,12 @@ Anything the importer could not map confidently: an unknown unit, an
 ingredient with no amounts, an unparseable duration, or a recipe missing
 servings or steps.
 
+A recipe with neither `prepMinutes` nor `totalMinutes` gets a `cookTime` item,
+because its effective cook time is unknown and no number is invented for it. A
+missing `totalMinutes` on its own is normal (HelloFresh omits it for every
+add-on and some mains) and is not flagged: cook time is max of the two, so prep
+alone still answers the question.
+
 ```json
 { "sourceRecipeId": "…", "recipeName": "…", "field": "ingredients.Mystery Paste.unit", "value": "dollop", "reason": "unknown unit" }
 ```

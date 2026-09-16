@@ -349,3 +349,56 @@ func TestFormatQuantity(t *testing.T) {
 		}
 	}
 }
+
+// TestNormalizeFlagsMissingCookTime: a source recipe with no usable duration is
+// imported with no cook time and flagged for review, rather than given an
+// invented one. A missing totalTime alone is normal (every HelloFresh add-on)
+// and is not flagged, because prep alone still yields a cook time.
+func TestNormalizeFlagsMissingCookTime(t *testing.T) {
+	cookTimeFlags := func(t *testing.T, recipe string) ([]ReviewItem, ImportRecipe) {
+		t.Helper()
+		file, err := Normalize(
+			[]RawRecipe{rawFrom(t, "bbbbbbbbbbbbbbbbbbbbbbbb", recipe)},
+			History{}, time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC),
+		)
+		if err != nil {
+			t.Fatalf("Normalize() error = %v", err)
+		}
+		if len(file.Recipes) != 1 {
+			t.Fatalf("recipes = %d, want 1", len(file.Recipes))
+		}
+		var flags []ReviewItem
+		for _, rv := range file.Review {
+			if rv.Field == "cookTime" {
+				flags = append(flags, rv)
+			}
+		}
+		return flags, file.Recipes[0]
+	}
+
+	t.Run("prep only is not flagged", func(t *testing.T) {
+		addon := strings.Replace(syntheticRecipe, `"totalTime": "PT1H5M",`, ``, 1)
+		flags, r := cookTimeFlags(t, addon)
+		if len(flags) != 0 {
+			t.Errorf("cookTime flags = %+v, want none: prep alone is a usable cook time", flags)
+		}
+		if r.PrepMinutes != 10 || r.TotalMinutes != 0 {
+			t.Errorf("prep/total = %d/%d, want 10/0", r.PrepMinutes, r.TotalMinutes)
+		}
+	})
+
+	t.Run("neither time is flagged and nothing is invented", func(t *testing.T) {
+		timeless := strings.Replace(syntheticRecipe, `"prepTime": "PT10M",`, ``, 1)
+		timeless = strings.Replace(timeless, `"totalTime": "PT1H5M",`, ``, 1)
+		flags, r := cookTimeFlags(t, timeless)
+		if len(flags) != 1 {
+			t.Fatalf("cookTime flags = %+v, want exactly one", flags)
+		}
+		if !strings.Contains(flags[0].Reason, "unknown") {
+			t.Errorf("reason = %q", flags[0].Reason)
+		}
+		if r.PrepMinutes != 0 || r.TotalMinutes != 0 {
+			t.Errorf("prep/total = %d/%d, want 0/0: no number may be invented", r.PrepMinutes, r.TotalMinutes)
+		}
+	})
+}

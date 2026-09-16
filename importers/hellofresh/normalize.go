@@ -464,6 +464,14 @@ func normalizeRecipe(id string, r hfRecipe, raw RawRecipe) (ImportRecipe, []Revi
 	} else if r.TotalTime != "" {
 		flag("totalTime", r.TotalTime, "unparseable duration")
 	}
+	// Effective cook time is max(prep, total) at read time (architecture.md
+	// #127), so a recipe only has no cook time when neither field is usable.
+	// HelloFresh routinely omits totalTime (every add-on, and some mains), and
+	// that alone is fine. Flag the both-missing case rather than invent a
+	// number: consumers treat an unknown time as unknown, never as quick.
+	if out.PrepMinutes <= 0 && out.TotalMinutes <= 0 {
+		flag("cookTime", "", "recipe has neither a prep nor a total time; its cook time is unknown")
+	}
 
 	for _, n := range r.Nutrition {
 		out.Nutrition = append(out.Nutrition, Nutrient{Name: n.Name, Amount: n.Amount, Unit: n.Unit})
