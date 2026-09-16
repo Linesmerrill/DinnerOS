@@ -125,7 +125,8 @@ struct SpecialtyIngredientsView: View {
                     NavigationLink {
                         SpecialtyStrategyView()
                     } label: {
-                        SpecialtyStrategySummaryRow(settings: specialties.settings)
+                        SpecialtyStrategySummaryRow(
+                            settings: specialties.settings, error: specialties.settingsError)
                     }
                 } footer: {
                     Text("What to do about the ones nobody has chosen an option for.")
@@ -295,6 +296,7 @@ enum SpecialtyPreviewData {
 
     static let glaze = SpecialtyIngredient(
         id: "sweet-soy-glaze", key: "sweet soy glaze", name: "Sweet Soy Glaze", aliases: [], category: "condiments",
+        note: "Bottled sweet soy glaze is usually in the international aisle.",
         ingredientIDs: [], recipeCount: 8, unitSizes: [], defaultOptionID: "sweet-soy-glaze.store", retired: false,
         choice: nil,
         options: [

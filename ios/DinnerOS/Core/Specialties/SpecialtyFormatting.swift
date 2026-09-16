@@ -40,6 +40,18 @@ nonisolated enum SpecialtyFormat {
         }
     }
 
+    /// The strategy summary row's second line: the strategy in force, an honest failure when it
+    /// couldn't be loaded, and "Loading…" only while it really is loading.
+    static func strategySummaryDetail(_ settings: SpecialtySettings?, error: String? = nil) -> String {
+        if let settings {
+            return settings.currentOption?.label ?? settings.strategy.rawValue
+        }
+        if error != nil {
+            return String(localized: "Couldn't load — tap to try again")
+        }
+        return String(localized: "Loading…")
+    }
+
     /// A short label for the choice: "Not Set", "Keep as Is", "Store Alternative", or
     /// "House-Made Batch".
     static func choiceKind(_ ingredient: SpecialtyIngredient) -> String {

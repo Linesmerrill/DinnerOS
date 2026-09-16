@@ -315,6 +315,35 @@ struct SpecialtyStoreTests {
         #expect(store.ingredient(withID: "chicken-stock-concentrate")?.hasHouseholdChoice == true)
     }
 
+    /// A server too old for the settings route answers `404`, and the setup screen ignores the
+    /// throw so the list still loads. The strategy row then sat on "Loading…" for as long as the
+    /// screen was open, so the failure is remembered and the row can say so.
+    @Test func aFailedSettingsLoadIsRememberedInsteadOfLoadingForever() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        harness.server.failSettings()
+
+        do {
+            try await store.loadSettings()
+            Issue.record("Expected the settings load to fail")
+        } catch let error as APIError {
+            #expect(error.status == 404)
+        }
+
+        #expect(store.settings == nil)
+        let message = try #require(store.settingsError)
+        #expect(!message.isEmpty)
+        #expect(SpecialtyFormat.strategySummaryDetail(store.settings, error: store.settingsError) != "Loading…")
+        // The list itself loaded, so the ingredients are still on screen.
+        #expect(store.phase == .loaded)
+
+        harness.server.failSettings(false)
+        try await store.loadSettings()
+
+        #expect(store.settings?.strategy == .ask)
+        #expect(store.settingsError == nil)
+    }
+
     @Test func aForbiddenStrategyChangeChangesNothing() async throws {
         let harness = try await makeHarness()
         let store = harness.store

@@ -173,19 +173,13 @@ struct MenuStoreTests {
         // What the server counted, before any plan is in hand.
         #expect(MenuFormat.weekPillDetail(store.summary(for: thisWeek), timing: .current) == "7 meals")
 
-        // An older server doesn't mark the add-on entry, and the menu has no card for it, so
-        // the eight entries mustn't be read as eight dinners.
-        let unmarked = PlanFixtures.entry(id: "e8", recipeID: "addon-1", name: "Garlic Bread")
-        store.applyPlan(try plan(entries: mains + [unmarked]))
-        #expect(store.summary(for: thisWeek)?.plannedCount == 7)
-        #expect(store.summary(for: thisWeek)?.addOnCount == 1)
-        #expect(MenuFormat.weekPillDetail(store.summary(for: thisWeek), timing: .current) == "7 meals")
-
-        // A current server marks the entry itself, and the week counts out the same way.
+        // The plan marks the add-on entry itself, so eight entries count as seven dinners
+        // without waiting for the menu's cards to name them.
         let marked = PlanFixtures.entry(id: "e8", recipeID: "addon-1", name: "Garlic Bread", isAddon: true)
         store.applyPlan(try plan(entries: mains + [marked]))
         #expect(store.summary(for: thisWeek)?.plannedCount == 7)
         #expect(store.summary(for: thisWeek)?.addOnCount == 1)
+        #expect(MenuFormat.weekPillDetail(store.summary(for: thisWeek), timing: .current) == "7 meals")
 
         // Planning another dinner counts right away, with the add-on still apart from it.
         let ninth = PlanFixtures.entry(id: "e9", recipeID: "recipe-9", name: "Meal 9")

@@ -185,6 +185,9 @@ struct SpecialtyStrategyRow: View {
 /// The current strategy, as a row that opens the screen above.
 struct SpecialtyStrategySummaryRow: View {
     let settings: SpecialtySettings?
+    /// Set when the strategy couldn't be loaded, so the row says so and the screen it opens
+    /// offers another go, rather than spinning for as long as the screen is up.
+    var error: String?
 
     var body: some View {
         Label {
@@ -196,15 +199,17 @@ struct SpecialtyStrategySummaryRow: View {
                     .foregroundStyle(.secondary)
             }
         } icon: {
-            Image(systemName: settings?.strategy.systemImage ?? "sparkles")
-                .foregroundStyle(.tint)
+            Image(systemName: settings?.strategy.systemImage ?? (failed ? "exclamationmark.triangle" : "sparkles"))
+                .foregroundStyle(failed ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.tint))
         }
         .accessibilityElement(children: .combine)
     }
 
+    /// Nothing loaded, and the load failed rather than still being under way.
+    private var failed: Bool { settings == nil && error != nil }
+
     private var detail: String {
-        guard let settings else { return String(localized: "Loading…") }
-        return settings.currentOption?.label ?? settings.strategy.rawValue
+        SpecialtyFormat.strategySummaryDetail(settings, error: error)
     }
 }
 

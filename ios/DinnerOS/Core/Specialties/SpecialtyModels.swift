@@ -310,6 +310,9 @@ nonisolated struct SpecialtyIngredient: Decodable, Hashable, Sendable, Identifia
     let name: String
     let aliases: [String]
     let category: String
+    /// A short shopping note, empty for most: the caveat its store route needs ("bottled ponzu
+    /// is in the international aisle"), or why there is no honest store equivalent.
+    let note: String
     let ingredientIDs: [String]
     /// The household's recipes that use it.
     let recipeCount: Int
@@ -326,9 +329,9 @@ nonisolated struct SpecialtyIngredient: Decodable, Hashable, Sendable, Identifia
     let batch: SpecialtyBatchStock?
 
     init(
-        id: String, key: String, name: String, aliases: [String], category: String, ingredientIDs: [String],
-        recipeCount: Int, unitSizes: [SpecialtyUnitSize], defaultOptionID: String, retired: Bool,
-        choice: SpecialtyChoice?, options: [SpecialtyOption], batch: SpecialtyBatchStock?,
+        id: String, key: String, name: String, aliases: [String], category: String, note: String = "",
+        ingredientIDs: [String], recipeCount: Int, unitSizes: [SpecialtyUnitSize], defaultOptionID: String,
+        retired: Bool, choice: SpecialtyChoice?, options: [SpecialtyOption], batch: SpecialtyBatchStock?,
         choiceSource: SpecialtyChoiceSource? = nil
     ) {
         self.id = id
@@ -336,6 +339,7 @@ nonisolated struct SpecialtyIngredient: Decodable, Hashable, Sendable, Identifia
         self.name = name
         self.aliases = aliases
         self.category = category
+        self.note = note
         self.ingredientIDs = ingredientIDs
         self.recipeCount = recipeCount
         self.unitSizes = unitSizes
@@ -382,7 +386,7 @@ nonisolated struct SpecialtyIngredient: Decodable, Hashable, Sendable, Identifia
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, key, name, aliases, category
+        case id, key, name, aliases, category, note
         case ingredientIDs = "ingredientIds"
         case recipeCount, unitSizes
         case defaultOptionID = "defaultOptionId"
@@ -397,6 +401,8 @@ nonisolated struct SpecialtyIngredient: Decodable, Hashable, Sendable, Identifia
             name: try container.decode(String.self, forKey: .name),
             aliases: try container.decodeIfPresent([String].self, forKey: .aliases) ?? [],
             category: try container.decodeIfPresent(String.self, forKey: .category) ?? "",
+            // Required by the API, read leniently so an older server still lists.
+            note: try container.decodeIfPresent(String.self, forKey: .note) ?? "",
             ingredientIDs: try container.decodeIfPresent([String].self, forKey: .ingredientIDs) ?? [],
             recipeCount: try container.decodeIfPresent(Int.self, forKey: .recipeCount) ?? 0,
             unitSizes: try container.decodeIfPresent([SpecialtyUnitSize].self, forKey: .unitSizes) ?? [],

@@ -235,6 +235,7 @@ func (s *Service) AddEntries(ctx context.Context, householdID, userID, week stri
 			return Plan{}, nil, err
 		}
 		e.RecipeID, e.RecipeName, e.RecipeImageURL = recipe.ID, recipe.Name, recipe.ImageURL
+		e.RecipeIsAddon = recipe.IsAddon
 		entries = append(entries, e)
 	}
 

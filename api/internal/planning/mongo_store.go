@@ -59,11 +59,14 @@ type entryDoc struct {
 	RecipeID       bson.ObjectID `bson:"recipeId"`
 	RecipeName     string        `bson:"recipeName"`
 	RecipeImageURL string        `bson:"recipeImageUrl,omitempty"`
-	Day            string        `bson:"day,omitempty"`
-	Servings       int           `bson:"servings"`
-	Note           string        `bson:"note,omitempty"`
-	AddedBy        bson.ObjectID `bson:"addedBy"`
-	AddedAt        time.Time     `bson:"addedAt"`
+	// RecipeIsAddon is stored only for add-ons; absent means a meal, which is
+	// also how entries stored before add-ons were marked read.
+	RecipeIsAddon bool          `bson:"recipeIsAddon,omitempty"`
+	Day           string        `bson:"day,omitempty"`
+	Servings      int           `bson:"servings"`
+	Note          string        `bson:"note,omitempty"`
+	AddedBy       bson.ObjectID `bson:"addedBy"`
+	AddedAt       time.Time     `bson:"addedAt"`
 	// Origin is stored only for autopilot entries; absent means manual.
 	Origin     string `bson:"origin,omitempty"`
 	ProposalID string `bson:"proposalId,omitempty"`
@@ -117,7 +120,8 @@ func (d planDoc) toPlan() (Plan, error) {
 		}
 		p.Entries = append(p.Entries, Entry{
 			ID: e.ID.Hex(), RecipeID: e.RecipeID.Hex(), RecipeName: e.RecipeName, RecipeImageURL: e.RecipeImageURL,
-			Day: Day(e.Day), Servings: e.Servings, Note: e.Note, AddedBy: e.AddedBy.Hex(), AddedAt: e.AddedAt.UTC(),
+			RecipeIsAddon: e.RecipeIsAddon, Day: Day(e.Day), Servings: e.Servings, Note: e.Note,
+			AddedBy: e.AddedBy.Hex(), AddedAt: e.AddedAt.UTC(),
 			Origin: origin, ProposalID: e.ProposalID, Customizations: customizationsOf(e.Customizations),
 		})
 	}
@@ -233,7 +237,8 @@ func (s *MongoStore) AddEntries(ctx context.Context, householdID string, w Week,
 		id := bson.NewObjectID()
 		doc := entryDoc{
 			ID: id, RecipeID: recipeID, RecipeName: e.RecipeName, RecipeImageURL: e.RecipeImageURL,
-			Day: string(e.Day), Servings: e.Servings, Note: e.Note, AddedBy: addedBy, AddedAt: e.AddedAt,
+			RecipeIsAddon: e.RecipeIsAddon, Day: string(e.Day), Servings: e.Servings, Note: e.Note,
+			AddedBy: addedBy, AddedAt: e.AddedAt,
 			ProposalID: e.ProposalID,
 		}
 		if e.Origin == OriginAutopilot {

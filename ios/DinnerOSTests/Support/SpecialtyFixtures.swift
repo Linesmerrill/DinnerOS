@@ -51,7 +51,8 @@ nonisolated enum SpecialtyFixtures {
     /// A batch is chosen and in the pantry; the household added its own copy.
     static let southwestJSON = #"""
         {"id":"southwest-spice-blend","key":"southwest spice blend","name":"Southwest Spice Blend",
-         "aliases":["Southwestern Spice Blend"],"category":"spices","ingredientIds":["i-southwest"],"recipeCount":52,
+         "aliases":["Southwestern Spice Blend"],"category":"spices","note":"","ingredientIds":["i-southwest"],
+         "recipeCount":52,
          "unitSizes":[{"per":"count","quantity":"1","quantityValue":1,"unit":"tbsp","text":"1 tbsp"}],
          "defaultOptionId":"southwest-spice-blend.batch","retired":false,"choiceSource":"household",
          "choice":{"source":"household","optionId":"southwest-spice-blend.batch","type":"house_made_batch",
@@ -69,7 +70,8 @@ nonisolated enum SpecialtyFixtures {
     /// no chooser and no time they chose it.
     static let strategySpecialtyJSON = #"""
         {"id":"sweet-soy-glaze","key":"sweet soy glaze","name":"Sweet Soy Glaze","aliases":[],
-         "category":"condiments","ingredientIds":["i-glaze"],"recipeCount":8,"unitSizes":[],
+         "category":"condiments","note":"Bottled sweet soy glaze is in the international aisle.",
+         "ingredientIds":["i-glaze"],"recipeCount":8,"unitSizes":[],
          "defaultOptionId":"sweet-soy-glaze.store","retired":false,"choiceSource":"strategy",
          "choice":{"source":"strategy","optionId":"sweet-soy-glaze.store","type":"store_alternative",
            "optionName":"Soy and honey","strategy":"similar","chosenBy":null,"chosenAt":null},
@@ -318,6 +320,8 @@ nonisolated final class FakeSpecialtyServer: Sendable {
         var strategySetAt: String? = "2026-09-15T18:30:00Z"
         /// Changes answer `403`, as for a member without `pantry.edit`.
         var forbidsChanges = false
+        /// The settings route answers `404`, as a server too old to have it does.
+        var failsSettings = false
         /// The next choice answers `500`.
         var failsNextChoice = false
         /// The next batch is recorded, but its response is a `500`, as if it were lost.
@@ -343,6 +347,11 @@ nonisolated final class FakeSpecialtyServer: Sendable {
 
     func forbidChanges() {
         state.withLock { $0.forbidsChanges = true }
+    }
+
+    /// Answers the settings route with `404`, as a server predating it does.
+    func failSettings(_ fails: Bool = true) {
+        state.withLock { $0.failsSettings = fails }
     }
 
     func failNextChoice() {
@@ -391,6 +400,9 @@ nonisolated final class FakeSpecialtyServer: Sendable {
                 return Self.applyDefaults(&state)
             }
             if rest == ["settings"] {
+                if state.failsSettings {
+                    return (404, Fixtures.errorJSON(code: "not_found"))
+                }
                 switch method {
                 case "GET":
                     return (200, Self.settingsJSON(state))

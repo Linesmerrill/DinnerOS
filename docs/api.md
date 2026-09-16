@@ -376,7 +376,7 @@ Sunday). The week number must exist in its year: 2026 has 53 weeks, 2025 has
   "entries": [
     {
       "id": "66e5a1f2c3b4a5d6e7f80c01",
-      "recipe": { "id": "66e5a1f2c3b4a5d6e7f80915", "name": "Beef Tacos", "imageUrl": "https://img.example.com/beef-tacos.jpg" },
+      "recipe": { "id": "66e5a1f2c3b4a5d6e7f80915", "name": "Beef Tacos", "isAddon": false, "imageUrl": "https://img.example.com/beef-tacos.jpg" },
       "day": "tue",
       "date": "2026-09-15",
       "servings": 2,
@@ -387,7 +387,7 @@ Sunday). The week number must exist in its year: 2026 has 53 weeks, 2025 has
     },
     {
       "id": "66e5a1f2c3b4a5d6e7f80c02",
-      "recipe": { "id": "66e5a1f2c3b4a5d6e7f80916", "name": "Onion Soup" },
+      "recipe": { "id": "66e5a1f2c3b4a5d6e7f80916", "name": "Onion Soup", "isAddon": false },
       "day": null,
       "date": null,
       "servings": 4,
@@ -404,8 +404,11 @@ Sunday). The week number must exist in its year: 2026 has 53 weeks, 2025 has
 
 - `day` is `mon`–`sun`, or `null` for "this week, not scheduled". `date` is
   that day's `YYYY-MM-DD`, or `null`.
-- `recipe` is a snapshot of the name and image taken when the entry was
-  added. Use `GET .../recipes/{id}` for details.
+- `recipe` is a snapshot of the name, image, and `isAddon` taken when the
+  entry was added. Use `GET .../recipes/{id}` for details. `isAddon` is true
+  for a pairing's add-on (garlic bread alongside the pasta), which is planned
+  with a meal and never counted as one, so a client never has to work that out
+  from the catalog. Entries added before add-ons were marked read as `false`.
 - Entries are in the order they were added.
 - `origin` is `manual`, or `autopilot` for entries added by accepting an
   [Autopilot](#autopilot) proposal. Autopilot entries are ordinary entries:

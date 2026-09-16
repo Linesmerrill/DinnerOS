@@ -32,6 +32,9 @@ final class SpecialtyStore {
     private(set) var revision = 0
     /// The household's standing strategy and the server's words for it; `nil` until it's loaded.
     private(set) var settings: SpecialtySettings?
+    /// Set when the strategy couldn't be loaded and none is in hand, so the summary row can say
+    /// so instead of showing "Loading…" forever. Cleared by a load or change that succeeds.
+    private(set) var settingsError: String?
 
     /// Receives a batch's pantry item and household after "Made a Batch", so the pantry can show it.
     @ObservationIgnored var onBatchRecorded: ((PantryItem, String) -> Void)?
@@ -54,7 +57,7 @@ final class SpecialtyStore {
     /// A store frozen with the given items, for SwiftUI previews. It has no network access.
     static func preview(
         session: AuthSession, phase: Phase = .loaded, items: [SpecialtyIngredient] = [],
-        householdID: String = "household-1", settings: SpecialtySettings? = nil
+        householdID: String = "household-1", settings: SpecialtySettings? = nil, settingsError: String? = nil
     ) -> SpecialtyStore {
         let store = SpecialtyStore(session: session, api: nil)
         store.householdID = householdID
@@ -62,6 +65,7 @@ final class SpecialtyStore {
         store.phase = phase
         store.items = items
         store.settings = settings
+        store.settingsError = settingsError
         return store
     }
 
@@ -154,11 +158,27 @@ final class SpecialtyStore {
     func loadSettings() async throws -> SpecialtySettings {
         let (api, target) = try require(nil)
         let started = generation
-        let loaded = try await session.authorized { token in
-            try await api.settings(householdID: target, accessToken: token)
+        do {
+            let loaded = try await session.authorized { token in
+                try await api.settings(householdID: target, accessToken: token)
+            }
+            if started == generation, target == householdID {
+                settings = loaded
+                settingsError = nil
+            }
+            return loaded
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // A server without the route answers 404. The caller may ignore the throw (the setup
+            // screen loads the list either way), so the failure is remembered here: otherwise the
+            // strategy row has nothing to show but a spinner that never stops.
+            Self.logger.notice("Specialty settings load failed: \(Self.describe(error), privacy: .public)")
+            if started == generation, target == householdID, settings == nil {
+                settingsError = HouseholdStore.message(for: error)
+            }
+            throw error
         }
-        if started == generation, target == householdID { settings = loaded }
-        return loaded
     }
 
     /// Sets the standing strategy. Nothing is stored per ingredient, so the whole list is
@@ -174,6 +194,7 @@ final class SpecialtyStore {
         Self.logger.info("Specialty strategy set to \(strategy.rawValue, privacy: .public)")
         guard started == generation, target == householdID else { return updated }
         settings = updated
+        settingsError = nil
         if phase == .loaded { await load(showingProgress: false) }
         return updated
     }
@@ -320,6 +341,7 @@ final class SpecialtyStore {
         items = []
         refreshError = nil
         settings = nil
+        settingsError = nil
     }
 
     // MARK: - Helpers

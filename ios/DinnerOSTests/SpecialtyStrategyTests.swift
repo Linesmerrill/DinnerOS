@@ -68,6 +68,20 @@ struct SpecialtyStrategyTests {
         #expect(updated.strategy == .ask)
     }
 
+    /// "Loading…" is only true while it's loading: a failed settings load has to read as one.
+    @Test func theSummaryRowSaysWhenTheStrategyCouldNotLoad() async throws {
+        let transport = StubTransport { _ in (200, SpecialtyFixtures.settingsJSON()) }
+        let settings = try await makeAPI(transport).settings(householdID: "household-1", accessToken: "t")
+
+        #expect(SpecialtyFormat.strategySummaryDetail(settings) == "Something similar")
+        #expect(SpecialtyFormat.strategySummaryDetail(nil) == "Loading…")
+        #expect(
+            SpecialtyFormat.strategySummaryDetail(nil, error: "Something went wrong.")
+                == "Couldn't load — tap to try again")
+        // A strategy in hand wins: a stale error mustn't hide what the household is on.
+        #expect(SpecialtyFormat.strategySummaryDetail(settings, error: "Something went wrong.") == "Something similar")
+    }
+
     @Test func anUnknownStrategyFromANewerServerKeepsItsRawValue() throws {
         let settings = try decode(
             SpecialtySettings.self,
@@ -86,6 +100,9 @@ struct SpecialtyStrategyTests {
         let ingredient = try decode(SpecialtyIngredient.self, from: SpecialtyFixtures.strategySpecialtyJSON)
 
         #expect(ingredient.choiceSource == .strategy)
+        // The shopping caveat travels with the ingredient, for the screen to show near the
+        // store alternative it's about.
+        #expect(ingredient.note == "Bottled sweet soy glaze is in the international aisle.")
         let choice = try #require(ingredient.choice)
         #expect(choice.source == .strategy)
         #expect(choice.strategy == .similar)
@@ -104,6 +121,8 @@ struct SpecialtyStrategyTests {
         let ingredient = try decode(SpecialtyIngredient.self, from: SpecialtyFixtures.unresolvedSpecialtyJSON)
 
         #expect(ingredient.choiceSource == .unset)
+        // No note at all from a server that doesn't send one, rather than a failed decode.
+        #expect(ingredient.note.isEmpty)
         #expect(ingredient.choice == nil)
         #expect(!ingredient.isResolvedByStrategy)
         #expect(!ingredient.hasHouseholdChoice)

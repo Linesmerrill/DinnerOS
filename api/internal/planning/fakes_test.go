@@ -26,6 +26,7 @@ const (
 	recipeSoup  = "66e5a1f2c3b4a5d6e7f81002"
 	recipeSalad = "66e5a1f2c3b4a5d6e7f81003"
 	recipeBobs  = "66e5a1f2c3b4a5d6e7f81004"
+	recipeBread = "66e5a1f2c3b4a5d6e7f81005" // a pairing add-on, not a meal
 
 	ingOnion      = "66e5a1f2c3b4a5d6e7f82001"
 	ingGarlic     = "66e5a1f2c3b4a5d6e7f82002"
@@ -83,6 +84,17 @@ func saladRecipe() recipes.Recipe {
 			ingredientLine(ingOnion, "Yellow Onion", "produce", false, amt(2, "1/2", "count")),
 			ingredientLine(ingChicken, "Chicken Breast", "meat-seafood", false, amt(2, "10", "oz")),
 			ingredientLine(ingSalt, "Salt", "spices", false, amt(2, "1/4", "tsp")),
+		},
+	}
+}
+
+// breadRecipe is a pairing's add-on: planned alongside a meal, never counted
+// as one.
+func breadRecipe() recipes.Recipe {
+	return recipes.Recipe{
+		ID: recipeBread, HouseholdID: hhAda, Name: "Garlic Bread", Servings: []int{2}, IsAddon: true,
+		Ingredients: []recipes.RecipeIngredient{
+			ingredientLine(ingGarlic, "Garlic", "produce", false, amt(2, "2", "clove")),
 		},
 	}
 }
@@ -331,7 +343,7 @@ func (m *memoryStore) SetStatus(_ context.Context, householdID string, w Week, s
 
 func newTestService(t *testing.T, store Store) (*Service, *fakeRecipes) {
 	t.Helper()
-	reader := newFakeRecipes(tacosRecipe(), soupRecipe(), saladRecipe(), bobsRecipe())
+	reader := newFakeRecipes(tacosRecipe(), soupRecipe(), saladRecipe(), breadRecipe(), bobsRecipe())
 	svc := NewService(store, reader)
 	svc.now = func() time.Time { return testNow }
 	return svc, reader
