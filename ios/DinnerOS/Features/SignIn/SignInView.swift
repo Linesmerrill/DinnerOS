@@ -93,15 +93,7 @@ private struct SignInScreen: View {
 
             #if DEBUG
                 if configuration.environment == .development {
-                    Button {
-                        Task { await model.signInForDevelopment() }
-                    } label: {
-                        Label("Developer sign-in", systemImage: "hammer")
-                            .frame(maxWidth: .infinity, minHeight: buttonHeight)
-                    }
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.roundedRectangle(radius: 12))
-                    .accessibilityHint("Signs in with a test account on the development server.")
+                    developerSignIn
                 }
             #endif
 
@@ -113,6 +105,44 @@ private struct SignInScreen: View {
         }
         .disabled(model.isWorking)
     }
+
+    #if DEBUG
+        /// The developer affordance. Only ever mounted from inside `#if DEBUG` and an
+        /// `environment == .development` check, so it can't reach a Release build or a
+        /// build pointed at production.
+        private var developerSignIn: some View {
+            VStack(spacing: 8) {
+                Button {
+                    Task { await model.signInForDevelopment() }
+                } label: {
+                    Label("Developer sign-in as \(model.developerIdentity.displayName)", systemImage: "hammer")
+                        .frame(maxWidth: .infinity, minHeight: buttonHeight)
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.roundedRectangle(radius: 12))
+                .accessibilityHint("Signs in with a test account on the development server.")
+
+                HStack(spacing: 8) {
+                    TextField("Subject", text: $model.developerSubject)
+                        .textFieldStyle(.roundedBorder)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.go)
+                        .onSubmit { Task { await model.signInForDevelopment() } }
+                        .accessibilityLabel("Developer subject")
+                    Menu {
+                        ForEach(DeveloperIdentity.suggestedSubjects, id: \.self) { subject in
+                            Button(subject) { model.developerSubject = subject }
+                        }
+                    } label: {
+                        Label("Test accounts", systemImage: "person.2")
+                            .labelStyle(.iconOnly)
+                    }
+                    .accessibilityLabel("Choose a test account")
+                }
+            }
+        }
+    #endif
 
     private func errorBanner(_ message: String) -> some View {
         VStack(spacing: 12) {

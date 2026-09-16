@@ -130,10 +130,20 @@ needs `GOOGLE_CLIENT_ID` on the API. For everyday simulator work, use the Debug-
    `NSAllowsLocalNetworking` allows plain HTTP to local addresses. A physical device
    needs the Mac's LAN IP instead.
 
-3. Run the **DinnerOS** scheme (Debug), tap **Developer sign-in**, then open the
-   **Household** tab. It shows "Simulator Developer" and
+3. Run the **DinnerOS** scheme (Debug), tap **Developer sign-in as Dev Simulator**,
+   then open the **Household** tab. It shows that name and
    `dev-simulator@example.com` from `GET /api/v1/me`. **Sign Out** asks for
    confirmation and returns to the sign-in screen.
+
+4. To sign in as somebody else, type a subject in the field under the button, or
+   pick one from the menu beside it (`dev-simulator`, `rachel-sim`,
+   `charlie-sim`). A subject the API hasn't seen creates a new user
+   (`isNewUser: true`), which is how you reach a second household member's first
+   run — invite them from the first account, then sign in as the second subject.
+   The email and display name are derived from the subject (`rachel-sim` →
+   `rachel-sim@example.com`, "Rachel Sim"); a user created before this change
+   keeps the name it was created with, so an existing `dev-simulator` may still
+   read "Simulator Developer".
 
 The button only appears in Debug builds whose `AppEnvironment` is `development`.
 It isn't compiled into Release. Without `AUTH_DEV_LOGIN_ENABLED=true`, the API
