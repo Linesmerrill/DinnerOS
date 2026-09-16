@@ -137,8 +137,8 @@ func buildVocabulary(catalog []recipes.Recipe) Vocabulary {
 			proteinCounts[p]++
 		}
 	}
-	v.Cuisines = cuisines.options(starterCuisines)
-	v.Tags = tags.options(starterTags)
+	v.Cuisines = cuisines.options(starterCuisines, v.CatalogRecipes)
+	v.Tags = tags.options(starterTags, v.CatalogRecipes)
 	for _, o := range ProteinOptions {
 		o.RecipeCount = proteinCounts[o.Value]
 		v.Proteins = append(v.Proteins, o)
@@ -154,6 +154,10 @@ type valueKind struct {
 	expand func(string) []string
 	// label returns a known value's display label, or "".
 	label func(string) string
+	// hidden reports whether a value is bookkeeping rather than a real
+	// choice, so it is never offered. count is how many of the catalog's
+	// total main meals carry it. nil means nothing is hidden.
+	hidden func(value string, count, total int) bool
 }
 
 var (
@@ -164,6 +168,7 @@ var (
 		canonical: canonicalTag,
 		expand:    func(v string) []string { return []string{v} },
 		label:     func(string) string { return "" },
+		hidden:    hiddenTag,
 	}
 )
 
@@ -217,9 +222,15 @@ func (c *counter) label(value string) string {
 
 // options returns counted values (most used first), then starters the
 // catalog doesn't use (alphabetically), capped at MaxVocabularyOptions.
-func (c *counter) options(starters []string) []Option {
+// Hidden values are dropped before the cap, so hiding one frees a slot for a
+// real choice. total is how many main meals the counts cover.
+func (c *counter) options(starters []string, total int) []Option {
+	hide := func(value string, n int) bool { return c.kind.hidden != nil && c.kind.hidden(value, n, total) }
 	var counted []Option
 	for value, n := range c.counts {
+		if hide(value, n) {
+			continue
+		}
 		counted = append(counted, Option{Value: value, Label: c.label(value), RecipeCount: n})
 	}
 	slices.SortFunc(counted, func(a, b Option) int {
@@ -230,7 +241,7 @@ func (c *counter) options(starters []string) []Option {
 	})
 	for _, s := range starters {
 		value := c.kind.canonical(s)
-		if c.counts[value] > 0 || slices.ContainsFunc(counted, func(o Option) bool { return o.Value == value }) {
+		if c.counts[value] > 0 || hide(value, 0) || slices.ContainsFunc(counted, func(o Option) bool { return o.Value == value }) {
 			continue
 		}
 		label := c.kind.label(value)
