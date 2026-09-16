@@ -25,6 +25,8 @@
 	</array>
 	<key>GoogleIOSClientID</key>
 	<string>$(GOOGLE_IOS_CLIENT_ID)</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Adds your week's grocery list to a Reminders list so you can use it while you shop.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

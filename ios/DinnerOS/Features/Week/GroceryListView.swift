@@ -86,6 +86,7 @@ struct GroceryListContent: View {
     @State private var picker: GrocerySpecialty?
     @State private var showsSpecialtySetup = false
     @State private var confirmingBatch: GroceryBatch?
+    @State private var exportController = GroceryExportController(remindersStore: EventKitRemindersStore())
 
     var body: some View {
         content
@@ -101,9 +102,11 @@ struct GroceryListContent: View {
                         }
                     }
                 }
-                if !model.checked.isEmpty {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Menu("More", systemImage: "ellipsis.circle") {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu("More", systemImage: "ellipsis.circle") {
+                        // Share already has its own button next to this menu.
+                        GroceryExportActions(controller: exportController, model: model, includesShare: false)
+                        if !model.checked.isEmpty {
                             Button("Uncheck All", systemImage: "circle") {
                                 model.uncheckAll()
                             }
@@ -111,6 +114,7 @@ struct GroceryListContent: View {
                     }
                 }
             }
+            .groceryExportPrompts(exportController)
             .sheet(item: $picker) { specialty in
                 SpecialtyQuickPicker(specialty: specialty, model: model)
             }

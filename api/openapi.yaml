@@ -7169,7 +7169,7 @@ components:
             $ref: "#/components/schemas/AutopilotSkippedSlot"
         pairingsAdded:
           type: array
-          description: The pairings added with the meals: add-on plan entries and grocery items.
+          description: "The pairings added with the meals: add-on plan entries and grocery items."
           items:
             $ref: "#/components/schemas/AutopilotAddedPairing"
         pairingsSkipped:
@@ -7625,7 +7625,7 @@ components:
             type: string
     AutopilotPairingTarget:
       type: object
-      description: What a pairing adds. `recipe` is set for `kind: recipe`, `groceryItem` for `kind: grocery_item`.
+      description: "What a pairing adds. `recipe` is set for `kind: recipe`, `groceryItem` for `kind: grocery_item`."
       required: [kind]
       properties:
         kind:
@@ -7890,7 +7890,7 @@ components:
         items:
           type: array
           maxItems: 6
-          description: Includes pairings already in the week, with `inPlan: true`.
+          description: "Includes pairings already in the week, with `inPlan: true`."
           items:
             $ref: "#/components/schemas/AutopilotPairing"
     AutopilotPairingActionRequest:

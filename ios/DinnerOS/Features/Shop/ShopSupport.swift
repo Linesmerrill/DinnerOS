@@ -61,12 +61,40 @@ enum ShopPreviewData {
         id: "handoff-preview", status: .open, createdBy: HouseholdPreviewData.user.id,
         createdAt: .now.addingTimeInterval(-3_600), updatedAt: .now, proposal: proposal)
 
-    static func store(session: AuthSession, configured: Bool = true) -> ShoppingStore {
+    /// Sample stores behind "Don't see your store?". Request counts are made up.
+    static let catalog: [ShoppingCatalogItem] = [
+        ShoppingCatalogItem(
+            key: ShoppingProviderKey.walmart, name: "Walmart", kind: .grocer, status: .available,
+            aliases: ["wal mart", "wal-mart"]),
+        ShoppingCatalogItem(
+            key: "kroger", name: "Kroger", kind: .grocer, status: .researched, aliases: ["krogers"],
+            note: "Its cart API needs a partner agreement.", requests: 3),
+        ShoppingCatalogItem(
+            key: "instacart", name: "Instacart", kind: .delivery, status: .researched, aliases: ["insta cart"],
+            requests: 2),
+        ShoppingCatalogItem(
+            key: "frys", name: "Fry's Food Stores", kind: .grocer, status: .unsupported, aliases: ["frys", "fry"],
+            requests: 1),
+        ShoppingCatalogItem(key: "costco", name: "Costco", kind: .warehouse, status: .unsupported, requests: 4),
+    ]
+
+    /// A request this household already sent, so a row shows Requested with an Undo.
+    static func request(key: String) -> ShoppingStoreRequest {
+        ShoppingStoreRequest(
+            id: "request-\(key)", key: key, name: catalog.first { $0.key == key }?.name ?? key,
+            status: .researched, note: nil, requestedBy: HouseholdPreviewData.user.id,
+            requestedAt: .now.addingTimeInterval(-7_200))
+    }
+
+    static func store(
+        session: AuthSession, configured: Bool = true, requestedStoreKey: String? = nil
+    ) -> ShoppingStore {
         .preview(
             session: session,
             settings: configured
                 ? settings : ShoppingSettings(provider: nil, storeID: nil, updatedBy: nil, updatedAt: nil),
-            providers: [walmart], proposal: configured ? proposal : nil, openHandoff: configured ? handoff : nil)
+            providers: [walmart], proposal: configured ? proposal : nil, openHandoff: configured ? handoff : nil,
+            catalog: catalog, storeRequests: requestedStoreKey.map { [request(key: $0)] } ?? [])
     }
 
     private static func amount(_ quantity: String, _ unit: String, _ text: String? = nil) -> ShoppingAmount {
