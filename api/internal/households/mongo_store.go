@@ -61,7 +61,9 @@ type householdDoc struct {
 	DefaultServings int           `bson:"defaultServings"`
 	TimeZone        string        `bson:"timeZone"`
 	// OrderDay is absent for a household that never set one.
-	OrderDay  string        `bson:"orderDay,omitempty"`
+	OrderDay string `bson:"orderDay,omitempty"`
+	// MealKit is absent until the household sets a meal kit baseline.
+	MealKit   *mealKitDoc   `bson:"mealKit,omitempty"`
 	CreatedBy bson.ObjectID `bson:"createdBy"`
 	// AdminCount backs the last-admin guard; see DecrementAdminCount.
 	AdminCount int       `bson:"adminCount"`
@@ -69,8 +71,18 @@ type householdDoc struct {
 	UpdatedAt  time.Time `bson:"updatedAt"`
 }
 
+type mealKitDoc struct {
+	WeeklyCents int64 `bson:"weeklyCents"`
+	Meals       int   `bson:"meals"`
+}
+
 func (d householdDoc) toHousehold() Household {
+	var kit *MealKit
+	if d.MealKit != nil {
+		kit = &MealKit{WeeklyCents: d.MealKit.WeeklyCents, Meals: d.MealKit.Meals}
+	}
 	return Household{
+		MealKit:         kit,
 		ID:              d.ID.Hex(),
 		Name:            d.Name,
 		DefaultServings: d.DefaultServings,
@@ -223,10 +235,18 @@ func (s *MongoStore) UpdateHousehold(ctx context.Context, id string, patch House
 	if patch.OrderDay != nil {
 		set = append(set, bson.E{Key: "orderDay", Value: *patch.OrderDay})
 	}
+	update := bson.D{}
+	if patch.SetMealKit && patch.MealKit != nil {
+		set = append(set, bson.E{Key: "mealKit", Value: mealKitDoc{WeeklyCents: patch.MealKit.WeeklyCents, Meals: patch.MealKit.Meals}})
+	}
+	update = append(update, bson.E{Key: "$set", Value: set})
+	if patch.SetMealKit && patch.MealKit == nil {
+		update = append(update, bson.E{Key: "$unset", Value: bson.D{{Key: "mealKit", Value: ""}}})
+	}
 	var doc householdDoc
 	err = s.households.FindOneAndUpdate(ctx,
 		bson.D{{Key: "_id", Value: oid}},
-		bson.D{{Key: "$set", Value: set}},
+		update,
 		options.FindOneAndUpdate().SetReturnDocument(options.After),
 	).Decode(&doc)
 	if err != nil {

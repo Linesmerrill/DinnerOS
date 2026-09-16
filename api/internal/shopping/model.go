@@ -104,11 +104,19 @@ type Preference struct {
 	PackageSize *PackageSize
 	// Coverage overrides how a package maps to a week's need. Empty follows
 	// the ingredient's grocery category (coverage.go).
-	Coverage  providers.Coverage
-	CreatedBy string
-	CreatedAt time.Time
-	UpdatedBy string
-	UpdatedAt time.Time
+	Coverage providers.Coverage
+	// PriceCents is what one package costs, in US cents, or nil when nobody
+	// entered a price; PriceUpdatedAt is when it was set.
+	PriceCents     *int64
+	PriceUpdatedAt time.Time
+	CreatedBy      string
+	CreatedAt      time.Time
+	UpdatedBy      string
+	UpdatedAt      time.Time
+
+	// setPrice tells UpsertPreference to write PriceCents (nil clears it);
+	// otherwise the stored price is kept.
+	setPrice bool
 }
 
 // PreferenceInput saves a product for an ingredient. Exactly one of
@@ -125,7 +133,24 @@ type PreferenceInput struct {
 	IngredientName string
 	// Coverage is the member's override, or empty to follow the category.
 	Coverage providers.Coverage
+	// SetPrice changes the package price to PriceCents (nil clears it).
+	// Without it the saved price is kept.
+	SetPrice   bool
+	PriceCents *int64
 }
+
+// PantryTracking says what confirming a handoff line did in the pantry.
+type PantryTracking string
+
+// Pantry tracking values (leftovers.go).
+const (
+	// PantryTracked: the line became a pantry purchase whose leftovers count
+	// down as meals are cooked.
+	PantryTracked PantryTracking = "tracked"
+	// PantryNotTracked: a fresh item bought for this week's meals and assumed
+	// used up by them, so no pantry purchase was recorded.
+	PantryNotTracked PantryTracking = "not_tracked"
+)
 
 // ExclusionReason says why a grocery line isn't in a handoff.
 type ExclusionReason string
@@ -151,6 +176,10 @@ const (
 	ExcludedNoProduct ExclusionReason = "no_product"
 	// ExcludedNotOnList: a selected key isn't on the week's list (anymore).
 	ExcludedNotOnList ExclusionReason = "not_on_list"
+	// ExcludedOrdered: a confirmed handoff line already bought it fresh for
+	// this week, and it isn't tracked in the pantry (leftovers.go), and the
+	// member didn't select it.
+	ExcludedOrdered ExclusionReason = "ordered"
 )
 
 // LineStatus is a handoff line's confirmation state.
@@ -237,6 +266,10 @@ type HandoffLine struct {
 	// SkippedBy and SkippedAt are set when a member said it wasn't ordered.
 	SkippedBy string
 	SkippedAt time.Time
+	// PriceCents is what the line cost in all (every package), or nil.
+	PriceCents *int64
+	// Pantry is set once confirmed: whether it became a pantry purchase.
+	Pantry PantryTracking
 
 	// Cart is set on a match line when the week has a current handoff: what
 	// that handoff already put in the provider's cart for this product. It is
@@ -401,6 +434,10 @@ type MatchInput struct {
 	Lines          []LineSelection
 	CheckedOffKeys []string
 	ExcludeKeys    []string
+
+	// ordered holds the keys this week's confirmed handoffs bought fresh and
+	// didn't track (ExcludedOrdered). The service fills it.
+	ordered map[string]bool
 }
 
 // HandoffFilter filters a handoff list. Empty fields don't filter.
@@ -415,6 +452,8 @@ type ConfirmLine struct {
 	LineID string
 	// Packages is what was ordered; 0 means the line's Packages.
 	Packages int
+	// PriceCents, when set, is what the line cost in all.
+	PriceCents *int64
 }
 
 // ConfirmInput says what was ordered from a handoff: All lines that aren't

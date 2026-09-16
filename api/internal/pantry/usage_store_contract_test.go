@@ -162,6 +162,48 @@ func runUsageStoreContract(t *testing.T, store UsageStore) {
 	if _, err := store.InsertCookUsage(ctx, usage); err != nil {
 		t.Errorf("same key in another household error = %v", err)
 	}
+	estimated := CookUsage{
+		HouseholdID: testHousehold, SourceKey: "entry:e2", RecipeID: "66e5a1f2c3b4a5d6e7f80e01", EntryID: "e2",
+		Servings: 2, OccurredAt: day(1), CreatedAt: day(1),
+		Lines: []CookLine{{ItemID: itemID, Ingredient: "Sour Cream", Quantity: "2", Unit: "tbsp", Deducted: "1047/1000", TrackingUnit: "oz", CycleID: "c", Estimated: true}},
+	}
+	if _, err := store.InsertCookUsage(ctx, estimated); err != nil {
+		t.Fatal(err)
+	}
+	cooked, err := store.ListCookUsageByEntries(ctx, testHousehold, []string{"e2", "e1", "missing"})
+	if err != nil || len(cooked) != 2 || cooked[0].EntryID != "e1" || cooked[1].EntryID != "e2" {
+		t.Fatalf("ListCookUsageByEntries() = %+v, %v", cooked, err)
+	}
+	if l := cooked[1].Lines; len(l) != 1 || !reflect.DeepEqual(l[0], estimated.Lines[0]) || cooked[0].UserID != testUser || cooked[0].ScaledFrom != 2 {
+		t.Errorf("listed cook usage = %+v", cooked)
+	}
+	if list, _ := store.ListCookUsageByEntries(ctx, otherHousehold, []string{"e2"}); len(list) != 0 {
+		t.Errorf("other household's cook usage = %+v", list)
+	}
+
+	price := int64(1298)
+	priced, err := store.SetPurchasePrice(ctx, testHousehold, fromHandoff.ID, &price)
+	if err != nil || priced.PriceCents == nil || *priced.PriceCents != 1298 || priced.ID != fromHandoff.ID {
+		t.Fatalf("SetPurchasePrice() = %+v, %v", priced, err)
+	}
+	if _, err := store.SetPurchasePrice(ctx, otherHousehold, fromHandoff.ID, &price); !errors.Is(err, ErrNotFound) {
+		t.Errorf("SetPurchasePrice(other household) error = %v", err)
+	}
+	byID, err := store.PurchasesByIDs(ctx, testHousehold, []string{fromHandoff.ID, first.ID, "nope"})
+	if err != nil || len(byID) != 2 {
+		t.Fatalf("PurchasesByIDs() = %+v, %v", byID, err)
+	}
+	for _, p := range byID {
+		if p.ID == fromHandoff.ID && (p.PriceCents == nil || *p.PriceCents != 1298) {
+			t.Errorf("priced purchase = %+v", p)
+		}
+	}
+	if cleared, err := store.SetPurchasePrice(ctx, testHousehold, fromHandoff.ID, nil); err != nil || cleared.PriceCents != nil {
+		t.Errorf("clear price = %+v, %v", cleared, err)
+	}
+	if list, _ := store.PurchasesByIDs(ctx, otherHousehold, []string{fromHandoff.ID}); len(list) != 0 {
+		t.Errorf("other household's purchases = %+v", list)
+	}
 
 	if _, err := store.GetSettings(ctx, testHousehold); !errors.Is(err, ErrNotFound) {
 		t.Errorf("GetSettings() before put error = %v", err)

@@ -230,6 +230,8 @@ func TestApplyPersonEdit(t *testing.T) {
 func TestRestock(t *testing.T) {
 	item := trackedButter()
 	item.Tracking.SegmentRecipeUsed = "6"
+	// Marked low: replacing it assumes the old stock was used up.
+	item.Status = StatusLow
 	restock(&item, "cycle2", CycleManual, "1", "cup", day(8))
 	if item.Tracking.CycleID != "cycle2" || item.Tracking.Reference != "1" || item.Status != StatusInStock || !item.StatusSetAt.Equal(day(8)) {
 		t.Errorf("restocked = %+v", item)
@@ -251,6 +253,7 @@ func TestRestock(t *testing.T) {
 
 	// A known package size tracks the purchase in the size's unit.
 	item.UnitSize = &UnitSize{Unit: "package", Quantity: "8", SizeUnit: "oz"}
+	item.Status = StatusLow
 	restock(&item, "cycle4", CycleGroceryList, "2", "package", day(20))
 	if item.Tracking.Unit != "oz" || item.Tracking.Reference != "16" || item.Quantity != "2" || item.Unit != "package" {
 		t.Errorf("sized restock = %+v", item.Tracking)
@@ -266,5 +269,40 @@ func TestRestock(t *testing.T) {
 	}
 	if len(item.History) != MaxHistorySegments {
 		t.Errorf("history length = %d, want %d", len(item.History), MaxHistorySegments)
+	}
+}
+
+func TestRestockCarriesInStockLeftovers(t *testing.T) {
+	// Soy sauce: a 10 fl oz bottle, 4 fl oz used by recipes, still in stock.
+	item := Item{ID: "soy", HouseholdID: testHousehold, Key: "soy sauce", DisplayName: "Soy Sauce", Status: StatusInStock,
+		StatusSource: StatusSourcePerson, StatusSetAt: testNow, Quantity: "1", Unit: "package",
+		UnitSize: &UnitSize{Unit: "package", Quantity: "10", SizeUnit: "fl oz"}}
+	restock(&item, "c1", CycleProvider, "1", "package", testNow)
+	item.Tracking.SegmentRecipeUsed, item.Tracking.RecipeUsed = "4", "4"
+
+	// Another bottle arrives: 6 left + 10 bought = 16 fl oz, and 100% is 16.
+	restock(&item, "c2", CycleProvider, "1", "package", day(10))
+	if tr := item.Tracking; tr.CycleID != "c2" || tr.Unit != "fl oz" || tr.Reference != "16" || tr.SegmentStart != "16" {
+		t.Fatalf("carried tracking = %+v", tr)
+	}
+	if h := item.History; len(h) != 1 || !h[0].Carried || h[0].Remaining != "6" || h[0].Observed {
+		t.Errorf("carried history = %+v", h)
+	}
+	// Carried segments never teach the rate, however many there are.
+	for _, id := range []string{"c3", "c4", "c5"} {
+		restock(&item, id, CycleProvider, "1", "package", day(30))
+	}
+	if item.Rate != nil {
+		t.Errorf("rate from carried segments = %+v", item.Rate)
+	}
+
+	// Less than MinCarryPercent left counts as used up.
+	item.Tracking.SegmentRecipeUsed = new(big.Rat).Sub(ratOf(item.Tracking.SegmentStart), ratOf("1")).RatString()
+	restock(&item, "c9", CycleManual, "1", "package", day(70))
+	if tr := item.Tracking; tr.Reference != "10" {
+		t.Errorf("crumb carried: %+v", tr)
+	}
+	if h := item.History[len(item.History)-1]; h.Carried || h.Remaining != "0" {
+		t.Errorf("crumb segment = %+v", h)
 	}
 }

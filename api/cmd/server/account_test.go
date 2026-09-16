@@ -69,6 +69,7 @@ var accountDeletionKinds = map[string]collectionKind{
 	shopping.HandoffsCollection:            householdData,
 	shopping.StoreRequestsCollection:       householdData,
 	shopping.OrderWeeksCollection:          householdData,
+	shopping.WeekSpendCollection:           householdData,
 	skips.Collection:                       householdData,
 	ratings.Collection:                     userRatings,
 	events.Collection:                      userHistory,

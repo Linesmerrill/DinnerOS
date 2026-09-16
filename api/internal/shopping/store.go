@@ -72,6 +72,23 @@ type Store interface {
 	// pending.
 	SkipLine(ctx context.Context, householdID, handoffID, lineID, userID string, at time.Time) (bool, error)
 
+	// SetLinePrices sets (or, with nil, clears) handoff lines' prices by line
+	// ID and returns the handoff. Unknown line IDs are ignored.
+	SetLinePrices(ctx context.Context, householdID, handoffID string, prices map[string]*int64, at time.Time) (Handoff, error)
+	// SetPreferencePrice sets a saved product's package price, provided the
+	// ingredient's saved product is still productID; otherwise ErrNotFound.
+	SetPreferencePrice(ctx context.Context, householdID string, provider providers.Key, ingredientKey, productID string, priceCents int64, at time.Time) error
+
+	// GetWeekSpend returns a week's order total, or ErrNotFound.
+	GetWeekSpend(ctx context.Context, householdID, week string) (WeekSpend, error)
+	// ListWeekSpend returns the household's order totals, latest week first,
+	// at most limit.
+	ListWeekSpend(ctx context.Context, householdID string, limit int) ([]WeekSpend, error)
+	// PutWeekSpend creates or replaces a week's order total.
+	PutWeekSpend(ctx context.Context, w WeekSpend) (WeekSpend, error)
+	// DeleteWeekSpend removes a week's order total, or returns ErrNotFound.
+	DeleteWeekSpend(ctx context.Context, householdID, week string) error
+
 	// GetOrderedWeek returns the household's ordered marker for the week, or
 	// ErrNotFound when the week isn't marked.
 	GetOrderedWeek(ctx context.Context, householdID, week string) (OrderedWeek, error)

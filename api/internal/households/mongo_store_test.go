@@ -44,6 +44,16 @@ func TestIntegrationMongoStoreHouseholds(t *testing.T) {
 	if err != nil || updated.Name != "Casa" || updated.DefaultServings != 5 || updated.TimeZone != "America/Denver" || !updated.UpdatedAt.Equal(later) {
 		t.Errorf("UpdateHousehold() = %+v, %v", updated, err)
 	}
+	kit, err := store.UpdateHousehold(ctx, h.ID, HouseholdPatch{SetMealKit: true, MealKit: &MealKit{WeeklyCents: 13000, Meals: 5}}, later)
+	if err != nil || kit.MealKit == nil || *kit.MealKit != (MealKit{WeeklyCents: 13000, Meals: 5}) || kit.Name != "Casa" {
+		t.Errorf("UpdateHousehold(meal kit) = %+v, %v", kit, err)
+	}
+	if got, _ := store.GetHousehold(ctx, h.ID); got.MealKit == nil || got.MealKit.Meals != 5 {
+		t.Errorf("GetHousehold() meal kit = %+v", got.MealKit)
+	}
+	if cleared, err := store.UpdateHousehold(ctx, h.ID, HouseholdPatch{SetMealKit: true}, later); err != nil || cleared.MealKit != nil {
+		t.Errorf("clearing meal kit = %+v, %v", cleared, err)
+	}
 	if _, err := store.UpdateHousehold(ctx, missingID, HouseholdPatch{Name: ptr("x")}, later); !errors.Is(err, ErrNotFound) {
 		t.Errorf("UpdateHousehold(missing) error = %v", err)
 	}

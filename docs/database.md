@@ -54,7 +54,7 @@ Implemented in Phase 3 (`internal/households`, `internal/invitations`).
 
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `households` | name, defaultServings (1–12, default 2), timeZone (IANA name), orderDay (`mon`–`sun`, absent when unset), createdBy, adminCount, createdAt, updatedAt | — (looked up by `_id` only) |
+| `households` | name, defaultServings (1–12, default 2), timeZone (IANA name), orderDay (`mon`–`sun`, absent when unset), mealKit{weeklyCents, meals} (absent when unset), createdBy, adminCount, createdAt, updatedAt | — (looked up by `_id` only) |
 | `household_memberships` | householdId, userId, role (`admin`/`member`), createdAt, updatedAt | **unique** `{householdId, userId}`; `{userId}` |
 | `household_invitations` | householdId, email (trimmed, lowercase), role, tokenHash, codeHash, expiresAt, pending, acceptedAt, acceptedBy, revokedAt, createdBy, createdAt | **unique** `{tokenHash}`; **unique** `{codeHash}`; **unique partial** `{householdId, email}` where `pending: true` |
 
@@ -229,8 +229,8 @@ Implemented in `internal/pantry` ([pantry-usage.md](pantry-usage.md)).
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
 | `pantry_items` (usage fields) | statusSource (`person`/`estimate`; absent on older items, meaning person), statusSetAt, tracking{cycleId, cycleSource, cycleStartedAt, unit, reference, segmentStart, segmentStartedAt, segmentRecipeUsed, recipeUsed, recipeUses, skippedUses}, unitSize{unit, quantity, sizeUnit}, history[{startedAt, endedAt, unit, start, recipeUsed, remaining, observed}], rate{perDay, unit, segments, computedAt}, lowThresholdPercent, lowAlertCycleId | the item's unique key |
-| `pantry_purchases` | householdId, itemId, itemKey, source (`grocery_list`/`manual`/`provider`/`house_made`), quantity, quantityValue, unit, unitSize{}, week, clientPurchaseId, provider{key, handoffId, lineId, productId}, recordedBy, purchasedAt | `{householdId, itemId, purchasedAt: -1}`; **unique partial** `{householdId, recordedBy, clientPurchaseId}` where `clientPurchaseId` is a string; **unique partial** `{householdId, provider.handoffId, provider.lineId}` where `provider.handoffId` is a string |
-| `pantry_cook_usage` | householdId, sourceKey, recipeId, entryId, userId, servings, scaledFrom, occurredAt, createdAt, lines[{itemId, ingredient, quantity, unit, deducted, trackingUnit, cycleId, skipReason}] | **unique** `{householdId, sourceKey}` |
+| `pantry_purchases` | householdId, itemId, itemKey, source (`grocery_list`/`manual`/`provider`/`house_made`), quantity, quantityValue, unit, unitSize{}, week, clientPurchaseId, provider{key, handoffId, lineId, productId}, priceCents (absent when unknown), recordedBy, purchasedAt | `{householdId, itemId, purchasedAt: -1}`; **unique partial** `{householdId, recordedBy, clientPurchaseId}` where `clientPurchaseId` is a string; **unique partial** `{householdId, provider.handoffId, provider.lineId}` where `provider.handoffId` is a string |
+| `pantry_cook_usage` | householdId, sourceKey, recipeId, entryId, userId, servings, scaledFrom, occurredAt, createdAt, lines[{itemId, ingredient, quantity, unit, deducted, trackingUnit, cycleId, estimated, skipReason}] | **unique** `{householdId, sourceKey}` |
 | `pantry_settings` | householdId, lowThresholdPercent, updatedBy, updatedAt | **unique** `{householdId}` |
 
 - **Usage state lives on the item** and changes with it under the same
@@ -357,10 +357,11 @@ Implemented in `internal/shopping` (Phase 8a, [shopping-providers.md](shopping-p
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
 | `shopping_settings` | householdId, provider (`walmart`), storeId, updatedBy, updatedAt | **unique** `{householdId}` |
-| `shopping_product_preferences` | householdId, provider, ingredientKey, ingredientName, productId, displayName, packageSize{quantity, quantityValue, unit}, createdBy, createdAt, updatedBy, updatedAt | **unique** `{householdId, provider, ingredientKey}` |
-| `shopping_handoffs` | householdId, week, provider, storeId, lines[{id, ingredientKey, name, category, amounts[{quantity, quantityValue, unit}], unquantified, groceryStatus, productId, productName, packageSize{}, computedPackages, packages, reason, status (`pending`/`confirmed`/`skipped`), claimedAt, confirmedPackages, purchaseId, confirmedBy, confirmedAt, skippedBy, skippedAt}], excluded[{ingredientKey, name, category, amounts[], unquantified, groceryStatus, reason}], links[{url, lineIds[], itemCount}] (the latest send), affiliateTracked, active (only while true), closedAt, closedReason (`ordered`/`started_over`/`confirmed`), revision, createdBy, createdAt, updatedAt | `{householdId, createdAt: -1}`; `{householdId, week, createdAt: -1}`; **unique** `{householdId, week, provider}` where `active: true` (one current handoff per week, #495) |
+| `shopping_product_preferences` | householdId, provider, ingredientKey, ingredientName, productId, displayName, packageSize{quantity, quantityValue, unit}, coverage, priceCents, priceUpdatedAt, createdBy, createdAt, updatedBy, updatedAt | **unique** `{householdId, provider, ingredientKey}` |
+| `shopping_handoffs` | householdId, week, provider, storeId, lines[{id, ingredientKey, name, category, amounts[{quantity, quantityValue, unit}], unquantified, groceryStatus, productId, productName, packageSize{}, computedPackages, packages, reason, status (`pending`/`confirmed`/`skipped`), claimedAt, confirmedPackages, purchaseId, confirmedBy, confirmedAt, skippedBy, skippedAt, priceCents, pantry (`tracked`/`not_tracked`)}], excluded[{ingredientKey, name, category, amounts[], unquantified, groceryStatus, reason}], links[{url, lineIds[], itemCount}] (the latest send), affiliateTracked, active (only while true), closedAt, closedReason (`ordered`/`started_over`/`confirmed`), revision, createdBy, createdAt, updatedAt | `{householdId, createdAt: -1}`; `{householdId, week, createdAt: -1}`; **unique** `{householdId, week, provider}` where `active: true` (one current handoff per week, #495) |
 | `shopping_store_requests` | householdId, key, name, note, requestedBy, requestedAt, updatedAt | **unique** `{householdId, key}`; `{householdId, requestedAt: -1}`; `{key}` |
 | `shopping_order_weeks` | householdId, week, orderedBy, orderedAt | **unique** `{householdId, week}` |
+| `shopping_week_spend` | householdId, week, orderTotalCents, updatedBy, updatedAt | **unique** `{householdId, week}` |
 
 - **Settings** are one document per household, replaced with an upsert.
 - **Store requests** are the grocers and delivery services a household asked
@@ -391,6 +392,17 @@ Implemented in `internal/shopping` (Phase 8a, [shopping-providers.md](shopping-p
   partial index makes a line bought at most once (see
   [Pantry usage](#pantry-usage)).
 - Handoffs are kept indefinitely for now, like purchases.
+- **Money** is integer US cents everywhere (`priceCents`, `orderTotalCents`,
+  `mealKit.weeklyCents`), 0–1,000,000, and every price is optional. A
+  handoff line's `priceCents` is the whole line; a saved product's is one
+  package; a pantry purchase's is the whole purchase. A line's price is set
+  with a positional update that doesn't bump `revision` (it doesn't change
+  the cart). Confirming a line the pantry doesn't track (`pantry:
+  not_tracked`) leaves `purchaseId` absent.
+- **Week spend** is the order total a member entered, one document per
+  household and week, replaced with an upsert and deleted when cleared.
+  Weekly cost and savings are computed on read from handoffs, purchases,
+  cook usage, and the plan; nothing derived is stored.
 
 ### Behavior
 

@@ -52,6 +52,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(edit).Post(base+"/bulk", h.bulk)
 		r.With(edit).Post(base+"/staples/defaults", h.addDefaultStaples)
 		r.With(edit).Post(base+"/purchases", h.recordPurchase)
+		r.With(edit).Patch(base+"/purchases/{purchaseId}", h.setPurchasePrice)
 		r.With(view).Get(base+"/settings", h.getSettings)
 		r.With(edit).Put(base+"/settings", h.putSettings)
 		r.With(view).Get(base+"/{itemId}/purchases", h.listPurchases)

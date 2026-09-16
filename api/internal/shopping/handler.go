@@ -78,6 +78,10 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(view).Get(base+"/handoffs", h.listHandoffs)
 		r.With(view).Get(base+"/handoffs/{handoffId}", h.getHandoff)
 		r.With(pantryEdit).Post(base+"/handoffs/{handoffId}/confirm", h.confirm)
+		r.With(pantryEdit).Post(base+"/handoffs/{handoffId}/prices", h.setPrices)
+		r.With(view).Get(base+"/weeks/{week}/cost", h.getWeekCost)
+		r.With(edit).Put(base+"/weeks/{week}/spend", h.setWeekSpend)
+		r.With(view).Get(base+"/savings", h.getSavings)
 		r.With(view).Get(base+"/requests", h.listStoreRequests)
 		r.With(view).Post(base+"/requests", h.requestStore)
 		r.With(view).Delete(base+"/requests/{requestId}", h.deleteStoreRequest)
@@ -163,6 +167,9 @@ type PreferenceRequest struct {
 	// Coverage overrides how a package covers a week's need; omitted or ""
 	// follows the ingredient's grocery category.
 	Coverage providers.Coverage `json:"coverage"`
+	// PriceCents is one package's price: omitted keeps the saved price,
+	// null clears it.
+	PriceCents httpx.Optional[int64] `json:"priceCents"`
 }
 
 // PreferenceResponse is a saved product for an ingredient.
@@ -177,11 +184,14 @@ type PreferenceResponse struct {
 	DisplayName    string               `json:"displayName"`
 	PackageSize    *PackageSizeResponse `json:"packageSize"`
 	// Coverage is the household's override, or "" to follow the category.
-	Coverage  providers.Coverage `json:"coverage"`
-	CreatedBy string             `json:"createdBy"`
-	CreatedAt time.Time          `json:"createdAt"`
-	UpdatedBy string             `json:"updatedBy"`
-	UpdatedAt time.Time          `json:"updatedAt"`
+	Coverage providers.Coverage `json:"coverage"`
+	// PriceCents is one package's price, or null when none was entered.
+	PriceCents     *int64     `json:"priceCents"`
+	PriceUpdatedAt *time.Time `json:"priceUpdatedAt"`
+	CreatedBy      string     `json:"createdBy"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedBy      string     `json:"updatedBy"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
 }
 
 // PreferenceListResponse is returned by GET .../preferences.
@@ -264,6 +274,11 @@ type HandoffLineResponse struct {
 	Cart *LineCartResponse `json:"cart"`
 	// Recipes are the planned recipes the line is for, never null.
 	Recipes []RecipeRefResponse `json:"recipes"`
+	// PriceCents is what the line cost in all, or null.
+	PriceCents *int64 `json:"priceCents"`
+	// Pantry is null until confirmed; then tracked (a pantry purchase) or
+	// not_tracked (fresh for the week, used up).
+	Pantry *PantryTracking `json:"pantry"`
 }
 
 // RecipeRefResponse names a recipe a line is for.
@@ -381,6 +396,90 @@ type HandoffListResponse struct {
 type ConfirmLineRequest struct {
 	LineID   string `json:"lineId"`
 	Packages int    `json:"packages"`
+	// PriceCents is optional: what the line cost in all, in US cents.
+	PriceCents *int64 `json:"priceCents"`
+}
+
+// LinePriceRequest is one line of POST .../handoffs/{handoffId}/prices.
+type LinePriceRequest struct {
+	LineID string `json:"lineId"`
+	// PriceCents is required; null clears the line's price.
+	PriceCents httpx.Optional[int64] `json:"priceCents"`
+}
+
+// SetPricesRequest is the body of POST .../handoffs/{handoffId}/prices.
+type SetPricesRequest struct {
+	Lines []LinePriceRequest `json:"lines"`
+}
+
+// SetWeekSpendRequest is the body of PUT .../shopping/weeks/{week}/spend.
+type SetWeekSpendRequest struct {
+	// OrderTotalCents is required; null clears it.
+	OrderTotalCents httpx.Optional[int64] `json:"orderTotalCents"`
+}
+
+// MealKitResponse is the household's meal kit baseline.
+type MealKitResponse struct {
+	WeeklyCents  int64 `json:"weeklyCents"`
+	Meals        int   `json:"meals"`
+	PerMealCents int64 `json:"perMealCents"`
+}
+
+// CostItemResponse is one bought item in a week's cost.
+type CostItemResponse struct {
+	HandoffID     string         `json:"handoffId"`
+	LineID        string         `json:"lineId"`
+	IngredientKey string         `json:"ingredientKey"`
+	Name          string         `json:"name"`
+	PriceCents    *int64         `json:"priceCents"`
+	UsedCents     *int64         `json:"usedCents"`
+	StockedCents  *int64         `json:"stockedCents"`
+	Pantry        PantryTracking `json:"pantry"`
+	Usage         ItemUsage      `json:"usage"`
+}
+
+// WeekCostResponse is returned by GET .../shopping/weeks/{week}/cost and PUT
+// .../spend. Money is integer US cents.
+type WeekCostResponse struct {
+	Week                  string             `json:"week"`
+	Currency              string             `json:"currency"`
+	OrderTotalCents       *int64             `json:"orderTotalCents"`
+	SpentCents            *int64             `json:"spentCents"`
+	SpentSource           *string            `json:"spentSource"`
+	ItemsBought           int                `json:"itemsBought"`
+	ItemsPriced           int                `json:"itemsPriced"`
+	UsedCents             *int64             `json:"usedCents"`
+	StockedCents          *int64             `json:"stockedCents"`
+	EarlierStockUsedCents int64              `json:"earlierStockUsedCents"`
+	FeesAndUnpricedCents  int64              `json:"feesAndUnpricedCents"`
+	Meals                 int                `json:"meals"`
+	CostPerMealCents      *int64             `json:"costPerMealCents"`
+	MealKit               *MealKitResponse   `json:"mealKit"`
+	SavedCents            *int64             `json:"savedCents"`
+	Partial               bool               `json:"partial"`
+	Summary               string             `json:"summary"`
+	Items                 []CostItemResponse `json:"items"`
+}
+
+// WeekSavingsSummaryResponse is one week in the savings history.
+type WeekSavingsSummaryResponse struct {
+	Week             string `json:"week"`
+	SpentCents       *int64 `json:"spentCents"`
+	UsedCents        *int64 `json:"usedCents"`
+	StockedCents     *int64 `json:"stockedCents"`
+	Meals            int    `json:"meals"`
+	CostPerMealCents *int64 `json:"costPerMealCents"`
+	SavedCents       *int64 `json:"savedCents"`
+	ItemsBought      int    `json:"itemsBought"`
+	ItemsPriced      int    `json:"itemsPriced"`
+}
+
+// SavingsResponse is returned by GET .../shopping/savings.
+type SavingsResponse struct {
+	Weeks           []WeekSavingsSummaryResponse `json:"weeks"`
+	TotalSavedCents *int64                       `json:"totalSavedCents"`
+	WeeksCounted    int                          `json:"weeksCounted"`
+	MealKit         *MealKitResponse             `json:"mealKit"`
 }
 
 // ConfirmRequest is the body of POST .../handoffs/{handoffId}/confirm.
@@ -517,6 +616,7 @@ func (h *Handler) preferenceResponse(p Preference) PreferenceResponse {
 		ID: p.ID, Provider: p.Provider, IngredientKey: p.IngredientKey, IngredientID: optionalString(catalogID(p.IngredientKey)),
 		IngredientName: p.IngredientName, ProductID: p.ProductID, ProductURL: h.providerURL(p.Provider, p.ProductID),
 		DisplayName: p.DisplayName, PackageSize: packageSizeResponse(p.PackageSize), Coverage: p.Coverage,
+		PriceCents: p.PriceCents, PriceUpdatedAt: optionalTime(p.PriceUpdatedAt),
 		CreatedBy: p.CreatedBy, CreatedAt: p.CreatedAt, UpdatedBy: p.UpdatedBy, UpdatedAt: p.UpdatedAt,
 	}
 }
@@ -569,6 +669,11 @@ func (h *Handler) lineResponse(provider providers.Key, l HandoffLine, stored boo
 	resp.CoverageText = providers.CoverageText(count, size)
 	resp.Coverage, resp.CoversWeek = l.Coverage, count.CoversWeek
 	resp.SearchTerms = searchTermsResponse(l.Name, l.Category)
+	resp.PriceCents = l.PriceCents
+	if l.Pantry != "" {
+		tracking := l.Pantry
+		resp.Pantry = &tracking
+	}
 	resp.Recipes = make([]RecipeRefResponse, 0, len(l.Recipes))
 	for _, r := range l.Recipes {
 		resp.Recipes = append(resp.Recipes, RecipeRefResponse(r))
@@ -624,6 +729,8 @@ func (h *Handler) exclusionText(provider providers.Key, reason ExclusionReason) 
 		return "Choose a " + h.providerName(provider) + " product"
 	case ExcludedNotOnList:
 		return "No longer on this week's list"
+	case ExcludedOrdered:
+		return "Ordered this week"
 	}
 	return ""
 }
@@ -793,6 +900,7 @@ func (h *Handler) putPreference(w http.ResponseWriter, r *http.Request) {
 	in := PreferenceInput{
 		ProductURL: req.ProductURL, ProductID: req.ProductID, DisplayName: req.DisplayName,
 		IngredientName: req.IngredientName, Coverage: req.Coverage,
+		SetPrice: req.PriceCents.Set, PriceCents: req.PriceCents.Value,
 	}
 	if req.PackageSize != nil {
 		in.PackageSize = &PackageSize{Quantity: req.PackageSize.Quantity, Unit: req.PackageSize.Unit}
@@ -931,6 +1039,109 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 			pr.Item = h.opts.Pantry.ItemResponse(r.Context(), p.Item)
 		}
 		resp.Purchases = append(resp.Purchases, pr)
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) setPrices(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	var req SetPricesRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	prices := make([]LinePrice, 0, len(req.Lines))
+	for _, l := range req.Lines {
+		if !l.PriceCents.Set {
+			h.writeError(w, r, "", invalid("each line needs priceCents; send null to clear it"))
+			return
+		}
+		prices = append(prices, LinePrice{LineID: l.LineID, PriceCents: l.PriceCents.Value})
+	}
+	ho, err := h.opts.Service.SetPrices(r.Context(), actor, chi.URLParam(r, "handoffId"), prices)
+	if err != nil {
+		h.writeError(w, r, "set shopping prices failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, h.handoffResponse(ho))
+}
+
+func mealKitResponse(kit *households.MealKit) *MealKitResponse {
+	if kit == nil {
+		return nil
+	}
+	return &MealKitResponse{WeeklyCents: kit.WeeklyCents, Meals: kit.Meals, PerMealCents: kit.PerMealCents()}
+}
+
+func weekCostResponse(c WeekCost) WeekCostResponse {
+	resp := WeekCostResponse{
+		Week: c.Week, Currency: "USD", OrderTotalCents: c.OrderTotalCents, SpentCents: c.SpentCents, SpentSource: optionalString(c.SpentSource),
+		ItemsBought: c.ItemsBought, ItemsPriced: c.ItemsPriced, UsedCents: c.UsedCents, StockedCents: c.StockedCents,
+		EarlierStockUsedCents: c.EarlierStockUsedCents, FeesAndUnpricedCents: c.FeesAndUnpricedCents, Meals: c.Meals,
+		CostPerMealCents: c.CostPerMealCents, MealKit: mealKitResponse(c.MealKit), SavedCents: c.SavedCents,
+		Partial: c.Partial(), Summary: c.Summary, Items: make([]CostItemResponse, 0, len(c.Items)),
+	}
+	for _, it := range c.Items {
+		resp.Items = append(resp.Items, CostItemResponse(it))
+	}
+	return resp
+}
+
+func (h *Handler) getWeekCost(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	c, err := h.opts.Service.WeekCost(r.Context(), actor.HouseholdID, chi.URLParam(r, "week"))
+	if err != nil {
+		h.writeError(w, r, "get week cost failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, weekCostResponse(c))
+}
+
+func (h *Handler) setWeekSpend(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	var req SetWeekSpendRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	if !req.OrderTotalCents.Set {
+		h.writeError(w, r, "", invalid("orderTotalCents is required; send null to clear it"))
+		return
+	}
+	week := chi.URLParam(r, "week")
+	if err := h.opts.Service.SetWeekSpend(r.Context(), actor, week, req.OrderTotalCents.Value); err != nil {
+		h.writeError(w, r, "set week spend failed", err)
+		return
+	}
+	c, err := h.opts.Service.WeekCost(r.Context(), actor.HouseholdID, week)
+	if err != nil {
+		h.writeError(w, r, "get week cost failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, weekCostResponse(c))
+}
+
+func (h *Handler) getSavings(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	limit := 0
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > MaxSavingsWeeks {
+			h.writeError(w, r, "", invalid("limit must be between 1 and %d", MaxSavingsWeeks))
+			return
+		}
+		limit = n
+	}
+	s, err := h.opts.Service.Savings(r.Context(), actor.HouseholdID, limit)
+	if err != nil {
+		h.writeError(w, r, "get savings failed", err)
+		return
+	}
+	resp := SavingsResponse{Weeks: make([]WeekSavingsSummaryResponse, 0, len(s.Weeks)), TotalSavedCents: s.TotalSavedCents,
+		WeeksCounted: s.WeeksCounted, MealKit: mealKitResponse(s.MealKit)}
+	for _, c := range s.Weeks {
+		resp.Weeks = append(resp.Weeks, WeekSavingsSummaryResponse{
+			Week: c.Week, SpentCents: c.SpentCents, UsedCents: c.UsedCents, StockedCents: c.StockedCents, Meals: c.Meals,
+			CostPerMealCents: c.CostPerMealCents, SavedCents: c.SavedCents, ItemsBought: c.ItemsBought, ItemsPriced: c.ItemsPriced,
+		})
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }

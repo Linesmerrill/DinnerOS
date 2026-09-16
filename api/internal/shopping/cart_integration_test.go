@@ -56,7 +56,7 @@ func TestIntegrationSendingAgainAddsOnlyWhatsNew(t *testing.T) {
 	if _, err := f.svc.UpdateSettings(ctx, f.actor, "walmart", "5435"); err != nil {
 		t.Fatal(err)
 	}
-	f.save(t, "Ground Beef", "https://www.walmart.com/ip/Test-Beef/100000001", &PackageSize{Quantity: "16", Unit: "oz"})
+	f.saveMeasured(t, "Ground Beef", "https://www.walmart.com/ip/Test-Beef/100000001", &PackageSize{Quantity: "16", Unit: "oz"})
 	f.save(t, "Yellow Onion", "https://www.walmart.com/ip/100000002", &PackageSize{Quantity: "3", Unit: "count"})
 	f.save(t, "Kidney Beans", "https://www.walmart.com/ip/Test-Beans/100000005", &PackageSize{Quantity: "1", Unit: "can"})
 
@@ -252,7 +252,7 @@ func TestIntegrationSendingAgainAddsOnlyWhatsNew(t *testing.T) {
 func TestIntegrationLegacyHandoffIsAdopted(t *testing.T) {
 	f := newFixture(t)
 	ctx := f.ctx
-	f.save(t, "Ground Beef", "https://www.walmart.com/ip/Test-Beef/100000001", &PackageSize{Quantity: "16", Unit: "oz"})
+	f.saveMeasured(t, "Ground Beef", "https://www.walmart.com/ip/Test-Beef/100000001", &PackageSize{Quantity: "16", Unit: "oz"})
 	h, _, err := f.svc.CreateHandoff(ctx, f.actor, testWeek, "walmart", MatchInput{})
 	if err != nil {
 		t.Fatal(err)
@@ -277,7 +277,7 @@ func TestIntegrationSendAgainHTTP(t *testing.T) {
 	if _, err := f.svc.UpdateSettings(ctx, f.actor, "walmart", "5435"); err != nil {
 		t.Fatal(err)
 	}
-	f.save(t, "Ground Beef", "https://www.walmart.com/ip/Test-Beef/100000001", &PackageSize{Quantity: "16", Unit: "oz"})
+	f.saveMeasured(t, "Ground Beef", "https://www.walmart.com/ip/Test-Beef/100000001", &PackageSize{Quantity: "16", Unit: "oz"})
 	r := chi.NewRouter()
 	r.Route("/api/v1", NewHandler(HandlerOptions{
 		Service: f.svc, Pantry: f.pantry, Tokens: fakeTokens{},

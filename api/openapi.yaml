@@ -1917,6 +1917,57 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/pantry/purchases/{purchaseId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - name: purchaseId
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      summary: Set a purchase's price
+      description: |
+        Sets what a purchase cost, or clears it with null. `priceCents` is
+        required. Prices of provider purchases are usually set through
+        POST .../shopping/handoffs/{handoffId}/prices, which keeps the handoff
+        line in step. Requires `pantry.edit`.
+      operationId: setPantryPurchasePrice
+      tags: [pantry]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [priceCents]
+              properties:
+                priceCents:
+                  type: [integer, "null"]
+                  minimum: 0
+                  maximum: 1000000
+      responses:
+        "200":
+          description: The purchase.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [purchase]
+                properties:
+                  purchase:
+                    $ref: "#/components/schemas/PantryPurchase"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/pantry/settings:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -2731,8 +2782,11 @@ paths:
     post:
       summary: Confirm what was ordered
       description: |
-        Records what a member says was ordered ("Did you order these?"). Each
-        confirmed line becomes one pantry purchase with `source: provider`,
+        Records what a member says was ordered ("Did you order these?"). Lines
+        counted per_amount, and per_week lines (not meat or seafood) with a
+        measurable leftover of at least 25%, become pantry purchases; other
+        lines are confirmed with `pantry: not_tracked` and no purchase. Each
+        tracked line becomes one pantry purchase with `source: provider`,
         written from the stored line: `unit: package` with `unitSize` for a
         weight or volume package size, the exact amount for a discrete size
         (2 × 12 count = 24 count), or a package count without a size. A
@@ -2767,6 +2821,162 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/ShoppingConflict"
+  /api/v1/households/{householdId}/shopping/handoffs/{handoffId}/prices:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/ShoppingHandoffID"
+    post:
+      summary: Set what handoff lines cost
+      description: |
+        Sets each line's `priceCents` (null clears). A confirmed line's pantry
+        purchase gets the same price, and the saved product remembers the
+        package price (price ÷ packages) while it is still the line's product.
+        Prices come from members, typed in or read on the phone from an order
+        screenshot that never leaves the phone. Requires `pantry.edit`.
+      operationId: setShoppingPrices
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [lines]
+              properties:
+                lines:
+                  type: array
+                  minItems: 1
+                  maxItems: 300
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [lineId, priceCents]
+                    properties:
+                      lineId:
+                        type: string
+                      priceCents:
+                        type: [integer, "null"]
+                        minimum: 0
+                        maximum: 1000000
+      responses:
+        "200":
+          description: The handoff.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingHandoff"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/shopping/weeks/{week}/cost:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    get:
+      summary: What the week's groceries cost
+      description: |
+        Spent, used by this week's meals, stocked for later, cost per meal, and
+        the comparison with the household's meal kit, from the prices members
+        entered (docs/grocery-engine.md#weekly-cost). Requires `household.view`.
+      operationId: getWeekCost
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The week's cost.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeekCost"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/shopping/weeks/{week}/spend:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    put:
+      summary: Record the week's order total
+      description: |
+        What the whole order cost, fees, tax, tip, and discounts included, or
+        null to clear it. Requires `shopping.edit`.
+      operationId: setWeekSpend
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [orderTotalCents]
+              properties:
+                orderTotalCents:
+                  type: [integer, "null"]
+                  minimum: 0
+                  maximum: 1000000
+      responses:
+        "200":
+          description: The week's cost with the new total.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeekCost"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/shopping/savings:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: Recent weeks' cost and savings
+      description: |
+        Weeks with a confirmed order or an order total, newest first, with the
+        total saved against the meal kit. Requires `household.view`.
+      operationId: getShoppingSavings
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 26
+            default: 8
+      responses:
+        "200":
+          description: The savings history.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingSavings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/shopping/weeks/{week}/order:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -4908,7 +5118,7 @@ components:
         - shopping.edit
     Household:
       type: object
-      required: [id, name, defaultServings, timeZone, orderDay, createdBy, createdAt, updatedAt]
+      required: [id, name, defaultServings, timeZone, orderDay, mealKit, createdBy, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -4931,6 +5141,11 @@ components:
           enum: [mon, tue, wed, thu, fri, sat, sun, null]
           description: The weekday the household means to place its grocery order; null until someone picks one, which leaves order reminders off.
           example: thu
+        mealKit:
+          description: What the household spent on meal kits, compared with its weekly grocery cost; null until set.
+          oneOf:
+            - $ref: "#/components/schemas/MealKit"
+            - type: "null"
         createdBy:
           type: string
           description: User ID of the member who created the household.
@@ -5018,6 +5233,11 @@ components:
           enum: [mon, tue, wed, thu, fri, sat, sun, ""]
           description: The grocery order day. An empty string clears it, turning order reminders off; omitting the field leaves it unchanged.
           example: thu
+        mealKit:
+          description: The meal kit baseline; null turns the comparison off, omitting it leaves it unchanged.
+          oneOf:
+            - $ref: "#/components/schemas/MealKit"
+            - type: "null"
     CreateHouseholdResponse:
       type: object
       required: [household, membership]
@@ -6199,9 +6419,14 @@ components:
           type: string
           maxLength: 64
           description: Idempotency key, unique per member.
+        priceCents:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+          description: Optional. What the whole purchase cost, in US cents.
     PantryPurchase:
       type: object
-      required: [id, householdId, itemId, source, quantity, quantityValue, unit, unitSize, week, clientPurchaseId, provider, recordedBy, purchasedAt]
+      required: [id, householdId, itemId, source, quantity, quantityValue, unit, unitSize, week, clientPurchaseId, provider, priceCents, recordedBy, purchasedAt]
       properties:
         id:
           type: string
@@ -6235,6 +6460,11 @@ components:
           oneOf:
             - $ref: "#/components/schemas/PantryPurchaseProvider"
             - type: "null"
+        priceCents:
+          type: [integer, "null"]
+          minimum: 0
+          maximum: 1000000
+          description: What the whole purchase cost, in US cents; null when nobody entered a price.
         recordedBy:
           type: string
         purchasedAt:
@@ -9135,9 +9365,14 @@ components:
             it (a clove against a bulb sold by the each); `per_amount` always
             counts by exact measure. Omitted or empty follows the
             ingredient's grocery category.
+        priceCents:
+          type: [integer, "null"]
+          minimum: 0
+          maximum: 1000000
+          description: One package's price in US cents. Omitted keeps the saved price; null clears it.
     ShoppingPreference:
       type: object
-      required: [id, provider, ingredientKey, ingredientId, ingredientName, productId, productUrl, displayName, packageSize, coverage, createdBy, createdAt, updatedBy, updatedAt]
+      required: [id, provider, ingredientKey, ingredientId, ingredientName, productId, productUrl, displayName, packageSize, coverage, priceCents, priceUpdatedAt, createdBy, createdAt, updatedBy, updatedAt]
       properties:
         id:
           type: string
@@ -9168,6 +9403,12 @@ components:
           type: string
           enum: ["", per_week, per_amount]
           description: The household's override, or empty to follow the category.
+        priceCents:
+          type: [integer, "null"]
+          description: One package's price in US cents, entered by a member or remembered from a priced handoff line.
+        priceUpdatedAt:
+          type: [string, "null"]
+          format: date-time
         createdBy:
           type: string
         createdAt:
@@ -9240,7 +9481,7 @@ components:
           format: date-time
     ShoppingHandoffLine:
       type: object
-      required: [id, ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, product, computedPackages, packages, packagesOverridden, checkAmount, reason, reasonText, coverageText, coverage, coversWeek, searchTerms, confirmation, cart, recipes]
+      required: [id, ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, product, computedPackages, packages, packagesOverridden, checkAmount, reason, reasonText, coverageText, coverage, coversWeek, searchTerms, confirmation, cart, recipes, priceCents, pantry]
       properties:
         id:
           type: string
@@ -9346,6 +9587,18 @@ components:
                 type: string
               name:
                 type: string
+        priceCents:
+          type: [integer, "null"]
+          description: What the line cost in all (every package), in US cents; null until a member enters it.
+        pantry:
+          type: [string, "null"]
+          enum: [tracked, not_tracked, null]
+          description: |
+            Null until confirmed. `tracked`: the line became a pantry purchase
+            whose leftovers count down. `not_tracked`: bought fresh for the
+            week and assumed used up (meat and seafood; other per_week lines
+            without a measurable leftover of at least 25%), so no purchase.
+    ShoppingLineCart:
       type: object
       required: [sentPackages, addPackages, removePackages]
       properties:
@@ -9438,7 +9691,7 @@ components:
           enum: [toBuy, inPantry, pantryHint, null]
         reason:
           type: string
-          enum: [in_pantry, pantry_hint, house_made, checked_off, excluded, not_selected, no_product, not_on_list]
+          enum: [in_pantry, pantry_hint, house_made, checked_off, excluded, not_selected, no_product, not_on_list, ordered]
         text:
           type: string
           example: Choose a Walmart product
@@ -9569,6 +9822,147 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ShoppingHandoff"
+    MealKit:
+      type: object
+      additionalProperties: false
+      required: [weeklyCents, meals]
+      properties:
+        weeklyCents:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+          example: 13000
+        meals:
+          type: integer
+          minimum: 1
+          maximum: 21
+          example: 5
+    WeekCost:
+      type: object
+      required: [week, currency, orderTotalCents, spentCents, spentSource, itemsBought, itemsPriced, usedCents, stockedCents, earlierStockUsedCents, feesAndUnpricedCents, meals, costPerMealCents, mealKit, savedCents, partial, summary, items]
+      properties:
+        week:
+          type: string
+          example: 2026-W38
+        currency:
+          type: string
+          enum: [USD]
+        orderTotalCents:
+          type: [integer, "null"]
+        spentCents:
+          type: [integer, "null"]
+          description: The order total, else the sum of known item prices.
+        spentSource:
+          type: [string, "null"]
+          enum: [order_total, item_prices, null]
+        itemsBought:
+          type: integer
+        itemsPriced:
+          type: integer
+        usedCents:
+          type: [integer, "null"]
+          description: What this week's meals used, including earlierStockUsedCents and feesAndUnpricedCents.
+        stockedCents:
+          type: [integer, "null"]
+          description: What's left of this week's priced items.
+        earlierStockUsedCents:
+          type: integer
+        feesAndUnpricedCents:
+          type: integer
+        meals:
+          type: integer
+        costPerMealCents:
+          type: [integer, "null"]
+        mealKit:
+          oneOf:
+            - type: object
+              required: [weeklyCents, meals, perMealCents]
+              properties:
+                weeklyCents:
+                  type: integer
+                meals:
+                  type: integer
+                perMealCents:
+                  type: integer
+            - type: "null"
+        savedCents:
+          type: [integer, "null"]
+          description: The meal kit's price per meal × meals − usedCents; negative when groceries cost more.
+        partial:
+          type: boolean
+        summary:
+          type: string
+          example: Based on 18 of 24 items with prices.
+        items:
+          type: array
+          items:
+            type: object
+            required: [handoffId, lineId, ingredientKey, name, priceCents, usedCents, stockedCents, pantry, usage]
+            properties:
+              handoffId:
+                type: string
+              lineId:
+                type: string
+              ingredientKey:
+                type: string
+              name:
+                type: string
+              priceCents:
+                type: [integer, "null"]
+              usedCents:
+                type: [integer, "null"]
+              stockedCents:
+                type: [integer, "null"]
+              pantry:
+                type: string
+                enum: [tracked, not_tracked]
+              usage:
+                type: string
+                enum: [measured, whole_package, unknown]
+    ShoppingSavings:
+      type: object
+      required: [weeks, totalSavedCents, weeksCounted, mealKit]
+      properties:
+        weeks:
+          type: array
+          items:
+            type: object
+            required: [week, spentCents, usedCents, stockedCents, meals, costPerMealCents, savedCents, itemsBought, itemsPriced]
+            properties:
+              week:
+                type: string
+              spentCents:
+                type: [integer, "null"]
+              usedCents:
+                type: [integer, "null"]
+              stockedCents:
+                type: [integer, "null"]
+              meals:
+                type: integer
+              costPerMealCents:
+                type: [integer, "null"]
+              savedCents:
+                type: [integer, "null"]
+              itemsBought:
+                type: integer
+              itemsPriced:
+                type: integer
+        totalSavedCents:
+          type: [integer, "null"]
+        weeksCounted:
+          type: integer
+        mealKit:
+          oneOf:
+            - type: object
+              required: [weeklyCents, meals, perMealCents]
+              properties:
+                weeklyCents:
+                  type: integer
+                meals:
+                  type: integer
+                perMealCents:
+                  type: integer
+            - type: "null"
     ConfirmShoppingOrderRequest:
       type: object
       description: "`all: true`, or `lines`; `skipRest: true` alone says nothing was ordered."
@@ -9589,6 +9983,11 @@ components:
                 minimum: 1
                 maximum: 99
                 description: What was ordered; defaults to the line's `packages`.
+              priceCents:
+                type: integer
+                minimum: 0
+                maximum: 1000000
+                description: Optional. What the line cost in all, in US cents.
         skipRest:
           type: boolean
           description: Mark the other pending lines as not ordered.

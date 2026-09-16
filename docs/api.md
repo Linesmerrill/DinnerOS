@@ -98,7 +98,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/households` `{name, timeZone, defaultServings?}` → `201 {household, membership}`. When `STARTER_RECIPES_HOUSEHOLD_ID` is set, the new household's recipes are copied from that household; the response waits up to 3 s for the copy (typically under a second), and a slower copy finishes in the background | bearer | 3 | ✅ |
 | GET | `/api/v1/households` → `{items: [{household, role, permissions}]}` | bearer | 3 | ✅ |
 | GET | `/api/v1/households/{householdId}` → `{household, members, role, permissions}` | `household.view` | 3 | ✅ |
-| PATCH | `/api/v1/households/{householdId}` `{name?, timeZone?, defaultServings?, orderDay?}` → household | `household.update` | 3 | ✅ |
+| PATCH | `/api/v1/households/{householdId}` `{name?, timeZone?, defaultServings?, orderDay?, mealKit?}` → household | `household.update` | 3 | ✅ |
 | PATCH | `/api/v1/households/{householdId}/members/{userId}` `{role}` → member | `members.changeRole` | 3 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/members/{userId}` → `204` | `members.remove`, or your own ID to leave | 3 | ✅ |
 | POST | `/api/v1/households/{householdId}/invitations` `{email, role}` → `201 {invitation, code, emailDelivered}` | `members.invite`, rate limited | 3 | ✅ |
@@ -131,7 +131,8 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | DELETE | `/api/v1/households/{householdId}/pantry/{itemId}` → `204` | `pantry.edit` | 7 | ✅ |
 | POST | `/api/v1/households/{householdId}/pantry/bulk` `{items: [{id, status}]}` → `{items, missing}` | `pantry.edit` | 7 | ✅ |
 | POST | `/api/v1/households/{householdId}/pantry/staples/defaults` → `{items, skipped}` | `pantry.edit` | 7 | ✅ |
-| POST | `/api/v1/households/{householdId}/pantry/purchases` `{itemId? or ingredientId?/name?, source, quantity?, unit?, unitSize?, week?, clientPurchaseId?}` → `201 {purchase, item}`, or `200` for a repeated `clientPurchaseId` | `pantry.edit` | 7 | ✅ |
+| POST | `/api/v1/households/{householdId}/pantry/purchases` `{itemId? or ingredientId?/name?, source, quantity?, unit?, unitSize?, week?, clientPurchaseId?, priceCents?}` → `201 {purchase, item}`, or `200` for a repeated `clientPurchaseId` | `pantry.edit` | 7 | ✅ |
+| PATCH | `/api/v1/households/{householdId}/pantry/purchases/{purchaseId}` `{priceCents}` (null clears) → `{purchase}` | `pantry.edit` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/pantry/{itemId}/purchases` → `{items}` (newest 20) | `household.view` | 7 | ✅ |
 | GET | `/api/v1/households/{householdId}/pantry/settings` → `{lowThresholdPercent, defaultLowThresholdPercent, updatedBy, updatedAt}` | `household.view` | 7 | ✅ |
 | PUT | `/api/v1/households/{householdId}/pantry/settings` `{lowThresholdPercent}` → settings | `pantry.edit` | 7 | ✅ |
@@ -176,7 +177,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | PUT | `/api/v1/households/{householdId}/shopping/settings` `{provider, storeId?}` → settings | `shopping.edit` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/{provider}/preferences` → `{items}` | `household.view` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}` → saved product | `household.view` | 8a | ✅ |
-| PUT | `/api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}` `{productUrl or productId, displayName, packageSize?, ingredientName?}` → `201` saved product, or `200` when replaced | `shopping.edit` | 8a | ✅ |
+| PUT | `/api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}` `{productUrl or productId, displayName, packageSize?, ingredientName?, coverage?, priceCents?}` → `201` saved product, or `200` when replaced | `shopping.edit` | 8a | ✅ |
 | DELETE | `/api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}` → `204` | `shopping.edit` | 8a | ✅ |
 | POST | `/api/v1/households/{householdId}/plans/{week}/shopping/{provider}/match` `{lines?, checkedOffKeys?, excludeKeys?}` → proposal (not stored) | `household.view` | 8a | ✅ |
 | POST | `/api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs` `{lines?, checkedOffKeys?, excludeKeys?}` → `201` new handoff, or `200` the week's handoff with links for only what's new | `shopping.edit` | 8a | ✅ |
@@ -184,7 +185,11 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs/send-again` `{ingredientKey}` → `204` | `shopping.edit` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/handoffs` `?week&status&limit` → `{items}` | `household.view` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/handoffs/{handoffId}` → handoff | `household.view` | 8a | ✅ |
-| POST | `/api/v1/households/{householdId}/shopping/handoffs/{handoffId}/confirm` `{all}` or `{lines: [{lineId, packages?}], skipRest?}` → `{handoff, purchases}` | `pantry.edit` | 8a | ✅ |
+| POST | `/api/v1/households/{householdId}/shopping/handoffs/{handoffId}/confirm` `{all}` or `{lines: [{lineId, packages?, priceCents?}], skipRest?}` → `{handoff, purchases}` | `pantry.edit` | 8a | ✅ |
+| POST | `/api/v1/households/{householdId}/shopping/handoffs/{handoffId}/prices` `{lines: [{lineId, priceCents}]}` → handoff | `pantry.edit` | 8a | ✅ |
+| GET | `/api/v1/households/{householdId}/shopping/weeks/{week}/cost` → week cost | `household.view` | 8a | ✅ |
+| PUT | `/api/v1/households/{householdId}/shopping/weeks/{week}/spend` `{orderTotalCents}` (null clears) → week cost | `shopping.edit` | 8a | ✅ |
+| GET | `/api/v1/households/{householdId}/shopping/savings` `?limit` → `{weeks, totalSavedCents, weeksCounted, mealKit}` | `household.view` | 8a | ✅ |
 | GET | `/api/v1/shopping/catalog` `?q` → `{items: [{key, name, kind, status, aliases, note, requestedByHousehold, requests}]}` | bearer | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/requests` → `{items}` | `household.view` | 8a | ✅ |
 | POST | `/api/v1/households/{householdId}/shopping/requests` `{key or name, note?}` → `201` `{request}`, or `200` when the note is updated | `household.view` | 8a | ✅ |
@@ -1019,6 +1024,7 @@ and a new usage cycle starts.
     "unitSize": { "per": "count", "quantity": "1/2", "quantityValue": 0.5, "unit": "cup" },
     "week": "2026-W38",
     "clientPurchaseId": "5b0c7c52-3f6e-4d8e-9f0a-8d7f1c2b3a41",
+    "priceCents": null,
     "recordedBy": "66e5a1f2c3b4a5d6e7f80912",
     "purchasedAt": "2026-09-15T18:30:00Z"
   },
@@ -1041,6 +1047,9 @@ and a new usage cycle starts.
   must be a volume or weight. The item remembers it, and its estimate is kept
   in that unit.
 - `week` is optional and only for `grocery_list`.
+- `priceCents` is optional: what the whole purchase cost, in US cents
+  (0–1,000,000). Every purchase response carries `priceCents`, `null` when
+  unknown.
 - `clientPurchaseId` (optional, at most 64 characters, per member) makes
   retries safe: a repeat returns `200` with the first purchase and the item as
   it is now, and changes nothing.
@@ -1052,6 +1061,19 @@ and a new usage cycle starts.
 
 `GET .../pantry/{itemId}/purchases` (`household.view`) returns the item's
 newest 20 purchases: `{"items": [purchase, ...]}`.
+
+`PATCH .../pantry/purchases/{purchaseId}` (`pantry.edit`) sets a price later:
+`{"priceCents": 498}`, or `{"priceCents": null}` to clear it. The key is
+required. It returns `{"purchase": purchase}`, or `404 not_found` for a
+purchase outside the household. Prices of provider purchases are usually set
+through the handoff instead ([prices](#prices-and-weekly-cost)), which keeps
+the line and the purchase in step.
+
+**Restocking adds up.** A purchase of an item that is still `in_stock` adds
+the estimated remaining amount to the new cycle (when it's at least 10% of the
+old starting amount and converts), so a second bottle of soy sauce makes 1 ½
+bottles, not 1. A `low` or `out` item is assumed used up, as before
+([pantry-usage.md](pantry-usage.md#cycles-and-segments)).
 
 ### Settings
 
@@ -1509,6 +1531,7 @@ created with even if the household changes the rule afterwards.
 | `not_selected` | `lines` was sent without it |
 | `no_product` | No saved product for the ingredient: "Choose a Walmart product" |
 | `not_on_list` | A `lines` key that isn't on the week's list (only `ingredientKey` is set) |
+| `ordered` | A confirmed line of this week's handoffs bought it fresh and didn't put it in the pantry (`pantry: not_tracked`), and `lines` didn't select it: "Ordered this week" |
 
 **Cart links**: `https://www.walmart.com/sc/cart/addToCart?items=ID_QTY,ID&storeId=N`.
 A quantity of 1 has no suffix, lines that share a product are merged into one
@@ -1626,7 +1649,21 @@ ordered.
 }
 ```
 
-Each confirmed line is one pantry purchase with `source: provider`, written
+`priceCents` (optional, per line) is what the line cost in all; it's stored
+on the line, on its pantry purchase, and (÷ packages) on the saved product.
+
+**Not every line goes in the pantry.** A line counted by exact measure
+(`coverage: per_amount`: rice, oil, spices, sauces) always does. A `per_week`
+line (produce, meat, dairy, bakery, deli) does only when its leftover can be
+measured and is at least 25% of what was bought — a 16 oz tub of sour cream
+for 2 tbsp, a dozen eggs for two — and meat and seafood never do
+([pantry-usage.md](pantry-usage.md#what-goes-in-the-pantry)). The confirmed
+line says which with `pantry`: `tracked` or `not_tracked` (`null` before
+confirming). A `not_tracked` line has no purchase (`confirmation.purchaseId`
+is `null`) and isn't in `purchases`; the week's match leaves it out as
+`ordered` ("Ordered this week") instead of offering it again.
+
+Each tracked line is one pantry purchase with `source: provider`, written
 from the stored line (the app can't send amounts):
 
 | Saved package size | Purchase |
@@ -1642,6 +1679,103 @@ from the stored line (the app can't send amounts):
   `created: false` and changes nothing. A skipped line can still be confirmed.
 - After confirming, treat those grocery lines as checked off: don't also ask
   "Add to pantry?", which would record a second purchase.
+
+### Prices and weekly cost
+
+Walmart's order emails have no item prices, so prices come from members:
+typed in, or read on the phone from a screenshot of the Walmart app's order
+details. The screenshot never leaves the phone; only the prices a member
+confirms are sent ([shopping-providers.md](shopping-providers.md#prices)).
+Money is integer US cents, and every price is optional.
+
+`POST .../shopping/handoffs/{handoffId}/prices` (`pantry.edit`):
+
+```json
+{ "lines": [{ "lineId": "l1", "priceCents": 248 }, { "lineId": "l4", "priceCents": null }] }
+```
+
+- Sets each line's `priceCents` (what it cost in all; `null` clears). Lines may
+  be pending or confirmed; at most 300. Returns the handoff.
+- A confirmed line's pantry purchase gets the same price.
+- The saved product remembers the package price (price ÷ packages, rounded)
+  while it is still the product the line bought. Clearing a line's price
+  leaves the saved product's price alone.
+- Saved products carry `priceCents` (one package) and `priceUpdatedAt`. `PUT
+  .../preferences/{ingredientKey}` takes `priceCents`: omit it to keep the
+  saved price, `null` to clear it.
+
+**The meal kit baseline** is a household setting: `PATCH
+/api/v1/households/{householdId}` (`household.update`) with `{"mealKit":
+{"weeklyCents": 13000, "meals": 5}}` ($130 for 5 meals; `weeklyCents`
+1–1,000,000, `meals` 1–21), or `{"mealKit": null}` to turn the comparison off.
+Leaving the key out changes nothing. Households carry `mealKit`, `null` until
+set.
+
+`PUT .../shopping/weeks/{week}/spend` (`shopping.edit`) records what the whole
+order cost, fees, tax, tip, and discounts included: `{"orderTotalCents":
+13042}`, or `null` to clear it. It returns the week cost.
+
+`GET .../shopping/weeks/{week}/cost` (`household.view`):
+
+```json
+{
+  "week": "2026-W38",
+  "currency": "USD",
+  "orderTotalCents": 13042,
+  "spentCents": 13042,
+  "spentSource": "order_total",
+  "itemsBought": 24,
+  "itemsPriced": 18,
+  "usedCents": 6120,
+  "stockedCents": 5400,
+  "earlierStockUsedCents": 310,
+  "feesAndUnpricedCents": 1200,
+  "meals": 5,
+  "costPerMealCents": 1224,
+  "mealKit": { "weeklyCents": 13000, "meals": 5, "perMealCents": 2600 },
+  "savedCents": 6880,
+  "partial": true,
+  "summary": "Based on 18 of 24 items with prices. Fees, tax, and unpriced items ($12.00) count as used. Includes $3.10 of pantry stock bought earlier.",
+  "items": [
+    { "handoffId": "66e5a1f2c3b4a5d6e7f80b01", "lineId": "l3", "ingredientKey": "name:sour cream", "name": "Sour Cream",
+      "priceCents": 248, "usedCents": 17, "stockedCents": 231, "pantry": "tracked", "usage": "measured" }
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `spentCents` | The order total when entered (`spentSource: order_total`), else the sum of known item prices (`item_prices`), else `null` |
+| `itemsBought`, `itemsPriced`, `partial` | Confirmed lines across the week's handoffs, how many have a price, and whether some don't |
+| `usedCents` | What this week's meals used: see below. `null` when nothing is priced and there's no order total |
+| `stockedCents` | What's left of this week's priced items, for later weeks |
+| `earlierStockUsedCents` | Part of `usedCents`: pantry stock bought before this week that this week's cooked meals used |
+| `feesAndUnpricedCents` | Part of `usedCents`: the order total less the item prices, when a total was entered |
+| `meals` | The week's planned meals, add-ons not counted |
+| `costPerMealCents` | `usedCents ÷ meals`, rounded |
+| `mealKit` | The household's baseline (`mealKit` on the household), with `perMealCents` |
+| `savedCents` | `perMealCents × meals − usedCents`; negative when groceries cost more. `null` without a baseline, meals, or `usedCents` |
+| `summary` | English, ready to show: what the figures are based on |
+
+Per item, `usage` says how its used share was found: `whole_package` (not
+tracked: fresh for the week, all used), `measured` (the week's need ÷ what was
+bought, measured the way package counts are, then capped by the pantry's
+estimate of what's left), or `unknown` (tracked, but not measurable: the whole
+price counts as used so savings are never overstated).
+[grocery-engine.md](grocery-engine.md#weekly-cost) has the full rules.
+
+`GET .../shopping/savings?limit=8` (`household.view`, `limit` 1–26, default
+8) returns recent weeks with a confirmed order or an order total, newest first:
+`{"weeks": [{week, spentCents, usedCents, stockedCents, meals,
+costPerMealCents, savedCents, itemsBought, itemsPriced}], "totalSavedCents":
+6880, "weeksCounted": 1, "mealKit": {…}}`. `totalSavedCents` sums the weeks
+with a `savedCents` (`weeksCounted`), and is `null` when there are none.
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `validation_failed` | A price outside 0–1,000,000, a line not in the handoff or listed twice, `priceCents`/`orderTotalCents` missing, bad week, `limit` outside 1–26 |
+| 403 | `forbidden` | Prices without `pantry.edit`; order total without `shopping.edit` |
+| 404 | `not_found` | Not a member; unknown handoff |
 
 ### Order reminders
 

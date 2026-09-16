@@ -238,6 +238,47 @@ recipes each is for, and keeps the `Specialty` marking. Lines without these
 fields aggregate exactly as before, and the output still doesn't depend on
 input order.
 
+## Weekly cost
+
+`shopping.Service.WeekCost` (`internal/shopping/cost.go`) answers "what did
+this week of groceries really cost?" A $130 Walmart cart and a $130 meal kit
+aren't the same spend when the cart's sour cream, soy sauce, and spices last
+for weeks. Everything is computed on read, in integer US cents, from what
+members entered; nothing derived is stored.
+
+| Figure | Rule |
+| --- | --- |
+| **Spent** | The week's order total (`shopping_week_spend`, fees, tax, and tip included) when entered, else the sum of known line prices |
+| **Used this week** | Σ per priced item (below) + **earlier stock**: this week's cooked planned meals × the pantry deductions from purchases made for other weeks, valued at each purchase's price per unit + **fees and unpriced items**: order total − priced items, when a total was entered |
+| **Stocked for later** | Σ what's left of this week's priced items |
+| **Cost per meal** | Used ÷ the week's planned meals (add-ons don't count) |
+| **vs meal kit** | Meal kit price per meal (`mealKit.weeklyCents ÷ meals`, rounded) × meals − used |
+| **Savings** | The sum of vs meal kit over recent weeks with a confirmed order or an order total |
+
+Per confirmed handoff line with a price (the line's, or its pantry purchase's):
+
+1. **Not tracked** (fresh for the week, [pantry-usage.md](pantry-usage.md#what-goes-in-the-pantry)):
+   the whole price is used (`usage: whole_package`).
+2. **Tracked and measurable**: used = price × the week's need ÷ what was
+   bought, the need measured against the package exactly as package counting
+   does (densities included), capped at 1 (`measured`). Then, while the
+   pantry's current cycle is still this purchase, stocked is capped at price ×
+   the estimate's remaining ÷ bought, and the difference moves to used: when
+   more was cooked or used than planned, the pantry knows.
+3. **Tracked, not measurable** (no package size, a need that doesn't convert):
+   the whole price counts as used (`unknown`), so savings are never
+   overstated.
+
+Worked example: sour cream, $2.48 for 16 oz, 2 tbsp for the week: 2 tbsp ≈
+1.1 oz at 1.05 g/ml, 6.8% of the tub, so **17¢ used and $2.31 stocked**. Two
+16 oz packs of ground beef at $11.98 for 20 oz are not tracked, so $11.98 used.
+
+**Honesty.** Unpriced items are left out of used and stocked, never guessed;
+`itemsPriced` of `itemsBought` and `partial` say how much the figures rest on,
+and `summary` says it in a sentence ("Based on 18 of 24 items with prices.").
+An order total covers the unpriced items, which then count as used. Rounding
+is to the nearest cent per item.
+
 ## Rules
 
 - Pure, deterministic Go. No LLM, no network, no clock inside the engine.

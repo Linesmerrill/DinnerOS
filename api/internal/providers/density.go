@@ -135,3 +135,18 @@ func extremeDensity(to ingredients.Unit) *big.Rat {
 	}
 	return minDensity
 }
+
+// EstimateAmount converts q between a volume and a weight unit code with
+// item's typical density, for estimates that are allowed to be approximate:
+// package counting here, and pantry deductions of a recipe's spoons from a
+// package bought by weight (docs/pantry-usage.md#unit-conversion). ok is false
+// when the units aren't one volume and one weight.
+func EstimateAmount(q *big.Rat, from, to string, item Item) (*big.Rat, bool) {
+	fu, err1 := ingredients.LookupUnit(from)
+	tu, err2 := ingredients.LookupUnit(to)
+	if err1 != nil || err2 != nil || !crossKind(fu, tu) {
+		return nil, false
+	}
+	density, _ := densityFor(item)
+	return estimate(ingredients.NewQuantity(1, 1).MulRat(q), fu, tu, density).Rat(), true
+}

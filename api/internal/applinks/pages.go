@@ -120,7 +120,7 @@ var privacyPage = template.Must(template.New("privacy").Parse(`<!doctype html>
 <ul>
 <li><strong>Your account.</strong> When you sign in with Apple or Google we receive an account identifier from them, and your name and email address if you share them. With Sign in with Apple you can hide your email.</li>
 <li><strong>Household data.</strong> Household names, members and their roles, time zone, servings, and invitations you send (including the invitee's email address).</li>
-<li><strong>What you plan and keep.</strong> Recipes (including order history files you choose to import), weekly plans, grocery lists and skipped ingredients, pantry items and purchases, Autopilot preferences, store settings and saved products.</li>
+<li><strong>What you plan and keep.</strong> Recipes (including order history files you choose to import), weekly plans, grocery lists and skipped ingredients, pantry items and purchases, Autopilot preferences, store settings and saved products, and the grocery prices, order totals, and meal kit spend you enter.</li>
 <li><strong>Ratings and activity in the app.</strong> Recipe ratings, and events such as viewing, planning, cooking, or skipping a recipe, which power suggestions for your household.</li>
 <li><strong>Device push tokens,</strong> if you turn on notifications, so reminders can reach your phone.</li>
 <li><strong>Server logs</strong> (request time, path, status, and IP address) kept briefly for security and debugging.</li>
@@ -134,6 +134,9 @@ var privacyPage = template.Must(template.New("privacy").Parse(`<!doctype html>
 <li><strong>Approximate weather bands.</strong> The app uses reduced-accuracy location to get a forecast from Apple Weather on your phone and sends only a temperature band (cold, mild, or hot) and precipitation (none, rain, or snow) for each day. Your location and coordinates are never sent to us.</li>
 </ul>
 <p>These values are stored with that week's suggestions so swapping a meal uses the same context, and are deleted with them.</p>
+
+<h2>Order screenshots, processed on your iPhone</h2>
+<p>If you import prices from screenshots of a grocery order, the app reads the text in the images on your iPhone (and, where Apple Intelligence is available, organizes it on your iPhone too). The images and their text never leave your phone and aren't saved. Only the item prices and order total you review and confirm are sent, and they're stored with your household's grocery orders, pantry purchases, and saved products to show what your groceries cost each week. Prices and meal kit amounts you type in are stored the same way.</p>
 
 <h2>How it's used</h2>
 <p>Only to run the app for you and your household: signing you in, sharing plans with the members you invite, building grocery lists, suggesting meals, and sending the reminders you ask for. Members of your household can see its shared data and your name.</p>

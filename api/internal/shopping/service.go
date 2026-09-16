@@ -31,10 +31,21 @@ type Catalog interface {
 	IngredientsByID(ctx context.Context, ids []string) ([]recipes.Ingredient, error)
 }
 
-// Pantry records confirmed orders. *pantry.Service implements it.
+// Pantry records confirmed orders and reads what weekly cost needs from them.
+// *pantry.Service implements it.
 type Pantry interface {
 	RecordProviderPurchase(ctx context.Context, actor households.Membership, in pantry.ProviderPurchaseInput) (pantry.PurchaseResult, error)
 	FindProviderPurchase(ctx context.Context, householdID, handoffID, lineID string) (pantry.PurchaseResult, bool, error)
+	SetPurchasePrice(ctx context.Context, actor households.Membership, purchaseID string, priceCents *int64) (pantry.Purchase, error)
+	PurchasesByIDs(ctx context.Context, householdID string, ids []string) ([]pantry.Purchase, error)
+	CookUsageForEntries(ctx context.Context, householdID string, entryIDs []string) ([]pantry.CookUsage, error)
+	PurchaseStock(ctx context.Context, p pantry.Purchase) (pantry.StockValue, error)
+}
+
+// Planner reads a week's plan, for the meals a week's cost is divided by.
+// *planning.Service implements it.
+type Planner interface {
+	Get(ctx context.Context, householdID, week string) (planning.Plan, error)
 }
 
 // ServiceOptions configures a Service.
@@ -45,6 +56,8 @@ type ServiceOptions struct {
 	// Catalog, when set, checks catalog IDs and names saved products.
 	Catalog Catalog
 	Pantry  Pantry
+	// Plans, when set, counts a week's meals for its cost per meal.
+	Plans Planner
 	// Households, when set, reads the household's order day and time zone for
 	// the weekly order reminder. Without it the reminder is simply off.
 	Households HouseholdSource
@@ -67,6 +80,7 @@ type Service struct {
 	grocery    GrocerySource
 	catalog    Catalog
 	pantry     Pantry
+	plans      Planner
 	households HouseholdSource
 	notifier   Notifier
 	events     events.Recorder
@@ -81,7 +95,7 @@ func NewService(o ServiceOptions) *Service {
 		logger = slog.New(slog.DiscardHandler)
 	}
 	return &Service{
-		store: o.Store, providers: o.Providers, grocery: o.Grocery, catalog: o.Catalog, pantry: o.Pantry,
+		store: o.Store, providers: o.Providers, grocery: o.Grocery, catalog: o.Catalog, pantry: o.Pantry, plans: o.Plans,
 		households: o.Households, notifier: o.Notifier, events: o.Events, logger: logger, now: time.Now,
 	}
 }
@@ -247,6 +261,12 @@ func (s *Service) PutPreference(ctx context.Context, actor households.Membership
 	if pref.IngredientName, err = cleanName(in.IngredientName, "ingredientName", false); err != nil {
 		return Preference{}, false, err
 	}
+	if in.SetPrice {
+		if err := validatePrice(in.PriceCents); err != nil {
+			return Preference{}, false, err
+		}
+		pref.setPrice, pref.PriceCents = true, in.PriceCents
+	}
 	if id := catalogID(key); id != "" && s.catalog != nil {
 		found, err := s.catalog.IngredientsByID(ctx, []string{id})
 		if err != nil {
@@ -354,6 +374,11 @@ func (s *Service) match(ctx context.Context, householdID, week, provider string,
 	prefs, err := s.store.ListPreferences(ctx, householdID, p.Key())
 	if err != nil {
 		return Proposal{}, nil, nil, fmt.Errorf("list saved products: %w", err)
+	}
+	if in.Lines == nil {
+		if in.ordered, err = s.orderedKeys(ctx, householdID, g.Week.String(), p.Key()); err != nil {
+			return Proposal{}, nil, nil, err
+		}
 	}
 	proposal, err := buildProposal(p, settings, g, prefs, in)
 	if err != nil {
@@ -722,6 +747,7 @@ func confirmTargets(h Handoff, in ConfirmInput) ([]ConfirmLine, error) {
 		return nil, invalid("lines lists more lines than the handoff has")
 	}
 	requested := map[string]int{}
+	prices := map[string]*int64{}
 	for _, l := range in.Lines {
 		if _, dup := requested[l.LineID]; dup {
 			return nil, invalid("lines lists %s more than once", l.LineID)
@@ -732,7 +758,13 @@ func confirmTargets(h Handoff, in ConfirmInput) ([]ConfirmLine, error) {
 		if l.Packages < 0 || l.Packages > providers.MaxPackages {
 			return nil, invalid("packages must be between 1 and %d", providers.MaxPackages)
 		}
+		if err := validatePrice(l.PriceCents); err != nil {
+			return nil, err
+		}
 		requested[l.LineID] = l.Packages
+		if l.PriceCents != nil {
+			prices[l.LineID] = l.PriceCents
+		}
 	}
 	var out []ConfirmLine
 	for _, l := range h.Lines {
@@ -746,7 +778,7 @@ func confirmTargets(h Handoff, in ConfirmInput) ([]ConfirmLine, error) {
 		if packages == 0 {
 			packages = l.Packages
 		}
-		out = append(out, ConfirmLine{LineID: l.ID, Packages: packages})
+		out = append(out, ConfirmLine{LineID: l.ID, Packages: packages, PriceCents: prices[l.ID]})
 	}
 	return out, nil
 }
@@ -781,18 +813,35 @@ func (s *Service) confirmLine(ctx context.Context, actor households.Membership, 
 		}
 		return nil, false, ErrConflict
 	}
-	recorded, err := s.pantry.RecordProviderPurchase(ctx, actor, providerPurchase(h, line, t.Packages))
-	if err != nil {
-		if releaseErr := s.store.ReleaseLine(context.WithoutCancel(ctx), h.HouseholdID, h.ID, line.ID); releaseErr != nil {
-			s.logger.WarnContext(ctx, "release handoff line failed", "handoffId", h.ID, "lineId", line.ID, "error", releaseErr)
-		}
-		return nil, false, err
+	price := line.PriceCents
+	if t.PriceCents != nil {
+		price = t.PriceCents
 	}
-	line.ConfirmedPackages, line.PurchaseID, line.ConfirmedBy, line.ConfirmedAt = t.Packages, recorded.Purchase.ID, actor.UserID, now
+	line.Pantry = pantryTrackingFor(line, t.Packages)
+	var recorded *pantry.PurchaseResult
+	if line.Pantry == PantryTracked {
+		in := providerPurchase(h, line, t.Packages)
+		in.PriceCents = price
+		res, err := s.pantry.RecordProviderPurchase(ctx, actor, in)
+		if err != nil {
+			if releaseErr := s.store.ReleaseLine(context.WithoutCancel(ctx), h.HouseholdID, h.ID, line.ID); releaseErr != nil {
+				s.logger.WarnContext(ctx, "release handoff line failed", "handoffId", h.ID, "lineId", line.ID, "error", releaseErr)
+			}
+			return nil, false, err
+		}
+		recorded, line.PurchaseID = &res, res.Purchase.ID
+	}
+	line.ConfirmedPackages, line.ConfirmedBy, line.ConfirmedAt = t.Packages, actor.UserID, now
 	if err := s.store.ConfirmLine(ctx, h.HouseholdID, h.ID, line, now); err != nil {
 		return nil, false, fmt.Errorf("confirm handoff line: %w", err)
 	}
-	return &recorded, true, nil
+	if t.PriceCents != nil {
+		if _, err := s.store.SetLinePrices(ctx, h.HouseholdID, h.ID, map[string]*int64{line.ID: t.PriceCents}, now); err != nil {
+			return nil, false, fmt.Errorf("price handoff line: %w", err)
+		}
+		s.rememberPackagePrice(ctx, h, line, t.Packages, t.PriceCents)
+	}
+	return recorded, true, nil
 }
 
 // providerPurchase maps a confirmed line to the pantry purchase: packages

@@ -48,7 +48,10 @@ type Purchase struct {
 	// ClientPurchaseID is the app's idempotency key, unique per member.
 	ClientPurchaseID string
 	// Provider is set on provider purchases: the handoff line it confirms.
-	Provider    *ProviderRef
+	Provider *ProviderRef
+	// PriceCents is what the household paid for the whole purchase, in US
+	// cents, or nil when nobody entered a price (prices.go).
+	PriceCents  *int64
 	RecordedBy  string
 	PurchasedAt time.Time
 }
@@ -79,6 +82,8 @@ type PurchaseInput struct {
 	UnitSizeUnit     string
 	Week             string
 	ClientPurchaseID string
+	// PriceCents is optional: what the whole purchase cost.
+	PriceCents *int64
 }
 
 // PurchaseResult is returned by Service.RecordPurchase. Created is false when
@@ -124,6 +129,14 @@ type UsageStore interface {
 	GetSettings(ctx context.Context, householdID string) (Settings, error)
 	// PutSettings creates or replaces the household's settings.
 	PutSettings(ctx context.Context, s Settings) (Settings, error)
+	// SetPurchasePrice sets (or, with nil, clears) a purchase's price and
+	// returns the purchase.
+	SetPurchasePrice(ctx context.Context, householdID, purchaseID string, priceCents *int64) (Purchase, error)
+	// PurchasesByIDs returns the household's purchases with these IDs, in no
+	// particular order; unknown IDs are left out.
+	PurchasesByIDs(ctx context.Context, householdID string, ids []string) ([]Purchase, error)
+	// ListCookUsageByEntries returns the cook records of these plan entries.
+	ListCookUsageByEntries(ctx context.Context, householdID string, entryIDs []string) ([]CookUsage, error)
 }
 
 // RecipeReader loads one of a household's recipes with its ingredient lines.
@@ -221,6 +234,7 @@ func (s *Service) Estimate(item Item, settings Settings) *Estimate {
 // --- Purchases ----------------------------------------------------------------
 
 type purchase struct {
+	price    *int64
 	source   PurchaseSource
 	quantity string
 	unit     string
@@ -279,6 +293,10 @@ func validatePurchase(in PurchaseInput) (purchase, error) {
 			return purchase{}, invalid("week must be an ISO week such as 2026-W38")
 		}
 	}
+	if err := validatePrice(in.PriceCents); err != nil {
+		return purchase{}, err
+	}
+	p.price = in.PriceCents
 	p.clientID = in.ClientPurchaseID
 	switch {
 	case len(p.clientID) > MaxClientPurchaseIDLength:
@@ -383,7 +401,7 @@ func (s *Service) recordPurchase(ctx context.Context, actor households.Membershi
 	record, err := s.usage.InsertPurchase(ctx, Purchase{
 		ID: purchaseID, HouseholdID: hh, ItemID: saved.ID, ItemKey: saved.Key, Source: p.source,
 		Quantity: p.quantity, Unit: p.unit, UnitSize: p.unitSize, Week: p.week,
-		ClientPurchaseID: p.clientID, Provider: p.provider, RecordedBy: actor.UserID, PurchasedAt: saved.UpdatedAt,
+		ClientPurchaseID: p.clientID, Provider: p.provider, PriceCents: p.price, RecordedBy: actor.UserID, PurchasedAt: saved.UpdatedAt,
 	})
 	if errors.Is(err, ErrDuplicate) && p.provider != nil {
 		// A concurrent confirmation of the same handoff line recorded it first.

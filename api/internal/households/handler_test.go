@@ -146,9 +146,24 @@ func TestUpdateHouseholdHandler(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
 	}
-	if body := decodeBody[HouseholdResponse](t, rec); body.Name != "Casa" || body.TimeZone != "Europe/Paris" || body.DefaultServings != 2 {
+	if body := decodeBody[HouseholdResponse](t, rec); body.Name != "Casa" || body.TimeZone != "Europe/Paris" || body.DefaultServings != 2 || body.MealKit != nil {
 		t.Errorf("updated = %+v", body)
 	}
+
+	// The meal kit baseline: set, left alone by other changes, cleared with null.
+	rec = srv.do(t, http.MethodPatch, "/api/v1/households/"+id, `{"mealKit":{"weeklyCents":13000,"meals":5}}`, userAda)
+	if !strings.Contains(rec.Body.String(), `"mealKit":{"weeklyCents":13000,"meals":5}`) {
+		t.Fatalf("meal kit = %d %s", rec.Code, rec.Body.String())
+	}
+	rec = srv.do(t, http.MethodPatch, "/api/v1/households/"+id, `{"name":"Casa Two"}`, userAda)
+	if !strings.Contains(rec.Body.String(), `"mealKit":{"weeklyCents":13000,"meals":5}`) {
+		t.Errorf("meal kit after rename = %s", rec.Body.String())
+	}
+	rec = srv.do(t, http.MethodPatch, "/api/v1/households/"+id, `{"mealKit":null}`, userAda)
+	if !strings.Contains(rec.Body.String(), `"mealKit":null`) {
+		t.Errorf("cleared meal kit = %s", rec.Body.String())
+	}
+	wantError(t, srv.do(t, http.MethodPatch, "/api/v1/households/"+id, `{"mealKit":{"weeklyCents":13000,"meals":0}}`, userAda), 400, "validation_failed")
 }
 
 func TestMemberHandlers(t *testing.T) {

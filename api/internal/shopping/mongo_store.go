@@ -94,6 +94,7 @@ func Indexes() []mongodb.IndexSet {
 				Options: options.Index().SetUnique(true).SetName("householdId_week_unique"),
 			}},
 		},
+		weekSpendIndexes(),
 	}
 }
 
@@ -104,6 +105,7 @@ type MongoStore struct {
 	handoffs      *mongo.Collection
 	storeRequests *mongo.Collection
 	orderWeeks    *mongo.Collection
+	weekSpend     *mongo.Collection
 }
 
 var _ Store = (*MongoStore)(nil)
@@ -116,6 +118,7 @@ func NewMongoStore(db *mongo.Database) *MongoStore {
 		handoffs:      db.Collection(HandoffsCollection),
 		storeRequests: db.Collection(StoreRequestsCollection),
 		orderWeeks:    db.Collection(OrderWeeksCollection),
+		weekSpend:     db.Collection(WeekSpendCollection),
 	}
 }
 
@@ -249,11 +252,14 @@ type preferenceDoc struct {
 	PackageSize    *amountDoc    `bson:"packageSize,omitempty"`
 	// Coverage is empty on documents written before the rule existed, which
 	// reads as "follow the ingredient's category".
-	Coverage  string        `bson:"coverage,omitempty"`
-	CreatedBy bson.ObjectID `bson:"createdBy"`
-	CreatedAt time.Time     `bson:"createdAt"`
-	UpdatedBy bson.ObjectID `bson:"updatedBy"`
-	UpdatedAt time.Time     `bson:"updatedAt"`
+	Coverage string `bson:"coverage,omitempty"`
+	// PriceCents is one package's price, absent until someone enters one.
+	PriceCents     *int64        `bson:"priceCents,omitempty"`
+	PriceUpdatedAt *time.Time    `bson:"priceUpdatedAt,omitempty"`
+	CreatedBy      bson.ObjectID `bson:"createdBy"`
+	CreatedAt      time.Time     `bson:"createdAt"`
+	UpdatedBy      bson.ObjectID `bson:"updatedBy"`
+	UpdatedAt      time.Time     `bson:"updatedAt"`
 }
 
 func (d preferenceDoc) toPreference() Preference {
@@ -261,6 +267,7 @@ func (d preferenceDoc) toPreference() Preference {
 		ID: d.ID.Hex(), HouseholdID: d.HouseholdID.Hex(), Provider: providers.Key(d.Provider),
 		IngredientKey: d.IngredientKey, IngredientName: d.IngredientName, ProductID: d.ProductID, DisplayName: d.DisplayName,
 		PackageSize: d.PackageSize.packageSize(), Coverage: providers.Coverage(d.Coverage),
+		PriceCents: d.PriceCents, PriceUpdatedAt: timeOrZero(d.PriceUpdatedAt),
 		CreatedBy: hexOrEmpty(d.CreatedBy), CreatedAt: d.CreatedAt.UTC(), UpdatedBy: hexOrEmpty(d.UpdatedBy), UpdatedAt: d.UpdatedAt.UTC(),
 	}
 }
@@ -332,10 +339,22 @@ func (s *MongoStore) UpsertPreference(ctx context.Context, p Preference) (Prefer
 	update := bson.D{
 		{Key: "$setOnInsert", Value: bson.D{{Key: "_id", Value: bson.NewObjectID()}, {Key: "createdBy", Value: uid}, {Key: "createdAt", Value: p.UpdatedAt}}},
 	}
+	unset := bson.D{}
 	if size := sizeDoc(p.PackageSize); size != nil {
 		set = append(set, bson.E{Key: "packageSize", Value: size})
 	} else {
-		update = append(update, bson.E{Key: "$unset", Value: bson.D{{Key: "packageSize", Value: ""}}})
+		unset = append(unset, bson.E{Key: "packageSize", Value: ""})
+	}
+	// The price changes only when the caller says so; otherwise the saved
+	// one is kept.
+	switch {
+	case p.setPrice && p.PriceCents != nil:
+		set = append(set, bson.E{Key: "priceCents", Value: *p.PriceCents}, bson.E{Key: "priceUpdatedAt", Value: p.UpdatedAt})
+	case p.setPrice:
+		unset = append(unset, bson.E{Key: "priceCents", Value: ""}, bson.E{Key: "priceUpdatedAt", Value: ""})
+	}
+	if len(unset) > 0 {
+		update = append(update, bson.E{Key: "$unset", Value: unset})
 	}
 	update = append(update, bson.E{Key: "$set", Value: set})
 	res, err := s.preferences.UpdateOne(ctx, preferenceFilter(hid, p.Provider, p.IngredientKey), update, options.UpdateOne().SetUpsert(true))
@@ -401,6 +420,10 @@ type lineDoc struct {
 	ConfirmedAt      *time.Time    `bson:"confirmedAt,omitempty"`
 	SkippedBy        bson.ObjectID `bson:"skippedBy,omitempty"`
 	SkippedAt        *time.Time    `bson:"skippedAt,omitempty"`
+	// PriceCents is what the line cost, absent until a member enters it.
+	PriceCents *int64 `bson:"priceCents,omitempty"`
+	// Pantry is set when the line is confirmed: tracked or not_tracked.
+	Pantry string `bson:"pantry,omitempty"`
 }
 
 type excludedDoc struct {
@@ -512,6 +535,7 @@ func newLineDocs(lines []HandoffLine) ([]lineDoc, error) {
 			Packages: l.Packages, Reason: string(l.Reason), CoversWeek: l.CoversWeek,
 			Status: string(l.Status), Confirmed: l.ConfirmedPackages, PurchaseID: l.PurchaseID,
 			ConfirmedBy: confirmedBy, ConfirmedAt: timeOrNil(l.ConfirmedAt), SkippedBy: skippedBy, SkippedAt: timeOrNil(l.SkippedAt),
+			PriceCents: l.PriceCents, Pantry: string(l.Pantry),
 		})
 	}
 	return out, nil
@@ -535,6 +559,7 @@ func (d handoffDoc) toHandoff() Handoff {
 			Reason: providers.Reason(l.Reason), Status: LineStatus(l.Status), ConfirmedPackages: l.Confirmed, PurchaseID: l.PurchaseID,
 			ConfirmedBy: hexOrEmpty(l.ConfirmedBy), ConfirmedAt: timeOrZero(l.ConfirmedAt),
 			SkippedBy: hexOrEmpty(l.SkippedBy), SkippedAt: timeOrZero(l.SkippedAt),
+			PriceCents: l.PriceCents, Pantry: PantryTracking(l.Pantry),
 		})
 	}
 	for _, e := range d.Excluded {
@@ -806,7 +831,8 @@ func (s *MongoStore) ConfirmLine(ctx context.Context, householdID, handoffID str
 		{Key: "$set", Value: bson.D{
 			{Key: "lines.$.status", Value: string(LineConfirmed)}, {Key: "lines.$.confirmedPackages", Value: line.ConfirmedPackages},
 			{Key: "lines.$.purchaseId", Value: line.PurchaseID}, {Key: "lines.$.confirmedBy", Value: by},
-			{Key: "lines.$.confirmedAt", Value: line.ConfirmedAt}, {Key: "updatedAt", Value: at},
+			{Key: "lines.$.confirmedAt", Value: line.ConfirmedAt}, {Key: "lines.$.pantry", Value: string(line.Pantry)},
+			{Key: "updatedAt", Value: at},
 		}},
 		{Key: "$unset", Value: bson.D{{Key: "lines.$.claimedAt", Value: ""}, {Key: "lines.$.skippedBy", Value: ""}, {Key: "lines.$.skippedAt", Value: ""}}},
 		incRevision,

@@ -269,6 +269,7 @@ func run() error {
 		Grocery:    planService,
 		Catalog:    recipeService,
 		Pantry:     pantryService,
+		Plans:      planService,
 		Households: householdService,
 		Notifier:   notificationService,
 		Events:     behavior.events,

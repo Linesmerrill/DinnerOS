@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 )
 
@@ -109,6 +110,48 @@ func (m *memoryUsageStore) PutSettings(_ context.Context, s Settings) (Settings,
 	defer m.mu.Unlock()
 	m.settings[s.HouseholdID] = s
 	return s, nil
+}
+
+func (m *memoryUsageStore) SetPurchasePrice(_ context.Context, householdID, purchaseID string, priceCents *int64) (Purchase, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, p := range m.purchases {
+		if p.HouseholdID == householdID && p.ID == purchaseID {
+			if priceCents != nil {
+				v := *priceCents
+				priceCents = &v
+			}
+			m.purchases[i].PriceCents = priceCents
+			return m.purchases[i], nil
+		}
+	}
+	return Purchase{}, ErrNotFound
+}
+
+func (m *memoryUsageStore) PurchasesByIDs(_ context.Context, householdID string, ids []string) ([]Purchase, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []Purchase
+	for _, p := range m.purchases {
+		if p.HouseholdID == householdID && slices.Contains(ids, p.ID) {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+func (m *memoryUsageStore) ListCookUsageByEntries(_ context.Context, householdID string, entryIDs []string) ([]CookUsage, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []CookUsage
+	for _, u := range m.cooks {
+		if u.HouseholdID == householdID && slices.Contains(entryIDs, strings.TrimPrefix(u.SourceKey, "entry:")) && strings.HasPrefix(u.SourceKey, "entry:") {
+			u.Lines = slices.Clone(u.Lines)
+			out = append(out, u)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b CookUsage) int { return a.OccurredAt.Compare(b.OccurredAt) })
+	return out, nil
 }
 
 // cookUsages returns the stored cook usage records, oldest first.

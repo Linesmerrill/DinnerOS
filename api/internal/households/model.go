@@ -9,6 +9,7 @@ package households
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -46,7 +47,40 @@ const (
 	MaxServings       = 12
 	MaxNameLength     = 100
 	maxTimeZoneLength = 64
+	// MaxMealKitWeeklyCents and MaxMealKitMeals bound the meal kit baseline:
+	// $10,000 a week, and three meals a day.
+	MaxMealKitWeeklyCents = 1_000_000
+	MaxMealKitMeals       = 21
 )
+
+// MealKit is a household's meal kit spend: WeeklyCents (US cents) for Meals
+// meals a week, such as $130 for 5 meals. Shopping compares a week's grocery
+// cost per meal with WeeklyCents ÷ Meals (docs/grocery-engine.md#weekly-cost).
+type MealKit struct {
+	WeeklyCents int64
+	Meals       int
+}
+
+// PerMealCents is the baseline cost of one meal, rounded to the nearest cent.
+func (m MealKit) PerMealCents() int64 {
+	if m.Meals <= 0 {
+		return 0
+	}
+	return (m.WeeklyCents + int64(m.Meals)/2) / int64(m.Meals)
+}
+
+func validateMealKit(m *MealKit) error {
+	if m == nil {
+		return nil
+	}
+	if m.WeeklyCents < 1 || m.WeeklyCents > MaxMealKitWeeklyCents {
+		return invalid(fmt.Sprintf("mealKit.weeklyCents must be between 1 and %d", MaxMealKitWeeklyCents))
+	}
+	if m.Meals < 1 || m.Meals > MaxMealKitMeals {
+		return invalid(fmt.Sprintf("mealKit.meals must be between 1 and %d", MaxMealKitMeals))
+	}
+	return nil
+}
 
 // Household is a group of people who plan and shop together. It is the data
 // isolation boundary for every household-owned document.
@@ -60,7 +94,10 @@ type Household struct {
 	// OrderDay is the weekday the household means to place its grocery order
 	// ("mon".."sun"), or "" when they haven't chosen one. It drives the
 	// shopping order reminder (docs/shopping-providers.md#order-reminders).
-	OrderDay  string
+	OrderDay string
+	// MealKit is what the household spent on meal kits, the baseline the
+	// weekly grocery cost is compared with, or nil when not set.
+	MealKit   *MealKit
 	CreatedBy string
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -106,6 +143,9 @@ type UpdateInput struct {
 	TimeZone        *string
 	DefaultServings *int
 	OrderDay        *string
+	// SetMealKit changes the meal kit baseline to MealKit; nil clears it.
+	SetMealKit bool
+	MealKit    *MealKit
 }
 
 // HouseholdPatch holds validated field changes for Store.UpdateHousehold.
@@ -114,6 +154,9 @@ type HouseholdPatch struct {
 	TimeZone        *string
 	DefaultServings *int
 	OrderDay        *string
+	// SetMealKit sets MealKit, or removes it when MealKit is nil.
+	SetMealKit bool
+	MealKit    *MealKit
 }
 
 func normalizeName(name string) (string, error) {

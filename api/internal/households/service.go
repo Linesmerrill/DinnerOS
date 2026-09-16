@@ -191,8 +191,18 @@ func (s *Service) Update(ctx context.Context, actor Membership, in UpdateInput) 
 		return Household{}, ErrForbidden
 	}
 	var patch HouseholdPatch
-	if in.Name == nil && in.TimeZone == nil && in.DefaultServings == nil && in.OrderDay == nil {
-		return Household{}, invalid("at least one of name, timeZone, defaultServings, or orderDay is required")
+	if in.Name == nil && in.TimeZone == nil && in.DefaultServings == nil && in.OrderDay == nil && !in.SetMealKit {
+		return Household{}, invalid("at least one of name, timeZone, defaultServings, orderDay, or mealKit is required")
+	}
+	if in.SetMealKit {
+		if err := validateMealKit(in.MealKit); err != nil {
+			return Household{}, err
+		}
+		patch.SetMealKit = true
+		if in.MealKit != nil {
+			kit := *in.MealKit
+			patch.MealKit = &kit
+		}
 	}
 	if in.Name != nil {
 		name, err := normalizeName(*in.Name)

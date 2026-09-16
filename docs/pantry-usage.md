@@ -43,11 +43,19 @@ Details of every collection and index are in
   unit that doesn't convert, starts a new cycle instead.
 - **Remaining** = segment start − recipe use since the segment started −
   learned rate × days since, never below 0, and 0 when the item is `out`.
-- A purchase assumes the previous cycle was used up (remaining 0,
-  `observed: false`). If a person marked the item `out` first, the segment
-  ends at that moment instead (`observed: true`). Leftovers aren't carried
-  into the new cycle; a person who has more corrects the amount, and their
-  number wins.
+- **Purchases add up.** A purchase of an item that is still `in_stock` carries
+  the estimated remaining amount into the new cycle: a second bottle of soy
+  sauce with 6 fl oz left starts a cycle of 16 fl oz, not 10. The closed
+  segment records that estimate as `remaining` with `carried: true`, and the
+  learned rate skips carried segments (the remainder is the estimate itself,
+  so it teaches nothing). Less than 10% of the old starting amount
+  (`MinCarryPercent`), or a remainder in a unit that doesn't convert, counts
+  as used up instead.
+- A purchase of an item that is `low` (by anyone) or `out` assumes the previous
+  cycle was used up (remaining 0, `observed: false`), which is what the rate
+  learns from. If a person marked the item `out` first, the segment ends at
+  that moment instead (`observed: true`). A person who has a different amount
+  corrects it, and their number wins.
 - A purchase without an amount, or clearing an item's amount, ends tracking.
   History and the learned rate are kept. Marking an item `out` clears its
   amount but keeps the cycle.
@@ -65,8 +73,13 @@ providers exist:
   recorded as before.
 - **Manual restock** from the Pantry tab sends `source: manual` with the
   item's `itemId`.
-- **Phase 8 providers** will write the same record with `source: provider`
-  (plus an order reference field added then). Apps can't send `provider`.
+- **Shopping providers** write the same record with `source: provider` when a
+  member confirms "Did you order these?", but only for the lines the pantry
+  tracks ([below](#what-goes-in-the-pantry)). Apps can't send `provider`.
+- Every purchase may carry `priceCents`, what it cost in all, set when it's
+  recorded or later (`PATCH .../pantry/purchases/{purchaseId}`). Prices
+  don't change tracking; shopping's weekly cost reads them
+  ([grocery-engine.md](grocery-engine.md#weekly-cost)).
 - **House-made batches** of specialty ingredients (a jar of spice blend) are
   purchases with `source: house_made`, recorded by
   `POST .../specialty-ingredients/{specialtyId}/batches` with the batch's
@@ -79,6 +92,25 @@ providers exist:
 A grocery line with two amounts ("1 onion" and "8 oz onion") is two
 purchases or one the member chooses; the API takes one amount per purchase.
 
+### What goes in the pantry
+
+Confirming a Walmart order (`shopping/leftovers.go`) decides per line:
+
+| Line | Pantry |
+| --- | --- |
+| Counted by exact measure (`coverage: per_amount`): rice, oil, spices, sauces, sugar, or anything a member switched to it | Tracked: a `provider` purchase |
+| Bought for the week (`per_week`: produce, dairy, bakery, deli) with a known package size, all of the week's need convertible to it (exactly or by density), and at least 25% of what was bought left over (`MinLeftoverPercent`) | Tracked: a tub of sour cream for 2 tbsp, a dozen eggs for two, a 3-count bag of onions for 2 |
+| Any other `per_week` line: no size, a need that doesn't convert (4 cloves against a bulb), or mostly used | Not tracked |
+| Meat and seafood (`per_week`) | Never tracked: what's left is frozen or thrown out, not kept on a shelf |
+
+A line that isn't tracked is still confirmed, with `pantry: not_tracked` and
+no purchase. Putting it in the pantry would leave it `in_stock` and keep it off
+next week's list ("In your pantry" for last week's ground beef), which is the
+gap this rule closes. The same week's Shop tab leaves it out as `ordered`
+("Ordered this week") so it isn't sent again. Tracked leftovers count down as
+meals are cooked, add up when bought again, and go back on the list when the
+estimate marks them `low`.
+
 ## Unit conversion
 
 Amounts convert exactly or not at all. There is no density or "1 onion ≈
@@ -90,14 +122,23 @@ Amounts convert exactly or not at all. There is no density or "1 onion ≈
 | weight ↔ weight (oz, lb, g, kg) | yes, exact factors |
 | a discrete unit (count, package, can, …) ↔ the same unit | yes |
 | a discrete unit with a known size ↔ the size's kind | yes: 2 packages × 8 oz = 16 oz |
-| volume ↔ weight | no |
+| volume ↔ weight | no, except a cooked recipe's deduction (below) |
 | a discrete unit ↔ anything else, without a size | no |
 
 - A purchase may send `unitSize` when its unit is discrete ("4 count, each
   1/2 cup"). The item remembers it for later purchases and recipe lines in
   that unit, and the cycle is tracked in the size's unit.
-- When a cooked recipe's amount can't convert, or has no amount ("salt to
-  taste"), **the deduction is skipped and flagged**. The cook record keeps
+- **A cooked recipe's spoons against a package bought by weight are
+  estimated.** 2 tbsp of sour cream from a 16 oz tub converts with the
+  ingredient's typical density (`providers.EstimateAmount`, the table package
+  counting uses: sour cream ≈ 1.05 g/ml, brown sugar 0.9, spices 0.5), rounded
+  to thousandths, and the cook line is marked `estimated: true`. Without it the
+  owner's sour cream, brown sugar, and spices never counted down. Only cooked
+  recipes estimate: a person's amounts and purchases still convert exactly or
+  not at all.
+- When a cooked recipe's amount still can't convert (a count against ounces
+  with no size), or has no amount ("salt to taste"), **the deduction is
+  skipped and flagged**. The cook record keeps
   `skipReason` (`unit_mismatch`, `no_amount`), and the item's
   `estimate.skippedRecipes` counts it, so the app can say "1 recipe couldn't
   be counted". Nothing is guessed.
@@ -334,11 +375,12 @@ also turns the prompt off and reloads the household's permissions.
 
 ## Limitations and open questions
 
-- **Estimates, not measurements.** No density conversions, no "1 onion ≈
-  8 oz". Items bought by count with no size can only be deducted by recipes
+- **Estimates, not measurements.** Density is used only for cooked recipes'
+  volume ↔ weight deductions, and there's no "1 onion ≈ 8 oz". Items bought by count with no size can only be deducted by recipes
   that use the same count unit.
-- **Restock assumption.** Purchases assume the old stock was used up (see
-  [the learned rate](#the-learned-rate)).
+- **Restock assumption.** Purchases of `low` or `out` items assume the old
+  stock was used up (see [the learned rate](#the-learned-rate)); purchases of
+  `in_stock` items carry the estimate, which is only as good as the estimate.
 - **Alerts on time decay** are noticed at the next read or hourly push sweep,
   and pushed after 08:00 in the household's time zone.
 - **Deleting an item** leaves its purchases and cook records. They're

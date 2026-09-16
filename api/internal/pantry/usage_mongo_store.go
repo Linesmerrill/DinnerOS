@@ -99,6 +99,7 @@ type segmentDoc struct {
 	RecipeUsed string    `bson:"recipeUsed"`
 	Remaining  string    `bson:"remaining"`
 	Observed   bool      `bson:"observed"`
+	Carried    bool      `bson:"carried,omitempty"`
 }
 
 type rateDoc struct {
@@ -201,6 +202,7 @@ type purchaseDoc struct {
 	// Provider is a string handoff ID so the partial unique index covers
 	// only provider purchases.
 	Provider    *purchaseProviderDoc `bson:"provider,omitempty"`
+	PriceCents  *int64               `bson:"priceCents,omitempty"`
 	RecordedBy  bson.ObjectID        `bson:"recordedBy"`
 	PurchasedAt time.Time            `bson:"purchasedAt"`
 }
@@ -216,7 +218,7 @@ func (d purchaseDoc) toPurchase() Purchase {
 	p := Purchase{
 		ID: d.ID.Hex(), HouseholdID: d.HouseholdID.Hex(), ItemID: d.ItemID.Hex(), ItemKey: d.ItemKey, Source: PurchaseSource(d.Source),
 		Quantity: d.Quantity, Unit: d.Unit, Week: d.Week, ClientPurchaseID: d.ClientPurchaseID,
-		RecordedBy: d.RecordedBy.Hex(), PurchasedAt: d.PurchasedAt.UTC(),
+		RecordedBy: d.RecordedBy.Hex(), PurchasedAt: d.PurchasedAt.UTC(), PriceCents: d.PriceCents,
 	}
 	if s := d.UnitSize; s != nil {
 		p.UnitSize = &UnitSize{Unit: s.Unit, Quantity: s.Quantity, SizeUnit: s.SizeUnit}
@@ -236,7 +238,7 @@ func (s *MongoStore) InsertPurchase(ctx context.Context, p Purchase) (Purchase, 
 	d := purchaseDoc{
 		ID: ids["id"], HouseholdID: ids["householdId"], ItemID: ids["itemId"], ItemKey: p.ItemKey, Source: string(p.Source),
 		Quantity: p.Quantity, Unit: p.Unit, Week: p.Week, ClientPurchaseID: p.ClientPurchaseID,
-		RecordedBy: ids["recordedBy"], PurchasedAt: p.PurchasedAt,
+		RecordedBy: ids["recordedBy"], PurchasedAt: p.PurchasedAt, PriceCents: p.PriceCents,
 	}
 	if p.Quantity != "" {
 		q, err := ingredients.ParseQuantity(p.Quantity)
@@ -327,6 +329,7 @@ type cookLineDoc struct {
 	Deducted     string        `bson:"deducted,omitempty"`
 	TrackingUnit string        `bson:"trackingUnit,omitempty"`
 	CycleID      string        `bson:"cycleId,omitempty"`
+	Estimated    bool          `bson:"estimated,omitempty"`
 	SkipReason   string        `bson:"skipReason,omitempty"`
 }
 
@@ -367,7 +370,8 @@ func (s *MongoStore) InsertCookUsage(ctx context.Context, u CookUsage) (CookUsag
 		}
 		d.Lines = append(d.Lines, cookLineDoc{
 			ItemID: itemID, Ingredient: line.Ingredient, Quantity: line.Quantity, Unit: line.Unit,
-			Deducted: line.Deducted, TrackingUnit: line.TrackingUnit, CycleID: line.CycleID, SkipReason: string(line.SkipReason),
+			Deducted: line.Deducted, TrackingUnit: line.TrackingUnit, CycleID: line.CycleID, Estimated: line.Estimated,
+			SkipReason: string(line.SkipReason),
 		})
 	}
 	if _, err := s.cookUsage.InsertOne(ctx, d); err != nil {
@@ -375,6 +379,107 @@ func (s *MongoStore) InsertCookUsage(ctx context.Context, u CookUsage) (CookUsag
 	}
 	u.ID = d.ID.Hex()
 	return u, nil
+}
+
+func (d cookUsageDoc) toCookUsage() CookUsage {
+	u := CookUsage{
+		ID: d.ID.Hex(), HouseholdID: d.HouseholdID.Hex(), SourceKey: d.SourceKey, RecipeID: d.RecipeID.Hex(), EntryID: d.EntryID,
+		UserID: hexOrEmpty(d.UserID), Servings: d.Servings, ScaledFrom: d.ScaledFrom, OccurredAt: d.OccurredAt.UTC(), CreatedAt: d.CreatedAt.UTC(),
+	}
+	for _, l := range d.Lines {
+		u.Lines = append(u.Lines, CookLine{
+			ItemID: l.ItemID.Hex(), Ingredient: l.Ingredient, Quantity: l.Quantity, Unit: l.Unit, Deducted: l.Deducted,
+			TrackingUnit: l.TrackingUnit, CycleID: l.CycleID, Estimated: l.Estimated, SkipReason: CookSkipReason(l.SkipReason),
+		})
+	}
+	return u
+}
+
+func hexOrEmpty(id bson.ObjectID) string {
+	if id.IsZero() {
+		return ""
+	}
+	return id.Hex()
+}
+
+// ListCookUsageByEntries implements UsageStore. Planned meals are keyed
+// "entry:<entryId>", which the unique sourceKey index serves.
+func (s *MongoStore) ListCookUsageByEntries(ctx context.Context, householdID string, entryIDs []string) ([]CookUsage, error) {
+	hid, err := householdOID(householdID)
+	if err != nil {
+		return nil, err
+	}
+	keys := make([]string, 0, len(entryIDs))
+	for _, id := range entryIDs {
+		keys = append(keys, "entry:"+id)
+	}
+	cur, err := s.cookUsage.Find(ctx, bson.D{{Key: "householdId", Value: hid}, {Key: "sourceKey", Value: bson.D{{Key: "$in", Value: keys}}}},
+		options.Find().SetSort(bson.D{{Key: "occurredAt", Value: 1}, {Key: "_id", Value: 1}}))
+	if err != nil {
+		return nil, translate(err)
+	}
+	var docs []cookUsageDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	out := make([]CookUsage, 0, len(docs))
+	for _, d := range docs {
+		out = append(out, d.toCookUsage())
+	}
+	return out, nil
+}
+
+// SetPurchasePrice implements UsageStore.
+func (s *MongoStore) SetPurchasePrice(ctx context.Context, householdID, purchaseID string, priceCents *int64) (Purchase, error) {
+	hid, err := householdOID(householdID)
+	if err != nil {
+		return Purchase{}, err
+	}
+	pid, err := mongodb.ParseID(purchaseID)
+	if err != nil {
+		return Purchase{}, ErrNotFound
+	}
+	update := bson.D{{Key: "$unset", Value: bson.D{{Key: "priceCents", Value: ""}}}}
+	if priceCents != nil {
+		update = bson.D{{Key: "$set", Value: bson.D{{Key: "priceCents", Value: *priceCents}}}}
+	}
+	var d purchaseDoc
+	err = s.purchases.FindOneAndUpdate(ctx, bson.D{{Key: "_id", Value: pid}, {Key: "householdId", Value: hid}}, update,
+		options.FindOneAndUpdate().SetReturnDocument(options.After)).Decode(&d)
+	if err != nil {
+		return Purchase{}, translate(err)
+	}
+	return d.toPurchase(), nil
+}
+
+// PurchasesByIDs implements UsageStore.
+func (s *MongoStore) PurchasesByIDs(ctx context.Context, householdID string, ids []string) ([]Purchase, error) {
+	hid, err := householdOID(householdID)
+	if err != nil {
+		return nil, err
+	}
+	oids := make([]bson.ObjectID, 0, len(ids))
+	for _, id := range ids {
+		if oid, err := mongodb.ParseID(id); err == nil {
+			oids = append(oids, oid)
+		}
+	}
+	if len(oids) == 0 {
+		return nil, nil
+	}
+	cur, err := s.purchases.Find(ctx, bson.D{{Key: "householdId", Value: hid}, {Key: "_id", Value: bson.D{{Key: "$in", Value: oids}}}})
+	if err != nil {
+		return nil, translate(err)
+	}
+	var docs []purchaseDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	out := make([]Purchase, 0, len(docs))
+	for _, d := range docs {
+		out = append(out, d.toPurchase())
+	}
+	return out, nil
 }
 
 // --- Settings -----------------------------------------------------------------

@@ -91,8 +91,25 @@ func TestUsageHandlersFlow(t *testing.T) {
 
 	rec = srv.do(t, http.MethodGet, base+"/"+item.ID+"/purchases", "", userViewer)
 	wantStatus(t, rec, http.StatusOK)
-	if purchases := decodeBody[PurchaseListResponse](t, rec); len(purchases.Items) != 1 || purchases.Items[0].ID != p.ID {
+	if purchases := decodeBody[PurchaseListResponse](t, rec); len(purchases.Items) != 1 || purchases.Items[0].ID != p.ID || purchases.Items[0].PriceCents != nil {
 		t.Errorf("purchases = %s", rec.Body.String())
+	}
+
+	// A price added later, then cleared.
+	rec = srv.do(t, http.MethodPatch, base+"/purchases/"+p.ID, `{"priceCents":498}`, userAda)
+	wantStatus(t, rec, http.StatusOK)
+	if got := decodeBody[PurchaseEnvelope](t, rec).Purchase; got.ID != p.ID || got.PriceCents == nil || *got.PriceCents != 498 {
+		t.Errorf("priced = %s", rec.Body.String())
+	}
+	rec = srv.do(t, http.MethodPatch, base+"/purchases/"+p.ID, `{"priceCents":null}`, userAda)
+	if !strings.Contains(rec.Body.String(), `"priceCents":null`) {
+		t.Errorf("cleared price = %s", rec.Body.String())
+	}
+	// Priced when recorded.
+	rec = srv.do(t, http.MethodPost, base+"/purchases", `{"name":"Soy Sauce","source":"manual","quantity":"1","unit":"package","priceCents":297}`, userAda)
+	wantStatus(t, rec, http.StatusCreated)
+	if got := decodeBody[RecordPurchaseResponse](t, rec).Purchase; got.PriceCents == nil || *got.PriceCents != 297 {
+		t.Errorf("priced purchase = %s", rec.Body.String())
 	}
 
 	for _, tc := range []struct {
@@ -106,6 +123,11 @@ func TestUsageHandlersFlow(t *testing.T) {
 		{http.MethodPost, base + "/purchases", `{"itemId":"66e5a1f2c3b4a5d6e7f80d99","source":"manual"}`, userAda, http.StatusNotFound, "not_found"},
 		{http.MethodPost, base + "/purchases", `{"name":"Salt","source":"manual"}`, userViewer, http.StatusForbidden, "forbidden"},
 		{http.MethodGet, base + "/66e5a1f2c3b4a5d6e7f80d99/purchases", "", userAda, http.StatusNotFound, "not_found"},
+		{http.MethodPost, base + "/purchases", `{"name":"Salt","source":"manual","priceCents":-1}`, userAda, http.StatusBadRequest, "validation_failed"},
+		{http.MethodPatch, base + "/purchases/" + p.ID, `{}`, userAda, http.StatusBadRequest, "validation_failed"},
+		{http.MethodPatch, base + "/purchases/" + p.ID, `{"priceCents":1000001}`, userAda, http.StatusBadRequest, "validation_failed"},
+		{http.MethodPatch, base + "/purchases/" + p.ID, `{"priceCents":100}`, userViewer, http.StatusForbidden, "forbidden"},
+		{http.MethodPatch, base + "/purchases/66e5a1f2c3b4a5d6e7f80d99", `{"priceCents":100}`, userAda, http.StatusNotFound, "not_found"},
 		{http.MethodPut, base + "/settings", `{}`, userAda, http.StatusBadRequest, "validation_failed"},
 		{http.MethodPut, base + "/settings", `{"lowThresholdPercent":101}`, userAda, http.StatusBadRequest, "validation_failed"},
 		{http.MethodPut, base + "/settings", `{"lowThresholdPercent":50}`, userViewer, http.StatusForbidden, "forbidden"},

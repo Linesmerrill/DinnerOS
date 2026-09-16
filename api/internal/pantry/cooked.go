@@ -78,7 +78,11 @@ type CookLine struct {
 	Deducted     string
 	TrackingUnit string
 	CycleID      string
-	SkipReason   CookSkipReason
+	// Estimated is true when Deducted converted a volume to a weight (or
+	// the reverse) with the ingredient's typical density: tablespoons of
+	// sour cream from a 16 oz tub.
+	Estimated  bool
+	SkipReason CookSkipReason
 }
 
 // cookSourceKey returns the idempotency key for a cooked meal, or "" when it
@@ -275,6 +279,14 @@ func (s *Service) matchNeeds(ctx context.Context, m CookedMeal, needs []recipeNe
 			converted, ok := convertAmount(n.quantity, n.unit, t.Unit, item.UnitSize)
 			for i := 0; !ok && hasResolved && i < len(r.UnitSizes); i++ {
 				converted, ok = convertAmount(n.quantity, n.unit, t.Unit, &r.UnitSizes[i])
+			}
+			if !ok {
+				// Spoons against a package bought by weight: estimate with
+				// the ingredient's typical density rather than never
+				// counting it down (docs/pantry-usage.md#unit-conversion).
+				if converted, ok = estimateAmount(n.quantity, n.unit, t.Unit, item); ok {
+					converted, line.Estimated = roundRat(converted, 1000), true
+				}
 			}
 			if !ok {
 				line.SkipReason = SkipUnitMismatch

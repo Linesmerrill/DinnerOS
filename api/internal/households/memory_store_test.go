@@ -90,6 +90,13 @@ func (m *memoryStore) UpdateHousehold(_ context.Context, id string, patch Househ
 	if patch.OrderDay != nil {
 		h.OrderDay = *patch.OrderDay
 	}
+	if patch.SetMealKit {
+		h.MealKit = nil
+		if patch.MealKit != nil {
+			kit := *patch.MealKit
+			h.MealKit = &kit
+		}
+	}
 	h.UpdatedAt = at
 	m.households[id] = h
 	return h, nil

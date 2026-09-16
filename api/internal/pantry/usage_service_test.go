@@ -300,8 +300,14 @@ func TestCookSkipsWhatItCannotConvert(t *testing.T) {
 	if err != nil || res.Item.Tracking.Unit != "cup" || res.Item.Tracking.Reference != "2" || res.Item.UnitSize.Unit != "count" {
 		t.Fatalf("sized purchase = %+v, %v", res.Item, err)
 	}
-	// Parmesan bought by weight; the recipe measures it in cups.
+	// Parmesan bought by weight; the recipe measures it in cups, so the
+	// deduction is estimated with parmesan's typical density.
 	parm, err := f.svc.RecordPurchase(f.ctx, f.actor, PurchaseInput{Name: "Parmesan", Source: PurchaseManual, Quantity: "8", Unit: "oz"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Egg noodles bought as a count with no size can't take ounces at all.
+	noodles, err := f.svc.RecordPurchase(f.ctx, f.actor, PurchaseInput{Name: "Egg Noodles", Source: PurchaseManual, Quantity: "2", Unit: "package"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,12 +320,18 @@ func TestCookSkipsWhatItCannotConvert(t *testing.T) {
 	if l := lines[res.Item.ID]; l.Deducted != "1/8" {
 		t.Errorf("butter line = %+v", l)
 	}
-	if l := lines[parm.Item.ID]; l.SkipReason != SkipUnitMismatch || l.Deducted != "" {
+	if l := lines[parm.Item.ID]; l.SkipReason != "" || l.Deducted != "1669/1000" || !l.Estimated || l.TrackingUnit != "oz" {
 		t.Errorf("parmesan line = %+v", l)
 	}
-	got := f.item(t, parm.Item.ID)
-	if got.Tracking.RecipeUsed != "0" || got.Tracking.SkippedUses != 1 {
+	if got := f.item(t, parm.Item.ID); got.Tracking.RecipeUsed != "1669/1000" || got.Tracking.RecipeUses != 1 {
 		t.Errorf("parmesan tracking = %+v", got.Tracking)
+	}
+	if l := lines[noodles.Item.ID]; l.SkipReason != SkipUnitMismatch || l.Deducted != "" || l.Estimated {
+		t.Errorf("noodles line = %+v", l)
+	}
+	got := f.item(t, noodles.Item.ID)
+	if got.Tracking.RecipeUsed != "0" || got.Tracking.SkippedUses != 1 {
+		t.Errorf("noodles tracking = %+v", got.Tracking)
 	}
 	// "1 butter" by count uses the stick size.
 	if _, applied, err := f.svc.ApplyCooked(f.ctx, CookedMeal{HouseholdID: testHousehold, RecipeID: otherRecipe, EntryID: "toast", Servings: 2, OccurredAt: *f.clock}); err != nil || !applied {

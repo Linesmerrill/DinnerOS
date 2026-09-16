@@ -83,6 +83,7 @@ type fixture struct {
 	keys    map[string]string // grocery line name → ingredient key
 	actor   households.Membership
 	recipes *recipes.Service
+	plans   *planning.Service
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -142,10 +143,23 @@ func newFixture(t *testing.T) *fixture {
 	clock := testNow
 	svc := NewService(ServiceOptions{
 		Store: store, Providers: providers.NewRegistry(providers.NewWalmart(providers.WalmartOptions{})),
-		Grocery: plans, Catalog: recipeSvc, Pantry: pantrySvc, Events: rec,
+		Grocery: plans, Catalog: recipeSvc, Pantry: pantrySvc, Plans: plans, Events: rec,
 	})
 	svc.now = func() time.Time { return clock }
-	return &fixture{ctx: ctx, svc: svc, store: store, pantry: pantrySvc, events: rec, clock: &clock, keys: keys, actor: actor, recipes: recipeSvc}
+	return &fixture{ctx: ctx, svc: svc, store: store, pantry: pantrySvc, events: rec, clock: &clock, keys: keys, actor: actor, recipes: recipeSvc, plans: plans}
+}
+
+// saveMeasured saves a product counted by exact measure (per_amount), which
+// the pantry always tracks, whatever its category (leftovers.go).
+func (f *fixture) saveMeasured(t *testing.T, name, product string, size *PackageSize) Preference {
+	t.Helper()
+	p, _, err := f.svc.PutPreference(f.ctx, f.actor, "walmart", f.keys[name], PreferenceInput{
+		ProductURL: product, DisplayName: name + " (store)", PackageSize: size, Coverage: providers.CoveragePerAmount,
+	})
+	if err != nil {
+		t.Fatalf("save %s: %v", name, err)
+	}
+	return p
 }
 
 func (f *fixture) save(t *testing.T, name, product string, size *PackageSize) Preference {
@@ -277,7 +291,7 @@ func TestIntegrationHandoffAndConfirm(t *testing.T) {
 	if _, err := f.svc.UpdateSettings(ctx, f.actor, "walmart", "5435"); err != nil {
 		t.Fatal(err)
 	}
-	f.save(t, "Ground Beef", "https://www.walmart.com/ip/Test-Beef/100000001", &PackageSize{Quantity: "16", Unit: "oz"})
+	f.saveMeasured(t, "Ground Beef", "https://www.walmart.com/ip/Test-Beef/100000001", &PackageSize{Quantity: "16", Unit: "oz"})
 	f.save(t, "Yellow Onion", "https://www.walmart.com/ip/100000002", &PackageSize{Quantity: "3", Unit: "count"})
 	f.save(t, "Garlic", "100000003", &PackageSize{Quantity: "3", Unit: "count"})
 	f.save(t, "Milk", "https://walmart.com/ip/Test-Milk/100000004", nil)
@@ -418,7 +432,16 @@ func TestIntegrationHandoffAndConfirm(t *testing.T) {
 
 	// Everything else, as another member.
 	all, err := f.svc.Confirm(ctx, memberOf(otherMember), h.ID, ConfirmInput{All: true})
-	if err != nil || len(all.Purchases) != 4 || all.Handoff.Status() != HandoffDone {
+	// Garlic is fresh for the week and can't be measured against a bulb, so
+	// it's confirmed without a pantry purchase; the onions' 3-count bag has a
+	// measurable leftover and is tracked (leftovers.go).
+	if l, _ := all.Handoff.Line(lineFor(t, h.Proposal, "Garlic").ID); l.Status != LineConfirmed || l.Pantry != PantryNotTracked || l.PurchaseID != "" {
+		t.Errorf("garlic line = %+v", l)
+	}
+	if l, _ := all.Handoff.Line(onion.ID); l.Pantry != PantryTracked || l.PurchaseID == "" {
+		t.Errorf("onion line = %+v", l)
+	}
+	if err != nil || len(all.Purchases) != 3 || all.Handoff.Status() != HandoffDone {
 		t.Fatalf("Confirm(all) = %+v, %v", all, err)
 	}
 	created := 0
@@ -430,8 +453,8 @@ func TestIntegrationHandoffAndConfirm(t *testing.T) {
 			t.Errorf("onion purchase = %+v", p.Purchase)
 		}
 	}
-	if created != 2 {
-		t.Errorf("created %d purchases, want 2", created)
+	if created != 1 {
+		t.Errorf("created %d purchases, want 1", created)
 	}
 	if done, _ := f.svc.ListHandoffs(ctx, testHousehold, HandoffFilter{Status: HandoffDone}); len(done) != 1 {
 		t.Errorf("done handoffs = %d", len(done))
@@ -474,7 +497,9 @@ func TestIntegrationHandoffAndConfirm(t *testing.T) {
 		t.Errorf("all after skipping = %+v", all.Purchases)
 	}
 	res, err = f.svc.Confirm(ctx, f.actor, h2.ID, ConfirmInput{Lines: []ConfirmLine{{LineID: "l2", Packages: 1}}})
-	if l, _ := res.Handoff.Line("l2"); err != nil || l.Status != LineConfirmed || !res.Purchases[0].Created {
+	// l2 is the milk: dairy with no size is fresh for the week, so there's no
+	// pantry purchase to return.
+	if l, _ := res.Handoff.Line("l2"); err != nil || l.Status != LineConfirmed || l.Name != "Milk" || l.Pantry != PantryNotTracked || len(res.Purchases) != 0 {
 		t.Errorf("confirming a skipped line = %+v, %v", l, err)
 	}
 	if _, err := f.svc.Confirm(ctx, f.actor, "66e5a1f2c3b4a5d6e7f80b99", ConfirmInput{All: true}); !errors.Is(err, ErrNotFound) {
@@ -571,10 +596,10 @@ func TestIntegrationShoppingHTTP(t *testing.T) {
 		t.Errorf("put preference = %d %v", rec.Code, body)
 	}
 	beefPath := hh + "/shopping/walmart/preferences/" + f.keys["Ground Beef"]
-	if rec, body = do(http.MethodPut, beefPath, `{"productId":"100000001","displayName":"Beef","packageSize":{"quantity":"16","unit":"oz"}}`, testUser); rec.Code != 201 {
+	if rec, body = do(http.MethodPut, beefPath, `{"productId":"100000001","displayName":"Beef","packageSize":{"quantity":"16","unit":"oz"},"coverage":"per_amount"}`, testUser); rec.Code != 201 {
 		t.Fatalf("put beef = %d %v", rec.Code, body)
 	}
-	if rec, _ = do(http.MethodPut, beefPath, `{"productId":"100000001","displayName":"Beef 16 oz","packageSize":{"quantity":"16","unit":"oz"}}`, testUser); rec.Code != 200 {
+	if rec, _ = do(http.MethodPut, beefPath, `{"productId":"100000001","displayName":"Beef 16 oz","packageSize":{"quantity":"16","unit":"oz"},"coverage":"per_amount","priceCents":598}`, testUser); rec.Code != 200 {
 		t.Errorf("update beef = %d", rec.Code)
 	}
 	if rec, body = do(http.MethodGet, hh+"/shopping/walmart/preferences", "", viewerUser); rec.Code != 200 || len(body["items"].([]any)) != 2 {
@@ -625,5 +650,58 @@ func TestIntegrationShoppingHTTP(t *testing.T) {
 	}
 	if rec, _ = do(http.MethodPost, hh+"/shopping/handoffs/"+id+"/confirm", `{}`, testUser); rec.Code != 400 {
 		t.Errorf("empty confirm = %d", rec.Code)
+	}
+
+	// Prices: the saved product kept the price it was saved with, a line
+	// price reaches the pantry purchase, and the week's cost reads both.
+	if rec, body = do(http.MethodGet, beefPath, "", viewerUser); rec.Code != 200 || body["priceCents"] != 598.0 || body["priceUpdatedAt"] == nil {
+		t.Errorf("priced preference = %d %v", rec.Code, body)
+	}
+	if rec, body = do(http.MethodPut, beefPath, `{"productId":"100000001","displayName":"Beef 16 oz","packageSize":{"quantity":"16","unit":"oz"},"coverage":"per_amount"}`, testUser); rec.Code != 200 || body["priceCents"] != 598.0 {
+		t.Errorf("a save without priceCents keeps the price = %d %v", rec.Code, body)
+	}
+	rec, body = do(http.MethodPost, hh+"/shopping/handoffs/"+id+"/prices", `{"lines":[{"lineId":"l1","priceCents":1150}]}`, testUser)
+	if line := body["lines"].([]any)[0].(map[string]any); rec.Code != 200 || line["priceCents"] != 1150.0 || line["pantry"] != "tracked" {
+		t.Errorf("set prices = %d %v", rec.Code, body)
+	}
+	if _, body = do(http.MethodGet, beefPath, "", viewerUser); body["priceCents"] != 575.0 {
+		t.Errorf("remembered package price = %v", body)
+	}
+	rec, body = do(http.MethodPut, hh+"/shopping/weeks/2026-W38/spend", `{"orderTotalCents":1400}`, testUser)
+	if rec.Code != 200 || body["currency"] != "USD" || body["orderTotalCents"] != 1400.0 || body["spentSource"] != "order_total" ||
+		body["itemsBought"] != 1.0 || body["itemsPriced"] != 1.0 || body["feesAndUnpricedCents"] != 250.0 || body["meals"] != 2.0 ||
+		body["mealKit"] != nil || body["savedCents"] != nil || len(body["items"].([]any)) != 1 {
+		t.Errorf("set spend = %d %v", rec.Code, body)
+	}
+	if rec, body = do(http.MethodGet, hh+"/shopping/weeks/2026-W38/cost", "", viewerUser); rec.Code != 200 || body["spentCents"] != 1400.0 {
+		t.Errorf("week cost = %d %v", rec.Code, body)
+	}
+	if rec, body = do(http.MethodPut, hh+"/shopping/weeks/2026-W38/spend", `{"orderTotalCents":null}`, testUser); rec.Code != 200 || body["orderTotalCents"] != nil || body["spentCents"] != 1150.0 {
+		t.Errorf("cleared spend = %d %v", rec.Code, body)
+	}
+	if rec, body = do(http.MethodGet, hh+"/shopping/savings?limit=4", "", viewerUser); rec.Code != 200 || len(body["weeks"].([]any)) != 1 || body["totalSavedCents"] != nil {
+		t.Errorf("savings = %d %v", rec.Code, body)
+	}
+	for _, tc := range []struct {
+		method, path, body, user string
+		status                   int
+		code                     string
+	}{
+		{http.MethodPost, "/shopping/handoffs/" + id + "/prices", `{"lines":[{"lineId":"l1","priceCents":1}]}`, viewerUser, 403, "forbidden"},
+		{http.MethodPost, "/shopping/handoffs/" + id + "/prices", `{"lines":[{"lineId":"l9","priceCents":1}]}`, testUser, 400, "validation_failed"},
+		{http.MethodPost, "/shopping/handoffs/" + id + "/prices", `{"lines":[{"lineId":"l1"}]}`, testUser, 400, "validation_failed"},
+		{http.MethodPost, "/shopping/handoffs/" + id + "/prices", `{"lines":[{"lineId":"l1","priceCents":-5}]}`, testUser, 400, "validation_failed"},
+		{http.MethodPut, "/shopping/weeks/2026-W38/spend", `{}`, testUser, 400, "validation_failed"},
+		{http.MethodPut, "/shopping/weeks/2026-W38/spend", `{"orderTotalCents":1}`, viewerUser, 403, "forbidden"},
+		{http.MethodPut, "/shopping/weeks/2026-38/spend", `{"orderTotalCents":1}`, testUser, 400, "validation_failed"},
+		{http.MethodGet, "/shopping/weeks/2026-W38/cost", "", outsider, 404, "not_found"},
+		{http.MethodGet, "/shopping/savings?limit=99", "", testUser, 400, "validation_failed"},
+		{http.MethodPut, "/shopping/walmart/preferences/" + f.keys["Ground Beef"], `{"productId":"100000001","displayName":"Beef","priceCents":2000000}`, testUser, 400, "validation_failed"},
+	} {
+		rec, body := do(tc.method, hh+tc.path, tc.body, tc.user)
+		errBody, _ := body["error"].(map[string]any)
+		if rec.Code != tc.status || errBody["code"] != tc.code {
+			t.Errorf("%s %s as %s = %d %v, want %d %s", tc.method, tc.path, tc.user, rec.Code, body, tc.status, tc.code)
+		}
 	}
 }

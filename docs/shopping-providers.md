@@ -312,7 +312,7 @@ No provider reports what was ordered. What DinnerOS can know:
 | The products and package counts in the handoff link | ✅ stored on the handoff |
 | That the user opened it | ✅ the app reports it |
 | What was actually in the cart, substituted, removed, or delivered | ❌ |
-| Price paid, order time | ❌ |
+| Price paid, order time | ❌ from Walmart; ✅ when a member enters prices or an order total ([Prices](#prices)) |
 | Commission from an order (Impact) | Aggregated and delayed, not per user; don't use for pantry |
 
 **Flow:** after the handoff, the Shop tab shows "Did you order these?" with
@@ -323,7 +323,9 @@ several meals appears once under "For Several Meals" (with the meals named),
 and add-on recipes (garlic bread) and items tied to no recipe go under
 "Extras". A meal whose items are all checked collapses to "4 of 4 ordered".
 One button confirms: "Ordered All 43", or "Ordered 42 of 43" with the rest
-marked not ordered. On confirm, the API writes one pantry purchase per line:
+marked not ordered. On confirm, the API writes one pantry purchase per line the pantry tracks
+(long-lasting leftovers; fresh items used up this week are confirmed without
+one, [pantry-usage.md](pantry-usage.md#what-goes-in-the-pantry)):
 
 ```json
 {
@@ -346,8 +348,43 @@ marked not ordered. On confirm, the API writes one pantry purchase per line:
 - A handoff line can be confirmed at most once (idempotent per handoff line).
 - Checking the grocery line off works as today and doesn't create a second
   purchase for a line already confirmed through a handoff.
-- Later, not in Phase 8: importing the user's own emailed Walmart receipts
-  with explicit consent. It would be a separate, opt-in decision.
+- Emailed Walmart receipts can't help with prices: the confirmation and
+  delivered emails carry only the item count, the order total (fees, tax, and
+  discounts included), savings, and a "View order" link, never item prices.
+  iPhone apps can't read Mail either.
+
+### Prices
+
+Prices make weekly cost and meal kit savings possible
+([grocery-engine.md](grocery-engine.md#weekly-cost)). They're optional
+everywhere and stored in integer US cents.
+
+| Way in | Where | What's sent |
+| --- | --- | --- |
+| Typed | "Did You Order These?" (per line), Choose Product (per package), Add Prices under This Week's Cost | `priceCents` on confirm, `POST .../handoffs/{id}/prices`, or the saved product |
+| Order total | This Week's Cost: the total with fees, tax, and tip | `PUT .../shopping/weeks/{week}/spend` |
+| Order screenshots | Shop → This Week's Cost → Import Prices from Order Screenshots…: the member picks screenshots of the Walmart app's order details | Only the prices (and total) the member confirms on the review screen |
+
+**Screenshot import runs on the iPhone.** The picked images stay in memory:
+Vision (`RecognizeTextRequest`) reads their text on device. When Apple
+Intelligence is available, the on-device Foundation Models framework
+structures that text into items (name, price, quantity) and the order total,
+behind an availability check and a timeout; an item it returns is kept only if
+its price appears in the recognized text. Otherwise, and always as the check,
+a deterministic parser (`OrderScreenshotParser`) reads item names with their
+prices, quantities, and "was" prices, and the subtotal, fees, tax, tip, and
+total. `OrderPriceMatcher` matches items to the week's handoff lines by word
+overlap with the product and ingredient names, one item per line, with high,
+medium, or low confidence. The review screen shows matched items (reassignable
+or unused), unmatched items (assignable), lines still without a price, and the
+detected total; saving sends only those numbers. No image, recognized text,
+or unused item leaves the phone, and nothing is stored on it.
+
+A Share extension from Photos isn't built: it needs its own app extension
+target and gives nothing the in-app picker doesn't.
+
+A confirmed line's price is also written to its pantry purchase, and the saved
+product remembers the per-package price for next time.
 
 ## MVP architecture
 

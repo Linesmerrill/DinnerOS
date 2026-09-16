@@ -32,6 +32,8 @@ type ProviderPurchaseInput struct {
 	// Provider names the handoff line; Key, HandoffID, and LineID are
 	// required.
 	Provider ProviderRef
+	// PriceCents is optional: what the line cost.
+	PriceCents *int64
 }
 
 // RecordProviderPurchase records that the household ordered an item through
@@ -54,7 +56,10 @@ func (s *Service) RecordProviderPurchase(ctx context.Context, actor households.M
 	if res, found, err := s.FindProviderPurchase(ctx, actor.HouseholdID, pr.HandoffID, pr.LineID); found || err != nil {
 		return res, err
 	}
-	p := purchase{source: PurchaseProvider, provider: &pr}
+	p := purchase{source: PurchaseProvider, provider: &pr, price: in.PriceCents}
+	if err := validatePrice(in.PriceCents); err != nil {
+		return PurchaseResult{}, err
+	}
 	var err error
 	if p.quantity, p.unit, err = normalizeAmount(in.Quantity, in.Unit); err != nil {
 		return PurchaseResult{}, err

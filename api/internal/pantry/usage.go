@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
+	"github.com/Linesmerrill/DinnerOS/api/internal/providers"
 )
 
 // This file holds the pure usage-estimate logic: cycles, segments, the learned
@@ -97,6 +98,10 @@ type Segment struct {
 	// amount or marked the item out). False means a restock assumed it was
 	// used up.
 	Observed bool
+	// Carried is true when a purchase arrived while the item was still in
+	// stock and the estimated Remaining was carried into the new cycle. The
+	// remaining amount is the estimate itself, so the learned rate skips it.
+	Carried bool
 }
 
 // Rate is the learned non-recipe use: the median daily use across recent
@@ -217,6 +222,14 @@ func convertAmount(q *big.Rat, from, to string, size *UnitSize) (*big.Rat, bool)
 	return r.Quo(r, tu.BaseFactor()), true
 }
 
+// estimateAmount converts q between volume and weight with the item's
+// typical density (providers.EstimateAmount). It is the fallback for cooked
+// recipes only: a person's amounts and purchases still convert exactly or
+// not at all.
+func estimateAmount(q *big.Rat, from, to string, item Item) (*big.Rat, bool) {
+	return providers.EstimateAmount(q, from, to, providers.Item{Name: item.DisplayName, Category: item.Category})
+}
+
 // trackingAmount is the amount and unit a recorded amount is tracked in: a
 // discrete unit with a known size is tracked in the size's unit.
 func trackingAmount(quantity, unit string, size *UnitSize) (*big.Rat, string) {
@@ -284,25 +297,65 @@ func closeSegment(item *Item, end time.Time, remaining *big.Rat, observed bool, 
 	item.Rate = learnRate(history, t.Unit, item.UnitSize, now)
 }
 
-// restock applies a purchase to item at now: the current segment closes (as
-// used up, unless a person marked the item out, which records when), and a
-// new cycle starts with the purchased amount. A purchase without an amount
+// restock applies a purchase to item at now: the current segment closes, and
+// a new cycle starts with the purchased amount. A purchase without an amount
 // ends tracking. The item is in stock afterwards.
+//
+// How the old segment closes depends on the item's status:
+//   - in stock: the household bought more while it still had some, so the
+//     estimated remaining amount is carried into the new cycle ("more
+//     purchases add up"), when it converts. The segment is Carried, and the
+//     learned rate skips it.
+//   - low (by anyone), or out by the estimate: assumed used up, which is what
+//     the learned rate learns from.
+//   - out by a person: used up when they said so (observed).
 func restock(item *Item, cycleID string, source CycleSource, quantity, unit string, now time.Time) {
+	var carried *big.Rat
+	carriedUnit := ""
 	if t := item.Tracking; t != nil {
-		end, observed := now, false
-		if item.Status == StatusOut && item.StatusSource != StatusSourceEstimate && item.StatusSetAt.After(t.SegmentStartedAt) {
+		end, observed, remaining := now, false, new(big.Rat)
+		switch {
+		case item.Status == StatusOut && item.StatusSource != StatusSourceEstimate && item.StatusSetAt.After(t.SegmentStartedAt):
 			end, observed = item.StatusSetAt, true
+		case item.Status == StatusInStock:
+			if e := estimateItem(*item, DefaultLowThresholdPercent, now); e != nil && worthCarrying(e) {
+				carried, carriedUnit = e.Remaining, t.Unit
+				remaining = e.Remaining
+			}
 		}
-		closeSegment(item, end, new(big.Rat), observed, now)
+		closeSegment(item, end, remaining, observed, now)
+		if carried != nil {
+			item.History[len(item.History)-1].Carried = true
+			item.Rate = learnRate(item.History, t.Unit, item.UnitSize, now)
+		}
 	}
 	item.Tracking = nil
 	item.Quantity, item.Unit = quantity, unit
 	if quantity != "" {
 		q, trackUnit := trackingAmount(quantity, unit, item.UnitSize)
+		if carried != nil {
+			if extra, ok := convertAmount(carried, carriedUnit, trackUnit, item.UnitSize); ok {
+				q.Add(q, extra)
+			}
+		}
 		startCycle(item, cycleID, source, q, trackUnit, now)
 	}
 	item.Status, item.StatusSource, item.StatusSetAt = StatusInStock, StatusSourcePerson, now
+}
+
+// MinCarryPercent is the smallest estimated remainder, as a percent of the
+// cycle's starting amount, that a purchase adds to. Less is treated as used
+// up, so a rounding crumb doesn't stop the rate from learning.
+const MinCarryPercent = 10
+
+// worthCarrying reports whether an estimate's remaining amount is at least
+// MinCarryPercent of its reference.
+func worthCarrying(e *Estimate) bool {
+	if e.Remaining.Sign() <= 0 {
+		return false
+	}
+	scaled := new(big.Rat).Mul(e.Remaining, big.NewRat(100, 1))
+	return scaled.Cmp(new(big.Rat).Mul(e.Reference, big.NewRat(MinCarryPercent, 1))) >= 0
 }
 
 // applyPersonEdit records what a person's change from before to after means
@@ -367,7 +420,7 @@ func learnRate(history []Segment, unit string, size *UnitSize, now time.Time) *R
 	for i := len(history) - 1; i >= 0; i-- {
 		seg := history[i]
 		duration := seg.EndedAt.Sub(seg.StartedAt)
-		if duration < MinSegmentDuration {
+		if duration < MinSegmentDuration || seg.Carried {
 			continue
 		}
 		start, ok1 := convertAmount(ratOf(seg.Start), seg.Unit, unit, size)

@@ -66,10 +66,18 @@ type HouseholdResponse struct {
 	DefaultServings int    `json:"defaultServings"`
 	TimeZone        string `json:"timeZone"`
 	// OrderDay is null until the household picks a grocery order day.
-	OrderDay  *string   `json:"orderDay"`
-	CreatedBy string    `json:"createdBy"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	OrderDay *string `json:"orderDay"`
+	// MealKit is null until the household says what it spent on meal kits.
+	MealKit   *MealKitJSON `json:"mealKit"`
+	CreatedBy string       `json:"createdBy"`
+	CreatedAt time.Time    `json:"createdAt"`
+	UpdatedAt time.Time    `json:"updatedAt"`
+}
+
+// MealKitJSON is a meal kit baseline: weeklyCents for meals a week.
+type MealKitJSON struct {
+	WeeklyCents int64 `json:"weeklyCents"`
+	Meals       int   `json:"meals"`
 }
 
 // orderDayOrNil renders an unset order day as JSON null.
@@ -82,7 +90,12 @@ func orderDayOrNil(day string) *string {
 
 // NewHouseholdResponse converts a Household for the API.
 func NewHouseholdResponse(hh Household) HouseholdResponse {
+	var kit *MealKitJSON
+	if hh.MealKit != nil {
+		kit = &MealKitJSON{WeeklyCents: hh.MealKit.WeeklyCents, Meals: hh.MealKit.Meals}
+	}
 	return HouseholdResponse{
+		MealKit:         kit,
 		ID:              hh.ID,
 		Name:            hh.Name,
 		DefaultServings: hh.DefaultServings,
@@ -169,6 +182,8 @@ type updateHouseholdRequest struct {
 	DefaultServings *int    `json:"defaultServings"`
 	// OrderDay set to "" clears the household's order day.
 	OrderDay *string `json:"orderDay"`
+	// MealKit set to null clears the meal kit baseline; absent leaves it.
+	MealKit httpx.Optional[MealKitJSON] `json:"mealKit"`
 }
 
 type changeRoleRequest struct {
@@ -239,7 +254,11 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	hh, err := h.svc.Update(r.Context(), actor, UpdateInput(req))
+	in := UpdateInput{Name: req.Name, TimeZone: req.TimeZone, DefaultServings: req.DefaultServings, OrderDay: req.OrderDay, SetMealKit: req.MealKit.Set}
+	if v := req.MealKit.Value; v != nil {
+		in.MealKit = &MealKit{WeeklyCents: v.WeeklyCents, Meals: v.Meals}
+	}
+	hh, err := h.svc.Update(r.Context(), actor, in)
 	if err != nil {
 		h.writeError(w, r, "update household failed", err)
 		return

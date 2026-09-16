@@ -2,6 +2,7 @@ package pantry
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"net/http"
 	"time"
@@ -85,6 +86,19 @@ type RecordPurchaseRequest struct {
 	UnitSize         *UnitSizeRequest `json:"unitSize"`
 	Week             string           `json:"week"`
 	ClientPurchaseID string           `json:"clientPurchaseId"`
+	// PriceCents is optional: what the whole purchase cost, in US cents.
+	PriceCents *int64 `json:"priceCents"`
+}
+
+// SetPurchasePriceRequest is the body of PATCH .../pantry/purchases/{purchaseId}.
+type SetPurchasePriceRequest struct {
+	// PriceCents is required; null clears the price.
+	PriceCents httpx.Optional[int64] `json:"priceCents"`
+}
+
+// PurchaseEnvelope is returned by PATCH .../pantry/purchases/{purchaseId}.
+type PurchaseEnvelope struct {
+	Purchase PurchaseResponse `json:"purchase"`
 }
 
 // PurchaseResponse is a recorded purchase.
@@ -100,9 +114,11 @@ type PurchaseResponse struct {
 	Week             *string           `json:"week"`
 	ClientPurchaseID *string           `json:"clientPurchaseId"`
 	// Provider is set for source provider: the handoff line it confirms.
-	Provider    *PurchaseProviderResponse `json:"provider"`
-	RecordedBy  string                    `json:"recordedBy"`
-	PurchasedAt time.Time                 `json:"purchasedAt"`
+	Provider *PurchaseProviderResponse `json:"provider"`
+	// PriceCents is what the whole purchase cost, or null when unknown.
+	PriceCents  *int64    `json:"priceCents"`
+	RecordedBy  string    `json:"recordedBy"`
+	PurchasedAt time.Time `json:"purchasedAt"`
 }
 
 // PurchaseProviderResponse links a provider purchase to its handoff line.
@@ -183,7 +199,7 @@ func newEstimateResponse(e *Estimate) *EstimateResponse {
 func newPurchaseResponse(p Purchase) PurchaseResponse {
 	resp := PurchaseResponse{
 		ID: p.ID, HouseholdID: p.HouseholdID, ItemID: p.ItemID, Source: p.Source,
-		UnitSize: unitSizeResponse(p.UnitSize), RecordedBy: p.RecordedBy, PurchasedAt: p.PurchasedAt.UTC(),
+		UnitSize: unitSizeResponse(p.UnitSize), RecordedBy: p.RecordedBy, PurchasedAt: p.PurchasedAt.UTC(), PriceCents: p.PriceCents,
 	}
 	if p.Quantity != "" {
 		exact, unit := p.Quantity, p.Unit
@@ -264,7 +280,7 @@ func (h *Handler) recordPurchase(w http.ResponseWriter, r *http.Request) {
 	}
 	in := PurchaseInput{
 		ItemID: req.ItemID, IngredientID: req.IngredientID, Name: req.Name, Source: req.Source,
-		Quantity: req.Quantity, Unit: req.Unit, Week: req.Week, ClientPurchaseID: req.ClientPurchaseID,
+		Quantity: req.Quantity, Unit: req.Unit, Week: req.Week, ClientPurchaseID: req.ClientPurchaseID, PriceCents: req.PriceCents,
 	}
 	if req.UnitSize != nil {
 		in.UnitSizeQuantity, in.UnitSizeUnit = req.UnitSize.Quantity, req.UnitSize.Unit
@@ -283,6 +299,28 @@ func (h *Handler) recordPurchase(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusCreated
 	}
 	httpx.WriteJSON(w, status, RecordPurchaseResponse{Purchase: newPurchaseResponse(res.Purchase), Item: h.itemResponse(r, res.Item)})
+}
+
+func (h *Handler) setPurchasePrice(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	var req SetPurchasePriceRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	if !req.PriceCents.Set {
+		h.writeError(w, r, "", invalid("priceCents is required; send null to clear it"))
+		return
+	}
+	p, err := h.opts.Service.SetPurchasePrice(r.Context(), actor, chi.URLParam(r, "purchaseId"), req.PriceCents.Value)
+	if errors.Is(err, ErrNotFound) {
+		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "pantry purchase not found")
+		return
+	}
+	if err != nil {
+		h.writeError(w, r, "set pantry purchase price failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, PurchaseEnvelope{Purchase: newPurchaseResponse(p)})
 }
 
 func (h *Handler) listPurchases(w http.ResponseWriter, r *http.Request) {

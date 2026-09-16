@@ -257,6 +257,38 @@ func TestUpdateHouseholdOrderDay(t *testing.T) {
 	}
 }
 
+func TestUpdateHouseholdMealKit(t *testing.T) {
+	svc, _ := newTestService(t)
+	ctx := context.Background()
+	h, admin := newHousehold(t, svc, map[string]Role{userBob: RoleMember})
+	if h.MealKit != nil {
+		t.Errorf("new household MealKit = %+v, want none", h.MealKit)
+	}
+
+	updated, err := svc.Update(ctx, admin, UpdateInput{SetMealKit: true, MealKit: &MealKit{WeeklyCents: 13000, Meals: 5}})
+	if err != nil || updated.MealKit == nil || updated.MealKit.PerMealCents() != 2600 || updated.OrderDay != h.OrderDay {
+		t.Fatalf("Update(mealKit) = %+v, %v", updated, err)
+	}
+	if got := (MealKit{WeeklyCents: 13000, Meals: 3}).PerMealCents(); got != 4333 {
+		t.Errorf("PerMealCents rounding = %d, want 4333", got)
+	}
+	cleared, err := svc.Update(ctx, admin, UpdateInput{SetMealKit: true})
+	if err != nil || cleared.MealKit != nil {
+		t.Fatalf("clearing mealKit = %+v, %v", cleared, err)
+	}
+
+	var ve *ValidationError
+	for _, bad := range []MealKit{{WeeklyCents: 0, Meals: 5}, {WeeklyCents: 13000, Meals: 0}, {WeeklyCents: 13000, Meals: 22}, {WeeklyCents: MaxMealKitWeeklyCents + 1, Meals: 5}} {
+		if _, err := svc.Update(ctx, admin, UpdateInput{SetMealKit: true, MealKit: &bad}); !errors.As(err, &ve) {
+			t.Errorf("Update(mealKit %+v) error = %v, want ValidationError", bad, err)
+		}
+	}
+	member := Membership{HouseholdID: h.ID, UserID: userBob, Role: RoleMember}
+	if _, err := svc.Update(ctx, member, UpdateInput{SetMealKit: true}); !errors.Is(err, ErrForbidden) {
+		t.Errorf("member Update(mealKit) error = %v, want ErrForbidden", err)
+	}
+}
+
 func TestUpdateHousehold(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()
