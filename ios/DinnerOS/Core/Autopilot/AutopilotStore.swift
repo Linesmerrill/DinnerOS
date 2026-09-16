@@ -25,6 +25,9 @@ final class AutopilotStore {
     private(set) var phase: Phase = .idle
     private(set) var profile: AutopilotProfile?
     private(set) var vocabulary: AutopilotVocabulary?
+    /// Set when a reload failed while the profile stayed on screen, as in every other store.
+    /// Without it a failed pull to refresh looked exactly like one that worked.
+    private(set) var refreshError: String?
 
     /// The week `proposal` and `context` belong to.
     private(set) var week: ISOWeek?
@@ -129,14 +132,18 @@ final class AutopilotStore {
             guard started == profileGeneration else { return }
             self.profile = profile
             self.vocabulary = vocabulary
+            refreshError = nil
             phase = .loaded
         } catch is CancellationError {
             if started == profileGeneration, phase == .loading { phase = .idle }
         } catch {
             guard started == profileGeneration else { return }
             Self.logger.notice("Autopilot profile load failed: \(Self.describe(error), privacy: .public)")
-            if phase != .loaded {
-                phase = .failed(HouseholdStore.message(for: error))
+            let message = HouseholdStore.message(for: error)
+            if phase == .loaded {
+                refreshError = message
+            } else {
+                phase = .failed(message)
             }
         }
     }
@@ -191,6 +198,7 @@ final class AutopilotStore {
         profileGeneration += 1
         profile = saved
         if vocabulary != nil {
+            refreshError = nil
             phase = .loaded
         }
     }
@@ -243,6 +251,8 @@ final class AutopilotStore {
     private func loadWeek() async {
         guard let week, api != nil else { return }
         isLoadingWeek = true
+        // Cleared here so Try Again drops the old message, and only a new failure sets it again.
+        weekError = nil
         async let proposal: Void = loadProposal(week: week)
         async let context: Void = loadContext(week: week)
         _ = await (proposal, context)
@@ -478,6 +488,7 @@ final class AutopilotStore {
         phase = .idle
         profile = nil
         vocabulary = nil
+        refreshError = nil
         week = nil
         resetWeek(to: nil)
     }

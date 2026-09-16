@@ -51,6 +51,11 @@ struct AutopilotPreferencesView: View {
 
     private func list(_ profile: AutopilotProfile) -> some View {
         List {
+            if let refreshError = autopilot.refreshError {
+                Section {
+                    FormErrorLabel(message: refreshError)
+                }
+            }
             if !profile.configured {
                 Section {
                     VStack(alignment: .leading, spacing: 10) {

@@ -54,6 +54,19 @@ struct PlanStoreTests {
         #expect(harness.server.log.count == 1)
     }
 
+    /// The grocery list screen builds its model from here, and answers `nil` without a
+    /// household. The screen has to say so: it used to show a spinner nothing would replace.
+    @Test func aGroceryListIsOnlyMadeOnceThereIsAHousehold() async throws {
+        let harness = try await makeHarness()
+        let week = try #require(ISOWeek("2026-W38"))
+
+        #expect(harness.store.makeGroceryList(week: week) == nil)
+
+        await harness.store.activate(householdID: "household-1", timeZone: Self.denver)
+
+        #expect(harness.store.makeGroceryList(week: week) != nil)
+    }
+
     @Test func switchingWeeksLoadsThemAndReturnsToThisWeek() async throws {
         let harness = try await activated()
         let store = harness.store
