@@ -98,7 +98,8 @@ type Weights struct {
 	// MissingQuick applies per quick meal the week can no longer fit to
 	// reach its minimum.
 	MissingQuick float64
-	// RuleRepeat applies per extra meal matching an at-most-once rule.
+	// RuleRepeat applies per extra meal matching an at-most-once rule, or
+	// repeating the meal category of the meal that already satisfied it.
 	RuleRepeat float64
 	// NoveltyBudget applies per new meal beyond the novelty budget.
 	NoveltyBudget float64

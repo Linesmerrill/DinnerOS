@@ -18,7 +18,10 @@ type state struct {
 	quick  int
 	fresh  int // new meals
 	hits   []int
-	bands  [7]autopilot.TimeBand
+	// hitCats is, per rule, the meal categories of the meals that satisfied
+	// it. A rule caps the kind of meal it placed, not just its cuisine.
+	hitCats [][]string
+	bands   [7]autopilot.TimeBand
 	// remaining is how many slots are still to be decided.
 	remaining int
 	// A busy week wants busyWant quick meals on its busy weeknights; busyQuick
@@ -39,6 +42,7 @@ func (st *state) clone() state {
 	c.pens = slices.Clone(st.pens)
 	c.chosen = slices.Clone(st.chosen)
 	c.hits = slices.Clone(st.hits)
+	c.hitCats = slices.Clone(st.hitCats)
 	return c
 }
 
@@ -159,7 +163,10 @@ func methodUnmet(s *slot) autopilot.Message {
 
 func (m *model) initialState(slots []*slot) state {
 	n := len(slots)
-	st := state{picks: make([]*cand, n), pens: make([][4]float64, n), hits: make([]int, len(m.prefs.allRules)), remaining: n}
+	st := state{
+		picks: make([]*cand, n), pens: make([][4]float64, n), hits: make([]int, len(m.prefs.allRules)),
+		hitCats: make([][]string, len(m.prefs.allRules)), remaining: n,
+	}
 	for _, s := range slots {
 		if m.busyOn(s.day) {
 			st.busyLeft++
@@ -209,6 +216,19 @@ func (m *model) apply(st *state, it *item, day int, longOK bool) {
 	for i, r := range m.prefs.allRules {
 		if r.freq == autopilot.AtMostOnce && fullMatch(it, r) {
 			st.hits[i]++
+			// Remember the kind of meal that satisfied the rule. A catalog
+			// labels plenty of pasta with a cuisine outside the rule's tree
+			// ("north american"), and such a meal would otherwise escape the
+			// rule's limit however plainly it repeats the same dinner.
+			if len(it.categories) > 0 {
+				cats := slices.Clone(st.hitCats[i])
+				for _, c := range it.categories {
+					if !slices.Contains(cats, c) {
+						cats = append(cats, c)
+					}
+				}
+				st.hitCats[i] = cats
+			}
 		}
 	}
 }
@@ -255,7 +275,11 @@ func (m *model) penalties(st *state, it *item, day int, longOK bool) [4]float64 
 		p[1] -= w.MissingQuick * float64(missingQuick(st.busyWant, st.busyQuick, st.busyLeft, quick))
 	}
 	for i, r := range m.prefs.allRules {
-		if r.freq == autopilot.AtMostOnce && st.hits[i] > 0 && fullMatch(it, r) {
+		// A second meal counts against an at-most-once rule when it matches
+		// the rule, or when it is the same kind of dinner as the meal that
+		// already satisfied it.
+		if r.freq == autopilot.AtMostOnce && st.hits[i] > 0 &&
+			(fullMatch(it, r) || intersect(it.categories, st.hitCats[i]) != "") {
 			p[2] -= w.RuleRepeat
 		}
 	}
@@ -412,7 +436,7 @@ func (m *model) selectDiverse(sorted []state) []state {
 
 // signature describes what a partial week means for the days still open.
 func (st *state) signature() string {
-	return fmt.Sprint(st.bands, st.hits, st.fresh, st.quick, st.busyQuick, st.long)
+	return fmt.Sprint(st.bands, st.hits, st.hitCats, st.fresh, st.quick, st.busyQuick, st.long)
 }
 
 // evaluate computes the week objective of picks (one per slot, nil for
