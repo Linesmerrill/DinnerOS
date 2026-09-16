@@ -71,6 +71,8 @@ jobs:
     # Manual dispatch from main allows re-running an upload without a new commit.
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.TESTFLIGHT_ENABLED == 'true'
     runs-on: macos-26
+    # A signing prompt or a stuck archive should fail fast, not idle for hours.
+    timeout-minutes: 45
     environment: testflight
     concurrency:
       group: testflight
@@ -114,6 +116,7 @@ jobs:
     # Manual only: creating or renewing a certificate is never part of a build.
     if: github.event_name == 'workflow_dispatch' && inputs.sync_signing
     runs-on: macos-26
+    timeout-minutes: 20
     environment: testflight
     concurrency:
       group: signing
