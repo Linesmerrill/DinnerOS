@@ -189,6 +189,34 @@ nonisolated struct ShoppingPreferenceList: Decodable, Sendable {
     let items: [ShoppingPreference]
 }
 
+/// Saved Products, split so the products still missing a package size are listed first.
+nonisolated struct SavedProductGroups: Equatable, Sendable {
+    /// No package size saved, in the given order.
+    let needsPackageSize: [ShoppingPreference]
+    /// Everything else, in the given order.
+    let complete: [ShoppingPreference]
+
+    init(_ preferences: [ShoppingPreference]) {
+        needsPackageSize = preferences.filter { $0.packageSize == nil }
+        complete = preferences.filter { $0.packageSize != nil }
+    }
+}
+
+/// What a Check Amount warning's fix does to the product's package size.
+nonisolated enum ShoppingPackageSizeFix: Equatable, Sendable {
+    /// No size is saved.
+    case add
+    /// A size is saved, but the recipe's amount can't be measured against it.
+    case change
+
+    var title: String {
+        switch self {
+        case .add: String(localized: "Add Package Size")
+        case .change: String(localized: "Change Package Size")
+        }
+    }
+}
+
 // MARK: - Match and handoff
 
 /// One selected line of a match or handoff request.
@@ -316,6 +344,18 @@ nonisolated struct ShoppingHandoffLine: Decodable, Hashable, Sendable, Identifia
     var isInCart: Bool {
         guard let cart else { return false }
         return cart.sentPackages > 0 && cart.addPackages == 0
+    }
+
+    /// How a Check Amount warning is fixed from the Shop tab: every reason but a capped count
+    /// is about the product's package size, so the warning opens the product focused on it.
+    /// `nil` when there's no warning or the size can't fix it.
+    var packageSizeFix: ShoppingPackageSizeFix? {
+        guard checkAmount else { return nil }
+        switch reason {
+        case .noPackageSize?: return .add
+        case .unitNotConvertible?: return .change
+        default: return nil
+        }
     }
 
     private enum CodingKeys: String, CodingKey {

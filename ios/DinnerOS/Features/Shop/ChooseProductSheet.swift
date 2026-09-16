@@ -12,6 +12,8 @@ struct ProductChoice: Identifiable {
     let searchTerms: ShoppingSearchTerms
     /// A product is already saved for the ingredient, so it can be removed.
     let isSaved: Bool
+    /// Opened to fix a package size: the size comes first, switched on, with its field focused.
+    var packageSizeFix: ShoppingPackageSizeFix?
 
     var id: String { ingredientKey }
 
@@ -24,20 +26,31 @@ struct ProductChoice: Identifiable {
         isSaved = false
     }
 
-    init(line: ShoppingHandoffLine) {
+    init(line: ShoppingHandoffLine, packageSizeFix: ShoppingPackageSizeFix? = nil) {
         ingredientKey = line.ingredientKey
         ingredientName = line.name
         amountText = line.quantityText.isEmpty ? nil : line.quantityText
-        draft = SavedProductDraft(product: line.product)
+        var draft = SavedProductDraft(product: line.product)
+        if packageSizeFix != nil {
+            draft.hasPackageSize = true
+        }
+        self.draft = draft
         searchTerms = line.searchTerms
         isSaved = true
+        self.packageSizeFix = packageSizeFix
     }
 
     init(preference: ShoppingPreference) {
         ingredientKey = preference.ingredientKey
         ingredientName = preference.ingredientName
         amountText = nil
-        draft = SavedProductDraft(preference: preference)
+        var draft = SavedProductDraft(preference: preference)
+        // A product without a size is opened to add one.
+        if preference.packageSize == nil {
+            draft.hasPackageSize = true
+            packageSizeFix = .add
+        }
+        self.draft = draft
         // Saved Products lists products, not this week's lines, so the API sends no terms.
         searchTerms = .plain(preference.ingredientName)
         isSaved = true
@@ -59,6 +72,14 @@ struct ChooseProductSheet: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var isConfirmingRemoval = false
+    @FocusState private var isSizeFocused: Bool
+
+    private var title: String {
+        if let fix = choice.packageSizeFix {
+            return fix.title
+        }
+        return choice.isSaved ? String(localized: "Change Product") : String(localized: "Choose Product")
+    }
 
     init(choice: ProductChoice) {
         self.choice = choice
@@ -73,10 +94,18 @@ struct ChooseProductSheet: View {
                         FormErrorLabel(message: errorMessage)
                     }
                 }
-                instructions
-                linkSection
-                nameSection
-                sizeSection
+                if choice.packageSizeFix != nil {
+                    // Fixing a size: that's the whole job, so it comes first.
+                    sizeSection
+                    instructions
+                    linkSection
+                    nameSection
+                } else {
+                    instructions
+                    linkSection
+                    nameSection
+                    sizeSection
+                }
                 if choice.isSaved {
                     Section {
                         Button("Remove Saved Product", role: .destructive) {
@@ -85,8 +114,13 @@ struct ChooseProductSheet: View {
                     }
                 }
             }
-            .navigationTitle(choice.isSaved ? "Change Product" : "Choose Product")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
+            .task {
+                if choice.packageSizeFix != nil {
+                    isSizeFocused = true
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -106,7 +140,7 @@ struct ChooseProductSheet: View {
                 Button("Remove", role: .destructive, action: remove)
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("It goes back to Needs a Product until someone chooses another.")
+                Text("You'll be asked to choose a product for it again the next time it's on your list.")
             }
         }
     }
@@ -176,7 +210,7 @@ struct ChooseProductSheet: View {
         } header: {
             Text("Product Link")
         } footer: {
-            Text("Pasting the whole shared message works too; the link is picked out of it.")
+            Text("Pasting the whole shared message works too.")
         }
     }
 
@@ -193,7 +227,7 @@ struct ChooseProductSheet: View {
             Text("Product Name")
         } footer: {
             Text(
-                "Starts as the ingredient's name, so you usually don't type anything. Edit it if you want the brand or size; it's shown on the Shop tab so everyone knows what's being bought."
+                "Filled in for you. Change it to note the brand or size; everyone in your household sees this name."
             )
         }
     }
@@ -205,6 +239,7 @@ struct ChooseProductSheet: View {
                 TextField("Amount", text: $draft.packageQuantityText, prompt: Text("For example, 16"))
                     .keyboardType(.numbersAndPunctuation)
                     .autocorrectionDisabled()
+                    .focused($isSizeFocused)
                 Picker("Unit", selection: $draft.packageUnit) {
                     ForEach(PantryUnit.options(including: draft.packageUnit), id: \.self) { code in
                         Text(PantryUnit.pickerLabel(code)).tag(code)
@@ -214,9 +249,14 @@ struct ChooseProductSheet: View {
                     FormErrorLabel(message: error)
                 }
             }
+        } header: {
+            // First in the form when fixing a size, so it names what's being fixed.
+            if choice.packageSizeFix != nil {
+                Text(choice.amountText.map { "\(choice.ingredientName), \($0)" } ?? choice.ingredientName)
+            }
         } footer: {
             Text(
-                "How much one package holds, from the product page. It sets how many packages to add. Without it, 1 package is added and the line is flagged to check."
+                "How much one package holds, from the product page, so we know how many to buy. Fresh food works without it: we buy 1 for the week."
             )
         }
     }

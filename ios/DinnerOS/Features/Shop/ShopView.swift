@@ -192,7 +192,7 @@ private struct ShopWeekList: View {
                 Label("Nothing to Buy", systemImage: "cart")
             } description: {
                 Text(
-                    "Nothing on this week's grocery list needs buying. Plan recipes, or uncheck lines on the grocery list."
+                    "You have everything on this week's grocery list. Add recipes to your plan, or uncheck items on the grocery list."
                 )
             }
             .listRowBackground(Color.clear)
@@ -218,14 +218,17 @@ private struct ShopWeekList: View {
         if !toSend.isEmpty {
             Section {
                 ForEach(toSend) { line in
-                    ReadyLineRow(line: line, packages: packagesBinding(for: line), canEdit: shopping.canEdit) {
-                        choose(ProductChoice(line: line))
-                    }
+                    ReadyLineRow(
+                        line: line, packages: packagesBinding(for: line), canEdit: shopping.canEdit,
+                        changeProduct: { choose(ProductChoice(line: line)) },
+                        fixPackageSize: { choose(ProductChoice(line: line, packageSizeFix: $0)) })
                 }
             } header: {
                 Text("Ready")
             } footer: {
-                Text("Counts come from each product's package size. Check flagged lines before opening Walmart.")
+                Text(
+                    "We work out how many to buy from each product's size. Tap anything marked Check Amount to fix it before opening Walmart."
+                )
             }
         }
         if !proposal.linesInCart.isEmpty || !proposal.otherInCart.isEmpty {
@@ -244,7 +247,9 @@ private struct ShopWeekList: View {
                         .foregroundStyle(Color.primary)
                 }
             } footer: {
-                Text("Lines at home or checked off on the grocery list stay out of the cart.")
+                Text(
+                    "Items you already have at home, or already checked off on your grocery list, won't be added to your Walmart cart."
+                )
             }
         }
     }
@@ -300,6 +305,13 @@ private struct ReadyLineRow: View {
     @Binding var packages: Int
     let canEdit: Bool
     let changeProduct: () -> Void
+    /// Opens the product to fix the package size a Check Amount warning is about.
+    let fixPackageSize: (ShoppingPackageSizeFix) -> Void
+
+    /// The warning's fix, when this member can make it.
+    private var fix: ShoppingPackageSizeFix? {
+        canEdit ? line.packageSizeFix : nil
+    }
 
     private var productText: String {
         let size = line.product.packageSize?.text ?? String(localized: "size unknown")
@@ -318,28 +330,13 @@ private struct ReadyLineRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(line.name)
-                        .font(.headline)
-                    Text(productText)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    if !coverageText.isEmpty {
-                        Text(coverageText)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    // Sent before at a lower count: only the difference goes to Walmart.
-                    if line.sentPackages > 0 {
-                        Text(ShoppingText.cartStatus(sent: line.sentPackages, wanted: packages))
-                            .font(.footnote)
-                            .foregroundStyle(.tint)
-                    }
-                }
-                .accessibilityElement(children: .combine)
+                details
                 Spacer(minLength: 0)
                 if canEdit {
                     Menu {
+                        if let fix {
+                            Button(fix.title, systemImage: "ruler") { fixPackageSize(fix) }
+                        }
                         Button("Change Product", systemImage: "arrow.triangle.2.circlepath", action: changeProduct)
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -350,7 +347,17 @@ private struct ReadyLineRow: View {
                 }
             }
             if line.checkAmount {
-                CheckAmountBadge(text: line.reasonText)
+                if let fix {
+                    // The warning is the way to fix it: a warning you can't act on is just noise.
+                    Button {
+                        fixPackageSize(fix)
+                    } label: {
+                        CheckAmountBadge(text: line.reasonText, action: fix.title)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    CheckAmountBadge(text: line.reasonText, action: nil)
+                }
             }
             if canEdit {
                 Stepper(value: $packages, in: ShoppingLimits.packages) {
@@ -365,6 +372,46 @@ private struct ReadyLineRow: View {
             }
         }
         .padding(.vertical, 2)
+    }
+
+    /// The name, product and count. With a fixable warning, tapping them fixes it too.
+    @ViewBuilder
+    private var details: some View {
+        if let fix {
+            Button {
+                fixPackageSize(fix)
+            } label: {
+                detailsText
+                    .foregroundStyle(Color.primary)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(fix.title)
+        } else {
+            detailsText
+        }
+    }
+
+    private var detailsText: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(line.name)
+                .font(.headline)
+            Text(productText)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            if !coverageText.isEmpty {
+                Text(coverageText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            // Sent before at a lower count: only the difference goes to Walmart.
+            if line.sentPackages > 0 {
+                Text(ShoppingText.cartStatus(sent: line.sentPackages, wanted: packages))
+                    .font(.footnote)
+                    .foregroundStyle(.tint)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -420,7 +467,7 @@ private struct InWalmartCartSection: View {
             Text("In Walmart Cart")
         } footer: {
             Text(
-                "Already sent to your Walmart cart this week, so opening Walmart again won't add them twice. Marking the week ordered starts fresh."
+                "Already in your Walmart cart, so opening Walmart again won't add them twice. Once you mark the week ordered, the next list starts fresh."
             )
         }
     }
@@ -508,6 +555,8 @@ private struct OtherInCartRow: View {
 
 private struct CheckAmountBadge: View {
     let text: String?
+    /// What tapping the warning does, shown under it; `nil` when it does nothing.
+    let action: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -522,8 +571,27 @@ private struct CheckAmountBadge: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+            if let action {
+                Label(action, systemImage: "chevron.right")
+                    .labelStyle(TrailingIconLabelStyle())
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tint)
+            }
         }
+        .contentShape(.rect)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// A label with its icon after the title, like a disclosure: "Add Package Size ›".
+private struct TrailingIconLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 4) {
+            configuration.title
+            configuration.icon
+                .imageScale(.small)
+                .accessibilityHidden(true)
+        }
     }
 }
 

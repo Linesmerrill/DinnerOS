@@ -707,6 +707,48 @@ struct ShoppingStoreTests {
         #expect(store.preferences.map(\.ingredientName) == ["Cilantro", "Flour Tortillas", "Ground Beef"])
     }
 
+    /// Check Amount for a missing size opens the product on its package size; saving one
+    /// matches again and the warning is gone. Fresh food without a size never warns.
+    @Test func addingAMissingPackageSizeFromTheWarningClearsIt() async throws {
+        var state = FakeShoppingServer.State()
+        state.grocery += [
+            .init(key: "i-paprika", name: "Paprika", category: "spices"),
+            .init(key: "i-garlic", name: "Garlic", category: "produce"),
+        ]
+        state.products["i-paprika"] = .init(
+            productID: "100000010", displayName: "Test paprika", ingredientName: "Paprika")
+        state.products["i-garlic"] = .init(productID: "100000011", displayName: "Test garlic", ingredientName: "Garlic")
+        let harness = try await makeHarness(state)
+        let store = harness.store
+        await store.load()
+
+        let garlic = try #require(store.proposal?.lines.first { $0.ingredientKey == "i-garlic" })
+        #expect(!garlic.checkAmount)
+        #expect(garlic.coversWeek)
+        #expect(garlic.packageSizeFix == nil)
+
+        let paprika = try #require(store.proposal?.lines.first { $0.ingredientKey == "i-paprika" })
+        #expect(paprika.checkAmount)
+        let fix = try #require(paprika.packageSizeFix)
+        #expect(fix == .add)
+        #expect(fix.title == "Add Package Size")
+
+        let choice = ProductChoice(line: paprika, packageSizeFix: fix)
+        #expect(choice.packageSizeFix == .add)
+        #expect(choice.draft.hasPackageSize)
+        var draft = choice.draft
+        draft.packageQuantityText = "2 1/2"
+        draft.packageUnit = "oz"
+        try await store.savePreference(
+            ingredientKey: choice.ingredientKey,
+            request: try #require(draft.request(ingredientName: choice.ingredientName)))
+
+        #expect(harness.server.products["i-paprika"]?.sizeUnit == "oz")
+        let fixed = try #require(store.proposal?.lines.first { $0.ingredientKey == "i-paprika" })
+        #expect(!fixed.checkAmount)
+        #expect(fixed.packageSizeFix == nil)
+    }
+
     @Test func aRejectedLinkKeepsTheAPIMessage() async throws {
         let harness = try await makeHarness()
         let store = harness.store

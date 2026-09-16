@@ -60,13 +60,35 @@ struct SavedProductsView: View {
             if let refreshError = shopping.preferencesRefreshError {
                 FormErrorLabel(message: refreshError)
             }
-            Section {
-                ForEach(shopping.preferences) { preference in
-                    row(preference)
+            let groups = SavedProductGroups(shopping.preferences)
+            if !groups.needsPackageSize.isEmpty {
+                Section {
+                    ForEach(groups.needsPackageSize) { preference in
+                        row(preference)
+                    }
+                } header: {
+                    Text("Needs Package Size (\(groups.needsPackageSize.count))")
+                } footer: {
+                    Text(
+                        shopping.canEdit
+                            ? "Tap one to add its size so we know how many to buy. Fresh food works without one: we buy 1 for the week."
+                            : "Without a size we buy 1. Fresh food works without one."
+                    )
                 }
-            } footer: {
-                if shopping.canEdit {
-                    Text("Swipe to remove a product. Its ingredient goes back to Needs a Product.")
+            }
+            if !groups.complete.isEmpty {
+                Section {
+                    ForEach(groups.complete) { preference in
+                        row(preference)
+                    }
+                } header: {
+                    if !groups.needsPackageSize.isEmpty {
+                        Text("Ready")
+                    }
+                } footer: {
+                    if shopping.canEdit {
+                        Text("Tap a product to change it, or swipe to remove it.")
+                    }
                 }
             }
         }
@@ -83,7 +105,7 @@ struct SavedProductsView: View {
             } label: {
                 SavedProductRow(preference: preference)
             }
-            .accessibilityHint("Changes the product")
+            .accessibilityHint(preference.packageSize == nil ? "Adds its package size" : "Changes the product")
             .swipeActions(edge: .trailing) {
                 Button("Remove", systemImage: "trash", role: .destructive) {
                     remove(preference)
@@ -117,9 +139,15 @@ private struct SavedProductRow: View {
                 Text(preference.displayName)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Text(preference.packageSize?.text ?? String(localized: "Package size unknown"))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                if let size = preference.packageSize {
+                    Text(size.text)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Label("No package size", systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                }
             }
             Spacer(minLength: 0)
         }

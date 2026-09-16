@@ -9301,6 +9301,11 @@ components:
           example: "Check amount: 4 cloves doesn't convert to a 3 ct package"
         coverageText:
           type: string
+          description: |
+            How the count covers the need. A volume need against a weight
+            package (or the reverse) is estimated by the ingredient's typical
+            density and shown in the recipe's units ("1 × 18 oz covers 2 tbsp"),
+            prefixed "about" when the estimate could change the count.
           example: 3 × 16 oz covers 36 oz
         coverage:
           type: string
@@ -9311,7 +9316,8 @@ components:
           description: |
             True when the count assumes one package covers the week because
             the need couldn't be measured against the package (a clove
-            against a bulb). `checkAmount` is false in that case.
+            against a bulb, or no saved package size under `per_week`).
+            `checkAmount` is false in that case.
         searchTerms:
           $ref: "#/components/schemas/ShoppingSearchTerms"
         confirmation:

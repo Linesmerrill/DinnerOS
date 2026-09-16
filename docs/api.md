@@ -1450,10 +1450,12 @@ and `updatedAt`, and every `confirmation` is `null`.
 | Converts (same unit, or both weights or both volumes): 20 oz for 16 oz | Total ÷ size, rounded up: 2 | `null` |
 | Several amounts: 1 cup + 3 tbsp for 8 fl oz | Converted and summed, rounded up: 2 | `null` |
 | Discrete units only convert to themselves: 2 cans for 1 can, 13 count for 12 count | 2, 2 | `null` |
-| Doesn't convert, `coverage: per_amount`: 4 cloves for 3 count, 1 cup for 5 lb | 1 | `unit_not_convertible` |
+| Volume against weight (or weight against volume): 2 tbsp jam for 18 oz | Estimated by the ingredient's typical density: 1 | `null` |
+| Doesn't convert, `coverage: per_amount`: 4 cloves for 3 count, 2 count for 3 lb | 1 | `unit_not_convertible` |
 | Doesn't convert, `coverage: per_week`: 4 cloves for a 1 ct bulb | 1, `coversWeek: true` | `null` |
 | Partly converts: 1 count + 40 oz for 32 oz | What converts, at least 1: 2 | `unit_not_convertible` |
-| No saved package size | 1 | `no_package_size` |
+| No saved package size, `coverage: per_amount` | 1 | `no_package_size` |
+| No saved package size, `coverage: per_week` | 1, `coversWeek: true` | `null` |
 | Unquantified ("to taste") | 1 | `null` |
 | More than 99 | 99 | `package_count_capped` |
 
@@ -1461,13 +1463,25 @@ and `updatedAt`, and every `confirmation` is `null`.
 ("Check amount: 4 cloves doesn't convert to a 3 ct package") and let the
 member change the count. Flags never block the handoff.
 
+**Volume and weight.** Recipes measure in spoons and cups and stores sell by
+weight, so a need in one against a package in the other is estimated with the
+ingredient's typical density: a short table by name (honey and jam 1.4 g/ml,
+oils 0.92, vinegar and sauces about 1.05, ground spices 0.5, fresh leafy herbs
+0.15), then the grocery category. `coverageText` keeps the recipe's units:
+"1 × 18 oz covers 2 tbsp". When the density comes from the category alone and
+an extreme one (1.5 g/ml, heavier than honey; 0.1 the other way) would buy
+more packages, the count stands and reads "about": "1 × 10 oz covers about
+1 cup". This is package counting only; recipe and pantry amounts never convert
+between volume and weight.
+
 **Coverage** (`coverage`) says how one package maps to a week's need, and is
-the only thing that changes the table above. It affects exactly one row: a
-need in a unit that can't be measured against the package at all.
+the only thing that changes the table above. It affects exactly the rows where
+the need can't be measured against the package at all: a unit that doesn't
+convert, or no saved package size.
 
 | Rule | What it does |
 | --- | --- |
-| `per_week` | One package is assumed to cover the week, with no flag: a recipe asking for a clove and a bulb sold by the each buys one bulb, not one per clove. `coverageText` reads "1 × 1 ct covers this week (4 cloves)". |
+| `per_week` | One package is assumed to cover the week, with no flag: a recipe asking for a clove and a bulb sold by the each buys one bulb, not one per clove, and a product with no saved size needs none. `coverageText` reads "1 × 1 ct covers this week (4 cloves)", or "1 package covers this week (4 cloves)" without a size. |
 | `per_amount` | Always count by exact measure, flagging what can't be measured. |
 
 A saved product's `coverage` sets it; when that is empty the rule comes from

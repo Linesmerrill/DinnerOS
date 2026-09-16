@@ -269,9 +269,27 @@ lines.
 | Same dimension (20 oz needed, 16 oz package) | `ceil(need ÷ size)` = 2, shown as "2 × 16 oz covers 20 oz" |
 | Several amounts that combine after conversion | Convert, sum, then round up |
 | Discrete unit matching the package (`2 can` and a can) | The count |
-| A count that doesn't convert (4 garlic cloves, package "3 ct heads") | **1, flagged "check amount"**, until the ingredient has an explicit conversion fact |
+| Volume against weight (2 tbsp jam, 18 oz jar; 5 tsp vinegar, 8.5 oz bottle) | Estimated with the ingredient's typical density, shown in the recipe's units: "1 × 18 oz covers 2 tbsp" (see below) |
+| A count that doesn't convert (4 garlic cloves, package "3 ct heads") | **1, flagged "check amount"** for `per_amount`; 1 covering the week, unflagged, for `per_week` |
 | Unquantified ("salt to taste") | 1, only if the pantry doesn't have it (the line is `toBuy`) |
-| Unknown package size | 1, flagged |
+| Unknown package size | 1: flagged for `per_amount`, covering the week unflagged for `per_week` (fresh categories) |
+
+**Volume ↔ weight, for counting only.** Recipes use spoons and cups; Walmart
+sells jam, spices and vinegar by the ounce of weight. Flagging "2 tbsp doesn't
+convert to an 18 oz package" every week is noise with an obvious answer, so
+package counting (and nothing else — recipe and pantry amounts still never
+convert between volume and weight) estimates with a typical density
+(`providers/density.go`): a short name table first (honey, jam and syrup
+1.4 g/ml; salt 1.2; sauces, vinegar and milk about 1.05; oil 0.92; sugar 0.85;
+flour 0.55; ground spices 0.5; dried herbs 0.3; fresh leafy herbs 0.15), then
+a per-category default. A package in `fl oz` against a volume need is exact
+already. As a check, the same need is converted with an extreme density
+(1.5 g/ml, heavier than honey, for volume → weight; 0.1 the other way): when
+only the category default is known and the extreme would buy more packages,
+the count stands but reads "about" ("1 × 10 oz covers about 1 cup"). Only
+needs that can't be estimated at all — a count or cloves against a weight —
+are still flagged, and the Shop tab turns every size-related flag into a
+shortcut to the product's package size.
 
 Parsing sizes from `size` or the product name ("20 oz", "2 lb", "12 ct",
 "1.5 fl oz") uses a small allowlist of exact patterns. Anything else is

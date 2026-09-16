@@ -301,9 +301,23 @@ func TestIntegrationHandoffAndConfirm(t *testing.T) {
 	if l := lineFor(t, m, "Garlic"); l.Packages != 1 || l.Reason != "" || !l.CoversWeek || l.Coverage != providers.CoveragePerWeek {
 		t.Errorf("garlic = %+v", l)
 	}
-	if l := lineFor(t, m, "Milk"); l.Packages != 1 || l.Reason != providers.ReasonNoPackageSize {
+	// Milk has no saved size, but dairy is bought for the week, so one
+	// package covers it and there's nothing to check.
+	if l := lineFor(t, m, "Milk"); l.Packages != 1 || l.Reason != "" || !l.CoversWeek || l.Coverage != providers.CoveragePerWeek {
 		t.Errorf("milk = %+v", l)
 	}
+	// Counted by exact measure, the missing size is flagged again.
+	if _, _, err := f.svc.PutPreference(ctx, f.actor, "walmart", f.keys["Milk"], PreferenceInput{ProductURL: "https://walmart.com/ip/Test-Milk/100000004", DisplayName: "Milk (store)", Coverage: providers.CoveragePerAmount}); err != nil {
+		t.Fatal(err)
+	}
+	perAmount, err := f.svc.Match(ctx, testHousehold, testWeek, "walmart", MatchInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l := lineFor(t, perAmount, "Milk"); l.Packages != 1 || l.Reason != providers.ReasonNoPackageSize || l.CoversWeek {
+		t.Errorf("per_amount milk = %+v", l)
+	}
+	f.save(t, "Milk", "https://walmart.com/ip/Test-Milk/100000004", nil)
 	if l := lineFor(t, m, "Kidney Beans"); l.Packages != 2 {
 		t.Errorf("beans = %+v", l)
 	}

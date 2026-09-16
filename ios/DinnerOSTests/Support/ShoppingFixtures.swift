@@ -615,12 +615,21 @@ nonisolated final class FakeShoppingServer: Sendable {
         let product = state.products[line.key]
         let confirmation =
             stored ? ShoppingFixtures.confirmationJSON(status: line.status, packages: line.confirmedPackages) : nil
+        // The API's coverage rule: fresh categories buy one package for the week, so only the
+        // rest need a package size.
+        let category = grocery?.category ?? "other"
+        let perWeek = ["produce", "meat-seafood", "dairy-eggs", "bakery", "deli"].contains(category)
+        let size = sizeJSON(product)
+        let missingSize = size == nil && !perWeek
         return ShoppingFixtures.lineJSON(
-            id: line.id, key: line.key, name: grocery?.name ?? line.key, category: grocery?.category ?? "other",
+            id: line.id, key: line.key, name: grocery?.name ?? line.key, category: category,
             productID: product?.productID ?? "0", displayName: product?.displayName ?? "",
-            size: sizeJSON(product), computed: grocery?.computed ?? 1,
+            size: size, computed: grocery?.computed ?? 1,
             packages: line.packages == grocery?.computed ? nil : line.packages,
-            coverage: "\(line.packages) packages", confirmation: confirmation, cart: cart)
+            reason: missingSize ? "no_package_size" : nil,
+            reasonText: missingSize ? "Check amount: no package size is saved for this product" : nil,
+            coverage: "\(line.packages) packages", coverageRule: perWeek ? "per_week" : "per_amount",
+            coversWeek: size == nil && perWeek, confirmation: confirmation, cart: cart)
     }
 
     private static func linksJSON(_ lines: [Line], state: State) -> [String] {

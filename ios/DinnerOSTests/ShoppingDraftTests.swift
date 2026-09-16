@@ -167,6 +167,38 @@ struct SavedProductDraftTests {
         #expect(draft.packageUnit == "cup")
         #expect(draft.isValid)
     }
+
+    private func preference(_ key: String, _ name: String, size: String?) throws -> ShoppingPreference {
+        let json = ShoppingFixtures.preferenceJSON(
+            key: key, ingredientName: name, productID: "10000\(name.count)", displayName: "Test \(name)", size: size)
+        return try JSONCoding.makeDecoder().decode(ShoppingPreference.self, from: Data(json.utf8))
+    }
+
+    @Test func savedProductsListThoseMissingAPackageSizeFirst() throws {
+        let preferences = [
+            try preference("i-beef", "Ground Beef", size: ShoppingFixtures.amount("16", "oz")),
+            try preference("i-cilantro", "Cilantro", size: nil),
+            try preference("i-paprika", "Paprika", size: nil),
+            try preference("i-rice", "Rice", size: ShoppingFixtures.amount("2", "lb")),
+        ]
+
+        let groups = SavedProductGroups(preferences)
+
+        #expect(groups.needsPackageSize.map(\.ingredientName) == ["Cilantro", "Paprika"])
+        #expect(groups.complete.map(\.ingredientName) == ["Ground Beef", "Rice"])
+        #expect(SavedProductGroups([preferences[0]]).needsPackageSize.isEmpty)
+    }
+
+    @Test func tappingASavedProductWithoutASizeOpensItOnThePackageSize() throws {
+        let missing = ProductChoice(preference: try preference("i-paprika", "Paprika", size: nil))
+        #expect(missing.packageSizeFix == .add)
+        #expect(missing.draft.hasPackageSize)
+        #expect(missing.isSaved)
+
+        let complete = ProductChoice(
+            preference: try preference("i-beef", "Ground Beef", size: ShoppingFixtures.amount("16", "oz")))
+        #expect(complete.packageSizeFix == nil)
+    }
 }
 
 struct OrderConfirmationDraftTests {

@@ -31,8 +31,19 @@ type PackageCount struct {
 	// Reason is set when the count needs checking ("check amount").
 	Reason Reason
 	// Needed is the part of the line's amount that converts, in the package
-	// size's unit; nil when nothing converts or there's no size.
+	// size's unit, including what was estimated by density; nil when nothing
+	// converts or there's no size.
 	Needed *ingredients.Amount
+	// Measured is the exactly converted part of Needed, nil when all of it
+	// was estimated.
+	Measured *ingredients.Amount
+	// Estimated are the amounts converted between volume and weight by the
+	// ingredient's typical density (density.go).
+	Estimated []ingredients.Amount
+	// Approximate is true when that estimate could change the count: the
+	// density came from the category alone and an extreme one would buy
+	// more. The count stands and reads "about".
+	Approximate bool
 	// Unconverted are the amounts that don't convert to the package size.
 	Unconverted []ingredients.Amount
 	// CoversWeek is true when the count rests on the weekly coverage rule
@@ -77,27 +88,47 @@ const (
 	CoveragePerWeek Coverage = "per_week"
 )
 
-// CountPackagesFor is CountPackages with a coverage rule applied.
+// CountPackagesFor is CountPackages for a grocery line's item, with a coverage
+// rule applied.
 //
-// CoveragePerWeek changes exactly one case: a need in a unit that doesn't
-// convert to the package at all (4 cloves against a 1 ct bulb). Exact math
-// is otherwise untouched, so 2 ¼ lb of beef against 16 oz packages is still
-// 3 packages under either rule — a week's need that *can* be measured is
-// never collapsed to one package.
-func CountPackagesFor(needs []ingredients.Amount, size *ingredients.Amount, coverage Coverage) PackageCount {
-	out := countPackagesExact(needs, size)
+// Unlike CountPackages it estimates between volume and weight (2 tbsp of jam
+// against an 18 oz jar) from item's typical density; see density.go. Only
+// amounts that still can't be estimated — a count against a weight, 4 cloves
+// against 8 oz — are left out and flagged.
+//
+// CoveragePerWeek changes exactly the cases where the need can't be measured
+// against the package at all: a unit that doesn't convert (4 cloves against
+// a 1 ct bulb), or no saved package size. Exact math is otherwise untouched,
+// so 2 ¼ lb of beef against 16 oz packages is still 3 packages under either
+// rule — a week's need that *can* be measured is never collapsed to one
+// package.
+func CountPackagesFor(needs []ingredients.Amount, size *ingredients.Amount, coverage Coverage, item Item) PackageCount {
+	out := countPackages(needs, size, &item)
 	if coverage != CoveragePerWeek {
 		return out
 	}
+	switch {
 	// Only when nothing converted: a partly converted line keeps its exact
 	// count and its flag, because the measured part is real.
-	if out.Reason == ReasonUnitNotConvertible && out.Needed == nil {
+	case out.Reason == ReasonUnitNotConvertible && out.Needed == nil:
 		out.Packages, out.Reason, out.CoversWeek = 1, "", true
+	// With no size nothing can be measured, and under this rule a size
+	// wouldn't change the count: one package covers the week, so there is
+	// nothing to check.
+	case out.Reason == ReasonNoPackageSize:
+		out.Packages, out.Reason, out.CoversWeek = 1, "", true
+		out.Unconverted = append([]ingredients.Amount(nil), needs...)
 	}
 	return out
 }
 
 func countPackagesExact(needs []ingredients.Amount, size *ingredients.Amount) PackageCount {
+	return countPackages(needs, size, nil)
+}
+
+// countPackages is the count, estimating volume↔weight for item when it isn't
+// nil (density.go).
+func countPackages(needs []ingredients.Amount, size *ingredients.Amount, item *Item) PackageCount {
 	if size == nil || size.Quantity.IsZero() {
 		return PackageCount{Packages: 1, Reason: ReasonNoPackageSize}
 	}
@@ -105,25 +136,40 @@ func countPackagesExact(needs []ingredients.Amount, size *ingredients.Amount) Pa
 		return PackageCount{Packages: 1}
 	}
 	var out PackageCount
-	total := ingredients.NewQuantity(0, 1)
-	converted := false
+	measured, typical, extreme := zero(), zero(), zero()
+	converted, estimated := false, false
+	var density *big.Rat
+	specific := false
+	if item != nil {
+		density, specific = densityFor(*item)
+	}
 	for _, n := range needs {
-		q, err := ingredients.Convert(n.Quantity, n.Unit, size.Unit)
-		if err != nil {
-			out.Unconverted = append(out.Unconverted, n)
+		if q, err := ingredients.Convert(n.Quantity, n.Unit, size.Unit); err == nil {
+			measured, converted = measured.Add(q), true
 			continue
 		}
-		total, converted = total.Add(q), true
+		if item != nil && crossKind(n.Unit, size.Unit) {
+			typical = typical.Add(estimate(n.Quantity, n.Unit, size.Unit, density))
+			extreme = extreme.Add(estimate(n.Quantity, n.Unit, size.Unit, extremeDensity(size.Unit)))
+			out.Estimated, estimated = append(out.Estimated, n), true
+			continue
+		}
+		out.Unconverted = append(out.Unconverted, n)
 	}
-	if !converted {
+	if !converted && !estimated {
 		out.Packages, out.Reason = 1, ReasonUnitNotConvertible
 		return out
 	}
+	if converted {
+		out.Measured = &ingredients.Amount{Quantity: measured, Unit: size.Unit}
+	}
+	total := measured.Add(typical)
 	out.Needed = &ingredients.Amount{Quantity: total, Unit: size.Unit}
-	ratio := new(big.Rat).Quo(total.Rat(), size.Quantity.Rat())
-	count, rem := new(big.Int).QuoRem(ratio.Num(), ratio.Denom(), new(big.Int))
-	if rem.Sign() != 0 {
-		count.Add(count, big.NewInt(1))
+	count := packagesOf(total, size.Quantity)
+	// An estimate from the category alone is certain only when even the
+	// most extreme density buys no more packages.
+	if estimated && !specific && packagesOf(measured.Add(extreme), size.Quantity).Cmp(count) > 0 {
+		out.Approximate = true
 	}
 	switch {
 	case count.Cmp(big.NewInt(MaxPackages)) > 0:
@@ -137,6 +183,18 @@ func countPackagesExact(needs []ingredients.Amount, size *ingredients.Amount) Pa
 		out.Reason = ReasonUnitNotConvertible
 	}
 	return out
+}
+
+func zero() ingredients.Quantity { return ingredients.NewQuantity(0, 1) }
+
+// packagesOf is total ÷ size, rounded up.
+func packagesOf(total, size ingredients.Quantity) *big.Int {
+	ratio := new(big.Rat).Quo(total.Rat(), size.Rat())
+	count, rem := new(big.Int).QuoRem(ratio.Num(), ratio.Denom(), new(big.Int))
+	if rem.Sign() != 0 {
+		count.Add(count, big.NewInt(1))
+	}
+	return count
 }
 
 // AmountText renders an amount for people: kitchen fractions when exact
@@ -161,16 +219,35 @@ func AmountText(a ingredients.Amount) string {
 }
 
 // CoverageText explains a count for size: "2 × 16 oz covers 20 oz",
-// "1 × 16 oz", or "1 package" without a size.
+// "1 × 16 oz", or "1 package" without a size ("1 package covers this week
+// (4 cloves)" under weekly coverage).
 func CoverageText(c PackageCount, size *ingredients.Amount) string {
 	if size == nil || size.Quantity.IsZero() {
-		if c.Packages == 1 {
-			return "1 package"
+		text := "1 package"
+		if c.Packages != 1 {
+			text = fmt.Sprintf("%d packages", c.Packages)
 		}
-		return fmt.Sprintf("%d packages", c.Packages)
+		if c.CoversWeek {
+			text += " covers this week"
+			if parts := amountList(c.Unconverted); parts != "" {
+				text += " (" + parts + ")"
+			}
+		}
+		return text
 	}
 	text := fmt.Sprintf("%d × %s", c.Packages, AmountText(*size))
 	switch {
+	case len(c.Estimated) > 0:
+		// The estimate is in the recipe's own units: "covers 2 tbsp", not
+		// the grams it was turned into.
+		parts := amountList(c.Estimated)
+		if c.Measured != nil {
+			parts = AmountText(*c.Measured) + " + " + parts
+		}
+		if c.Approximate {
+			parts = "about " + parts
+		}
+		text += " covers " + parts
 	case c.Needed != nil:
 		text += " covers " + AmountText(*c.Needed)
 	case c.CoversWeek:

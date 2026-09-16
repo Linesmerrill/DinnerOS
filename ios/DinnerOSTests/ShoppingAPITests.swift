@@ -224,6 +224,8 @@ struct ShoppingAPITests {
         #expect(proposal.lines.map(\.id) == ["l1", "l2", "l3", "l4"])
         #expect(proposal.lines.map(\.reason) == [nil, nil, .noPackageSize, .packageCountCapped])
         #expect(proposal.lines.map(\.checkAmount) == [false, false, true, true])
+        // A missing size is fixed by adding one; a capped count isn't about the size.
+        #expect(proposal.lines.map(\.packageSizeFix) == [nil, nil, .add, nil])
         let beef = proposal.lines[0]
         #expect(beef.name == "Ground Beef")
         #expect(beef.category == "meat-seafood")

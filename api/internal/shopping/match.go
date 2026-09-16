@@ -77,7 +77,7 @@ func needsOf(amounts []Amount) []ingredients.Amount {
 // PackageCount recomputes a line's package count from its stored amounts,
 // package size, and coverage rule.
 func (l HandoffLine) PackageCount() providers.PackageCount {
-	return providers.CountPackagesFor(needsOf(l.Amounts), amountFromSize(l.PackageSize), l.Coverage)
+	return providers.CountPackagesFor(needsOf(l.Amounts), amountFromSize(l.PackageSize), l.Coverage, providers.Item{Name: l.Name, Category: l.Category})
 }
 
 func validateMatchInput(in MatchInput) (MatchInput, error) {
