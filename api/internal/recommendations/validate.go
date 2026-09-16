@@ -521,7 +521,8 @@ func (p Profile) preferences(householdServings int) autopilot.Preferences {
 	}
 	for _, r := range p.WeekdayRules {
 		out.Rules = append(out.Rules, autopilot.WeekdayRule{
-			Day: autopilot.Day(r.Day), Label: r.Label, Cuisines: r.Cuisines, Tags: r.Tags, Proteins: r.Proteins,
+			Day: autopilot.Day(r.Day), Label: r.Label, Cuisines: r.Cuisines, CuisineRegions: cuisineRegions(r.Cuisines),
+			Tags: r.Tags, Proteins: r.Proteins,
 			Methods: r.Methods, TimeBand: autopilot.TimeBand(r.TimeBand), Frequency: autopilot.RuleFrequency(r.Frequency),
 		})
 	}

@@ -74,11 +74,14 @@ type exclusions struct {
 }
 
 type rule struct {
-	day                               int
-	label                             string
-	cuisines, tags, proteins, methods []string
-	band                              autopilot.TimeBand
-	freq                              autopilot.RuleFrequency
+	day   int
+	label string
+	// cuisines are the rule's own; regions are their broader regions, which a
+	// recipe may be labeled with instead ("italian" → "southern european").
+	cuisines, regions       []string
+	tags, proteins, methods []string
+	band                    autopilot.TimeBand
+	freq                    autopilot.RuleFrequency
 }
 
 type weekCtx struct {
@@ -103,15 +106,17 @@ type item struct {
 	// regions, for preferences, exclusions, and rules.
 	cuisines, withRegions             []string
 	tags, proteins, methods, allergen []string
-	diets                             []string
-	ingredients                       [][]string // tokenized names
-	minutes                           int
-	band                              autopilot.TimeBand
-	servings                          []int
-	spicy                             bool
-	tie                               uint64
-	isNew                             bool
-	st                                stats
+	// categories are the kinds of dish the item is ("pasta"), for variety.
+	categories  []string
+	diets       []string
+	ingredients [][]string // tokenized names
+	minutes     int
+	band        autopilot.TimeBand
+	servings    []int
+	spicy       bool
+	tie         uint64
+	isNew       bool
+	st          stats
 }
 
 type stats struct {
@@ -175,7 +180,7 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 		}
 		it := &item{
 			id: ci.ID, cuisines: normAll(ci.Cuisines), withRegions: normAll(append(slices.Clone(ci.Cuisines), ci.CuisineRegions...)),
-			tags: normAll(ci.Tags), proteins: normAll(ci.Proteins),
+			tags: normAll(ci.Tags), proteins: normAll(ci.Proteins), categories: normAll(ci.MealCategories),
 			methods: normAll(ci.Methods), allergen: normAll(ci.Allergens), diets: normAll(ci.Diets),
 			minutes: max(ci.CookMinutes, 0), servings: sortedPositive(ci.Servings),
 			tie: hashString(fmt.Sprintf("%d|%s", m.seed, ci.ID)), st: stats{nearest: -1},
@@ -400,7 +405,8 @@ func normalizePrefs(in autopilot.Preferences) (prefs, error) {
 			return prefs{}, fmt.Errorf("%w: rule day %q is not a weekday", autopilot.ErrInvalidRequest, r.Day)
 		}
 		nr := &rule{
-			day: day, label: strings.TrimSpace(r.Label), cuisines: normAll(r.Cuisines), tags: normAll(r.Tags),
+			day: day, label: strings.TrimSpace(r.Label), cuisines: normAll(r.Cuisines),
+			regions: normAll(r.CuisineRegions), tags: normAll(r.Tags),
 			proteins: normAll(r.Proteins), band: r.TimeBand, freq: r.Frequency,
 		}
 		// A method the household has no equipment for can't be asked of a

@@ -238,11 +238,13 @@ func attributes(r recipes.Recipe, override *RecipeOverride, bands autopilot.Time
 }
 
 // Item turns attributes into the provider's catalog item. Its cuisine regions
-// let preferences for a region match the region's cuisines.
+// let preferences for a region match the region's cuisines, and its meal
+// categories let the week objective see "two pastas" (pairings_categories.go).
 func (a RecipeAttributes) item(r recipes.Recipe) autopilot.Item {
 	it := autopilot.Item{
 		ID: r.ID, Cuisines: a.Cuisines, CuisineRegions: a.CuisineRegions, Tags: a.Tags, Proteins: a.Proteins, CookMinutes: a.CookMinutes,
-		Servings: slices.Clone(r.Servings), Allergens: a.Allergens, Diets: a.Diets, Spicy: a.Spicy,
+		MealCategories: recipeMealCategories(r, a.Override),
+		Servings:       slices.Clone(r.Servings), Allergens: a.Allergens, Diets: a.Diets, Spicy: a.Spicy,
 	}
 	for _, m := range a.Methods {
 		if m.Suits {

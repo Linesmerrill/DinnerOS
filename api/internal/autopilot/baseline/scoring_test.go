@@ -169,7 +169,7 @@ func TestColdStartLeansOnTasteProfile(t *testing.T) {
 }
 
 // TestCuisineRegions: likes and exclusions match an item's cuisine regions,
-// but variety compares only its own cuisines.
+// and variety counts a shared region as a partial repeat.
 func TestCuisineRegions(t *testing.T) {
 	regions := func(r ...string) opt { return func(it *autopilot.Item) { it.CuisineRegions = r } }
 	in := input(
@@ -194,7 +194,9 @@ func TestCuisineRegions(t *testing.T) {
 			t.Errorf("%s reasons = %v", s.ItemID, reasonTexts(s.Reasons))
 		}
 	}
-	if res.Score.Variety != 0 {
+	// Italian and French are different cuisines that share the European
+	// region: a partial repeat, not a full one.
+	if res.Score.Variety != -DefaultWeights().CuisineRegionRepeat {
 		t.Errorf("variety = %v; Italian and French share only a region", res.Score.Variety)
 	}
 }

@@ -61,9 +61,14 @@ type Item struct {
 	Cuisines []string
 	// CuisineRegions are broader groups the cuisines belong to ("italian" →
 	// "southern european", "european"). Likes, dislikes, exclusions, and
-	// weekday rules match them too; variety compares only Cuisines.
+	// weekday rules match them too. Variety counts a shared Cuisine as a full
+	// repeat and a shared region as a partial one.
 	CuisineRegions []string
 	Tags           []string
+	// MealCategories are the kinds of dish the item is, in the caller's own
+	// vocabulary ("pasta", "soup"). Variety penalizes a week that repeats
+	// one, so two different pastas still read as a repeat.
+	MealCategories []string
 	// Proteins are protein codes ("chicken", "pork", "tofu").
 	Proteins []string
 	// Methods are cooking methods or equipment the item suits ("smoker",
@@ -245,9 +250,13 @@ type WeekdayRule struct {
 	// A meal matches the rule when it matches every non-empty group; within
 	// a group, any value matches. Partial matches earn partial credit.
 	Cuisines []string
-	Tags     []string
-	Proteins []string
-	Methods  []string
+	// CuisineRegions are the broader regions of Cuisines ("italian" →
+	// "southern european", "european"), so a rule for a country cuisine also
+	// matches a recipe the catalog labeled only with its region.
+	CuisineRegions []string
+	Tags           []string
+	Proteins       []string
+	Methods        []string
 	// TimeBand is "" for no preference, quick or medium to prefer meals at or
 	// under that band, or long to allow a long cook that day.
 	TimeBand  TimeBand

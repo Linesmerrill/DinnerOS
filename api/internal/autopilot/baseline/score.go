@@ -219,14 +219,24 @@ func (m *model) score(s *slot, it *item) cand {
 		var parts []string
 		// The label names the method ("smoker night"), so explanations list
 		// the matched protein, cuisine, or tag.
-		for i, g := range [][2][]string{{it.proteins, r.proteins}, {it.methods, r.methods}, {it.withRegions, r.cuisines}, {it.tags, r.tags}} {
-			if len(g[1]) == 0 {
+		for _, g := range []struct {
+			want  []string
+			match func() string
+			// quiet groups aren't listed: the label already names the method.
+			quiet bool
+		}{
+			{r.proteins, func() string { return intersect(it.proteins, r.proteins) }, false},
+			{r.methods, func() string { return intersect(it.methods, r.methods) }, true},
+			{r.cuisines, func() string { return ruleCuisine(it, r) }, false},
+			{r.tags, func() string { return intersect(it.tags, r.tags) }, false},
+		} {
+			if len(g.want) == 0 {
 				continue
 			}
 			groups++
-			if v := intersect(g[0], g[1]); v != "" {
+			if v := g.match(); v != "" {
 				matched++
-				if i != 1 {
+				if !g.quiet {
 					parts = append(parts, displayName(v))
 				}
 			}

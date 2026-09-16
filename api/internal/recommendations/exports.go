@@ -34,6 +34,13 @@ func CuisineLabel(value string) string { return cuisineLabel(value) }
 // CanonicalTag returns the canonical form of a tag.
 func CanonicalTag(s string) string { return canonicalTag(s) }
 
+// RecipeMealCategories returns the meal categories a main meal is in, with the
+// household's overrides applied ([]string{"pasta"}). Add-ons have none.
+// override may be nil.
+func RecipeMealCategories(r recipes.Recipe, override *RecipeOverride) []string {
+	return recipeMealCategories(r, override)
+}
+
 // CatalogVocabulary counts cuisines (rolled up to regions), tags, and
 // proteins across the catalog's main meals, as GET .../autopilot/vocabulary
 // does.

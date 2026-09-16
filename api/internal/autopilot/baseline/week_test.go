@@ -46,7 +46,8 @@ func TestDiversityPenalties(t *testing.T) {
 	}
 
 	noVariety := DefaultWeights()
-	noVariety.CuisineRepeat, noVariety.ProteinRepeat = 0, 0
+	noVariety.CuisineRepeat, noVariety.CuisineRegionRepeat = 0, 0
+	noVariety.MealCategoryRepeat, noVariety.ProteinRepeat = 0, 0
 	if n := countItalian(generate(t, New(Options{Weights: noVariety}), in)); n != 4 {
 		t.Errorf("without variety penalties, %d Italian meals; want all 4 top-rated", n)
 	}
