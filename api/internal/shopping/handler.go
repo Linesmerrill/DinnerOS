@@ -262,6 +262,14 @@ type HandoffLineResponse struct {
 	// Cart is set on a match when the week has a current handoff, and null
 	// otherwise (and on stored handoffs, whose packages are what was sent).
 	Cart *LineCartResponse `json:"cart"`
+	// Recipes are the planned recipes the line is for, never null.
+	Recipes []RecipeRefResponse `json:"recipes"`
+}
+
+// RecipeRefResponse names a recipe a line is for.
+type RecipeRefResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // LineCartResponse is what a match line already has in the cart.
@@ -561,6 +569,10 @@ func (h *Handler) lineResponse(provider providers.Key, l HandoffLine, stored boo
 	resp.CoverageText = providers.CoverageText(count, size)
 	resp.Coverage, resp.CoversWeek = l.Coverage, count.CoversWeek
 	resp.SearchTerms = searchTermsResponse(l.Name, l.Category)
+	resp.Recipes = make([]RecipeRefResponse, 0, len(l.Recipes))
+	for _, r := range l.Recipes {
+		resp.Recipes = append(resp.Recipes, RecipeRefResponse(r))
+	}
 	if l.Reason != "" {
 		reason := l.Reason
 		count.Reason = reason

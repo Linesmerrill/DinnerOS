@@ -191,6 +191,16 @@ type LineSource struct {
 	Unquantified  bool
 	// GroceryStatus is empty for ExcludedNotOnList.
 	GroceryStatus grocery.Status
+	// Recipes are the planned recipes the grocery item is for, from the
+	// grocery engine's sources; empty for an item only an extra added, and
+	// on handoffs stored before recipes were recorded.
+	Recipes []RecipeRef
+}
+
+// RecipeRef names a recipe a line is for.
+type RecipeRef struct {
+	ID   string
+	Name string
 }
 
 // IngredientID returns the catalog ingredient ID the key names, or "".

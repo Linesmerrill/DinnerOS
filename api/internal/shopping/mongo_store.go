@@ -371,6 +371,13 @@ type sourceDoc struct {
 	Amounts       []amountDoc `bson:"amounts"`
 	Unquantified  bool        `bson:"unquantified"`
 	GroceryStatus string      `bson:"groceryStatus,omitempty"`
+	// Recipes is absent on handoffs stored before it was recorded.
+	Recipes []recipeRefDoc `bson:"recipes,omitempty"`
+}
+
+type recipeRefDoc struct {
+	ID   string `bson:"id"`
+	Name string `bson:"name"`
 }
 
 type lineDoc struct {
@@ -434,6 +441,9 @@ func newSourceDoc(s LineSource) sourceDoc {
 	for _, a := range s.Amounts {
 		d.Amounts = append(d.Amounts, newAmountDoc(a.Quantity, a.Unit))
 	}
+	for _, r := range s.Recipes {
+		d.Recipes = append(d.Recipes, recipeRefDoc(r))
+	}
 	return d
 }
 
@@ -441,6 +451,9 @@ func (d sourceDoc) source() LineSource {
 	s := LineSource{IngredientKey: d.IngredientKey, Name: d.Name, Category: d.Category, Unquantified: d.Unquantified, GroceryStatus: grocery.Status(d.GroceryStatus)}
 	for _, a := range d.Amounts {
 		s.Amounts = append(s.Amounts, Amount{Quantity: a.Quantity, Unit: a.Unit})
+	}
+	for _, r := range d.Recipes {
+		s.Recipes = append(s.Recipes, RecipeRef(r))
 	}
 	return s
 }

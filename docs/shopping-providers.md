@@ -316,8 +316,14 @@ No provider reports what was ordered. What DinnerOS can know:
 | Commission from an order (Impact) | Aggregated and delayed, not per user; don't use for pantry |
 
 **Flow:** after the handoff, the Shop tab shows "Did you order these?" with
-each handed-off line checked and its package count editable. On confirm, the
-API writes one pantry purchase per line:
+each handed-off line checked and its package count editable. The sheet is
+grouped by meal, in plan order with each recipe's photo and day, using the
+handoff line's `recipes`: an item for one meal sits under it, an item for
+several meals appears once under "For Several Meals" (with the meals named),
+and add-on recipes (garlic bread) and items tied to no recipe go under
+"Extras". A meal whose items are all checked collapses to "4 of 4 ordered".
+One button confirms: "Ordered All 43", or "Ordered 42 of 43" with the rest
+marked not ordered. On confirm, the API writes one pantry purchase per line:
 
 ```json
 {

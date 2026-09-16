@@ -267,4 +267,99 @@ struct OrderConfirmationDraftTests {
             draft.everythingRequest
                 == .lines([ConfirmedOrderLine(lineID: "l1"), ConfirmedOrderLine(lineID: "l3")], skipRest: true))
     }
+
+    @Test func theOneConfirmButtonSaysWhatItConfirms() throws {
+        var draft = OrderConfirmationDraft(handoff: try handoff())
+        #expect(draft.isAllSelected)
+        #expect(draft.confirmTitle == "Ordered All 2")
+        #expect(draft.confirmRequest == .all)
+
+        draft.toggle(draft.lines[1])
+        #expect(draft.confirmTitle == "Ordered 1 of 2")
+        #expect(draft.confirmRequest == .lines([ConfirmedOrderLine(lineID: "l1")], skipRest: true))
+
+        draft.toggle(draft.lines[0])
+        #expect(draft.confirmTitle == "Ordered 0 of 2")
+        #expect(draft.confirmRequest == nil)
+    }
+}
+
+struct OrderConfirmationGroupsTests {
+    private static let names = ["r-tacos": "Tacos", "r-pasta": "Pasta", "r-bread": "Garlic Bread"]
+
+    private func line(_ id: String, _ name: String, recipes: [String]) throws -> ShoppingHandoffLine {
+        let json = ShoppingFixtures.lineJSON(
+            id: id, key: "i-\(id)", name: name, productID: "10000000\(id.count)", displayName: "Test \(name)",
+            size: nil, computed: 1)
+        var line = try JSONCoding.makeDecoder().decode(ShoppingHandoffLine.self, from: Data(json.utf8))
+        line.recipeRefs = recipes.map { GroceryRecipe(id: $0, name: Self.names[$0] ?? $0) }
+        return line
+    }
+
+    private func entry(_ recipeID: String, day: PlanDay?, isAddon: Bool = false) -> PlanEntry {
+        PlanEntry(
+            id: "e-\(recipeID)",
+            recipe: PlanEntryRecipe(
+                id: recipeID, name: Self.names[recipeID] ?? recipeID,
+                imageURLString: "https://images.example.com/\(recipeID).jpg", isAddon: isAddon),
+            day: day, date: nil, servings: 2, note: "", addedBy: "user-1", addedAt: .distantPast)
+    }
+
+    private func lines() throws -> [ShoppingHandoffLine] {
+        [
+            try line("l1", "Garlic", recipes: ["r-pasta", "r-tacos"]),
+            try line("l2", "Tortillas", recipes: ["r-tacos"]),
+            try line("l3", "Cavatappi", recipes: ["r-pasta"]),
+            try line("l4", "Baguette", recipes: ["r-bread"]),
+            try line("l5", "Crackers", recipes: []),
+            try line("l6", "Ground Beef", recipes: ["r-tacos"]),
+        ]
+    }
+
+    @Test func itemsGroupUnderTheirMealInPlanOrderWithEachItemOnce() throws {
+        // Pasta was added first, but tacos is on Monday.
+        let entries = [
+            entry("r-pasta", day: .wed), entry("r-bread", day: .wed, isAddon: true), entry("r-tacos", day: .mon),
+        ]
+
+        let groups = OrderConfirmationGroups(lines: try lines(), entries: entries)
+
+        #expect(groups.meals.map(\.name) == ["Tacos", "Pasta"])
+        #expect(groups.meals.map { $0.lines.map(\.name) } == [["Tortillas", "Ground Beef"], ["Cavatappi"]])
+        #expect(groups.meals.map(\.day) == [.mon, .wed])
+        #expect(groups.meals.first?.imageURL?.absoluteString == "https://images.example.com/r-tacos.jpg")
+        // Garlic is for both meals: listed once, naming them in plan order.
+        #expect(groups.shared.map(\.line.name) == ["Garlic"])
+        #expect(groups.shared.first?.mealNames == ["Tacos", "Pasta"])
+        // The add-on's items and the item tied to no recipe are extras.
+        #expect(groups.extras.map(\.name) == ["Baguette", "Crackers"])
+
+        let all = groups.meals.flatMap(\.lines) + groups.shared.map(\.line) + groups.extras
+        #expect(all.map(\.id).sorted() == ["l1", "l2", "l3", "l4", "l5", "l6"])
+    }
+
+    @Test func withoutThePlanMealsComeFromTheLinesThemselves() throws {
+        let groups = OrderConfirmationGroups(lines: try lines(), entries: nil)
+
+        // In the order the lines first name them; add-ons can't be told apart without the plan.
+        #expect(groups.meals.map(\.name) == ["Pasta", "Tacos", "Garlic Bread"])
+        #expect(groups.meals.allSatisfy { $0.imageURL == nil && $0.day == nil })
+        #expect(groups.shared.map(\.line.name) == ["Garlic"])
+        #expect(groups.extras.map(\.name) == ["Crackers"])
+    }
+
+    @Test func aLineDecodesItsRecipesAndOlderHandoffsHaveNone() throws {
+        let json = ShoppingFixtures.lineJSON(
+            id: "l1", key: "i-beef", name: "Ground Beef", productID: "100000001", displayName: "Test beef",
+            size: nil, computed: 1)
+        let decoder = JSONCoding.makeDecoder()
+
+        let old = try decoder.decode(ShoppingHandoffLine.self, from: Data(json.utf8))
+        #expect(old.recipes.isEmpty)
+
+        let withRecipes = json.replacingOccurrences(
+            of: #""cart":null}"#, with: #""cart":null,"recipes":[{"id":"r-tacos","name":"Tacos"}]}"#)
+        let line = try decoder.decode(ShoppingHandoffLine.self, from: Data(withRecipes.utf8))
+        #expect(line.recipes == [GroceryRecipe(id: "r-tacos", name: "Tacos")])
+    }
 }

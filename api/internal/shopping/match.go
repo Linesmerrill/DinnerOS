@@ -240,5 +240,8 @@ func lineSource(category string, item grocery.Item) LineSource {
 	for _, a := range item.Amounts {
 		src.Amounts = append(src.Amounts, Amount{Quantity: a.Quantity.String(), Unit: a.Unit.Code})
 	}
+	for _, s := range item.Sources {
+		src.Recipes = append(src.Recipes, RecipeRef{ID: s.RecipeID, Name: s.RecipeName})
+	}
 	return src
 }

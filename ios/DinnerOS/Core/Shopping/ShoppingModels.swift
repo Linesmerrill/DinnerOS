@@ -335,6 +335,12 @@ nonisolated struct ShoppingHandoffLine: Decodable, Hashable, Sendable, Identifia
     /// On a match, what the week's Walmart hand-off already put in the cart for this line.
     /// `nil` when nothing has been sent this week, and on stored handoffs.
     var cart: ShoppingLineCart? = nil
+    /// The planned recipes this line is for; `nil` from a server that doesn't send them.
+    var recipeRefs: [GroceryRecipe]? = nil
+
+    /// The planned recipes this line is for, sorted by name. Empty for an extra, and on
+    /// handoffs stored before the API recorded them.
+    var recipes: [GroceryRecipe] { recipeRefs ?? [] }
 
     /// Packages already in the Walmart cart.
     var sentPackages: Int { cart?.sentPackages ?? 0 }
@@ -364,6 +370,7 @@ nonisolated struct ShoppingHandoffLine: Decodable, Hashable, Sendable, Identifia
         case name, category, amounts, quantityText, unquantified, groceryStatus, product, computedPackages, packages,
             packagesOverridden, checkAmount, reason, reasonText, coverageText, coverage, coversWeek, searchTerms,
             confirmation, cart
+        case recipeRefs = "recipes"
     }
 }
 

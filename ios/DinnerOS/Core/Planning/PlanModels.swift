@@ -461,7 +461,7 @@ nonisolated struct GroceryAmount: Decodable, Equatable, Sendable {
     let text: String
 }
 
-nonisolated struct GroceryRecipe: Decodable, Equatable, Sendable, Identifiable {
+nonisolated struct GroceryRecipe: Decodable, Hashable, Sendable, Identifiable {
     let id: String
     let name: String
 }

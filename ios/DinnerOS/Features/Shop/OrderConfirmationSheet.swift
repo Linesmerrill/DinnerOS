@@ -2,56 +2,72 @@ import SwiftUI
 
 /// "Did you order these?": records the handed-off lines a member ordered as pantry purchases.
 /// Walmart doesn't report orders, so the member says what was bought.
+///
+/// Grouped by meal (`OrderConfirmationGroups`), so each item reads as the thing it's for. A
+/// meal whose items are all checked folds down to one row.
 struct OrderConfirmationSheet: View {
     let handoff: ShoppingHandoff
 
     @Environment(ShoppingStore.self) private var shopping
     @Environment(HouseholdStore.self) private var households
+    /// Optional so previews and other hosts needn't supply one; without it meals have no photo.
+    @Environment(PlanStore.self) private var plans: PlanStore?
     @Environment(\.appConfiguration) private var configuration
 
     @State private var draft: OrderConfirmationDraft
     @State private var isSaving = false
     @State private var errorMessage: String?
+    /// Complete meals the member opened again.
+    @State private var expanded: Set<String> = []
 
     init(handoff: ShoppingHandoff) {
         self.handoff = handoff
         _draft = State(initialValue: OrderConfirmationDraft(handoff: handoff))
     }
 
+    private var groups: OrderConfirmationGroups {
+        let plan = plans?.plan
+        return OrderConfirmationGroups(
+            lines: draft.lines, entries: plan?.week == handoff.week ? plan?.entries : nil)
+    }
+
     var body: some View {
+        let groups = groups
         NavigationStack {
             List {
                 Section {
                     Text(
-                        "Walmart doesn't tell \(configuration.displayName) what you ordered. Check what you bought and it's added to your pantry."
+                        "Walmart doesn't tell \(configuration.displayName) what you ordered. Uncheck anything you didn't buy, and the rest goes in your pantry."
                     )
                     .foregroundStyle(.secondary)
                     if let errorMessage {
                         FormErrorLabel(message: errorMessage)
                     }
                 }
-                Section {
-                    ForEach(draft.lines) { line in
-                        OrderLineRow(
-                            line: line, isSelected: draft.isSelected(line),
-                            packages: Binding(
-                                get: { draft.packages(for: line) },
-                                set: { draft.setPackages($0, for: line) }),
-                            toggle: { draft.toggle(line) })
+                if !groups.shared.isEmpty {
+                    Section {
+                        ForEach(groups.shared) { shared in
+                            row(shared.line, detail: String(localized: "For \(shared.mealNames.formatted())"))
+                        }
+                    } header: {
+                        Text("For Several Meals")
                     }
-                } header: {
-                    Text("Sent to Walmart \(handoff.createdAt.formatted(.relative(presentation: .named)))")
+                }
+                ForEach(groups.meals) { meal in
+                    mealSection(meal)
+                }
+                if !groups.extras.isEmpty {
+                    Section {
+                        ForEach(groups.extras) { line in
+                            row(line, detail: nil)
+                        }
+                    } header: {
+                        Text("Extras")
+                    }
                 }
             }
             .navigationTitle("Did You Order These?")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Not Yet") {
-                        shopping.dismissConfirmation()
-                    }
-                }
-            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 actions
             }
@@ -60,45 +76,75 @@ struct OrderConfirmationSheet: View {
         }
     }
 
-    private var actions: some View {
-        VStack(spacing: 8) {
+    @ViewBuilder
+    private func mealSection(_ meal: OrderConfirmationGroups.Meal) -> some View {
+        let checked = meal.lines.filter { draft.isSelected($0) }.count
+        let isComplete = checked == meal.lines.count
+        let isOpen = !isComplete || expanded.contains(meal.id)
+        Section {
             Button {
-                confirm(draft.everythingRequest)
+                guard isComplete else { return }
+                if expanded.contains(meal.id) {
+                    expanded.remove(meal.id)
+                } else {
+                    expanded.insert(meal.id)
+                }
+            } label: {
+                MealHeader(meal: meal, checked: checked, isComplete: isComplete, isOpen: isOpen)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(isComplete ? (isOpen ? "Hides its items" : "Shows its items") : "")
+            if isOpen {
+                ForEach(meal.lines) { line in
+                    row(line, detail: nil)
+                }
+            }
+        }
+    }
+
+    private func row(_ line: ShoppingHandoffLine, detail: String?) -> some View {
+        OrderLineRow(
+            line: line, detail: detail, isSelected: draft.isSelected(line),
+            packages: Binding(
+                get: { draft.packages(for: line) },
+                set: { draft.setPackages($0, for: line) }),
+            toggle: { draft.toggle(line) })
+    }
+
+    private var actions: some View {
+        VStack(spacing: 4) {
+            Button {
+                if let request = draft.confirmRequest {
+                    confirm(request)
+                }
             } label: {
                 Group {
                     if isSaving {
                         ProgressView()
                     } else {
-                        Text("Ordered Everything")
+                        Text(draft.confirmTitle)
                     }
                 }
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .disabled(draft.lines.isEmpty)
+            .disabled(draft.confirmRequest == nil)
+            .accessibilityHint(
+                draft.isAllSelected
+                    ? "Adds everything to the pantry."
+                    : "Adds the checked items to the pantry. The rest weren't ordered.")
 
-            Button {
-                if let request = draft.selectedRequest {
-                    confirm(request)
-                }
-            } label: {
-                Text(selectedTitle)
-                    .frame(maxWidth: .infinity)
+            Button("Not Yet") {
+                shopping.dismissConfirmation()
             }
-            .buttonStyle(.bordered)
             .controlSize(.large)
-            .disabled(draft.selectedRequest == nil)
-            .accessibilityHint("Adds the checked items to the pantry and marks the rest as not ordered.")
+            .disabled(isSaving)
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
         .background(.bar)
-    }
-
-    private var selectedTitle: String {
-        draft.selectedCount == 1
-            ? String(localized: "Ordered Only the 1 Checked Item")
-            : String(localized: "Ordered Only the \(draft.selectedCount) Checked Items")
     }
 
     private func confirm(_ request: ConfirmShoppingOrderRequest) {
@@ -118,8 +164,54 @@ struct OrderConfirmationSheet: View {
     }
 }
 
+/// A meal's photo, name and day, and how many of its items are checked.
+private struct MealHeader: View {
+    let meal: OrderConfirmationGroups.Meal
+    let checked: Int
+    let isComplete: Bool
+    let isOpen: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            RecipePhoto(url: meal.imageURL, aspectRatio: 1, pointWidth: 48, cornerRadius: 10)
+                .frame(width: 48, height: 48)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(meal.name)
+                    .font(.headline)
+                if let day = meal.day {
+                    Text(day.name())
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 8)
+            if isComplete {
+                Label("\(checked) of \(meal.lines.count) ordered", systemImage: "checkmark.circle.fill")
+                    .labelStyle(.titleAndIcon)
+                    .font(.footnote)
+                    .foregroundStyle(.tint)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(isOpen ? 90 : 0))
+                    .accessibilityHidden(true)
+            } else {
+                Text("\(checked) of \(meal.lines.count)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .foregroundStyle(Color.primary)
+        .contentShape(.rect)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private struct OrderLineRow: View {
     let line: ShoppingHandoffLine
+    /// For example "For Tacos and Pasta".
+    let detail: String?
     let isSelected: Bool
     @Binding var packages: Int
     let toggle: () -> Void
@@ -136,6 +228,11 @@ private struct OrderLineRow: View {
                         Text(line.product.displayName)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                        if let detail {
+                            Text(detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                         if line.confirmation?.status == .skipped {
                             Text("Marked not ordered")
                                 .font(.caption)

@@ -9240,7 +9240,7 @@ components:
           format: date-time
     ShoppingHandoffLine:
       type: object
-      required: [id, ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, product, computedPackages, packages, packagesOverridden, checkAmount, reason, reasonText, coverageText, coverage, coversWeek, searchTerms, confirmation, cart]
+      required: [id, ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, product, computedPackages, packages, packagesOverridden, checkAmount, reason, reasonText, coverageText, coverage, coversWeek, searchTerms, confirmation, cart, recipes]
       properties:
         id:
           type: string
@@ -9331,7 +9331,21 @@ components:
           oneOf:
             - $ref: "#/components/schemas/ShoppingLineCart"
             - type: "null"
-    ShoppingLineCart:
+        recipes:
+          type: array
+          description: |
+            The planned recipes this grocery item is for, sorted by name, the
+            same as the grocery list item's `recipes`. Empty for an item only
+            an extra added, and on handoffs stored before recipes were
+            recorded. Apps group "Did you order these?" by meal with it.
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id:
+                type: string
+              name:
+                type: string
       type: object
       required: [sentPackages, addPackages, removePackages]
       properties:

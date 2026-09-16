@@ -293,6 +293,10 @@ func TestIntegrationHandoffAndConfirm(t *testing.T) {
 	if beef.Packages != 3 || beef.Reason != "" || beef.PackageCount().Needed == nil || providers.CoverageText(beef.PackageCount(), amountFromSize(beef.PackageSize)) != "3 × 16 oz covers 36 oz" {
 		t.Errorf("beef = %+v", beef)
 	}
+	// Each line names the recipes it's for, so "Did you order these?" can group by meal.
+	if got := beef.Recipes; len(got) != 2 || got[0].Name != "Beef Chili" || got[1].Name != "Beef Tacos" || got[0].ID == "" {
+		t.Errorf("beef recipes = %+v", got)
+	}
 	if l := lineFor(t, m, "Yellow Onion"); l.Packages != 1 || l.Reason != "" {
 		t.Errorf("onion = %+v", l)
 	}
@@ -352,6 +356,7 @@ func TestIntegrationHandoffAndConfirm(t *testing.T) {
 	storedGarlic := lineFor(t, stored.Proposal, "Garlic")
 	if err != nil || len(stored.Lines) != 4 || stored.Links[0].URL != h.Links[0].URL ||
 		storedGarlic.Coverage != providers.CoveragePerWeek || !storedGarlic.CoversWeek || storedGarlic.Reason != "" ||
+		len(storedGarlic.Recipes) != 1 || storedGarlic.Recipes[0].Name != "Beef Tacos" ||
 		stored.Lines[0].Amounts[0].Quantity == "" || !stored.CreatedAt.Equal(testNow) {
 		t.Errorf("GetHandoff() = %+v, %v", stored, err)
 	}

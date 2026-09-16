@@ -172,4 +172,108 @@ nonisolated struct OrderConfirmationDraft: Equatable, Sendable {
         let count = packages(for: line)
         return ConfirmedOrderLine(lineID: line.id, packages: count == line.packages ? nil : count)
     }
+
+    /// Whether every line is checked.
+    var isAllSelected: Bool { !lines.isEmpty && selected.count == lines.count }
+
+    /// The one confirm button: "Ordered All 43", or "Ordered 42 of 43" when some are unchecked.
+    var confirmTitle: String {
+        isAllSelected
+            ? String(localized: "Ordered All \(lines.count)")
+            : String(localized: "Ordered \(selectedCount) of \(lines.count)")
+    }
+
+    /// What the confirm button sends: everything when all are checked, otherwise the checked
+    /// lines with the rest marked not ordered. `nil` when nothing is checked.
+    var confirmRequest: ConfirmShoppingOrderRequest? {
+        isAllSelected ? everythingRequest : selectedRequest
+    }
+}
+
+/// "Did you order these?" grouped by meal, so each item reads as "this goes to the tacos".
+///
+/// Every line appears exactly once: under its meal when it's for one, in `shared` when it's for
+/// several, and in `extras` when it's only for add-ons (garlic bread) or no recipe at all.
+nonisolated struct OrderConfirmationGroups: Equatable, Sendable {
+    nonisolated struct Meal: Equatable, Sendable, Identifiable {
+        let recipeID: String
+        let name: String
+        let imageURL: URL?
+        /// `nil` when the plan isn't loaded or the meal has no day.
+        let day: PlanDay?
+        let lines: [ShoppingHandoffLine]
+
+        var id: String { recipeID }
+    }
+
+    nonisolated struct SharedLine: Equatable, Sendable, Identifiable {
+        let line: ShoppingHandoffLine
+        /// The meals it's for, in plan order.
+        let mealNames: [String]
+
+        var id: String { line.id }
+    }
+
+    /// In plan order: by day, then the order they were added; meals with nothing to confirm
+    /// are left out.
+    let meals: [Meal]
+    let shared: [SharedLine]
+    let extras: [ShoppingHandoffLine]
+
+    /// Groups `lines` by the meals in `entries`, the handoff week's plan. Without a plan
+    /// (another week is loaded) the meals come from the lines' own recipes, with no photo or
+    /// day, in the order they first appear.
+    init(lines: [ShoppingHandoffLine], entries: [PlanEntry]?) {
+        struct MealInfo {
+            let name: String
+            let imageURL: URL?
+            let day: PlanDay?
+        }
+        var order: [String] = []
+        var info: [String: MealInfo] = [:]
+        var addOns: Set<String> = []
+        if let entries {
+            let planned = entries.enumerated().sorted { a, b in
+                let dayA = a.element.day?.offset ?? PlanDay.allCases.count
+                let dayB = b.element.day?.offset ?? PlanDay.allCases.count
+                return dayA != dayB ? dayA < dayB : a.offset < b.offset
+            }
+            for (_, entry) in planned {
+                let recipe = entry.recipe
+                if recipe.isAddon {
+                    addOns.insert(recipe.id)
+                    continue
+                }
+                guard info[recipe.id] == nil else { continue }
+                order.append(recipe.id)
+                info[recipe.id] = MealInfo(name: recipe.name, imageURL: recipe.imageURL, day: entry.day)
+            }
+        }
+        var byMeal: [String: [ShoppingHandoffLine]] = [:]
+        var sharedLines: [(line: ShoppingHandoffLine, mealIDs: Set<String>)] = []
+        var extras: [ShoppingHandoffLine] = []
+        for line in lines {
+            let meals = line.recipes.filter { !addOns.contains($0.id) }
+            // Without a plan, and for a recipe no longer planned, the line's own name stands in.
+            for recipe in meals where info[recipe.id] == nil {
+                order.append(recipe.id)
+                info[recipe.id] = MealInfo(name: recipe.name, imageURL: nil, day: nil)
+            }
+            switch meals.count {
+            case 0: extras.append(line)
+            case 1: byMeal[meals[0].id, default: []].append(line)
+            default: sharedLines.append((line, Set(meals.map(\.id))))
+            }
+        }
+        self.meals = order.compactMap { id in
+            guard let lines = byMeal[id], let meal = info[id] else { return nil }
+            return Meal(recipeID: id, name: meal.name, imageURL: meal.imageURL, day: meal.day, lines: lines)
+        }
+        shared = sharedLines.map { shared in
+            SharedLine(
+                line: shared.line,
+                mealNames: order.filter { shared.mealIDs.contains($0) }.compactMap { info[$0]?.name })
+        }
+        self.extras = extras
+    }
 }
