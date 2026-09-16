@@ -10,6 +10,8 @@ struct HouseholdView: View {
     @Environment(HouseholdStore.self) private var households
     @Environment(ImportReviewStore.self) private var importReviews
     @Environment(\.appConfiguration) private var configuration
+    @Environment(PushNotificationStore.self) private var push: PushNotificationStore?
+    @Environment(\.openURL) private var openURL
 
     @State private var me: MeResponse?
     @State private var isLoadingAccount = false
@@ -290,6 +292,25 @@ struct HouseholdView: View {
         }
     }
 
+    /// Whether reminders can reach this phone, with the one action that changes it.
+    @ViewBuilder
+    private func notificationsRow(_ push: PushNotificationStore) -> some View {
+        switch push.authorization {
+        case .authorized:
+            LabeledContent("Notifications", value: String(localized: "On"))
+        case .notDetermined:
+            Button("Turn On Notifications", systemImage: "bell.badge") {
+                Task { await push.requestAuthorizationIfNeeded() }
+            }
+            .accessibilityHint("Lets order-day and low-stock reminders reach this phone.")
+        case .denied:
+            Button("Turn On Notifications in Settings", systemImage: "bell.slash") {
+                if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
+            }
+            .accessibilityHint("Notifications are off for DinnerOS on this phone.")
+        }
+    }
+
     @ViewBuilder
     private var accountSection: some View {
         let user = me?.user ?? session.currentUser
@@ -301,6 +322,9 @@ struct HouseholdView: View {
                 LabeledContent("Email") {
                     Text(user.primaryEmail ?? String(localized: "Not shared"))
                 }
+            }
+            if let push {
+                notificationsRow(push)
             }
             if let me, !me.identities.isEmpty {
                 LabeledContent("Signed in with") {

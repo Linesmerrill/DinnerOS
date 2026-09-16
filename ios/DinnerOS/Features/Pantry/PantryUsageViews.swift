@@ -455,6 +455,7 @@ struct PantryThresholdFields: View {
 struct PantryThresholdSheet: View {
     @Environment(PantryStore.self) private var pantry
     @Environment(HouseholdStore.self) private var households
+    @Environment(PushNotificationStore.self) private var push: PushNotificationStore?
     @Environment(\.dismiss) private var dismiss
 
     @State private var percent = PantrySettings.defaultLowThresholdPercent
@@ -581,6 +582,9 @@ struct PantryThresholdSheet: View {
             do {
                 try await pantry.updateSettings(lowThresholdPercent: percent)
                 dismiss()
+                // Setting a low-stock alert is asking to be told, so it's a moment to ask
+                // whether that may reach a locked phone. Only asked once per device.
+                await push?.requestAuthorizationIfNeeded()
             } catch is CancellationError {
                 // Nothing to report.
             } catch {
