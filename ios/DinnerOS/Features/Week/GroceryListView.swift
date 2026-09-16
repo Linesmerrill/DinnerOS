@@ -70,6 +70,15 @@ struct GroceryListContent: View {
     let model: GroceryListModel
 
     @Environment(EventReporter.self) private var events
+    @Environment(PairingsStore.self) private var pairings
+    @Environment(HouseholdStore.self) private var households
+
+    /// Hiding the action is a convenience; the API enforces `plan.edit`.
+    private var canEditPlan: Bool {
+        households.access?.can(.planEdit) == true && model.list?.status == .draft
+    }
+
+    @State private var removeError: String?
 
     /// Items whose contributing recipes are shown.
     @State private var expanded: Set<String> = []
@@ -104,6 +113,11 @@ struct GroceryListContent: View {
             }
             .sheet(item: $picker) { specialty in
                 SpecialtyQuickPicker(specialty: specialty, model: model)
+            }
+            .alert("Couldn't Remove That", isPresented: Binding(presenting: $removeError)) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(removeError ?? "")
             }
             .sheet(isPresented: $showsSpecialtySetup) {
                 SpecialtyIngredientsSheet()
@@ -263,7 +277,43 @@ struct GroceryListContent: View {
             },
             choose: {
                 picker = item.specialtyDetail
-            })
+            }
+        )
+        // A paired grocery item is the household's own add-on, so it can be taken back off
+        // the week. Ingredients a recipe needs can't: removing the meal does that.
+        .swipeActions(edge: .trailing) {
+            ForEach(removableExtras(item)) { extra in
+                Button("Remove", systemImage: "trash", role: .destructive) {
+                    remove(extra)
+                }
+            }
+        }
+        .contextMenu {
+            ForEach(removableExtras(item)) { extra in
+                Button("Remove from This Week", systemImage: "trash", role: .destructive) {
+                    remove(extra)
+                }
+            }
+        }
+    }
+
+    /// The pairing extras this member may take off the list.
+    private func removableExtras(_ item: GroceryItem) -> [GroceryExtra] {
+        guard canEditPlan, !pairings.isForbidden else { return [] }
+        return item.pairingExtras
+    }
+
+    private func remove(_ extra: GroceryExtra) {
+        Task {
+            do {
+                try await pairings.removeGroceryItem(id: extra.id)
+                await model.load()
+            } catch is CancellationError {
+                return
+            } catch {
+                removeError = HouseholdStore.message(for: error)
+            }
+        }
     }
 
     private func expandedBinding(for key: String) -> Binding<Bool> {
@@ -311,6 +361,13 @@ private struct GroceryItemRow: View {
                             }
                             ForEach(Array(item.via.enumerated()), id: \.offset) { _, via in
                                 Text(via.text)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            // What put the line on the list besides a recipe, such as an
+                            // accepted pairing. Read the same way as `via`.
+                            ForEach(item.extras) { extra in
+                                Text(extra.text)
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }
@@ -409,6 +466,7 @@ private struct GroceryItemRow: View {
             parts.append(amount)
         }
         parts += item.via.map(\.text)
+        parts += item.extras.map(\.text)
         switch item.status {
         case .pantryHint: parts.append(String(localized: "Pantry staple"))
         case .inPantry where item.isHouseMade: parts.append(String(localized: "In pantry, house-made"))
