@@ -83,6 +83,18 @@ struct HouseholdView: View {
                     isConfirmingSignOut = true
                 }
                 .accessibilityHint("Signs you out of \(configuration.displayName) on this device.")
+                // Attached to the button, not the list: on iOS 26 the dialog is a popover
+                // that points at whatever view it's attached to.
+                .confirmationDialog(
+                    "Sign out of \(configuration.displayName)?",
+                    isPresented: $isConfirmingSignOut,
+                    titleVisibility: .visible
+                ) {
+                    Button("Sign Out", role: .destructive) { Task { await session.signOut() } }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("You'll need to sign in again to see your household.")
+                }
             }
         }
         .navigationTitle(households.current?.household.name ?? String(localized: "Household"))
@@ -261,6 +273,16 @@ struct HouseholdView: View {
             Button("Leave Household", role: .destructive) {
                 isConfirmingLeave = true
             }
+            .confirmationDialog(
+                Text("Leave \(households.current?.household.name ?? "")?"),
+                isPresented: $isConfirmingLeave,
+                titleVisibility: .visible
+            ) {
+                Button("Leave Household", role: .destructive) { perform { try await households.leaveHousehold() } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("You'll lose access to its plans and lists, and you'll need a new invitation to rejoin.")
+            }
         } footer: {
             if households.isOnlyAdmin == true {
                 Text("You're this household's only admin. Make another member an admin before you leave.")
@@ -341,20 +363,14 @@ struct HouseholdView: View {
 
     private var confirmations: HouseholdConfirmations {
         HouseholdConfirmations(
-            householdName: households.current?.household.name ?? "",
-            displayName: configuration.displayName,
             memberPendingRemoval: $memberPendingRemoval,
             pendingRoleChange: Binding(
                 get: { pendingRoleChange.map { ($0.member, $0.role) } },
                 set: { pendingRoleChange = $0.map { RoleChange(member: $0.0, role: $0.1) } }),
             invitationPendingRevoke: $invitationPendingRevoke,
-            isConfirmingLeave: $isConfirmingLeave,
-            isConfirmingSignOut: $isConfirmingSignOut,
             removeMember: { member in perform { try await households.removeMember(member) } },
             changeRole: { member, role in perform { try await households.changeRole(of: member, to: role) } },
-            revokeInvitation: { invitation in perform { try await households.revokeInvitation(invitation) } },
-            leave: { perform { try await households.leaveHousehold() } },
-            signOut: { Task { await session.signOut() } })
+            revokeInvitation: { invitation in perform { try await households.revokeInvitation(invitation) } })
     }
 
     // MARK: - Actions
@@ -447,18 +463,12 @@ private struct HouseholdMemberRow: View {
 
 /// The Household tab's confirmation dialogs, kept out of the main view body.
 private struct HouseholdConfirmations: ViewModifier {
-    let householdName: String
-    let displayName: String
     @Binding var memberPendingRemoval: HouseholdMember?
     @Binding var pendingRoleChange: (HouseholdMember, HouseholdRole)?
     @Binding var invitationPendingRevoke: HouseholdInvitation?
-    @Binding var isConfirmingLeave: Bool
-    @Binding var isConfirmingSignOut: Bool
     let removeMember: (HouseholdMember) -> Void
     let changeRole: (HouseholdMember, HouseholdRole) -> Void
     let revokeInvitation: (HouseholdInvitation) -> Void
-    let leave: () -> Void
-    let signOut: () -> Void
 
     func body(content: Content) -> some View {
         content
@@ -496,26 +506,6 @@ private struct HouseholdConfirmations: ViewModifier {
                 Button("Cancel", role: .cancel) {}
             } message: { _ in
                 Text("Its link and code will stop working.")
-            }
-            .confirmationDialog(
-                Text("Leave \(householdName)?"),
-                isPresented: $isConfirmingLeave,
-                titleVisibility: .visible
-            ) {
-                Button("Leave Household", role: .destructive) { leave() }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("You'll lose access to its plans and lists, and you'll need a new invitation to rejoin.")
-            }
-            .confirmationDialog(
-                "Sign out of \(displayName)?",
-                isPresented: $isConfirmingSignOut,
-                titleVisibility: .visible
-            ) {
-                Button("Sign Out", role: .destructive) { signOut() }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("You'll need to sign in again to see your household.")
             }
     }
 
