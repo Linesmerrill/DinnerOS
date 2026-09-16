@@ -121,8 +121,13 @@ category is read from the catalog, not copied onto the recipe.
   `sourceRecipeId` or any alias equals the stored `sourceRecipeId` or any
   stored alias, so a later file with a different canonical ID updates the
   recipe in place. `orderWeeks` and `sourceAliases` merge as sorted set
-  unions; every other field takes the file's value. Recipes that didn't change
-  aren't written. An import is five bulk round trips at most, whatever its
+  unions; every other field takes the file's value. When several file recipes
+  match one stored recipe, the closest match gets it (same canonical ID, then
+  the stored canonical ID among its aliases, then most shared IDs) and an
+  alias-only one is created as its own recipe; only an exact tie is rejected.
+  A stored recipe gives up aliases the file assigns to another recipe, with the
+  order weeks that came with them, even when it isn't in the file; nothing is
+  deleted. Recipes that didn't change aren't written. An import is five bulk round trips at most, whatever its
   size: find ingredients, upsert ingredients (and re-read them), find recipes,
   write recipes, and upsert review items.
 - `orderWeeks` holds one ISO week per delivery, so it stays small (a few dozen

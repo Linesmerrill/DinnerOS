@@ -322,6 +322,104 @@ func TestImportMatchesAliases(t *testing.T) {
 	}
 }
 
+func TestImportSplitsADistinctVariantOutOfAStoredAlias(t *testing.T) {
+	for _, variantFirst := range []bool{false, true} {
+		store := newMemoryStore()
+		svc := NewService(store)
+
+		// An earlier import merged the pork delivery under the beef recipe.
+		merged := testRecipe("canon-beef", "Beef Chili", "2026-W01", "2026-W02")
+		merged.SourceAliases = []string{"menu-beef", "menu-pork"}
+		mustImport(t, svc, "hh", testFile(merged))
+		stored := store.recipes[0]
+
+		// The new file knows the pork delivery is its own dinner.
+		beef := testRecipe("canon-beef", "Beef Chili", "2026-W01")
+		beef.SourceAliases = []string{"menu-beef"}
+		pork := testRecipe("menu-pork", "Pork Chili", "2026-W02")
+		file := testFile(beef, pork)
+		if variantFirst {
+			file = testFile(pork, beef)
+		}
+		res := mustImport(t, svc, "hh", file)
+		if res.Created != 1 || res.Updated != 1 || len(res.Errors) != 0 || len(store.recipes) != 2 {
+			t.Fatalf("variantFirst=%v: result = %+v with %d stored, want pork created and beef updated", variantFirst, res, len(store.recipes))
+		}
+		byID := map[string]Recipe{}
+		for _, r := range store.recipes {
+			byID[r.SourceRecipeID] = r
+		}
+		gotBeef, gotPork := byID["canon-beef"], byID["menu-pork"]
+		// The stored recipe keeps its identity, so plans and ratings still point at it.
+		if gotBeef.ID != stored.ID || !gotBeef.CreatedAt.Equal(stored.CreatedAt) {
+			t.Errorf("beef identity changed: %+v, was %+v", gotBeef, stored)
+		}
+		if !slices.Equal(gotBeef.SourceAliases, []string{"menu-beef"}) || !slices.Equal(gotBeef.OrderWeeks, []string{"2026-W01"}) || gotBeef.TimesOrdered != 1 {
+			t.Errorf("beef aliases %v weeks %v times %d, want the pork delivery released", gotBeef.SourceAliases, gotBeef.OrderWeeks, gotBeef.TimesOrdered)
+		}
+		if gotPork.ID == "" || gotPork.ID == stored.ID || gotPork.Name != "Pork Chili" || !slices.Equal(gotPork.OrderWeeks, []string{"2026-W02"}) {
+			t.Errorf("pork = %+v, want its own recipe", gotPork)
+		}
+
+		// Importing the same file again changes nothing.
+		again := mustImport(t, svc, "hh", file)
+		if again.Unchanged != 2 || again.Created != 0 || again.Updated != 0 || len(again.Errors) != 0 {
+			t.Errorf("variantFirst=%v: re-import = %+v, want 2 unchanged", variantFirst, again)
+		}
+	}
+}
+
+func TestImportReleasesAliasesTheFileAssignsElsewhere(t *testing.T) {
+	store := newMemoryStore()
+	svc := NewService(store)
+
+	withAliases := func(r ImportRecipe, aliases ...string) ImportRecipe {
+		r.SourceAliases = aliases
+		return r
+	}
+	// An earlier import put delivery d2 under the beef tacos and d3 under a
+	// recipe that was never delivered as itself.
+	mustImport(t, svc, "hh", testFile(
+		withAliases(testRecipe("canon-a", "Beef Tacos", "2026-W01", "2026-W02"), "d1", "d2"),
+		testRecipe("canon-b", "Turkey Tacos", "2026-W03"),
+		withAliases(testRecipe("canon-c", "Phantom Bowls", "2026-W04"), "d3"),
+		testRecipe("canon-d", "Rice Bowls", "2026-W05"),
+	))
+	before := map[string]Recipe{}
+	for _, r := range store.recipes {
+		before[r.SourceRecipeID] = r
+	}
+
+	file := testFile(
+		withAliases(testRecipe("canon-a", "Beef Tacos", "2026-W01"), "d1"),
+		withAliases(testRecipe("canon-b", "Turkey Tacos", "2026-W02", "2026-W03"), "d2"),
+		withAliases(testRecipe("canon-d", "Rice Bowls", "2026-W04", "2026-W05"), "d3"),
+	)
+	res := mustImport(t, svc, "hh", file)
+	if res.Created != 0 || res.Updated != 3 || res.Released != 1 || len(res.Errors) != 0 || len(store.recipes) != 4 {
+		t.Fatalf("result = %+v with %d stored, want 3 updated and 1 released", res, len(store.recipes))
+	}
+	want := map[string]struct {
+		aliases, weeks []string
+	}{
+		"canon-a": {[]string{"d1"}, []string{"2026-W01"}},
+		"canon-b": {[]string{"d2"}, []string{"2026-W02", "2026-W03"}},
+		"canon-c": {nil, nil},
+		"canon-d": {[]string{"d3"}, []string{"2026-W04", "2026-W05"}},
+	}
+	for _, r := range store.recipes {
+		w := want[r.SourceRecipeID]
+		if r.ID != before[r.SourceRecipeID].ID || !slices.Equal(r.SourceAliases, w.aliases) || !slices.Equal(r.OrderWeeks, w.weeks) || r.TimesOrdered != len(w.weeks) {
+			t.Errorf("%s: id %s aliases %v weeks %v times %d; want same id, aliases %v, weeks %v", r.SourceRecipeID, r.ID, r.SourceAliases, r.OrderWeeks, r.TimesOrdered, w.aliases, w.weeks)
+		}
+	}
+
+	again := mustImport(t, svc, "hh", file)
+	if again.Unchanged != 3 || again.Updated != 0 || again.Released != 0 {
+		t.Errorf("re-import = %+v, want 3 unchanged and nothing released", again)
+	}
+}
+
 func TestImportUnionsOrderWeeks(t *testing.T) {
 	store := newMemoryStore()
 	svc := NewService(store)

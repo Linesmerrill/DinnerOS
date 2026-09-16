@@ -37,6 +37,9 @@ type ImportResult struct {
 	// ReviewItems counts distinct review items in the file. Items recorded by
 	// an earlier import are not duplicated.
 	ReviewItems int
+	// Released counts stored recipes outside the file that gave up aliases
+	// the file assigns to other recipes. They are not deleted.
+	Released int
 	// Errors lists rejected recipes in file order. The rest still import.
 	Errors []RecipeError
 }
@@ -57,6 +60,10 @@ type importCandidate struct {
 	in       ImportRecipe
 	ids      []string
 	existing *Recipe
+	match    storedMatch
+	// released are other file recipes that take IDs existing holds as
+	// aliases (see Import).
+	released []ImportRecipe
 }
 
 // Import idempotently upserts a file's recipes into a household. Callers
@@ -66,8 +73,10 @@ type importCandidate struct {
 // A recipe matches a stored one when its sourceRecipeId or any alias equals the
 // stored recipe's sourceRecipeId or any of its aliases, so re-imports that
 // pick a different canonical ID do not duplicate recipes. Order weeks and
-// aliases merge as set unions; every other field takes the file's value.
-// Re-importing the same file writes no recipes.
+// aliases merge as set unions; every other field takes the file's value. A
+// file recipe that an earlier import stored only as another recipe's alias is
+// split out as its own recipe when another file recipe matches that stored
+// recipe more closely. Re-importing the same file writes no recipes.
 //
 // It returns ErrInvalidImport for an unusable file. The work is a handful of
 // bulk round trips regardless of file size.
@@ -118,20 +127,85 @@ func (s *Service) Import(ctx context.Context, householdID string, file ImportFil
 		}
 		stored[source] = found
 	}
-	matchedBy := map[string]int{}
-	matched := candidates[:0]
-	for _, c := range candidates {
-		c.existing = matchStored(stored[c.in.Source], c.in.SourceRecipeID, c.ids)
+	// A stored recipe goes to the candidate that matches it most closely. The
+	// file may split a stored recipe: a delivered variant that an earlier
+	// import merged under a canonical recipe as an alias now arrives as its
+	// own recipe. When another candidate claims the stored recipe more closely
+	// (by its canonical ID, or by sharing more IDs), the alias-only candidate
+	// is created as a new recipe. Only an exact tie is rejected.
+	for i := range candidates {
+		candidates[i].existing, candidates[i].match = matchStored(stored[candidates[i].in.Source], candidates[i].in.SourceRecipeID, candidates[i].ids)
+	}
+	winners := map[string]int{} // stored recipe ID -> position in candidates
+	for i, c := range candidates {
+		if c.existing == nil {
+			continue
+		}
+		if w, ok := winners[c.existing.ID]; !ok || c.match.beats(candidates[w].match) {
+			winners[c.existing.ID] = i
+		}
+	}
+	matched := make([]importCandidate, 0, len(candidates))
+	for i, c := range candidates {
 		if c.existing != nil {
-			if other, taken := matchedBy[c.existing.ID]; taken {
-				reject(c.index, c.in, fmt.Sprintf("matches the same stored recipe as recipes[%d]", other))
-				continue
+			if w := winners[c.existing.ID]; w != i {
+				winner := candidates[w]
+				if !winner.match.beats(c.match) || c.match.strength != matchAlias {
+					reject(c.index, c.in, fmt.Sprintf("matches the same stored recipe as recipes[%d]", winner.index))
+					continue
+				}
+				c.existing = nil
 			}
-			matchedBy[c.existing.ID] = c.index
 		}
 		matched = append(matched, c)
 	}
 	candidates = matched
+
+	// The file is the authority on which recipe an ID belongs to. A stored
+	// recipe gives up the aliases, and the order weeks that came with them, that
+	// the file assigns to another recipe, whether that recipe is split out, was
+	// stored separately already, or leaves the stored recipe out of the file.
+	// Stored recipes keep their identity either way, so nothing that refers to
+	// them breaks.
+	owner := map[string]int{} // stored recipe ID -> position in candidates
+	claimedBy := map[sourceRecipeKey][]int{}
+	for i, c := range candidates {
+		if c.existing != nil {
+			owner[c.existing.ID] = i
+		}
+		for _, id := range c.ids {
+			key := sourceRecipeKey{source: c.in.Source, id: id}
+			claimedBy[key] = append(claimedBy[key], i)
+		}
+	}
+	var detached []Recipe
+	for _, source := range sortedKeys(stored) {
+		seen := map[string]bool{}
+		for _, st := range stored[source] {
+			if seen[st.ID] {
+				continue
+			}
+			seen[st.ID] = true
+			self, owned := owner[st.ID]
+			var released []ImportRecipe
+			taken := map[int]bool{}
+			for _, id := range st.SourceAliases {
+				for _, i := range claimedBy[sourceRecipeKey{source: source, id: id}] {
+					if (!owned || i != self) && !taken[i] {
+						taken[i] = true
+						released = append(released, candidates[i].in)
+					}
+				}
+			}
+			switch {
+			case len(released) == 0:
+			case owned:
+				candidates[self].released = released
+			default:
+				detached = append(detached, releaseFromStored(st, released))
+			}
+		}
+	}
 
 	// 3. Resolve ingredient lines to catalog IDs.
 	ingredientIDs, created, err := s.resolveIngredients(ctx, candidates, now)
@@ -152,7 +226,7 @@ func (s *Service) Import(ctx context.Context, householdID string, file ImportFil
 			res.Created++
 			continue
 		}
-		r = mergeStored(r, *c.existing)
+		r = mergeStored(r, *c.existing, c.released)
 		if reflect.DeepEqual(r, *c.existing) {
 			res.Unchanged++
 			continue
@@ -160,6 +234,11 @@ func (s *Service) Import(ctx context.Context, householdID string, file ImportFil
 		r.UpdatedAt = now
 		writes = append(writes, r)
 		res.Updated++
+	}
+	for _, r := range detached {
+		r.UpdatedAt = now
+		writes = append(writes, r)
+		res.Released++
 	}
 	if len(writes) > 0 {
 		if err := s.store.SaveRecipes(ctx, householdID, writes); err != nil {
@@ -191,32 +270,91 @@ func firstClaim(claimed map[sourceRecipeKey]int, source string, ids []string) (i
 	return 0, false
 }
 
-// matchStored prefers a stored recipe with the same canonical ID, then any
-// stored recipe sharing an ID or alias.
-func matchStored(stored []Recipe, canonical string, ids []string) *Recipe {
-	for i := range stored {
-		if stored[i].SourceRecipeID == canonical {
-			return &stored[i]
-		}
-	}
-	for i := range stored {
-		for _, id := range ids {
-			if stored[i].SourceRecipeID == id || slices.Contains(stored[i].SourceAliases, id) {
-				return &stored[i]
-			}
-		}
-	}
-	return nil
+// How closely a file recipe matches a stored one, weakest first.
+const (
+	matchAlias     = iota + 1 // they share an ID only through aliases
+	matchClaims               // the file recipe lists the stored canonical ID as an alias
+	matchCanonical            // same canonical ID
+)
+
+type storedMatch struct {
+	strength int
+	shared   int // IDs the two have in common
 }
 
-// mergeStored applies stored identity and the set-union fields to r.
-func mergeStored(r, stored Recipe) Recipe {
+func (m storedMatch) beats(o storedMatch) bool {
+	if m.strength != o.strength {
+		return m.strength > o.strength
+	}
+	return m.shared > o.shared
+}
+
+// matchStored returns the stored recipe a file recipe matches most closely:
+// the same canonical ID, then a stored canonical ID the file lists as an
+// alias, then any shared ID, preferring more shared IDs.
+func matchStored(stored []Recipe, canonical string, ids []string) (*Recipe, storedMatch) {
+	var best *Recipe
+	var bestMatch storedMatch
+	for i := range stored {
+		s := &stored[i]
+		m := storedMatch{}
+		for _, id := range ids {
+			if s.SourceRecipeID == id || slices.Contains(s.SourceAliases, id) {
+				m.shared++
+			}
+		}
+		switch {
+		case m.shared == 0:
+			continue
+		case s.SourceRecipeID == canonical:
+			m.strength = matchCanonical
+		case slices.Contains(ids, s.SourceRecipeID):
+			m.strength = matchClaims
+		default:
+			m.strength = matchAlias
+		}
+		if best == nil || m.beats(bestMatch) {
+			best, bestMatch = s, m
+		}
+	}
+	return best, bestMatch
+}
+
+// mergeStored applies stored identity and the set-union fields to r, less
+// the aliases and order weeks released to other file recipes (see Import).
+func mergeStored(r, stored Recipe, released []ImportRecipe) Recipe {
 	r.ID, r.HouseholdID = stored.ID, stored.HouseholdID
 	r.CreatedAt, r.UpdatedAt = stored.CreatedAt, stored.UpdatedAt
-	r.SourceAliases = sortedSet(slices.Concat(stored.SourceAliases, r.SourceAliases, []string{stored.SourceRecipeID}), r.SourceRecipeID)
-	r.OrderWeeks = sortedSet(slices.Concat(stored.OrderWeeks, r.OrderWeeks), "")
+	aliases, weeks := releaseIDs(
+		slices.Concat(stored.SourceAliases, r.SourceAliases, []string{stored.SourceRecipeID}),
+		slices.Concat(stored.OrderWeeks, r.OrderWeeks), r.OrderWeeks, released)
+	r.SourceAliases = sortedSet(aliases, r.SourceRecipeID)
+	r.OrderWeeks = sortedSet(weeks, "")
 	r.TimesOrdered, r.LastOrderedWeek = orderStats(r.OrderWeeks)
 	return r
+}
+
+// releaseFromStored returns a stored recipe that isn't in the file without
+// the aliases and order weeks the file gives to other recipes.
+func releaseFromStored(stored Recipe, released []ImportRecipe) Recipe {
+	aliases, weeks := releaseIDs(slices.Clone(stored.SourceAliases), slices.Clone(stored.OrderWeeks), nil, released)
+	stored.SourceAliases = sortedSet(aliases, stored.SourceRecipeID)
+	stored.OrderWeeks = sortedSet(weeks, "")
+	stored.TimesOrdered, stored.LastOrderedWeek = orderStats(stored.OrderWeeks)
+	return stored
+}
+
+// releaseIDs removes the released recipes' IDs from aliases and their order
+// weeks from weeks, keeping any week in keep.
+func releaseIDs(aliases, weeks, keep []string, released []ImportRecipe) ([]string, []string) {
+	for _, other := range released {
+		ids := append([]string{other.SourceRecipeID}, other.SourceAliases...)
+		aliases = slices.DeleteFunc(aliases, func(id string) bool { return slices.Contains(ids, strings.TrimSpace(id)) })
+		weeks = slices.DeleteFunc(weeks, func(w string) bool {
+			return slices.Contains(other.OrderWeeks, strings.TrimSpace(w)) && !slices.Contains(keep, w)
+		})
+	}
+	return aliases, weeks
 }
 
 // lineKey identifies an ingredient line for catalog resolution.

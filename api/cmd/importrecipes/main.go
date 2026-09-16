@@ -130,6 +130,9 @@ func printResult(out io.Writer, res recipes.ImportResult) {
 	fmt.Fprintf(out, "recipes: %d created, %d updated, %d unchanged, %d rejected\n", res.Created, res.Updated, res.Unchanged, len(res.Errors))
 	fmt.Fprintf(out, "ingredients created: %d\n", res.IngredientsCreated)
 	fmt.Fprintf(out, "review items: %d\n", res.ReviewItems)
+	if res.Released > 0 {
+		fmt.Fprintf(out, "stored recipes not in the file that gave up aliases: %d\n", res.Released)
+	}
 	for _, e := range res.Errors {
 		fmt.Fprintf(out, "  rejected recipes[%d] %s %q: %s\n", e.Index, e.SourceRecipeID, e.Name, strings.Join(e.Problems, "; "))
 	}

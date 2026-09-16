@@ -41,6 +41,8 @@ func main() {
 		err = runNormalize(logger, os.Args[2:])
 	case "variants":
 		err = runVariants(logger, os.Args[2:])
+	case "cards":
+		err = runCards(ctx, logger, os.Args[2:])
 	case "capture":
 		err = runCapture(logger, os.Args[2:])
 	case "-h", "--help", "help":
@@ -64,6 +66,7 @@ commands:
   fetch       save public recipe page data for every recipe in the order history
   normalize   convert raw recipes into the DinnerOS import format
   variants    list delivered variants that still need an account capture
+  cards       fetch and parse printed recipe cards for delivered variants and step-less pages
   capture     save account captures ({deliveredId: recipe} JSON) to data/raw/delivered
 `)
 }

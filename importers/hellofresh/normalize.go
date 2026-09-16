@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // ImportVersion is the version of the DinnerOS recipe import contract
@@ -117,55 +118,69 @@ var sourceUnits = map[string]string{
 	"milliliter": "ml", "milliliters": "ml", "millilitre": "ml", "millilitres": "ml", "ml": "ml",
 	"liter": "l", "liters": "l", "l": "l",
 	"pinch": "pinch",
+	// A "pick" is one item picked into the box: HelloFresh uses it for counted
+	// produce such as scallions and limes.
+	"pick": "count", "picks": "count",
 }
 
 // hfRecipe is the subset of the HelloFresh recipe object the normalizer reads.
 type hfRecipe struct {
-	RecipeID      string  `json:"recipeId"`
-	ID            string  `json:"id"`
-	Slug          string  `json:"slug"`
-	Name          string  `json:"name"`
-	Headline      string  `json:"headline"`
-	Description   string  `json:"description"`
-	ImagePath     string  `json:"imagePath"`
-	WebsiteURL    string  `json:"websiteUrl"`
-	CanonicalLink string  `json:"canonicalLink"`
-	PrepTime      string  `json:"prepTime"`
-	TotalTime     string  `json:"totalTime"`
-	Difficulty    int     `json:"difficulty"`
-	IsAddon       bool    `json:"isAddon"`
-	UpdatedAt     string  `json:"updatedAt"`
-	Cuisines      []named `json:"cuisines"`
-	Tags          []named `json:"tags"`
-	Utensils      []named `json:"utensils"`
-	Allergens     []named `json:"allergens"`
-	Nutrition     []struct {
-		Name   string  `json:"name"`
-		Amount float64 `json:"amount"`
-		Unit   string  `json:"unit"`
-	} `json:"nutrition"`
-	Ingredients []struct {
-		ID        string `json:"id"`
-		Name      string `json:"name"`
-		Slug      string `json:"slug"`
-		ImagePath string `json:"imagePath"`
-		Shipped   bool   `json:"shipped"`
-	} `json:"ingredients"`
-	Yields []struct {
-		Yields      int `json:"yields"`
-		Ingredients []struct {
-			ID     string   `json:"id"`
-			Amount *float64 `json:"amount"`
-			Unit   string   `json:"unit"`
-		} `json:"ingredients"`
-	} `json:"yields"`
-	Steps []struct {
-		Index        int    `json:"index"`
-		Instructions string `json:"instructions"`
-		Images       []struct {
-			Path string `json:"path"`
-		} `json:"images"`
-	} `json:"steps"`
+	RecipeID      string         `json:"recipeId"`
+	ID            string         `json:"id"`
+	Slug          string         `json:"slug"`
+	Name          string         `json:"name"`
+	Headline      string         `json:"headline"`
+	Description   string         `json:"description"`
+	ImagePath     string         `json:"imagePath"`
+	WebsiteURL    string         `json:"websiteUrl"`
+	CanonicalLink string         `json:"canonicalLink"`
+	CardLink      string         `json:"cardLink"`
+	PrepTime      string         `json:"prepTime"`
+	TotalTime     string         `json:"totalTime"`
+	Difficulty    int            `json:"difficulty"`
+	IsAddon       bool           `json:"isAddon"`
+	UpdatedAt     string         `json:"updatedAt"`
+	Cuisines      []named        `json:"cuisines"`
+	Tags          []named        `json:"tags"`
+	Utensils      []named        `json:"utensils"`
+	Allergens     []named        `json:"allergens"`
+	Nutrition     []hfNutrient   `json:"nutrition"`
+	Ingredients   []hfIngredient `json:"ingredients"`
+	Yields        []hfYield      `json:"yields"`
+	Steps         []hfStep       `json:"steps"`
+}
+
+type hfNutrient struct {
+	Name   string  `json:"name"`
+	Amount float64 `json:"amount"`
+	Unit   string  `json:"unit"`
+}
+
+type hfIngredient struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Slug      string `json:"slug"`
+	ImagePath string `json:"imagePath"`
+	Shipped   bool   `json:"shipped"`
+}
+
+type hfYield struct {
+	Yields      int                 `json:"yields"`
+	Ingredients []hfYieldIngredient `json:"ingredients"`
+}
+
+type hfYieldIngredient struct {
+	ID     string   `json:"id"`
+	Amount *float64 `json:"amount"`
+	Unit   string   `json:"unit"`
+}
+
+type hfStep struct {
+	Index        int    `json:"index"`
+	Instructions string `json:"instructions"`
+	Images       []struct {
+		Path string `json:"path"`
+	} `json:"images"`
 }
 
 type parsedRaw struct {
@@ -173,16 +188,20 @@ type parsedRaw struct {
 	recipe hfRecipe
 }
 
-// LoadRawRecipes reads every raw recipe file in dir/recipes (public pages) and
-// dir/delivered (account captures).
+// LoadRawRecipes reads every raw recipe file in dir/recipes (public pages),
+// dir/delivered (account captures), and dir/cards (parsed recipe cards).
 func LoadRawRecipes(dir string) ([]RawRecipe, error) {
 	var paths []string
-	for _, sub := range []string{"recipes", "delivered"} {
+	for _, sub := range []string{"recipes", "delivered", "cards"} {
 		matches, err := filepath.Glob(filepath.Join(dir, sub, "*.json"))
 		if err != nil {
 			return nil, err
 		}
-		paths = append(paths, matches...)
+		for _, m := range matches {
+			if !strings.HasSuffix(m, ".missing.json") {
+				paths = append(paths, m)
+			}
+		}
 	}
 	sort.Strings(paths)
 	out := make([]RawRecipe, 0, len(paths))
@@ -201,27 +220,55 @@ func LoadRawRecipes(dir string) ([]RawRecipe, error) {
 }
 
 // Normalize converts raw source recipes into the DinnerOS import contract.
-// Delivered menu clones of the same canonical recipe are merged into one recipe.
+//
+// Each delivered recipe is read from the most exact source available: an
+// account capture, then its printed card, then the public page (which can
+// redirect a weekly clone to a different canonical variant). Clones of one dish
+// merge into one recipe; a delivered variant that is a different dish (pork
+// instead of beef chili) becomes its own recipe under its delivered ID.
 func Normalize(raws []RawRecipe, history History, now time.Time) (ImportFile, error) {
 	weeksByDelivered := map[string][]string{}
 	namesByDelivered := map[string]string{}
+	urlsByDelivered := map[string]string{}
 	for _, r := range history.UniqueRecipes() {
 		weeksByDelivered[r.DeliveredID] = r.Weeks
 		namesByDelivered[r.DeliveredID] = r.Name
+		urlsByDelivered[r.DeliveredID] = r.URL
 	}
 
 	parsed, captured, err := parseRaws(raws)
 	if err != nil {
 		return ImportFile{}, err
 	}
+	cards := map[string]parsedRaw{}
+	for _, p := range parsed {
+		if p.raw.Origin == OriginCard {
+			cards[p.raw.DeliveredID] = p
+		}
+	}
 
 	// Public pages group by canonical recipe ID. An account capture replaces the
-	// public page for its delivered ID, because it is the exact variant delivered.
+	// public page for its delivered ID. So does a card whose recipe is a
+	// different dish from the page; a card of the same dish confirms the page.
 	groups := map[string][]parsedRaw{}
 	keyByVariant := map[string]string{}
+	verified := map[string]bool{} // delivered IDs whose page is confirmed by their card
+	var exact []parsedRaw
 	for _, p := range parsed {
-		if p.raw.Origin == OriginAccount || captured[p.raw.DeliveredID] {
+		switch {
+		case p.raw.Origin == OriginAccount:
+			exact = append(exact, p)
 			continue
+		case p.raw.Origin != "" || captured[p.raw.DeliveredID]:
+			continue
+		}
+		delivered := namesByDelivered[p.raw.DeliveredID]
+		if card, ok := cards[p.raw.DeliveredID]; ok && delivered != "" && !sameVariant(delivered, p.recipe) {
+			if !sameDish(card.recipe, p.recipe) {
+				exact = append(exact, withPageDetails(card, p, urlsByDelivered[p.raw.DeliveredID]))
+				continue
+			}
+			verified[p.raw.DeliveredID] = true
 		}
 		key := p.recipe.RecipeID
 		if key == "" {
@@ -234,21 +281,18 @@ func Normalize(raws []RawRecipe, history History, now time.Time) (ImportFile, er
 		keyByVariant[variantKey(firstNonEmpty(p.recipe.Slug, p.recipe.Name))] = key
 	}
 
-	// Account captures carry no canonical ID. They join the public recipe of the
+	// Exact recipes carry no canonical ID. They join the public recipe of the
 	// same name, or group by name under their newest delivered ID.
-	accountGroups := map[string][]parsedRaw{}
-	for _, p := range parsed {
-		if p.raw.Origin != OriginAccount {
-			continue
-		}
+	exactGroups := map[string][]parsedRaw{}
+	for _, p := range exact {
 		vk := variantKey(firstNonEmpty(p.recipe.Slug, p.recipe.Name))
 		if key, ok := keyByVariant[vk]; ok {
 			groups[key] = append(groups[key], p)
 			continue
 		}
-		accountGroups[vk] = append(accountGroups[vk], p)
+		exactGroups[vk] = append(exactGroups[vk], p)
 	}
-	for _, group := range accountGroups {
+	for _, group := range exactGroups {
 		key := group[0].raw.DeliveredID
 		for _, g := range group[1:] {
 			key = max(key, g.raw.DeliveredID) // Object IDs sort by creation time.
@@ -261,7 +305,8 @@ func Normalize(raws []RawRecipe, history History, now time.Time) (ImportFile, er
 	// under the newest ID (Object IDs sort by creation time).
 	keysByName := map[string][]string{}
 	for key, group := range groups {
-		name := variantKey(newestRaw(group).recipe.Name)
+		sortByPreference(group)
+		name := variantKey(group[0].recipe.Name)
 		if name == "" {
 			continue
 		}
@@ -288,8 +333,7 @@ func Normalize(raws []RawRecipe, history History, now time.Time) (ImportFile, er
 
 	for _, key := range keys {
 		group := groups[key]
-		// Prefer the most recently updated copy as the primary source.
-		sort.SliceStable(group, func(i, j int) bool { return group[i].recipe.UpdatedAt > group[j].recipe.UpdatedAt })
+		sortByPreference(group)
 		primary := group[0].recipe
 
 		weekSet := map[string]bool{}
@@ -306,17 +350,28 @@ func Normalize(raws []RawRecipe, history History, now time.Time) (ImportFile, er
 			}
 		}
 
+		// A recipe without steps takes them from a card of the same dish.
+		if len(primary.Steps) == 0 {
+			for _, g := range group {
+				if card, ok := cards[g.raw.DeliveredID]; ok && len(card.recipe.Steps) > 0 && (sameVariant(card.recipe.Name, primary) || sameDish(card.recipe, primary)) {
+					primary.Steps = card.recipe.Steps
+					break
+				}
+			}
+		}
+
 		rec, review := normalizeRecipe(key, primary, group[0].raw)
 		rec.OrderWeeks = sortedKeys(weekSet)
 		rec.SourceAliases = sortedKeys(aliasSet)
 
 		// Recipe pages redirect weekly menu clones to a canonical recipe, which is
 		// occasionally a different variant (e.g. pork delivered, chicken page).
-		// Flag it so a person knows the stored details may not match the box.
+		// Without a capture or card, flag it so a person knows the stored details
+		// may not match the box.
 		variants := map[string]bool{}
 		for _, g := range group {
 			delivered := namesByDelivered[g.raw.DeliveredID]
-			if g.raw.Origin == OriginAccount || delivered == "" || sameVariant(delivered, primary) || variants[variantKey(delivered)] {
+			if g.raw.Origin != "" || verified[g.raw.DeliveredID] || delivered == "" || sameVariant(delivered, primary) || variants[variantKey(delivered)] {
 				continue
 			}
 			variants[variantKey(delivered)] = true
@@ -342,15 +397,82 @@ func Normalize(raws []RawRecipe, history History, now time.Time) (ImportFile, er
 	return file, nil
 }
 
-// newestRaw returns the most recently updated copy in a group.
-func newestRaw(group []parsedRaw) parsedRaw {
-	newest := group[0]
-	for _, g := range group[1:] {
-		if g.recipe.UpdatedAt > newest.recipe.UpdatedAt {
-			newest = g
+// sortByPreference orders a group's copies best first: full recipe data (a
+// page or capture) before a card, then the most recently updated.
+func sortByPreference(group []parsedRaw) {
+	rank := func(p parsedRaw) int {
+		if p.raw.Origin == OriginCard {
+			return 1
+		}
+		return 0
+	}
+	sort.SliceStable(group, func(i, j int) bool {
+		if ri, rj := rank(group[i]), rank(group[j]); ri != rj {
+			return ri < rj
+		}
+		return group[i].recipe.UpdatedAt > group[j].recipe.UpdatedAt
+	})
+}
+
+// withPageDetails fills what a card doesn't print from the public page its
+// delivered ID resolves to: cuisines, tags, and difficulty, which don't change
+// with the protein, and the page's IDs and images for ingredients of the same
+// name. The page's photo, description, and nutrition describe the other
+// variant and are not copied.
+func withPageDetails(card, page parsedRaw, deliveredURL string) parsedRaw {
+	out := card
+	r := card.recipe
+	r.Cuisines, r.Tags, r.Difficulty = page.recipe.Cuisines, page.recipe.Tags, page.recipe.Difficulty
+	pageIngredients := map[string]hfIngredient{}
+	for _, ing := range page.recipe.Ingredients {
+		pageIngredients[variantKey(ing.Name)] = ing
+	}
+	ids := map[string]string{}
+	r.Ingredients = append([]hfIngredient(nil), card.recipe.Ingredients...)
+	for i, ing := range r.Ingredients {
+		if p, ok := pageIngredients[variantKey(ing.Name)]; ok && p.ID != "" {
+			ids[ing.ID] = p.ID
+			r.Ingredients[i].ID, r.Ingredients[i].Slug, r.Ingredients[i].ImagePath = p.ID, p.Slug, p.ImagePath
 		}
 	}
-	return newest
+	r.Yields = make([]hfYield, len(card.recipe.Yields))
+	for i, y := range card.recipe.Yields {
+		r.Yields[i] = hfYield{Yields: y.Yields, Ingredients: append([]hfYieldIngredient(nil), y.Ingredients...)}
+		for j, yi := range r.Yields[i].Ingredients {
+			if id, ok := ids[yi.ID]; ok {
+				r.Yields[i].Ingredients[j].ID = id
+			}
+		}
+	}
+	out.recipe = r
+	if out.raw.FinalURL == "" {
+		out.raw.FinalURL = deliveredURL
+	}
+	return out
+}
+
+// sameDish reports whether two recipes ship the same ingredients, by name: a
+// renamed clone rather than a different dinner.
+func sameDish(a, b hfRecipe) bool {
+	set := func(r hfRecipe) map[string]bool {
+		out := map[string]bool{}
+		for _, ing := range r.Ingredients {
+			if ing.Shipped {
+				out[variantKey(strings.TrimRight(ing.Name, "*"))] = true
+			}
+		}
+		return out
+	}
+	sa, sb := set(a), set(b)
+	if len(sa) == 0 || len(sa) != len(sb) {
+		return false
+	}
+	for k := range sa {
+		if !sb[k] {
+			return false
+		}
+	}
+	return true
 }
 
 // parseRaws decodes every raw recipe and reports which delivered IDs have an
@@ -372,19 +494,25 @@ func parseRaws(raws []RawRecipe) ([]parsedRaw, map[string]bool, error) {
 }
 
 // PendingVariant is a delivered recipe whose public page resolved to a different
-// variant and that has no account capture yet.
+// variant and that has no account capture or parsed card yet.
 type PendingVariant struct {
 	DeliveredID string `json:"deliveredId"`
 	Name        string `json:"name"`
 	LastWeek    string `json:"lastWeek"`
 }
 
-// PendingVariants lists delivered recipes that need an account capture, newest
-// delivery first.
+// PendingVariants lists delivered recipes that still need an account capture,
+// newest delivery first.
 func PendingVariants(raws []RawRecipe, history History) ([]PendingVariant, error) {
 	parsed, captured, err := parseRaws(raws)
 	if err != nil {
 		return nil, err
+	}
+	carded := map[string]bool{}
+	for _, p := range parsed {
+		if p.raw.Origin == OriginCard {
+			carded[p.raw.DeliveredID] = true
+		}
 	}
 	ordered := map[string]OrderedRecipe{}
 	for _, r := range history.UniqueRecipes() {
@@ -394,7 +522,7 @@ func PendingVariants(raws []RawRecipe, history History) ([]PendingVariant, error
 	out := []PendingVariant{}
 	for _, p := range parsed {
 		o, ok := ordered[p.raw.DeliveredID]
-		if p.raw.Origin == OriginAccount || captured[p.raw.DeliveredID] || !ok || o.Name == "" || sameVariant(o.Name, p.recipe) {
+		if p.raw.Origin != "" || captured[p.raw.DeliveredID] || carded[p.raw.DeliveredID] || !ok || o.Name == "" || sameVariant(o.Name, p.recipe) {
 			continue
 		}
 		pv := PendingVariant{DeliveredID: o.DeliveredID, Name: o.Name}
@@ -416,20 +544,38 @@ func PendingVariants(raws []RawRecipe, history History) ([]PendingVariant, error
 // Ragu" and "beef-zucchini-ragu" are the same variant.
 var variantStopwords = map[string]bool{"and": true, "with": true}
 
+// variantKey reduces a recipe name or slug to what a respelling can't change:
+// case, accents, spacing, punctuation, and "&" versus "and". Any other
+// difference in wording — "molten", "pork" for "beef" — is kept, so a real
+// variant never compares equal. It mirrors the iOS app's
+// ImportVariantMatch.isSpellingOnly, plus the stopwords above.
 func variantKey(s string) string {
-	var kept []string
-	for _, part := range strings.Split(slugify(s), "-") {
-		if part != "" && !variantStopwords[part] {
-			kept = append(kept, part)
+	s = foldAccents(strings.ToLower(strings.ReplaceAll(s, "&", " and ")))
+	var b strings.Builder
+	for _, word := range strings.FieldsFunc(s, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
+		if !variantStopwords[word] {
+			b.WriteString(word)
 		}
 	}
-	return strings.Join(kept, "-")
+	return b.String()
 }
 
-// sameVariant reports whether a delivered name matches a recipe's slug or name.
+var accentFolds = strings.NewReplacer(
+	"á", "a", "à", "a", "â", "a", "ä", "a", "ã", "a", "å", "a",
+	"é", "e", "è", "e", "ê", "e", "ë", "e",
+	"í", "i", "ì", "i", "î", "i", "ï", "i",
+	"ó", "o", "ò", "o", "ô", "o", "ö", "o", "õ", "o",
+	"ú", "u", "ù", "u", "û", "u", "ü", "u",
+	"ñ", "n", "ç", "c", "ý", "y", "ÿ", "y",
+)
+
+func foldAccents(s string) string { return accentFolds.Replace(s) }
+
+// sameVariant reports whether a delivered name matches a recipe's slug or name
+// once spelling is set aside (see variantKey).
 func sameVariant(delivered string, r hfRecipe) bool {
 	k := variantKey(delivered)
-	return k == variantKey(r.Slug) || k == variantKey(r.Name)
+	return k != "" && (k == variantKey(r.Slug) || k == variantKey(r.Name))
 }
 
 func normalizeRecipe(id string, r hfRecipe, raw RawRecipe) (ImportRecipe, []ReviewItem) {
@@ -474,7 +620,7 @@ func normalizeRecipe(id string, r hfRecipe, raw RawRecipe) (ImportRecipe, []Revi
 	}
 
 	for _, n := range r.Nutrition {
-		out.Nutrition = append(out.Nutrition, Nutrient{Name: n.Name, Amount: n.Amount, Unit: n.Unit})
+		out.Nutrition = append(out.Nutrition, Nutrient(n))
 	}
 
 	servingSet := map[int]bool{}
@@ -502,8 +648,12 @@ func normalizeRecipe(id string, r hfRecipe, raw RawRecipe) (ImportRecipe, []Revi
 	}
 
 	for _, ing := range r.Ingredients {
+		sourceID := ing.ID
+		if strings.HasPrefix(sourceID, cardIngredientIDPrefix) {
+			sourceID = "" // made up by the card conversion; the card has no IDs
+		}
 		line := ImportIngredient{
-			SourceIngredientID: ing.ID,
+			SourceIngredientID: sourceID,
 			Name:               strings.TrimSpace(ing.Name),
 			Slug:               ing.Slug,
 			ImageURL:           imageURL(ing.ImagePath),
@@ -532,13 +682,7 @@ func normalizeRecipe(id string, r hfRecipe, raw RawRecipe) (ImportRecipe, []Revi
 		out.Ingredients = append(out.Ingredients, line)
 	}
 
-	steps := append([]struct {
-		Index        int    `json:"index"`
-		Instructions string `json:"instructions"`
-		Images       []struct {
-			Path string `json:"path"`
-		} `json:"images"`
-	}(nil), r.Steps...)
+	steps := append([]hfStep(nil), r.Steps...)
 	sort.SliceStable(steps, func(i, j int) bool { return steps[i].Index < steps[j].Index })
 	for i, s := range steps {
 		st := ImportStep{Index: i + 1, Text: cleanInstructions(s.Instructions)}
@@ -676,15 +820,6 @@ func names(items []named) []string {
 		}
 	}
 	return out
-}
-
-var nonSlugRe = regexp.MustCompile(`[^a-z0-9]+`)
-
-// slugify reduces a name or slug to a comparable form: "Pork & Green Pepper
-// Tacos", "pork and green pepper tacos", and "pork-and-green-pepper-tacos" match.
-func slugify(s string) string {
-	s = strings.ToLower(strings.ReplaceAll(s, "&", " and "))
-	return strings.Trim(nonSlugRe.ReplaceAllString(s, "-"), "-")
 }
 
 func sortedKeys(m map[string]bool) []string {
