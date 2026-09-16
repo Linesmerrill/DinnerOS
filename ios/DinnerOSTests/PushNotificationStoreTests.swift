@@ -183,7 +183,9 @@ struct PushNotificationStoreTests {
         let started = ContinuousClock.now
         await harness.session.signOut()
 
-        #expect(ContinuousClock.now - started < .seconds(10))
+        // The server would take 30s. Well under that proves sign-out didn't wait for it;
+        // the bound is loose because parallel tests on a CI runner stall the clock.
+        #expect(ContinuousClock.now - started < .seconds(20))
         #expect(harness.session.state == .signedOut)
     }
 

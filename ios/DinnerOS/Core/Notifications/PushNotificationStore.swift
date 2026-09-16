@@ -215,7 +215,7 @@ final class PushNotificationStore {
         // the timeout by a lot.
         let resumed = OSAllocatedUnfairLock(initialState: false)
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            let resumeOnce = {
+            let resumeOnce: @Sendable () -> Void = {
                 let first = resumed.withLock { done in
                     defer { done = true }
                     return !done
@@ -228,8 +228,11 @@ final class PushNotificationStore {
                 }
                 resumeOnce()
             }
-            Task {
-                try? await Task.sleep(for: Self.signOutTimeout)
+            // Detached so the timer isn't queued behind other main-actor work: a busy
+            // main actor must not stretch the sign-out wait past the timeout.
+            let timeout = Self.signOutTimeout
+            Task.detached {
+                try? await Task.sleep(for: timeout)
                 deletion.cancel()
                 resumeOnce()
             }
