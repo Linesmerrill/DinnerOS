@@ -10,6 +10,8 @@ struct HouseholdSettingsForm: View {
     @State private var name: String
     @State private var timeZone: String
     @State private var defaultServings: Int
+    /// The API's weekday code, or "" for no reminder.
+    @State private var orderDay: String
     @State private var isSaving = false
     @State private var errorMessage: String?
 
@@ -18,6 +20,7 @@ struct HouseholdSettingsForm: View {
         _name = State(initialValue: household.name)
         _timeZone = State(initialValue: household.timeZone)
         _defaultServings = State(initialValue: household.defaultServings)
+        _orderDay = State(initialValue: household.orderDay ?? "")
     }
 
     private var trimmedName: String {
@@ -30,7 +33,9 @@ struct HouseholdSettingsForm: View {
         HouseholdChanges(
             name: trimmedName == household.name ? nil : trimmedName,
             timeZone: timeZone == household.timeZone ? nil : timeZone,
-            defaultServings: defaultServings == household.defaultServings ? nil : defaultServings)
+            defaultServings: defaultServings == household.defaultServings ? nil : defaultServings,
+            // "" clears the order day; nil would leave it alone.
+            orderDay: orderDay == (household.orderDay ?? "") ? nil : orderDay)
     }
 
     var body: some View {
@@ -50,6 +55,20 @@ struct HouseholdSettingsForm: View {
                 }
             } footer: {
                 Text("Weekly plans follow the household's time zone and start from its default servings.")
+            }
+            Section {
+                Picker("Order Day", selection: $orderDay) {
+                    Text("No reminder").tag("")
+                    ForEach(OrderDay.codes, id: \.self) { code in
+                        Text(OrderDay.name(code)).tag(code)
+                    }
+                }
+            } header: {
+                Text("Grocery Order")
+            } footer: {
+                Text(
+                    "Pick the day you usually order. From that day, Shop reminds the household until someone marks the week ordered. Next week starts fresh."
+                )
             }
             if let errorMessage {
                 Section {

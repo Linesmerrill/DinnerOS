@@ -89,6 +89,11 @@ final class ShoppingStore {
     /// The handoff "Did you order these?" asks about. The app shell presents it.
     private(set) var confirmationPrompt: ShoppingHandoff?
 
+    /// The shown week's order state, derived by the API on every read. `remind` is the only
+    /// thing the banner keys off; nothing here is inferred from a handoff.
+    private(set) var orderReminder: OrderReminder?
+    private(set) var isSettingOrdered = false
+
     private(set) var preferencesPhase: Phase = .idle
     /// Saved products, by ingredient name.
     private(set) var preferences: [ShoppingPreference] = []
@@ -164,7 +169,8 @@ final class ShoppingStore {
     static func preview(
         session: AuthSession, settings: ShoppingSettings?, providers: [ShoppingProvider],
         proposal: ShoppingProposal? = nil, openHandoff: ShoppingHandoff? = nil, preferences: [ShoppingPreference] = [],
-        catalog: [ShoppingCatalogItem] = [], storeRequests: [ShoppingStoreRequest] = []
+        catalog: [ShoppingCatalogItem] = [], storeRequests: [ShoppingStoreRequest] = [],
+        orderReminder: OrderReminder? = nil
     ) -> ShoppingStore {
         let store = ShoppingStore(session: session, api: nil, checks: InMemoryGroceryChecks(), openURL: { _ in false })
         store.householdID = "household-preview"
@@ -178,6 +184,7 @@ final class ShoppingStore {
             store.proposalPhase = .loaded
         }
         store.openHandoff = openHandoff
+        store.orderReminder = orderReminder
         store.preferences = preferences
         store.preferencesPhase = .loaded
         store.catalog = catalog
@@ -223,6 +230,7 @@ final class ShoppingStore {
             await loadProposal(clearing: true)
         }
         await refreshOpenHandoff(presenting: false)
+        await refreshOrderReminder()
     }
 
     /// Pull to refresh: content stays on screen until the responses arrive.
@@ -231,6 +239,7 @@ final class ShoppingStore {
         guard isConfigured else { return }
         await loadProposal(clearing: false)
         await refreshOpenHandoff(presenting: false)
+        await refreshOrderReminder()
     }
 
     /// Shows `newWeek` and matches it. Changed package counts belong to the previous week.
@@ -244,6 +253,8 @@ final class ShoppingStore {
             packageOverrides = [:]
             linkError = nil
             openHandoff = nil
+            // Each week has its own order state; the previous week's must not linger.
+            orderReminder = nil
         }
         await load()
     }
@@ -510,6 +521,48 @@ final class ShoppingStore {
         }
     }
 
+    // MARK: - Order reminder
+
+    /// Reads the shown week's order state. Best effort: a failure keeps what's on screen and
+    /// is only logged, because a missing banner isn't worth an error over the week's list.
+    func refreshOrderReminder() async {
+        guard let api, let householdID else { return }
+        let started = scope
+        let week = week
+        do {
+            let reminder = try await session.authorized { token in
+                try await api.orderReminder(householdID: householdID, week: week, accessToken: token)
+            }
+            guard started == scope, week == self.week else { return }
+            orderReminder = reminder
+        } catch is CancellationError {
+            return
+        } catch {
+            Self.logger.notice("Order reminder failed: \(Self.describe(error), privacy: .public)")
+        }
+    }
+
+    /// Marks the shown week's groceries ordered, or takes that back. This is the only thing
+    /// that silences the reminder: opening a Walmart cart link is not proof an order was
+    /// placed, so nothing infers it.
+    func setWeekOrdered(_ ordered: Bool) async throws {
+        let (api, householdID) = try requireHousehold()
+        let started = scope
+        let week = week
+        isSettingOrdered = true
+        defer {
+            if started == scope { isSettingOrdered = false }
+        }
+        let reminder = try await session.authorized { token in
+            try await api.setWeekOrdered(householdID: householdID, week: week, ordered: ordered, accessToken: token)
+        }
+        guard started == scope, week == self.week else { return }
+        orderReminder = reminder
+        // Marking also reads the bell's copy of the reminder server-side, so the badge is
+        // refreshed here alongside the pantry.
+        await onPantryChanged?()
+    }
+
     // MARK: - Saved products
 
     func loadPreferences() async {
@@ -733,6 +786,8 @@ final class ShoppingStore {
         linkError = nil
         openHandoff = nil
         confirmationPrompt = nil
+        orderReminder = nil
+        isSettingOrdered = false
         preferencesPhase = .idle
         preferences = []
         preferencesRefreshError = nil

@@ -205,6 +205,38 @@ func TestDetails(t *testing.T) {
 	}
 }
 
+func TestUpdateHouseholdOrderDay(t *testing.T) {
+	svc, _ := newTestService(t)
+	ctx := context.Background()
+	h, admin := newHousehold(t, svc, nil)
+
+	if h.OrderDay != "" {
+		t.Errorf("new household OrderDay = %q, want none", h.OrderDay)
+	}
+
+	updated, err := svc.Update(ctx, admin, UpdateInput{OrderDay: ptr("thu")})
+	if err != nil || updated.OrderDay != "thu" {
+		t.Fatalf("Update() = %+v, %v; want orderDay thu", updated, err)
+	}
+	// Setting the order day alone leaves the rest of the household alone.
+	if updated.Name != h.Name || updated.TimeZone != h.TimeZone || updated.DefaultServings != h.DefaultServings {
+		t.Errorf("Update() changed more than the order day: %+v", updated)
+	}
+
+	// Turning reminders off is an empty order day, not a missing field.
+	cleared, err := svc.Update(ctx, admin, UpdateInput{OrderDay: ptr("")})
+	if err != nil || cleared.OrderDay != "" {
+		t.Fatalf("clearing orderDay = %+v, %v", cleared, err)
+	}
+
+	var ve *ValidationError
+	for _, bad := range []string{"Thursday", "thur", "0"} {
+		if _, err := svc.Update(ctx, admin, UpdateInput{OrderDay: ptr(bad)}); !errors.As(err, &ve) {
+			t.Errorf("Update(orderDay %q) error = %v, want ValidationError", bad, err)
+		}
+	}
+}
+
 func TestUpdateHousehold(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()

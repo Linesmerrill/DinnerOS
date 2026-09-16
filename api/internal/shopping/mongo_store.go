@@ -23,6 +23,8 @@ const (
 	HandoffsCollection    = "shopping_handoffs"
 	// StoreRequestsCollection holds which stores each household asked for.
 	StoreRequestsCollection = "shopping_store_requests"
+	// OrderWeeksCollection holds the weeks a household marked ordered.
+	OrderWeeksCollection = "shopping_order_weeks"
 )
 
 // Indexes returns the indexes MongoStore relies on.
@@ -73,6 +75,15 @@ func Indexes() []mongodb.IndexSet {
 				},
 			},
 		},
+		{
+			Collection: OrderWeeksCollection,
+			Indexes: []mongo.IndexModel{{
+				// One marker per household per week, which is also how
+				// marking twice stays a no-op.
+				Keys:    bson.D{{Key: "householdId", Value: 1}, {Key: "week", Value: 1}},
+				Options: options.Index().SetUnique(true).SetName("householdId_week_unique"),
+			}},
+		},
 	}
 }
 
@@ -82,6 +93,7 @@ type MongoStore struct {
 	preferences   *mongo.Collection
 	handoffs      *mongo.Collection
 	storeRequests *mongo.Collection
+	orderWeeks    *mongo.Collection
 }
 
 var _ Store = (*MongoStore)(nil)
@@ -93,6 +105,7 @@ func NewMongoStore(db *mongo.Database) *MongoStore {
 		preferences:   db.Collection(PreferencesCollection),
 		handoffs:      db.Collection(HandoffsCollection),
 		storeRequests: db.Collection(StoreRequestsCollection),
+		orderWeeks:    db.Collection(OrderWeeksCollection),
 	}
 }
 

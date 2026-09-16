@@ -31,6 +31,56 @@ func lowNotification(key string) New {
 	}
 }
 
+func TestEveryRefresherRunsBeforeARead(t *testing.T) {
+	svc, _ := newTestService()
+	ctx := context.Background()
+	var calls []string
+	// The first one failing must not stop the second: several producers now
+	// bring their own time-based conditions up to date before a read.
+	svc.SetRefresher(refresherFunc(func(_ context.Context, householdID string) error {
+		calls = append(calls, "first:"+householdID)
+		return errors.New("boom")
+	}))
+	svc.AddRefresher(refresherFunc(func(_ context.Context, householdID string) error {
+		calls = append(calls, "second:"+householdID)
+		return nil
+	}))
+
+	if _, err := svc.List(ctx, memberOf(hhA, userA), ListQuery{}); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(calls) != 2 || calls[0] != "first:"+hhA || calls[1] != "second:"+hhA {
+		t.Errorf("refresher calls = %v; want both, in order", calls)
+	}
+}
+
+func TestMarkReadByDedupeKey(t *testing.T) {
+	svc, _ := newTestService()
+	ctx := context.Background()
+	actor := memberOf(hhA, userA)
+
+	// A key with no notification is not an error: the producer may never have
+	// created one, which is the outcome the caller wanted anyway.
+	if err := svc.MarkReadByDedupeKey(ctx, actor, "shopping.order_due:2026-W38"); err != nil {
+		t.Fatalf("MarkReadByDedupeKey() on a missing key error = %v", err)
+	}
+
+	n, _, err := svc.Create(ctx, lowNotification("pantry.low:item1:cycle1"))
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if err := svc.MarkReadByDedupeKey(ctx, actor, n.DedupeKey); err != nil {
+		t.Fatalf("MarkReadByDedupeKey() error = %v", err)
+	}
+	if count, err := svc.UnreadCount(ctx, actor); err != nil || count != 0 {
+		t.Errorf("UnreadCount() = %d, %v; want 0", count, err)
+	}
+	// It is read for the member who acted, not for the whole household.
+	if count, err := svc.UnreadCount(ctx, memberOf(hhA, userB)); err != nil || count != 1 {
+		t.Errorf("other member UnreadCount() = %d, %v; want 1", count, err)
+	}
+}
+
 func TestCreateDeduplicates(t *testing.T) {
 	svc, store := newTestService()
 	ctx := context.Background()

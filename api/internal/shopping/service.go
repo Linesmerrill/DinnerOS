@@ -45,6 +45,12 @@ type ServiceOptions struct {
 	// Catalog, when set, checks catalog IDs and names saved products.
 	Catalog Catalog
 	Pantry  Pantry
+	// Households, when set, reads the household's order day and time zone for
+	// the weekly order reminder. Without it the reminder is simply off.
+	Households HouseholdSource
+	// Notifier, when set, receives the weekly order reminder and is told when
+	// a week is marked ordered.
+	Notifier Notifier
 	// Events, when set, records shopping.handoff_created and
 	// shopping.order_confirmed (best effort).
 	Events events.Recorder
@@ -56,14 +62,16 @@ type ServiceOptions struct {
 // products, and handoffs check shopping.edit, and confirming an order checks
 // pantry.edit, because it writes pantry purchases.
 type Service struct {
-	store     Store
-	providers *providers.Registry
-	grocery   GrocerySource
-	catalog   Catalog
-	pantry    Pantry
-	events    events.Recorder
-	logger    *slog.Logger
-	now       func() time.Time
+	store      Store
+	providers  *providers.Registry
+	grocery    GrocerySource
+	catalog    Catalog
+	pantry     Pantry
+	households HouseholdSource
+	notifier   Notifier
+	events     events.Recorder
+	logger     *slog.Logger
+	now        func() time.Time
 }
 
 // NewService returns a Service.
@@ -72,7 +80,10 @@ func NewService(o ServiceOptions) *Service {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
-	return &Service{store: o.Store, providers: o.Providers, grocery: o.Grocery, catalog: o.Catalog, pantry: o.Pantry, events: o.Events, logger: logger, now: time.Now}
+	return &Service{
+		store: o.Store, providers: o.Providers, grocery: o.Grocery, catalog: o.Catalog, pantry: o.Pantry,
+		households: o.Households, notifier: o.Notifier, events: o.Events, logger: logger, now: time.Now,
+	}
 }
 
 func (s *Service) timestamp() time.Time { return s.now().UTC().Truncate(time.Millisecond) }

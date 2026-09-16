@@ -245,6 +245,37 @@ finds pending notifications oldest first. A future worker will:
 
 Nothing else changes for producers. In-app reads never touch `push`.
 
+#### What real push still needs
+
+Nothing in the repo sends a push today, and the gap is larger than the worker
+above. **Every notification is in-app only**: it appears on the bell when
+someone opens the app and reads the list. Nothing reaches a closed app, and no
+code asks iOS for permission to try. Shipping real push needs all of:
+
+1. **An APNs auth key** (`.p8`) created in the owner's Apple Developer account,
+   with its key ID and team ID, stored as config the way other secrets are.
+   Only the owner can create it; nothing else on this list can be finished
+   without it.
+2. **The `aps-environment` entitlement** in `ios/Config/DinnerOS.entitlements`,
+   which today holds only Sign in with Apple and associated domains, plus the
+   matching provisioning profile.
+3. **A permission prompt**: no iOS source references
+   `UNUserNotificationCenter` or authorization options, so the app has never
+   asked. It must ask at a moment the member understands, and handle a refusal
+   (the bell keeps working; that is the whole product without push).
+4. **Device-token registration**: `registerForRemoteNotifications`, a
+   `device_tokens` collection keyed by user and household, and removal when a
+   token goes stale or a member leaves.
+5. **A sender**: the worker above, plus the Heroku Scheduler sweep (#103) that
+   calls each producer's idempotent `Refresh` so a condition that becomes true
+   while nobody has the app open is noticed at all. Derived-on-read reminders
+   — the pantry's low-stock check and shopping's order reminder — are computed
+   by a *read*, so without a sweep a closed app generates nothing to send.
+
+Until those exist, "reminder" in DinnerOS means a row on the bell and a banner
+in the app, and the docs should say so rather than imply an alert arrives on a
+locked phone.
+
 ## Estimate fields
 
 Every pantry item response carries `statusSource`, `lowThresholdPercent`

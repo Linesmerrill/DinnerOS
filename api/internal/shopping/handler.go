@@ -81,6 +81,8 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(view).Get(base+"/requests", h.listStoreRequests)
 		r.With(view).Post(base+"/requests", h.requestStore)
 		r.With(view).Delete(base+"/requests/{requestId}", h.deleteStoreRequest)
+		r.With(view).Get(base+"/weeks/{week}/order", h.getOrderReminder)
+		r.With(edit).Put(base+"/weeks/{week}/order", h.setWeekOrdered)
 		r.With(view).Get(base+"/{provider}/preferences", h.listPreferences)
 		r.With(view).Get(base+"/{provider}/preferences/{ingredientKey}", h.getPreference)
 		r.With(edit).Put(base+"/{provider}/preferences/{ingredientKey}", h.putPreference)
@@ -841,6 +843,72 @@ func (h *Handler) deleteStoreRequest(w http.ResponseWriter, r *http.Request) {
 
 // writeError maps service errors to responses. msg is logged for unexpected
 // errors only.
+// OrderReminderResponse is a week's order state. Every field is derived on
+// read except `ordered`, which a member sets.
+type OrderReminderResponse struct {
+	Week string `json:"week"`
+	// OrderDay is null when the household hasn't picked one, which turns the
+	// reminder off.
+	OrderDay *string `json:"orderDay"`
+	DueOn    *string `json:"dueOn"`
+	Due      bool    `json:"due"`
+	// Remind is what an app shows a reminder for: due and not yet ordered.
+	Remind    bool       `json:"remind"`
+	Ordered   bool       `json:"ordered"`
+	OrderedBy *string    `json:"orderedBy"`
+	OrderedAt *time.Time `json:"orderedAt"`
+}
+
+// SetWeekOrderedRequest is the body of PUT .../weeks/{week}/order.
+type SetWeekOrderedRequest struct {
+	// Ordered false takes the mark back, which brings the reminder back.
+	Ordered bool `json:"ordered"`
+}
+
+// orderTextOrNil renders an empty string as JSON null.
+func orderTextOrNil(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func newOrderReminderResponse(r OrderReminder) OrderReminderResponse {
+	resp := OrderReminderResponse{
+		Week: r.Week, OrderDay: orderTextOrNil(r.OrderDay), DueOn: orderTextOrNil(r.DueOn),
+		Due: r.Due, Remind: r.Remind, Ordered: r.Ordered, OrderedBy: orderTextOrNil(r.OrderedBy),
+	}
+	if !r.OrderedAt.IsZero() {
+		at := r.OrderedAt.UTC()
+		resp.OrderedAt = &at
+	}
+	return resp
+}
+
+func (h *Handler) getOrderReminder(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	reminder, err := h.opts.Service.OrderReminder(r.Context(), actor.HouseholdID, chi.URLParam(r, "week"))
+	if err != nil {
+		h.writeError(w, r, "get order reminder failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, newOrderReminderResponse(reminder))
+}
+
+func (h *Handler) setWeekOrdered(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	var req SetWeekOrderedRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	reminder, err := h.opts.Service.SetWeekOrdered(r.Context(), actor, chi.URLParam(r, "week"), req.Ordered)
+	if err != nil {
+		h.writeError(w, r, "set week ordered failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, newOrderReminderResponse(reminder))
+}
+
 func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string, err error) {
 	var validation *ValidationError
 	var providerValidation *providers.ValidationError

@@ -252,16 +252,22 @@ func run() error {
 	// Shopping hands the week's list (as planning builds it) to a provider and
 	// records confirmed orders as pantry purchases. Walmart needs no keys in
 	// Phase 8a; the Impact IDs only wrap its links when set.
+	shoppingService := shopping.NewService(shopping.ServiceOptions{
+		Store:      shopping.NewMongoStore(db.Database()),
+		Providers:  providers.NewRegistry(newWalmartProvider(cfg)),
+		Grocery:    planService,
+		Catalog:    recipeService,
+		Pantry:     pantryService,
+		Households: householdService,
+		Notifier:   notificationService,
+		Events:     behavior.events,
+		Logger:     logger,
+	})
+	// The weekly order reminder is derived when notifications are read, the
+	// way the pantry's low-stock check is: no scheduler and nothing to drift.
+	notificationService.AddRefresher(shoppingService)
 	shoppingHandler := shopping.NewHandler(shopping.HandlerOptions{
-		Service: shopping.NewService(shopping.ServiceOptions{
-			Store:     shopping.NewMongoStore(db.Database()),
-			Providers: providers.NewRegistry(newWalmartProvider(cfg)),
-			Grocery:   planService,
-			Catalog:   recipeService,
-			Pantry:    pantryService,
-			Events:    behavior.events,
-			Logger:    logger,
-		}),
+		Service:    shoppingService,
 		Pantry:     pantryService,
 		Authorizer: householdService,
 		Households: householdService,

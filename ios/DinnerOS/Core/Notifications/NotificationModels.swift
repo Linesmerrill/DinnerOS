@@ -1,7 +1,7 @@
 import Foundation
 
-/// A notification's stable type. Only `pantry.low` exists today; unknown types show their
-/// title and body.
+/// A notification's stable type. `pantry.low` and `shopping.order_due` exist today; unknown
+/// types show their title and body.
 nonisolated struct AppNotificationType: RawRepresentable, Codable, Hashable, Sendable {
     let rawValue: String
 
@@ -10,11 +10,14 @@ nonisolated struct AppNotificationType: RawRepresentable, Codable, Hashable, Sen
     }
 
     static let pantryLow = AppNotificationType(rawValue: "pantry.low")
+    /// The household's order day has arrived and the week isn't marked ordered.
+    static let shoppingOrderDue = AppNotificationType(rawValue: "shopping.order_due")
 }
 
 /// What a notification is about, and so what tapping it opens.
 nonisolated struct AppNotificationSubject: Codable, Hashable, Sendable {
     static let pantryItemKind = "pantry_item"
+    static let shoppingWeekKind = "shopping_week"
 
     let kind: String
     let id: String
@@ -22,6 +25,11 @@ nonisolated struct AppNotificationSubject: Codable, Hashable, Sendable {
     /// The pantry item to open, when the subject is one.
     var pantryItemID: String? {
         kind == Self.pantryItemKind ? id : nil
+    }
+
+    /// The ISO week to open in Shop, when the subject is one.
+    var shoppingWeek: String? {
+        kind == Self.shoppingWeekKind ? id : nil
     }
 }
 

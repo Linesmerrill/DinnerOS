@@ -89,7 +89,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/households` `{name, timeZone, defaultServings?}` → `201 {household, membership}` | bearer | 3 | ✅ |
 | GET | `/api/v1/households` → `{items: [{household, role, permissions}]}` | bearer | 3 | ✅ |
 | GET | `/api/v1/households/{householdId}` → `{household, members, role, permissions}` | `household.view` | 3 | ✅ |
-| PATCH | `/api/v1/households/{householdId}` `{name?, timeZone?, defaultServings?}` → household | `household.update` | 3 | ✅ |
+| PATCH | `/api/v1/households/{householdId}` `{name?, timeZone?, defaultServings?, orderDay?}` → household | `household.update` | 3 | ✅ |
 | PATCH | `/api/v1/households/{householdId}/members/{userId}` `{role}` → member | `members.changeRole` | 3 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/members/{userId}` → `204` | `members.remove`, or your own ID to leave | 3 | ✅ |
 | POST | `/api/v1/households/{householdId}/invitations` `{email, role}` → `201 {invitation, code, emailDelivered}` | `members.invite`, rate limited | 3 | ✅ |
@@ -173,6 +173,8 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/shopping/requests` → `{items}` | `household.view` | 8a | ✅ |
 | POST | `/api/v1/households/{householdId}/shopping/requests` `{key or name, note?}` → `201` `{request}`, or `200` when the note is updated | `household.view` | 8a | ✅ |
 | DELETE | `/api/v1/households/{householdId}/shopping/requests/{requestId}` → `204` | `household.view` | 8a | ✅ |
+| GET | `/api/v1/households/{householdId}/shopping/weeks/{week}/order` → `{week, orderDay, dueOn, due, remind, ordered, orderedBy, orderedAt}` | `household.view` | 8a | ✅ |
+| PUT | `/api/v1/households/{householdId}/shopping/weeks/{week}/order` `{ordered}` → order reminder | `shopping.edit` | 8a | ✅ |
 | … | saved grocery lists, product search, other providers | | 8 | planned |
 
 Household-scoped routes return `404 not_found` to anyone who isn't a member,
@@ -1408,6 +1410,41 @@ from the stored line (the app can't send amounts):
 - After confirming, treat those grocery lines as checked off: don't also ask
   "Add to pantry?", which would record a second purchase.
 
+### Order reminders
+
+A household picks the weekday it means to order (`orderDay` on the household),
+and gets one reminder a week from that day until someone says they ordered
+([shopping-providers.md](shopping-providers.md#order-reminders)).
+
+`GET .../shopping/weeks/{week}/order` (`household.view`):
+
+```json
+{
+  "week": "2026-W38", "orderDay": "thu", "dueOn": "2026-09-17",
+  "due": true, "remind": true,
+  "ordered": false, "orderedBy": null, "orderedAt": null
+}
+```
+
+- **Everything but `ordered` is derived on read.** No reminder is stored and
+  nothing is scheduled, so there is nothing to drift or fire twice. `due` means
+  `dueOn` has arrived and the week hasn't ended, both in the household's time
+  zone; `remind` is `due` and not `ordered`, and is the only thing an app
+  should show a reminder for.
+- **A reminder belongs to its own week.** It stops when the week ends, so an
+  unmarked past week goes quiet instead of piling up.
+- Without an `orderDay`, `orderDay` and `dueOn` are `null` and `due` is false.
+
+`PUT .../shopping/weeks/{week}/order` with `{"ordered": true}`
+(`shopping.edit`) marks the week and returns the new state; `false` takes it
+back and the reminder returns.
+
+- **Only a person marks a week.** Nothing infers it — a Walmart hand-off is not
+  proof an order was placed — so marking is never automatic, and it is undoable
+  because a mis-tap must not leave a household un-remindable for the week.
+- Marking is idempotent and keeps the first member and time. It also marks the
+  caller's copy of the `shopping.order_due` notification read.
+
 ### Request a store
 
 The Shop tab supports Walmart only, so members can say what they'd use
@@ -1485,7 +1522,7 @@ withdraw one household's requests:
 | Status | Code | When |
 | --- | --- | --- |
 | 400 | `validation_failed` | Bad link, product ID, name, package size, key, store, week, `status`, or `limit`; both or neither of `productUrl`/`productId`; no line to hand off; confirm with neither `all`, `lines`, nor `skipRest`, both `all` and `lines`, an unknown or repeated `lineId`, or `packages` outside 1–99; a store request with both or neither of `key`/`name`, a `key` that isn't in the catalog, a `name` with no letter or digit, or a `q`, `name`, or `note` that is too long |
-| 403 | `forbidden` | Settings, saved products, or handoffs without `shopping.edit`; confirm without `pantry.edit` |
+| 403 | `forbidden` | Settings, saved products, handoffs, or marking a week ordered without `shopping.edit`; confirm without `pantry.edit` |
 | 404 | `not_found` | Not a member; unknown provider; no saved product, handoff, or store request |
 | 409 | `conflict` | Another request is confirming the same line, or a pantry item kept changing; retry. Also a household past its 25-store request cap |
 | 503 | `provider_unavailable` | A planned provider that isn't enabled |
@@ -1522,8 +1559,9 @@ low-stock check.
 - `unread=true` keeps notifications the caller hasn't read.
 - `read` is for the caller. `subject` says what to open: `pantry_item` is a
   pantry item ID.
-- `type` is stable. Only `pantry.low` exists today; show unknown types with
-  their title and body.
+- `type` is stable. `pantry.low` and `shopping.order_due` exist today; show
+  unknown types with their title and body. A `shopping.order_due` subject is
+  `{kind: "shopping_week", id: "2026-W38"}`: the week to open in Shop.
 
 `GET .../notifications/unread-count` returns `{"unreadCount": 3}`.
 

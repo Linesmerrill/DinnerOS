@@ -8,6 +8,8 @@ import SwiftUI
 struct NotificationsView: View {
     @Environment(NotificationStore.self) private var notifications
     @Environment(\.dismiss) private var dismiss
+    /// `nil` outside the tab shell, where there's no Shop tab to open.
+    @Environment(\.openShop) private var openShop
 
     @State private var path: [PantryItemRoute] = []
     @State private var actionError: String?
@@ -94,7 +96,7 @@ struct NotificationsView: View {
         } label: {
             NotificationRow(notification: notification)
         }
-        .accessibilityHint(notification.subject.pantryItemID == nil ? Text("") : Text("Opens the pantry item."))
+        .accessibilityHint(hint(for: notification))
         .swipeActions(edge: .leading) {
             if !notification.read {
                 Button("Mark Read", systemImage: "envelope.open") {
@@ -128,10 +130,24 @@ struct NotificationsView: View {
         }
     }
 
+    private func hint(for notification: AppNotification) -> Text {
+        if notification.subject.pantryItemID != nil {
+            return Text("Opens the pantry item.")
+        }
+        if notification.subject.shoppingWeek != nil, openShop != nil {
+            return Text("Opens the week in Shop.")
+        }
+        return Text("")
+    }
+
     private func open(_ notification: AppNotification) {
         Task { await notifications.markRead(notification) }
         if let itemID = notification.subject.pantryItemID {
             path.append(PantryItemRoute(itemID: itemID))
+        } else if let openShop, let week = notification.subject.shoppingWeek.flatMap(ISOWeek.init) {
+            // The bell is a sheet over another tab, so it closes before switching tabs.
+            dismiss()
+            openShop(week)
         }
     }
 
@@ -152,11 +168,23 @@ struct NotificationsView: View {
 struct NotificationRow: View {
     let notification: AppNotification
 
+    private var icon: String {
+        switch notification.type {
+        case .pantryLow: "cabinet"
+        case .shoppingOrderDue: "cart"
+        default: "bell"
+        }
+    }
+
+    private var iconStyle: AnyShapeStyle {
+        notification.type == .pantryLow ? AnyShapeStyle(.orange) : AnyShapeStyle(.tint)
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: notification.type == .pantryLow ? "cabinet" : "bell")
+            Image(systemName: icon)
                 .font(.title3)
-                .foregroundStyle(notification.type == .pantryLow ? AnyShapeStyle(.orange) : AnyShapeStyle(.tint))
+                .foregroundStyle(iconStyle)
                 .frame(minWidth: 28)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {

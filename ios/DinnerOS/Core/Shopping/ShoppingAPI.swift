@@ -130,6 +130,25 @@ nonisolated struct ShoppingAPI: Sendable {
                 .authorized(with: accessToken))
     }
 
+    /// The week's order reminder: the household's order day, whether the order day has
+    /// arrived, and whether anyone has marked the week ordered.
+    func orderReminder(householdID: String, week: ISOWeek, accessToken: String) async throws -> OrderReminder {
+        try await client.send(
+            APIRequest.get(Self.path(householdID) + "/weeks/\(week.description)/order")
+                .authorized(with: accessToken))
+    }
+
+    /// Marks the week's groceries ordered, or takes that back with `ordered: false`.
+    func setWeekOrdered(householdID: String, week: ISOWeek, ordered: Bool, accessToken: String) async throws
+        -> OrderReminder
+    {
+        try await client.send(
+            try APIRequest.put(
+                Self.path(householdID) + "/weeks/\(week.description)/order",
+                body: SetWeekOrderedRequest(ordered: ordered)
+            ).authorized(with: accessToken))
+    }
+
     static func path(_ householdID: String) -> String {
         "/api/v1/households/\(householdID)/shopping"
     }

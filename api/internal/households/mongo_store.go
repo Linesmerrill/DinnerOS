@@ -60,7 +60,9 @@ type householdDoc struct {
 	Name            string        `bson:"name"`
 	DefaultServings int           `bson:"defaultServings"`
 	TimeZone        string        `bson:"timeZone"`
-	CreatedBy       bson.ObjectID `bson:"createdBy"`
+	// OrderDay is absent for a household that never set one.
+	OrderDay  string        `bson:"orderDay,omitempty"`
+	CreatedBy bson.ObjectID `bson:"createdBy"`
 	// AdminCount backs the last-admin guard; see DecrementAdminCount.
 	AdminCount int       `bson:"adminCount"`
 	CreatedAt  time.Time `bson:"createdAt"`
@@ -73,6 +75,7 @@ func (d householdDoc) toHousehold() Household {
 		Name:            d.Name,
 		DefaultServings: d.DefaultServings,
 		TimeZone:        d.TimeZone,
+		OrderDay:        d.OrderDay,
 		CreatedBy:       d.CreatedBy.Hex(),
 		CreatedAt:       d.CreatedAt.UTC(),
 		UpdatedAt:       d.UpdatedAt.UTC(),
@@ -185,6 +188,9 @@ func (s *MongoStore) UpdateHousehold(ctx context.Context, id string, patch House
 	}
 	if patch.DefaultServings != nil {
 		set = append(set, bson.E{Key: "defaultServings", Value: *patch.DefaultServings})
+	}
+	if patch.OrderDay != nil {
+		set = append(set, bson.E{Key: "orderDay", Value: *patch.OrderDay})
 	}
 	var doc householdDoc
 	err = s.households.FindOneAndUpdate(ctx,

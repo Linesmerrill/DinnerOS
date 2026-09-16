@@ -90,8 +90,8 @@ struct PlanWeekTests {
 
     @Test func unknownHouseholdTimeZoneFallsBackToTheDevice() {
         let household = Household(
-            id: "h", name: "Test", defaultServings: 2, timeZone: "Not/AZone", createdBy: "u", createdAt: .now,
-            updatedAt: .now)
+            id: "h", name: "Test", defaultServings: 2, timeZone: "Not/AZone", orderDay: nil, createdBy: "u",
+            createdAt: .now, updatedAt: .now)
         #expect(household.planningTimeZone == .autoupdatingCurrent)
     }
 }

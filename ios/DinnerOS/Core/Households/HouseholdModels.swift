@@ -85,6 +85,9 @@ nonisolated struct Household: Decodable, Equatable, Sendable, Identifiable {
     let defaultServings: Int
     /// An IANA time zone name such as `America/Denver`.
     let timeZone: String
+    /// The weekday the household means to place its grocery order (`mon`…`sun`), or `nil`
+    /// when nobody has picked one, which turns the weekly order reminder off.
+    let orderDay: String?
     let createdBy: String
     let createdAt: Date
     let updatedAt: Date
@@ -196,8 +199,11 @@ nonisolated struct HouseholdChanges: Encodable, Equatable, Sendable {
     var name: String?
     var timeZone: String?
     var defaultServings: Int?
+    /// A weekday code to remind on, or `""` to turn the order reminder off. `nil` leaves
+    /// the household's order day alone.
+    var orderDay: String?
 
-    var isEmpty: Bool { name == nil && timeZone == nil && defaultServings == nil }
+    var isEmpty: Bool { name == nil && timeZone == nil && defaultServings == nil && orderDay == nil }
 }
 
 /// The secret presented to accept an invitation.
