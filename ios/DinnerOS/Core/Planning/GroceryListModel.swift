@@ -229,6 +229,7 @@ final class GroceryListModel {
                 try await api.groceryList(householdID: householdID, week: week, accessToken: token)
             }
             list = loaded
+            pruneChecks(to: loaded)
             refreshError = nil
             phase = .loaded
         } catch is CancellationError {
@@ -252,6 +253,21 @@ final class GroceryListModel {
     /// an order confirmed on the Shop tab covered.
     func reloadChecks() {
         checked = checks.checkedItems(householdID: householdID, week: week)
+    }
+
+    /// Forgets checks for lines the week no longer has, so an ingredient that leaves the list
+    /// and comes back later starts unchecked instead of already crossed off.
+    ///
+    /// Checks are keyed by `ingredientKey`, which doesn't depend on the plan, so without this
+    /// a check outlives the meal it came from: drop a recipe, shop, add it back, and its
+    /// ingredients return struck through. Runs after every successful load, and writes through
+    /// so the stale keys don't come back with `reloadChecks()`.
+    private func pruneChecks(to list: GroceryList) {
+        let onTheList = Set(list.allItems.map(\.ingredientKey))
+        let kept = checked.intersection(onTheList)
+        guard kept != checked else { return }
+        checked = kept
+        checks.setCheckedItems(kept, householdID: householdID, week: week)
     }
 
     /// Checks or unchecks a line. Checking one off asks "Add to pantry?" when the member may
