@@ -96,15 +96,40 @@ func (m *model) longOKOn(day int) bool {
 	return r != nil && r.band == autopilot.BandLong
 }
 
+// ruleCuisine returns the value by which the item matches the rule's cuisines,
+// or "". Matching runs one step in each direction, but never sideways:
+//
+//   - the item carries the rule's cuisine or descends from it, so a rule for
+//     "european" matches an Italian recipe (intersect with withRegions);
+//   - the item carries only a region the rule's cuisine belongs to, so a rule
+//     for "italian" matches a recipe the catalog labeled just "southern
+//     european" — it could be Italian.
+//
+// The second test reads the item's own cuisines, not its regions, so a rule
+// for "italian" does not match a French recipe just because both are
+// European.
+func ruleCuisine(it *item, r *rule) string {
+	if v := intersect(it.withRegions, r.cuisines); v != "" {
+		return v
+	}
+	return intersect(it.cuisines, r.regions)
+}
+
 // fullMatch reports whether the item matches every group the rule specifies.
 func fullMatch(it *item, r *rule) bool {
 	groups := 0
-	for _, g := range [][2][]string{{it.proteins, r.proteins}, {it.methods, r.methods}, {it.withRegions, r.cuisines}, {it.tags, r.tags}} {
+	for _, g := range [][2][]string{{it.proteins, r.proteins}, {it.methods, r.methods}, {it.tags, r.tags}} {
 		if len(g[1]) == 0 {
 			continue
 		}
 		groups++
 		if intersect(g[0], g[1]) == "" {
+			return false
+		}
+	}
+	if len(r.cuisines) > 0 {
+		groups++
+		if ruleCuisine(it, r) == "" {
 			return false
 		}
 	}
@@ -194,8 +219,19 @@ func (m *model) penalties(st *state, it *item, day int, longOK bool) [4]float64 
 	var p [4]float64
 	w := m.w
 	for _, c := range st.chosen {
-		if intersect(it.cuisines, c.it.cuisines) != "" {
+		// A shared cuisine is a full repeat; sharing only a region ("italian"
+		// and "greek" are both southern european) is a partial one. They never
+		// stack: a shared cuisine already implies a shared region.
+		switch {
+		case intersect(it.cuisines, c.it.cuisines) != "":
 			p[0] -= w.CuisineRepeat
+		case intersect(it.withRegions, c.it.withRegions) != "":
+			p[0] -= w.CuisineRegionRepeat
+		}
+		// Two pastas repeat even when their cuisine labels differ or are
+		// missing, which is what "the same kind of meal twice" means.
+		if intersect(it.categories, c.it.categories) != "" {
+			p[0] -= w.MealCategoryRepeat
 		}
 		if intersect(it.proteins, c.it.proteins) != "" {
 			p[0] -= w.ProteinRepeat
