@@ -127,6 +127,17 @@ final class GroceryListModel {
         }
     }
 
+    /// Skipping an ingredient that failed.
+    struct SkipFailure: Equatable, Identifiable {
+        let id: String
+        let name: String
+        let message: String
+        /// The member's role doesn't allow plan changes, so trying again won't help.
+        let isForbidden: Bool
+
+        var title: String { String(localized: "Couldn't Skip \(name)") }
+    }
+
     let householdID: String
     let week: ISOWeek
     private(set) var phase: Phase = .idle
@@ -143,12 +154,19 @@ final class GroceryListModel {
     /// Whether the member may change the pantry (`pantry.edit`), which also covers specialty
     /// ingredient choices and batches. The screen keeps it current; a `403` turns it off.
     private(set) var canAddToPantry: Bool
+    /// Whether the member may change the plan (`plan.edit`), which is what skipping an
+    /// ingredient needs. The screen keeps it current; a `403` turns it off.
+    private(set) var canSkipIngredients: Bool
 
     /// Specialty ingredients with a change in flight, by ID.
     private(set) var specialtyActionsInFlight: Set<String> = []
     private(set) var specialtyFailure: SpecialtyFailure?
     /// A batch just recorded, for a brief confirmation. Its ID is the `clientPurchaseId`.
     private(set) var lastRecordedBatch: RecordedPurchase?
+
+    /// Ingredients with a skip in flight, by ingredient key.
+    private(set) var skipsInFlight: Set<String> = []
+    private(set) var skipFailure: SkipFailure?
 
     /// The prompt's editable amount, for bindings. Writes for a replaced prompt are ignored.
     var purchaseDraft: PantryPurchaseDraft {
@@ -175,23 +193,42 @@ final class GroceryListModel {
         specialties != nil && canAddToPantry
     }
 
+    /// Whether Skip is offered on a line. Hiding it is a convenience; the API enforces
+    /// `plan.edit`.
+    var canSkip: Bool {
+        skips != nil && canSkipIngredients
+    }
+
+    /// The ingredients this week's list is holding back. They are deliberately not among the
+    /// items to buy, but the week still knows what they were and which meals wanted them.
+    var skippedItems: [GroceryItem] {
+        list?.skippedItems ?? []
+    }
+
+    func isSkipping(_ item: GroceryItem) -> Bool {
+        skipsInFlight.contains(item.ingredientKey)
+    }
+
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let api: PlansAPI?
     @ObservationIgnored private let checks: any GroceryCheckStorage
     @ObservationIgnored private let purchases: (any PantryPurchaseRecording)?
     @ObservationIgnored private let specialties: (any SpecialtyChoosing)?
+    @ObservationIgnored private let skips: (any GrocerySkipping)?
     /// A batch's `clientPurchaseId` until it's recorded, by specialty ID, so tapping Made It again
     /// after a failure can't record twice.
     @ObservationIgnored private var batchPurchaseIDs: [String: String] = [:]
     /// The specialty revision this list already reloaded for.
     @ObservationIgnored private var handledSpecialtyRevision: Int?
+    /// The skip revision this list already reloaded for.
+    @ObservationIgnored private var handledSkipRevision: Int?
 
     private static let logger = Logger(subsystem: "DinnerOS", category: "grocery")
 
     init(
         householdID: String, week: ISOWeek, session: AuthSession, api: PlansAPI?, checks: any GroceryCheckStorage,
         purchases: (any PantryPurchaseRecording)? = nil, specialties: (any SpecialtyChoosing)? = nil,
-        canAddToPantry: Bool = false
+        skips: (any GrocerySkipping)? = nil, canAddToPantry: Bool = false, canSkipIngredients: Bool = false
     ) {
         self.householdID = householdID
         self.week = week
@@ -200,8 +237,11 @@ final class GroceryListModel {
         self.checks = checks
         self.purchases = purchases
         self.specialties = specialties
+        self.skips = skips
         self.canAddToPantry = canAddToPantry
+        self.canSkipIngredients = canSkipIngredients
         handledSpecialtyRevision = specialties?.revision
+        handledSkipRevision = skips?.revision
         checked = checks.checkedItems(householdID: householdID, week: week)
     }
 
@@ -364,6 +404,61 @@ final class GroceryListModel {
             purchaseFailure = PurchaseFailure(
                 prompt: prompt, message: HouseholdStore.message(for: error), isForbidden: false)
         }
+    }
+
+    // MARK: - Skipped ingredients
+
+    func setCanSkipIngredients(_ canSkip: Bool) {
+        canSkipIngredients = canSkip
+    }
+
+    /// Leaves an ingredient off the list, for this week or for good, then reloads so the line
+    /// goes away. Skipping an ingredient the household already skips changes that skip's
+    /// lifetime rather than adding a second one.
+    func skip(_ item: GroceryItem, scope: GrocerySkipScope) async {
+        guard let skips, canSkipIngredients, !skipsInFlight.contains(item.ingredientKey) else { return }
+        let request =
+            scope == .always
+            ? GrocerySkipRequest.forever(item: item)
+            : GrocerySkipRequest.thisWeek(item: item, week: week)
+        skipsInFlight.insert(item.ingredientKey)
+        defer { skipsInFlight.remove(item.ingredientKey) }
+        do {
+            try await skips.skip(request, householdID: householdID)
+            // The line is about to leave the list, and a check-off left behind would strike it
+            // through if the ingredient is ever resumed. Forget it now (as `pruneChecks` would).
+            if checked.remove(item.ingredientKey) != nil {
+                checks.setCheckedItems(checked, householdID: householdID, week: week)
+            }
+            handledSkipRevision = skips.revision
+            Self.logger.info("Ingredient skipped from the grocery list")
+            await load()
+        } catch is CancellationError {
+            return
+        } catch let error as APIError where error.status == 403 {
+            Self.logger.notice("Skip forbidden")
+            setCanSkipIngredients(false)
+            skipFailure = SkipFailure(
+                id: UUID().uuidString, name: item.name, message: HouseholdStore.message(for: error),
+                isForbidden: true)
+        } catch {
+            Self.logger.notice("Skip failed")
+            skipFailure = SkipFailure(
+                id: UUID().uuidString, name: item.name, message: HouseholdStore.message(for: error),
+                isForbidden: false)
+        }
+    }
+
+    func dismissSkipFailure() {
+        skipFailure = nil
+    }
+
+    /// Reloads after skips changed elsewhere, such as the review sheet resuming an ingredient.
+    /// A change this list made already reloaded it.
+    func skipsDidChange() async {
+        guard let skips, skips.revision != handledSkipRevision else { return }
+        handledSkipRevision = skips.revision
+        await load()
     }
 
     // MARK: - Specialty ingredients

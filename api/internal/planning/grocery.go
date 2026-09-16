@@ -23,6 +23,14 @@ type GroceryList struct {
 	Batches []grocery.BatchPlan
 	// Skipped lists entries that could not contribute.
 	Skipped []SkippedEntry
+	// SkippedItems are the ingredients the household chose not to buy
+	// (docs/grocery-engine.md#skipped-ingredients). They are not in
+	// Categories, so nobody is asked to buy them, but they are reported
+	// rather than dropped: the recipes still need them, and the list says so.
+	//
+	// This is a different thing from Skipped, which is about plan ENTRIES that
+	// could not contribute at all.
+	SkippedItems []grocery.Item
 }
 
 // GroceryCategory is one aisle of the list.
@@ -85,13 +93,17 @@ func grocerySelections(p Plan, live []recipes.Recipe) ([]grocery.RecipeSelection
 }
 
 // aggregateGroceryList aggregates selections and groups the items by
-// category.
-func aggregateGroceryList(p Plan, selections []grocery.RecipeSelection, skipped []SkippedEntry, pantry grocery.Pantry) (GroceryList, error) {
+// category. Ingredients the household skips are held out of the categories and
+// reported in SkippedItems instead.
+func aggregateGroceryList(
+	p Plan, selections []grocery.RecipeSelection, skipped []SkippedEntry, pantry grocery.Pantry, skips grocery.Skips,
+) (GroceryList, error) {
 	out := GroceryList{Week: p.Week, Status: p.Status, Skipped: skipped}
-	list, err := grocery.Aggregate(selections, pantry)
+	list, err := grocery.AggregateWith(selections, pantry, skips)
 	if err != nil {
 		return GroceryList{}, err
 	}
+	out.SkippedItems = list.SkippedItems
 	for _, item := range list.Items {
 		n := len(out.Categories)
 		if n == 0 || out.Categories[n-1].Category != item.Category {

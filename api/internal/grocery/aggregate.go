@@ -61,6 +61,22 @@ const (
 	// StatusPantryHint is flagged by the recipe source as a staple (salt, oil)
 	// but not in the household pantry. Shown as "probably have it".
 	StatusPantryHint Status = "pantryHint"
+	// StatusSkipped is an ingredient the household chose not to buy. Items with
+	// this status are in List.SkippedItems, never in List.Items, so nothing
+	// asks anyone to buy them; they are reported rather than dropped so the
+	// grocery list and the recipe never disagree about what a recipe needs.
+	StatusSkipped Status = "skipped"
+)
+
+// SkipScope is how long a skip lasts.
+type SkipScope string
+
+// Skip scopes.
+const (
+	// SkipThisWeek leaves the ingredient off one week's list only.
+	SkipThisWeek SkipScope = "week"
+	// SkipAlways leaves it off every list until the household resumes it.
+	SkipAlways SkipScope = "always"
 )
 
 // Amount is a combined quantity in one unit.
@@ -96,11 +112,19 @@ type Item struct {
 	// Extras are the week's extra lines this item includes, such as a paired
 	// grocery item. Empty for items only recipes ask for.
 	Extras []Extra
+	// SkipScope is set only on an item the household skipped, and says which
+	// lifetime skipped it. Empty on every item in List.Items.
+	SkipScope SkipScope
 }
 
 // List is the aggregated grocery list.
 type List struct {
 	Items []Item
+	// SkippedItems are the items the household chose not to buy, aggregated
+	// exactly like the rest and then held back from Items. They keep their
+	// amounts, recipes, and Via, so the app can say what is being skipped and
+	// which meals wanted it.
+	SkippedItems []Item
 }
 
 // Pantry reports whether a household keeps an ingredient at home.
@@ -138,6 +162,26 @@ func (p PantryStock) Has(key string) bool { return p.InStock[key] }
 // Out implements OutPantry.
 func (p PantryStock) Out(key string) bool { return p.OutOfStock[key] }
 
+// Skips reports the ingredients a household chose not to buy. It is consulted
+// after specialty ingredients are applied, so skipping an ingredient a store
+// alternative introduced leaves the rest of that alternative alone.
+type Skips interface {
+	// Skip returns the scope that skips ingredientKey, and false when the
+	// household buys it as usual.
+	Skip(ingredientKey string) (SkipScope, bool)
+}
+
+// SkipSet is a simple Skips backed by ingredient keys. An ingredient reachable
+// under more than one key (a catalog ID and "name:<normalized name>") is
+// registered under each.
+type SkipSet map[string]SkipScope
+
+// Skip implements Skips.
+func (s SkipSet) Skip(key string) (SkipScope, bool) {
+	scope, ok := s[key]
+	return scope, ok
+}
+
 // CategoryOrder is the aisle order used to sort the list.
 var CategoryOrder = []string{
 	"produce", "meat-seafood", "dairy-eggs", "bakery", "deli",
@@ -167,6 +211,15 @@ type unitGroup struct {
 // Aggregate builds a grocery list from planned recipes. It is deterministic:
 // the output does not depend on the order of selections or lines.
 func Aggregate(selections []RecipeSelection, pantry Pantry) (List, error) {
+	return AggregateWith(selections, pantry, nil)
+}
+
+// AggregateWith is Aggregate with the ingredients the household chose not to
+// buy. Those items are aggregated like every other line and then held back in
+// List.SkippedItems with StatusSkipped, rather than dropped: the recipe still
+// needs the ingredient, and the list says so instead of quietly disagreeing
+// with it. A nil skips buys everything.
+func AggregateWith(selections []RecipeSelection, pantry Pantry, skips Skips) (List, error) {
 	if pantry == nil {
 		pantry = PantrySet{}
 	}
@@ -237,7 +290,16 @@ func Aggregate(selections []RecipeSelection, pantry Pantry) (List, error) {
 			Specialty:     a.specialty,
 			Extras:        a.itemExtras(),
 		}
+		var skipScope SkipScope
+		isSkipped := false
+		if skips != nil {
+			skipScope, isSkipped = skips.Skip(a.key)
+		}
 		switch {
+		// A skip outranks the pantry: whatever the household has at home, it
+		// asked for this ingredient to stay off the list.
+		case isSkipped:
+			item.Status, item.SkipScope = StatusSkipped, skipScope
 		case pantry.Has(a.key):
 			item.Status = StatusInPantry
 		case a.allHinted && !isOut(a.key):
@@ -254,15 +316,27 @@ func Aggregate(selections []RecipeSelection, pantry Pantry) (List, error) {
 			}
 			return item.Sources[i].RecipeID < item.Sources[j].RecipeID
 		})
+		if isSkipped {
+			list.SkippedItems = append(list.SkippedItems, item)
+			continue
+		}
 		list.Items = append(list.Items, item)
 	}
 
+	sortItems(list.Items)
+	sortItems(list.SkippedItems)
+	return list, nil
+}
+
+// sortItems puts items in aisle order, then by name, then by key, so the
+// result never depends on input order.
+func sortItems(items []Item) {
 	rank := map[string]int{}
 	for i, c := range CategoryOrder {
 		rank[c] = i
 	}
-	sort.Slice(list.Items, func(i, j int) bool {
-		a, b := list.Items[i], list.Items[j]
+	sort.Slice(items, func(i, j int) bool {
+		a, b := items[i], items[j]
 		if rank[a.Category] != rank[b.Category] {
 			return rank[a.Category] < rank[b.Category]
 		}
@@ -271,7 +345,6 @@ func Aggregate(selections []RecipeSelection, pantry Pantry) (List, error) {
 		}
 		return a.IngredientKey < b.IngredientKey
 	})
-	return list, nil
 }
 
 func (a *accumulator) add(q ingredients.Quantity, unit ingredients.Unit) {

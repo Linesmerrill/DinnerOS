@@ -142,6 +142,13 @@ type GroceryListResponse struct {
 	// Batches are the house-made specialty ingredients the week uses.
 	Batches []GroceryBatchResponse `json:"batches"`
 	Skipped []SkippedEntryResponse `json:"skipped"`
+	// SkippedItems are the ingredients the household chose not to buy. They
+	// are not in Categories, so nothing asks anyone to buy them, but they are
+	// reported here rather than dropped: the recipes still need them.
+	//
+	// Not to be confused with Skipped, which is about plan ENTRIES that could
+	// not contribute at all.
+	SkippedItems []GroceryItemResponse `json:"skippedItems"`
 }
 
 // GrocerySpecialtyResponse describes an item that is itself a specialty
@@ -231,6 +238,12 @@ type GroceryItemResponse struct {
 	// Extras are items added to the week directly, such as an Autopilot
 	// pairing ("Club crackers for Chicken Noodle Soup").
 	Extras []GroceryExtraResponse `json:"extras"`
+	// SkipScope is week or always on an item in SkippedItems, and absent on
+	// every item that is actually on the list.
+	SkipScope grocery.SkipScope `json:"skipScope,omitempty"`
+	// SkipText says what the skip does, in the words the app shows. Absent
+	// unless the item is skipped.
+	SkipText string `json:"skipText,omitempty"`
 }
 
 // GroceryExtraResponse is an item added to the week directly.
@@ -332,9 +345,10 @@ func newEntryResponse(w Week, e Entry) EntryResponse {
 func newGroceryListResponse(g GroceryList) GroceryListResponse {
 	resp := GroceryListResponse{
 		Week: g.Week.String(), Status: g.Status, PantryApplied: g.PantryApplied, SpecialtiesApplied: g.SpecialtiesApplied,
-		Categories: make([]GroceryCategoryResponse, 0, len(g.Categories)),
-		Batches:    make([]GroceryBatchResponse, 0, len(g.Batches)),
-		Skipped:    make([]SkippedEntryResponse, 0, len(g.Skipped)),
+		Categories:   make([]GroceryCategoryResponse, 0, len(g.Categories)),
+		Batches:      make([]GroceryBatchResponse, 0, len(g.Batches)),
+		Skipped:      make([]SkippedEntryResponse, 0, len(g.Skipped)),
+		SkippedItems: make([]GroceryItemResponse, 0, len(g.SkippedItems)),
 	}
 	for _, b := range g.Batches {
 		resp.Batches = append(resp.Batches, newGroceryBatchResponse(b))
@@ -342,42 +356,65 @@ func newGroceryListResponse(g GroceryList) GroceryListResponse {
 	for _, c := range g.Categories {
 		cr := GroceryCategoryResponse{Category: c.Category, Items: make([]GroceryItemResponse, 0, len(c.Items))}
 		for _, item := range c.Items {
-			ir := GroceryItemResponse{
-				IngredientKey: item.IngredientKey, Name: item.Name, Unquantified: item.Unquantified, Status: item.Status,
-				Amounts: make([]GroceryAmountResponse, 0, len(item.Amounts)),
-				Recipes: make([]GroceryRecipeResponse, 0, len(item.Sources)),
-			}
-			texts := make([]string, 0, len(item.Amounts))
-			for _, a := range item.Amounts {
-				text := amountText(a)
-				texts = append(texts, text)
-				ir.Amounts = append(ir.Amounts, GroceryAmountResponse{
-					Quantity: a.Quantity.String(), QuantityValue: a.Quantity.Float64(), Unit: a.Unit.Code, Text: text,
-				})
-			}
-			ir.QuantityText = strings.Join(texts, " + ")
-			for _, src := range item.Sources {
-				ir.Recipes = append(ir.Recipes, GroceryRecipeResponse{ID: src.RecipeID, Name: src.RecipeName})
-			}
-			ir.Via = make([]GroceryViaResponse, 0, len(item.Via))
-			for _, v := range item.Via {
-				ir.Via = append(ir.Via, newGroceryViaResponse(v))
-			}
-			ir.Extras = make([]GroceryExtraResponse, 0, len(item.Extras))
-			for _, e := range item.Extras {
-				ir.Extras = append(ir.Extras, GroceryExtraResponse(e))
-			}
-			if s := item.Specialty; s != nil {
-				ir.Specialty, ir.SpecialtyDetail = true, newGrocerySpecialtyResponse(*s)
-			}
-			cr.Items = append(cr.Items, ir)
+			cr.Items = append(cr.Items, newGroceryItemResponse(item))
 		}
 		resp.Categories = append(resp.Categories, cr)
+	}
+	for _, item := range g.SkippedItems {
+		resp.SkippedItems = append(resp.SkippedItems, newGroceryItemResponse(item))
 	}
 	for _, s := range g.Skipped {
 		resp.Skipped = append(resp.Skipped, SkippedEntryResponse(s))
 	}
 	return resp
+}
+
+// newGroceryItemResponse renders one aggregated item. Skipped items go through
+// it too, so the review screen sees the same amounts, recipes, and provenance
+// as the list would have shown.
+func newGroceryItemResponse(item grocery.Item) GroceryItemResponse {
+	ir := GroceryItemResponse{
+		IngredientKey: item.IngredientKey, Name: item.Name, Unquantified: item.Unquantified, Status: item.Status,
+		Amounts: make([]GroceryAmountResponse, 0, len(item.Amounts)),
+		Recipes: make([]GroceryRecipeResponse, 0, len(item.Sources)),
+	}
+	texts := make([]string, 0, len(item.Amounts))
+	for _, a := range item.Amounts {
+		text := amountText(a)
+		texts = append(texts, text)
+		ir.Amounts = append(ir.Amounts, GroceryAmountResponse{
+			Quantity: a.Quantity.String(), QuantityValue: a.Quantity.Float64(), Unit: a.Unit.Code, Text: text,
+		})
+	}
+	ir.QuantityText = strings.Join(texts, " + ")
+	for _, src := range item.Sources {
+		ir.Recipes = append(ir.Recipes, GroceryRecipeResponse{ID: src.RecipeID, Name: src.RecipeName})
+	}
+	ir.Via = make([]GroceryViaResponse, 0, len(item.Via))
+	for _, v := range item.Via {
+		ir.Via = append(ir.Via, newGroceryViaResponse(v))
+	}
+	ir.Extras = make([]GroceryExtraResponse, 0, len(item.Extras))
+	for _, e := range item.Extras {
+		ir.Extras = append(ir.Extras, GroceryExtraResponse(e))
+	}
+	if s := item.Specialty; s != nil {
+		ir.Specialty, ir.SpecialtyDetail = true, newGrocerySpecialtyResponse(*s)
+	}
+	if item.SkipScope != "" {
+		ir.SkipScope, ir.SkipText = item.SkipScope, skipText(item.SkipScope)
+	}
+	return ir
+}
+
+// skipText is the app's wording for a skip's lifetime. The skips package says
+// the same thing about its own records; this is the grocery list's copy, so
+// planning doesn't depend on that package for two strings.
+func skipText(scope grocery.SkipScope) string {
+	if scope == grocery.SkipAlways {
+		return "Never buying this"
+	}
+	return "Skipped this week"
 }
 
 // amountText renders "1 ½ cups", "2 cloves", or "3" for counts.

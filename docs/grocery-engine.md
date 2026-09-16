@@ -140,6 +140,46 @@ that `Aggregate` takes:
   when the estimate crosses the household's threshold, which puts them back
   on the list.
 
+## Skipped ingredients
+
+A household can leave an ingredient off its list on purpose — the one it buys,
+throws away, and resents buying again. `skips.Service.GrocerySkips` turns the
+household's skips into the `grocery.SkipSet` that `AggregateWith` takes
+([api.md](api.md#skipped-ingredients),
+[database.md](database.md#skipped-ingredients)).
+
+Two lifetimes, and nothing else:
+
+| Scope | Applies to | Ends |
+| --- | --- | --- |
+| `week` | the one ISO week it names | on its own, next week |
+| `always` | every week | when someone resumes it |
+
+- **Three different states.** `inPantry` says the household *has* it, check-off
+  says someone *bought* it, and a skip says the household never *wants* it.
+  They answer different questions and are never conflated: a skip outranks the
+  pantry, because whatever is at home, the household asked for this ingredient
+  to stay off the list.
+- **Skipped items are held back, not dropped.** `AggregateWith` aggregates them
+  exactly like every other line — amounts, sources, `Via` — then puts them in
+  `List.SkippedItems` with `StatusSkipped` instead of `List.Items`. The recipe
+  still needs the ingredient, and the list says so rather than quietly
+  disagreeing with the recipe screen. Anything built from the list's categories
+  (the shopping handoff included) therefore leaves them out with no change of
+  its own.
+- **Order matters.** Skips resolve *after* `ApplySpecialties`, against the keys
+  the list actually ends up with. Skipping a component a store alternative
+  introduced drops that component and leaves the rest of the alternative alone,
+  still marked with the `via` that explains it.
+- **Keys** work as the pantry's do: the key the skip was made from,
+  `name:<normalized name>`, and the catalog ingredient ID resolved from that
+  name, so skipping cilantro once covers every way a recipe reaches cilantro.
+- **Not an Autopilot signal.** A forever-skip is weak evidence against recipes
+  built around that ingredient, but nothing reads it as one. Autopilot already
+  has explicit restrictions and ratings, and making a skip quietly rank meals
+  down would remove recipes the household never rejected, with no screen saying
+  why. If it is ever wanted, it should be surfaced, not hidden.
+
 ## Meal customizations
 
 `customize.ApplyGrocery(selection, picks)` runs before `ApplySpecialties` when

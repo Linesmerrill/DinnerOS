@@ -13,6 +13,8 @@ final class AppDependencies {
     let plans: PlanStore
     let pantry: PantryStore
     let specialties: SpecialtyStore
+    /// Ingredients the household leaves off its grocery list on purpose.
+    let grocerySkips: GrocerySkipStore
     let autopilot: AutopilotStore
     let events: EventReporter
     let notifications: NotificationStore
@@ -58,6 +60,7 @@ final class AppDependencies {
         pantry.onChange = { [notifications] in
             Task { await notifications.refreshUnreadCount() }
         }
+        grocerySkips = GrocerySkipStore(session: session, api: client.map { GrocerySkipsAPI(client: $0) })
         specialties = SpecialtyStore(session: session, api: client.map { SpecialtiesAPI(client: $0) })
         // A recorded batch restocks its pantry item.
         specialties.onBatchRecorded = { [pantry] item, householdID in
