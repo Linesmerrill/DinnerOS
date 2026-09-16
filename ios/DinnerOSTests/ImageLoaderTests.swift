@@ -199,10 +199,12 @@ struct ImageLoaderCoalescingTests {
 ///
 /// A cancellation is recorded by another task, and a machine running several test suites at once
 /// can take longer than any constant we would pick: a fixed 200ms wait failed here while the same
-/// test passed in isolation. The assertion that follows stays exact — this only decides how long
-/// we are willing to wait for it.
+/// test passed in isolation, and a 5s one then failed on CI, where these cases take 27s. The
+/// deadline is an upper bound on a hang, not a guess at how slow the machine is — the loop leaves
+/// as soon as the count arrives, so a generous bound costs nothing when the code works. The
+/// assertion that follows stays exact.
 private func waitForCancellations(_ data: FakeImageData, toReach count: Int) async throws {
-    let deadline = ContinuousClock.now + .seconds(5)
+    let deadline = ContinuousClock.now + .seconds(60)
     while data.cancellations < count, ContinuousClock.now < deadline {
         try await Task.sleep(for: .milliseconds(10))
     }
