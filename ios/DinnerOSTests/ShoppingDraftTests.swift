@@ -105,6 +105,15 @@ struct SavedProductDraftTests {
         #expect(!bare.isValid)
     }
 
+    @Test func aNewProductStartsNamedAfterTheIngredientAndALinkDoesNotRenameIt() {
+        var draft = SavedProductDraft(ingredientName: "Minced Garlic")
+        #expect(draft.displayName == "Minced Garlic")
+        draft.linkText = "https://www.walmart.com/ip/Garlic-Bulb-Fresh-Whole-Each/100000001"
+        draft.fillNameFromLink()
+        #expect(draft.displayName == "Minced Garlic")
+        #expect(draft.isValid)
+    }
+
     @Test func anItemNumberWithoutASizeSendsTheIDAndNoSize() {
         var draft = SavedProductDraft()
         draft.linkText = "100000002"

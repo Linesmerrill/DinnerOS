@@ -13,6 +13,12 @@ nonisolated struct SavedProductDraft: Equatable, Sendable {
 
     init() {}
 
+    /// A new product for an ingredient, named after the ingredient as the recipe lists it.
+    /// Almost always that's what the household calls it; the member can still edit it.
+    init(ingredientName: String) {
+        displayName = ingredientName
+    }
+
     /// Starts from a line's current product, to change it.
     init(product: ShoppingLineProduct) {
         self.init(url: product.productURLString, name: product.displayName, size: product.packageSize)

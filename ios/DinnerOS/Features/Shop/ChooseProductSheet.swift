@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The grocery line a product is being chosen or changed for.
 struct ProductChoice: Identifiable {
@@ -18,7 +19,7 @@ struct ProductChoice: Identifiable {
         ingredientKey = line.ingredientKey
         ingredientName = line.name
         amountText = line.quantityText.isEmpty ? nil : line.quantityText
-        draft = SavedProductDraft()
+        draft = SavedProductDraft(ingredientName: line.name)
         searchTerms = line.searchTerms
         isSaved = false
     }
@@ -159,10 +160,12 @@ struct ChooseProductSheet: View {
             // A pasted link names the product, so the name fills itself in. Typing a link by
             // hand fills it too; an edited name is never overwritten.
             .onChange(of: draft.linkText) { draft.fillNameFromLink() }
-            // The system paste button reads the clipboard only when tapped, without the
-            // "Allow Paste" prompt.
-            PasteButton(payloadType: String.self) { strings in
-                Task { @MainActor in paste(strings) }
+            // A plain button, not PasteButton: Walmart's share sheet copies a URL, which a
+            // String-only PasteButton treats as nothing to paste and shows disabled. Reading
+            // the pasteboard here shows iOS's one-time "Allow Paste" prompt instead.
+            Button("Paste", systemImage: "doc.on.clipboard") {
+                let board = UIPasteboard.general
+                paste([board.url?.absoluteString, board.string].compactMap { $0 })
             }
             if let error = draft.linkError {
                 FormErrorLabel(message: error)
@@ -190,7 +193,7 @@ struct ChooseProductSheet: View {
             Text("Product Name")
         } footer: {
             Text(
-                "Filled in from the link, so you usually don't type anything. Edit it if the link's name reads badly; it's shown on the Shop tab so everyone knows what's being bought."
+                "Starts as the ingredient's name, so you usually don't type anything. Edit it if you want the brand or size; it's shown on the Shop tab so everyone knows what's being bought."
             )
         }
     }
