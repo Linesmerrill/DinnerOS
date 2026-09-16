@@ -312,10 +312,12 @@ final class MenuStore {
 
     // MARK: - Lists and lookups
 
-    /// A separate All Meals list for "Show More", marked for the selected week.
-    func makeList(query: MenuRecipeQuery) -> MenuRecipeList {
+    /// A separate All Meals list for "Show More", marked for the selected week. `pageSize`
+    /// asks for a shorter page, for a caller that needs only a few rows.
+    func makeList(query: MenuRecipeQuery, pageSize: Int = MenuRecipeList.pageSize) -> MenuRecipeList {
         let list = MenuRecipeList(
-            session: session, api: api, query: query, householdID: householdID, week: selectedWeek)
+            session: session, api: api, query: query, householdID: householdID, week: selectedWeek,
+            pageSize: pageSize)
         extraLists.removeAll { $0.list == nil }
         extraLists.append(WeakList(list))
         return list

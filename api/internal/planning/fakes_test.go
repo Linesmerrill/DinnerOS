@@ -192,7 +192,11 @@ func (m *memoryStore) ListSummaries(_ context.Context, householdID string, from,
 		if p.HouseholdID != householdID || from.WeeksUntil(p.Week) < 0 || p.Week.WeeksUntil(to) < 0 {
 			continue
 		}
-		out = append(out, Summary{Week: p.Week, Status: p.Status, EntryCount: len(p.Entries), UpdatedAt: p.UpdatedAt})
+		ids := make([]string, 0, len(p.Entries))
+		for _, e := range p.Entries {
+			ids = append(ids, e.RecipeID)
+		}
+		out = append(out, Summary{Week: p.Week, Status: p.Status, EntryCount: len(p.Entries), RecipeIDs: ids, UpdatedAt: p.UpdatedAt})
 	}
 	slices.SortFunc(out, func(a, b Summary) int { return cmp.Compare(a.Week.String(), b.Week.String()) })
 	return out, nil

@@ -94,10 +94,11 @@ func customizationsOf(docs []customizationDoc) []Customization {
 }
 
 type summaryDoc struct {
-	Week       string    `bson:"week"`
-	Status     string    `bson:"status"`
-	EntryCount int       `bson:"entryCount"`
-	UpdatedAt  time.Time `bson:"updatedAt"`
+	Week       string          `bson:"week"`
+	Status     string          `bson:"status"`
+	EntryCount int             `bson:"entryCount"`
+	RecipeIDs  []bson.ObjectID `bson:"recipeIds"`
+	UpdatedAt  time.Time       `bson:"updatedAt"`
 }
 
 func (d planDoc) toPlan() (Plan, error) {
@@ -151,7 +152,8 @@ func (s *MongoStore) GetPlan(ctx context.Context, householdID string, w Week) (P
 	return doc.toPlan()
 }
 
-// ListSummaries implements Store with one query that projects entry counts.
+// ListSummaries implements Store with one query that projects entry counts
+// and the entries' recipe IDs.
 func (s *MongoStore) ListSummaries(ctx context.Context, householdID string, from, to Week) ([]Summary, error) {
 	hid, err := mongodb.ParseID(householdID)
 	if err != nil {
@@ -169,6 +171,11 @@ func (s *MongoStore) ListSummaries(ctx context.Context, householdID string, from
 			{Key: "status", Value: 1},
 			{Key: "updatedAt", Value: 1},
 			{Key: "entryCount", Value: bson.D{{Key: "$size", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$entries", bson.A{}}}}}}},
+			{Key: "recipeIds", Value: bson.D{{Key: "$map", Value: bson.D{
+				{Key: "input", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$entries", bson.A{}}}}},
+				{Key: "as", Value: "e"},
+				{Key: "in", Value: "$$e.recipeId"},
+			}}}},
 		})
 	cur, err := s.plans.Find(ctx, filter, opts)
 	if err != nil {
@@ -184,7 +191,11 @@ func (s *MongoStore) ListSummaries(ctx context.Context, householdID string, from
 		if err != nil {
 			return nil, fmt.Errorf("planning: stored plan week %q: %w", d.Week, err)
 		}
-		out = append(out, Summary{Week: w, Status: Status(d.Status), EntryCount: d.EntryCount, UpdatedAt: d.UpdatedAt.UTC()})
+		ids := make([]string, 0, len(d.RecipeIDs))
+		for _, id := range d.RecipeIDs {
+			ids = append(ids, id.Hex())
+		}
+		out = append(out, Summary{Week: w, Status: Status(d.Status), EntryCount: d.EntryCount, RecipeIDs: ids, UpdatedAt: d.UpdatedAt.UTC()})
 	}
 	return out, nil
 }
