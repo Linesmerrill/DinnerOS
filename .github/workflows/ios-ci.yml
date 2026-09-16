@@ -10,6 +10,11 @@ on:
     paths:
       - "ios/**"
       - ".github/workflows/ios-ci.yml"
+  # One TestFlight upload a day at most: Apple caps uploads per app per day, and a
+  # push-per-upload pipeline hit that cap. Pushes run tests only; the nightly run
+  # uploads when the app changed in the last day, and a manual dispatch uploads now.
+  schedule:
+    - cron: "0 10 * * *" # 10:00 UTC = 3am Pacific (PDT)
   workflow_dispatch:
     inputs:
       sync_signing:
@@ -21,15 +26,44 @@ permissions:
   contents: read
 
 concurrency:
-  group: ios-ci-${{ github.ref }}
+  # The event is part of the group so a push can't cancel the nightly upload.
+  group: ios-ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 env:
   IOS_DESTINATION: platform=iOS Simulator,name=iPhone 17 Pro,OS=latest
 
 jobs:
+  changes:
+    name: Decide whether to build
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      changelog: ${{ steps.decide.outputs.changelog }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: decide
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            subjects=$(git log --since="24 hours ago" --format=%s -- ios .github/workflows/ios-ci.yml)
+          else
+            subjects=$(git log -1 --format=%s)
+          fi
+          if [ -z "$subjects" ]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+          # One line for TestFlight's What to Test: every change of the day, newest first.
+          changelog=$(printf '%s' "$subjects" | paste -sd ';' - | sed 's/;/; /g' | cut -c1-900)
+          echo "changelog=$changelog" >> "$GITHUB_OUTPUT"
+
   test:
     name: Lint and test
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v5
@@ -65,11 +99,11 @@ jobs:
 
   testflight:
     name: Upload to TestFlight
-    needs: test
-    # Disabled until the App Store Connect setup in docs/deployment.md is done.
-    # Enable by setting the repository variable TESTFLIGHT_ENABLED=true.
-    # Manual dispatch from main allows re-running an upload without a new commit.
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.TESTFLIGHT_ENABLED == 'true'
+    needs: [changes, test]
+    # Enabled by the repository variable TESTFLIGHT_ENABLED=true. Uploads only from the
+    # nightly schedule (when the app changed that day) or a manual dispatch: Apple limits
+    # uploads per day, so pushes never upload.
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.TESTFLIGHT_ENABLED == 'true' && needs.changes.outputs.build == 'true'
     runs-on: macos-26
     # A signing prompt or a stuck archive should fail fast, not idle for hours. The
     # extra time covers waiting for build processing when external groups are set.
@@ -111,7 +145,7 @@ jobs:
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
           API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
           TESTFLIGHT_EXTERNAL_GROUPS: ${{ vars.TESTFLIGHT_EXTERNAL_GROUPS }}
-          TESTFLIGHT_CHANGELOG: ${{ github.event.head_commit.message }}
+          TESTFLIGHT_CHANGELOG: ${{ needs.changes.outputs.changelog }}
         run: bundle exec fastlane beta
 
   signing:
