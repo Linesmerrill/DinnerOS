@@ -37,6 +37,22 @@ Validation              ← low-confidence items go to a review queue, never gue
 DinnerOS API → MongoDB  ← upsert keyed by (source="hellofresh", sourceRecipeId)
 ```
 
+## Printed recipe cards
+
+A public recipe page can redirect a weekly clone to a different variant (pork
+delivered, beef page). `go run . variants` lists those deliveries. For each one,
+and for recipes with no steps, `go run . cards -history 'data/history-part*.tsv'`
+fetches the delivered recipe's printed card PDF — one request at a time, 3 s
+apart, stopping on any refusal that isn't a missing file — into
+`data/raw/cards/<deliveredId>.pdf` (misses are recorded as `.missing.json` and
+not asked for again unless `-retry-missing`), then parses every cached card
+into `data/raw/cards/<deliveredId>.json`. `-offline` only re-parses.
+
+`normalize` prefers an account capture, then a card, then the public page. A
+card of a different dish becomes its own recipe; a card that can't be parsed is
+not used and the delivery's review item stays. Cards, like everything under
+`data/`, never enter Git.
+
 ## Idempotency
 
 - Recipes are upserted by `(source, sourceRecipeId)`, with `sourceURL` as a

@@ -297,18 +297,6 @@ func TestVariantKey(t *testing.T) {
 	}
 }
 
-func TestSlugify(t *testing.T) {
-	for in, want := range map[string]string{
-		"One-Pan Pork & Green Pepper Tacos":   "one-pan-pork-and-green-pepper-tacos",
-		"one pan pork and green pepper tacos": "one-pan-pork-and-green-pepper-tacos",
-		"  Che Buono!  Chicken ":              "che-buono-chicken",
-	} {
-		if got := slugify(in); got != want {
-			t.Errorf("slugify(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestParseISODurationMinutes(t *testing.T) {
 	tests := []struct {
 		in   string

@@ -89,8 +89,11 @@ value to avoid producing one.
 4. (optional) capture those from the signed-in past-deliveries view as
       {deliveredId: recipe} JSON, then: go run . capture -in captures.json
       → data/raw/delivered/<id>.json
-5. go run . normalize -history ...   → data/import/recipes.json (this format)
-6. Load into DinnerOS (below)
+5. go run . cards -history ...       printed card PDFs for the remaining
+      variants and step-less recipes → data/raw/cards/<id>.pdf, parsed to
+      data/raw/cards/<id>.json (-offline re-parses without requests)
+6. go run . normalize -history ...   → data/import/recipes.json (this format)
+7. Load into DinnerOS (below)
 ```
 
 Normalization rules worth knowing:
@@ -99,9 +102,14 @@ Normalization rules worth knowing:
   name (a dish republished under new IDs) merge under the newest ID; older IDs
   become `sourceAliases`.
 - An account capture is the exact variant delivered and replaces the public
-  page for that delivered ID. Uncaptured variants produce a `variant` review
-  item, because the stored details come from a different variant's page.
-- Names that differ only by "and"/"with" are the same variant.
+  page for that delivered ID. Otherwise a parsed printed card does: a card of a
+  different dish becomes its own recipe (its delivered ID, its card title), and
+  a card shipping the same ingredients as the page merges as a clone. Variants
+  with neither produce a `variant` review item, because the stored details come
+  from a different variant's page. A recipe without steps takes them from a
+  card of the same dish.
+- Names that differ only in case, accents, spacing, punctuation, "&"/"and", or
+  "with" are the same variant. Any other wording is a different name.
 
 ## Loading into DinnerOS
 

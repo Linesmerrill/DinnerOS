@@ -32,12 +32,14 @@ type Fetcher struct {
 	Client        *http.Client
 	UserAgent     string
 	AllowedPrefix string
-	Delay         time.Duration
-	MaxAttempts   int
-	Limit         int
-	Now           func() time.Time
-	Sleep         func(context.Context, time.Duration) error
-	Log           *slog.Logger
+	// CardBaseURL is where recipe card PDFs live; empty means HelloFresh's.
+	CardBaseURL string
+	Delay       time.Duration
+	MaxAttempts int
+	Limit       int
+	Now         func() time.Time
+	Sleep       func(context.Context, time.Duration) error
+	Log         *slog.Logger
 }
 
 // OriginAccount marks a raw recipe captured from the owner's signed-in past
