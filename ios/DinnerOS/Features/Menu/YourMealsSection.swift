@@ -200,13 +200,17 @@ struct MealCard: View {
 
     private var outcome: EventReporter.EntryOutcome? { events.outcomes[entry.id] }
 
+    /// Whether the meal's night has passed, so the card may ask about it at all. The same gate
+    /// covers both questions, so a card never asks one and not the other.
+    private var hasHappened: Bool {
+        MealFeedback.hasHappened(day: entry.day, timing: menu.selectedTiming, today: plans.today)
+    }
+
     /// Whether to ask how the meal went: only once its night has passed, and only when the menu
     /// has a card for it, whose `myRating` is what the stars show. Without one the row would ask
     /// again about a meal the member has already rated.
     private var feedbackRecipe: RecipeSummary? {
-        guard MealFeedback.hasHappened(day: entry.day, timing: menu.selectedTiming, today: plans.today) else {
-            return nil
-        }
+        guard hasHappened else { return nil }
         return card?.recipe
     }
     private var isBusy: Bool { planner.busyEntryIDs.contains(entry.id) }
@@ -231,6 +235,11 @@ struct MealCard: View {
                 ServingsStepper(
                     label: MenuFormat.servings(entry.servings), isBusy: isBusy,
                     decrease: { changeServings(-1) }, increase: { changeServings(1) })
+            }
+            // What happened comes before how it was: one is a fact about the night, the other an
+            // opinion about the food, and only the first may be recorded as `recipe.cooked`.
+            if hasHappened {
+                MealOutcomeRow(entry: entry)
             }
             if let feedbackRecipe {
                 MealRatingRow(recipe: feedbackRecipe)

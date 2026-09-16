@@ -10,6 +10,35 @@ nonisolated struct EventQueueSnapshot: Codable, Equatable, Sendable {
     var householdID: String?
     /// Oldest first.
     var events: [ClientEvent] = []
+    /// What the household answered about each plan entry, by entry ID.
+    ///
+    /// Kept beside the queue rather than in it, because the two empty at different times: an
+    /// event is removed the moment the API accepts it, while the answer it carried is what the
+    /// cards go on showing. Without this the Cooked badge lasted one launch and the app couldn't
+    /// tell anyone what they had already marked.
+    var outcomes: [String: RecordedOutcome] = [:]
+
+    init(
+        version: Int = EventQueueSnapshot.currentVersion, userID: String? = nil, householdID: String? = nil,
+        events: [ClientEvent] = [], outcomes: [String: RecordedOutcome] = [:]
+    ) {
+        self.version = version
+        self.userID = userID
+        self.householdID = householdID
+        self.events = events
+        self.outcomes = outcomes
+    }
+
+    /// `outcomes` is decoded only if present, so a queue written before outcomes were stored
+    /// still loads and keeps its pending events instead of being discarded by a version bump.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        userID = try container.decodeIfPresent(String.self, forKey: .userID)
+        householdID = try container.decodeIfPresent(String.self, forKey: .householdID)
+        events = try container.decodeIfPresent([ClientEvent].self, forKey: .events) ?? []
+        outcomes = try container.decodeIfPresent([String: RecordedOutcome].self, forKey: .outcomes) ?? [:]
+    }
 }
 
 /// Where the event queue survives app launches.

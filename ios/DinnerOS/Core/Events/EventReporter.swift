@@ -21,15 +21,20 @@ import os
 /// one user and household, and is discarded on sign-out or when the household changes.
 @Observable
 final class EventReporter {
-    /// What the user said happened to a planned meal, shown on its row. Kept in memory
-    /// for this launch; the event history is the durable record.
-    enum EntryOutcome: Equatable {
-        case cooked
-        case skipped(SkipReason?)
-    }
+    /// What the user said happened to a planned meal, shown on its row.
+    typealias EntryOutcome = MealOutcome
+
+    /// Outcomes by plan entry ID, with when each was answered.
+    ///
+    /// Stored, not derived: it survives a relaunch with the queue, because the event that
+    /// carried the answer is deleted as soon as the API accepts it while the answer itself is
+    /// what the cards keep showing.
+    private(set) var recordedOutcomes: [String: RecordedOutcome] = [:]
 
     /// Outcomes by plan entry ID.
-    private(set) var outcomes: [String: EntryOutcome] = [:]
+    var outcomes: [String: EntryOutcome] {
+        recordedOutcomes.mapValues(\.outcome)
+    }
 
     static let maxBatchSize = EventLimits.maxBatchSize
     static let flushThreshold = 20
@@ -43,6 +48,13 @@ final class EventReporter {
     /// The oldest events are dropped beyond this, so a long offline stretch can't grow
     /// the file without bound.
     static let maxQueuedEvents = 500
+    /// How long a recorded outcome is kept on device. Longer than `maxEventAge`, which exists
+    /// because the API rejects old events: an outcome is a local record of an answer, and the
+    /// Menu can show a week from months ago, which should still say what happened.
+    static let maxOutcomeAge: TimeInterval = 120 * 86_400
+    /// How long after answering the answer can still be taken back, while its event is only
+    /// queued and the API hasn't deducted anything from the pantry.
+    static let undoWindow: TimeInterval = 8
     static let baseRetryDelay: TimeInterval = 5
     /// The API refills one batch every 10 seconds after a burst of 30.
     static let rateLimitedRetryDelay: TimeInterval = 30
@@ -132,7 +144,7 @@ final class EventReporter {
         flushTask = nil
         snapshot = empty
         lastViewed = [:]
-        outcomes = [:]
+        recordedOutcomes = empty.outcomes
         consecutiveFailures = 0
         retryNotBefore = nil
     }
@@ -153,14 +165,42 @@ final class EventReporter {
     func recipeCooked(_ entry: PlanEntry, week: ISOWeek) {
         guard isActive else { return }
         record(.recipeCooked(RecipeCookedPayload(entry: entry)), recipeID: entry.recipe.id, week: week)
-        outcomes[entry.id] = .cooked
+        setOutcome(.cooked, for: entry.id)
     }
 
     func recipeSkipped(_ entry: PlanEntry, week: ISOWeek, reason: SkipReason?) {
         guard isActive else { return }
         record(
             .recipeSkipped(RecipeSkippedPayload(entry: entry, reason: reason)), recipeID: entry.recipe.id, week: week)
-        outcomes[entry.id] = .skipped(reason)
+        setOutcome(.skipped(reason), for: entry.id)
+    }
+
+    private func setOutcome(_ outcome: EntryOutcome, for entryID: String) {
+        recordedOutcomes[entryID] = RecordedOutcome(outcome: outcome, recordedAt: now())
+        pruneExpiredOutcomes()
+        persist()
+    }
+
+    /// Whether the answer for `entryID` can still be taken back: it was answered within
+    /// `undoWindow` and its event hasn't been accepted by the API yet.
+    ///
+    /// Once the event is sent the pantry has already been deducted, and undoing here would
+    /// only hide that from the person who could still fix it.
+    func canUndoOutcome(entryID: String) -> Bool {
+        guard let recorded = recordedOutcomes[entryID] else { return false }
+        guard now().timeIntervalSince(recorded.recordedAt) < Self.undoWindow else { return false }
+        return snapshot.events.contains { $0.entryID == entryID && $0.type.isOutcome }
+    }
+
+    /// Takes back a cooked or skipped answer, dropping the queued event so the API never sees
+    /// it. Does nothing once the event has been sent. Returns whether anything was undone.
+    @discardableResult
+    func undoOutcome(entryID: String) -> Bool {
+        guard canUndoOutcome(entryID: entryID) else { return false }
+        snapshot.events.removeAll { $0.entryID == entryID && $0.type.isOutcome }
+        recordedOutcomes[entryID] = nil
+        persist()
+        return true
     }
 
     func groceryItemChecked(_ item: GroceryItem, checked: Bool, week: ISOWeek) {
@@ -339,15 +379,23 @@ final class EventReporter {
         do {
             if let stored = try storage.load() {
                 snapshot = stored
+                recordedOutcomes = stored.outcomes
             }
         } catch {
             Self.logger.error("Event queue unreadable; starting empty")
             try? storage.clear()
         }
         pruneExpiredEvents()
+        pruneExpiredOutcomes()
+    }
+
+    private func pruneExpiredOutcomes() {
+        let cutoff = now().addingTimeInterval(-Self.maxOutcomeAge)
+        recordedOutcomes = recordedOutcomes.filter { $0.value.recordedAt >= cutoff }
     }
 
     private func persist() {
+        snapshot.outcomes = recordedOutcomes
         do {
             try storage.save(snapshot)
         } catch {
