@@ -225,7 +225,9 @@ private func waitForCancellations(_ data: FakeImageData, toReach count: Int) asy
 struct ImageLoaderCancellationTests {
     @Test func scrollingPastTheLastWaiterCancelsTheFetch() async throws {
         let data = FakeImageData { _, _ in
-            try await Task.sleep(for: .seconds(5))
+            // Far longer than any CI stall: the fetch may only end by being cancelled. At
+            // 5s a starved runner let it finish first, so no cancellation was ever seen.
+            try await Task.sleep(for: .seconds(600))
             return pngData(width: 400, height: 300)
         }
         let loader = makeLoader(data)
@@ -263,7 +265,9 @@ struct ImageLoaderCancellationTests {
 
     @Test func droppingAPrefetchCancelsIt() async throws {
         let data = FakeImageData { _, _ in
-            try await Task.sleep(for: .seconds(5))
+            // Far longer than any CI stall: the fetch may only end by being cancelled. At
+            // 5s a starved runner let it finish first, so no cancellation was ever seen.
+            try await Task.sleep(for: .seconds(600))
             return pngData(width: 400, height: 300)
         }
         let loader = makeLoader(data)
