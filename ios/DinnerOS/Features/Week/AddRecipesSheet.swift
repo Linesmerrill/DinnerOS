@@ -21,6 +21,9 @@ struct AddRecipesSheet: View {
     @State private var adding: Set<String> = []
     @State private var configuring: RecipeSummary?
     @State private var addError: String?
+    /// Set when there was no household to search, so the sheet says so instead of showing a
+    /// spinner nothing would ever replace.
+    @State private var couldNotStart = false
 
     private static let searchDebounce = Duration.milliseconds(350)
 
@@ -33,6 +36,17 @@ struct AddRecipesSheet: View {
             Group {
                 if let picker {
                     content(picker)
+                } else if couldNotStart {
+                    ContentUnavailableView {
+                        Label("Couldn't Load Recipes", systemImage: "exclamationmark.triangle")
+                    } description: {
+                        Text("Recipes need your household. Try again in a moment.")
+                    } actions: {
+                        Button("Try Again") {
+                            Task { await start() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 } else {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -55,12 +69,7 @@ struct AddRecipesSheet: View {
                     }
                 }
             }
-            .task {
-                guard let householdID = households.current?.household.id else { return }
-                let picker = picker ?? library.makeIndependentCopy()
-                self.picker = picker
-                await picker.activate(householdID: householdID)
-            }
+            .task { await start() }
             .task(id: searchText) {
                 guard let picker, searchText != picker.filters.search else { return }
                 do {
@@ -81,6 +90,20 @@ struct AddRecipesSheet: View {
                 Text(addError ?? "")
             }
         }
+    }
+
+    /// Makes the sheet's own recipe list and loads it. Without a household there is nothing to
+    /// search, which used to leave the sheet on a spinner forever; now it says so and offers
+    /// another go.
+    private func start() async {
+        guard let householdID = households.current?.household.id else {
+            couldNotStart = picker == nil
+            return
+        }
+        couldNotStart = false
+        let picker = picker ?? library.makeIndependentCopy()
+        self.picker = picker
+        await picker.activate(householdID: householdID)
     }
 
     @ViewBuilder

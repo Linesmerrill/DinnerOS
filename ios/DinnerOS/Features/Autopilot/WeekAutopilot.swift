@@ -111,8 +111,19 @@ struct WeekAutopilotSection: View {
     }
 
     var body: some View {
-        if proposal != nil || (canEdit && plans.isDraft) || contextSummary != nil {
+        if autopilot.weekError != nil || proposal != nil || (canEdit && plans.isDraft) || contextSummary != nil {
             Section {
+                // The week's suggestions and context failed to load. Without this the rows below
+                // simply read as "nothing suggested", which is a different thing entirely.
+                if let weekError = autopilot.weekError {
+                    VStack(alignment: .leading, spacing: 8) {
+                        FormErrorLabel(message: weekError)
+                        Button("Try Again") {
+                            Task { await autopilot.reloadWeek() }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
                 if let proposal {
                     suggestionsRow(proposal)
                 } else if canEdit && plans.isDraft {

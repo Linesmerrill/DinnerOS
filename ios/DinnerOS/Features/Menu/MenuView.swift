@@ -80,6 +80,13 @@ struct MenuView: View {
             .onChange(of: plans.plan?.entries.map(\.id) ?? []) { _, _ in
                 Task { await pairings.reload() }
             }
+            .onChange(of: pairings.isForbidden) { _, isForbidden in
+                // The role changed elsewhere; reload it so the rest of the app matches rather
+                // than leaving the suggestions hidden until the next launch.
+                if isForbidden {
+                    Task { await households.load() }
+                }
+            }
             .sheet(isPresented: $isAddingRecipes) {
                 AddRecipesSheet(week: plans.week)
             }

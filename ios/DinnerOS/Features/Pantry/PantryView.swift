@@ -347,6 +347,10 @@ struct PantryView: View {
                 // After a sign-out the root view replaces this screen, so no error is shown.
                 guard session.currentUser != nil else { return }
                 actionError = HouseholdStore.message(for: error)
+                if (error as? APIError)?.status == 403 {
+                    // The role changed elsewhere; reload it so the screen matches.
+                    await households.load()
+                }
             }
         }
     }

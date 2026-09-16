@@ -259,6 +259,10 @@ nonisolated final class FakeAutopilotServer: Sendable {
         /// Days the plan already has an entry on.
         var plannedDays: Set<String> = []
         var planStatus = "draft"
+        /// The profile and vocabulary routes answer `500`.
+        var failsProfile = false
+        /// The week's proposal route answers `500`.
+        var failsProposal = false
         /// The `pairingIds` the last accept sent, `nil` when it left the field out.
         var acceptedPairingIDs: [String]?
         /// Method, path (without `/api/v1/`), and body of every request, in order.
@@ -289,6 +293,16 @@ nonisolated final class FakeAutopilotServer: Sendable {
         state.withLock { change(&$0) }
     }
 
+    /// Answers the profile and vocabulary routes with `500`.
+    func failProfile(_ fails: Bool = true) {
+        state.withLock { $0.failsProfile = fails }
+    }
+
+    /// Answers the week's proposal route with `500`.
+    func failProposal(_ fails: Bool = true) {
+        state.withLock { $0.failsProposal = fails }
+    }
+
     func handle(_ request: URLRequest) -> (status: Int, body: Data) {
         guard let url = request.url else { return (400, Data()) }
         let method = request.httpMethod ?? "GET"
@@ -304,11 +318,13 @@ nonisolated final class FakeAutopilotServer: Sendable {
 
             switch (method, tail) {
             case ("GET", ["profile"]):
+                if state.failsProfile { return (500, Fixtures.errorJSON(code: "internal")) }
                 return (200, Data(state.profile.utf8))
             case ("PUT", ["profile"]), ("PATCH", ["profile"]):
                 state.profile = Self.merge(body, into: state.profile)
                 return (200, Data(state.profile.utf8))
             case ("GET", ["vocabulary"]):
+                if state.failsProfile { return (500, Fixtures.errorJSON(code: "internal")) }
                 return (200, AutopilotFixtures.vocabulary)
             case ("GET", ["profile", "history"]):
                 return (200, AutopilotFixtures.history)
@@ -343,6 +359,7 @@ nonisolated final class FakeAutopilotServer: Sendable {
                     slots: AutopilotFixtures.defaultSlots)
                 return (201, Self.proposalJSON(state))
             case ("GET", ["proposal"]):
+                if state.failsProposal { return (500, Fixtures.errorJSON(code: "internal")) }
                 guard let proposal = state.proposal, proposal.week == week else {
                     return (404, Fixtures.errorJSON(code: "not_found"))
                 }

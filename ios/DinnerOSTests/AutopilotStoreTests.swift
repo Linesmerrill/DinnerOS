@@ -419,6 +419,72 @@ struct AutopilotStoreTests {
         #expect(!harness.store.isGenerating)
     }
 
+    /// A failed reload left no trace at all: the profile stayed on screen and pull to refresh
+    /// looked exactly like one that worked. Every other store remembers it in `refreshError`.
+    @Test func aFailedProfileReloadIsReportedAndKeepsTheProfile() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.activate(householdID: "household-1")
+        #expect(store.phase == .loaded)
+
+        harness.server.failProfile()
+        await store.reloadProfile()
+
+        // The profile that was already loaded stays readable.
+        #expect(store.phase == .loaded)
+        #expect(store.profile != nil)
+        #expect(store.vocabulary != nil)
+        let message = try #require(store.refreshError)
+        #expect(!message.isEmpty)
+
+        harness.server.failProfile(false)
+        await store.reloadProfile()
+
+        #expect(store.refreshError == nil)
+        #expect(store.phase == .loaded)
+    }
+
+    /// The first load has nothing to fall back on, so it fails the screen rather than showing
+    /// an empty one with a quiet banner.
+    @Test func aFailedFirstProfileLoadFailsThePhase() async throws {
+        let server = FakeAutopilotServer()
+        server.failProfile()
+        let harness = try await makeHarness(server: server)
+
+        await harness.store.activate(householdID: "household-1")
+
+        guard case .failed(let message) = harness.store.phase else {
+            Issue.record("Expected the profile load to fail")
+            return
+        }
+        #expect(!message.isEmpty)
+        #expect(harness.store.profile == nil)
+        #expect(harness.store.refreshError == nil)
+    }
+
+    /// `weekError` was set but nothing ever read it, so a failed proposal load was silent and
+    /// the week's rows read as "nothing suggested" instead.
+    @Test func aFailedProposalLoadIsRememberedAndClearedByARetry() async throws {
+        let server = FakeAutopilotServer()
+        let harness = try await makeHarness(server: server)
+        await harness.store.activate(householdID: "household-1")
+        server.failProposal()
+
+        await harness.store.showWeek(week, householdID: "household-1")
+
+        let message = try #require(harness.store.weekError)
+        #expect(!message.isEmpty)
+        #expect(harness.store.proposal == nil)
+        #expect(!harness.store.isLoadingWeek)
+
+        server.failProposal(false)
+        await harness.store.reloadWeek()
+
+        // The week has no proposal, which is not the same as having failed to ask.
+        #expect(harness.store.weekError == nil)
+        #expect(harness.store.proposal == nil)
+    }
+
     @Test func aWeekWithoutAProposalShowsNone() async throws {
         let harness = try await activated()
 

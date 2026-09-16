@@ -12,6 +12,9 @@ struct GroceryListView: View {
     @Environment(HouseholdStore.self) private var households
     @Environment(\.openShop) private var openShop
     @State private var model: GroceryListModel?
+    /// Set when there was no household to build the list for, so the screen says so instead of
+    /// showing a spinner nothing would ever replace.
+    @State private var couldNotStart = false
 
     /// Hiding "Add to pantry?" and specialty actions is a convenience; the API enforces `pantry.edit`.
     private var canEditPantry: Bool {
@@ -27,6 +30,17 @@ struct GroceryListView: View {
         Group {
             if let model {
                 GroceryListContent(model: model)
+            } else if couldNotStart {
+                ContentUnavailableView {
+                    Label("Couldn't Build the List", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text("This week's grocery list needs your household. Try again in a moment.")
+                } actions: {
+                    Button("Try Again") {
+                        Task { await start() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -41,15 +55,7 @@ struct GroceryListView: View {
                 }
             }
         }
-        .task {
-            if model == nil {
-                model = plans.makeGroceryList(
-                    week: week, purchases: pantry, specialties: specialties, canAddToPantry: canEditPantry)
-            }
-            // Lines confirmed as ordered on the Shop tab are checked off while this list was away.
-            model?.reloadChecks()
-            await model?.load()
-        }
+        .task { await start() }
         .onChange(of: canEditPantry) { _, canEdit in
             model?.setCanAddToPantry(canEdit)
         }
@@ -63,6 +69,21 @@ struct GroceryListView: View {
                 Task { await households.load() }
             }
         }
+    }
+
+    /// Builds the list's model and loads it. `makeGroceryList` answers `nil` without a
+    /// household, which used to leave the screen on a spinner forever; now it says so and
+    /// offers another go.
+    private func start() async {
+        if model == nil {
+            model = plans.makeGroceryList(
+                week: week, purchases: pantry, specialties: specialties, canAddToPantry: canEditPantry)
+        }
+        couldNotStart = model == nil
+        guard let model else { return }
+        // Lines confirmed as ordered on the Shop tab are checked off while this list was away.
+        model.reloadChecks()
+        await model.load()
     }
 }
 

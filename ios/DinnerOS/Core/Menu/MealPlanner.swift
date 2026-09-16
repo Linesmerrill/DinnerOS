@@ -105,7 +105,7 @@ final class MealPlanner {
         } catch is CancellationError {
             return nil
         } catch {
-            errorMessage = HouseholdStore.message(for: error)
+            report(error)
             return nil
         }
     }
@@ -126,7 +126,7 @@ final class MealPlanner {
         } catch is CancellationError {
             return
         } catch {
-            errorMessage = HouseholdStore.message(for: error)
+            report(error)
         }
     }
 
@@ -140,7 +140,7 @@ final class MealPlanner {
         } catch is CancellationError {
             return
         } catch {
-            errorMessage = HouseholdStore.message(for: error)
+            report(error)
             return
         }
         guard let next = ServingSizes.step(from: entry.servings, options: options, by: delta) else {
@@ -156,7 +156,7 @@ final class MealPlanner {
         } catch is CancellationError {
             return
         } catch {
-            errorMessage = HouseholdStore.message(for: error)
+            report(error)
         }
     }
 
@@ -170,7 +170,7 @@ final class MealPlanner {
         } catch is CancellationError {
             return
         } catch {
-            errorMessage = HouseholdStore.message(for: error)
+            report(error)
         }
     }
 
@@ -198,7 +198,17 @@ final class MealPlanner {
         } catch is CancellationError {
             return
         } catch {
-            errorMessage = HouseholdStore.message(for: error)
+            report(error)
+        }
+    }
+
+    /// Reports a failed change. A `403` means the role changed elsewhere, so the household
+    /// reloads and the controls this class hides match it again, rather than every tap failing
+    /// until the next launch.
+    private func report(_ error: any Error) {
+        errorMessage = HouseholdStore.message(for: error)
+        if (error as? APIError)?.status == 403 {
+            Task { await households.load() }
         }
     }
 
