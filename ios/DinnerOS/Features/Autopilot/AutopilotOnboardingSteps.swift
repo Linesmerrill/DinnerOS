@@ -52,14 +52,7 @@ private struct CuisineTileView: View {
 
     var body: some View {
         Button(action: cycle) {
-            RecipePhoto(url: tile.imageURL, aspectRatio: 1, pointWidth: 200, cornerRadius: Self.cornerRadius)
-                .overlay {
-                    // Keeps the name readable whatever the photo is behind it.
-                    LinearGradient(
-                        colors: [.black.opacity(0.05), .black.opacity(0.65)], startPoint: .top, endPoint: .bottom
-                    )
-                    .clipShape(.rect(cornerRadius: Self.cornerRadius))
-                }
+            artwork
                 .overlay(alignment: .bottomLeading) { name }
                 .overlay(alignment: .topTrailing) { mark }
                 .overlay {
@@ -83,13 +76,41 @@ private struct CuisineTileView: View {
         .accessibilityAddTraits(preference == .liked ? .isSelected : [])
     }
 
+    /// The cuisine's photo, or a plain tinted tile when no unused photo was left for it —
+    /// never a repeat of another tile's (#335).
+    @ViewBuilder
+    private var artwork: some View {
+        if let url = tile.imageURL {
+            RecipePhoto(url: url, aspectRatio: 1, pointWidth: 200, cornerRadius: Self.cornerRadius)
+                .overlay {
+                    // A scrim under the name, so it stays readable on a light photo.
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black.opacity(0), location: 0),
+                            .init(color: .black.opacity(0.25), location: 0.55),
+                            .init(color: .black.opacity(0.75), location: 1),
+                        ], startPoint: .top, endPoint: .bottom
+                    )
+                    .clipShape(.rect(cornerRadius: Self.cornerRadius))
+                }
+        } else {
+            RoundedRectangle(cornerRadius: Self.cornerRadius)
+                .fill(.tint.opacity(0.18))
+                .aspectRatio(1, contentMode: .fit)
+                .overlay {
+                    RoundedRectangle(cornerRadius: Self.cornerRadius)
+                        .strokeBorder(.tint.opacity(0.35))
+                }
+        }
+    }
+
     private var name: some View {
         Text(tile.label)
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(tile.imageURL == nil ? AnyShapeStyle(Color.primary) : AnyShapeStyle(Color.white))
             .lineLimit(2)
             .minimumScaleFactor(0.8)
-            .shadow(radius: 2)
+            .shadow(color: .black.opacity(tile.imageURL == nil ? 0 : 0.6), radius: 3)
             .padding(10)
     }
 

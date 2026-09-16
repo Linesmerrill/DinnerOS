@@ -13,13 +13,17 @@ final class CuisineTileLoader {
     /// The tiles to show, in order. Empty until `load` is called.
     private(set) var tiles: [CuisineTile] = []
 
-    /// Enough rows to find a photo when the first recipe of a cuisine happens to lack one,
-    /// without pulling a whole page per tile.
-    static let photoSearchLimit = 6
+    /// Enough rows to find a photo when a cuisine's first recipes lack one or are already on
+    /// another tile, without pulling a whole page per tile.
+    static let photoSearchLimit = 8
 
     /// The per-cuisine lists, kept alive: `MenuStore.makeList` holds only a weak reference.
     @ObservationIgnored private var lists: [MenuRecipeList] = []
     @ObservationIgnored private var hasLoaded = false
+    /// The cuisines to show, before photos are handed out.
+    @ObservationIgnored private var base: [CuisineTile] = []
+    /// Candidate recipes per cuisine, in the server's order.
+    @ObservationIgnored private var candidates: [String: [MenuCard]] = [:]
 
     init() {}
 
@@ -36,20 +40,22 @@ final class CuisineTileLoader {
     func load(cuisines: [AutopilotOption], menu: MenuStore) async {
         guard !hasLoaded else { return }
         hasLoaded = true
-        tiles = CuisineTiles.top(cuisines)
-        guard !tiles.isEmpty else { return }
+        base = CuisineTiles.top(cuisines)
+        tiles = base
+        guard !base.isEmpty else { return }
 
-        // One list per cuisine, loaded together; each fills its own tile as it arrives.
-        lists = tiles.map { tile in
-            menu.makeList(query: MenuRecipeQuery(cuisine: tile.value, sort: .popular))
+        lists = base.map { tile in
+            menu.makeList(
+                query: MenuRecipeQuery(cuisine: tile.value, sort: .popular), pageSize: Self.photoSearchLimit)
         }
-        // Each list fills its own tile as it arrives. The loads run one after another rather
-        // than in a task group: everything here is main-actor state, and a handful of small
-        // requests isn't worth the isolation dance.
-        for (index, list) in lists.enumerated() {
+        // The loads run one after another rather than in a task group: everything here is
+        // main-actor state, and a handful of small requests isn't worth the isolation dance.
+        // Photos are reassigned from scratch after each one, so a tile never shows a recipe an
+        // earlier tile already has, and the result doesn't depend on which load finished first.
+        for (tile, list) in zip(base, lists) {
             await list.load()
-            guard index < tiles.count, let url = CuisineTiles.photo(in: list.items) else { continue }
-            tiles[index].imageURL = url
+            candidates[tile.value] = list.items
+            tiles = CuisineTiles.assignPhotos(base, candidates: candidates)
         }
         // The photos are on the tiles now; the lists themselves aren't needed.
         lists = []

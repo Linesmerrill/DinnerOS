@@ -72,18 +72,22 @@ enum AutopilotPreviewData {
     /// The household's rules, for the Pairings preference screens.
     static let pairingRules: [PairingRule] = profile?.pairings ?? [.new()]
 
-    /// Onboarding's cuisine grid, with example photo URLs and one tile that has none.
+    /// Onboarding's cuisine grid: specific cuisines with example photos, plus one tile no
+    /// unused photo was left for, which shows the plain tinted fallback.
     static let cuisineTiles: [CuisineTile] = [
         CuisineTile(
-            value: "mexican", label: "Mexican", recipeCount: 42,
-            imageURL: URL(string: "https://img.example.com/f_auto,q_auto,w_600/recipe-1.jpg")),
+            value: "north american", label: "North American", recipeCount: 110,
+            imageURL: URL(string: "https://img.example.com/f_auto,q_auto,w_600/recipe-4.jpg")),
         CuisineTile(
-            value: "italian", label: "Italian", recipeCount: 30,
+            value: "east asian", label: "East Asian", recipeCount: 60,
+            imageURL: URL(string: "https://img.example.com/f_auto,q_auto,w_600/recipe-2.jpg")),
+        CuisineTile(
+            value: "italian", label: "Italian", recipeCount: 32,
             imageURL: URL(string: "https://img.example.com/f_auto,q_auto,w_600/recipe-3.jpg")),
         CuisineTile(
-            value: "north american", label: "North American", recipeCount: 28,
-            imageURL: URL(string: "https://img.example.com/f_auto,q_auto,w_600/recipe-4.jpg")),
-        CuisineTile(value: "thai", label: "Thai", recipeCount: 12, imageURL: nil),
+            value: "mexican", label: "Mexican", recipeCount: 26,
+            imageURL: URL(string: "https://img.example.com/f_auto,q_auto,w_600/recipe-1.jpg")),
+        CuisineTile(value: "caribbean", label: "Caribbean", recipeCount: 9, imageURL: nil),
     ]
 
     /// A draft with a like and a "no thanks" already set, for the grid's selected states.
