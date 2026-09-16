@@ -3,6 +3,7 @@ package shopping
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -28,11 +29,21 @@ type PantryRenderer interface {
 	ItemResponse(ctx context.Context, item pantry.Item) pantry.PantryItemResponse
 }
 
+// HouseholdLister lists the households a user belongs to. *households.Service
+// implements it. The store catalog uses it to mark what the caller's own
+// household already asked for; it is optional, and without it every
+// requestedByHousehold is false.
+type HouseholdLister interface {
+	ListForUser(ctx context.Context, userID string) ([]households.UserHousehold, error)
+}
+
 // HandlerOptions configures the shopping HTTP handlers.
 type HandlerOptions struct {
 	Service    *Service
 	Pantry     PantryRenderer
 	Authorizer households.Authorizer
+	// Households is optional; see HouseholdLister.
+	Households HouseholdLister
 	Tokens     auth.AccessTokenValidator
 	Logger     *slog.Logger
 }
@@ -61,11 +72,15 @@ func (h *Handler) Mount(r chi.Router) {
 		pantryEdit := households.RequirePermission(h.opts.Authorizer, households.PermPantryEdit, h.logger)
 		const base = "/households/{householdId}/shopping"
 		r.Get("/shopping/providers", h.listProviders)
+		r.Get("/shopping/catalog", h.storeCatalog)
 		r.With(view).Get(base+"/settings", h.getSettings)
 		r.With(edit).Put(base+"/settings", h.putSettings)
 		r.With(view).Get(base+"/handoffs", h.listHandoffs)
 		r.With(view).Get(base+"/handoffs/{handoffId}", h.getHandoff)
 		r.With(pantryEdit).Post(base+"/handoffs/{handoffId}/confirm", h.confirm)
+		r.With(view).Get(base+"/requests", h.listStoreRequests)
+		r.With(view).Post(base+"/requests", h.requestStore)
+		r.With(view).Delete(base+"/requests/{requestId}", h.deleteStoreRequest)
 		r.With(view).Get(base+"/{provider}/preferences", h.listPreferences)
 		r.With(view).Get(base+"/{provider}/preferences/{ingredientKey}", h.getPreference)
 		r.With(edit).Put(base+"/{provider}/preferences/{ingredientKey}", h.putPreference)
@@ -302,6 +317,77 @@ type ConfirmedPurchaseResponse struct {
 type ConfirmResponse struct {
 	Handoff   HandoffResponse             `json:"handoff"`
 	Purchases []ConfirmedPurchaseResponse `json:"purchases"`
+}
+
+// StoreCatalogItemResponse is one store in the catalog, with the demand
+// behind it.
+type StoreCatalogItemResponse struct {
+	Key  string    `json:"key"`
+	Name string    `json:"name"`
+	Kind StoreKind `json:"kind"`
+	// Status is what docs/shopping-providers.md concluded, not live data.
+	Status StoreStatus `json:"status"`
+	// Aliases are the other spellings the search matches.
+	Aliases []string `json:"aliases"`
+	// Note summarizes the research, or is null when there is none.
+	Note *string `json:"note"`
+	// RequestedByHousehold is whether the caller's household already asked.
+	RequestedByHousehold bool `json:"requestedByHousehold"`
+	// Requests counts the households that asked, across all of DinnerOS.
+	Requests int `json:"requests"`
+}
+
+// StoreCatalogResponse is returned by GET /shopping/catalog.
+type StoreCatalogResponse struct {
+	Items []StoreCatalogItemResponse `json:"items"`
+}
+
+// StoreRequestRequest is the body of POST .../shopping/requests. Send key for
+// a catalog store, or name for one the catalog doesn't list.
+type StoreRequestRequest struct {
+	Key  string `json:"key"`
+	Name string `json:"name"`
+	Note string `json:"note"`
+}
+
+// StoreRequestResponse is one household's request for a store.
+type StoreRequestResponse struct {
+	ID     string      `json:"id"`
+	Key    string      `json:"key"`
+	Name   string      `json:"name"`
+	Status StoreStatus `json:"status"`
+	Note   *string     `json:"note"`
+	// RequestedBy and RequestedAt are the first request for this store.
+	RequestedBy string    `json:"requestedBy"`
+	RequestedAt time.Time `json:"requestedAt"`
+}
+
+// StoreRequestEnvelope is returned by POST .../shopping/requests.
+type StoreRequestEnvelope struct {
+	Request StoreRequestResponse `json:"request"`
+}
+
+// StoreRequestListResponse is returned by GET .../shopping/requests.
+type StoreRequestListResponse struct {
+	Items []StoreRequestResponse `json:"items"`
+}
+
+func storeCatalogItemResponse(i CatalogItem) StoreCatalogItemResponse {
+	aliases := i.Aliases
+	if aliases == nil {
+		aliases = []string{}
+	}
+	return StoreCatalogItemResponse{
+		Key: i.Key, Name: i.Name, Kind: i.Kind, Status: i.Status, Aliases: aliases, Note: optionalString(i.Note),
+		RequestedByHousehold: i.RequestedByHousehold, Requests: i.Requests,
+	}
+}
+
+func storeRequestResponse(r StoreRequest) StoreRequestResponse {
+	return StoreRequestResponse{
+		ID: r.ID, Key: r.Key, Name: r.Name, Status: r.Status(), Note: optionalString(r.Note),
+		RequestedBy: r.RequestedBy, RequestedAt: r.RequestedAt,
+	}
 }
 
 func optionalString(s string) *string {
@@ -679,6 +765,80 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
+// callerHousehold returns the household whose requests the catalog marks: the
+// signed-in user's first household (oldest membership). The catalog is not
+// household-scoped, so this is a best effort — "" when the user belongs to no
+// household, no lister is configured, or the lookup fails.
+func (h *Handler) callerHousehold(r *http.Request) string {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok || h.opts.Households == nil {
+		return ""
+	}
+	list, err := h.opts.Households.ListForUser(r.Context(), userID)
+	if err != nil {
+		h.logger.WarnContext(r.Context(), "list households for the store catalog failed", "error", err)
+		return ""
+	}
+	if len(list) == 0 {
+		return ""
+	}
+	return list[0].Membership.HouseholdID
+}
+
+func (h *Handler) storeCatalog(w http.ResponseWriter, r *http.Request) {
+	items, err := h.opts.Service.StoreCatalog(r.Context(), h.callerHousehold(r), r.URL.Query().Get("q"))
+	if err != nil {
+		h.writeError(w, r, "list store catalog failed", err)
+		return
+	}
+	resp := StoreCatalogResponse{Items: make([]StoreCatalogItemResponse, 0, len(items))}
+	for _, i := range items {
+		resp.Items = append(resp.Items, storeCatalogItemResponse(i))
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) requestStore(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	var req StoreRequestRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	saved, created, err := h.opts.Service.RequestStore(r.Context(), actor, StoreRequestInput(req))
+	if err != nil {
+		h.writeError(w, r, "request store failed", err)
+		return
+	}
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	httpx.WriteJSON(w, status, StoreRequestEnvelope{Request: storeRequestResponse(saved)})
+}
+
+func (h *Handler) listStoreRequests(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	list, err := h.opts.Service.ListStoreRequests(r.Context(), actor.HouseholdID)
+	if err != nil {
+		h.writeError(w, r, "list store requests failed", err)
+		return
+	}
+	resp := StoreRequestListResponse{Items: make([]StoreRequestResponse, 0, len(list))}
+	for _, req := range list {
+		resp.Items = append(resp.Items, storeRequestResponse(req))
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) deleteStoreRequest(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	if err := h.opts.Service.DeleteStoreRequest(r.Context(), actor, chi.URLParam(r, "requestId")); err != nil {
+		h.writeError(w, r, "withdraw store request failed", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // writeError maps service errors to responses. msg is logged for unexpected
 // errors only.
 func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string, err error) {
@@ -702,6 +862,9 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "saved product or handoff not found")
 	case errors.Is(err, ErrForbidden), errors.Is(err, pantry.ErrForbidden):
 		httpx.WriteError(w, r, http.StatusForbidden, "forbidden", "your role in this household does not allow this action")
+	case errors.Is(err, ErrTooManyRequests):
+		httpx.WriteError(w, r, http.StatusConflict, "conflict",
+			fmt.Sprintf("a household can ask for at most %d stores; withdraw one first", MaxStoreRequestsPerHousehold))
 	case errors.Is(err, ErrConflict):
 		httpx.WriteError(w, r, http.StatusConflict, "conflict", "another request is confirming this handoff; retry")
 	case errors.Is(err, pantry.ErrConflict):

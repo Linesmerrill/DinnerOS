@@ -49,4 +49,20 @@ type Store interface {
 	// SkipLine marks a pending line skipped and reports whether it was
 	// pending.
 	SkipLine(ctx context.Context, householdID, handoffID, lineID, userID string, at time.Time) (bool, error)
+
+	// ListStoreRequests returns the household's store requests, newest first.
+	ListStoreRequests(ctx context.Context, householdID string) ([]StoreRequest, error)
+	// GetStoreRequestByKey returns the household's request for one store.
+	GetStoreRequestByKey(ctx context.Context, householdID, key string) (StoreRequest, error)
+	// CountStoreRequests counts the stores the household has asked for.
+	CountStoreRequests(ctx context.Context, householdID string) (int, error)
+	// CountStoreRequestsByKey counts requests per store key across every
+	// household: DinnerOS's own demand signal.
+	CountStoreRequestsByKey(ctx context.Context) (map[string]int, error)
+	// UpsertStoreRequest saves r by (householdId, key), keeping an existing
+	// one's ID, RequestedBy, and RequestedAt, and reports whether it was
+	// created.
+	UpsertStoreRequest(ctx context.Context, r StoreRequest) (StoreRequest, bool, error)
+	// DeleteStoreRequest removes one of the household's store requests.
+	DeleteStoreRequest(ctx context.Context, householdID, id string) error
 }

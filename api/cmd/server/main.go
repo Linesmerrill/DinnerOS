@@ -261,6 +261,7 @@ func run() error {
 		}),
 		Pantry:     pantryService,
 		Authorizer: householdService,
+		Households: householdService,
 		Tokens:     tokens,
 		Logger:     logger,
 	})
