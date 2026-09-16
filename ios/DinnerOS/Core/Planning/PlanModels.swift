@@ -44,12 +44,27 @@ nonisolated struct PlanEntryRecipe: Decodable, Hashable, Sendable {
     let id: String
     let name: String
     let imageURLString: String?
+    /// An add-on planned alongside a meal, such as garlic bread with pasta. `false` from a
+    /// server that doesn't mark them; `MenuStore.isAddOn` falls back to the menu's own card.
+    var isAddon = false
 
     var imageURL: URL? { imageURLString.flatMap { URL(string: $0) } }
 
-    private enum CodingKeys: String, CodingKey {
-        case id, name
+    fileprivate enum CodingKeys: String, CodingKey {
+        case id, name, isAddon
         case imageURLString = "imageUrl"
+    }
+}
+
+nonisolated extension PlanEntryRecipe {
+    /// `isAddon` is additive, so it's read leniently.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(String.self, forKey: .id),
+            name: try container.decode(String.self, forKey: .name),
+            imageURLString: try container.decodeIfPresent(String.self, forKey: .imageURLString),
+            isAddon: container.decodeLenient(Bool.self, forKey: .isAddon) ?? false)
     }
 }
 

@@ -19,6 +19,8 @@ struct AllMealsSection: View {
         menu.filterOptions ?? .fallback
     }
 
+    private var photoURLs: [URL?] { list.items.map(\.recipe.imageURL) }
+
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
             Section {
@@ -83,8 +85,10 @@ struct AllMealsSection: View {
                     if let refreshError = list.refreshError {
                         FormErrorLabel(message: refreshError)
                     }
-                    ForEach(list.items) { card in
+                    ForEach(Array(list.items.enumerated()), id: \.element.id) { index, card in
                         MenuRecipeCard(card: card, size: .fullWidth, canAdd: canAdd)
+                            .prefetchesPhotos(
+                                after: index, in: photoURLs, pointWidth: MenuRecipeCard.fullWidthEstimate)
                     }
                     pageFooter
                 }

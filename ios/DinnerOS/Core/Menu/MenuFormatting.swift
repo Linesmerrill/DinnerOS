@@ -50,12 +50,25 @@ nonisolated enum MenuFormat {
         return parts
     }
 
-    /// For example "Creamy Dill Pork Filet, 30 minutes, 690 calories, in your week".
+    /// For example "One-Pan Santa Fe Pork Tacos, 20 minutes, quick, often ordered, in your week".
+    ///
+    /// A card shows only its name and the badges over the photo, so everything those badges
+    /// say has to be spoken here instead.
     static func cardAccessibilityLabel(
-        name: String, minutes: Int?, calories: Int?, proteinGrams: Int? = nil, inPlan: Bool
+        name: String, minutes: Int?, isQuick: Bool = false, badge: String? = nil, isAddOn: Bool = false,
+        inPlan: Bool
     ) -> String {
         var parts = [name]
-        parts += spokenFacts(minutes: minutes, calories: calories, proteinGrams: proteinGrams)
+        parts += spokenFacts(minutes: minutes, calories: nil, proteinGrams: nil)
+        if isQuick {
+            parts.append(String(localized: "quick"))
+        }
+        if let badge, !badge.isEmpty {
+            parts.append(badge.lowercased())
+        }
+        if isAddOn {
+            parts.append(String(localized: "add-on"))
+        }
         if inPlan {
             parts.append(String(localized: "in your week"))
         }
@@ -83,6 +96,28 @@ nonisolated enum MenuFormat {
         case 1: String(localized: "1 meal planned")
         default: String(localized: "\(count) meals planned")
         }
+    }
+
+    /// "1 add-on" or "3 add-ons".
+    static func addOns(_ count: Int) -> String {
+        count == 1 ? String(localized: "1 add-on") : String(localized: "\(count) add-ons")
+    }
+
+    /// Your Meals' subtitle, counting main meals only and naming the week's add-ons separately:
+    /// "5 meals planned · 2 from Autopilot · 1 add-on".
+    static func yourMealsSubtitle(counts: MealCounts) -> String {
+        let base = yourMealsSubtitle(total: counts.meals, fromAutopilot: counts.mealsFromAutopilot)
+        guard counts.addOns > 0 else { return base }
+        return base + " · " + addOns(counts.addOns)
+    }
+
+    /// The bottom bar's title, counting main meals only: "5 meals this week", or "5 meals ·
+    /// 1 add-on" when add-ons are planned alongside them.
+    static func bottomBarTitle(counts: MealCounts, timing: WeekTiming) -> String {
+        guard counts.addOns > 0 else { return bottomBarTitle(count: counts.meals, timing: timing) }
+        let meals =
+            counts.meals == 1 ? String(localized: "1 meal") : String(localized: "\(counts.meals) meals")
+        return meals + " · " + addOns(counts.addOns)
     }
 
     /// The bottom bar's title: "4 meals this week" for this week, "4 meals planned" otherwise.

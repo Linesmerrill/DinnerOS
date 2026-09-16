@@ -7,12 +7,13 @@ enum MenuPreviewData {
 
     static func summary(
         id: String, name: String, headline: String?, minutes: Int?, calories: Int?, protein: Int?,
-        image: String? = nil, tags: [String] = ["Quick"]
+        image: String? = nil, hasImage: Bool = true, isAddon: Bool = false, tags: [String] = ["Quick"]
     ) -> RecipeSummary {
         RecipeSummary(
             id: id, name: name, headline: headline,
-            imageURLString: image ?? "https://img.example.com/f_auto,q_auto,w_1200/\(id).jpg", totalMinutes: minutes,
-            cookMinutes: minutes, timesOrdered: 2, lastOrderedWeek: "2026-W30", isAddon: false, tags: tags,
+            imageURLString: hasImage ? (image ?? "https://img.example.com/f_auto,q_auto,w_1200/\(id).jpg") : nil,
+            totalMinutes: minutes,
+            cookMinutes: minutes, timesOrdered: 2, lastOrderedWeek: "2026-W30", isAddon: isAddon, tags: tags,
             householdRating: HouseholdRating(average: 4.5, count: 2), myRating: nil, calories: calories,
             proteinGrams: protein, timeBand: (minutes ?? 60) <= 20 ? .quick : .medium)
     }
@@ -38,6 +39,18 @@ enum MenuPreviewData {
                 id: "recipe-4", name: "Example Smoked Pork", headline: "with Charred Corn", minutes: 240,
                 calories: 940, protein: 52),
             badges: [MenuBadge(code: .smokerFriendly, text: "Smoker")]),
+        // A name long enough to wrap, next to a card with none of the optional data: the cards
+        // in a row have to stay the same height either way.
+        MenuCard(
+            recipe: summary(
+                id: "recipe-5", name: "One-Pan Sample Santa Fe Pork Tacos with Charred Corn Salsa",
+                headline: nil, minutes: 20, calories: 1_020, protein: 49),
+            badges: [MenuBadge(code: .oftenOrdered, text: "Often Ordered")]),
+        // No cook time, so no time badge, and no photo, so the glyph shows at once.
+        MenuCard(
+            recipe: summary(
+                id: "recipe-6", name: "Untimed Test Dish", headline: nil, minutes: nil, calories: nil,
+                protein: nil, hasImage: false, tags: [])),
     ]
 
     static let sections: [MenuSection] = [

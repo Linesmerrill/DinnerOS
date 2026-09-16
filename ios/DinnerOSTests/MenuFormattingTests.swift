@@ -24,11 +24,18 @@ struct MenuFormattingTests {
     }
 
     @Test func cardAccessibilityLabelReadsNaturally() {
+        // The card shows a name and a time badge, so the badges have to be spoken here.
         #expect(
-            MenuFormat.cardAccessibilityLabel(name: "Creamy Dill Pork Filet", minutes: 30, calories: 690, inPlan: true)
-                == "Creamy Dill Pork Filet, 30 minutes, 690 calories, in your week")
+            MenuFormat.cardAccessibilityLabel(
+                name: "One-Pan Santa Fe Pork Tacos", minutes: 20, isQuick: true, badge: "Often Ordered",
+                inPlan: false) == "One-Pan Santa Fe Pork Tacos, 20 minutes, quick, often ordered")
         #expect(
-            MenuFormat.cardAccessibilityLabel(name: "Toast", minutes: nil, calories: nil, inPlan: false) == "Toast")
+            MenuFormat.cardAccessibilityLabel(name: "Creamy Dill Pork Filet", minutes: 30, inPlan: true)
+                == "Creamy Dill Pork Filet, 30 minutes, in your week")
+        #expect(MenuFormat.cardAccessibilityLabel(name: "Toast", minutes: nil, inPlan: false) == "Toast")
+        #expect(
+            MenuFormat.cardAccessibilityLabel(name: "Sample Garlic Bread", minutes: 10, isAddOn: true, inPlan: true)
+                == "Sample Garlic Bread, 10 minutes, add-on, in your week")
     }
 
     @Test func yourMealsSubtitle() {
