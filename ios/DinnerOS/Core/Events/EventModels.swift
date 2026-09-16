@@ -35,6 +35,60 @@ nonisolated enum SkipReason: String, Codable, CaseIterable, Sendable, Identifiab
     }
 }
 
+extension ClientEventType {
+    /// Whether this event carries an answer about a planned meal, rather than something the
+    /// app merely observed.
+    var isOutcome: Bool {
+        self == .recipeCooked || self == .recipeSkipped
+    }
+}
+
+/// What the household said happened to a planned meal.
+///
+/// Only ever set from an answer someone gave. Nothing infers it: a week going by doesn't cook a
+/// meal, and a rating says the food was good, not that this household made it that night.
+nonisolated enum MealOutcome: Equatable, Sendable {
+    case cooked
+    case skipped(SkipReason?)
+}
+
+extension MealOutcome: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case kind, reason
+    }
+
+    private enum Kind: String, Codable {
+        case cooked, skipped
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        switch try container.decode(Kind.self, forKey: .kind) {
+        case .cooked:
+            self = .cooked
+        case .skipped:
+            self = .skipped(try container.decodeIfPresent(SkipReason.self, forKey: .reason))
+        }
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .cooked:
+            try container.encode(Kind.cooked, forKey: .kind)
+        case .skipped(let reason):
+            try container.encode(Kind.skipped, forKey: .kind)
+            try container.encodeIfPresent(reason, forKey: .reason)
+        }
+    }
+}
+
+/// An outcome and when it was answered, so old ones can be dropped.
+nonisolated struct RecordedOutcome: Codable, Equatable, Sendable {
+    var outcome: MealOutcome
+    var recordedAt: Date
+}
+
 /// The API's limits on client event fields.
 nonisolated enum EventLimits {
     static let maxBatchSize = 100
@@ -115,6 +169,16 @@ nonisolated struct ClientEvent: Codable, Equatable, Sendable, Identifiable {
 
     var id: String { clientEventID }
     var type: ClientEventType { payload.type }
+
+    /// The plan entry this event is about, for the `recipe.cooked` and `recipe.skipped`
+    /// events that name one.
+    var entryID: String? {
+        switch payload {
+        case .recipeCooked(let value): value.entryID
+        case .recipeSkipped(let value): value.entryID
+        case .recipeViewed, .groceryItemChecked: nil
+        }
+    }
 
     init(
         clientEventID: String = UUID().uuidString, recipeID: String?, week: String?, occurredAt: Date,

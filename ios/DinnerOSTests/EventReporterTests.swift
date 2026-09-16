@@ -461,6 +461,104 @@ struct EventReporterTests {
         #expect(storage.snapshot?.events == [fresh])
     }
 
+    // MARK: Outcomes
+
+    /// The event carrying the answer is deleted as soon as the API accepts it, so the answer has
+    /// to be stored separately or the Cooked badge lasts exactly one launch.
+    @Test func outcomesSurviveARelaunchAfterTheirEventsAreSent() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "OutcomeTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appending(path: "event-queue.json")
+        let clock = ManualClock()
+
+        let first = try await makeHarness(storage: FileEventQueueStorage(url: url), clock: clock)
+        first.reporter.recipeCooked(entry(), week: week)
+        first.reporter.recipeSkipped(entry(id: "entry-2"), week: week, reason: .ateOut)
+        await first.reporter.flush()
+        #expect(first.reporter.queuedEvents.isEmpty, "the queue emptied, but the answers must not")
+
+        let relaunched = try await makeHarness(storage: FileEventQueueStorage(url: url), clock: clock)
+
+        #expect(
+            relaunched.reporter.outcomes == [
+                "66e5a1f2c3b4a5d6e7f80c01": .cooked, "entry-2": .skipped(.ateOut),
+            ])
+    }
+
+    @Test func outcomesOlderThanTheirWindowAreDroppedWhenTheQueueLoads() async throws {
+        let clock = ManualClock()
+        let storage = InMemoryEventQueueStorage(
+            snapshot: EventQueueSnapshot(
+                userID: Fixtures.user.id, householdID: "household-1",
+                outcomes: [
+                    "old": RecordedOutcome(
+                        outcome: .cooked, recordedAt: clock.now.addingTimeInterval(-EventReporter.maxOutcomeAge - 60)),
+                    "fresh": RecordedOutcome(outcome: .skipped(.noTime), recordedAt: clock.now),
+                ]))
+
+        let harness = try await makeHarness(storage: storage, clock: clock)
+
+        #expect(harness.reporter.outcomes == ["fresh": .skipped(.noTime)])
+    }
+
+    // MARK: Undo
+
+    @Test func undoDeletesTheQueuedEventSoTheAPINeverSeesIt() async throws {
+        let harness = try await makeHarness()
+        harness.reporter.recipeCooked(entry(), week: week)
+        #expect(harness.reporter.canUndoOutcome(entryID: "66e5a1f2c3b4a5d6e7f80c01"))
+
+        #expect(harness.reporter.undoOutcome(entryID: "66e5a1f2c3b4a5d6e7f80c01"))
+
+        #expect(harness.reporter.outcomes.isEmpty)
+        #expect(harness.reporter.queuedEvents.isEmpty)
+        await harness.reporter.flush()
+        #expect(harness.server.requestCount == 0, "nothing was sent, so the pantry was never deducted")
+    }
+
+    /// Undoing must not touch the other meals' answers, or a stray tap would erase them.
+    @Test func undoLeavesTheOtherEntriesAlone() async throws {
+        let harness = try await makeHarness()
+        harness.reporter.recipeCooked(entry(), week: week)
+        harness.reporter.recipeSkipped(entry(id: "entry-2"), week: week, reason: .noTime)
+
+        #expect(harness.reporter.undoOutcome(entryID: "entry-2"))
+
+        #expect(harness.reporter.outcomes == ["66e5a1f2c3b4a5d6e7f80c01": .cooked])
+        #expect(harness.reporter.queuedEvents.count == 1)
+        #expect(harness.reporter.queuedEvents.first?.entryID == "66e5a1f2c3b4a5d6e7f80c01")
+    }
+
+    /// Once the API has the event the pantry is already deducted, and undoing on the device
+    /// would only hide that from the person who could still fix it.
+    @Test func undoDoesNothingOnceTheEventHasBeenSent() async throws {
+        let harness = try await makeHarness()
+        harness.reporter.recipeCooked(entry(), week: week)
+        await harness.reporter.flush()
+
+        #expect(!harness.reporter.canUndoOutcome(entryID: "66e5a1f2c3b4a5d6e7f80c01"))
+        #expect(!harness.reporter.undoOutcome(entryID: "66e5a1f2c3b4a5d6e7f80c01"))
+        #expect(harness.reporter.outcomes == ["66e5a1f2c3b4a5d6e7f80c01": .cooked])
+    }
+
+    @Test func undoExpiresWithItsWindow() async throws {
+        let harness = try await makeHarness()
+        harness.reporter.recipeCooked(entry(), week: week)
+
+        harness.clock.advance(by: EventReporter.undoWindow)
+
+        #expect(!harness.reporter.canUndoOutcome(entryID: "66e5a1f2c3b4a5d6e7f80c01"))
+        #expect(!harness.reporter.undoOutcome(entryID: "66e5a1f2c3b4a5d6e7f80c01"))
+        #expect(harness.reporter.queuedEvents.count == 1, "the event still sends")
+    }
+
+    @Test func undoingSomethingNeverAnsweredDoesNothing() async throws {
+        let harness = try await makeHarness()
+
+        #expect(!harness.reporter.canUndoOutcome(entryID: "entry-unknown"))
+        #expect(!harness.reporter.undoOutcome(entryID: "entry-unknown"))
+    }
+
     // MARK: Viewed debounce
 
     @Test func viewedIsRecordedAtMostOncePerRecipePerTenMinutes() async throws {
