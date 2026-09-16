@@ -156,6 +156,64 @@ func TestAtMostOnceRuleBites(t *testing.T) {
 	}
 }
 
+// TestAtMostOnceRuleCapsTheSameKindOfMeal is the owner's report in the shape
+// the catalog actually produces it: a Monday "Italian, at most once a week"
+// rule, and pastas the catalog labeled with a cuisine outside the Italian
+// tree ("north american"). Those never match the rule, so before the rule
+// counted the kind of meal it placed, they escaped its limit entirely and the
+// week served pasta two or three nights running.
+func TestAtMostOnceRuleCapsTheSameKindOfMeal(t *testing.T) {
+	var catalog []autopilot.Item
+	var ratings []autopilot.Rating
+	var history []autopilot.Interaction
+	strong := func(id string, opts ...opt) {
+		catalog = append(catalog, meal(id, opts...))
+		ratings = append(ratings, rate(id, 5, autopilot.FeedbackMakeAgain))
+		// Familiar, and last had long enough ago to earn the recency boost.
+		for _, week := range []string{"2026-W20", "2026-W22", "2026-W24"} {
+			history = append(history, autopilot.Interaction{ItemID: id, Kind: autopilot.KindCooked, Week: week})
+		}
+	}
+	strong("italian-pasta-0", cuisine("italian"), regionsOf("southern european", "european"), categories("pasta"), proteins("chicken"))
+	strong("italian-pasta-1", cuisine("italian"), regionsOf("southern european", "european"), categories("pasta"), proteins("beef"))
+	strong("other-pasta-0", cuisine("north american"), categories("pasta"), proteins("pork"))
+	strong("other-pasta-1", cuisine("north american"), categories("pasta"), proteins("shrimp"))
+	// Well-liked meals of other kinds, as a real catalog has: the week has
+	// something good to reach for instead of a second pasta.
+	for i := range 4 {
+		id := fmt.Sprintf("other-%d", i)
+		catalog = append(catalog, meal(id, cuisine(fmt.Sprintf("cuisine-%d", i)), proteins(fmt.Sprintf("protein-%d", i))))
+		ratings = append(ratings, rate(id, 4))
+		history = append(history, autopilot.Interaction{ItemID: id, Kind: autopilot.KindCooked, Week: "2026-W22"})
+	}
+
+	in := input(catalog...)
+	in.Ratings, in.History = ratings, history
+	in.Preferences.Rules = []autopilot.WeekdayRule{{
+		Day: autopilot.Monday, Label: "Italian night",
+		Cuisines: []string{"italian"}, CuisineRegions: []string{"southern european", "european"},
+		Frequency: autopilot.AtMostOnce,
+	}}
+
+	res := generate(t, New(Options{}), in)
+	if res.Planned != 5 {
+		t.Fatalf("planned %d of 5: %s", res.Planned, describe(res))
+	}
+	pasta := 0
+	for _, id := range pickedIDs(res) {
+		if strings.Contains(id, "pasta") {
+			pasta++
+		}
+	}
+	if pasta != 1 {
+		t.Errorf("planned %d pastas; an at-most-once Italian rule that put pasta on its day allows one: %s",
+			pasta, describe(res))
+	}
+	if got := slotOn(res, autopilot.Monday); got == nil || !strings.HasPrefix(got.ItemID, "italian") {
+		t.Errorf("Monday = %v; the rule's day should still get its Italian meal: %s", got, describe(res))
+	}
+}
+
 // TestVarietyIsDeterministic: the same inputs give the same week, whatever
 // order the catalog arrives in.
 func TestVarietyIsDeterministic(t *testing.T) {

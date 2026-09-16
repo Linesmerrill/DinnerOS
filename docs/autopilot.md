@@ -101,7 +101,13 @@ smoker night: chicken or pork, long cook OK":
 - `every_week`: the rule's day strongly prefers matching meals, and meals that
   don't match at all get a small penalty that day.
 - `at_most_once`: the rule's day prefers matching meals, but the week allows
-  only one full match; a second one is penalized.
+  only one full match; a second one is penalized. The limit also covers the
+  **kind** of meal the rule placed: once an Italian night is filled with a
+  pasta, another pasta is penalized too, even one the catalog labeled with a
+  cuisine outside the rule's tree (`north american`). Catalogs label plenty of
+  pasta that way, and such a meal would otherwise escape the limit however
+  plainly it repeats the same dinner. A rule whose meal has no meal category
+  ("Meatloaf à la Mom") caps on its own groups alone, as before.
 - `timeBand`: `quick` or `medium` prefer meals at or under that band that day;
   `long` means "long cook OK": no weeknight limit that day, a small bonus for a
   long meal, and it doesn't count against the week's long-meal allowance.
@@ -385,7 +391,7 @@ couldn't be filled are listed as `unfilled` (`no_candidates`,
   catalog, ratings, and history are normalized and ordered internally, so their
   order doesn't matter (tested). Ties break with an FNV-1a hash of
   household ID, week, attempt, model version, and item ID.
-- `modelVersion` (`baseline-2026.3`) is stored on every proposal and event.
+- `modelVersion` (`baseline-2026.4`) is stored on every proposal and event.
   `inputsHash` fingerprints the provider request, so identical inputs can be
   recognized.
 - **Tuning:** change `baseline.DefaultWeights` (or pass `Options.Weights`) and
