@@ -2566,6 +2566,76 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/ShoppingConflict"
+  /api/v1/households/{householdId}/shopping/weeks/{week}/order:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    get:
+      summary: The week's order reminder
+      description: |
+        Whether the household should be reminded to order this week. Every
+        field but `ordered` is derived on read, so nothing is scheduled and
+        nothing can drift: `due` means the household's `orderDay` has arrived
+        and the week hasn't ended, both in the household's time zone, and
+        `remind` is `due` and not `ordered`. A reminder belongs to its own
+        week, so an unmarked past week stops asking once the week ends. A
+        household with no `orderDay` gets nulls and `due: false`. Requires
+        `household.view`.
+      operationId: getOrderReminder
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The week's order state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderReminder"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Mark the week ordered, or take it back
+      description: |
+        Records that a member placed this week's grocery order, which silences
+        the reminder for that week only. Sending `ordered: false` removes the
+        mark and brings the reminder back, so a mis-tap can't leave a
+        household un-remindable for a week. Marking is idempotent and keeps
+        the first member and time, and also marks the caller's copy of the
+        `shopping.order_due` notification read. Nothing else sets this: a
+        Walmart hand-off is not proof an order was placed. Requires
+        `shopping.edit`.
+      operationId: setWeekOrdered
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetWeekOrderedRequest"
+      responses:
+        "200":
+          description: The week's new order state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderReminder"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/shopping/catalog:
     get:
       summary: The store catalog
@@ -4573,7 +4643,7 @@ components:
         - shopping.edit
     Household:
       type: object
-      required: [id, name, defaultServings, timeZone, createdBy, createdAt, updatedAt]
+      required: [id, name, defaultServings, timeZone, orderDay, createdBy, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -4591,6 +4661,11 @@ components:
           type: string
           description: IANA time zone name. Plan dates are interpreted in it.
           example: America/Denver
+        orderDay:
+          type: [string, "null"]
+          enum: [mon, tue, wed, thu, fri, sat, sun, null]
+          description: The weekday the household means to place its grocery order; null until someone picks one, which leaves order reminders off.
+          example: thu
         createdBy:
           type: string
           description: User ID of the member who created the household.
@@ -4673,6 +4748,11 @@ components:
           type: integer
           minimum: 1
           maximum: 12
+        orderDay:
+          type: string
+          enum: [mon, tue, wed, thu, fri, sat, sun, ""]
+          description: The grocery order day. An empty string clears it, turning order reminders off; omitting the field leaves it unchanged.
+          example: thu
     CreateHouseholdResponse:
       type: object
       required: [household, membership]
@@ -5950,7 +6030,7 @@ components:
           type: string
         type:
           type: string
-          description: Stable type. Only `pantry.low` exists today; show unknown types by title and body.
+          description: Stable type. `pantry.low` and `shopping.order_due` exist today; show unknown types by title and body.
           example: pantry.low
         title:
           type: string
@@ -5961,7 +6041,7 @@ components:
         subject:
           type: object
           required: [kind, id]
-          description: What to open. `pantry_item` is a pantry item ID.
+          description: What to open. `pantry_item` is a pantry item ID; `shopping_week` is an ISO week to open in Shop.
           properties:
             kind:
               type: string
@@ -8505,6 +8585,45 @@ components:
           type: [string, "null"]
           description: The store number (1–6 digits; leading zeros are dropped). Null or omitted means no store.
           example: "5435"
+    OrderReminder:
+      type: object
+      required: [week, orderDay, dueOn, due, remind, ordered, orderedBy, orderedAt]
+      properties:
+        week:
+          type: string
+          example: 2026-W38
+        orderDay:
+          type: [string, "null"]
+          enum: [mon, tue, wed, thu, fri, sat, sun, null]
+          description: The household's grocery order day; null turns reminders off.
+          example: thu
+        dueOn:
+          type: [string, "null"]
+          description: The order day's calendar date in this week; null without an order day.
+          example: "2026-09-17"
+        due:
+          type: boolean
+          description: The order day has arrived and the week hasn't ended, in the household's time zone.
+        remind:
+          type: boolean
+          description: Due and not yet ordered. This is the only state an app shows a reminder for.
+        ordered:
+          type: boolean
+          description: A member marked this week's groceries ordered.
+        orderedBy:
+          type: [string, "null"]
+          description: The member who marked it.
+        orderedAt:
+          type: [string, "null"]
+          format: date-time
+    SetWeekOrderedRequest:
+      type: object
+      additionalProperties: false
+      required: [ordered]
+      properties:
+        ordered:
+          type: boolean
+          description: False removes the mark, which brings the week's reminder back.
     ShoppingAmount:
       type: object
       required: [quantity, quantityValue, unit, text]

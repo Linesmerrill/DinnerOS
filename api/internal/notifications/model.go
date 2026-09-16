@@ -41,6 +41,9 @@ type Type string
 const (
 	// TypePantryLow: the usage estimate marked a pantry item low.
 	TypePantryLow Type = "pantry.low"
+	// TypeShoppingOrderDue: the household's order day has arrived and nobody
+	// has marked this week's groceries ordered.
+	TypeShoppingOrderDue Type = "shopping.order_due"
 )
 
 // SubjectKind is the kind of record a notification points at.
@@ -49,6 +52,8 @@ type SubjectKind string
 // Subject kinds.
 const (
 	SubjectPantryItem SubjectKind = "pantry_item"
+	// SubjectShoppingWeek is an ISO week ("2026-W38"): the week to open.
+	SubjectShoppingWeek SubjectKind = "shopping_week"
 )
 
 // Subject is the record a notification is about, so an app can open it.

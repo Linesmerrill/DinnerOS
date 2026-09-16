@@ -248,6 +248,13 @@ nonisolated final class FakeShoppingServer: Sendable {
         var productsPerLink = 40
         var handoffs: [Handoff] = []
         var nextID = 1
+        /// The household's grocery order day, or nil for no reminder.
+        var orderDay: String? = "thu"
+        /// Whether the order day has arrived. The real API derives this from today's date in
+        /// the household's time zone; the fake states it so tests don't depend on the clock.
+        var orderDayArrived = true
+        /// Weeks a member marked ordered.
+        var orderedWeeks: Set<String> = []
         /// The next this many confirmations answer `409 conflict`.
         var conflictsRemaining = 0
         /// `METHOD /path` (percent-encoded as sent) for every request, in order.
@@ -295,6 +302,21 @@ nonisolated final class FakeShoppingServer: Sendable {
         state.withLock { change(&$0) }
     }
 
+    /// The week's order state, shaped like the API's derived response.
+    private static func orderReminderJSON(_ state: State, week: String) -> Data {
+        let ordered = state.orderedWeeks.contains(week)
+        let due = state.orderDay != nil && state.orderDayArrived
+        let remind = due && !ordered
+        let day = state.orderDay.map { #""\#($0)""# } ?? "null"
+        let dueOn = state.orderDay == nil ? "null" : #""2026-09-17""#
+        return Data(
+            #"""
+            {"week":"\#(week)","orderDay":\#(day),"dueOn":\#(dueOn),"due":\#(due),"remind":\#(remind),
+             "ordered":\#(ordered),"orderedBy":\#(ordered ? #""\#(Fixtures.user.id)""# : "null"),
+             "orderedAt":\#(ordered ? #""2026-09-17T18:00:00Z""# : "null")}
+            """#.utf8)
+    }
+
     func handle(_ request: URLRequest) -> (status: Int, body: Data) {
         guard let url = request.url else { return (400, Data()) }
         let method = request.httpMethod ?? "GET"
@@ -336,6 +358,16 @@ nonisolated final class FakeShoppingServer: Sendable {
                     return (404, Fixtures.errorJSON(code: "not_found"))
                 }
                 return (204, Data())
+            case ("GET", 4) where rest[0] == "shopping" && rest[1] == "weeks" && rest[3] == "order":
+                return (200, Self.orderReminderJSON(state, week: rest[2]))
+            case ("PUT", 4) where rest[0] == "shopping" && rest[1] == "weeks" && rest[3] == "order":
+                let week = rest[2]
+                if body["ordered"] as? Bool == true {
+                    state.orderedWeeks.insert(week)
+                } else {
+                    state.orderedWeeks.remove(week)
+                }
+                return (200, Self.orderReminderJSON(state, week: week))
             case ("POST", 5) where rest[0] == "plans" && rest[2] == "shopping" && rest[4] == "match":
                 let (lines, excluded) = Self.match(body, state: &state, numbering: false)
                 return (200, Data(Self.proposalJSON(state, week: rest[1], lines: lines, excluded: excluded).utf8))

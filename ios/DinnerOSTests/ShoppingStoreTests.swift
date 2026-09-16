@@ -49,6 +49,91 @@ struct ShoppingStoreTests {
         try #require(ISOWeek("2026-W38"))
     }
 
+    // MARK: Order reminder
+
+    private static let orderRoute = "GET /households/household-1/shopping/weeks/2026-W38/order"
+    private static let setOrderRoute = "PUT /households/household-1/shopping/weeks/2026-W38/order"
+
+    @Test func theWeeksOrderReminderLoadsWithTheWeek() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+
+        await store.load()
+
+        let reminder = try #require(store.orderReminder)
+        #expect(reminder.week == "2026-W38")
+        #expect(reminder.orderDay == "thu")
+        #expect(reminder.orderDayName == "Thursday")
+        #expect(reminder.remind)
+        #expect(!reminder.ordered)
+        #expect(harness.server.log.last == Self.orderRoute)
+    }
+
+    @Test func aHouseholdWithNoOrderDayGetsNoReminder() async throws {
+        let harness = try await makeHarness(.init(orderDay: nil))
+        let store = harness.store
+
+        await store.load()
+
+        let reminder = try #require(store.orderReminder)
+        #expect(reminder.orderDay == nil)
+        #expect(reminder.orderDayName == nil)
+        #expect(!reminder.due)
+        #expect(!reminder.remind)
+    }
+
+    @Test func markingTheWeekOrderedSilencesTheReminderAndIsUndoable() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.load()
+        let refreshes = harness.recorder.pantryRefreshes
+
+        try await store.setWeekOrdered(true)
+
+        #expect(harness.server.bodies(Self.setOrderRoute).last?["ordered"] as? Bool == true)
+        #expect(store.orderReminder?.ordered == true)
+        #expect(store.orderReminder?.remind == false)
+        #expect(!store.isSettingOrdered)
+        // Marking reads the bell's copy server-side, so the badge refreshes with the pantry.
+        #expect(harness.recorder.pantryRefreshes == refreshes + 1)
+
+        // A mis-tap must not cost the household its reminder for the week.
+        try await store.setWeekOrdered(false)
+
+        #expect(harness.server.bodies(Self.setOrderRoute).last?["ordered"] as? Bool == false)
+        #expect(store.orderReminder?.ordered == false)
+        #expect(store.orderReminder?.remind == true)
+    }
+
+    @Test func handingTheListToWalmartNeverMarksTheWeekOrdered() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.load()
+
+        try await store.openInWalmart()
+
+        #expect(!harness.recorder.opened.isEmpty)
+        // Opening a cart link is not placing an order, so nothing infers it.
+        #expect(store.orderReminder?.ordered == false)
+        #expect(store.orderReminder?.remind == true)
+        #expect(!harness.server.log.contains(Self.setOrderRoute))
+    }
+
+    @Test func nextWeekStartsFresh() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.load()
+        try await store.setWeekOrdered(true)
+        #expect(store.orderReminder?.ordered == true)
+
+        await store.show(week: try week().next)
+
+        #expect(store.week.description == "2026-W39")
+        #expect(store.orderReminder?.week == "2026-W39")
+        #expect(store.orderReminder?.ordered == false)
+        #expect(store.orderReminder?.remind == true)
+    }
+
     // MARK: Setup and match
 
     @Test func theFirstRunNeedsAStoreBeforeMatching() async throws {
@@ -91,15 +176,17 @@ struct ShoppingStoreTests {
         #expect(proposal.lines.map(\.ingredientKey) == ["i-beef"])
         #expect(proposal.needsProduct.map(\.ingredientKey) == ["name:flour tortillas"])
         #expect(proposal.notIncluded.map(\.reason) == [.checkedOff, .pantryHint, .inPantry])
-        #expect(harness.server.log.last == "GET /households/household-1/shopping/handoffs?week=2026-W38&status=open")
+        // The week's open handoff and then its order reminder are read after the match.
+        #expect(harness.server.log.contains("GET /households/household-1/shopping/handoffs?week=2026-W38&status=open"))
+        #expect(harness.server.log.last == Self.orderRoute)
         #expect(store.openHandoff == nil)
 
-        // Loading again doesn't match again.
+        // Loading again doesn't match again; it re-reads the handoff and the reminder.
         let requests = harness.server.log.count
         harness.checks.setCheckedItems([], householdID: "household-1", week: try week())
         await store.load()
         #expect(harness.server.log.filter { $0 == Self.matchRoute }.count == 1)
-        #expect(harness.server.log.count == requests + 1)
+        #expect(harness.server.log.count == requests + 2)
 
         await store.reload()
         #expect(harness.server.bodies(Self.matchRoute).last?["checkedOffKeys"] == nil)

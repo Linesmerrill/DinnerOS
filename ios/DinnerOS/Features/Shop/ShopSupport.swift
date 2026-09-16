@@ -57,6 +57,11 @@ enum ShopPreviewData {
         ],
         affiliateTracked: true)
 
+    /// The order day has arrived and nobody has marked the week, so the banner shows.
+    static let orderReminder = OrderReminder(
+        week: "2026-W38", orderDay: "thu", dueOn: "2026-09-17", due: true, remind: true, ordered: false,
+        orderedBy: nil, orderedAt: nil)
+
     static let handoff = ShoppingHandoff(
         id: "handoff-preview", status: .open, createdBy: HouseholdPreviewData.user.id,
         createdAt: .now.addingTimeInterval(-3_600), updatedAt: .now, proposal: proposal)
@@ -94,7 +99,8 @@ enum ShopPreviewData {
             settings: configured
                 ? settings : ShoppingSettings(provider: nil, storeID: nil, updatedBy: nil, updatedAt: nil),
             providers: [walmart], proposal: configured ? proposal : nil, openHandoff: configured ? handoff : nil,
-            catalog: catalog, storeRequests: requestedStoreKey.map { [request(key: $0)] } ?? [])
+            catalog: catalog, storeRequests: requestedStoreKey.map { [request(key: $0)] } ?? [],
+            orderReminder: configured ? orderReminder : nil)
     }
 
     private static func amount(_ quantity: String, _ unit: String, _ text: String? = nil) -> ShoppingAmount {

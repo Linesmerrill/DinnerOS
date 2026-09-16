@@ -178,8 +178,8 @@ func (s *Service) Update(ctx context.Context, actor Membership, in UpdateInput) 
 		return Household{}, ErrForbidden
 	}
 	var patch HouseholdPatch
-	if in.Name == nil && in.TimeZone == nil && in.DefaultServings == nil {
-		return Household{}, invalid("at least one of name, timeZone, or defaultServings is required")
+	if in.Name == nil && in.TimeZone == nil && in.DefaultServings == nil && in.OrderDay == nil {
+		return Household{}, invalid("at least one of name, timeZone, defaultServings, or orderDay is required")
 	}
 	if in.Name != nil {
 		name, err := normalizeName(*in.Name)
@@ -201,6 +201,13 @@ func (s *Service) Update(ctx context.Context, actor Membership, in UpdateInput) 
 		}
 		servings := *in.DefaultServings
 		patch.DefaultServings = &servings
+	}
+	if in.OrderDay != nil {
+		day, err := normalizeOrderDay(*in.OrderDay)
+		if err != nil {
+			return Household{}, err
+		}
+		patch.OrderDay = &day
 	}
 	h, err := s.store.UpdateHousehold(ctx, actor.HouseholdID, patch, s.now().UTC())
 	if err != nil {

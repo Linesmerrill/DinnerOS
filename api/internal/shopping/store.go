@@ -50,6 +50,16 @@ type Store interface {
 	// pending.
 	SkipLine(ctx context.Context, householdID, handoffID, lineID, userID string, at time.Time) (bool, error)
 
+	// GetOrderedWeek returns the household's ordered marker for the week, or
+	// ErrNotFound when the week isn't marked.
+	GetOrderedWeek(ctx context.Context, householdID, week string) (OrderedWeek, error)
+	// MarkWeekOrdered records that a week's groceries were ordered. Marking a
+	// week that is already marked keeps the first marker, so a double tap
+	// doesn't rewrite who ordered and when.
+	MarkWeekOrdered(ctx context.Context, w OrderedWeek) (OrderedWeek, error)
+	// UnmarkWeekOrdered removes the week's marker, or returns ErrNotFound.
+	UnmarkWeekOrdered(ctx context.Context, householdID, week string) error
+
 	// ListStoreRequests returns the household's store requests, newest first.
 	ListStoreRequests(ctx context.Context, householdID string) ([]StoreRequest, error)
 	// GetStoreRequestByKey returns the household's request for one store.

@@ -118,6 +118,11 @@ private struct ShopWeekList: View {
             if let refreshError = shopping.refreshError {
                 FormErrorLabel(message: refreshError)
             }
+            // Above "Did you order these?" on purpose: after a Walmart hand-off both are in
+            // view, so marking the week ordered is offered at that moment and never assumed.
+            if let reminder = shopping.orderReminder, reminder.remind || reminder.ordered {
+                OrderReminderBanner(reminder: reminder)
+            }
             if shopping.canConfirm, let handoff = shopping.openHandoff {
                 OpenHandoffBanner(handoff: handoff) {
                     shopping.reviewOpenHandoff()
@@ -384,6 +389,87 @@ private struct ExcludedLineRow: View {
         }
         .foregroundStyle(Color.primary)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// The week's order reminder, and the one control that silences it.
+///
+/// It appears from the household's order day until a member marks the week ordered, then
+/// stays as a quiet confirmation with an undo — a mis-tap must not leave the household
+/// un-remindable for the rest of the week. Nothing else marks a week: handing a list to
+/// Walmart is not proof an order was placed.
+private struct OrderReminderBanner: View {
+    let reminder: OrderReminder
+
+    @Environment(ShoppingStore.self) private var shopping
+    @Environment(HouseholdStore.self) private var households
+
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(title, systemImage: reminder.ordered ? "checkmark.circle.fill" : "calendar.badge.clock")
+                    .font(.headline)
+                    .foregroundStyle(reminder.ordered ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.primary))
+                Text(summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                if let errorMessage {
+                    FormErrorLabel(message: errorMessage)
+                        .font(.footnote)
+                }
+                if shopping.canEdit {
+                    action
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    @ViewBuilder
+    private var action: some View {
+        if reminder.ordered {
+            Button("Not Ordered Yet") { setOrdered(false) }
+                .buttonStyle(.bordered)
+                .disabled(shopping.isSettingOrdered)
+                .accessibilityHint("Brings this week's reminder back.")
+        } else {
+            Button("Mark as Ordered") { setOrdered(true) }
+                .buttonStyle(.borderedProminent)
+                .disabled(shopping.isSettingOrdered)
+                .accessibilityHint("Stops reminding you about this week.")
+        }
+    }
+
+    private var title: String {
+        reminder.ordered
+            ? String(localized: "Ordered this week")
+            : String(localized: "Time to order this week's groceries")
+    }
+
+    private var summary: String {
+        if reminder.ordered {
+            return String(localized: "Marked ordered, so nothing will remind you again until next week.")
+        }
+        guard let day = reminder.orderDayName else {
+            return String(localized: "Send your list to Walmart, then mark the week ordered.")
+        }
+        return String(
+            localized: "\(day) is your order day. Once you've placed the order, mark the week and this stops.")
+    }
+
+    private func setOrdered(_ ordered: Bool) {
+        Task {
+            errorMessage = nil
+            do {
+                try await shopping.setWeekOrdered(ordered)
+            } catch is CancellationError {
+                return
+            } catch {
+                errorMessage = ShopErrors.message(for: error, households: households)
+            }
+        }
     }
 }
 

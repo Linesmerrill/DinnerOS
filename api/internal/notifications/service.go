@@ -36,15 +36,19 @@ type ServiceOptions struct {
 
 // Service creates and reads household notifications.
 type Service struct {
-	store     Store
-	refresher Refresher
-	logger    *slog.Logger
-	now       func() time.Time
+	store Store
+	// refreshers all run before a read, in the order they were added.
+	refreshers []Refresher
+	logger     *slog.Logger
+	now        func() time.Time
 }
 
 // NewService returns a Service.
 func NewService(opts ServiceOptions) *Service {
-	s := &Service{store: opts.Store, refresher: opts.Refresher, logger: opts.Logger, now: opts.Now}
+	s := &Service{store: opts.Store, logger: opts.Logger, now: opts.Now}
+	if opts.Refresher != nil {
+		s.refreshers = append(s.refreshers, opts.Refresher)
+	}
 	if s.logger == nil {
 		s.logger = slog.New(slog.DiscardHandler)
 	}
@@ -54,8 +58,18 @@ func NewService(opts ServiceOptions) *Service {
 	return s
 }
 
-// SetRefresher sets the refresher. Call it while wiring, before serving.
-func (s *Service) SetRefresher(r Refresher) { s.refresher = r }
+// SetRefresher replaces the refreshers with r. Call it while wiring, before
+// serving.
+func (s *Service) SetRefresher(r Refresher) { s.refreshers = []Refresher{r} }
+
+// AddRefresher adds another refresher, so several producers can bring their
+// own time-based conditions up to date before a read. Call it while wiring,
+// before serving.
+func (s *Service) AddRefresher(r Refresher) {
+	if r != nil {
+		s.refreshers = append(s.refreshers, r)
+	}
+}
 
 // Create stores a household notification with a pending push, unless one with
 // the same DedupeKey exists; then it returns that one and created is false.
@@ -200,13 +214,39 @@ func (s *Service) MarkRead(ctx context.Context, actor households.Membership, ids
 	return n, nil
 }
 
-func (s *Service) refresh(ctx context.Context, householdID string) {
-	if s.refresher == nil {
-		return
+// refresh runs every refresher, each bounded by RefreshTimeout. One failing
+// is logged and never stops the others or the read.
+// MarkReadByDedupeKey marks the household's notification with dedupeKey read
+// by the actor. A key with no notification is not an error: the producer may
+// never have created one, which is the same outcome the caller wanted.
+func (s *Service) MarkReadByDedupeKey(ctx context.Context, actor households.Membership, dedupeKey string) error {
+	if err := authorizeView(actor); err != nil {
+		return err
 	}
-	refreshCtx, cancel := context.WithTimeout(ctx, RefreshTimeout)
-	defer cancel()
-	if err := s.refresher.Refresh(refreshCtx, householdID); err != nil {
-		s.logger.WarnContext(ctx, "refresh notifications failed", "householdId", householdID, "error", err)
+	n, err := s.store.FindByDedupeKey(ctx, actor.HouseholdID, dedupeKey)
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("find notification by dedupe key: %w", err)
+	}
+	if n.ReadByUser(actor.UserID) {
+		return nil
+	}
+	if err := s.store.MarkRead(ctx, actor.HouseholdID, actor.UserID, []string{n.ID}); err != nil {
+		return fmt.Errorf("mark notification read: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) refresh(ctx context.Context, householdID string) {
+	for _, r := range s.refreshers {
+		func() {
+			refreshCtx, cancel := context.WithTimeout(ctx, RefreshTimeout)
+			defer cancel()
+			if err := r.Refresh(refreshCtx, householdID); err != nil {
+				s.logger.WarnContext(ctx, "refresh notifications failed", "householdId", householdID, "error", err)
+			}
+		}()
 	}
 }

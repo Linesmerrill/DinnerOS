@@ -54,7 +54,7 @@ Implemented in Phase 3 (`internal/households`, `internal/invitations`).
 
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `households` | name, defaultServings (1–12, default 2), timeZone (IANA name), createdBy, adminCount, createdAt, updatedAt | — (looked up by `_id` only) |
+| `households` | name, defaultServings (1–12, default 2), timeZone (IANA name), orderDay (`mon`–`sun`, absent when unset), createdBy, adminCount, createdAt, updatedAt | — (looked up by `_id` only) |
 | `household_memberships` | householdId, userId, role (`admin`/`member`), createdAt, updatedAt | **unique** `{householdId, userId}`; `{userId}` |
 | `household_invitations` | householdId, email (trimmed, lowercase), role, tokenHash, codeHash, expiresAt, pending, acceptedAt, acceptedBy, revokedAt, createdBy, createdAt | **unique** `{tokenHash}`; **unique** `{codeHash}`; **unique partial** `{householdId, email}` where `pending: true` |
 
@@ -335,6 +335,7 @@ Implemented in `internal/shopping` (Phase 8a, [shopping-providers.md](shopping-p
 | `shopping_product_preferences` | householdId, provider, ingredientKey, ingredientName, productId, displayName, packageSize{quantity, quantityValue, unit}, createdBy, createdAt, updatedBy, updatedAt | **unique** `{householdId, provider, ingredientKey}` |
 | `shopping_handoffs` | householdId, week, provider, storeId, lines[{id, ingredientKey, name, category, amounts[{quantity, quantityValue, unit}], unquantified, groceryStatus, productId, productName, packageSize{}, computedPackages, packages, reason, status (`pending`/`confirmed`/`skipped`), claimedAt, confirmedPackages, purchaseId, confirmedBy, confirmedAt, skippedBy, skippedAt}], excluded[{ingredientKey, name, category, amounts[], unquantified, groceryStatus, reason}], links[{url, lineIds[], itemCount}], affiliateTracked, createdBy, createdAt, updatedAt | `{householdId, createdAt: -1}`; `{householdId, week, createdAt: -1}` |
 | `shopping_store_requests` | householdId, key, name, note, requestedBy, requestedAt, updatedAt | **unique** `{householdId, key}`; `{householdId, requestedAt: -1}`; `{key}` |
+| `shopping_order_weeks` | householdId, week, orderedBy, orderedAt | **unique** `{householdId, week}` |
 
 - **Settings** are one document per household, replaced with an upsert.
 - **Store requests** are the grocers and delivery services a household asked

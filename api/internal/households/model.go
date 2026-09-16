@@ -9,6 +9,7 @@ package households
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"time"
 	_ "time/tzdata" // time-zone validation must not depend on the host's zoneinfo (the Alpine image has none)
@@ -55,7 +56,11 @@ type Household struct {
 	DefaultServings int
 	// TimeZone is an IANA name (e.g. "America/Denver"); plan dates are
 	// interpreted in it.
-	TimeZone  string
+	TimeZone string
+	// OrderDay is the weekday the household means to place its grocery order
+	// ("mon".."sun"), or "" when they haven't chosen one. It drives the
+	// shopping order reminder (docs/shopping-providers.md#order-reminders).
+	OrderDay  string
 	CreatedBy string
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -94,11 +99,13 @@ type CreateInput struct {
 	DefaultServings *int
 }
 
-// UpdateInput is a partial update; nil fields are left unchanged.
+// UpdateInput is a partial update; nil fields are left unchanged. A non-nil
+// OrderDay holding "" clears the household's order day.
 type UpdateInput struct {
 	Name            *string
 	TimeZone        *string
 	DefaultServings *int
+	OrderDay        *string
 }
 
 // HouseholdPatch holds validated field changes for Store.UpdateHousehold.
@@ -106,6 +113,7 @@ type HouseholdPatch struct {
 	Name            *string
 	TimeZone        *string
 	DefaultServings *int
+	OrderDay        *string
 }
 
 func normalizeName(name string) (string, error) {
@@ -133,6 +141,22 @@ func normalizeTimeZone(tz string) (string, error) {
 		return "", invalid("timeZone must be an IANA time zone name such as America/Denver")
 	}
 	return tz, nil
+}
+
+// OrderDays are the weekday codes an order day may take, Monday first. They
+// match planning.Day, without depending on that package.
+var OrderDays = []string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+
+// normalizeOrderDay accepts a weekday code, or "" meaning no order day.
+func normalizeOrderDay(day string) (string, error) {
+	day = strings.TrimSpace(day)
+	if day == "" {
+		return "", nil
+	}
+	if !slices.Contains(OrderDays, day) {
+		return "", invalid("orderDay must be one of mon, tue, wed, thu, fri, sat, sun, or empty to clear it")
+	}
+	return day, nil
 }
 
 func validateServings(n int) error {

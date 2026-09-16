@@ -475,6 +475,39 @@ credentials.
   out-of-stock or alternates flow, and the 8.0 spike's answers (whether the
   `goto.walmart.com` wrapper still opens the app, and the real URL limits).
 
+## Order reminders
+
+A household picks the weekday it means to place its grocery order, and gets one
+reminder for the week once that day arrives — until someone says they ordered.
+
+- **The order day is a household setting** (`orderDay` on the household,
+  `mon`…`sun`, or unset). Unset is the default and means no reminders.
+- **The reminder is derived, never stored.** "Has the order day arrived, and is
+  this week still unmarked?" is a question about today, so it is answered on
+  read from the order day, the household's time zone, and the ordered marker.
+  There is no scheduler, no background job, and nothing that can drift or fire
+  twice.
+- **It belongs to its own week.** It starts on the order day and stops when the
+  week ends, so next week starts fresh instead of a run of old unmarked weeks
+  all asking at once.
+- **Only a person marks a week ordered.** Nothing infers it. A Walmart hand-off
+  is not proof an order was placed — the cart link opens Walmart and DinnerOS
+  never learns what happened next ([Recording purchases](#recording-purchases))
+  — so marking automatically would silence the reminder for a household that
+  never checked out. Marking is undoable for the same reason: a mis-tap must
+  not leave a household un-remindable for a week.
+- **It does not nag.** One notification per week, deduped on the week, and one
+  banner that persists until it is acted on. Marking the week also marks that
+  member's copy of the bell notification read.
+- **Where it shows:** the Shop tab is the primary surface, because the reminder
+  is about ordering and Shop is where the list is sent. It sits directly above
+  "Did you order these?", so finishing a Walmart hand-off puts both in view and
+  the mark is *offered* at that moment. The bell carries the same reminder
+  (`shopping.order_due`) for members who aren't in the Shop tab.
+- **Push:** there is none. Like every notification today this is in-app only;
+  [pantry-usage.md](pantry-usage.md#what-real-push-still-needs) lists what real
+  push would still require.
+
 ## Demand signal
 
 Phase 8a ships one provider, so the Shop tab's honest answer to "can I use my

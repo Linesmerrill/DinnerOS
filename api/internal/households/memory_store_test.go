@@ -87,6 +87,9 @@ func (m *memoryStore) UpdateHousehold(_ context.Context, id string, patch Househ
 	if patch.DefaultServings != nil {
 		h.DefaultServings = *patch.DefaultServings
 	}
+	if patch.OrderDay != nil {
+		h.OrderDay = *patch.OrderDay
+	}
 	h.UpdatedAt = at
 	m.households[id] = h
 	return h, nil

@@ -61,13 +61,23 @@ func (h *Handler) Mount(r chi.Router) {
 
 // HouseholdResponse is the public representation of a household.
 type HouseholdResponse struct {
-	ID              string    `json:"id"`
-	Name            string    `json:"name"`
-	DefaultServings int       `json:"defaultServings"`
-	TimeZone        string    `json:"timeZone"`
-	CreatedBy       string    `json:"createdBy"`
-	CreatedAt       time.Time `json:"createdAt"`
-	UpdatedAt       time.Time `json:"updatedAt"`
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	DefaultServings int    `json:"defaultServings"`
+	TimeZone        string `json:"timeZone"`
+	// OrderDay is null until the household picks a grocery order day.
+	OrderDay  *string   `json:"orderDay"`
+	CreatedBy string    `json:"createdBy"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// orderDayOrNil renders an unset order day as JSON null.
+func orderDayOrNil(day string) *string {
+	if day == "" {
+		return nil
+	}
+	return &day
 }
 
 // NewHouseholdResponse converts a Household for the API.
@@ -77,6 +87,7 @@ func NewHouseholdResponse(hh Household) HouseholdResponse {
 		Name:            hh.Name,
 		DefaultServings: hh.DefaultServings,
 		TimeZone:        hh.TimeZone,
+		OrderDay:        orderDayOrNil(hh.OrderDay),
 		CreatedBy:       hh.CreatedBy,
 		CreatedAt:       hh.CreatedAt.UTC(),
 		UpdatedAt:       hh.UpdatedAt.UTC(),
@@ -156,6 +167,8 @@ type updateHouseholdRequest struct {
 	Name            *string `json:"name"`
 	TimeZone        *string `json:"timeZone"`
 	DefaultServings *int    `json:"defaultServings"`
+	// OrderDay set to "" clears the household's order day.
+	OrderDay *string `json:"orderDay"`
 }
 
 type changeRoleRequest struct {

@@ -14,6 +14,44 @@ struct HouseholdsAPITests {
         return (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
     }
 
+    @Test func aHouseholdWithoutAnOrderDayDecodesAsNil() async throws {
+        let transport = StubTransport { _ in
+            (200, HouseholdFixtures.detail(id: "household-1", name: "Lovelace", role: "admin"))
+        }
+
+        let detail = try await makeAPI(transport).household(id: "household-1", accessToken: "token-1")
+
+        // The fixture omits `orderDay`, the way an API without order reminders answers.
+        #expect(detail.household.orderDay == nil)
+    }
+
+    @Test func updateHouseholdSendsOnlyTheOrderDayItMeansTo() async throws {
+        let transport = StubTransport { _ in
+            (200, Data(HouseholdFixtures.household(id: "household-1", name: "Lovelace").utf8))
+        }
+        let api = try makeAPI(transport)
+
+        _ = try await api.updateHousehold(
+            id: "household-1",
+            changes: HouseholdChanges(name: nil, timeZone: nil, defaultServings: nil, orderDay: "thu"),
+            accessToken: "token-1")
+        #expect(transport.requests.last?.jsonBody == ["orderDay": "thu"])
+
+        // "" clears the order day and turns reminders off.
+        _ = try await api.updateHousehold(
+            id: "household-1",
+            changes: HouseholdChanges(name: nil, timeZone: nil, defaultServings: nil, orderDay: ""),
+            accessToken: "token-1")
+        #expect(transport.requests.last?.jsonBody == ["orderDay": ""])
+
+        // A change that doesn't touch the order day omits it, leaving it alone.
+        _ = try await api.updateHousehold(
+            id: "household-1",
+            changes: HouseholdChanges(name: "Renamed", timeZone: nil, defaultServings: nil, orderDay: nil),
+            accessToken: "token-1")
+        #expect(transport.requests.last?.jsonBody == ["name": "Renamed"])
+    }
+
     @Test func createHouseholdPostsNameAndTimeZone() async throws {
         let transport = StubTransport { _ in (201, HouseholdFixtures.created(id: "household-1", name: "Lovelace")) }
 
