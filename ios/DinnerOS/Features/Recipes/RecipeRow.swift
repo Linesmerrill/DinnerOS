@@ -74,21 +74,20 @@ struct RecipeImage: View {
             .fill(.quaternary)
             .aspectRatio(4.0 / 3.0, contentMode: .fit)
             .overlay {
-                let sized = RecipeImageURL.sized(url, pointWidth: pointWidth, scale: displayScale)
-                AsyncImage(url: sized, transaction: Transaction(animation: .easeIn(duration: 0.2))) { phase in
-                    if let image = phase.image {
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } else {
-                        Image(systemName: "fork.knife")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
-                    }
+                CachedImage(key: ImageKey(url: url, pointWidth: pointWidth, scale: displayScale)) {
+                    glyph
+                } fallback: {
+                    glyph
                 }
             }
             .clipped()
             .accessibilityHidden(true)
+    }
+
+    private var glyph: some View {
+        Image(systemName: "fork.knife")
+            .font(.title2)
+            .foregroundStyle(.secondary)
     }
 }
 
