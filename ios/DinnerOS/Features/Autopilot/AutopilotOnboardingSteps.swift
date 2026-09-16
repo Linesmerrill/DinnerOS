@@ -133,79 +133,202 @@ private struct CuisineTileView: View {
 
 // MARK: - Step 2: restrictions
 
-/// The one safety-critical step: allergens and diets as chips, plus a single ingredient
-/// field. No photos — it should read as plainly as possible.
+/// The one safety-critical step. A photo would be noise — there's nothing appetizing to show
+/// about peanuts — so allergens and diets are symbol tiles in the same rounded-card shape the
+/// Menu uses, rather than two banks of chips a reader skims past (#337). The ingredient field
+/// stays, quietly, at the bottom.
 struct AutopilotAvoidStep: View {
     @Binding var settings: AutopilotSettings
     let vocabulary: AutopilotVocabulary
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private var limits: AutopilotLimits { vocabulary.limits }
 
+    private var columns: [GridItem] {
+        // One per row at accessibility sizes, where a label needs the whole width.
+        let minimum: CGFloat = dynamicTypeSize.isAccessibilitySize ? 260 : 104
+        return [GridItem(.adaptive(minimum: minimum), spacing: 10)]
+    }
+
     var body: some View {
-        Form {
-            Section {
-                ValueChipGroup(
-                    options: vocabulary.allergens, selection: $settings.restrictions.allergens,
-                    maxCount: vocabulary.allergens.count, order: vocabulary.allergens.map(\.value))
-            } header: {
-                Text("Allergens")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                group(
+                    title: String(localized: "Allergens"), options: vocabulary.allergens,
+                    selection: $settings.restrictions.allergens, symbol: AutopilotAvoidSymbol.allergen)
+                group(
+                    title: String(localized: "Diets"), options: vocabulary.diets,
+                    selection: $settings.restrictions.diets, symbol: AutopilotAvoidSymbol.diet)
+                ingredients
             }
-            Section {
-                ValueChipGroup(
-                    options: vocabulary.diets, selection: $settings.restrictions.diets,
-                    maxCount: vocabulary.diets.count, order: vocabulary.diets.map(\.value))
-            } header: {
-                Text("Diets")
-            }
-            Section {
-                ValueChipGroup(
-                    options: [], selection: $settings.restrictions.excludedIngredients,
-                    maxCount: limits.maxExcludedIngredients, maxLength: limits.maxIngredientLength,
-                    addPrompt: "Add an ingredient, like cilantro")
-            } header: {
-                Text("Never Include")
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    @ViewBuilder
+    private func group(
+        title: String, options: [AutopilotOption], selection: Binding<[String]>,
+        symbol: @escaping (String) -> String
+    ) -> some View {
+        if !options.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                LazyVGrid(columns: columns, spacing: 10) {
+                    ForEach(options, id: \.value) { option in
+                        AvoidTile(
+                            label: option.label, systemImage: symbol(option.value),
+                            isOn: selection.wrappedValue.contains(option.value)
+                        ) {
+                            toggle(option.value, in: selection, order: options.map(\.value))
+                        }
+                    }
+                }
             }
         }
+    }
+
+    /// Free text, so it keeps the chips-and-a-field control the preference screens use.
+    private var ingredients: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Never Include")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ValueChipGroup(
+                options: [], selection: $settings.restrictions.excludedIngredients,
+                maxCount: limits.maxExcludedIngredients, maxLength: limits.maxIngredientLength,
+                addPrompt: "Add an ingredient, like cilantro")
+        }
+    }
+
+    private func toggle(_ value: String, in selection: Binding<[String]>, order: [String]) {
+        var list = selection.wrappedValue
+        AutopilotInput.set(value, included: !list.contains(value), in: &list, order: order)
+        selection.wrappedValue = list
+    }
+}
+
+/// An allergen or diet: its glyph, its name, and whether it's on. The same corner radius and
+/// filled-tint selection as the Menu's cards.
+private struct AvoidTile: View {
+    let label: String
+    let systemImage: String
+    let isOn: Bool
+    let toggle: () -> Void
+
+    private static let cornerRadius: CGFloat = 18
+
+    var body: some View {
+        Button(action: toggle) {
+            VStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .font(.title2)
+                    .symbolVariant(.none)
+                    .foregroundStyle(isOn ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.accentColor))
+                Text(label)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(isOn ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.primary))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .padding(.horizontal, 8)
+            .background {
+                RoundedRectangle(cornerRadius: Self.cornerRadius)
+                    .fill(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color(.secondarySystemBackground)))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: Self.cornerRadius)
+                    .strokeBorder(isOn ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.clear), lineWidth: 2)
+            }
+            .contentShape(.rect(cornerRadius: Self.cornerRadius))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+        .accessibilityHint("Autopilot never suggests a recipe with this")
     }
 }
 
 // MARK: - Step 3: schedule
 
-/// How many dinners, which nights, and for how many people: one short line per control.
+/// The one thing about a week that has to be asked: which nights the household cooks. The
+/// dinners Autopilot plans follow the nights picked, and everything else about the schedule —
+/// planning fewer dinners than nights, servings, a weeknight time cap — keeps the API's
+/// defaults until someone changes them in Preferences (#337).
 struct AutopilotWeekStep: View {
     @Binding var settings: AutopilotSettings
-    let limits: AutopilotLimits
-    /// The household's default servings, shown for "Household default".
-    var householdServings: Int?
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var columns: [GridItem] {
+        let minimum: CGFloat = dynamicTypeSize.isAccessibilitySize ? 260 : 96
+        return [GridItem(.adaptive(minimum: minimum), spacing: 10)]
+    }
+
+    private var nights: Int { settings.schedule.planDays.count }
 
     var body: some View {
-        Form {
-            Section {
-                Stepper(value: $settings.schedule.mealsPerWeek, in: 1...max(settings.schedule.planDays.count, 1)) {
-                    LabeledContent("Dinners a Week", value: settings.schedule.mealsPerWeek.formatted())
-                }
-            } footer: {
-                Text("Autopilot fills up to this many of the nights below.")
-            }
-            Section {
-                DayChipRow(selection: settings.schedule.planDays) { day in
-                    settings.setPlanDay(day, included: !settings.schedule.planDays.contains(day))
-                }
-            } header: {
-                Text("Nights You Cook")
-            }
-            Section {
-                Picker("Servings", selection: $settings.schedule.defaultServings) {
-                    Text(householdServings.map { "Household Default (\($0))" } ?? "Household Default")
-                        .tag(Int?.none)
-                    ForEach(1...limits.maxServings, id: \.self) { count in
-                        Text("\(count)").tag(Int?.some(count))
+        ScrollView {
+            VStack(spacing: 16) {
+                LazyVGrid(columns: columns, spacing: 10) {
+                    ForEach(PlanDay.allCases) { day in
+                        NightTile(day: day, isOn: settings.schedule.planDays.contains(day)) {
+                            settings.setPlanNight(day, included: !settings.schedule.planDays.contains(day))
+                        }
                     }
                 }
-            } footer: {
-                Text("How many the meals should feed.")
+                Text("^[\(nights) dinner](inflect: true) a week")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel(Text("Autopilot plans ^[\(nights) dinner](inflect: true) a week"))
             }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
         }
+        .scrollBounceBehavior(.basedOnSize)
+    }
+}
+
+/// One night of the week, filled in when the household cooks it.
+private struct NightTile: View {
+    let day: PlanDay
+    let isOn: Bool
+    let toggle: () -> Void
+
+    private static let cornerRadius: CGFloat = 18
+
+    var body: some View {
+        Button(action: toggle) {
+            VStack(spacing: 6) {
+                Text(DayChipRow.shortName(day))
+                    .font(.headline)
+                    .foregroundStyle(isOn ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.primary))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Image(systemName: isOn ? "fork.knife" : "moon.zzz")
+                    .font(.subheadline)
+                    .foregroundStyle(isOn ? AnyShapeStyle(Color.white.opacity(0.9)) : AnyShapeStyle(Color.secondary))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .padding(.horizontal, 6)
+            .background {
+                RoundedRectangle(cornerRadius: Self.cornerRadius)
+                    .fill(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color(.secondarySystemBackground)))
+            }
+            .contentShape(.rect(cornerRadius: Self.cornerRadius))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(day.name())
+        .accessibilityValue(isOn ? Text("Cooking") : Text("Not cooking"))
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }
 
@@ -242,6 +365,13 @@ struct AutopilotWeekStep: View {
     }
 }
 
+#Preview("Avoid, chosen") {
+    @Previewable @State var settings = AutopilotPreviewData.likedSettings
+    if let vocabulary = AutopilotPreviewData.vocabulary {
+        AutopilotAvoidStep(settings: $settings, vocabulary: vocabulary)
+    }
+}
+
 #Preview("Avoid, dark") {
     @Previewable @State var settings = AutopilotSettings.defaults
     if let vocabulary = AutopilotPreviewData.vocabulary {
@@ -250,13 +380,27 @@ struct AutopilotWeekStep: View {
     }
 }
 
-#Preview("Week") {
+#Preview("Avoid, accessibility size") {
     @Previewable @State var settings = AutopilotSettings.defaults
-    AutopilotWeekStep(settings: $settings, limits: .defaults, householdServings: 4)
+    if let vocabulary = AutopilotPreviewData.vocabulary {
+        AutopilotAvoidStep(settings: $settings, vocabulary: vocabulary)
+            .environment(\.dynamicTypeSize, .accessibility3)
+    }
 }
 
-#Preview("Week, accessibility size") {
+#Preview("Nights") {
     @Previewable @State var settings = AutopilotSettings.defaults
-    AutopilotWeekStep(settings: $settings, limits: .defaults, householdServings: 4)
+    AutopilotWeekStep(settings: $settings)
+}
+
+#Preview("Nights, dark") {
+    @Previewable @State var settings = AutopilotSettings.defaults
+    AutopilotWeekStep(settings: $settings)
+        .preferredColorScheme(.dark)
+}
+
+#Preview("Nights, accessibility size") {
+    @Previewable @State var settings = AutopilotSettings.defaults
+    AutopilotWeekStep(settings: $settings)
         .environment(\.dynamicTypeSize, .accessibility3)
 }

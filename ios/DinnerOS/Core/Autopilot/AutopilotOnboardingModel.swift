@@ -29,7 +29,7 @@ nonisolated enum AutopilotOnboardingStep: String, CaseIterable, Hashable, Sendab
         switch self {
         case .taste: String(localized: "Tap what you love. Tap again for “no thanks.”")
         case .avoid: String(localized: "Autopilot never suggests a recipe that breaks these.")
-        case .week: String(localized: "How many dinners, which nights, and for how many.")
+        case .week: String(localized: "Tap the nights you cook dinner.")
         }
     }
 
@@ -49,7 +49,7 @@ nonisolated enum AutopilotOnboardingStep: String, CaseIterable, Hashable, Sendab
         case .week:
             String(
                 localized:
-                    "Autopilot fills up to this many of the nights you choose. Days you've already planned count toward the total."
+                    "Autopilot plans a dinner for each night you pick. Nights you've already planned count toward the total, and Autopilot Preferences can plan fewer dinners than nights, set servings, and cap weeknight cooking."
             )
         }
     }
@@ -61,6 +61,45 @@ nonisolated enum AutopilotOnboardingStep: String, CaseIterable, Hashable, Sendab
 
     var index: Int {
         AutopilotOnboardingStep.allCases.firstIndex(of: self) ?? 0
+    }
+}
+
+/// The glyph for an allergen or diet on the "Anything to avoid?" step.
+///
+/// A photo would be noise here — there's nothing appetizing to show about peanuts — so the
+/// step is symbol-led instead, which is also what keeps it from reading as a wall of chips
+/// (#337). Values the server hasn't taught the app fall back to a neutral glyph rather than
+/// a blank tile, so a newer vocabulary still looks right.
+nonisolated enum AutopilotAvoidSymbol {
+    static let allergenFallback = "exclamationmark.shield.fill"
+    static let dietFallback = "checkmark.seal.fill"
+
+    /// Canonical allergen value → SF Symbol.
+    static let allergens: [String: String] = [
+        "milk": "drop.fill", "dairy": "drop.fill", "eggs": "oval.fill", "fish": "fish.fill",
+        "shellfish": "water.waves", "peanuts": "leaf.fill", "tree nuts": "leaf.fill",
+        "wheat": "birthday.cake.fill", "gluten": "birthday.cake.fill", "soy": "leaf.circle.fill",
+        "sesame": "circle.grid.3x3.fill",
+    ]
+
+    /// Canonical diet value → SF Symbol.
+    static let diets: [String: String] = [
+        "vegetarian": "carrot.fill", "vegan": "leaf.fill", "pescatarian": "fish.fill",
+        "gluten-free": "birthday.cake.fill", "dairy-free": "drop.fill", "nut-free": "leaf.fill",
+        "keto": "flame.fill", "paleo": "flame.fill", "low-carb": "flame.fill",
+    ]
+
+    static func allergen(_ value: String) -> String {
+        allergens[value.lowercased()] ?? allergenFallback
+    }
+
+    static func diet(_ value: String) -> String {
+        diets[value.lowercased()] ?? dietFallback
+    }
+
+    /// Every symbol the step can draw, so a test can check they're all real.
+    static var allSymbols: [String] {
+        Array(allergens.values) + Array(diets.values) + [allergenFallback, dietFallback]
     }
 }
 

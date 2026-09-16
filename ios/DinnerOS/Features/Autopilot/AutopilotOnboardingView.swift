@@ -103,9 +103,7 @@ struct AutopilotOnboardingView: View {
             case .avoid:
                 AutopilotAvoidStep(settings: settings, vocabulary: vocabulary)
             case .week:
-                AutopilotWeekStep(
-                    settings: settings, limits: vocabulary.limits,
-                    householdServings: households.current?.household.defaultServings)
+                AutopilotWeekStep(settings: settings)
             }
         }
         .safeAreaInset(edge: .bottom) {

@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UIKit
 
 @testable import DinnerOS
 
@@ -46,6 +47,57 @@ struct AutopilotOnboardingTests {
             AutopilotSection.allCases.filter { !$0.isInSetup }
                 == [.cookTime, .equipment, .weekdayRules, .novelty, .pairings])
         #expect(AutopilotSection.allCases.allSatisfy { !$0.detail.isEmpty })
+    }
+
+    /// The nights you cook are the dinners you want, so setup asks once instead of twice.
+    @Test func theNightsPickedAreTheDinnersAutopilotPlans() {
+        var settings = AutopilotSettings.defaults
+        #expect(settings.schedule.planDays.count == 5)
+
+        settings.setPlanNight(.sat, included: true)
+        #expect(settings.schedule.planDays == [.mon, .tue, .wed, .thu, .fri, .sat])
+        #expect(settings.schedule.mealsPerWeek == 6)
+
+        settings.setPlanNight(.mon, included: false)
+        #expect(settings.schedule.planDays == [.tue, .wed, .thu, .fri, .sat])
+        #expect(settings.schedule.mealsPerWeek == settings.schedule.planDays.count)
+        #expect(settings.validationMessage == nil)
+    }
+
+    /// A week with no nights can't be planned, so the last one stays whatever is tapped.
+    @Test func theLastNightStaysSoTheWeekIsAlwaysPlannable() {
+        var settings = AutopilotSettings.defaults
+        for day in PlanDay.allCases {
+            settings.setPlanNight(day, included: false)
+        }
+
+        #expect(settings.schedule.planDays.count == 1)
+        #expect(settings.schedule.mealsPerWeek == 1)
+        #expect(settings.validationMessage == nil)
+    }
+
+    /// Setup no longer asks for servings: `nil` means the household's own default, which the
+    /// API resolves as `effective.defaultServings`.
+    @Test func setupLeavesServingsToTheHouseholdDefault() {
+        #expect(AutopilotSettings.defaults.schedule.defaultServings == nil)
+    }
+
+    // MARK: Glyphs
+
+    /// A misspelled SF Symbol draws nothing at all, so every one the avoid step can reach is
+    /// checked here rather than discovered on the screen.
+    @Test func everyAvoidGlyphIsARealSymbol() {
+        for name in AutopilotAvoidSymbol.allSymbols {
+            #expect(UIImage(systemName: name) != nil, "\(name) isn't an SF Symbol")
+        }
+    }
+
+    @Test func glyphsAreCaseInsensitiveAndFallBackForAnUnknownValue() {
+        #expect(AutopilotAvoidSymbol.allergen("peanuts") == "leaf.fill")
+        #expect(AutopilotAvoidSymbol.allergen("Peanuts") == "leaf.fill")
+        #expect(AutopilotAvoidSymbol.allergen("unobtainium") == AutopilotAvoidSymbol.allergenFallback)
+        #expect(AutopilotAvoidSymbol.diet("vegetarian") == "carrot.fill")
+        #expect(AutopilotAvoidSymbol.diet("carnivore") == AutopilotAvoidSymbol.dietFallback)
     }
 
     @Test func skippingAStepKeepsTheServerDefaultsForThatSectionOnly() {
