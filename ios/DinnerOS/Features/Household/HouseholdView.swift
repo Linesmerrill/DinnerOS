@@ -8,6 +8,7 @@ import SwiftUI
 struct HouseholdView: View {
     @Environment(AuthSession.self) private var session
     @Environment(HouseholdStore.self) private var households
+    @Environment(ImportReviewStore.self) private var importReviews
     @Environment(\.appConfiguration) private var configuration
 
     @State private var me: MeResponse?
@@ -65,6 +66,11 @@ struct HouseholdView: View {
                 } footer: {
                     Text("What your household likes, your schedule, and weekly habits Autopilot plans around.")
                 }
+                // Import bookkeeping, so it follows `recipes.import` rather than `household.view`,
+                // and hides entirely against an API without the route.
+                if detail.access.can(.recipesImport), importReviews.isAvailable {
+                    importReviewSection
+                }
                 if detail.access.can(.membersInvite) {
                     invitationsSection
                 }
@@ -96,6 +102,15 @@ struct HouseholdView: View {
             }
         }
         .task { await loadAccount() }
+        // Only for someone who could act on it: without `recipes.import` the row is hidden and
+        // the request would be a guaranteed `403`.
+        .task(id: households.current?.household.id) {
+            guard let householdID = households.current?.household.id,
+                households.access?.can(.recipesImport) == true
+            else { return }
+            importReviews.activate(householdID: householdID)
+            await importReviews.load()
+        }
         .refreshable {
             await households.load()
             await loadAccount()
@@ -169,6 +184,23 @@ struct HouseholdView: View {
                 Text("Your role can't see the member list.")
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    /// The importer's backlog. The badge counts recipes worth a second look, not every item:
+    /// a spelling difference is not something to act on.
+    private var importReviewSection: some View {
+        Section {
+            NavigationLink {
+                ImportReviewView()
+            } label: {
+                Label("Import Review", systemImage: "tray.full")
+                    .badge(importReviews.digest.differences.count)
+            }
+        } header: {
+            Text("Imports")
+        } footer: {
+            Text("Deliveries the importer couldn't match to the recipe page it stored the details from.")
         }
     }
 

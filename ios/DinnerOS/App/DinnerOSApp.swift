@@ -13,6 +13,7 @@ struct DinnerOSApp: App {
                 .environment(dependencies.session)
                 .environment(dependencies.households)
                 .environment(dependencies.recipes)
+                .environment(dependencies.importReviews)
                 .environment(dependencies.plans)
                 .environment(dependencies.pantry)
                 .environment(dependencies.specialties)
