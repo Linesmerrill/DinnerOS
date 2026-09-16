@@ -73,6 +73,10 @@ struct QuantityFormattingTests {
             ("1", 1, "clove", "clove", "1 clove"),
             ("2", 2, "clove", "clove", "2 cloves"),
             ("3/2", 1.5, "cup", "cup", "1½ cups"),
+            // Only exactly one is singular; a `> 1` rule wrote "0 cup".
+            ("0", 0, "cup", "cup", "0 cups"),
+            ("1/2", 0.5, "cup", "cup", "½ cup"),
+            ("0", 0, "count", "unit", "0"),
             ("6", 6, "count", "unit", "6"),
             ("250", 250, "ml", "milliliter", "250 mL"),
             ("2", 2, "floz", "fluid ounce", "2 fl oz"),

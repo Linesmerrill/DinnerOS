@@ -38,7 +38,9 @@ struct PantryEstimateRing: View {
     }
 }
 
-/// "◔ ~31% left" under a pantry row's name.
+/// "◔ ~31% left" under a pantry row's name, with a warning glyph when the estimate had to
+/// skip a cooked recipe — otherwise an item that couldn't be counted reads exactly like one
+/// that was, which is the one thing the percentage must not imply.
 struct PantryEstimateLabel: View {
     let estimate: PantryEstimate
 
@@ -48,11 +50,21 @@ struct PantryEstimateLabel: View {
         HStack(spacing: 5) {
             PantryEstimateRing(estimate: estimate, diameter: ringSize)
             Text(PantryUsageFormat.remainingShort(estimate))
+            if PantryUsageFormat.skippedRecipesShort(estimate) != nil {
+                Image(systemName: "exclamationmark.circle")
+                    .foregroundStyle(.orange)
+            }
         }
         .font(.footnote)
         .foregroundStyle(.secondary)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(PantryUsageFormat.remainingSpoken(estimate))
+        .accessibilityLabel(spokenLabel)
+    }
+
+    private var spokenLabel: String {
+        let remaining = PantryUsageFormat.remainingSpoken(estimate)
+        guard let skipped = PantryUsageFormat.skippedRecipesShort(estimate) else { return remaining }
+        return "\(remaining), \(skipped)"
     }
 }
 
@@ -98,11 +110,9 @@ struct PantryUsageSections: View {
                 LabeledContent("Recipes", value: PantryUsageFormat.recipeUse(estimate))
                 LabeledContent {
                     VStack(alignment: .trailing, spacing: 2) {
+                        Text(PantryUsageFormat.otherUse(estimate))
                         Text(PantryUsageFormat.dailyRate(estimate))
-                        if let basis = PantryUsageFormat.dailyRateBasis(estimate) {
-                            Text(basis)
-                                .font(.caption)
-                        }
+                            .font(.caption)
                     }
                 } label: {
                     Text("Other Use")

@@ -114,6 +114,34 @@ struct PantryFormattingTests {
         #expect(PantryFormat.amount(none, locale: english) == nil)
     }
 
+    /// Only exactly one is singular. The old `> 1` rule read zero as singular, so an item
+    /// used up rendered "0 cup".
+    @Test func emptyAndFractionalAmountsAgreeWithTheirUnit() {
+        let english = Locale(identifier: "en_US")
+        let empty = PantryFixtures.item(quantity: "0", quantityValue: 0, unit: "cup")
+        let half = PantryFixtures.item(quantity: "1/2", quantityValue: 0.5, unit: "cup")
+        let one = PantryFixtures.item(quantity: "1", quantityValue: 1, unit: "cup")
+        let many = PantryFixtures.item(quantity: "2", quantityValue: 2, unit: "cup")
+        let emptyCount = PantryFixtures.item(quantity: "0", quantityValue: 0, unit: "count")
+
+        #expect(PantryFormat.amount(empty, locale: english) == "0 cups")
+        #expect(PantryFormat.amount(half, locale: english) == "½ cup")
+        #expect(PantryFormat.amount(one, locale: english) == "1 cup")
+        #expect(PantryFormat.amount(many, locale: english) == "2 cups")
+        // A count still has no label to agree with.
+        #expect(PantryFormat.amount(emptyCount, locale: english) == "0")
+    }
+
+    @Test func onlyExactlyOneIsSingular() {
+        #expect(RecipeFormat.isPlural(0))
+        #expect(!RecipeFormat.isPlural(0.5))
+        #expect(!RecipeFormat.isPlural(1))
+        #expect(RecipeFormat.isPlural(1.5))
+        #expect(RecipeFormat.isPlural(2))
+        // No number to agree with keeps the singular label.
+        #expect(!RecipeFormat.isPlural(nil))
+    }
+
     @Test func unitPickerKeepsUnknownCodes() {
         #expect(PantryUnit.options(including: "cup") == PantryUnit.codes)
         #expect(PantryUnit.options(including: "sprig").last == "sprig")

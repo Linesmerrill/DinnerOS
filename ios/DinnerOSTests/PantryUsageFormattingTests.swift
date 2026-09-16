@@ -37,9 +37,29 @@ struct PantryUsageFormattingTests {
         let unlearned = PantryFixtures.estimate(dailyRate: nil)
 
         #expect(PantryUsageFormat.dailyRate(learned, locale: locale) == "About 1 tbsp a day")
-        #expect(PantryUsageFormat.dailyRateBasis(learned) == "Learned from 3 earlier periods")
         #expect(PantryUsageFormat.dailyRate(unlearned, locale: locale) == "Not enough history yet")
-        #expect(PantryUsageFormat.dailyRateBasis(unlearned) == nil)
+    }
+
+    /// The Other Use row counts what non-recipe use has actually been applied this cycle.
+    /// It used to show `dailyRate` — the rate, not the amount — so an item 5 tbsp down read
+    /// "About 1 tbsp a day" and the decoded `otherUse` was never shown anywhere.
+    @Test func otherUseIsTheAmountAppliedNotTheRate() {
+        let estimate = PantryFixtures.estimate()
+
+        #expect(PantryUsageFormat.otherUse(estimate, locale: locale) == "5 tbsp")
+        #expect(
+            PantryUsageFormat.otherUse(estimate, locale: locale)
+                != PantryUsageFormat.dailyRate(estimate, locale: locale))
+    }
+
+    /// A pantry row has to say that a percentage is missing a cooked recipe; without it an
+    /// item that couldn't be counted looks exactly like one that was deducted.
+    @Test func aRowSaysWhenSomeUseCouldntBeCounted() {
+        #expect(PantryUsageFormat.skippedRecipesShort(PantryFixtures.estimate()) == nil)
+        #expect(
+            PantryUsageFormat.skippedRecipesShort(PantryFixtures.estimate(skippedRecipes: 1)) == "some use not counted")
+        #expect(
+            PantryUsageFormat.skippedRecipesShort(PantryFixtures.estimate(skippedRecipes: 4)) == "some use not counted")
     }
 
     @Test func skippedRecipesAndThresholds() {
@@ -76,6 +96,10 @@ struct PantryUsageFormattingTests {
         #expect(PantryUsageFormat.purchaseSource(purchases[1].source) == "Grocery list")
         #expect(PantryUsageFormat.amount("3/2", value: 1.5, unit: "cup", locale: locale) == "1½ cups")
         #expect(PantryUsageFormat.amount("3", value: 3, unit: "count", locale: locale) == "3")
+        // Only exactly one is singular. A `> 1` rule wrote "0 cup".
+        #expect(PantryUsageFormat.amount("0", value: 0, unit: "cup", locale: locale) == "0 cups")
+        #expect(PantryUsageFormat.amount("1/2", value: 0.5, unit: "cup", locale: locale) == "½ cup")
+        #expect(PantryUsageFormat.amount("1", value: 1, unit: "cup", locale: locale) == "1 cup")
         #expect(
             PantryUsageFormat.unitSize(
                 PantryUnitSize(per: "package", quantity: "8", quantityValue: 8, unit: "oz"), locale: locale)

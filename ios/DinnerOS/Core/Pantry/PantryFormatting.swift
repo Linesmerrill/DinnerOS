@@ -81,7 +81,7 @@ nonisolated enum PantryFormat {
             return nil
         }
         let code = item.unit ?? PantryUnit.defaultCode
-        let unit = RecipeFormat.unitLabel(code, sourceUnit: code, plural: (item.quantityValue ?? 0) > 1)
+        let unit = RecipeFormat.unitLabel(code, sourceUnit: code, plural: RecipeFormat.isPlural(item.quantityValue))
         return unit.isEmpty ? quantity : "\(quantity) \(unit)"
     }
 }
