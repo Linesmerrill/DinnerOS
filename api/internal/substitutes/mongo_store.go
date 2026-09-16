@@ -19,6 +19,7 @@ const (
 	SpecialtiesCollection = "specialty_ingredients"
 	OptionsCollection     = "specialty_options"
 	ChoicesCollection     = "specialty_choices"
+	SettingsCollection    = "specialty_settings"
 )
 
 // Indexes returns the indexes MongoStore relies on.
@@ -51,6 +52,13 @@ func Indexes() []mongodb.IndexSet {
 				},
 			},
 		},
+		{
+			Collection: SettingsCollection,
+			Indexes: []mongo.IndexModel{{
+				Keys:    bson.D{{Key: "householdId", Value: 1}},
+				Options: options.Index().SetUnique(true).SetName("householdId_unique"),
+			}},
+		},
 	}
 }
 
@@ -59,6 +67,7 @@ type MongoStore struct {
 	specialties *mongo.Collection
 	options     *mongo.Collection
 	choices     *mongo.Collection
+	settings    *mongo.Collection
 }
 
 var _ Store = (*MongoStore)(nil)
@@ -69,6 +78,7 @@ func NewMongoStore(db *mongo.Database) *MongoStore {
 		specialties: db.Collection(SpecialtiesCollection),
 		options:     db.Collection(OptionsCollection),
 		choices:     db.Collection(ChoicesCollection),
+		settings:    db.Collection(SettingsCollection),
 	}
 }
 
@@ -122,6 +132,7 @@ type specialtyDoc struct {
 	Aliases         []string           `bson:"aliases"`
 	AliasKeys       []string           `bson:"aliasKeys"`
 	Category        string             `bson:"category"`
+	Note            string             `bson:"note,omitempty"`
 	UnitSizes       []unitSizeDoc      `bson:"unitSizes"`
 	DefaultOptionID string             `bson:"defaultOptionId"`
 	Options         []curatedOptionDoc `bson:"options"`
@@ -151,6 +162,21 @@ type choiceDoc struct {
 	OptionID    string        `bson:"optionId"`
 	ChosenBy    bson.ObjectID `bson:"chosenBy"`
 	ChosenAt    time.Time     `bson:"chosenAt"`
+}
+
+type settingsDoc struct {
+	ID          bson.ObjectID `bson:"_id"`
+	HouseholdID bson.ObjectID `bson:"householdId"`
+	Strategy    string        `bson:"strategy"`
+	UpdatedBy   bson.ObjectID `bson:"updatedBy"`
+	UpdatedAt   time.Time     `bson:"updatedAt"`
+}
+
+func (d settingsDoc) toSettings() Settings {
+	return Settings{
+		HouseholdID: d.HouseholdID.Hex(), Strategy: Strategy(d.Strategy),
+		UpdatedBy: d.UpdatedBy.Hex(), UpdatedAt: d.UpdatedAt.UTC(),
+	}
 }
 
 func value(quantity string) float64 {
@@ -204,7 +230,7 @@ func (b optionBody) applyTo(o *Option) {
 
 func (d specialtyDoc) toSpecialty() Specialty {
 	sp := Specialty{
-		ID: d.Slug, Key: d.Key, Name: d.Name, Category: d.Category, DefaultOptionID: d.DefaultOptionID,
+		ID: d.Slug, Key: d.Key, Name: d.Name, Category: d.Category, Note: d.Note, DefaultOptionID: d.DefaultOptionID,
 		SeedVersion: d.SeedVersion, ContentHash: d.ContentHash, Retired: d.Retired,
 		CreatedAt: d.CreatedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
 	}
@@ -298,7 +324,7 @@ func (s *MongoStore) GetSpecialty(ctx context.Context, id string) (Specialty, er
 func (s *MongoStore) UpsertSpecialty(ctx context.Context, sp Specialty) error {
 	d := specialtyDoc{
 		Slug: sp.ID, Key: sp.Key, Name: sp.Name, Aliases: sp.Aliases, AliasKeys: sp.AliasKeys, Category: sp.Category,
-		DefaultOptionID: sp.DefaultOptionID, SeedVersion: sp.SeedVersion, ContentHash: sp.ContentHash,
+		Note: sp.Note, DefaultOptionID: sp.DefaultOptionID, SeedVersion: sp.SeedVersion, ContentHash: sp.ContentHash,
 		UnitSizes: make([]unitSizeDoc, 0, len(sp.UnitSizes)), Options: make([]curatedOptionDoc, 0, len(sp.Options)),
 	}
 	if d.Aliases == nil {
@@ -313,7 +339,8 @@ func (s *MongoStore) UpsertSpecialty(ctx context.Context, sp Specialty) error {
 	update := bson.D{
 		{Key: "$set", Value: bson.D{
 			{Key: "key", Value: d.Key}, {Key: "name", Value: d.Name}, {Key: "aliases", Value: d.Aliases},
-			{Key: "aliasKeys", Value: d.AliasKeys}, {Key: "category", Value: d.Category}, {Key: "unitSizes", Value: d.UnitSizes},
+			{Key: "aliasKeys", Value: d.AliasKeys}, {Key: "category", Value: d.Category}, {Key: "note", Value: d.Note},
+			{Key: "unitSizes", Value: d.UnitSizes},
 			{Key: "defaultOptionId", Value: d.DefaultOptionID}, {Key: "options", Value: d.Options},
 			{Key: "seedVersion", Value: d.SeedVersion}, {Key: "contentHash", Value: d.ContentHash},
 			{Key: "retired", Value: false}, {Key: "updatedAt", Value: sp.UpdatedAt},
@@ -573,4 +600,47 @@ func (s *MongoStore) DeleteChoicesForOption(ctx context.Context, householdID, op
 	}
 	_, err = s.choices.DeleteMany(ctx, bson.D{{Key: "householdId", Value: hid}, {Key: "optionId", Value: optionID}})
 	return translate(err)
+}
+
+// --- Settings -------------------------------------------------------------------
+
+// GetSettings implements Store.
+func (s *MongoStore) GetSettings(ctx context.Context, householdID string) (Settings, error) {
+	hid, err := householdOID(householdID)
+	if err != nil {
+		return Settings{}, err
+	}
+	var d settingsDoc
+	if err := s.settings.FindOne(ctx, bson.D{{Key: "householdId", Value: hid}}).Decode(&d); err != nil {
+		return Settings{}, translate(err)
+	}
+	return d.toSettings(), nil
+}
+
+// PutSettings implements Store with an upsert on the unique household; when
+// two first writes race, the loser retries once as an update.
+func (s *MongoStore) PutSettings(ctx context.Context, set Settings) (Settings, error) {
+	ids, err := parseIDs(map[string]string{"householdId": set.HouseholdID, "updatedBy": set.UpdatedBy})
+	if err != nil {
+		return Settings{}, err
+	}
+	filter := bson.D{{Key: "householdId", Value: ids["householdId"]}}
+	update := bson.D{
+		{Key: "$set", Value: bson.D{
+			{Key: "strategy", Value: string(set.Strategy)},
+			{Key: "updatedBy", Value: ids["updatedBy"]},
+			{Key: "updatedAt", Value: set.UpdatedAt},
+		}},
+		{Key: "$setOnInsert", Value: bson.D{{Key: "_id", Value: bson.NewObjectID()}}},
+	}
+	opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)
+	var d settingsDoc
+	err = s.settings.FindOneAndUpdate(ctx, filter, update, opts).Decode(&d)
+	if errors.Is(mongodb.TranslateError(err), mongodb.ErrDuplicate) {
+		err = s.settings.FindOneAndUpdate(ctx, filter, update, opts).Decode(&d)
+	}
+	if err != nil {
+		return Settings{}, translate(err)
+	}
+	return d.toSettings(), nil
 }

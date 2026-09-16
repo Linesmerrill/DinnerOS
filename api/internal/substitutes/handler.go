@@ -56,6 +56,9 @@ func (h *Handler) Mount(r chi.Router) {
 		edit := households.RequirePermission(h.opts.Authorizer, households.PermPantryEdit, h.logger)
 		const base = "/households/{householdId}/specialty-ingredients"
 		r.With(view).Get(base, h.list)
+		// A static segment wins over {specialtyId}, like choices/defaults.
+		r.With(view).Get(base+"/settings", h.settings)
+		r.With(edit).Put(base+"/settings", h.setSettings)
 		r.With(edit).Post(base+"/choices/defaults", h.applyDefaults)
 		r.With(view).Get(base+"/{specialtyId}", h.get)
 		r.With(edit).Put(base+"/{specialtyId}/choice", h.setChoice)
@@ -121,14 +124,45 @@ type OptionResponse struct {
 	UpdatedAt       *time.Time      `json:"updatedAt"`
 }
 
-// ChoiceResponse is the household's choice.
+// ChoiceResponse is what the household currently does about a specialty
+// ingredient: the option a member chose, or the one its strategy picked.
 type ChoiceResponse struct {
-	OptionID string `json:"optionId"`
-	// Type is as_is or the chosen option's type.
-	Type       string    `json:"type"`
-	OptionName *string   `json:"optionName"`
-	ChosenBy   string    `json:"chosenBy"`
-	ChosenAt   time.Time `json:"chosenAt"`
+	// Source is household (a member chose it, including as_is) or strategy
+	// (the household's default picked it; a member can still override it).
+	Source   ChoiceSource `json:"source"`
+	OptionID string       `json:"optionId"`
+	// Type is as_is or the option's type.
+	Type       string  `json:"type"`
+	OptionName *string `json:"optionName"`
+	// Strategy is the strategy that picked the option, null when a member
+	// chose it.
+	Strategy *Strategy `json:"strategy"`
+	// ChosenBy and ChosenAt are null for a strategy, which nobody chose.
+	ChosenBy *string    `json:"chosenBy"`
+	ChosenAt *time.Time `json:"chosenAt"`
+}
+
+// StrategyOptionResponse explains one strategy in the words to show.
+type StrategyOptionResponse struct {
+	Value       Strategy `json:"value"`
+	Label       string   `json:"label"`
+	Description string   `json:"description"`
+}
+
+// SpecialtySettingsResponse is returned by GET and PUT
+// .../specialty-ingredients/settings. UpdatedBy and UpdatedAt are null for a
+// household that never set one.
+type SpecialtySettingsResponse struct {
+	Strategy  Strategy   `json:"strategy"`
+	UpdatedBy *string    `json:"updatedBy"`
+	UpdatedAt *time.Time `json:"updatedAt"`
+	// Options explain every strategy, in the order to offer them.
+	Options []StrategyOptionResponse `json:"options"`
+}
+
+// SetSpecialtySettingsRequest is the body of PUT .../settings.
+type SetSpecialtySettingsRequest struct {
+	Strategy string `json:"strategy"`
 }
 
 // BatchStockResponse is the specialty's batch item in the pantry.
@@ -142,19 +176,24 @@ type BatchStockResponse struct {
 
 // SpecialtyResponse is a specialty ingredient for a household.
 type SpecialtyResponse struct {
-	ID              string              `json:"id"`
-	Key             string              `json:"key"`
-	Name            string              `json:"name"`
-	Aliases         []string            `json:"aliases"`
-	Category        string              `json:"category"`
-	IngredientIDs   []string            `json:"ingredientIds"`
-	RecipeCount     int                 `json:"recipeCount"`
-	UnitSizes       []UnitSizeResponse  `json:"unitSizes"`
-	DefaultOptionID string              `json:"defaultOptionId"`
-	Retired         bool                `json:"retired"`
-	Choice          *ChoiceResponse     `json:"choice"`
-	Options         []OptionResponse    `json:"options"`
-	Batch           *BatchStockResponse `json:"batch"`
+	ID       string   `json:"id"`
+	Key      string   `json:"key"`
+	Name     string   `json:"name"`
+	Aliases  []string `json:"aliases"`
+	Category string   `json:"category"`
+	// Note is a short shopping note, empty for most.
+	Note            string             `json:"note"`
+	IngredientIDs   []string           `json:"ingredientIds"`
+	RecipeCount     int                `json:"recipeCount"`
+	UnitSizes       []UnitSizeResponse `json:"unitSizes"`
+	DefaultOptionID string             `json:"defaultOptionId"`
+	Retired         bool               `json:"retired"`
+	// ChoiceSource is household, strategy, or none, and says whether Choice
+	// is a member's decision or the household's default.
+	ChoiceSource ChoiceSource        `json:"choiceSource"`
+	Choice       *ChoiceResponse     `json:"choice"`
+	Options      []OptionResponse    `json:"options"`
+	Batch        *BatchStockResponse `json:"batch"`
 }
 
 // SpecialtyListResponse is returned by GET .../specialty-ingredients.
@@ -315,9 +354,9 @@ func newSpecialtyResponse(v View) SpecialtyResponse {
 	sp := v.Specialty
 	resp := SpecialtyResponse{
 		ID: sp.ID, Key: sp.Key, Name: sp.Name, Aliases: append([]string{}, sp.Aliases...), Category: sp.Category,
-		IngredientIDs: append([]string{}, v.IngredientIDs...), RecipeCount: v.RecipeCount,
+		Note: sp.Note, IngredientIDs: append([]string{}, v.IngredientIDs...), RecipeCount: v.RecipeCount,
 		UnitSizes: make([]UnitSizeResponse, 0, len(sp.UnitSizes)), DefaultOptionID: sp.DefaultOptionID, Retired: sp.Retired,
-		Options: make([]OptionResponse, 0, len(v.Options)),
+		ChoiceSource: ChoiceSourceNone, Options: make([]OptionResponse, 0, len(v.Options)),
 	}
 	for _, u := range sp.UnitSizes {
 		if a := amountResponse(u.Quantity, u.Unit); a != nil {
@@ -327,10 +366,24 @@ func newSpecialtyResponse(v View) SpecialtyResponse {
 	for _, o := range v.Options {
 		resp.Options = append(resp.Options, newOptionResponse(o, sp.DefaultOptionID))
 	}
-	if c := v.Choice; c != nil {
-		cr := &ChoiceResponse{OptionID: c.OptionID, Type: OptionAsIs, ChosenBy: c.ChosenBy, ChosenAt: c.ChosenAt.UTC()}
-		if o := v.ChoiceOption; o != nil {
-			cr.Type, cr.OptionName = string(o.Type), &o.Name
+	// The plan is the explicit choice when there is one, otherwise whatever the
+	// household's strategy picks; choiceSource says which.
+	if r := v.Resolution; r.Source != "" && r.Source != ChoiceSourceNone {
+		resp.ChoiceSource = r.Source
+		cr := &ChoiceResponse{Source: r.Source, OptionID: OptionAsIs, Type: OptionAsIs}
+		if o := r.Option; o != nil {
+			name := o.Name
+			cr.OptionID, cr.Type, cr.OptionName = o.ID, string(o.Type), &name
+		}
+		switch r.Source {
+		case ChoiceSourceStrategy:
+			strategy := r.Strategy
+			cr.Strategy = &strategy
+		case ChoiceSourceHousehold:
+			if c := v.Choice; c != nil {
+				by, at := c.ChosenBy, c.ChosenAt.UTC()
+				cr.ChosenBy, cr.ChosenAt = &by, &at
+			}
 		}
 		resp.Choice = cr
 	}
@@ -386,6 +439,47 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		resp.Items = append(resp.Items, newSpecialtyResponse(v))
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+func newSettingsResponse(set Settings) SpecialtySettingsResponse {
+	opts := StrategyOptions()
+	resp := SpecialtySettingsResponse{Strategy: set.Strategy, Options: make([]StrategyOptionResponse, 0, len(opts))}
+	if set.UpdatedBy != "" {
+		by := set.UpdatedBy
+		resp.UpdatedBy = &by
+	}
+	if !set.UpdatedAt.IsZero() {
+		at := set.UpdatedAt.UTC()
+		resp.UpdatedAt = &at
+	}
+	for _, o := range opts {
+		resp.Options = append(resp.Options, StrategyOptionResponse(o))
+	}
+	return resp
+}
+
+func (h *Handler) settings(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	set, err := h.opts.Service.Settings(r.Context(), actor.HouseholdID)
+	if err != nil {
+		h.writeError(w, r, "get specialty ingredient settings failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, newSettingsResponse(set))
+}
+
+func (h *Handler) setSettings(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	var req SetSpecialtySettingsRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	set, err := h.opts.Service.SetStrategy(r.Context(), actor, req.Strategy)
+	if err != nil {
+		h.writeError(w, r, "set specialty ingredient strategy failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, newSettingsResponse(set))
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {

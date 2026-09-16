@@ -48,4 +48,10 @@ type Store interface {
 	DeleteChoice(ctx context.Context, householdID, specialtyID string) error
 	// DeleteChoicesForOption removes the household's choices of optionID.
 	DeleteChoicesForOption(ctx context.Context, householdID, optionID string) error
+
+	// GetSettings returns the household's specialty ingredient settings, or
+	// ErrNotFound when it never set any.
+	GetSettings(ctx context.Context, householdID string) (Settings, error)
+	// PutSettings creates or replaces the household's settings.
+	PutSettings(ctx context.Context, s Settings) (Settings, error)
 }

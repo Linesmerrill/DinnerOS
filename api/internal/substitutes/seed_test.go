@@ -4,10 +4,50 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 )
+
+// TestSeedStoreAlternatives is the shopping audit: a household that never
+// wants to make a jar must still be able to cook every curated specialty
+// ingredient from a normal grocery store. Every entry needs a store
+// alternative, or a note saying what to do when there is no honest one.
+func TestSeedStoreAlternatives(t *testing.T) {
+	seed, err := LoadSeed()
+	if err != nil {
+		t.Fatalf("LoadSeed() error = %v", err)
+	}
+	for _, sp := range seed.Specialties {
+		stores := 0
+		for _, o := range sp.Options {
+			if o.Type == TypeStoreAlternative {
+				stores++
+			}
+		}
+		if stores == 0 && sp.Note == "" {
+			t.Errorf("%s has no store alternative and no note: a household on the similar strategy has nothing to buy", sp.ID)
+		}
+		if n := utf8.RuneCountInString(sp.Note); n > MaxNoteLength {
+			t.Errorf("%s: note is %d characters, over %d", sp.ID, n, MaxNoteLength)
+		}
+		// Both strategies must land on something for every curated entry.
+		similar := strategyOption(sp, StrategySimilar)
+		switch {
+		case similar == nil:
+			t.Errorf("%s: the similar strategy picks nothing", sp.ID)
+		case stores > 0 && similar.Type != TypeStoreAlternative:
+			t.Errorf("%s: similar picked a %s though a store alternative exists", sp.ID, similar.Type)
+		}
+		if closest := strategyOption(sp, StrategyClosest); closest == nil {
+			t.Errorf("%s: the closest strategy picks nothing", sp.ID)
+		}
+		if strategyOption(sp, StrategyAsk) != nil {
+			t.Errorf("%s: ask must pick nothing", sp.ID)
+		}
+	}
+}
 
 func TestSlug(t *testing.T) {
 	for in, want := range map[string]string{

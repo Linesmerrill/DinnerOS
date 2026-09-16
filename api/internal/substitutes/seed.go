@@ -39,6 +39,7 @@ type seedSpecialty struct {
 	Name            string         `json:"name"`
 	Aliases         []string       `json:"aliases"`
 	Category        string         `json:"category"`
+	Note            string         `json:"note"`
 	UnitSizes       []seedUnitSize `json:"unitSizes"`
 	DefaultOptionID string         `json:"defaultOptionId"`
 	Options         []seedOption   `json:"options"`
@@ -122,6 +123,11 @@ func parseSeedSpecialty(ss seedSpecialty, version int, owners map[string]string)
 	case !validCategory(sp.Category):
 		return Specialty{}, fmt.Errorf("unknown category %q", sp.Category)
 	}
+	note, err := cleanText("note", ss.Note, MaxNoteLength, false)
+	if err != nil {
+		return Specialty{}, err
+	}
+	sp.Note = note
 	claim := func(key string) error {
 		if owner, ok := owners[key]; ok {
 			return fmt.Errorf("name or alias %q is already %s", key, owner)

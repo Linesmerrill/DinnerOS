@@ -51,6 +51,9 @@ type Via struct {
 	SpecialtyName string
 	OptionID      string
 	OptionName    string
+	// Strategy is the household strategy that picked the option, empty when a
+	// member chose it explicitly. It lets the list say "(your default)".
+	Strategy string
 	// Yield is what one batch makes, and Batches how many the list asks for.
 	// Both are zero for a store alternative.
 	Yield   *Measure
@@ -149,6 +152,9 @@ type Choice struct {
 	// PantryKey is the line key the batch item is registered under in the
 	// PantryStock ("name:<key>").
 	PantryKey string
+	// Strategy is the household strategy that picked this option, empty when a
+	// member chose it explicitly.
+	Strategy string
 }
 
 // Specialty is one specialty ingredient and the household's choice.
@@ -294,7 +300,8 @@ func ApplySpecialties(selections []RecipeSelection, specs Specialties) ([]Recipe
 		yield := choice.Yield
 		via := &Via{
 			Kind: ViaHouseMadeBatch, SpecialtyID: spec.ID, SpecialtyKey: spec.Key, SpecialtyName: spec.Name,
-			OptionID: choice.OptionID, OptionName: choice.OptionName, Yield: &yield, Batches: plan.Batches,
+			OptionID: choice.OptionID, OptionName: choice.OptionName, Strategy: choice.Strategy,
+			Yield: &yield, Batches: plan.Batches,
 		}
 		made := RecipeSelection{RecipeID: "batch:" + spec.Key, RecipeName: choice.OptionName, RecipeServings: 1, TargetServings: 1}
 		for _, c := range choice.Components {
@@ -315,7 +322,10 @@ func storeLines(line Line, spec *Specialty, choice *Choice) []Line {
 			ratio = inPer.Quo(inPer, choice.Per.Quantity.Rat())
 		}
 	}
-	via := &Via{Kind: ViaStoreAlternative, SpecialtyID: spec.ID, SpecialtyKey: spec.Key, SpecialtyName: spec.Name, OptionID: choice.OptionID, OptionName: choice.OptionName}
+	via := &Via{
+		Kind: ViaStoreAlternative, SpecialtyID: spec.ID, SpecialtyKey: spec.Key, SpecialtyName: spec.Name,
+		OptionID: choice.OptionID, OptionName: choice.OptionName, Strategy: choice.Strategy,
+	}
 	lines := make([]Line, 0, len(choice.Components))
 	for _, c := range choice.Components {
 		lines = append(lines, componentLine(c, ratio, ratio != nil, via))

@@ -154,6 +154,13 @@ func newFixture(t *testing.T) *fixture {
 	p := &fakePantry{levels: map[string]pantry.StockLevel{}}
 	svc := NewService(ServiceOptions{Store: store, Catalog: catalog, Recipes: usage, Pantry: p})
 	svc.now = func() time.Time { return testNow }
+	// These tests cover explicit choices, so the household asks rather than
+	// applying a default; the strategy tests set their own (settings_test.go).
+	for _, hh := range []string{testHousehold, otherHousehold} {
+		if _, err := store.PutSettings(ctx, Settings{HouseholdID: hh, Strategy: StrategyAsk, UpdatedBy: testUser, UpdatedAt: testNow}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	return &fixture{svc: svc, store: store, catalog: catalog, pantry: p, ctx: ctx, actor: member(testHousehold)}
 }
 
@@ -479,10 +486,10 @@ func TestGrocerySpecialties(t *testing.T) {
 	}
 	tex := specs[texID]
 	if tex.ID != "tex-mex-paste" || tex.Choice == nil || tex.Choice.Type != grocery.ChoiceStoreAlternative || tex.Choice.Per.Unit != "tbsp" ||
-		len(tex.UnitSizes) != 2 || len(tex.Choice.Components) != 4 {
+		len(tex.UnitSizes) != 2 || len(tex.Choice.Components) != 5 {
 		t.Fatalf("tex-mex = %+v choice %+v", tex, tex.Choice)
 	}
-	paste, cumin := tex.Choice.Components[0], tex.Choice.Components[2]
+	paste, cumin := tex.Choice.Components[0], tex.Choice.Components[3]
 	if paste.IngredientKey != f.catalog.id("Tomato Paste") || paste.Name != "Tomato Paste" || quantityOf(paste.Quantity) != "2" || paste.Unit != "tsp" {
 		t.Errorf("tomato paste = %+v", paste)
 	}
