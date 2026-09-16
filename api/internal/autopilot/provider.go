@@ -3,6 +3,7 @@ package autopilot
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // RecommendationProvider builds recommendations for one household's week.
@@ -46,6 +47,10 @@ type Input struct {
 	// Objectives are tenant-supplied business boosts, applied after hard
 	// constraints and bounded by MaxObjectiveBoost.
 	Objectives []Objective
+	// LearningSince, when set, is when the household last reset what the
+	// provider learned: interactions before it still feed the standard
+	// signals (ratings, recency, conversion) but no learned adjustment.
+	LearningSince time.Time
 }
 
 // WeekRequest asks for a week.
@@ -101,7 +106,9 @@ type Recommendation struct {
 	TimeBand TimeBand
 	// Signals are the feature values behind the score, by name.
 	Signals map[string]float64
-	// Reasons explain the pick in words, most important first (at most 3).
+	// Reasons explain the pick in words, most important first: at most 3,
+	// plus learned and context reasons, which are always shown (at most 5 in
+	// all).
 	Reasons []Reason
 }
 
@@ -149,6 +156,49 @@ type WeekResult struct {
 	Unfilled  []Unfilled
 	Messages  []Message
 	Score     WeekScore
+}
+
+// LearningReporter is implemented by providers that learn per-household
+// adjustments from interactions and can list them. It is optional: callers
+// check for it with a type assertion.
+type LearningReporter interface {
+	// Learning returns what the provider learned from the input's history,
+	// strongest first. Like the rest of the provider it is deterministic.
+	Learning(ctx context.Context, in Input) (LearningResult, error)
+}
+
+// Learned adjustment kinds.
+const (
+	LearnedItem         = "item"
+	LearnedCuisine      = "cuisine"
+	LearnedProtein      = "protein"
+	LearnedMealCategory = "mealCategory"
+	LearnedTimeBand     = "timeBand"
+	// LearnedBusySkips applies only on busy weeks and busy days.
+	LearnedBusySkips = "busySkips"
+)
+
+// LearnedAdjustment is one thing a provider learned about a household.
+type LearnedAdjustment struct {
+	// Kind is one of the Learned constants.
+	Kind string
+	// Key is the item ID for the item and busySkips kinds, otherwise the
+	// attribute value ("mexican", "pork", "long").
+	Key string
+	// Value is -1..1: negative steers away, positive toward.
+	Value float64
+	// Text explains it ("You swapped this out twice recently").
+	Text string
+	// Evidence is how many interactions support it.
+	Evidence int
+}
+
+// LearningResult lists learned adjustments.
+type LearningResult struct {
+	ModelVersion string
+	// Interactions is how many interactions were eligible for learning.
+	Interactions int
+	Adjustments  []LearnedAdjustment
 }
 
 // RankResult is a ranking for one day.

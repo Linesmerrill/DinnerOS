@@ -43,6 +43,19 @@ nonisolated struct AutopilotAPI: Sendable {
         return response.items
     }
 
+    // MARK: Learning
+
+    /// What Autopilot learned from the household's feedback, strongest first.
+    func learning(householdID: String, accessToken: String) async throws -> AutopilotLearning {
+        try await client.send(APIRequest.get(Self.path(householdID, "/learning")).authorized(with: accessToken))
+    }
+
+    /// Clears what Autopilot learned; ratings, history, and preferences are untouched. Needs
+    /// `plan.edit`.
+    func resetLearning(householdID: String, accessToken: String) async throws -> AutopilotLearning {
+        try await client.send(APIRequest.delete(Self.path(householdID, "/learning")).authorized(with: accessToken))
+    }
+
     // MARK: Recipes
 
     func attributes(householdID: String, recipeID: String, accessToken: String) async throws

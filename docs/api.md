@@ -164,11 +164,13 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/autopilot/weeks/{week}/context` → week context | `household.view` | 10 | ✅ |
 | PUT | `/api/v1/households/{householdId}/autopilot/weeks/{week}/context` `{skip?, busy?, mealsPerWeek?, maxMinutes?, servings?, days?, note?}` → week context | `plan.edit` | 10 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/autopilot/weeks/{week}/context` → `204` | `plan.edit` | 10 | ✅ |
-| POST | `/api/v1/households/{householdId}/autopilot/weeks/{week}/generate` `{avoidPrevious?}` → `201` proposal | `plan.edit` | 10 | ✅ |
+| POST | `/api/v1/households/{householdId}/autopilot/weeks/{week}/generate` `{avoidPrevious?, signals?}` → `201` proposal | `plan.edit` | 10–11 | ✅ |
 | GET | `/api/v1/households/{householdId}/autopilot/weeks/{week}/proposal` → proposal | `household.view` | 10 | ✅ |
 | POST | `/api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/slots/{slotId}/swap` `{version}` → proposal | `plan.edit` | 10 | ✅ |
 | POST | `/api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/accept` `{version, excludeSlotIds?}` → `{proposal, plan, added, skipped}` | `plan.edit` | 10 | ✅ |
 | POST | `/api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/reject` `{version}` → proposal | `plan.edit` | 10 | ✅ |
+| GET | `/api/v1/households/{householdId}/autopilot/learning` → `{modelVersion, interactions, adjustments, resetAt, resetBy}` | `household.view` | 11 | ✅ |
+| DELETE | `/api/v1/households/{householdId}/autopilot/learning` → learning (empty) | `plan.edit` | 11 | ✅ |
 | GET | `/api/v1/shopping/providers` → `{items: [{key, name, affiliateTracked, capabilities}]}` | bearer | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/settings` → `{provider, storeId, updatedBy, updatedAt}` | `household.view` | 8a | ✅ |
 | PUT | `/api/v1/households/{householdId}/shopping/settings` `{provider, storeId?}` → settings | `shopping.edit` | 8a | ✅ |
@@ -2138,9 +2140,39 @@ derives from a recipe:
 ### Proposals
 
 `POST .../autopilot/weeks/{week}/generate` (body optional:
-`{"avoidPrevious": false}`) generates a proposal and returns `201`. `GET
-.../autopilot/weeks/{week}/proposal` returns the latest one (`404` when there
-is none).
+`{"avoidPrevious": false, "signals": {…}}`) generates a proposal and returns
+`201`. `GET .../autopilot/weeks/{week}/proposal` returns the latest one (`404`
+when there is none).
+
+`signals` carries calendar and weather context that the member's phone
+derived **on the device**
+([autopilot.md](autopilot.md#context-engine)). Only these derived values are
+sent: never calendar events, their titles or times, a forecast, or a
+location. Every field is optional, and a day with none set is ignored:
+
+```json
+{
+  "signals": {
+    "days": [
+      { "day": "tue", "busyness": "busy", "eveningFreeMinutes": 25 },
+      { "day": "wed", "temperatureBand": "cold", "precipitation": "rain" }
+    ]
+  }
+}
+```
+
+| Field | Values |
+| --- | --- |
+| `days[].day` | `mon`–`sun`, each at most once (at most 7 days) |
+| `days[].busyness` | `free`, `some`, `busy` |
+| `days[].eveningFreeMinutes` | 1–1440 |
+| `days[].temperatureBand` | `cold`, `mild`, `hot` |
+| `days[].precipitation` | `none`, `rain`, `snow` |
+
+The signals are stored with the proposal (`context.signals`), so swaps use
+them too; generating again uses only the signals sent with that request.
+Unknown fields or values are `400 validation_failed` (or `invalid_request`
+for unknown fields).
 
 ```json
 {
@@ -2152,7 +2184,7 @@ is none).
   "status": "proposed",
   "version": 2,
   "attempt": 1,
-  "modelVersion": "baseline-2026.2",
+  "modelVersion": "baseline-2026.6",
   "inputsHash": "9f2c4b1d0a7e6c35",
   "requestedMeals": 5,
   "plannedMeals": 3,
@@ -2169,11 +2201,14 @@ is none).
       "timeBand": "quick",
       "score": 1.042,
       "signals": { "rating": 1, "feedback": 0.6, "familiarity": 0.5, "conversion": 0.6, "recency": 0, "weekdayAffinity": 0.5,
-                    "taste": 0.4, "rule": 1, "timeFit": 0.55, "novelty": 0, "servingsFit": 0, "pantry": 0, "avoid": 0, "variety": -0.15 },
+                    "taste": 0.4, "rule": 1, "timeFit": 0.55, "novelty": 0, "servingsFit": 0, "pantry": 0, "avoid": 0,
+                    "learned": -0.36, "context": 0.6, "variety": -0.15 },
       "reasons": [
         { "code": "rule", "text": "Taco Tuesday · Mexican" },
         { "code": "busyWeek", "text": "Quick for your busy week (18 min)" },
-        { "code": "rating", "text": "You rated this 5★" }
+        { "code": "rating", "text": "You rated this 5★" },
+        { "code": "learnedMeal", "text": "You swapped this out once recently" },
+        { "code": "calendar", "text": "Quick for your busy Tuesday evening" }
       ],
       "swapCount": 1
     }
@@ -2185,6 +2220,12 @@ is none).
     { "code": "not_enough_candidates", "text": "Only 3 quick recipes (≤20 min) match; planned 3 of 5 nights." }
   ],
   "objective": { "meals": 2.91, "variety": -0.15, "cookTime": 0, "rules": 0, "novelty": 0, "total": 2.76 },
+  "context": {
+    "season": "fall",
+    "orderDate": "2026-09-19",
+    "holidays": [],
+    "signals": { "days": [{ "day": "tue", "busyness": "busy" }] }
+  },
   "swapCount": 1,
   "excludedSlotIds": [],
   "generatedBy": "66e5a1f2c3b4a5d6e7f80912",
@@ -2203,14 +2244,24 @@ is none).
   and those meals count toward `requestedMeals`. A finalized week can't be
   generated (`409 plan_finalized`).
 - **Slots** are ordered by day, and a slot's `id` is its day. `reasons` (at
-  most 3, most important first) are for display: join the texts with " · ".
+  most 3 standard reasons, most important first, then every learned and
+  context reason; at most 5) are for display: join the texts with " · ".
+  Learned reasons can be negative ("You swapped this out twice recently").
   `signals` and `objective` are the numbers behind them, for debugging and
   "why?" screens.
+- **Context.** `context` is what the week was planned with: `season` (from
+  the household's time zone), `orderDate` (the household's order day in the
+  week, or `null`), `holidays` (`{day, date, name, kind}`, US holidays
+  computed on the server; `kind` is `feast`, `cookout`, or `dayOff`), and
+  the device `signals` sent when generating.
 - **Shortfalls are explained.** `messages` covers `week_skipped`,
   `empty_catalog`, `week_full`, `not_enough_candidates`, `not_enough_days`,
   `rule_method_unmet` (a rule day with methods got a meal that doesn't suit
   them, because nothing suitable was left), `already_planned`, and `cold_start`. Days that couldn't be filled are in
-  `unfilled`. A skipped week returns `201` with no slots.
+  `unfilled`. A skipped week returns `201` with no slots. Context adds
+  `holiday` ("Thanksgiving is Thursday: something special that day, easy
+  nights around it.") and `device_context` ("Planned around your calendar
+  and the forecast.").
 - **Swap.** `POST .../proposal/slots/{slotId}/swap` `{"version": 2}` replaces
   that day's meal with the next best one that fits the same constraints and the
   rest of the week. A meal swapped out isn't offered for that day again. It
@@ -2243,6 +2294,38 @@ is none).
 | 409 | `nothing_to_accept` | Every meal is excluded, or its day or recipe is already planned |
 | 409 | `proposal_stale` | A proposed recipe was removed or lost its serving size; generate again |
 | 409 | `conflict` | The profile or context kept changing concurrently; retry |
+| 501 | `not_supported` | Learning endpoints, when the recommendation provider doesn't report what it learned |
+
+### What Autopilot learned
+
+`GET .../autopilot/learning` (`household.view`) lists the strongest (at most
+20) adjustments Autopilot learned from the household's feedback
+([autopilot.md](autopilot.md#learning-from-feedback)), as of the current
+week. Nothing is stored: they are recomputed from events each time.
+
+```json
+{
+  "modelVersion": "baseline-2026.6",
+  "interactions": 214,
+  "adjustments": [
+    { "kind": "item", "key": "66e5a1f2c3b4a5d6e7f80915", "label": "Beef Tacos", "recipeId": "66e5a1f2c3b4a5d6e7f80915",
+      "value": -0.58, "direction": "away", "text": "You swapped this out twice recently", "evidence": 2 },
+    { "kind": "cuisine", "key": "mexican", "label": "Mexican", "recipeId": null,
+      "value": 0.31, "direction": "toward", "text": "Lately you favor Mexican", "evidence": 9 }
+  ],
+  "resetAt": null,
+  "resetBy": null
+}
+```
+
+- `kind` is `item` (a recipe), `busySkips` (a recipe, applied only on busy
+  weeks and busy days), `cuisine`, `protein`, `mealCategory`, or `timeBand`.
+  `value` is −1…1; `direction` is `toward` or `away`. `text` is the same
+  wording as the proposal reason.
+- `DELETE .../autopilot/learning` (`plan.edit`) resets learning: feedback
+  from before now no longer adjusts suggestions, while ratings, history, and
+  preferences work as before. It records `autopilot.learning_reset` and
+  returns the (empty) learning with `resetAt` and `resetBy`.
 
 ### Add-on pairings
 
@@ -2708,6 +2791,7 @@ can observe.
 | `autopilot.preferences_updated` | server (Autopilot) | — | `{sections, changes?: [{field, added?, removed?, from?, to?}]}` |
 | `autopilot.week_context_updated` | server (Autopilot) | — | `{changes?, cleared?}` |
 | `autopilot.recipe_override_updated` | server (Autopilot) | required | `{method, value, previous?}`: `yes`, `no`, `auto` |
+| `autopilot.learning_reset` | server (Autopilot) | — | `{adjustments}` (how many learned adjustments were showing) |
 | `import.completed` | server (recipe import) | — | `{source, created, updated, unchanged, rejected}` |
 | `shopping.handoff_created` | server (shopping) | — | `{handoffId, provider, lines, packages, checkAmount, excluded, links}` (counts only, never product IDs) |
 | `shopping.order_confirmed` | server (shopping) | — | `{handoffId, provider, confirmed, packages, skipped}` |

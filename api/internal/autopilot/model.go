@@ -1,5 +1,7 @@
 package autopilot
 
+import "time"
+
 // Day is a weekday, Monday first as in ISO weeks.
 type Day string
 
@@ -120,6 +122,22 @@ const (
 	KindPlanned InteractionKind = "planned"
 	KindCooked  InteractionKind = "cooked"
 	KindSkipped InteractionKind = "skipped"
+
+	// Feedback on the provider's own suggestions and on items the household
+	// looked at. Providers may learn from them; the baseline does
+	// (docs/autopilot.md#learning-from-feedback).
+
+	// KindSwappedOut means a member swapped the item out of a proposed week.
+	KindSwappedOut InteractionKind = "swappedOut"
+	// KindAccepted means a proposed item was accepted into the plan.
+	KindAccepted InteractionKind = "accepted"
+	// KindRejected means a proposed item was left out when accepting a week,
+	// or removed from the plan after it was accepted.
+	KindRejected InteractionKind = "rejected"
+	// KindViewed means a member opened the item.
+	KindViewed InteractionKind = "viewed"
+	// KindRated means a member rated the item; Score carries the rating.
+	KindRated InteractionKind = "rated"
 )
 
 // Skip reasons a KindSkipped interaction may carry, when the tenant knows why
@@ -153,6 +171,13 @@ type Interaction struct {
 	// Reason is why a KindSkipped meal was skipped, when known: one of the
 	// Skip constants. Empty when unknown or not applicable.
 	Reason string
+	// At is when it happened, when known. When Input.LearningSince is set,
+	// learned adjustments ignore interactions before it or without an At.
+	At time.Time
+	// Busy is true when the household had marked the interaction's week busy.
+	Busy bool
+	// Score is the 1–5 rating of a KindRated interaction.
+	Score int
 }
 
 // Assignment is a meal fixed on a day of the week being planned. Day is empty
@@ -326,6 +351,9 @@ type WeekContext struct {
 	// Servings overrides Preferences.DefaultServings when positive.
 	Servings int
 	Days     []DayContext
+	// Signals are optional typed context for the whole week (season, order
+	// date). Unknown keys and values are ignored (context.go).
+	Signals Signals
 	// PantryLow are normalized names of ingredients running low at home.
 	PantryLow []string
 }
@@ -338,4 +366,7 @@ type DayContext struct {
 	// cap applies).
 	MaxMinutes int
 	Servings   int
+	// Signals are optional typed context for this day (holiday, busyness,
+	// weather). Unknown keys and values are ignored (context.go).
+	Signals Signals
 }

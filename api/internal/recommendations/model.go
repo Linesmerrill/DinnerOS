@@ -208,7 +208,10 @@ type Proposal struct {
 	Unfilled   []Unfilled
 	Messages   []Message
 	Objective  Objective
-	SwapCount  int
+	// Context is the season, holidays, order date, and device signals the
+	// week was planned with.
+	Context   ProposalContext
+	SwapCount int
 	// ExcludedSlots are the slots left out when the proposal was accepted.
 	ExcludedSlots []string
 	GeneratedBy   string

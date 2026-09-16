@@ -44,7 +44,17 @@ type reason struct {
 	value float64
 	// priority reasons (the day's rule, time caps) come first.
 	priority bool
+	// forced reasons (learned and context adjustments) are always shown,
+	// even when negative.
+	forced bool
 }
+
+// Explanation limits: standard reasons, and reasons in all with learned and
+// context reasons included.
+const (
+	maxReasons      = 3
+	maxTotalReasons = 5
+)
 
 func (m *model) newSlot(day int) *slot {
 	dc := m.ctx.days[day]
@@ -208,7 +218,22 @@ func (m *model) score(s *slot, it *item) cand {
 		}
 	}
 	tasteWeight := w.Taste * (1 + w.ColdStartTasteBoost*(1-m.confidence))
-	explain("taste", tasteText, add(SignalTaste, clamp(taste), tasteWeight), false)
+	tasteContribution := add(SignalTaste, clamp(taste), tasteWeight)
+	explain("taste", tasteText, tasteContribution, false)
+
+	// Learned from feedback, bounded so stated preferences win. Every learned
+	// adjustment that moves the score is explained.
+	if learned, reasons := m.learnedFor(s, it, tasteContribution); learned != 0 || len(reasons) > 0 {
+		add(SignalLearned, learned, w.Learned)
+		c.reasons = append(c.reasons, reasons...)
+	}
+
+	// Context signals (season, holiday, weekday, order date, calendar,
+	// weather), when present.
+	if value, reasons := m.contextFor(s, it); value != 0 {
+		add(SignalContext, value, w.Context)
+		c.reasons = append(c.reasons, reasons...)
+	}
 
 	// Weekday rule. A rule's methods (already limited to the household's
 	// equipment) dominate: a meal that doesn't suit them earns no rule credit
@@ -368,10 +393,19 @@ func (m *model) score(s *slot, it *item) cand {
 	return c
 }
 
-// explanation returns up to three reasons: priority reasons in order, then
-// the largest contributions.
+// explanation returns up to three reasons — priority reasons in order, then
+// the largest contributions — followed by every learned and context reason,
+// which displace the smallest standard reasons when there are more than
+// maxTotalReasons.
 func (c *cand) explanation() []autopilot.Reason {
-	sorted := slices.Clone(c.reasons)
+	var sorted, forced []reason
+	for _, r := range c.reasons {
+		if r.forced {
+			forced = append(forced, r)
+		} else {
+			sorted = append(sorted, r)
+		}
+	}
 	slices.SortStableFunc(sorted, func(a, b reason) int {
 		if a.priority != b.priority {
 			if a.priority {
@@ -388,18 +422,32 @@ func (c *cand) explanation() []autopilot.Reason {
 		return cmp.Compare(a.code, b.code)
 	})
 	var out []autopilot.Reason
+	room := maxReasons
+	priority := 0
 	for _, r := range sorted {
-		if len(out) == 3 {
+		if r.priority {
+			priority++
+		}
+	}
+	room = min(room, max(maxTotalReasons-len(forced), priority))
+	for _, r := range sorted {
+		if len(out) == room {
 			break
 		}
 		out = append(out, autopilot.Reason{Code: r.code, Text: r.text})
 	}
-	if len(out) == 0 {
+	if len(out) == 0 && len(forced) == 0 {
 		text := "Adds variety to your week"
 		if c.it.minutes > 0 {
 			text = fmt.Sprintf("Ready in %d min", c.it.minutes)
 		}
 		out = append(out, autopilot.Reason{Code: "fit", Text: text})
+	}
+	for _, r := range forced {
+		if len(out) == maxTotalReasons {
+			break
+		}
+		out = append(out, autopilot.Reason{Code: r.code, Text: r.text})
 	}
 	return out
 }

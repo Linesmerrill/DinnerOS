@@ -211,6 +211,22 @@ final class AutopilotStore {
         }
     }
 
+    /// What Autopilot learned from feedback. Not stored.
+    func learning() async throws -> AutopilotLearning {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        return try await session.authorized { token in
+            try await api.learning(householdID: householdID, accessToken: token)
+        }
+    }
+
+    /// Clears what Autopilot learned and returns the (empty) result.
+    func resetLearning() async throws -> AutopilotLearning {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        return try await session.authorized { token in
+            try await api.resetLearning(householdID: householdID, accessToken: token)
+        }
+    }
+
     // MARK: - Recipe attributes
 
     /// What Autopilot derives from a recipe. Not stored.

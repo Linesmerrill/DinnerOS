@@ -19,6 +19,9 @@ type Store interface {
 	// DeleteWeekContext removes a week's context and returns it, or
 	// ErrNotFound.
 	DeleteWeekContext(ctx context.Context, householdID, week string) (WeekContext, error)
+	// BusyWeeks returns the weeks from..to (ISO weeks, inclusive) whose
+	// context is marked busy, in order.
+	BusyWeeks(ctx context.Context, householdID, from, to string) ([]string, error)
 
 	// GetProposal returns the week's proposal, or ErrNotFound.
 	GetProposal(ctx context.Context, householdID, week string) (Proposal, error)

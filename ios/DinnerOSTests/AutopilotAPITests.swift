@@ -358,6 +358,59 @@ struct AutopilotAPITests {
         #expect(plan.entries.first?.isFromAutopilot == false)
     }
 
+    // MARK: Learning
+
+    private nonisolated static let learningJSON = """
+        {"modelVersion":"baseline-2026.6","interactions":14,
+         "adjustments":[
+           {"kind":"item","key":"recipe-1","label":"Beef Tacos","recipeId":"recipe-1","value":-0.62,
+            "direction":"away","text":"You swapped this out twice recently","evidence":2},
+           {"kind":"cuisine","key":"mexican","label":"Mexican","recipeId":null,"value":0.31,
+            "direction":"toward","text":"Lately you favor Mexican","evidence":6},
+           {"kind":"somethingNew","key":"x","label":"X","recipeId":null,"value":0.2,
+            "direction":"toward","text":"New","evidence":1}
+         ],
+         "resetAt":null,"resetBy":null}
+        """
+
+    @Test func learningDecodesAdjustmentsStrongestFirst() async throws {
+        let transport = StubTransport { _ in (200, Data(Self.learningJSON.utf8)) }
+
+        let learning = try await makeAPI(transport).learning(householdID: "household-1", accessToken: "token-1")
+
+        let request = try #require(transport.requests.first)
+        #expect(request.httpMethod == "GET")
+        #expect(request.url?.path() == "/api/v1/households/household-1/autopilot/learning")
+        #expect(learning.interactions == 14)
+        #expect(learning.adjustments.map(\.kind) == [.item, .cuisine, .unknown])
+        let first = try #require(learning.adjustments.first)
+        #expect(first.isAway)
+        #expect(first.recipeID == "recipe-1")
+        #expect(first.text == "You swapped this out twice recently")
+        #expect(!learning.adjustments[1].isAway)
+        #expect(learning.resetAt == nil)
+    }
+
+    @Test func resetLearningDeletes() async throws {
+        let transport = StubTransport { _ in
+            (
+                200,
+                Data(
+                    #"{"modelVersion":"m","interactions":0,"adjustments":[],"resetAt":"2026-09-16T12:00:00Z","resetBy":"user-1"}"#
+                        .utf8)
+            )
+        }
+
+        let learning = try await makeAPI(transport).resetLearning(householdID: "household-1", accessToken: "t")
+
+        let request = try #require(transport.requests.first)
+        #expect(request.httpMethod == "DELETE")
+        #expect(request.url?.path() == "/api/v1/households/household-1/autopilot/learning")
+        #expect(learning.adjustments.isEmpty)
+        #expect(learning.resetAt != nil)
+        #expect(learning.resetBy == "user-1")
+    }
+
     // MARK: Errors
 
     @Test(

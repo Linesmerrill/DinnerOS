@@ -7,6 +7,7 @@ import (
 	"math"
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot"
@@ -33,6 +34,11 @@ type model struct {
 	coldStart  bool
 	// dayCounts is how often the household planned meals on each weekday.
 	dayCounts [7]int
+
+	// weekStart is the Monday of the week being planned.
+	weekStart time.Time
+	// learned is what the household's feedback taught (learn.go).
+	learned learning
 
 	fixed   []fixedMeal
 	fixedID map[string]bool
@@ -92,12 +98,18 @@ type weekCtx struct {
 	servings   int
 	days       [7]dayCtx
 	pantryLow  [][]string // tokenized names
+	// season and orderDate are week signals; feast names a feast holiday in
+	// the week (context.go).
+	season    string
+	orderDate time.Time
+	feast     string
 }
 
 type dayCtx struct {
 	skip       bool
 	maxMinutes int
 	servings   int
+	sig        daySignals
 }
 
 type item struct {
@@ -174,11 +186,12 @@ func skipAboutTheMeal(reason string) bool {
 }
 
 func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
-	if _, err := autopilot.WeekStart(in.Week); err != nil {
+	start, err := autopilot.WeekStart(in.Week)
+	if err != nil {
 		return nil, err
 	}
 	m := &model{
-		w: p.weights, version: p.version, beam: p.beam, perSlot: p.perSlot, week: in.Week,
+		w: p.weights, version: p.version, beam: p.beam, perSlot: p.perSlot, week: in.Week, weekStart: start,
 		seed:     hashString(fmt.Sprintf("%s|%s|%d|%s", in.HouseholdID, in.Week, attempt, p.version)),
 		byID:     map[string]*item{},
 		rejected: map[string]int{},
@@ -186,7 +199,6 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 		avoid:    map[string]bool{},
 		boosts:   map[string]float64{},
 	}
-	var err error
 	if m.prefs, err = normalizePrefs(in.Preferences); err != nil {
 		return nil, err
 	}
@@ -298,6 +310,7 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 			it.st.nearest = d
 		}
 	}
+	m.learn(in.History, in.LearningSince)
 	m.confidence = math.Min(1, float64(signals)/confidenceSignals)
 	m.coldStart = m.confidence < coldStartConfidence
 	for _, it := range m.items {
@@ -485,7 +498,14 @@ func normalizeContext(in autopilot.WeekContext) (weekCtx, error) {
 		if i < 0 {
 			return weekCtx{}, fmt.Errorf("%w: context day %q is not a weekday", autopilot.ErrInvalidRequest, d.Day)
 		}
-		c.days[i] = dayCtx{skip: d.Skip, maxMinutes: max(d.MaxMinutes, 0), servings: max(d.Servings, 0)}
+		c.days[i] = dayCtx{skip: d.Skip, maxMinutes: max(d.MaxMinutes, 0), servings: max(d.Servings, 0), sig: parseDaySignals(d.Signals)}
+	}
+	parseWeekSignals(&c, in.Signals)
+	// The week is named for its last feast ("Christmas" over "Christmas Eve").
+	for _, d := range c.days {
+		if d.sig.holidayKind == autopilot.HolidayFeast {
+			c.feast = d.sig.holiday
+		}
 	}
 	for _, name := range in.PantryLow {
 		if tokens := tokenize(name); len(tokens) > 0 {

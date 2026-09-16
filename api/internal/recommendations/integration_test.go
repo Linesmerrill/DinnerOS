@@ -186,4 +186,32 @@ func TestIntegrationAutopilotEndpoints(t *testing.T) {
 	if h := decodeBody[HistoryResponse](t, rec); len(h.Items) != 2 || h.Items[0].Type != string(events.TypeAutopilotWeekContextUpdated) {
 		t.Errorf("history = %+v", h)
 	}
+
+	// Learning reads the swap, the meal left out, and the accepted meals back
+	// from MongoDB.
+	rec = call(http.MethodGet, "/learning", "")
+	wantStatus(t, rec, http.StatusOK, "")
+	learned := decodeBody[LearningResponse](t, rec)
+	swappedOut := proposal.Slots[0].Recipe.ID
+	if !slices.ContainsFunc(learned.Adjustments, func(a LearnedAdjustmentJSON) bool {
+		return a.Kind == "item" && a.RecipeID != nil && *a.RecipeID == swappedOut && a.Direction == "away" && a.Text == "You swapped this out once recently"
+	}) {
+		t.Errorf("learning = %+v; want the swapped-out %s", learned, swappedOut)
+	}
+
+	// Device signals are kept with the proposal.
+	rec = call(http.MethodPost, "/weeks/2026-W39/generate", `{"signals":{"days":[{"day":"tue","busyness":"busy"},{"day":"thu","temperatureBand":"cold","precipitation":"rain"}]}}`)
+	wantStatus(t, rec, http.StatusCreated, "")
+	rec = call(http.MethodGet, "/weeks/2026-W39/proposal", "")
+	wantStatus(t, rec, http.StatusOK, "")
+	withSignals := decodeBody[ProposalResponse](t, rec)
+	if c := withSignals.Context; c.Season == nil || *c.Season != "fall" || len(c.Signals.Days) != 2 || c.Signals.Days[0].Busyness == nil || *c.Signals.Days[0].Busyness != "busy" {
+		t.Errorf("stored context = %+v", c)
+	}
+
+	rec = call(http.MethodDelete, "/learning", "")
+	wantStatus(t, rec, http.StatusOK, "")
+	if reset := decodeBody[LearningResponse](t, rec); len(reset.Adjustments) != 0 || reset.ResetAt == nil {
+		t.Errorf("reset = %+v", reset)
+	}
 }

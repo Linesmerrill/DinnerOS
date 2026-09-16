@@ -1,10 +1,13 @@
 # Autopilot
 
-Status: **V1 implemented on the API and in the iOS app (Phase 10).** A local, deterministic,
-explainable baseline plans a week from the household's taste profile, week
-context, and history, and the household reviews, swaps, and accepts it. The
-context engine (weather, calendar), learned weights, and the private service
-come later (Phases 11–12).
+Status: **V1 implemented on the API and in the iOS app (Phase 10); learning
+from feedback and the context engine added (Phase 11).** A local,
+deterministic, explainable baseline plans a week from the household's taste
+profile, week context, history, what it learned from the household's
+feedback, and context signals (season, holidays, order day, and calendar and
+weather signals derived on the phone), and the household reviews, swaps, and
+accepts it. The iOS side that derives calendar and weather signals, and the
+private service (Phase 12), come later.
 
 > Given a household, its behavioral history, preferences, context, a provider's
 > available catalog, constraints, and optional business objectives, construct
@@ -26,7 +29,7 @@ DinnerOS ──────▶│                │◀────── Meal-k
 | Package | Role |
 | --- | --- |
 | `internal/autopilot` | The contract: `RecommendationProvider` and generic request/response types (catalog items, ratings, interactions, preferences, week context, fixed meals, objectives, explanations). Imports only the standard library; a test enforces that and that no recipe source is named. |
-| `internal/autopilot/baseline` | The V1 implementation: hard filters, weighted signals, beam search, explanations. Hand-set weights. |
+| `internal/autopilot/baseline` | The V1 implementation: hard filters, weighted signals, beam search, explanations. Hand-set weights, plus bounded learned adjustments (`learn.go`) and context calculators (`context.go`). Implements the optional `LearningReporter`. |
 | `internal/recommendations` | The DinnerOS module: taste profile, week contexts, recipe attributes and overrides, proposals, HTTP handlers, and the adapter that turns recipes, ratings, plans, events, and the pantry into provider input. |
 
 ```go
@@ -50,9 +53,14 @@ type RecommendationProvider interface {
 
 ```text
 Load (adapter)        → profile, week context, main-meal catalog, overrides, ratings, 26 weeks of plans,
-                        52 weeks of cooked/skipped events, low pantry items, this week's plan
+                        52 weeks of cooked/skipped events and busy weeks, 26 weeks of feedback events,
+                        low pantry items, this week's plan
+        ↓
+Context (adapter)     → season, US holidays, order date; the device's calendar and weather signals
         ↓
 Attributes (adapter)  → per recipe: cook minutes, time band, proteins, allergens, diets, spicy, methods
+        ↓
+Learning (provider)   → per meal and per attribute adjustments from feedback, with recency decay
         ↓
 Hard constraints      → remove candidates (nothing reintroduces them)
         ↓
@@ -266,7 +274,13 @@ keep today's spelling — the most common one the catalog uses.
 | Ratings and feedback tags | `recipe_ratings` (every member) | `Rating{itemId, memberId, score, tags}` |
 | Order history | `recipes.orderWeeks` | `ordered` interactions |
 | Planned meals, weekday affinity | `weekly_plans` entries, previous 25 weeks | `planned` interactions with a day |
-| Cooked and skipped | `recipe.cooked` / `recipe.skipped` events, 52 weeks | `cooked` / `skipped` interactions, a skip carrying its `reason` |
+| Cooked and skipped | `recipe.cooked` / `recipe.skipped` events, 52 weeks | `cooked` / `skipped` interactions, a skip carrying its `reason`, `at`, and whether its week was marked busy |
+| Swapped out | `meal.swapped` (`previousRecipeId`, not the meal swapped in), 26 weeks | `swappedOut` interactions |
+| Left out or removed | `meal.rejected`; `recipe.unplanned` with origin `autopilot` | `rejected` interactions |
+| Accepted | `recipe.planned` with origin `autopilot` | `accepted` interactions |
+| Looked at | `recipe.viewed`, except on the plan | `viewed` interactions |
+| Ratings over time | `recipe.rated` with its score | `rated` interactions |
+| Learning reset | the latest `autopilot.learning_reset` | `Input.LearningSince` |
 | This week's plan | `weekly_plans` for the week | fixed meals (occupy days, count toward meals and variety) |
 | Pantry running low | pantry items with status `low` | `context.pantryLow` |
 
@@ -308,6 +322,8 @@ signals.
 | `servingsFit` | −1…0 | when no authored size feeds the day's servings: −shortfall/servings | 0.25 |
 | `pantry` | 0…1 | ingredients running low it uses, /2 | 0.05 |
 | `avoid` | −1…0 | a previous pending proposal's meal (regenerate) | 0.35 |
+| `learned` | −1…1 | [learning from feedback](#learning-from-feedback), never more than half the meal's `taste` contribution in the other direction | 0.10 |
+| `context` | −1…1 | [context calculators](#context-engine), clamped sum | 0.15 |
 | `objective` | ±0.2 | tenant business boost (DinnerOS sends none) | 1 |
 
 The day's soft limit is, in order: none on a long-cook rule day, the quick band
@@ -364,9 +380,11 @@ meal and every meal already swapped out of that slot (up to 20).
 
 ## Explanations
 
-Each pick has up to three reasons (`{code, text}`): the day's rule and
-time-cap reasons first, then the largest positive contributions. The app joins
-them with " · ".
+Each pick has up to three standard reasons (`{code, text}`): the day's rule
+and time-cap reasons first, then the largest positive contributions. Every
+learned and context adjustment that moves the score is then added too, even a
+negative one, displacing the smallest standard reasons when there would be
+more than five. The app joins them with " · ".
 
 | Code | Example |
 | --- | --- |
@@ -385,6 +403,15 @@ them with " · ".
 | `guests` | Serves 6 for your guests |
 | `pantry` | Uses up the cilantro running low |
 | `fit` | fallback: Ready in 30 min |
+| `learnedMeal` | You swapped this out twice recently / You left this out once recently / You kept it when Autopilot suggested it / You've looked at it 3 times lately |
+| `learnedTaste` | Lately you favor Mexican / Lately you pass on long cooks |
+| `busySkips` | Often skipped on busy weeks |
+| `season` | A warming dinner for winter / A cozy dinner for fall / Grill season / A light dinner for summer |
+| `holiday` | Something special for Thanksgiving / An easy night in Thanksgiving week / A cookout for Labor Day |
+| `weekday` | Sunday has time for a longer cook |
+| `orderDate` | Fresh from Saturday's order / Late in the week after Saturday's order |
+| `calendar` | Quick for your busy Wednesday evening / Fits the 25 min you have free Tuesday / Free Saturday evening, time for a longer cook |
+| `weather` | Cold and rainy Tuesday, comfort food / Hot Wednesday, something lighter / Soup on a hot Wednesday |
 
 Week messages explain shortfalls gracefully: `week_skipped`, `empty_catalog`,
 `week_full`, `not_enough_candidates` ("Only 3 quick recipes (≤20 min) match;
@@ -392,7 +419,10 @@ planned 3 of 5 nights."), `not_enough_days` ("Only 4 days are open this week;
 planned 4 of 5 meals."), `rule_method_unmet` ("No smoker-friendly recipe fits
 Sunday; picked the best alternative.", or "Sunday's smoker-friendly recipes
 didn't fit this week; picked the best alternative." when suitable ones lost to
-the rest of the week), `already_planned`, and `cold_start`. Days that
+the rest of the week), `already_planned`, `cold_start`, `holiday`
+("Thanksgiving is Thursday: something special that day, easy nights around
+it."), and `device_context` ("Planned around your calendar and the
+forecast."). Days that
 couldn't be filled are listed as `unfilled` (`no_candidates`,
 `no_quick_candidates`).
 
@@ -401,8 +431,10 @@ couldn't be filled are listed as `unfilled` (`no_candidates`,
 - The same inputs, attempt, and model version always give the same week. The
   catalog, ratings, and history are normalized and ordered internally, so their
   order doesn't matter (tested). Ties break with an FNV-1a hash of
-  household ID, week, attempt, model version, and item ID.
-- `modelVersion` (`baseline-2026.5`) is stored on every proposal and event.
+  household ID, week, attempt, model version, and item ID. Learning sorts
+  the interactions it uses before summing, and a test shuffles history and
+  catalog with learning and every context signal present.
+- `modelVersion` (`baseline-2026.6`) is stored on every proposal and event.
   `inputsHash` fingerprints the provider request, so identical inputs can be
   recognized.
 - **Tuning:** change `baseline.DefaultWeights` (or pass `Options.Weights`) and
@@ -410,8 +442,9 @@ couldn't be filled are listed as `unfilled` (`no_candidates`,
   rules, cook-time mix, busy weeks, determinism) rather than exact scores, so
   small weight changes only need the few signal-value tests updated.
   `BenchmarkGenerateWeek` checks speed.
-- Learned or proprietary weights belong behind the same interface in a private
-  implementation, calibrated from the events below.
+- The baseline's learning is a small, bounded, explainable adjustment on top
+  of hand-set weights. Tuned or proprietary weights belong behind the same
+  interface in a private implementation, calibrated from the events below.
 
 ## Proposals, swap, accept
 
@@ -625,6 +658,7 @@ Autopilot types are server-observed; clients can't send them.
 | `autopilot.preferences_updated` | a profile section changed | `{sections, changes: [{field, added?, removed?, from?, to?}]}` |
 | `autopilot.week_context_updated` | a week context changed or was cleared (`week`) | `{changes?, cleared?}` |
 | `autopilot.recipe_override_updated` | a method or meal-category override changed (`recipeId`) | `{method` **or** `category, value: yes/no/auto, previous}` |
+| `autopilot.learning_reset` | a member reset what Autopilot learned | `{adjustments}` |
 | `pairing.suggested` | a pairing was offered with a meal (`recipeId` is the meal) | `{key, kind, source, frequency, mealCategory?, ruleId?, confidence?, entryId?, proposalId?, slotId?, day?}` |
 | `pairing.accepted` | a pairing was added to the week | the same, plus `{addedEntryId?, groceryItemId?}` |
 | `pairing.dismissed` | a pairing was dismissed, or left out when accepting | the same, plus `{reason: dismissed/excluded}` |
@@ -641,19 +675,23 @@ Plan entries carry `origin` and `proposalId`. `recipe.planned` includes
 `recipe.cooked` and `recipe.skipped` (which carry `entryId`) join back to the
 Autopilot meal and proposal that produced them.
 
-Signals available for future learning (V1 stays deterministic and doesn't
-learn from them):
+What the baseline [learns from](#learning-from-feedback), and what is left
+for a later model:
 
-| Signal | Use |
-| --- | --- |
-| Swaps: meal out, meal in, day, swap number | per-feature preference pairs (what the household prefers over the pick, on which day) |
-| Accepted vs. excluded meals, rejected weeks | pick-level and week-level acceptance labels |
-| Cooked / skipped for autopilot entries | conversion of accepted suggestions |
-| Removing an accepted entry (`recipe.unplanned` with origin autopilot) | late rejection |
-| Preference diffs with timestamps | which stated preferences change and when |
-| Recipe method and meal-category overrides | corrections to the attribute heuristics |
-| Pairings suggested, accepted, dismissed, and made into rules | which add-ons a household really wants with which meals, and where the learned thresholds sit |
-| Signals and model version on every stored proposal | the features behind each decision, for offline calibration |
+| Signal | Use | Learned today |
+| --- | --- | --- |
+| Swaps: meal out, meal in, day, swap number | the meal swapped out steers away; per-feature pairs (what was preferred over the pick, on which day) | meal out only |
+| Accepted vs. excluded meals | pick-level acceptance labels | ✅ |
+| Rejected weeks | week-level acceptance labels | no: `week.rejected` doesn't name the meals, and the replaced proposal is gone |
+| Cooked / skipped | attribute affinities; busy-week skips | ✅ |
+| Removing an accepted entry (`recipe.unplanned` with origin autopilot) | late rejection | ✅ |
+| Views | interest in a meal | ✅ (small) |
+| Ratings over time (`recipe.rated`) | attribute affinities with recency | ✅ |
+| Protein swaps and doubling (`meal.customized`) | "always swaps pork for chicken", portions | no |
+| Preference diffs with timestamps | which stated preferences change and when | no |
+| Recipe method and meal-category overrides | corrections to the attribute heuristics | no (overrides apply directly) |
+| Pairings suggested, accepted, dismissed, and made into rules | which add-ons a household really wants with which meals, and where the learned thresholds sit | no |
+| Signals and model version on every stored proposal | the features behind each decision, for offline calibration | no |
 
 ## Success metrics
 
@@ -671,10 +709,16 @@ Computed from `events`:
 
 Generation reads the whole main-meal catalog (at most 2000 recipes, without
 steps or nutrition), the household's ratings, 26 weeks of plans, 52 weeks of
-cooked and skipped events, and low pantry items, with nothing cached. Measured
-locally: about 65 ms end to end for 500 recipes through MongoDB and HTTP. The
-baseline alone plans a 500-recipe, 5000-interaction week in a few milliseconds
-(`BenchmarkGenerateWeek`).
+cooked and skipped events, 26 weeks of feedback events (at most 5000, newest
+first), busy weeks, and low pantry items, with nothing cached. The feedback
+and busy-week reads run alongside the plan and outcome reads. Measured
+locally: about 65 ms end to end for 500 synthetic recipes through MongoDB and
+HTTP. On a copy of a real 464-recipe catalog with 26 weeks of realistic
+history (plans, cooks, skips, swaps, rejections, 650 views, 60 ratings),
+`Service.Generate` went from a 146 ms median before learning and context to
+156 ms after (the provider itself is about 9 ms of that, over 2,200
+interactions). The baseline alone plans a 500-recipe, 5000-interaction week
+in a few milliseconds (`BenchmarkGenerateWeek`).
 
 ## iOS
 
@@ -683,7 +727,7 @@ baseline alone plans a 500-recipe, 5000-interaction week in a few milliseconds
 | Onboarding | Offered once on the Week tab's first visit while the profile isn't configured; also **Set Up Autopilot** (**Run Setup Again** once set up) in the Week menu (⋯) and Preferences (`AutopilotOnboardingView`, `AutopilotOnboardingSteps`) | **Three** one-screen questions, opening straight on the first, with a progress bar and a "2 of 3" count, and every screen answered by tapping tiles rather than reading: **What do you like?** (a grid of cuisine tiles, each a real catalog photo under a scrim — tap to like, again for "no thanks", again to clear, or long-press to pick), **Anything to avoid?** (allergen and diet tiles, each with its own SF Symbol, plus one "Add an ingredient" field), and **How do your weeks look?** (seven night tiles — the nights picked are the dinners Autopilot plans, so meals per week follows the count). The grid offers the specific cuisines people recognize, using a region only when nothing under it has enough recipes, and every tile gets a distinct photo — a plain tinted tile when none is left (#334, #335). A symbol the app doesn't know falls back to a neutral glyph, and a test checks every symbol is real (#337). At most one subtitle line per screen; longer explanations sit behind an info button. **Skip** is in the nav bar on every step and keeps that section's server defaults; **Set Up Later** is on the first step. **Finish** saves every section with one `PUT` and offers **Plan My Week**, plus a quiet **Fine-tune Autopilot** row. Setup no longer asks for meals per week, servings, the cook-time mix, equipment, weekday rules, novelty, or pairings — they keep the API's defaults and live in Preferences (#330, #337). |
 | Plan and review | Week → **Plan with Autopilot** row or ⋯ menu; **Autopilot suggested N meals → Review** (`WeekAutopilotSection`, `ProposalReviewView`) | Generates the shown week and opens the review: `messages` as notes, each slot's date, photo, name, `cookMinutes` with a Quick/Medium/Long badge, servings, and reasons joined with " · ", and `unfilled` days with their text. Each slot has an include checkmark and **Swap**; ⋯ has **Plan Again** and **Dismiss Suggestions**; **Add N Meals to Week** accepts with `excludeSlotIds`. The plan then shows the new entries with a sparkles badge, and skipped meals are explained. |
 | This Week's Plans | Week → **This Week's Plans…** row or ⋯ menu (`WeekContextSheet`) | Opens on three tiles — **Busy**, **Guests**, **Away** — that set the whole week in one tap, under one short line saying what the week is now; the exact numbers stay below them (a strict time limit, servings and meals for the week, per-day skip, limit, and servings, and a note). The tiles read the week back, so Guests is on when the week or any day serves extra, and turning it off clears both. **Save** sends the whole context; **Clear This Week's Plans** deletes it. Afterward the Week tab offers **Regenerate** or **Plan with Autopilot**, unless the week is skipped. |
-| Preferences | Household → **Autopilot Preferences**; Week → ⋯ → **Fine-tune Autopilot** (`AutopilotPreferencesView`, `AutopilotSectionEditor`) | Every section, in two groups: **From Setup** (taste, restrictions, schedule) and **Fine-tune Autopilot** (cook-time mix, equipment, weekday rules, novelty, pairings — what setup doesn't ask, kept at the API's defaults until changed). Each row carries a one-line description, a summary, and "Changed by *name* · *date*", and opens controls that save that section with `PATCH`. **Change History** lists profile, week context, and recipe override changes with who made them. |
+| Preferences | Household → **Autopilot Preferences**; Week → ⋯ → **Fine-tune Autopilot** (`AutopilotPreferencesView`, `AutopilotSectionEditor`) | Every section, in two groups: **From Setup** (taste, restrictions, schedule) and **Fine-tune Autopilot** (cook-time mix, equipment, weekday rules, novelty, pairings — what setup doesn't ask, kept at the API's defaults until changed). Each row carries a one-line description, a summary, and "Changed by *name* · *date*", and opens controls that save that section with `PATCH`. **Change History** lists profile, week context, and recipe override changes with who made them. **What Autopilot Learned** (`AutopilotLearningView`) lists the strongest learned adjustments — the recipe or attribute, an up or down arrow, and the same wording as a proposal reason — with **Reset Learning** (confirmed; `plan.edit` only). New learned and context reasons need no app change: they arrive in each slot's `reasons`. |
 | Recipe methods | A recipe → **Autopilot** (`RecipeAutopilotSection`) | Cook time and band, and **Good for Smoker** (and the household's other equipment): Automatic (Yes/No), Yes, or No, saved with `PUT .../override`. |
 
 Everything that changes Autopilot is hidden without `plan.edit`. Swaps,
@@ -691,9 +735,27 @@ accepts, and dismissals send the proposal's `version`; when another member
 changed it first, the review reloads and says so. A finalized week offers
 **Reopen and Plan**. See the decision log (#170–#181) for the reasoning.
 
-## Limitations of V1
+## Limitations
 
-- Weights are hand-set; nothing is learned yet.
+- Weights are hand-set. Learning adds bounded per-household adjustments on
+  top (at most ±0.10 of a score, never reversing a stated like or dislike);
+  it doesn't tune the weights themselves.
+- Learning is simple counting with recency decay: no per-day preferences from
+  swaps, no pairwise "preferred A over B", nothing from `meal.customized` or
+  dismissed weeks. A swap is read as "not this", even when the household
+  only meant "not this week".
+- Feedback events are read for 26 weeks, at most 5000; when a household has
+  more, learning starts at the oldest event read.
+- Context rules are hand-written: comfort food is soup, curry, stew, chili,
+  casserole, slow-cooker meals, or a "comfort" tag; light is salad or grill;
+  perishable is fish, shellfish, or salad. Holidays are US only, and a
+  holiday's kind is fixed (Thanksgiving is a feast, Labor Day a cookout).
+- The season comes from the household's time zone, the only location it has:
+  southern-hemisphere zones are reversed, and tropical zones still get
+  temperate seasons.
+- Calendar busyness and weather are only as present as the phone sends them;
+  without them, context falls back to season, holidays, weekday, and order
+  day. The API never fetches weather.
 - Attribute heuristics are keyword-based and English-only. Method overrides
   exist, but proteins, allergens, and diets can't be overridden per recipe yet.
   Allergen and diet data are only as good as recipe labels and ingredient
@@ -712,25 +774,112 @@ changed it first, the review reloads and says so. A finalized week offers
 - Pairings are learned per meal category, not per recipe, and the week is the
   unit: an add-on ordered in the same week as a pasta dish counts, even if it
   was eaten on another night.
-- The week note is stored, not interpreted. There's no weather, season, or
-  calendar context yet.
+- The week note is stored, not interpreted.
 - Only the latest proposal per week is stored; earlier ones survive only as
   events.
 - Equipment doesn't filter recipes that need equipment the household lacks.
 
-## Context engine (later)
+## Learning from feedback
 
-Context is a generic, optional map of typed signals rather than weather-specific
-code:
+The baseline learns small, per-household adjustments from how the household
+responds to suggestions and to its own plans (`baseline/learn.go`). It stays
+deterministic and explainable: the adjustments are **recomputed from the
+request's history on every call**, never stored, so the same inputs give the
+same week, and every adjustment that moves a score is named in the meal's
+reasons.
 
-```text
-weekday · holiday · season · temperature · precipitation · region · delivery date · time available · calendar busyness
-```
+**Why recompute rather than store.** Computing them is a single pass over at
+most a few thousand interactions (well under the ~9 ms the provider takes in
+all), and the events it reads are already indexed by household and time. A
+stored copy would need invalidating on every swap, accept, cook, skip, view,
+rating, and reset, and would split the provider's contract into "input" and
+"state the tenant must keep in sync". The only state is the reset, kept as an
+`autopilot.learning_reset` event.
 
-Feature calculators may use context when present and must degrade gracefully when
-it is absent. Examples: a cold, rainy Wednesday raises comfort-food affinity; a
-busy Wednesday evening favors meals under 20 minutes (V1 covers busy weeks and
-per-day time caps through the week context).
+| Learned | From | Value |
+| --- | --- | --- |
+| A meal | swapped out −1, left out or removed after accepting −1, accepted +0.5, each view +0.1 (views at most +0.3); decayed, summed, `tanh(sum / 1.5)` | −1…1, weighted 0.6 |
+| An attribute (own cuisine, protein, meal category, cook-time band) | cooked +1, skipped for a reason about the meal −1, swapped out −1, left out −1, accepted +0.5, rated (score − 3) / 2; its decayed mean minus the household's usual response, × n / (n + 4) | kept when n ≥ 3 and \|affinity\| ≥ 0.15; the meal's attributes are averaged, weighted 0.4 |
+| Skipped on busy weeks | skips in a week marked busy, or with reason `no-time`; at least 2 | −0.6, only on a busy week's weeknights or a day the calendar says is busy |
+
+- **Recency.** Evidence halves every 8 weeks and is ignored after 26.
+- **Explicit preferences win.** An attribute the household liked or disliked
+  in its taste profile isn't learned on top. The meal's learned value is
+  clamped to −1…1 and weighted 0.10, and it can take back at most half of
+  the meal's taste contribution: a liked meal never scores below an
+  otherwise equal neutral one, and a disliked meal never above.
+- **Hard constraints win.** They remove meals before scoring, so learning
+  can't bring back an allergen, a diet violation, or a never-again meal.
+- **Explained.** A meal gets up to two learned reasons, always shown, even
+  when negative: "You swapped this out twice recently", "You kept it when
+  Autopilot suggested it", "Lately you favor Mexican", "Lately you pass on
+  long cooks", "Often skipped on busy weeks". Components that would move a
+  score by less than 0.005 are dropped rather than applied unexplained.
+- **Reset.** `DELETE .../autopilot/learning` records `autopilot.learning_reset`;
+  the adapter passes its time as `Input.LearningSince`, and interactions before
+  it (or without a time) feed no learned adjustment. Ratings, history,
+  recency, and conversion keep working as before.
+- **Visible.** `GET .../autopilot/learning` lists the strongest 20 through
+  the optional `autopilot.LearningReporter` interface; a provider without it
+  answers `501 not_supported`.
+
+## Context engine
+
+Context is a generic, optional map of typed signals
+(`autopilot.Signals`, `context.go`) on the week and on each day, rather than
+weather- or calendar-specific fields. Each calculator in
+`baseline/context.go` uses the signals it understands; a missing key, or a
+value it doesn't know, contributes nothing, so a week without context plans
+exactly as before (tested). The parts are summed, clamped to −1…1, and
+weighted 0.15; the strongest part is named in the meal's reasons.
+
+| Signal | Level | Source | Values |
+| --- | --- | --- | --- |
+| weekday | day | always known (the slot's day) | `mon`–`sun` |
+| `season` | week | server: the week's Thursday in the household's time zone (southern-hemisphere zones reversed) | `winter`, `spring`, `summer`, `fall` |
+| `holiday`, `holidayKind` | day | server: US holidays computed locally, no API | a name; `feast`, `cookout`, `dayOff` |
+| `orderDate` | week | server: the household's order day in the week | `YYYY-MM-DD` (repeats weekly) |
+| `busyness` | day | **device** (calendar) | `free`, `some`, `busy` |
+| `eveningFreeMinutes` | day | **device** (calendar) | 1–1440 |
+| `temperatureBand` | day | **device** (forecast) | `cold`, `mild`, `hot` |
+| `precipitation` | day | **device** (forecast) | `none`, `rain`, `snow` |
+
+Holidays: New Year's Day, Martin Luther King Jr. Day, Presidents' Day, and
+Juneteenth are days off; Easter, Thanksgiving, Christmas Eve, Christmas, and
+New Year's Eve are feasts; Memorial Day, the Fourth of July, and Labor Day
+are cookouts.
+
+| Calculator | Rule (signal value) |
+| --- | --- |
+| Calendar | busy: quick +0.6, long −0.8; free minutes: fits +0.5, over −2 × overage / free (at most −1); free: long +0.4; unknown cook time −0.2 on a constrained evening |
+| Weather | cold and rain: comfort +0.8; cold or snow: comfort +0.6; rain: comfort +0.3; hot: light +0.5, soup −0.4, long −0.3; rain or snow: grill −0.4 |
+| Season (days without a forecast) | winter comfort +0.4, fall comfort +0.25, summer grill +0.4 or light +0.3, summer soup −0.25 |
+| Holiday | feast day: long or smoker +0.5; other days of a feast week: quick +0.3, long −0.3; cookout: grill or smoker +0.6; day off: long +0.3 |
+| Weekday | Saturday or Sunday that isn't a weeknight, has no weekday rule, holiday, or calendar signal: long +0.3 ("Sunday has time for a longer cook") |
+| Order date | fish, shellfish, or salad: 0–2 days after the order +0.4, 5–6 days after −0.4 |
+
+Context is soft: hard caps still apply, and a busy Tuesday on the calendar
+doesn't cap cook time the way a week context's `maxMinutes` does. The
+household's habits are covered by what already exists: a Sunday smoker rule
+for the long Sunday cook, the cook-time mix for balance across the week, and
+pairing rules for garlic bread with pasta and Club crackers with soup.
+
+### Device signals: what is (not) sent
+
+Calendar busyness and weather come from the member's iPhone (EventKit and
+WeatherKit with coarse location), computed **on the device**. The app sends
+only the derived values in the table above with a generate request
+(`signals.days`); the API never receives calendar events, their titles or
+times, a forecast, coordinates, or a location, and never calls a weather
+service. The values are validated and bounded (`400` otherwise), stored with
+the proposal (`context.signals`) so swaps use them, and not kept anywhere
+else. Generating again uses only what that request sends. The iOS side that
+computes them is a follow-up; until then no device signals are sent and
+Autopilot uses the server-side signals alone.
+
+**Not built:** reading calendar busyness on the server, weather on the server
+(the household has only a time zone, too coarse for a forecast), and holidays
+outside the US.
 
 ## Multi-tenant model (service)
 
@@ -778,9 +927,13 @@ Everything is household-scoped and lives in two collections
 | Historical preference, recency, repetition | `recipes.orderWeeks` / `timesOrdered` / `lastOrderedWeek`; `import.completed` marks each refresh | API (import) | ✅ used |
 | Planned meals, weekday affinity | plan entries; `recipe.planned` / `recipe.unplanned` with `entryId`, `day`, `date`, `servings`, `origin`, `proposalId` | API (planning) | ✅ used (from plans) |
 | Conversion (planned → cooked), skip rate | `recipe.cooked` / `recipe.skipped` (`entryId` links to the plan entry; `reason` for skips) | App, via `POST /events` | ✅ used |
-| Interest | `recipe.viewed` with `surface` | App | recorded, not used |
+| Interest | `recipe.viewed` with `surface` (not `plan`) | App | ✅ used (learning) |
+| Ratings over time | `recipe.rated` with its score | API (ratings) | ✅ used (learning) |
+| Busy weeks | week contexts with `busy` | API (Autopilot) | ✅ used (busy-week skips) |
 | Shopping behavior | `grocery.item_checked` | App | recorded, not used |
-| Week generation, swaps, acceptance | `week.*`, `meal.*` | API (Autopilot) | ✅ recorded for metrics and learning |
+| Swaps and acceptance | `meal.swapped`, `meal.rejected`, `recipe.planned` / `recipe.unplanned` with origin `autopilot` | API (Autopilot, planning) | ✅ used (learning) |
+| Week generation and dismissal | `week.*` | API (Autopilot) | recorded for metrics |
+| Protein customizations | `meal.customized` | API (customize) | recorded, not used |
 | Preference changes | `autopilot.*` | API (Autopilot) | ✅ recorded |
 
 - Server-observed types can't be sent by clients, so they can be weighted as

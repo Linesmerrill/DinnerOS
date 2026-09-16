@@ -67,6 +67,8 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(edit).Post(base+"/weeks/{week}/proposal/slots/{slotId}/swap", h.swap)
 		r.With(edit).Post(base+"/weeks/{week}/proposal/accept", h.accept)
 		r.With(edit).Post(base+"/weeks/{week}/proposal/reject", h.reject)
+		r.With(view).Get(base+"/learning", h.getLearning)
+		r.With(edit).Delete(base+"/learning", h.resetLearning)
 		h.mountPairings(r, view, edit)
 	})
 }
@@ -275,13 +277,16 @@ type ProposalResponse struct {
 	Unfilled       []UnfilledJSON `json:"unfilled"`
 	Messages       []TextJSON     `json:"messages"`
 	Objective      ObjectiveJSON  `json:"objective"`
-	SwapCount      int            `json:"swapCount"`
-	ExcludedSlots  []string       `json:"excludedSlotIds"`
-	GeneratedBy    string         `json:"generatedBy"`
-	GeneratedAt    time.Time      `json:"generatedAt"`
-	UpdatedAt      time.Time      `json:"updatedAt"`
-	DecidedBy      *string        `json:"decidedBy"`
-	DecidedAt      *time.Time     `json:"decidedAt"`
+	// Context is the season, holidays, order date, and device signals the
+	// week was planned with.
+	Context       ProposalContextJSON `json:"context"`
+	SwapCount     int                 `json:"swapCount"`
+	ExcludedSlots []string            `json:"excludedSlotIds"`
+	GeneratedBy   string              `json:"generatedBy"`
+	GeneratedAt   time.Time           `json:"generatedAt"`
+	UpdatedAt     time.Time           `json:"updatedAt"`
+	DecidedBy     *string             `json:"decidedBy"`
+	DecidedAt     *time.Time          `json:"decidedAt"`
 }
 
 // SkippedSlotJSON is a proposed meal accepting didn't add.
@@ -303,7 +308,8 @@ type AcceptResponse struct {
 }
 
 type generateRequest struct {
-	AvoidPrevious *bool `json:"avoidPrevious"`
+	AvoidPrevious *bool              `json:"avoidPrevious"`
+	Signals       *DeviceSignalsJSON `json:"signals"`
 }
 
 type versionRequest struct {
@@ -622,6 +628,7 @@ func newProposalResponse(p Proposal) ProposalResponse {
 		Status: p.Status, Version: p.Version, Attempt: p.Attempt, ModelVersion: p.ModelVersion, InputsHash: p.InputsHash,
 		RequestedMeals: p.Requested, PlannedMeals: p.Planned, CandidateCount: p.Candidates, ColdStart: p.ColdStart,
 		Slots: []SlotJSON{}, Unfilled: []UnfilledJSON{}, Messages: []TextJSON{}, Objective: ObjectiveJSON(p.Objective),
+		Context:   proposalContextJSON(p.Week, p.Context),
 		SwapCount: p.SwapCount, ExcludedSlots: orEmptyStrings(p.ExcludedSlots), GeneratedBy: p.GeneratedBy,
 		GeneratedAt: p.GeneratedAt, UpdatedAt: p.UpdatedAt, DecidedBy: optionalString(p.DecidedBy), DecidedAt: optionalTime(p.DecidedAt),
 	}
@@ -878,8 +885,13 @@ func (h *Handler) generate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	signals, err := req.Signals.signals()
+	if err != nil {
+		h.writeError(w, r, "generate autopilot week failed", err)
+		return
+	}
 	m := actor(r)
-	p, err := h.opts.Service.Generate(r.Context(), m.HouseholdID, m.UserID, chi.URLParam(r, "week"), GenerateOptions(req))
+	p, err := h.opts.Service.Generate(r.Context(), m.HouseholdID, m.UserID, chi.URLParam(r, "week"), GenerateOptions{AvoidPrevious: req.AvoidPrevious, Signals: signals})
 	if err != nil {
 		h.writeError(w, r, "generate autopilot week failed", err)
 		return
@@ -996,6 +1008,8 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 		httpx.WriteError(w, r, http.StatusConflict, "proposal_stale", "a recipe in the proposal changed; generate the week again")
 	case errors.Is(err, ErrConflict):
 		httpx.WriteError(w, r, http.StatusConflict, "conflict", "the preferences kept changing; try again")
+	case errors.Is(err, ErrLearningUnsupported):
+		httpx.WriteError(w, r, http.StatusNotImplemented, "not_supported", "the recommendation provider doesn't report what it learned")
 	case errors.Is(err, ErrPairingsUnavailable):
 		httpx.WriteError(w, r, http.StatusServiceUnavailable, "unavailable", "pairings are unavailable")
 	default:

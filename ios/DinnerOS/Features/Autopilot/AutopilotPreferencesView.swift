@@ -93,6 +93,11 @@ struct AutopilotPreferencesView: View {
             }
             Section {
                 NavigationLink {
+                    AutopilotLearningView()
+                } label: {
+                    Label("What Autopilot Learned", systemImage: "lightbulb")
+                }
+                NavigationLink {
                     AutopilotHistoryView()
                 } label: {
                     Label("Change History", systemImage: "clock.arrow.circlepath")

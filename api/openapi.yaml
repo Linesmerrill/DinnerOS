@@ -3808,6 +3808,70 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/autopilot/learning:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: What Autopilot learned
+      description: |
+        Requires `household.view`. The strongest (at most 20) adjustments
+        Autopilot learned from the household's feedback — swaps, meals left
+        out, accepted suggestions, views, cooks, skips, and ratings — as of
+        the current week (docs/autopilot.md#learning-from-feedback). They
+        are recomputed from events, not stored. 501 `not_supported` when the
+        recommendation provider doesn't report learning.
+      operationId: getAutopilotLearning
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: What was learned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotLearning"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "501":
+          description: The recommendation provider doesn't report learning.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Reset what Autopilot learned
+      description: |
+        Requires `plan.edit`. Feedback from before now no longer adjusts
+        suggestions; ratings, history, and preferences work as before.
+        Records `autopilot.learning_reset` and returns the (empty) learning.
+      operationId: resetAutopilotLearning
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Learning after the reset.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutopilotLearning"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "501":
+          description: The recommendation provider doesn't report learning.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/reject:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -7584,8 +7648,8 @@ components:
             Scoring inputs by name, for debugging and explanations. Meal
             signals: `rating`, `feedback`, `familiarity`, `conversion`,
             `recency`, `weekdayAffinity`, `taste`, `rule`, `timeFit`,
-            `novelty`, `servingsFit`, `pantry`, `avoid`, and `objective` (when
-            present). Week signals appear only when non-zero: `variety`,
+            `novelty`, `servingsFit`, `pantry`, `avoid`, and, when present,
+            `learned`, `context`, and `objective`. Week signals appear only when non-zero: `variety`,
             `cookTimeMix`, `ruleFrequency`, `noveltyBudget`. Names may be added.
           additionalProperties:
             type: number
@@ -7597,13 +7661,16 @@ components:
             variety: -0.1
         reasons:
           type: array
-          maxItems: 3
+          maxItems: 5
           description: |
-            Why the meal was picked, most important first. Codes: `rule`,
-            `busyWeek`, `dayLimit`, `rating`, `feedback`, `familiar`,
-            `conversion`, `notRecently`, `weekday`, `taste`, `weeknight`,
-            `quick`, `new`, `guests`, `pantry`, and `fit` (when nothing else
-            applies).
+            Why the meal was picked: at most 3 standard reasons, most
+            important first (`rule`, `busyWeek`, `dayLimit`, `rating`,
+            `feedback`, `familiar`, `conversion`, `notRecently`, `weekday`,
+            `taste`, `weeknight`, `quick`, `new`, `guests`, `pantry`, and
+            `fit` when nothing else applies), then every learned reason
+            (`learnedMeal`, `learnedTaste`, `busySkips`; may be negative) and
+            context reason (`season`, `holiday`, `weekday`, `orderDate`,
+            `calendar`, `weather`).
           items:
             $ref: "#/components/schemas/AutopilotText"
           example:
@@ -7665,7 +7732,7 @@ components:
           type: number
     AutopilotProposal:
       type: object
-      required: [id, householdId, week, startDate, endDate, status, version, attempt, modelVersion, inputsHash, requestedMeals, plannedMeals, candidateCount, coldStart, slots, unfilled, messages, objective, swapCount, excludedSlotIds, generatedBy, generatedAt, updatedAt, decidedBy, decidedAt]
+      required: [id, householdId, week, startDate, endDate, status, version, attempt, modelVersion, inputsHash, requestedMeals, plannedMeals, candidateCount, coldStart, slots, unfilled, messages, objective, context, swapCount, excludedSlotIds, generatedBy, generatedAt, updatedAt, decidedBy, decidedAt]
       properties:
         id:
           type: string
@@ -7697,7 +7764,7 @@ components:
           description: 1 for the week's first generation, then one more each time it's generated again.
         modelVersion:
           type: string
-          example: baseline-2026.2
+          example: baseline-2026.6
         inputsHash:
           type: string
           description: Fingerprint of the generation inputs; identical inputs give the same hash.
@@ -7732,7 +7799,8 @@ components:
           description: |
             Week-level notes. Codes: `week_skipped`, `empty_catalog`,
             `week_full`, `not_enough_candidates`, `not_enough_days`,
-            `rule_method_unmet`, `already_planned`, `cold_start`.
+            `rule_method_unmet`, `already_planned`, `cold_start`, `holiday`,
+            `device_context`.
           items:
             $ref: "#/components/schemas/AutopilotText"
           example:
@@ -7740,6 +7808,8 @@ components:
               text: Only 3 quick recipes (≤20 min) match; planned 3 of 5 nights.
         objective:
           $ref: "#/components/schemas/AutopilotObjective"
+        context:
+          $ref: "#/components/schemas/AutopilotProposalContext"
         swapCount:
           type: integer
           minimum: 0
@@ -7773,6 +7843,130 @@ components:
           type: boolean
           default: true
           description: When a pending proposal is replaced, steer away from its meals and the meals swapped out of it.
+        signals:
+          $ref: "#/components/schemas/AutopilotDeviceSignals"
+    AutopilotDeviceSignals:
+      type: object
+      additionalProperties: false
+      description: |
+        Calendar and weather context derived on the member's device
+        (docs/autopilot.md#context-engine). Only these derived values are
+        sent: never calendar events, forecasts, or a location. Stored with
+        the proposal so swaps use them; soft, and ignored when absent.
+      properties:
+        days:
+          type: array
+          maxItems: 7
+          items:
+            $ref: "#/components/schemas/AutopilotDeviceDaySignals"
+    AutopilotDeviceDaySignals:
+      type: object
+      additionalProperties: false
+      required: [day]
+      description: One day's signals; each at most once per request. A day with nothing set is ignored.
+      properties:
+        day:
+          $ref: "#/components/schemas/AutopilotDay"
+        busyness:
+          type: string
+          enum: [free, some, busy]
+          description: How busy the evening is, from the calendar.
+        eveningFreeMinutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+          description: Minutes free for cooking that evening, from the calendar.
+        temperatureBand:
+          type: string
+          enum: [cold, mild, hot]
+        precipitation:
+          type: string
+          enum: [none, rain, snow]
+    AutopilotProposalContext:
+      type: object
+      required: [season, orderDate, holidays, signals]
+      description: The context the week was planned with.
+      properties:
+        season:
+          type: [string, "null"]
+          enum: [winter, spring, summer, fall, null]
+          description: From the household's time zone (southern-hemisphere zones are reversed).
+        orderDate:
+          type: [string, "null"]
+          format: date
+          description: The household's order day in the week, when it has one.
+        holidays:
+          type: array
+          description: US holidays in the week, computed on the server.
+          items:
+            type: object
+            required: [day, date, name, kind]
+            properties:
+              day:
+                $ref: "#/components/schemas/AutopilotDay"
+              date:
+                type: string
+                format: date
+              name:
+                type: string
+                example: Thanksgiving
+              kind:
+                type: string
+                enum: [feast, cookout, dayOff]
+        signals:
+          $ref: "#/components/schemas/AutopilotDeviceSignals"
+    AutopilotLearning:
+      type: object
+      required: [modelVersion, interactions, adjustments, resetAt, resetBy]
+      properties:
+        modelVersion:
+          type: string
+          example: baseline-2026.6
+        interactions:
+          type: integer
+          minimum: 0
+          description: Feedback interactions considered.
+        adjustments:
+          type: array
+          maxItems: 20
+          description: Strongest first.
+          items:
+            $ref: "#/components/schemas/AutopilotLearnedAdjustment"
+        resetAt:
+          type: [string, "null"]
+          format: date-time
+          description: The last reset within the 26-week learning window.
+        resetBy:
+          type: [string, "null"]
+    AutopilotLearnedAdjustment:
+      type: object
+      required: [kind, key, label, recipeId, value, direction, text, evidence]
+      properties:
+        kind:
+          type: string
+          enum: [item, busySkips, cuisine, protein, mealCategory, timeBand]
+          description: "`busySkips` applies only on busy weeks and busy days."
+        key:
+          type: string
+          description: The recipe ID for `item` and `busySkips`, otherwise the attribute value.
+        label:
+          type: string
+          example: Beef Tacos
+        recipeId:
+          type: [string, "null"]
+        value:
+          type: number
+          minimum: -1
+          maximum: 1
+        direction:
+          type: string
+          enum: [toward, away]
+        text:
+          type: string
+          example: You swapped this out twice recently
+        evidence:
+          type: integer
+          minimum: 0
     AutopilotVersionRequest:
       type: object
       additionalProperties: false

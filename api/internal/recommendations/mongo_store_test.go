@@ -85,6 +85,17 @@ func TestIntegrationStoreProfilesAndContexts(t *testing.T) {
 	if gotCtx, err := store.GetWeekContext(ctx, hh, testWeek); err != nil || !reflect.DeepEqual(gotCtx, savedCtx) {
 		t.Errorf("GetWeekContext() = %+v, %v", gotCtx, err)
 	}
+	for _, week := range []string{"2026-W30", "2026-W36", "2025-W50"} {
+		if _, err := store.SaveWeekContext(ctx, WeekContext{HouseholdID: hh, Week: week, Busy: week != "2026-W36", UpdatedBy: userAda, UpdatedAt: testNow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if busy, err := store.BusyWeeks(ctx, hh, "2026-W01", "2026-W38"); err != nil || !slices.Equal(busy, []string{"2026-W30", testWeek}) {
+		t.Errorf("BusyWeeks() = %v, %v", busy, err)
+	}
+	if busy, err := store.BusyWeeks(ctx, bson.NewObjectID().Hex(), "2026-W01", "2026-W38"); err != nil || len(busy) != 0 {
+		t.Errorf("BusyWeeks(other household) = %v, %v", busy, err)
+	}
 	if _, err := store.SaveWeekContext(ctx, c); !errors.Is(err, ErrConflict) {
 		t.Errorf("second context insert error = %v", err)
 	}
@@ -113,6 +124,10 @@ func TestIntegrationStoreProposalsAndOverrides(t *testing.T) {
 		Messages:  []Message{{Code: "cold_start", Text: "Leaning on your taste profile."}},
 		Objective: Objective{Meals: 1.25, Total: 1.25}, SwapCount: 1,
 		GeneratedBy: userAda, GeneratedAt: testNow, UpdatedAt: testNow,
+		Context: ProposalContext{
+			Season: "fall", OrderDate: "2026-09-19", Holidays: []Holiday{{Day: "mon", Name: "Labor Day", Kind: "cookout"}},
+			Device: DeviceSignals{Days: []DeviceDaySignals{{Day: "tue", Busyness: "busy", EveningFreeMinutes: 25}, {Day: "wed", TemperatureBand: "cold", Precipitation: "rain"}}},
+		},
 	}
 	saved, err := store.SaveProposal(ctx, p)
 	if err != nil {

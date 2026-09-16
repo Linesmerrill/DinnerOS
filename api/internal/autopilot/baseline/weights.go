@@ -40,6 +40,14 @@ const (
 	SignalAvoid = "avoid"
 	// SignalObjective is the bounded business boost, when present.
 	SignalObjective = "objective"
+	// SignalLearned is the household's learned adjustment for the meal on
+	// the day (swaps, rejections, accepts, views, attribute affinities, busy
+	// skips), -1..1 before its weight (learn.go).
+	SignalLearned = "learned"
+	// SignalContext is what the week's and day's context signals say about
+	// the meal (season, holiday, weekday, order date, calendar, weather),
+	// -1..1 (context.go).
+	SignalContext = "context"
 
 	// SignalVariety is the week penalty for repeating cuisines, cuisine
 	// regions, meal categories, and proteins.
@@ -77,6 +85,12 @@ type Weights struct {
 	ServingsFit         float64
 	Pantry              float64
 	Avoid               float64
+	// Learned bounds learning from feedback: a meal's learned adjustment is
+	// at most ±Learned, and never more than half its taste contribution in
+	// the other direction. Zero turns learning off.
+	Learned float64
+	// Context weights the context calculators; zero turns them off.
+	Context float64
 
 	// Week objective penalties.
 	// CuisineRepeat and ProteinRepeat apply per pair of the week's meals
@@ -125,6 +139,8 @@ func DefaultWeights() Weights {
 		ServingsFit:         0.25,
 		Pantry:              0.05,
 		Avoid:               0.35,
+		Learned:             0.10,
+		Context:             0.15,
 
 		CuisineRepeat:       0.20,
 		CuisineRegionRepeat: 0.10,

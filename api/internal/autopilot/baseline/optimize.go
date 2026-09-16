@@ -665,6 +665,7 @@ func (m *model) generate() autopilot.WeekResult {
 			Code: "cold_start", Text: "Autopilot is leaning on your taste profile until you rate and cook more meals.",
 		})
 	}
+	res.Messages = append(res.Messages, m.contextMessages(slots)...)
 	return res
 }
 

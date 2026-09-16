@@ -33,6 +33,7 @@ func TestAutopilotEventsAreServerObserved(t *testing.T) {
 		{Type: TypeWeekRejected, Week: "2026-W38", Payload: WeekRejected{ProposalID: proposal, ModelVersion: "baseline-2026.1", Planned: 3, Reason: "regenerated"}},
 		{Type: TypeRecipePlanned, RecipeID: recipeA, Week: "2026-W38", Payload: RecipePlanned{EntryID: "e1", Day: "tue", Servings: 2, Origin: "autopilot", ProposalID: proposal}},
 		{Type: TypeRecipeUnplanned, RecipeID: recipeA, Week: "2026-W38", Payload: RecipeUnplanned{EntryID: "e1", Origin: "autopilot"}},
+		{Type: TypeAutopilotLearningReset, Payload: AutopilotLearningReset{Adjustments: 4}},
 	}
 	for _, e := range valid {
 		e.HouseholdID, e.UserID = hhA, userA

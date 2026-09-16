@@ -170,6 +170,19 @@ func (m *memoryStore) DeleteWeekContext(_ context.Context, householdID, week str
 	return c, nil
 }
 
+func (m *memoryStore) BusyWeeks(_ context.Context, householdID, from, to string) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var weeks []string
+	for _, c := range m.contexts {
+		if c.HouseholdID == householdID && c.Busy && c.Week >= from && c.Week <= to {
+			weeks = append(weeks, c.Week)
+		}
+	}
+	slices.Sort(weeks)
+	return weeks, nil
+}
+
 func (m *memoryStore) GetProposal(_ context.Context, householdID, week string) (Proposal, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -41,6 +41,9 @@ const (
 	TypeAutopilotPreferencesUpdated    Type = "autopilot.preferences_updated"
 	TypeAutopilotWeekContextUpdated    Type = "autopilot.week_context_updated"
 	TypeAutopilotRecipeOverrideUpdated Type = "autopilot.recipe_override_updated"
+	// TypeAutopilotLearningReset: a member cleared what Autopilot learned
+	// from the household's feedback; learning starts again after it.
+	TypeAutopilotLearningReset Type = "autopilot.learning_reset"
 
 	// Autopilot week generation and the household's response to it.
 	TypeWeekGenerated Type = "week.generated"
@@ -254,6 +257,13 @@ type AutopilotRecipeOverrideUpdated struct {
 	Previous string `json:"previous,omitempty" bson:"previous,omitempty"`
 }
 
+// AutopilotLearningReset is the payload of autopilot.learning_reset.
+// Adjustments is how many learned adjustments were showing when it was
+// reset.
+type AutopilotLearningReset struct {
+	Adjustments int `json:"adjustments" bson:"adjustments"`
+}
+
 // WeekGenerated is the payload of week.generated. Event.Week is the week.
 type WeekGenerated struct {
 	ProposalID   string `json:"proposalId" bson:"proposalId"`
@@ -452,6 +462,16 @@ func (AutopilotWeekContextUpdated) EventType() Type { return TypeAutopilotWeekCo
 
 // EventType implements Payload.
 func (AutopilotRecipeOverrideUpdated) EventType() Type { return TypeAutopilotRecipeOverrideUpdated }
+
+// EventType implements Payload.
+func (AutopilotLearningReset) EventType() Type { return TypeAutopilotLearningReset }
+
+func (p AutopilotLearningReset) validate() error {
+	if p.Adjustments < 0 {
+		return invalid("adjustments must not be negative")
+	}
+	return nil
+}
 
 // EventType implements Payload.
 func (WeekGenerated) EventType() Type { return TypeWeekGenerated }
@@ -684,6 +704,7 @@ var typeSpecs = map[Type]typeSpec{
 	TypeAutopilotPreferencesUpdated:    {decode: decoder[AutopilotPreferencesUpdated]()},
 	TypeAutopilotWeekContextUpdated:    {decode: decoder[AutopilotWeekContextUpdated]()},
 	TypeAutopilotRecipeOverrideUpdated: {recipe: true, decode: decoder[AutopilotRecipeOverrideUpdated]()},
+	TypeAutopilotLearningReset:         {decode: decoder[AutopilotLearningReset]()},
 	TypeWeekGenerated:                  {decode: decoder[WeekGenerated]()},
 	TypeWeekAccepted:                   {decode: decoder[WeekAccepted]()},
 	TypeWeekRejected:                   {decode: decoder[WeekRejected]()},

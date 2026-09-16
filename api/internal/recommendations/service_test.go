@@ -514,7 +514,7 @@ func TestAutopilotCatalogExcludesAddons(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	in, _, err := env.svc.buildInput(ctx, hhA, mustWeek(t, "2026-W38"), profile, WeekContext{}, planning.Plan{})
+	in, _, err := env.svc.buildInput(ctx, hhA, mustWeek(t, "2026-W38"), profile, WeekContext{}, planning.Plan{}, DeviceSignals{})
 	if err != nil {
 		t.Fatal(err)
 	}

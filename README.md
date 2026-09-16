@@ -27,9 +27,10 @@ Autopilot's first customer.
 | 7 | Pantry and grocery engine, specialty ingredient substitutes, low-stock alerts | ✅ Done; saved lists pending |
 | 8 | Shopping providers | Walmart cart handoff, category-aware search, product links with name and size, pack coverage ✅; order-day reminders ✅; Instacart later |
 | 9 | Ratings and behavioral events | ✅ Done (API and iOS) |
-| 10 | Autopilot V1: taste profile, week context, deterministic week proposals (generate, swap, accept) | ✅ Done (API and iOS); learning from feedback comes later |
+| 10 | Autopilot V1: taste profile, week context, deterministic week proposals (generate, swap, accept) | ✅ Done (API and iOS) |
 | — | Push notifications (APNs, hourly reminder sweep), starter recipe library for new households, account deletion, privacy policy, external TestFlight | ✅ Done |
-| 11–12 | Autopilot context engine and private service | Later |
+| 11 | Autopilot learning from feedback and context engine (season, US holidays, order day, weekday; calendar and weather signals from the phone) | ✅ Done (API; iOS shows the reasons and "What Autopilot Learned"); the iPhone side that derives calendar and weather signals comes next |
+| 12 | Autopilot private service | Later |
 
 ## Repository layout
 

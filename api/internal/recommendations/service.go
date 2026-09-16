@@ -420,6 +420,9 @@ type GenerateOptions struct {
 	// AvoidPrevious steers away from a pending proposal's meals when
 	// generating again. Nil means true.
 	AvoidPrevious *bool
+	// Signals are calendar and weather signals a member's device derived
+	// for the week. They are kept with the proposal, so swaps use them too.
+	Signals DeviceSignals
 }
 
 // loadWeek parses the week and loads its plan, failing for a finalized plan.
@@ -439,7 +442,7 @@ func (s *Service) loadWeek(ctx context.Context, householdID, week string) (plann
 }
 
 // prepareInput loads the profile and week context and builds provider input.
-func (s *Service) prepareInput(ctx context.Context, householdID string, w planning.Week, plan planning.Plan) (autopilot.Input, inputData, error) {
+func (s *Service) prepareInput(ctx context.Context, householdID string, w planning.Week, plan planning.Plan, device DeviceSignals) (autopilot.Input, inputData, error) {
 	profile, err := s.Profile(ctx, householdID)
 	if err != nil {
 		return autopilot.Input{}, inputData{}, err
@@ -448,7 +451,7 @@ func (s *Service) prepareInput(ctx context.Context, householdID string, w planni
 	if err != nil {
 		return autopilot.Input{}, inputData{}, err
 	}
-	return s.buildInput(ctx, householdID, w, profile, wc, plan)
+	return s.buildInput(ctx, householdID, w, profile, wc, plan, device)
 }
 
 // Generate proposes a week and saves it as the week's proposal, replacing any
@@ -456,6 +459,10 @@ func (s *Service) prepareInput(ctx context.Context, householdID string, w planni
 // planned). A finalized plan fails with ErrPlanFinalized.
 func (s *Service) Generate(ctx context.Context, householdID, userID, week string, opts GenerateOptions) (Proposal, error) {
 	if err := required(householdID, userID); err != nil {
+		return Proposal{}, err
+	}
+	device, err := normalizeDeviceSignals(opts.Signals)
+	if err != nil {
 		return Proposal{}, err
 	}
 	w, plan, err := s.loadWeek(ctx, householdID, week)
@@ -467,7 +474,7 @@ func (s *Service) Generate(ctx context.Context, householdID, userID, week string
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return Proposal{}, err
 	}
-	in, data, err := s.prepareInput(ctx, householdID, w, plan)
+	in, data, err := s.prepareInput(ctx, householdID, w, plan, device)
 	if err != nil {
 		return Proposal{}, err
 	}
@@ -491,6 +498,7 @@ func (s *Service) Generate(ctx context.Context, householdID, userID, week string
 		ID: newID(), HouseholdID: householdID, Week: w.String(), Status: StatusProposed, Attempt: req.Attempt,
 		ModelVersion: res.ModelVersion, InputsHash: inputsHash(req), Requested: res.Requested, Planned: res.Planned,
 		Candidates: res.Candidates, ColdStart: res.ColdStart, GeneratedBy: userID, GeneratedAt: now, UpdatedAt: now,
+		Context: data.context,
 		Objective: Objective{
 			Meals: res.Score.Meals, Variety: res.Score.Variety, CookTime: res.Score.CookTime,
 			Rules: res.Score.Rules, Novelty: res.Score.Novelty, Total: res.Score.Total,
@@ -582,7 +590,7 @@ func (s *Service) Swap(ctx context.Context, householdID, userID, week, slotID st
 	if err != nil {
 		return Proposal{}, err
 	}
-	in, data, err := s.prepareInput(ctx, householdID, w, plan)
+	in, data, err := s.prepareInput(ctx, householdID, w, plan, p.Context.Device)
 	if err != nil {
 		return Proposal{}, err
 	}

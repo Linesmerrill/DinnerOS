@@ -22,10 +22,30 @@ import (
 // the recipes (it is small).
 const historyWeeks = 52
 
+// Learning reads the household's feedback events for learningWeeks (the
+// provider's window) and at most learningEventLimit of them, newest first.
+const (
+	learningWeeks      = 26
+	learningEventLimit = 5000
+)
+
+// learningEventTypes are the events learning reads, besides cooked and
+// skipped meals.
+var learningEventTypes = []events.Type{
+	events.TypeMealSwapped, events.TypeMealRejected, events.TypeRecipePlanned, events.TypeRecipeUnplanned,
+	events.TypeRecipeViewed, events.TypeRecipeRated, events.TypeAutopilotLearningReset,
+}
+
 // inputData keeps what the adapter needs to turn provider results back into
 // proposals.
 type inputData struct {
 	byID map[string]recipes.Recipe
+	// context is the context the week was planned with.
+	context ProposalContext
+	// resetAt and resetBy are the household's last learning reset within
+	// the learning window.
+	resetAt time.Time
+	resetBy string
 }
 
 // slot converts a provider slot into a proposal slot.
@@ -43,8 +63,8 @@ func (d inputData) slot(s autopilot.Slot) Slot {
 
 // buildInput loads the household's data and translates it into the provider's
 // generic input. plan is the week being planned; its entries become fixed
-// meals.
-func (s *Service) buildInput(ctx context.Context, householdID string, w planning.Week, profile Profile, wc WeekContext, plan planning.Plan) (autopilot.Input, inputData, error) {
+// meals. device are the signals a member's device sent for the week.
+func (s *Service) buildInput(ctx context.Context, householdID string, w planning.Week, profile Profile, wc WeekContext, plan planning.Plan, device DeviceSignals) (autopilot.Input, inputData, error) {
 	household, err := s.households.GetHousehold(ctx, householdID)
 	if err != nil {
 		return autopilot.Input{}, inputData{}, fmt.Errorf("load household: %w", err)
@@ -61,8 +81,29 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 	if err != nil {
 		return autopilot.Input{}, inputData{}, fmt.Errorf("load ratings: %w", err)
 	}
+	// Learning's reads run alongside the rest, so they add little latency.
+	type learningRead struct {
+		feedback []events.Event
+		busy     []string
+		err      error
+	}
+	learningDone := make(chan learningRead, 1)
+	go func() {
+		var r learningRead
+		r.feedback, r.err = s.events.List(ctx, events.Query{
+			HouseholdID: householdID, Types: learningEventTypes,
+			Since: w.Monday().AddDate(0, 0, -7*learningWeeks), Limit: learningEventLimit, Newest: true,
+		})
+		if r.err != nil {
+			r.err = fmt.Errorf("load feedback events: %w", r.err)
+		} else if r.busy, r.err = s.store.BusyWeeks(ctx, householdID, w.AddWeeks(-historyWeeks).String(), w.AddWeeks(-1).String()); r.err != nil {
+			r.err = fmt.Errorf("load busy weeks: %w", r.err)
+		}
+		learningDone <- r
+	}()
 	plans, err := s.plans.ListPlans(ctx, householdID, w.AddWeeks(-(planning.MaxRangeWeeks - 1)).String(), w.String())
 	if err != nil {
+		<-learningDone
 		return autopilot.Input{}, inputData{}, fmt.Errorf("load plans: %w", err)
 	}
 	outcomes, err := s.events.List(ctx, events.Query{
@@ -70,7 +111,17 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 		Since: w.Monday().AddDate(0, 0, -7*historyWeeks), Limit: events.MaxListLimit,
 	})
 	if err != nil {
+		<-learningDone
 		return autopilot.Input{}, inputData{}, fmt.Errorf("load cooked and skipped events: %w", err)
+	}
+	learningRes := <-learningDone
+	if learningRes.err != nil {
+		return autopilot.Input{}, inputData{}, learningRes.err
+	}
+	feedback, busyList := learningRes.feedback, learningRes.busy
+	busy := make(map[string]bool, len(busyList))
+	for _, week := range busyList {
+		busy[week] = true
 	}
 
 	overrides := make(map[string]RecipeOverride, len(overrideList))
@@ -83,7 +134,8 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 		Preferences: profile.preferences(household.DefaultServings),
 		Context:     wc.providerContext(s.pantryLow(ctx, householdID)),
 	}
-	data := inputData{byID: make(map[string]recipes.Recipe, len(catalog))}
+	data := inputData{byID: make(map[string]recipes.Recipe, len(catalog)), context: weekContext(w, household.TimeZone, household.OrderDay, device)}
+	data.context.apply(&in.Context)
 	bands := profile.bands()
 	addonIDs := map[string]bool{}
 	for _, r := range catalog {
@@ -136,8 +188,9 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 			}
 			week = planning.WeekOf(day).String()
 		}
-		in.History = append(in.History, autopilot.Interaction{ItemID: e.RecipeID, Kind: kind, Week: week, Reason: reason})
+		in.History = append(in.History, autopilot.Interaction{ItemID: e.RecipeID, Kind: kind, Week: week, Reason: reason, At: e.OccurredAt, Busy: busy[week]})
 	}
+	s.addFeedback(&in, &data, feedback, loc)
 	for _, e := range plan.Entries {
 		// Add-ons (a pairing's garlic bread) go with a meal; they don't take
 		// its day or count as a meal.
@@ -147,6 +200,62 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 		in.Fixed = append(in.Fixed, autopilot.Assignment{ItemID: e.RecipeID, Day: autopilot.Day(e.Day)})
 	}
 	return in, data, nil
+}
+
+// addFeedback turns the household's feedback events into interactions the
+// provider learns from, and finds the last learning reset. Events are newest
+// first; when the read hit its limit, learning starts at the oldest event
+// read, so a reset that fell past the limit can't let older feedback back in.
+func (s *Service) addFeedback(in *autopilot.Input, data *inputData, list []events.Event, loc *time.Location) {
+	if len(list) >= learningEventLimit {
+		in.LearningSince = list[len(list)-1].OccurredAt
+	}
+	for _, e := range list {
+		week := e.Week
+		if week == "" {
+			week = planning.WeekOf(e.OccurredAt.In(loc)).String()
+		}
+		h := autopilot.Interaction{ItemID: e.RecipeID, Week: week, At: e.OccurredAt}
+		switch payload := e.Payload.(type) {
+		case events.AutopilotLearningReset:
+			if data.resetAt.IsZero() {
+				data.resetAt, data.resetBy = e.OccurredAt, e.UserID
+				if e.OccurredAt.After(in.LearningSince) {
+					in.LearningSince = e.OccurredAt
+				}
+			}
+			continue
+		case events.MealSwapped:
+			// The event's recipe is the one Autopilot offered next; only the
+			// meal swapped out was the member's choice.
+			h.ItemID, h.Kind = payload.PreviousRecipeID, autopilot.KindSwappedOut
+		case events.MealRejected:
+			h.Kind = autopilot.KindRejected
+		case events.RecipePlanned:
+			if payload.Origin != string(planning.OriginAutopilot) {
+				continue
+			}
+			h.Kind = autopilot.KindAccepted
+		case events.RecipeUnplanned:
+			if payload.Origin != string(planning.OriginAutopilot) {
+				continue
+			}
+			h.Kind = autopilot.KindRejected
+		case events.RecipeViewed:
+			// Seeing a meal on the plan isn't interest in it.
+			if payload.Surface == "plan" {
+				continue
+			}
+			h.Kind = autopilot.KindViewed
+		case events.RecipeRated:
+			h.Kind, h.Score = autopilot.KindRated, payload.Score
+		default:
+			continue
+		}
+		if h.ItemID != "" {
+			in.History = append(in.History, h)
+		}
+	}
 }
 
 // pantryLow returns the names of pantry items running low. The pantry is an

@@ -65,7 +65,7 @@ func TestBuildInputCarriesSkipReasons(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	in, _, err := env.svc.buildInput(ctx, hhA, w, profile, WeekContext{}, planning.Plan{})
+	in, _, err := env.svc.buildInput(ctx, hhA, w, profile, WeekContext{}, planning.Plan{}, DeviceSignals{})
 	if err != nil {
 		t.Fatal(err)
 	}
