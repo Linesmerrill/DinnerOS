@@ -5,6 +5,7 @@ struct RootView: View {
     @Environment(AuthSession.self) private var session
     @Environment(HouseholdStore.self) private var households
     @Environment(RecipeLibrary.self) private var recipes
+    @Environment(ImportReviewStore.self) private var importReviews
     @Environment(PlanStore.self) private var plans
     @Environment(PantryStore.self) private var pantry
     @Environment(SpecialtyStore.self) private var specialties
@@ -27,6 +28,7 @@ struct RootView: View {
                 } else {
                     households.reset()
                     recipes.reset()
+                    importReviews.reset()
                     plans.reset()
                     pantry.reset()
                     specialties.reset()
