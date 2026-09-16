@@ -25,7 +25,7 @@ struct RecipeDetailView: View {
     @State private var customizations: [CustomizationGroup] = []
     /// The chosen option per customizable ingredient, saved to the plan entry when there is one.
     @State private var selections: [String: String] = [:]
-    @State private var pairings: [RecipePairing] = []
+    @State private var pairings = RecipePairings.empty
     @State private var stepsExpanded = false
     @State private var heroHeight: CGFloat = 320
     @State private var showsNavigationBar = false
@@ -231,7 +231,7 @@ struct RecipeDetailView: View {
             case .overview:
                 RecipeOverviewSection(
                     recipe: recipe, customizations: customizations, selections: $selections,
-                    choose: choose(group:choice:), pairings: pairings, mainEntry: plannedEntries.last,
+                    choose: choose(group:choice:), pairings: pairings, summary: summary,
                     reloadPairings: { await loadPairings() })
             case .ingredients:
                 RecipeIngredientsSection(recipe: recipe, servings: $servings)
@@ -289,7 +289,7 @@ struct RecipeDetailView: View {
     }
 
     private func loadPairings() async {
-        pairings = (try? await library.pairings(recipeID: summary.id, week: plans.week)) ?? []
+        pairings = (try? await library.pairings(recipeID: summary.id, week: plans.week)) ?? .empty
     }
 
     /// Starts each group at the entry's saved choice, or the recipe as written.
