@@ -3,8 +3,8 @@ import Testing
 
 @testable import DinnerOS
 
-/// The three-question setup: which sections it covers, what skipping keeps, and how the
-/// cuisine grid picks its tiles and their photos (#330, #331).
+/// The three-question setup: which sections it covers, what skipping keeps, which cuisines
+/// the grid offers, and how it gives every tile a photo of its own (#330-#336).
 struct AutopilotOnboardingTests {
     private let limits = AutopilotLimits.defaults
 
@@ -12,8 +12,26 @@ struct AutopilotOnboardingTests {
         AutopilotOption(value: value, label: label, description: nil, recipeCount: count)
     }
 
-    private func card(id: String, image: String?) -> MenuCard {
+    private func card(id: String, image: String? = "https://img.example.test/\(UUID().uuidString).jpg") -> MenuCard {
         MenuCard(recipe: .placeholder(id: id, name: "Example \(id)", imageURLString: image))
+    }
+
+    private func photo(_ id: String) -> MenuCard {
+        MenuCard(
+            recipe: .placeholder(
+                id: id, name: "Example \(id)", imageURLString: "https://img.example.test/\(id).jpg"))
+    }
+
+    /// The live catalog's shape: counts roll up, so every region outranks the cuisines under it.
+    private var catalogCuisines: [AutopilotOption] {
+        [
+            option("asian", "Asian", 123), option("north american", "North American", 110),
+            option("european", "European", 80), option("southern european", "Southern European", 74),
+            option("latin american", "Latin American", 68), option("east asian", "East Asian", 60),
+            option("italian", "Italian", 32), option("mexican", "Mexican", 26),
+            option("southeast asian", "Southeast Asian", 24), option("caribbean", "Caribbean", 9),
+            option("japanese", "Japanese", 3), option("southwestern", "Southwestern", 1),
+        ]
     }
 
     // MARK: Steps
@@ -69,23 +87,67 @@ struct AutopilotOnboardingTests {
         #expect(settings.taste.dislikes.cuisines.isEmpty)
     }
 
-    // MARK: Cuisine tiles
+    // MARK: Hierarchy
 
-    @Test func tilesShowTheMostCommonCuisinesInAStableOrder() {
-        let options = [
-            option("thai", "Thai", 12), option("mexican", "Mexican", 30), option("italian", "Italian", 30),
-            option("nordic", "Nordic", 0), option("basque", "Basque", nil),
-        ]
+    @Test func theHierarchyMirrorsTheAPIsRegions() {
+        #expect(CuisineHierarchy.ancestors(of: "italian") == ["southern european", "european"])
+        #expect(CuisineHierarchy.ancestors(of: "japanese") == ["east asian", "asian"])
+        #expect(CuisineHierarchy.ancestors(of: "mexican") == ["latin american"])
+        // Spans regions, so it has no parent — and neither does an unknown cuisine.
+        #expect(CuisineHierarchy.ancestors(of: "mediterranean").isEmpty)
+        #expect(CuisineHierarchy.ancestors(of: "klingon").isEmpty)
 
-        let tiles = CuisineTiles.top(options, limit: 3)
+        #expect(CuisineHierarchy.isRegion("asian", of: "japanese"))
+        #expect(!CuisineHierarchy.isRegion("japanese", of: "asian"))
+        #expect(CuisineHierarchy.overlap("european", of: "italian"))
+        #expect(CuisineHierarchy.overlap("italian", of: "european"))
+        #expect(CuisineHierarchy.overlap("thai", of: "thai"))
+        // Siblings under one region are separate choices, not an overlap.
+        #expect(!CuisineHierarchy.overlap("mexican", of: "caribbean"))
+        #expect(!CuisineHierarchy.overlap("italian", of: "klingon"))
+    }
 
-        // Most recipes first; equal counts keep one order, so the grid doesn't reshuffle.
-        #expect(tiles.map(\.value) == ["italian", "mexican", "thai"])
-        #expect(tiles.map(\.recipeCount) == [30, 30, 12])
-        #expect(CuisineTiles.top(options, limit: 3) == tiles)
-        // A cuisine with no recipes has no photo to show, so it isn't offered.
-        #expect(!tiles.contains { $0.value == "nordic" || $0.value == "basque" })
-        #expect(CuisineTiles.top(options).count == 3)
+    // MARK: Which cuisines are offered
+
+    /// A region and a cuisine under it split one preference, so the specific one wins.
+    @Test func specificCuisinesAreOfferedInsteadOfTheRegionsAboveThem() {
+        let tiles = CuisineTiles.top(catalogCuisines)
+
+        #expect(
+            tiles.map(\.value) == [
+                "north american", "east asian", "italian", "mexican", "southeast asian", "caribbean",
+            ])
+        // No tile is a region of another, whatever the counts said.
+        for (index, tile) in tiles.enumerated() {
+            for other in tiles.dropFirst(index + 1) {
+                #expect(!CuisineHierarchy.overlap(tile.value, of: other.value))
+            }
+        }
+        #expect(!tiles.contains { $0.value == "asian" || $0.value == "european" })
+        #expect(CuisineTiles.top(catalogCuisines) == tiles)
+    }
+
+    /// A region is still the better tile when nothing under it has enough recipes: North
+    /// American keeps its 110 rather than handing them to Southwestern's 1.
+    @Test func aRegionIsOfferedWhenNothingUnderItHasEnoughRecipes() {
+        let tiles = CuisineTiles.top(catalogCuisines)
+
+        #expect(tiles.first?.value == "north american")
+        #expect(tiles.contains { $0.value == "east asian" })
+        #expect(!tiles.contains { $0.value == "japanese" })
+
+        // Lower the bar and Japanese's 3 recipes are enough to replace East Asian.
+        let specific = CuisineTiles.top(catalogCuisines, minimumSpecific: 3)
+        #expect(specific.contains { $0.value == "japanese" })
+        #expect(!specific.contains { $0.value == "east asian" })
+    }
+
+    @Test func theGridIsCappedAndCountsDecideTheOrder() {
+        let tiles = CuisineTiles.top(catalogCuisines, limit: 3)
+
+        #expect(tiles.map(\.value) == ["north american", "east asian", "italian"])
+        #expect(tiles.map(\.recipeCount) == [110, 60, 32])
+        #expect(CuisineTiles.top(catalogCuisines, limit: 0).isEmpty)
     }
 
     @Test func anUncountedVocabularyKeepsItsOwnOrderInsteadOfAnEmptyStep() {
@@ -94,20 +156,49 @@ struct AutopilotOnboardingTests {
         #expect(CuisineTiles.top(options).map(\.value) == ["thai", "italian"])
         #expect(CuisineTiles.top(options).allSatisfy { $0.imageURL == nil })
         #expect(CuisineTiles.top([]).isEmpty)
-        #expect(CuisineTiles.top(options, limit: 0).isEmpty)
     }
 
-    @Test func aTileTakesTheFirstPhotoAndFallsBackWhenNoRecipeHasOne() {
-        let url = "https://img.example.test/f_auto,q_auto,w_1200/recipe-2.jpg"
-        let cards = [
-            card(id: "recipe-1", image: nil), card(id: "recipe-2", image: url),
-            card(id: "recipe-3", image: nil),
+    // MARK: Photos
+
+    /// Cuisines overlap, so the same recipe can be the best match for two tiles. Each tile
+    /// takes the first one nothing earlier has taken, rather than repeating a photo.
+    @Test func everyTileGetsADistinctPhoto() {
+        let tiles = CuisineTiles.top(catalogCuisines, limit: 3)
+        // The same top recipe wins for all three, with different runners-up.
+        let candidates = [
+            "north american": [photo("shared"), photo("burger")],
+            "east asian": [photo("shared"), photo("ramen")],
+            "italian": [photo("shared"), photo("pasta")],
         ]
 
-        #expect(CuisineTiles.photo(in: cards) == URL(string: url))
-        // Nothing to show: the tile keeps the same fallback glyph as an imageless card.
-        #expect(CuisineTiles.photo(in: [card(id: "recipe-1", image: nil)]) == nil)
-        #expect(CuisineTiles.photo(in: []) == nil)
+        let assigned = CuisineTiles.assignPhotos(tiles, candidates: candidates)
+
+        #expect(assigned.compactMap(\.imageURL).count == 3)
+        #expect(Set(assigned.compactMap(\.imageURL)).count == 3)
+        #expect(assigned[0].imageURL == URL(string: "https://img.example.test/shared.jpg"))
+        #expect(assigned[1].imageURL == URL(string: "https://img.example.test/ramen.jpg"))
+        #expect(assigned[2].imageURL == URL(string: "https://img.example.test/pasta.jpg"))
+        // Deterministic: the same candidates give the same grid every launch.
+        #expect(CuisineTiles.assignPhotos(tiles, candidates: candidates) == assigned)
+    }
+
+    @Test func aTileWithNoUnusedPhotoShowsNoneRatherThanARepeat() {
+        let tiles = CuisineTiles.top(catalogCuisines, limit: 3)
+        let candidates = [
+            "north american": [photo("shared")],
+            // Only the recipe the first tile took, so this one has nothing left.
+            "east asian": [photo("shared")],
+            // A cuisine whose recipes have no photos at all.
+            "italian": [card(id: "no-photo", image: nil)],
+        ]
+
+        let assigned = CuisineTiles.assignPhotos(tiles, candidates: candidates)
+
+        #expect(assigned[0].imageURL == URL(string: "https://img.example.test/shared.jpg"))
+        #expect(assigned[1].imageURL == nil)
+        #expect(assigned[2].imageURL == nil)
+        // A cuisine nothing was fetched for keeps no photo either.
+        #expect(CuisineTiles.assignPhotos(tiles, candidates: [:]).allSatisfy { $0.imageURL == nil })
     }
 
     @Test func tilesReadTheirStateToVoiceOver() {
