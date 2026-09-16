@@ -121,12 +121,12 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 		loc = time.UTC
 	}
 	for _, e := range outcomes {
-		kind, date := autopilot.KindCooked, ""
+		kind, date, reason := autopilot.KindCooked, "", ""
 		switch payload := e.Payload.(type) {
 		case events.RecipeCooked:
 			date = payload.Date
 		case events.RecipeSkipped:
-			kind, date = autopilot.KindSkipped, payload.Date
+			kind, date, reason = autopilot.KindSkipped, payload.Date, payload.Reason
 		}
 		week := e.Week
 		if week == "" {
@@ -136,7 +136,7 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 			}
 			week = planning.WeekOf(day).String()
 		}
-		in.History = append(in.History, autopilot.Interaction{ItemID: e.RecipeID, Kind: kind, Week: week})
+		in.History = append(in.History, autopilot.Interaction{ItemID: e.RecipeID, Kind: kind, Week: week, Reason: reason})
 	}
 	for _, e := range plan.Entries {
 		// Add-ons (a pairing's garlic bread) go with a meal; they don't take

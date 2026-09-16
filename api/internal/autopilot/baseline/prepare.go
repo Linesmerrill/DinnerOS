@@ -129,6 +129,10 @@ type stats struct {
 	greatLeftovers         int
 	ordered, planned       int
 	cooked, skipped        int
+	// skippedAside counts the skips whose reason was about the household's
+	// week (ate out, missing ingredients, no time) rather than about the
+	// meal. Conversion leaves them out: they are evidence of neither.
+	skippedAside int
 	// nearest is the fewest weeks between the planned week and a week the
 	// meal was ordered, planned, or cooked; -1 when never.
 	nearest  int
@@ -147,6 +151,27 @@ const (
 	confidenceSignals   = 40.0
 	coldStartConfidence = 0.3
 )
+
+// skipAboutTheMeal reports whether a skipped meal's reason is evidence about
+// the meal rather than about the household's week. A meal nobody was in the
+// mood for says something about the meal; one the household missed because it
+// ate out or lacked an ingredient says only what the week was like, and
+// counting those as dislike quietly buries meals the household never rejected.
+// Running out of time is left out too: cook time already has its own signal,
+// the day's soft limit, and the week's cook-time mix, so reading a no-time
+// skip as dislike would penalize a long meal twice over and thin out exactly
+// the long cooks a household plans for the days it has time for.
+//
+// An empty or unrecognized reason counts as evidence, so a tenant that sends
+// no reason behaves exactly as before.
+func skipAboutTheMeal(reason string) bool {
+	switch norm(reason) {
+	case autopilot.SkipNoTime, autopilot.SkipAteOut, autopilot.SkipMissingIngredients:
+		return false
+	default:
+		return true
+	}
+}
 
 func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 	if _, err := autopilot.WeekStart(in.Week); err != nil {
@@ -262,6 +287,9 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 			it.st.cooked++
 		case autopilot.KindSkipped:
 			it.st.skipped++
+			if !skipAboutTheMeal(h.Reason) {
+				it.st.skippedAside++
+			}
 		default:
 			continue
 		}
