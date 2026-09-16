@@ -8330,8 +8330,11 @@ components:
           example: 16 oz
     ShoppingPreferenceRequest:
       type: object
-      description: "`productUrl` or `productId`, not both."
-      required: [displayName]
+      description: |
+        `productUrl` or `productId`, not both. `displayName` is required only
+        when the link carries no name of its own; a `/ip/<slug>/<id>` link
+        supplies one, so a member who pastes a link sends neither
+        `displayName` nor `packageSize`.
       properties:
         productUrl:
           type: string
@@ -8344,8 +8347,16 @@ components:
         displayName:
           type: string
           maxLength: 100
+          description: |
+            Omitted or empty reads the name from the link's slug
+            (`/ip/Garlic-Bulb-Fresh-Whole-Each/123` gives
+            `Garlic Bulb Fresh Whole Each`), trimmed to 100 characters. A
+            link with no slug still requires it.
         packageSize:
-          description: How much one package holds; null or omitted when unknown.
+          description: |
+            How much one package holds; null or omitted reads an unambiguous
+            size from the link's slug (`-15-oz`, `-2-lb`, `-12-Count`, a
+            trailing `-Each`), and stays unknown when the slug has none.
           oneOf:
             - type: object
               required: [quantity, unit]
@@ -8363,9 +8374,18 @@ components:
           type: string
           maxLength: 100
           description: Defaults to the catalog name, or the name after `name:`.
+        coverage:
+          type: string
+          enum: ["", per_week, per_amount]
+          description: |
+            How one package covers a week's need. `per_week` assumes one
+            package covers the week when the need can't be measured against
+            it (a clove against a bulb sold by the each); `per_amount` always
+            counts by exact measure. Omitted or empty follows the
+            ingredient's grocery category.
     ShoppingPreference:
       type: object
-      required: [id, provider, ingredientKey, ingredientId, ingredientName, productId, productUrl, displayName, packageSize, createdBy, createdAt, updatedBy, updatedAt]
+      required: [id, provider, ingredientKey, ingredientId, ingredientName, productId, productUrl, displayName, packageSize, coverage, createdBy, createdAt, updatedBy, updatedAt]
       properties:
         id:
           type: string
@@ -8392,6 +8412,10 @@ components:
           oneOf:
             - $ref: "#/components/schemas/ShoppingAmount"
             - type: "null"
+        coverage:
+          type: string
+          enum: ["", per_week, per_amount]
+          description: The household's override, or empty to follow the category.
         createdBy:
           type: string
         createdAt:
@@ -8464,7 +8488,7 @@ components:
           format: date-time
     ShoppingHandoffLine:
       type: object
-      required: [id, ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, product, computedPackages, packages, packagesOverridden, checkAmount, reason, reasonText, coverageText, confirmation]
+      required: [id, ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, product, computedPackages, packages, packagesOverridden, checkAmount, reason, reasonText, coverageText, coverage, coversWeek, searchTerms, confirmation]
       properties:
         id:
           type: string
@@ -8522,6 +8546,18 @@ components:
         coverageText:
           type: string
           example: 3 × 16 oz covers 36 oz
+        coverage:
+          type: string
+          enum: [per_week, per_amount]
+          description: The rule this count was computed under.
+        coversWeek:
+          type: boolean
+          description: |
+            True when the count assumes one package covers the week because
+            the need couldn't be measured against the package (a clove
+            against a bulb). `checkAmount` is false in that case.
+        searchTerms:
+          $ref: "#/components/schemas/ShoppingSearchTerms"
         confirmation:
           description: Null on a match.
           oneOf:
@@ -8529,7 +8565,7 @@ components:
             - type: "null"
     ShoppingExcludedLine:
       type: object
-      required: [ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, reason, text]
+      required: [ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, reason, text, searchTerms]
       properties:
         ingredientKey:
           type: string
@@ -8557,6 +8593,41 @@ components:
         text:
           type: string
           example: Choose a Walmart product
+        searchTerms:
+          $ref: "#/components/schemas/ShoppingSearchTerms"
+    ShoppingSearchTerms:
+      type: object
+      description: |
+        The search DinnerOS suggests for a grocery line, biased by the line's
+        grocery category so a produce line finds the fresh whole item rather
+        than a powdered or snack form. These are words for the member to
+        search with, not results: DinnerOS has no product-search API
+        (shopping-providers.md), so it cannot filter `avoid` out itself.
+      required: [query, qualifiers, avoid, why]
+      properties:
+        query:
+          type: string
+          description: What to search for.
+          example: fresh whole Garlic
+        qualifiers:
+          type: array
+          description: |
+            The words added ahead of the ingredient name. Empty when the
+            category has no bias, or when the name already names a form
+            ("Garlic Powder" is searched as itself).
+          items:
+            type: string
+          example: [fresh, whole]
+        avoid:
+          type: array
+          description: Wrong-form products to skip, shown to the member as a hint.
+          items:
+            type: string
+          example: [powder, minced, dried]
+        why:
+          type: string
+          description: One sentence explaining the bias, or empty when none applied.
+          example: Produce&#58; the fresh whole item, not a dried, powdered or prepared form.
     ShoppingCartLink:
       type: object
       required: [url, lineIds, itemCount]

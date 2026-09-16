@@ -35,6 +35,11 @@ api/bin/
 *.test
 *.out
 coverage.*
+# ...but never source. "coverage.*" is for coverage reports (coverage.out is
+# already covered by *.out above), and it silently swallowed the package file
+# api/internal/shopping/coverage.go: git add -A skipped it and git status
+# stayed clean, so the branch built locally and broke on merge.
+!*.go
 go.work
 go.work.sum
 

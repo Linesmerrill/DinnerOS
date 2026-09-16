@@ -44,6 +44,18 @@ nonisolated enum ShoppingFixtures {
             """#
     }
 
+    /// The search the API suggests for a line. Produce is the interesting case: the bare
+    /// ingredient name is the wrong search, so the qualifiers go in front of it.
+    static func searchTermsJSON(
+        _ name: String, qualifiers: [String] = [], avoid: [String] = [], why: String = ""
+    ) -> String {
+        let quoted = { (words: [String]) -> String in words.map { #""\#($0)""# }.joined(separator: ",") }
+        let query = (qualifiers + [name]).joined(separator: " ")
+        return #"""
+            {"query":"\#(query)","qualifiers":[\#(quoted(qualifiers))],"avoid":[\#(quoted(avoid))],"why":"\#(why)"}
+            """#
+    }
+
     static func confirmationJSON(status: String, packages: Int? = nil) -> String {
         let confirmed = status == "confirmed"
         let skipped = status == "skipped"
@@ -60,7 +72,9 @@ nonisolated enum ShoppingFixtures {
     static func lineJSON(
         id: String, key: String, name: String, category: String = "produce", quantityText: String = "1",
         productID: String, displayName: String, size: String?, computed: Int, packages: Int? = nil,
-        reason: String? = nil, reasonText: String? = nil, coverage: String = "", confirmation: String? = nil
+        reason: String? = nil, reasonText: String? = nil, coverage: String = "",
+        coverageRule: String = "per_amount", coversWeek: Bool = false, searchTerms: String? = nil,
+        confirmation: String? = nil
     ) -> String {
         let ingredientID = key.hasPrefix("name:") ? "null" : #""\#(key)""#
         let count = packages ?? computed
@@ -72,19 +86,22 @@ nonisolated enum ShoppingFixtures {
                         "productUrl":"https://www.walmart.com/ip/\#(productID)","packageSize":\#(size ?? "null")},
              "computedPackages":\#(computed),"packages":\#(count),"packagesOverridden":\#(packages != nil),
              "checkAmount":\#(reason != nil),"reason":\#(string(reason)),"reasonText":\#(string(reasonText)),
-             "coverageText":"\#(coverage)","confirmation":\#(confirmation ?? "null")}
+             "coverageText":"\#(coverage)","coverage":"\#(coverageRule)","coversWeek":\#(coversWeek),
+             "searchTerms":\#(searchTerms ?? searchTermsJSON(name)),
+             "confirmation":\#(confirmation ?? "null")}
             """#
     }
 
     static func excludedJSON(
         key: String, name: String, reason: String, text: String, category: String = "produce",
-        groceryStatus: String? = "toBuy"
+        groceryStatus: String? = "toBuy", searchTerms: String? = nil
     ) -> String {
         let ingredientID = key.hasPrefix("name:") ? "null" : #""\#(key)""#
         return #"""
             {"ingredientKey":"\#(key)","ingredientId":\#(ingredientID),"name":"\#(name)","category":"\#(category)",
              "amounts":[],"quantityText":"","unquantified":false,"groceryStatus":\#(string(groceryStatus)),
-             "reason":"\#(reason)","text":"\#(text)"}
+             "reason":"\#(reason)","text":"\#(text)",
+             "searchTerms":\#(searchTerms ?? searchTermsJSON(name))}
             """#
     }
 
@@ -123,9 +140,11 @@ nonisolated enum ShoppingFixtures {
                         size: amount("16", "oz"), computed: 3, coverage: "3 × 16 oz covers 36 oz"),
                     lineJSON(
                         id: "l2", key: "i-garlic", name: "Garlic", quantityText: "4 cloves", productID: "100000002",
-                        displayName: "Test garlic", size: amount("3", "count", text: "3 ct"), computed: 1,
-                        reason: "unit_not_convertible",
-                        reasonText: "Check amount: 4 cloves doesn't convert to a 3 ct package", coverage: "1 × 3 ct"),
+                        displayName: "Test garlic", size: amount("1", "count", text: "1 ct"), computed: 1,
+                        coverage: "1 × 1 ct covers this week (4 cloves)", coverageRule: "per_week", coversWeek: true,
+                        searchTerms: searchTermsJSON(
+                            "Garlic", qualifiers: ["fresh", "whole"], avoid: ["powder", "minced", "dried"],
+                            why: "Produce: the fresh whole item, not a dried, powdered or prepared form.")),
                     lineJSON(
                         id: "l3", key: "i-beans", name: "Green Beans", productID: "100000003",
                         displayName: "Test green beans", size: nil, computed: 1, reason: "no_package_size",

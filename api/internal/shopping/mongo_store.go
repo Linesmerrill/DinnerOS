@@ -224,18 +224,21 @@ type preferenceDoc struct {
 	ProductID      string        `bson:"productId"`
 	DisplayName    string        `bson:"displayName"`
 	PackageSize    *amountDoc    `bson:"packageSize,omitempty"`
-	CreatedBy      bson.ObjectID `bson:"createdBy"`
-	CreatedAt      time.Time     `bson:"createdAt"`
-	UpdatedBy      bson.ObjectID `bson:"updatedBy"`
-	UpdatedAt      time.Time     `bson:"updatedAt"`
+	// Coverage is empty on documents written before the rule existed, which
+	// reads as "follow the ingredient's category".
+	Coverage  string        `bson:"coverage,omitempty"`
+	CreatedBy bson.ObjectID `bson:"createdBy"`
+	CreatedAt time.Time     `bson:"createdAt"`
+	UpdatedBy bson.ObjectID `bson:"updatedBy"`
+	UpdatedAt time.Time     `bson:"updatedAt"`
 }
 
 func (d preferenceDoc) toPreference() Preference {
 	return Preference{
 		ID: d.ID.Hex(), HouseholdID: d.HouseholdID.Hex(), Provider: providers.Key(d.Provider),
 		IngredientKey: d.IngredientKey, IngredientName: d.IngredientName, ProductID: d.ProductID, DisplayName: d.DisplayName,
-		PackageSize: d.PackageSize.packageSize(),
-		CreatedBy:   hexOrEmpty(d.CreatedBy), CreatedAt: d.CreatedAt.UTC(), UpdatedBy: hexOrEmpty(d.UpdatedBy), UpdatedAt: d.UpdatedAt.UTC(),
+		PackageSize: d.PackageSize.packageSize(), Coverage: providers.Coverage(d.Coverage),
+		CreatedBy: hexOrEmpty(d.CreatedBy), CreatedAt: d.CreatedAt.UTC(), UpdatedBy: hexOrEmpty(d.UpdatedBy), UpdatedAt: d.UpdatedAt.UTC(),
 	}
 }
 
@@ -300,7 +303,8 @@ func (s *MongoStore) UpsertPreference(ctx context.Context, p Preference) (Prefer
 	}
 	set := bson.D{
 		{Key: "ingredientName", Value: p.IngredientName}, {Key: "productId", Value: p.ProductID},
-		{Key: "displayName", Value: p.DisplayName}, {Key: "updatedBy", Value: uid}, {Key: "updatedAt", Value: p.UpdatedAt},
+		{Key: "displayName", Value: p.DisplayName}, {Key: "coverage", Value: string(p.Coverage)},
+		{Key: "updatedBy", Value: uid}, {Key: "updatedAt", Value: p.UpdatedAt},
 	}
 	update := bson.D{
 		{Key: "$setOnInsert", Value: bson.D{{Key: "_id", Value: bson.NewObjectID()}, {Key: "createdBy", Value: uid}, {Key: "createdAt", Value: p.UpdatedAt}}},
@@ -347,14 +351,18 @@ type sourceDoc struct {
 }
 
 type lineDoc struct {
-	ID               string        `bson:"id"`
-	Source           sourceDoc     `bson:",inline"`
-	ProductID        string        `bson:"productId"`
-	ProductName      string        `bson:"productName"`
-	PackageSize      *amountDoc    `bson:"packageSize,omitempty"`
+	ID          string     `bson:"id"`
+	Source      sourceDoc  `bson:",inline"`
+	ProductID   string     `bson:"productId"`
+	ProductName string     `bson:"productName"`
+	PackageSize *amountDoc `bson:"packageSize,omitempty"`
+	// Coverage is the rule the count was computed under. Empty on documents
+	// written before the rule existed, which recomputes as exact math.
+	Coverage         string        `bson:"coverage,omitempty"`
 	ComputedPackages int           `bson:"computedPackages"`
 	Packages         int           `bson:"packages"`
 	Reason           string        `bson:"reason,omitempty"`
+	CoversWeek       bool          `bson:"coversWeek,omitempty"`
 	Status           string        `bson:"status"`
 	ClaimedAt        *time.Time    `bson:"claimedAt,omitempty"`
 	Confirmed        int           `bson:"confirmedPackages,omitempty"`
@@ -443,7 +451,8 @@ func newHandoffDoc(h Handoff, id, hid bson.ObjectID) (handoffDoc, error) {
 		}
 		d.Lines = append(d.Lines, lineDoc{
 			ID: l.ID, Source: newSourceDoc(l.LineSource), ProductID: l.ProductID, ProductName: l.ProductName,
-			PackageSize: sizeDoc(l.PackageSize), ComputedPackages: l.ComputedPackages, Packages: l.Packages, Reason: string(l.Reason),
+			PackageSize: sizeDoc(l.PackageSize), Coverage: string(l.Coverage), ComputedPackages: l.ComputedPackages,
+			Packages: l.Packages, Reason: string(l.Reason), CoversWeek: l.CoversWeek,
 			Status: string(l.Status), Confirmed: l.ConfirmedPackages, PurchaseID: l.PurchaseID,
 			ConfirmedBy: confirmedBy, ConfirmedAt: timeOrNil(l.ConfirmedAt), SkippedBy: skippedBy, SkippedAt: timeOrNil(l.SkippedAt),
 		})
@@ -469,7 +478,8 @@ func (d handoffDoc) toHandoff() Handoff {
 	for _, l := range d.Lines {
 		h.Lines = append(h.Lines, HandoffLine{
 			ID: l.ID, LineSource: l.Source.source(), ProductID: l.ProductID, ProductName: l.ProductName,
-			PackageSize: l.PackageSize.packageSize(), ComputedPackages: l.ComputedPackages, Packages: l.Packages,
+			PackageSize: l.PackageSize.packageSize(), Coverage: providers.Coverage(l.Coverage),
+			ComputedPackages: l.ComputedPackages, Packages: l.Packages, CoversWeek: l.CoversWeek,
 			Reason: providers.Reason(l.Reason), Status: LineStatus(l.Status), ConfirmedPackages: l.Confirmed, PurchaseID: l.PurchaseID,
 			ConfirmedBy: hexOrEmpty(l.ConfirmedBy), ConfirmedAt: timeOrZero(l.ConfirmedAt),
 			SkippedBy: hexOrEmpty(l.SkippedBy), SkippedAt: timeOrZero(l.SkippedAt),

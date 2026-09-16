@@ -1233,10 +1233,22 @@ percent-encoded (`name:red%20onion`).
   text around the link are `400`. On iOS, extract the URL from shared text
   before sending it.
 - `productUrl` in responses is rebuilt from the ID.
-- `displayName` is required (at most 100 characters). `packageSize` is
-  optional: a positive exact quantity and a unit code (`oz`, `floz`, `lb`,
-  `g`, `ml`, `count`, `can`, …). `null` or omitted means unknown, and every
-  line with that product is flagged "check amount".
+- `displayName` (at most 100 characters) is read from the link's own slug
+  when it's omitted or empty: `/ip/Garlic-Bulb-Fresh-Whole-Each/123` saves
+  `Garlic Bulb Fresh Whole Each`, trimmed to 100 characters. The page is
+  never fetched, so the name is only as good as the slug, and a link with no
+  slug (or a bare `productId`) still requires `displayName`. Hyphens in the
+  slug become spaces, so the original punctuation doesn't survive.
+- `packageSize` is optional: a positive exact quantity and a unit code
+  (`oz`, `floz`, `lb`, `g`, `ml`, `count`, `can`, …). When it's `null` or
+  omitted, an unambiguous size is read from the slug — a trailing `-15-oz`,
+  `-2-lb`, `-64-fl-oz`, `-12-Count`, or `-Each` (1 ct). A decimal written as
+  two numbers (`-2-5-lb`) is ambiguous and yields no size rather than a wrong
+  one. With no size at all, every line with that product is flagged "check
+  amount". Both derived values are defaults to confirm, not facts from
+  Walmart: anything sent explicitly wins.
+- `coverage` is optional: `per_week`, `per_amount`, or omitted to follow the
+  ingredient's grocery category (see [Match and hand off](#match-and-hand-off)).
 - `ingredientName` is optional: it defaults to the catalog name, or the
   normalized name after `name:`.
 - `201` creates, `200` replaces (keeping `id`, `createdBy`, `createdAt`). At
@@ -1322,7 +1334,8 @@ and `updatedAt`, and every `confirmation` is `null`.
 | Converts (same unit, or both weights or both volumes): 20 oz for 16 oz | Total ÷ size, rounded up: 2 | `null` |
 | Several amounts: 1 cup + 3 tbsp for 8 fl oz | Converted and summed, rounded up: 2 | `null` |
 | Discrete units only convert to themselves: 2 cans for 1 can, 13 count for 12 count | 2, 2 | `null` |
-| Doesn't convert: 4 cloves for 3 count, 1 cup for 5 lb | 1 | `unit_not_convertible` |
+| Doesn't convert, `coverage: per_amount`: 4 cloves for 3 count, 1 cup for 5 lb | 1 | `unit_not_convertible` |
+| Doesn't convert, `coverage: per_week`: 4 cloves for a 1 ct bulb | 1, `coversWeek: true` | `null` |
 | Partly converts: 1 count + 40 oz for 32 oz | What converts, at least 1: 2 | `unit_not_convertible` |
 | No saved package size | 1 | `no_package_size` |
 | Unquantified ("to taste") | 1 | `null` |
@@ -1331,6 +1344,28 @@ and `updatedAt`, and every `confirmation` is `null`.
 `checkAmount` is true whenever `reason` is set; show `reasonText`
 ("Check amount: 4 cloves doesn't convert to a 3 ct package") and let the
 member change the count. Flags never block the handoff.
+
+**Coverage** (`coverage`) says how one package maps to a week's need, and is
+the only thing that changes the table above. It affects exactly one row: a
+need in a unit that can't be measured against the package at all.
+
+| Rule | What it does |
+| --- | --- |
+| `per_week` | One package is assumed to cover the week, with no flag: a recipe asking for a clove and a bulb sold by the each buys one bulb, not one per clove. `coverageText` reads "1 × 1 ct covers this week (4 cloves)". |
+| `per_amount` | Always count by exact measure, flagging what can't be measured. |
+
+A saved product's `coverage` sets it; when that is empty the rule comes from
+the line's grocery category — `per_week` for `produce`, `meat-seafood`,
+`dairy-eggs`, `bakery` and `deli`, which are bought fresh and assumed not to
+carry over, and `per_amount` for everything else, because rice and spices do
+carry over. A measurable need is never collapsed: 2 ¼ lb of beef against
+16 oz packages is 3 packages under either rule.
+
+Nothing carries produce forward between weeks, and nothing needs to: each
+week's list is rebuilt from that week's recipes and the pantry, so the
+following week asks for the bulb again. The resolved rule is stored on the
+handoff line, so reading an old handoff back recomputes the count it was
+created with even if the household changes the rule afterwards.
 
 **Exclusions** (`excluded[].reason`), each with display `text`:
 

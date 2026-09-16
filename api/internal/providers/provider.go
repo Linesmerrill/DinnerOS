@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"slices"
+
+	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 )
 
 // Key identifies a provider in routes, stored documents, and responses.
@@ -51,6 +53,15 @@ type ProductRef struct {
 	// URL is the canonical product page, built from ProductID. It is never
 	// the pasted text.
 	URL string
+	// Name is the product name read from the link's own text, or "" when the
+	// link carries none (a bare item ID, or a link with no slug). It is a
+	// default for the member to confirm, not a fact from the provider: the
+	// page is never fetched, so it is only as good as the slug.
+	Name string
+	// Size is the package size read from the link's text, or nil when the
+	// link doesn't carry one unambiguously. Like Name, it is a default to
+	// confirm.
+	Size *ingredients.Amount
 }
 
 // CartItem is one product and a package count for a handoff. LineIDs are

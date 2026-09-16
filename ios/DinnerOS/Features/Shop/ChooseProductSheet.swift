@@ -6,6 +6,9 @@ struct ProductChoice: Identifiable {
     let ingredientName: String
     let amountText: String?
     let draft: SavedProductDraft
+    /// What to search Walmart for, from the API: an ingredient's bare name is the wrong
+    /// search, because "garlic" ranks powder and snacks above the bulb.
+    let searchTerms: ShoppingSearchTerms
     /// A product is already saved for the ingredient, so it can be removed.
     let isSaved: Bool
 
@@ -16,6 +19,7 @@ struct ProductChoice: Identifiable {
         ingredientName = line.name
         amountText = line.quantityText.isEmpty ? nil : line.quantityText
         draft = SavedProductDraft()
+        searchTerms = line.searchTerms
         isSaved = false
     }
 
@@ -24,6 +28,7 @@ struct ProductChoice: Identifiable {
         ingredientName = line.name
         amountText = line.quantityText.isEmpty ? nil : line.quantityText
         draft = SavedProductDraft(product: line.product)
+        searchTerms = line.searchTerms
         isSaved = true
     }
 
@@ -32,6 +37,8 @@ struct ProductChoice: Identifiable {
         ingredientName = preference.ingredientName
         amountText = nil
         draft = SavedProductDraft(preference: preference)
+        // Saved Products lists products, not this week's lines, so the API sends no terms.
+        searchTerms = .plain(preference.ingredientName)
         isSaved = true
     }
 }
@@ -103,6 +110,11 @@ struct ChooseProductSheet: View {
         }
     }
 
+    /// The first few wrong forms, as "powder, minced, and dried".
+    private var avoidHint: String {
+        ListFormatter.localizedString(byJoining: Array(choice.searchTerms.avoid.prefix(3)))
+    }
+
     private var instructions: some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
@@ -111,10 +123,22 @@ struct ChooseProductSheet: View {
                 StepLabel(number: 3, text: "Come back here and paste the link.")
             }
             .padding(.vertical, 4)
-            if let url = ProductLink.walmartSearchURL(for: choice.ingredientName) {
+            if let url = ProductLink.walmartSearchURL(for: choice.searchTerms.query) {
                 Link(destination: url) {
-                    Label("Search on Walmart for “\(choice.ingredientName)”", systemImage: "magnifyingglass")
+                    Label("Search on Walmart for “\(choice.searchTerms.query)”", systemImage: "magnifyingglass")
                 }
+            }
+            if !choice.searchTerms.why.isEmpty {
+                Text(choice.searchTerms.why)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            if !choice.searchTerms.avoid.isEmpty {
+                // The app can't filter these out — there's no product search API — so the
+                // member is told what to skip.
+                Text("Skip the \(avoidHint) versions.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         } header: {
             Text(choice.amountText.map { "\(choice.ingredientName), \($0)" } ?? choice.ingredientName)
@@ -132,6 +156,9 @@ struct ChooseProductSheet: View {
             .keyboardType(.URL)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
+            // A pasted link names the product, so the name fills itself in. Typing a link by
+            // hand fills it too; an edited name is never overwritten.
+            .onChange(of: draft.linkText) { draft.fillNameFromLink() }
             // The system paste button reads the clipboard only when tapped, without the
             // "Allow Paste" prompt.
             PasteButton(payloadType: String.self) { strings in
@@ -162,7 +189,9 @@ struct ChooseProductSheet: View {
         } header: {
             Text("Product Name")
         } footer: {
-            Text("Shown on the Shop tab so everyone knows what's being bought.")
+            Text(
+                "Filled in from the link, so you usually don't type anything. Edit it if the link's name reads badly; it's shown on the Shop tab so everyone knows what's being bought."
+            )
         }
     }
 
@@ -192,6 +221,7 @@ struct ChooseProductSheet: View {
     private func paste(_ strings: [String]) {
         guard let text = strings.first else { return }
         draft.linkText = ProductLink.firstURL(in: text) ?? text.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.fillNameFromLink()
     }
 
     private func save() {

@@ -49,6 +49,25 @@ nonisolated enum ProductLink {
         return itemID(in: String(last))
     }
 
+    /// The product name in a `walmart.com/ip/<slug>/<id>` link, read from the slug alone so the
+    /// member doesn't retype it. `nil` for a link with no slug.
+    ///
+    /// Nothing is fetched: the slug is the product title with hyphens for spaces, so the
+    /// original punctuation doesn't survive ("Garlic-Bulb-Fresh-Whole-Each" becomes "Garlic Bulb
+    /// Fresh Whole Each", not "Garlic Bulb Fresh Whole, Each"). The API derives the same name,
+    /// and the size with it; this fills the field in straight away so it can be edited first.
+    static func walmartProductName(inURL string: String) -> String? {
+        guard
+            let components = URLComponents(string: string),
+            let host = components.host?.lowercased(), host == "walmart.com" || host == "www.walmart.com"
+        else { return nil }
+        let parts = components.path.split(separator: "/")
+        guard parts.count == 3, parts[0] == "ip", itemID(in: String(parts[2])) != nil else { return nil }
+        let words = parts[1].split(whereSeparator: { $0 == "-" || $0 == "_" || $0 == "+" })
+        let name = words.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? nil : String(name.prefix(ShoppingLimits.maxDisplayNameLength))
+    }
+
     /// Walmart's search page for `query`. It's a plain link the member opens in Safari or the
     /// Walmart app; the app never fetches it.
     static func walmartSearchURL(for query: String) -> URL? {

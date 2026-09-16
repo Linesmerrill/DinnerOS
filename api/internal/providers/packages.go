@@ -35,6 +35,10 @@ type PackageCount struct {
 	Needed *ingredients.Amount
 	// Unconverted are the amounts that don't convert to the package size.
 	Unconverted []ingredients.Amount
+	// CoversWeek is true when the count rests on the weekly coverage rule
+	// rather than on measured package math: the need couldn't be measured
+	// against the package, and one package is assumed to cover the week.
+	CoversWeek bool
 }
 
 // CheckAmount reports whether the count is flagged.
@@ -52,6 +56,48 @@ func (c PackageCount) CheckAmount() bool { return c.Reason != "" }
 //     unit_not_convertible; with nothing that converts the count is 1.
 //   - More than MaxPackages is MaxPackages, flagged package_count_capped.
 func CountPackages(needs []ingredients.Amount, size *ingredients.Amount) PackageCount {
+	return countPackagesExact(needs, size)
+}
+
+// Coverage says how one bought package maps to a week's need.
+type Coverage string
+
+// Coverage rules.
+const (
+	// CoverageAuto leaves the rule to the caller's default, which shopping
+	// takes from the grocery category.
+	CoverageAuto Coverage = ""
+	// CoveragePerAmount is exact package math: the count comes from the
+	// amounts alone. It is the rule for anything measurable.
+	CoveragePerAmount Coverage = "per_amount"
+	// CoveragePerWeek assumes one package covers the week when the need
+	// can't be measured against the package: a recipe asking for 1 clove
+	// and a bulb sold as 1 ct buys one bulb, not one bulb per clove. The
+	// week's list is rebuilt each week, so the following week buys another.
+	CoveragePerWeek Coverage = "per_week"
+)
+
+// CountPackagesFor is CountPackages with a coverage rule applied.
+//
+// CoveragePerWeek changes exactly one case: a need in a unit that doesn't
+// convert to the package at all (4 cloves against a 1 ct bulb). Exact math
+// is otherwise untouched, so 2 ¼ lb of beef against 16 oz packages is still
+// 3 packages under either rule — a week's need that *can* be measured is
+// never collapsed to one package.
+func CountPackagesFor(needs []ingredients.Amount, size *ingredients.Amount, coverage Coverage) PackageCount {
+	out := countPackagesExact(needs, size)
+	if coverage != CoveragePerWeek {
+		return out
+	}
+	// Only when nothing converted: a partly converted line keeps its exact
+	// count and its flag, because the measured part is real.
+	if out.Reason == ReasonUnitNotConvertible && out.Needed == nil {
+		out.Packages, out.Reason, out.CoversWeek = 1, "", true
+	}
+	return out
+}
+
+func countPackagesExact(needs []ingredients.Amount, size *ingredients.Amount) PackageCount {
 	if size == nil || size.Quantity.IsZero() {
 		return PackageCount{Packages: 1, Reason: ReasonNoPackageSize}
 	}
@@ -124,10 +170,26 @@ func CoverageText(c PackageCount, size *ingredients.Amount) string {
 		return fmt.Sprintf("%d packages", c.Packages)
 	}
 	text := fmt.Sprintf("%d × %s", c.Packages, AmountText(*size))
-	if c.Needed != nil {
+	switch {
+	case c.Needed != nil:
 		text += " covers " + AmountText(*c.Needed)
+	case c.CoversWeek:
+		// Say what the assumption is, and what it is covering.
+		text += " covers this week"
+		if parts := amountList(c.Unconverted); parts != "" {
+			text += " (" + parts + ")"
+		}
 	}
 	return text
+}
+
+// amountList renders amounts as "4 cloves + 1 bunch", or "" for none.
+func amountList(list []ingredients.Amount) string {
+	parts := make([]string, 0, len(list))
+	for _, a := range list {
+		parts = append(parts, AmountText(a))
+	}
+	return strings.Join(parts, " + ")
 }
 
 // ReasonText explains a flagged count, or returns "" for an unflagged one.
@@ -136,15 +198,11 @@ func ReasonText(c PackageCount, size *ingredients.Amount) string {
 	case ReasonNoPackageSize:
 		return "Check amount: no package size is saved for this product"
 	case ReasonUnitNotConvertible:
-		parts := make([]string, 0, len(c.Unconverted))
-		for _, a := range c.Unconverted {
-			parts = append(parts, AmountText(a))
-		}
 		sizeText := ""
 		if size != nil {
 			sizeText = AmountText(*size)
 		}
-		return fmt.Sprintf("Check amount: %s doesn't convert to a %s package", strings.Join(parts, " + "), sizeText)
+		return fmt.Sprintf("Check amount: %s doesn't convert to a %s package", amountList(c.Unconverted), sizeText)
 	case ReasonCapped:
 		return fmt.Sprintf("Check amount: capped at %d packages", MaxPackages)
 	}

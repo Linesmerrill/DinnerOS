@@ -207,10 +207,30 @@ func (s *Service) PutPreference(ctx context.Context, actor households.Membership
 	}
 	pref.ProductID = ref.ProductID
 
-	if pref.DisplayName, err = cleanName(in.DisplayName, "displayName", true); err != nil {
+	// A pasted link carries the product's name in its slug, and often its
+	// size, so a member who pastes a link types nothing. Both are defaults
+	// read from the link's own text, never from fetching the page: anything
+	// sent explicitly wins, and the app shows them for editing before saving.
+	displayName := in.DisplayName
+	if strings.TrimSpace(displayName) == "" {
+		// A derived name is trimmed rather than rejected: the member typed
+		// nothing, so an error would have nothing to tell them to fix.
+		displayName = ref.Name
+		if r := []rune(displayName); len(r) > MaxDisplayNameLength {
+			displayName = string(r[:MaxDisplayNameLength])
+		}
+	}
+	if pref.DisplayName, err = cleanName(displayName, "displayName", true); err != nil {
 		return Preference{}, false, err
 	}
-	if pref.PackageSize, err = normalizePackageSize(in.PackageSize); err != nil {
+	size := in.PackageSize
+	if size == nil && ref.Size != nil {
+		size = &PackageSize{Quantity: ref.Size.Quantity.String(), Unit: ref.Size.Unit.Code}
+	}
+	if pref.PackageSize, err = normalizePackageSize(size); err != nil {
+		return Preference{}, false, err
+	}
+	if pref.Coverage, err = normalizeCoverage(in.Coverage); err != nil {
 		return Preference{}, false, err
 	}
 	if pref.IngredientName, err = cleanName(in.IngredientName, "ingredientName", false); err != nil {

@@ -150,11 +150,15 @@ type PackageSizeResponse struct {
 
 // PreferenceRequest is the body of PUT .../preferences/{ingredientKey}.
 type PreferenceRequest struct {
-	ProductURL     string              `json:"productUrl"`
-	ProductID      string              `json:"productId"`
+	ProductURL string `json:"productUrl"`
+	ProductID  string `json:"productId"`
+	// DisplayName is optional when productUrl's slug names the product.
 	DisplayName    string              `json:"displayName"`
 	PackageSize    *PackageSizeRequest `json:"packageSize"`
 	IngredientName string              `json:"ingredientName"`
+	// Coverage overrides how a package covers a week's need; omitted or ""
+	// follows the ingredient's grocery category.
+	Coverage providers.Coverage `json:"coverage"`
 }
 
 // PreferenceResponse is a saved product for an ingredient.
@@ -168,10 +172,12 @@ type PreferenceResponse struct {
 	ProductURL     string               `json:"productUrl"`
 	DisplayName    string               `json:"displayName"`
 	PackageSize    *PackageSizeResponse `json:"packageSize"`
-	CreatedBy      string               `json:"createdBy"`
-	CreatedAt      time.Time            `json:"createdAt"`
-	UpdatedBy      string               `json:"updatedBy"`
-	UpdatedAt      time.Time            `json:"updatedAt"`
+	// Coverage is the household's override, or "" to follow the category.
+	Coverage  providers.Coverage `json:"coverage"`
+	CreatedBy string             `json:"createdBy"`
+	CreatedAt time.Time          `json:"createdAt"`
+	UpdatedBy string             `json:"updatedBy"`
+	UpdatedAt time.Time          `json:"updatedAt"`
 }
 
 // PreferenceListResponse is returned by GET .../preferences.
@@ -240,8 +246,30 @@ type HandoffLineResponse struct {
 	Reason             *providers.Reason `json:"reason"`
 	ReasonText         *string           `json:"reasonText"`
 	CoverageText       string            `json:"coverageText"`
+	// Coverage is the rule the count was computed under.
+	Coverage providers.Coverage `json:"coverage"`
+	// CoversWeek is true when the count assumes one package covers the
+	// week, because the need couldn't be measured against the package.
+	CoversWeek bool `json:"coversWeek"`
+	// SearchTerms is what to search for to find this product again.
+	SearchTerms SearchTermsResponse `json:"searchTerms"`
 	// Confirmation is null on a match, which isn't stored.
 	Confirmation *ConfirmationResponse `json:"confirmation"`
+}
+
+// SearchTermsResponse is the search DinnerOS suggests for a grocery line.
+// DinnerOS has no product search API (docs/shopping-providers.md), so these
+// are words for the member to search with, not results.
+type SearchTermsResponse struct {
+	// Query is what to search for.
+	Query string `json:"query"`
+	// Qualifiers are the words added ahead of the ingredient name.
+	Qualifiers []string `json:"qualifiers"`
+	// Avoid are wrong-form products to skip. DinnerOS cannot filter them
+	// out itself without a search API, so the app shows them as a hint.
+	Avoid []string `json:"avoid"`
+	// Why explains the bias in one sentence, or "" when none was applied.
+	Why string `json:"why"`
 }
 
 // ExcludedResponse is a grocery line left out of the cart links.
@@ -256,6 +284,9 @@ type ExcludedResponse struct {
 	GroceryStatus *grocery.Status  `json:"groceryStatus"`
 	Reason        ExclusionReason  `json:"reason"`
 	Text          string           `json:"text"`
+	// SearchTerms is what to search for when choosing a product for this
+	// line, which is what the "no_product" rows need.
+	SearchTerms SearchTermsResponse `json:"searchTerms"`
 }
 
 // CartLinkResponse is one handoff URL.
@@ -430,7 +461,7 @@ func (h *Handler) preferenceResponse(p Preference) PreferenceResponse {
 	return PreferenceResponse{
 		ID: p.ID, Provider: p.Provider, IngredientKey: p.IngredientKey, IngredientID: optionalString(catalogID(p.IngredientKey)),
 		IngredientName: p.IngredientName, ProductID: p.ProductID, ProductURL: h.providerURL(p.Provider, p.ProductID),
-		DisplayName: p.DisplayName, PackageSize: packageSizeResponse(p.PackageSize),
+		DisplayName: p.DisplayName, PackageSize: packageSizeResponse(p.PackageSize), Coverage: p.Coverage,
 		CreatedBy: p.CreatedBy, CreatedAt: p.CreatedAt, UpdatedBy: p.UpdatedBy, UpdatedAt: p.UpdatedAt,
 	}
 }
@@ -456,6 +487,18 @@ func amounts(list []Amount) ([]AmountResponse, string) {
 	return out, strings.Join(texts, " + ")
 }
 
+// searchTermsResponse renders the search suggested for a line. The slices
+// are never null, so clients can render them without a nil check.
+func searchTermsResponse(name, category string) SearchTermsResponse {
+	t := SearchTermsFor(name, category)
+	return SearchTermsResponse{
+		Query:      t.Query,
+		Qualifiers: append([]string{}, t.Qualifiers...),
+		Avoid:      append([]string{}, t.Avoid...),
+		Why:        t.Why,
+	}
+}
+
 func (h *Handler) lineResponse(provider providers.Key, l HandoffLine, stored bool) HandoffLineResponse {
 	resp := HandoffLineResponse{
 		ID: l.ID, IngredientKey: l.IngredientKey, IngredientID: optionalString(l.IngredientID()), Name: l.Name, Category: l.Category,
@@ -469,6 +512,8 @@ func (h *Handler) lineResponse(provider providers.Key, l HandoffLine, stored boo
 	count, size := l.PackageCount(), amountFromSize(l.PackageSize)
 	count.Packages = l.Packages
 	resp.CoverageText = providers.CoverageText(count, size)
+	resp.Coverage, resp.CoversWeek = l.Coverage, count.CoversWeek
+	resp.SearchTerms = searchTermsResponse(l.Name, l.Category)
 	if l.Reason != "" {
 		reason := l.Reason
 		count.Reason = reason
@@ -522,6 +567,7 @@ func (h *Handler) proposalResponse(p Proposal, stored bool) ProposalResponse {
 		er := ExcludedResponse{
 			IngredientKey: e.IngredientKey, IngredientID: optionalString(e.IngredientID()), Name: e.Name, Category: e.Category,
 			Unquantified: e.Unquantified, Reason: e.Reason, Text: h.exclusionText(p.Provider, e.Reason),
+			SearchTerms: searchTermsResponse(e.Name, e.Category),
 		}
 		er.Amounts, er.QuantityText = amounts(e.Amounts)
 		if e.GroceryStatus != "" {
@@ -649,7 +695,10 @@ func (h *Handler) putPreference(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	in := PreferenceInput{ProductURL: req.ProductURL, ProductID: req.ProductID, DisplayName: req.DisplayName, IngredientName: req.IngredientName}
+	in := PreferenceInput{
+		ProductURL: req.ProductURL, ProductID: req.ProductID, DisplayName: req.DisplayName,
+		IngredientName: req.IngredientName, Coverage: req.Coverage,
+	}
 	if req.PackageSize != nil {
 		in.PackageSize = &PackageSize{Quantity: req.PackageSize.Quantity, Unit: req.PackageSize.Unit}
 	}

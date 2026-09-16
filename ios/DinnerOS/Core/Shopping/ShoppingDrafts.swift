@@ -50,6 +50,21 @@ nonisolated struct SavedProductDraft: Equatable, Sendable {
         displayName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// The product name carried by the pasted link's slug, when it has one.
+    var derivedName: String? {
+        if case .url(let url) = product {
+            return ProductLink.walmartProductName(inURL: url)
+        }
+        return nil
+    }
+
+    /// Fills the name in from the link when the member hasn't typed one. The API derives the
+    /// same name (and the size) when it saves; doing it here shows the name in time to edit it.
+    mutating func fillNameFromLink() {
+        guard trimmedName.isEmpty, let derived = derivedName else { return }
+        displayName = derived
+    }
+
     var linkError: String? {
         guard !linkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, product == nil else { return nil }
         return String(localized: "Paste a Walmart product link, such as walmart.com/ip/…, or the item number.")
