@@ -52,7 +52,7 @@ enum ShopPreviewData {
         ],
         excluded: [
             excluded("name:flour tortillas", "Flour Tortillas", reason: .noProduct, text: "Choose a Walmart product"),
-            excluded("salt", "Salt", reason: .pantryHint, text: "Probably at home"),
+            excluded("salt", "Salt", reason: .pantryHint, text: "Usually on hand"),
         ],
         cartLinks: [
             ShoppingCartLink(

@@ -119,7 +119,7 @@ that `Aggregate` takes:
 | Pantry item | In `PantryStock` | Grocery status of its lines |
 | --- | --- | --- |
 | `in_stock` | `InStock` | `inPantry` |
-| `low` | neither | `pantryHint` if every recipe flags it as a staple, otherwise `toBuy` |
+| `low` | `OutOfStock` | `toBuy`, even if every recipe flags it as a staple: running low means buy more |
 | `out` | `OutOfStock` | `toBuy`, even if every recipe flags it as a staple |
 | not in the pantry | neither | `pantryHint` if every recipe flags it as a staple, otherwise `toBuy` |
 
@@ -132,7 +132,15 @@ that `Aggregate` takes:
   and without a catalog ID). A free-text item is linked to the catalog when
   it's added, if its name is a catalog ingredient, and resolved against the
   catalog again each time a list is built, so an ingredient the catalog learns
-  later still matches.
+  later still matches. A default staple also answers for its aliases, each
+  resolved the same way: the "Cooking Oil" staple matches a recipe's
+  "Vegetable Oil", "Black Pepper" matches "Pepper" (`pantry/staples.go`). Other
+  items match only their own name; guessing equivalences beyond that list
+  would hide things a household needs to buy.
+- **A member's status beats the recipe's staple hint.** Only `in_stock` keeps
+  a line off the list; `low` and `out` always put it on, and `pantryHint`
+  ("Usually on hand" on the Shop tab) is only for staples the pantry doesn't
+  track at all.
 - **Amounts are informational.** The engine doesn't yet compare the pantry's
   amount with what recipes need: 1 tbsp of olive oil in stock makes a recipe's
   ½ cup `inPantry`. Mark the item `low` or `out` to put it on the list. Usage

@@ -46,6 +46,8 @@ func runGroceryPantryScenario(t *testing.T, svc *Service, catalog *fakeCatalog) 
 		t.Fatalf("sesame oil linked before the catalog had it: %+v", sesame)
 	}
 	sesameID := catalog.add("Sesame Oil").ID
+	// The recipe says "Vegetable Oil"; the pantry's default staple is "Cooking Oil".
+	vegetableOilID := catalog.add("Vegetable Oil").ID
 	mustAdd(t, svc, otherHousehold, AddInput{Name: "Lime"})
 
 	stock, err := svc.GroceryPantry(ctx, testHousehold)
@@ -60,13 +62,14 @@ func runGroceryPantryScenario(t *testing.T, svc *Service, catalog *fakeCatalog) 
 	id := catalog.id
 	lines := []grocery.Line{
 		{IngredientKey: id("Olive Oil"), Name: "Olive Oil", Category: "pantry", Quantity: amount(2, 1), UnitCode: "tbsp", PantryStaple: true},
-		{IngredientKey: id("Butter"), Name: "Butter", Category: "dairy-eggs", Quantity: amount(1, 1), UnitCode: "tbsp"},
+		{IngredientKey: id("Butter"), Name: "Butter", Category: "dairy-eggs", Quantity: amount(1, 1), UnitCode: "tbsp", PantryStaple: true},
 		{IngredientKey: id("Flour"), Name: "Flour", Category: "pantry", Quantity: amount(1, 2), UnitCode: "cup", PantryStaple: true},
 		{IngredientKey: id("Salt"), Name: "Salt", Category: "spices", PantryStaple: true},
 		{IngredientKey: id("Lime"), Name: "Lime", Category: "produce", Quantity: amount(1, 1), UnitCode: "count"},
 		{IngredientKey: sesameID, Name: "Sesame Oil", Category: "pantry", Quantity: amount(1, 1), UnitCode: "tbsp"},
 		{IngredientKey: UnresolvedKeyPrefix + "za'atar", Name: "Za'atar", Category: "spices", Quantity: amount(1, 1), UnitCode: "tsp"},
 		{IngredientKey: UnresolvedKeyPrefix + "black pepper", Name: "Black Pepper", Category: "spices", PantryStaple: true},
+		{IngredientKey: vegetableOilID, Name: "Vegetable Oil", Category: "pantry", Quantity: amount(2, 1), UnitCode: "tbsp", PantryStaple: true},
 	}
 	list, err := grocery.Aggregate([]grocery.RecipeSelection{
 		{RecipeID: "r1", RecipeName: "Test Stir Fry", RecipeServings: 2, TargetServings: 2, Lines: lines},
@@ -76,14 +79,15 @@ func runGroceryPantryScenario(t *testing.T, svc *Service, catalog *fakeCatalog) 
 	}
 
 	want := map[string]grocery.Status{
-		id("Olive Oil"):                      grocery.StatusInPantry,   // staple in stock
-		id("Butter"):                         grocery.StatusToBuy,      // low, not flagged by the recipe
-		id("Flour"):                          grocery.StatusPantryHint, // low, flagged as a staple by the recipe
-		id("Salt"):                           grocery.StatusToBuy,      // out, even though the recipe flags it
-		id("Lime"):                           grocery.StatusToBuy,      // only another household has it
-		sesameID:                             grocery.StatusInPantry,   // resolved against the catalog at read time
-		UnresolvedKeyPrefix + "za'atar":      grocery.StatusInPantry,   // free text, no catalog ID
-		UnresolvedKeyPrefix + "black pepper": grocery.StatusInPantry,   // default staple not in the catalog
+		id("Olive Oil"):                      grocery.StatusInPantry, // staple in stock
+		id("Butter"):                         grocery.StatusToBuy,    // low: running out means buy more, even for a staple
+		id("Flour"):                          grocery.StatusToBuy,    // low, flagged as a staple by the recipe
+		id("Salt"):                           grocery.StatusToBuy,    // out, even though the recipe flags it
+		id("Lime"):                           grocery.StatusToBuy,    // only another household has it
+		sesameID:                             grocery.StatusInPantry, // resolved against the catalog at read time
+		UnresolvedKeyPrefix + "za'atar":      grocery.StatusInPantry, // free text, no catalog ID
+		UnresolvedKeyPrefix + "black pepper": grocery.StatusInPantry, // default staple not in the catalog
+		vegetableOilID:                       grocery.StatusInPantry, // the Cooking Oil staple, under its alias
 	}
 	if len(list.Items) != len(want) {
 		t.Fatalf("list has %d items, want %d: %+v", len(list.Items), len(want), list.Items)
@@ -92,6 +96,10 @@ func runGroceryPantryScenario(t *testing.T, svc *Service, catalog *fakeCatalog) 
 		if item.Status != want[item.IngredientKey] {
 			t.Errorf("%s (%s) status = %s, want %s", item.Name, item.IngredientKey, item.Status, want[item.IngredientKey])
 		}
+	}
+
+	if !stock.Has(UnresolvedKeyPrefix + "vegetable oil") {
+		t.Error("a Vegetable Oil line without a catalog ID should match the Cooking Oil staple")
 	}
 
 	other, err := svc.GroceryPantry(ctx, otherHousehold)

@@ -2,8 +2,7 @@ import Foundation
 
 /// How much of an item the household has (`PantryStatus` in `api/openapi.yaml`).
 ///
-/// Grocery lists treat `inStock` as at home, `out` as to buy, and `low` like an item the
-/// pantry doesn't record.
+/// Grocery lists treat `inStock` as at home, and `low` and `out` as to buy, even for a staple.
 nonisolated enum PantryStatus: String, Codable, CaseIterable, Hashable, Sendable, Identifiable {
     case inStock = "in_stock"
     case low

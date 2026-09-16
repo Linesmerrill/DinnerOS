@@ -1450,7 +1450,7 @@ paths:
         recipe's authored amounts for the entry's serving size (never scaled).
         Requires `household.view`. Computed on every request, with the
         household pantry deciding statuses (`pantryApplied: true`): in-stock
-        items are `inPantry`, items marked out are `toBuy`, and the rest are
+        items are `inPantry`, items marked low or out are `toBuy`, and the rest are
         `pantryHint` when every recipe marks them as staples, otherwise
         `toBuy`. Amounts whose units can't be combined stay separate.
 
@@ -5758,9 +5758,8 @@ components:
           enum: [toBuy, inPantry, pantryHint, skipped]
           description: |
             `inPantry`: in stock in the household pantry. `toBuy`: not at home,
-            including anything the pantry marks as out. `pantryHint`: every
-            recipe marks it as a staple and the pantry doesn't list it as in
-            stock or out (or lists it as low). `skipped`: the household chose
+            including anything the pantry marks as low or out. `pantryHint`:
+            every recipe marks it as a staple and the pantry doesn't list it. `skipped`: the household chose
             not to buy it, and the item is in `skippedItems` rather than in
             `categories`.
         recipes:
@@ -5853,9 +5852,8 @@ components:
       type: string
       enum: [in_stock, low, out]
       description: |
-        `in_stock`: grocery lists show the ingredient as `inPantry`. `low`:
-        not treated as at home (`pantryHint` if every recipe marks it as a
-        staple, otherwise `toBuy`). `out`: always `toBuy`.
+        `in_stock`: grocery lists show the ingredient as `inPantry`. `low`
+        and `out`: always `toBuy`, even for a staple.
     PantryItem:
       type: object
       required: [id, householdId, ingredientId, key, displayName, category, quantity, quantityValue, unit, status, isStaple, expiresOn, note, statusSource, lowThresholdPercent, unitSize, estimate, updatedBy, createdAt, updatedAt]

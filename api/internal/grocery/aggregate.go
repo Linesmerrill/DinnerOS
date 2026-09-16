@@ -148,8 +148,9 @@ type OutPantry interface {
 }
 
 // PantryStock is a household pantry snapshot. Keys match Line.IngredientKey.
-// Ingredients in neither set (unknown to the pantry, or running low) get the
-// engine's default status: pantryHint when every source flags them as staples,
+// OutOfStock holds everything the household marked low or out: both mean buy
+// it. Ingredients in neither set (unknown to the pantry) get the engine's
+// default status: pantryHint when every source flags them as staples,
 // otherwise toBuy.
 type PantryStock struct {
 	InStock    map[string]bool

@@ -1501,8 +1501,8 @@ created with even if the household changes the rule afterwards.
 
 | Reason | When |
 | --- | --- |
-| `in_pantry` | The pantry has it (`inPantry`) and `lines` didn't select it |
-| `pantry_hint` | Probably have it (`pantryHint`) and `lines` didn't select it |
+| `in_pantry` | The pantry has it in stock (`inPantry`) and `lines` didn't select it: "In your pantry" |
+| `pantry_hint` | Not in the pantry, but every recipe flags it as a staple (`pantryHint`), and `lines` didn't select it: "Usually on hand". A pantry item marked `low` or `out` is never this; it's bought |
 | `house_made` | A house-made specialty batch in the pantry (never bought) |
 | `checked_off` | Listed in `checkedOffKeys` |
 | `excluded` | Listed in `excludeKeys` |

@@ -172,7 +172,7 @@ nonisolated enum ShoppingFixtures {
                         key: "i-butter", name: "Butter", reason: "in_pantry", text: "In your pantry",
                         groceryStatus: "inPantry"),
                     excludedJSON(
-                        key: "i-salt", name: "Salt", reason: "pantry_hint", text: "Probably at home",
+                        key: "i-salt", name: "Salt", reason: "pantry_hint", text: "Usually on hand",
                         groceryStatus: "pantryHint"),
                     excludedJSON(key: "i-stock", name: "Stock", reason: "house_made", text: "House-made"),
                     excludedJSON(key: "i-lime", name: "Lime", reason: "checked_off", text: "Checked off"),
@@ -473,7 +473,7 @@ nonisolated final class FakeShoppingServer: Sendable {
             } else if selectedKeys == nil, grocery.status == "inPantry" {
                 exclusion = ("in_pantry", "In your pantry")
             } else if selectedKeys == nil, grocery.status == "pantryHint" {
-                exclusion = ("pantry_hint", "Probably at home")
+                exclusion = ("pantry_hint", "Usually on hand")
             } else if state.products[grocery.key] == nil {
                 exclusion = ("no_product", "Choose a Walmart product")
             } else {

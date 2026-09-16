@@ -3,8 +3,10 @@ package pantry
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
+	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 )
 
 // UnresolvedKeyPrefix prefixes the grocery.Line.IngredientKey of a recipe line
@@ -18,14 +20,15 @@ const UnresolvedKeyPrefix = "name:"
 // Each item is registered under the keys a grocery line for that ingredient
 // can carry: its catalog ingredient ID, and UnresolvedKeyPrefix + its key. An
 // item added as free text before the catalog knew the ingredient is resolved
-// against the catalog now, so later imports still match it.
+// against the catalog now, so later imports still match it. A default staple
+// is registered under its aliases too, resolved the same way: the pantry's
+// "Cooking Oil" answers for a recipe's "Vegetable Oil".
 //
 // Status decides where an item goes. in_stock items are in InStock, so their
-// lines are inPantry. out items are in OutOfStock, so their lines are toBuy
-// even when the recipe source flags them as staples. low items are in neither,
-// so they get the engine's default: pantryHint when every source flags them
-// as staples, otherwise toBuy. Quantities are not compared with what the
-// recipes need.
+// lines are inPantry. low and out items are in OutOfStock, so their lines are
+// toBuy even when the recipe source flags them as staples: "running low" means
+// buy more, and a member's status always beats the source's staple hint.
+// Quantities are not compared with what the recipes need.
 func (s *Service) GroceryPantry(ctx context.Context, householdID string) (grocery.PantryStock, error) {
 	if householdID == "" {
 		return grocery.PantryStock{}, errHouseholdRequired
@@ -35,15 +38,18 @@ func (s *Service) GroceryPantry(ctx context.Context, householdID string) (grocer
 		return grocery.PantryStock{}, fmt.Errorf("list pantry items: %w", err)
 	}
 
-	var unlinked []string
+	var lookup []string
 	for _, item := range items {
-		if item.IngredientID == "" && item.Status != StatusLow {
-			unlinked = append(unlinked, item.Key)
+		for _, key := range pantryKeys(item) {
+			// An item linked to the catalog already carries its own ID.
+			if key != item.Key || item.IngredientID == "" {
+				lookup = append(lookup, key)
+			}
 		}
 	}
 	catalogIDs := map[string]string{}
-	if len(unlinked) > 0 {
-		found, err := s.catalog.IngredientsByKey(ctx, unlinked)
+	if len(lookup) > 0 {
+		found, err := s.catalog.IngredientsByKey(ctx, lookup)
 		if err != nil {
 			return grocery.PantryStock{}, fmt.Errorf("resolve pantry items in the catalog: %w", err)
 		}
@@ -58,17 +64,36 @@ func (s *Service) GroceryPantry(ctx context.Context, householdID string) (grocer
 		switch item.Status {
 		case StatusInStock:
 			set = stock.InStock
-		case StatusOut:
+		case StatusLow, StatusOut:
 			set = stock.OutOfStock
 		default:
 			continue
 		}
-		set[UnresolvedKeyPrefix+item.Key] = true
 		if id := item.IngredientID; id != "" {
 			set[id] = true
-		} else if id := catalogIDs[item.Key]; id != "" {
-			set[id] = true
+		}
+		for _, key := range pantryKeys(item) {
+			set[UnresolvedKeyPrefix+key] = true
+			if id := catalogIDs[key]; id != "" {
+				set[id] = true
+			}
 		}
 	}
 	return stock, nil
+}
+
+// pantryKeys are the normalized names an item answers for: its own key, plus,
+// when it is a default staple under any of that staple's names, all of them.
+func pantryKeys(item Item) []string {
+	name := ingredients.NormalizeName(item.DisplayName)
+	for _, d := range defaultStaples {
+		keys := d.keys()
+		if slices.Contains(keys, item.Key) || slices.Contains(keys, name) {
+			if !slices.Contains(keys, item.Key) {
+				keys = append(keys, item.Key)
+			}
+			return keys
+		}
+	}
+	return []string{item.Key}
 }

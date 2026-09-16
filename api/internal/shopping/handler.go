@@ -595,9 +595,11 @@ func (h *Handler) sentText(provider providers.Key, l SentLine) string {
 func (h *Handler) exclusionText(provider providers.Key, reason ExclusionReason) string {
 	switch reason {
 	case ExcludedInPantry:
-		return "In pantry"
+		return "In your pantry"
 	case ExcludedPantryHint:
-		return "Probably have it"
+		// Not in the pantry at all: the recipe calls it a staple most
+		// kitchens keep, which is all this knows.
+		return "Usually on hand"
 	case ExcludedHouseMade:
 		return "House-made batch in pantry"
 	case ExcludedCheckedOff:
