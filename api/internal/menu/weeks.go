@@ -31,10 +31,12 @@ var (
 type WeekSummary struct {
 	Week   planning.Week
 	Timing Timing
-	// Planned counts plan entries, Cooked distinct cooked entries (or recipes
+	// Planned counts planned main meals, AddOns the week's planned add-ons
+	// (a pairing's garlic bread), Cooked distinct cooked entries (or recipes
 	// and dates, for events without an entry), and Ordered main meals
-	// delivered that week.
+	// delivered that week. Add-ons are never counted as meals.
 	Planned int
+	AddOns  int
 	Cooked  int
 	Ordered int
 	// Status is draft, finalized, or none.
@@ -111,8 +113,12 @@ func buildWeekStrip(from, to, current planning.Week, loc *time.Location, plans m
 		loc = time.UTC
 	}
 	ordered := map[string]int{}
+	addons := map[string]bool{}
 	strip := WeekStrip{Earliest: earliestPlanned}
 	for _, r := range catalog {
+		if r.IsAddon {
+			addons[r.ID] = true
+		}
 		if r.IsAddon || len(r.OrderWeeks) == 0 {
 			continue
 		}
@@ -142,9 +148,28 @@ func buildWeekStrip(from, to, current planning.Week, loc *time.Location, plans m
 	for w := from; w.WeeksUntil(to) >= 0; w = w.AddWeeks(1) {
 		ws := WeekSummary{Week: w, Timing: timingOf(w, current), Ordered: ordered[w.String()], Cooked: len(cookedKeys[w.String()]), Status: WeekStatusNone}
 		if sum, ok := plans[w]; ok && !sum.UpdatedAt.IsZero() {
-			ws.Planned, ws.Status = sum.EntryCount, string(sum.Status)
+			ws.Planned, ws.AddOns = splitAddOns(sum, addons)
+			ws.Status = string(sum.Status)
 		}
 		strip.Weeks = append(strip.Weeks, ws)
 	}
 	return strip
+}
+
+// splitAddOns counts a week's planned main meals and add-ons. An entry whose
+// recipe isn't in the catalog counts as a main meal, and a summary without
+// recipe IDs falls back to its entry count, so a store that doesn't project
+// them still reports the week as planned.
+func splitAddOns(sum planning.Summary, addons map[string]bool) (meals, addOns int) {
+	if len(sum.RecipeIDs) == 0 {
+		return sum.EntryCount, 0
+	}
+	for _, id := range sum.RecipeIDs {
+		if addons[id] {
+			addOns++
+			continue
+		}
+		meals++
+	}
+	return meals, addOns
 }

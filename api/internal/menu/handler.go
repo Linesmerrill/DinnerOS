@@ -139,6 +139,7 @@ type WeekSummaryResponse struct {
 	WeekEnd      string `json:"weekEnd"`
 	Timing       Timing `json:"timing"`
 	PlannedCount int    `json:"plannedCount"`
+	AddOnCount   int    `json:"addOnCount"`
 	CookedCount  int    `json:"cookedCount"`
 	OrderedCount int    `json:"orderedCount"`
 	Status       string `json:"status"`
@@ -306,7 +307,7 @@ func (h *Handler) weeks(w http.ResponseWriter, r *http.Request) {
 	for _, ws := range strip.Weeks {
 		resp.Items = append(resp.Items, WeekSummaryResponse{
 			Week: ws.Week.String(), WeekStart: ws.Week.Date(planning.Monday), WeekEnd: ws.Week.Date(planning.Sunday), Timing: ws.Timing,
-			PlannedCount: ws.Planned, CookedCount: ws.Cooked, OrderedCount: ws.Ordered, Status: ws.Status,
+			PlannedCount: ws.Planned, AddOnCount: ws.AddOns, CookedCount: ws.Cooked, OrderedCount: ws.Ordered, Status: ws.Status,
 		})
 	}
 	if strip.Earliest != nil {
