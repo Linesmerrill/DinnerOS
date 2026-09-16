@@ -11,6 +11,18 @@ nonisolated extension PantryAPI {
             try APIRequest.post(Self.path(householdID) + "/purchases", body: purchase).authorized(with: accessToken))
     }
 
+    /// Sets or clears (`nil`) what a purchase cost. Requires `pantry.edit`.
+    func updatePurchasePrice(
+        householdID: String, purchaseID: String, priceCents: Int?, accessToken: String
+    ) async throws -> PantryPurchase {
+        let request = try APIRequest.patch(
+            Self.path(householdID) + "/purchases/" + APIRequest.encodePathSegment(purchaseID),
+            body: PantryPurchasePriceUpdate(priceCents: priceCents))
+        let response: PantryPurchaseEnvelope = try await client.send(
+            request.withPercentEncodedPath().authorized(with: accessToken))
+        return response.purchase
+    }
+
     /// The item's 20 most recent purchases, newest first.
     func purchases(householdID: String, itemID: String, accessToken: String) async throws -> [PantryPurchase] {
         let response: PantryPurchaseListResponse = try await client.send(

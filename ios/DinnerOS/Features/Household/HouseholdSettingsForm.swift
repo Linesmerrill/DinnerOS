@@ -14,10 +14,15 @@ struct HouseholdSettingsForm: View {
     @State private var defaultServings: Int
     /// The API's weekday code, or "" for no reminder.
     @State private var orderDay: String
+    /// What a week of meal kits cost, as typed; empty turns the comparison off.
+    @State private var mealKitAmount: String
+    @State private var mealKitMeals: Int
     @State private var isSaving = false
     @State private var errorMessage: String?
 
     init(household: Household) {
+        _mealKitAmount = State(initialValue: household.mealKit.map { MoneyText.editingText($0.weeklyCents) } ?? "")
+        _mealKitMeals = State(initialValue: household.mealKit?.meals ?? 5)
         self.household = household
         _name = State(initialValue: household.name)
         _timeZone = State(initialValue: household.timeZone)
@@ -37,7 +42,13 @@ struct HouseholdSettingsForm: View {
             timeZone: timeZone == household.timeZone ? nil : timeZone,
             defaultServings: defaultServings == household.defaultServings ? nil : defaultServings,
             // "" clears the order day; nil would leave it alone.
-            orderDay: orderDay == (household.orderDay ?? "") ? nil : orderDay)
+            orderDay: orderDay == (household.orderDay ?? "") ? nil : orderDay,
+            mealKit: mealKitChange ?? .keep)
+    }
+
+    /// The meal kit comparison as the form has it; `nil` while the amount isn't valid.
+    private var mealKitChange: FieldChange<MealKitInput>? {
+        MealKitForm.change(amountText: mealKitAmount, meals: mealKitMeals, current: household.mealKit)
     }
 
     var body: some View {
@@ -72,6 +83,30 @@ struct HouseholdSettingsForm: View {
                     "Pick the day you usually order. From that day, Shop reminds the household until someone marks the week ordered, and phones that allow notifications get one that morning. Next week starts fresh."
                 )
             }
+            Section {
+                TextField(
+                    "What did you spend on meal kits?", text: $mealKitAmount,
+                    prompt: Text("Weekly amount, for example 130")
+                )
+                .keyboardType(.decimalPad)
+                Stepper(value: $mealKitMeals, in: MealKitInput.mealsRange) {
+                    LabeledContent("Meals per Week", value: mealKitMeals.formatted())
+                }
+                if let error = MealKitForm.error(mealKitAmount) {
+                    FormErrorLabel(message: error)
+                }
+                if household.mealKit != nil || !mealKitAmount.isEmpty {
+                    Button("Clear Meal Kit Comparison", role: .destructive) {
+                        mealKitAmount = ""
+                    }
+                }
+            } header: {
+                Text("Meal Kit Comparison")
+            } footer: {
+                Text(
+                    "Shop compares your grocery cost per meal with a week of meal kits, for example $130 for 5 meals. Leave it empty to turn the comparison off."
+                )
+            }
             if let errorMessage {
                 Section {
                     FormErrorLabel(message: errorMessage)
@@ -91,7 +126,7 @@ struct HouseholdSettingsForm: View {
                     Button("Save") {
                         Task { await save() }
                     }
-                    .disabled(trimmedName.isEmpty || changes.isEmpty)
+                    .disabled(trimmedName.isEmpty || changes.isEmpty || mealKitChange == nil)
                 }
             }
         }

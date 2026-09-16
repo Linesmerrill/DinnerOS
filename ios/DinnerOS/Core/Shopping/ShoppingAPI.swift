@@ -171,6 +171,43 @@ nonisolated struct ShoppingAPI: Sendable {
             ).authorized(with: accessToken))
     }
 
+    /// Sets or clears line prices on a handoff, pending or confirmed. The API also prices the
+    /// confirmed pantry purchase and, when the product is still the saved one, the saved
+    /// product's per-package price. Needs `pantry.edit`.
+    func setLinePrices(
+        householdID: String, handoffID: String, request: ShoppingLinePricesRequest, accessToken: String
+    ) async throws -> ShoppingHandoff {
+        try await client.send(
+            try APIRequest.post(Self.path(householdID) + "/handoffs/\(handoffID)/prices", body: request)
+                .authorized(with: accessToken))
+    }
+
+    /// Sets the week's order total (fees, tax, and tip included), or clears it with `nil`.
+    func setWeekSpend(householdID: String, week: ISOWeek, orderTotalCents: Int?, accessToken: String) async throws
+        -> WeekCost
+    {
+        try await client.send(
+            try APIRequest.put(
+                Self.path(householdID) + "/weeks/\(week.description)/spend",
+                body: SetWeekSpendRequest(orderTotalCents: orderTotalCents)
+            ).authorized(with: accessToken))
+    }
+
+    /// What the week's groceries cost, used, and stocked, against the meal kit baseline.
+    func weekCost(householdID: String, week: ISOWeek, accessToken: String) async throws -> WeekCost {
+        try await client.send(
+            APIRequest.get(Self.path(householdID) + "/weeks/\(week.description)/cost").authorized(with: accessToken))
+    }
+
+    /// Recent weeks' cost and savings, newest first.
+    func savings(householdID: String, limit: Int? = nil, accessToken: String) async throws -> ShoppingSavings {
+        var request = APIRequest.get(Self.path(householdID) + "/savings")
+        if let limit {
+            request.queryItems = [URLQueryItem(name: "limit", value: String(limit))]
+        }
+        return try await client.send(request.authorized(with: accessToken))
+    }
+
     static func path(_ householdID: String) -> String {
         "/api/v1/households/\(householdID)/shopping"
     }

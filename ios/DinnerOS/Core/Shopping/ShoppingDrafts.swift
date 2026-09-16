@@ -10,8 +10,28 @@ nonisolated struct SavedProductDraft: Equatable, Sendable {
     var hasPackageSize = false
     var packageQuantityText = ""
     var packageUnit = SavedProductDraft.defaultUnit
+    /// One package's price, as typed. Blank keeps whatever is stored.
+    var priceText = ""
+    /// The saved price the form started with; clearing it sends `null`.
+    private(set) var originalPriceCents: Int?
 
     init() {}
+
+    /// Starts the price field from a saved price. Does nothing once the member typed one.
+    mutating func startPrice(_ cents: Int?) {
+        guard priceText.isEmpty, originalPriceCents == nil, let cents else { return }
+        originalPriceCents = cents
+        priceText = MoneyText.editingText(cents)
+    }
+
+    var priceError: String? {
+        MoneyText.error(priceText)
+    }
+
+    /// What Save does to the saved price; `nil` while the text isn't a price.
+    var priceChange: FieldChange<Int>? {
+        FieldChange.price(text: priceText, original: originalPriceCents)
+    }
 
     /// A new product for an ingredient, named after the ingredient as the recipe lists it.
     /// Almost always that's what the household calls it; the member can still edit it.
@@ -26,6 +46,7 @@ nonisolated struct SavedProductDraft: Equatable, Sendable {
 
     init(preference: ShoppingPreference) {
         self.init(url: preference.productURLString, name: preference.displayName, size: preference.packageSize)
+        startPrice(preference.priceCents)
     }
 
     private init(url: String, name: String, size: ShoppingAmount?) {
@@ -100,6 +121,7 @@ nonisolated struct SavedProductDraft: Equatable, Sendable {
 
     var isValid: Bool {
         product != nil && !trimmedName.isEmpty && nameError == nil && (!hasPackageSize || packageSize != nil)
+            && priceChange != nil
     }
 
     /// The request body, or `nil` while the form isn't valid.
@@ -110,7 +132,7 @@ nonisolated struct SavedProductDraft: Equatable, Sendable {
                 .prefix(ShoppingLimits.maxDisplayNameLength))
         return ShoppingPreferenceRequest(
             product: product, displayName: trimmedName, packageSize: packageSize,
-            ingredientName: name.isEmpty ? nil : name)
+            ingredientName: name.isEmpty ? nil : name, price: priceChange ?? .keep)
     }
 }
 
@@ -121,6 +143,8 @@ nonisolated struct OrderConfirmationDraft: Equatable, Sendable {
     let lines: [ShoppingHandoffLine]
     private(set) var selected: Set<String>
     private var packageCounts: [String: Int]
+    /// Optional prices typed per line, all its packages together.
+    private var priceTexts: [String: String] = [:]
 
     /// Every unconfirmed line starts checked, at the count sent to the cart.
     init(handoff: ShoppingHandoff) {
@@ -152,10 +176,33 @@ nonisolated struct OrderConfirmationDraft: Equatable, Sendable {
         packageCounts[line.id] = min(max(count, ShoppingLimits.packages.lowerBound), ShoppingLimits.packages.upperBound)
     }
 
-    /// "Ordered everything": `{all: true}`, unless a count changed or a line was skipped
-    /// before, which `all` wouldn't cover; then every line is named.
+    func priceText(for line: ShoppingHandoffLine) -> String {
+        priceTexts[line.id] ?? ""
+    }
+
+    mutating func setPriceText(_ text: String, for line: ShoppingHandoffLine) {
+        priceTexts[line.id] = text
+    }
+
+    func priceError(for line: ShoppingHandoffLine) -> String? {
+        MoneyText.error(priceText(for: line))
+    }
+
+    /// A checked line's price text isn't a price.
+    var hasInvalidPrice: Bool {
+        lines.contains { selected.contains($0.id) && priceError(for: $0) != nil }
+    }
+
+    private func priceCents(for line: ShoppingHandoffLine) -> Int? {
+        let text = priceText(for: line)
+        guard MoneyText.error(text) == nil else { return nil }
+        return MoneyText.cents(from: text)
+    }
+
+    /// "Ordered everything": `{all: true}`, unless a count or price changed or a line was
+    /// skipped before, which `all` wouldn't cover; then every line is named.
     var everythingRequest: ConfirmShoppingOrderRequest {
-        let isChanged = lines.contains { packages(for: $0) != $0.packages }
+        let isChanged = lines.contains { packages(for: $0) != $0.packages || priceCents(for: $0) != nil }
         let hasSkipped = lines.contains { $0.confirmation?.status == .skipped }
         guard isChanged || hasSkipped else { return .all }
         return .lines(lines.map(orderLine), skipRest: true)
@@ -170,7 +217,8 @@ nonisolated struct OrderConfirmationDraft: Equatable, Sendable {
 
     private func orderLine(_ line: ShoppingHandoffLine) -> ConfirmedOrderLine {
         let count = packages(for: line)
-        return ConfirmedOrderLine(lineID: line.id, packages: count == line.packages ? nil : count)
+        return ConfirmedOrderLine(
+            lineID: line.id, packages: count == line.packages ? nil : count, priceCents: priceCents(for: line))
     }
 
     /// Whether every line is checked.
@@ -186,7 +234,8 @@ nonisolated struct OrderConfirmationDraft: Equatable, Sendable {
     /// What the confirm button sends: everything when all are checked, otherwise the checked
     /// lines with the rest marked not ordered. `nil` when nothing is checked.
     var confirmRequest: ConfirmShoppingOrderRequest? {
-        isAllSelected ? everythingRequest : selectedRequest
+        guard !hasInvalidPrice else { return nil }
+        return isAllSelected ? everythingRequest : selectedRequest
     }
 }
 

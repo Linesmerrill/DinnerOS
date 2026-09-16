@@ -106,6 +106,7 @@ struct ChooseProductSheet: View {
                     nameSection
                     sizeSection
                 }
+                priceSection
                 if choice.isSaved {
                     Section {
                         Button("Remove Saved Product", role: .destructive) {
@@ -117,6 +118,11 @@ struct ChooseProductSheet: View {
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .task {
+                // A line doesn't carry its product's price; the saved product does, when loaded.
+                if choice.isSaved {
+                    draft.startPrice(
+                        shopping.preferences.first { $0.ingredientKey == choice.ingredientKey }?.priceCents)
+                }
                 if choice.packageSizeFix != nil {
                     isSizeFocused = true
                 }
@@ -258,6 +264,21 @@ struct ChooseProductSheet: View {
             Text(
                 "How much one package holds, from the product page, so we know how many to buy. Fresh food works without it: we buy 1 for the week."
             )
+        }
+    }
+
+    private var priceSection: some View {
+        Section {
+            TextField("Price", text: $draft.priceText, prompt: Text("Optional, for example 4.98"))
+                .keyboardType(.decimalPad)
+                .autocorrectionDisabled()
+            if let error = draft.priceError {
+                FormErrorLabel(message: error)
+            }
+        } header: {
+            Text("Price per Package")
+        } footer: {
+            Text("What one package costs at Walmart. It's used to work out your cost per meal.")
         }
     }
 

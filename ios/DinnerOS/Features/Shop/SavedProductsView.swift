@@ -140,7 +140,7 @@ private struct SavedProductRow: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 if let size = preference.packageSize {
-                    Text(size.text)
+                    Text(preference.priceCents.map { "\(size.text) · \(MoneyText.format($0))" } ?? size.text)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 } else {

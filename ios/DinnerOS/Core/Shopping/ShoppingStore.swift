@@ -111,6 +111,16 @@ final class ShoppingStore {
     /// of showing an error for something that isn't built.
     private(set) var isCatalogAvailable = true
 
+    /// The shown week's cost, and every handoff of the week (any status) for adding prices.
+    private(set) var costPhase: Phase = .idle
+    private(set) var weekCost: WeekCost?
+    private(set) var weekHandoffs: [ShoppingHandoff] = []
+    /// Cleared by a `404`: this API has no cost endpoints yet, so the card hides.
+    private(set) var isCostAvailable = true
+    private(set) var isSavingSpend = false
+    private(set) var savingsPhase: Phase = .idle
+    private(set) var savings: ShoppingSavings?
+
     /// `shopping.edit`: store setup, saved products, and handoffs. The API enforces it.
     private(set) var canEdit = false
     /// `pantry.edit`: confirming an order records pantry purchases.
@@ -175,6 +185,8 @@ final class ShoppingStore {
     /// arrived again doesn't cost a match. Kept per week because `planDidChange` is handed
     /// every week's plan, not only the shown one.
     @ObservationIgnored private var planSignatures: [String: PlanGrocerySignature] = [:]
+    /// The week whose cost was last asked for, so changes refresh it only once it's shown.
+    @ObservationIgnored private var costWeek: ISOWeek?
 
     private static let logger = Logger(subsystem: "DinnerOS", category: "shopping")
 
@@ -281,6 +293,7 @@ final class ShoppingStore {
             openHandoff = nil
             // Each week has its own order state; the previous week's must not linger.
             orderReminder = nil
+            clearWeekCost()
         }
         await load()
     }
@@ -588,6 +601,9 @@ final class ShoppingStore {
 
         markCheckedOff(response.purchases.map(\.ingredientKey), week: response.handoff.week, householdID: householdID)
         let updated = response.handoff
+        if let index = weekHandoffs.firstIndex(where: { $0.id == updated.id }) {
+            weekHandoffs[index] = updated
+        }
         if openHandoff?.id == updated.id {
             openHandoff = updated.status == .open ? updated : nil
         }
@@ -600,6 +616,9 @@ final class ShoppingStore {
         await onPantryChanged?()
         if updated.week == week.description {
             await loadProposal(clearing: false)
+            if costWeek == week {
+                await loadWeekCost()
+            }
         }
         return response
     }
@@ -659,6 +678,144 @@ final class ShoppingStore {
         if isConfigured, proposal != nil {
             await loadProposal(clearing: false)
         }
+    }
+
+    // MARK: - Prices and week cost
+
+    /// The shown week's handed-off lines that could carry a price: every line not marked
+    /// "not ordered", in handoff then aisle order.
+    var priceableLines: [PriceableLine] {
+        weekHandoffs.reversed().flatMap { handoff in
+            handoff.lines.filter { $0.confirmation?.status != .skipped }.map {
+                PriceableLine(handoffID: handoff.id, line: $0)
+            }
+        }
+    }
+
+    /// Loads the shown week's handoffs and cost. Best effort: a failure keeps what's shown,
+    /// and an API without the cost endpoints (`404`) hides the card instead of failing.
+    func loadWeekCost() async {
+        guard let api, let householdID else { return }
+        let started = scope
+        let week = week
+        costWeek = week
+        if weekCost == nil {
+            costPhase = .loading
+        }
+        do {
+            let handoffs = try await session.authorized { token in
+                try await api.handoffs(householdID: householdID, week: week, accessToken: token)
+            }
+            guard started == scope, week == self.week else { return }
+            weekHandoffs = handoffs
+            let cost = try await session.authorized { token in
+                try await api.weekCost(householdID: householdID, week: week, accessToken: token)
+            }
+            guard started == scope, week == self.week else { return }
+            weekCost = cost
+            isCostAvailable = true
+            costPhase = .loaded
+        } catch let error as APIError where error.status == 404 {
+            guard started == scope, week == self.week else { return }
+            Self.logger.info("Week cost isn't available on this API yet")
+            weekCost = nil
+            isCostAvailable = false
+            costPhase = .loaded
+        } catch is CancellationError {
+            if started == scope, costPhase == .loading { costPhase = .idle }
+        } catch {
+            guard started == scope, week == self.week else { return }
+            Self.logger.notice("Week cost load failed: \(Self.describe(error), privacy: .public)")
+            costPhase = weekCost == nil ? .failed(Self.message(for: error)) : .loaded
+        }
+    }
+
+    /// Sets the shown week's order total with fees, tax, and tip, or clears it with `nil`.
+    func setOrderTotal(_ cents: Int?) async throws {
+        let (api, householdID) = try requireHousehold()
+        let started = scope
+        let week = week
+        isSavingSpend = true
+        defer {
+            if started == scope { isSavingSpend = false }
+        }
+        let cost = try await session.authorized { token in
+            try await api.setWeekSpend(householdID: householdID, week: week, orderTotalCents: cents, accessToken: token)
+        }
+        guard started == scope, week == self.week else { return }
+        Self.logger.info("Week order total saved")
+        weekCost = cost
+        costWeek = week
+        costPhase = .loaded
+    }
+
+    /// Saves line prices, one request per handoff, then reads the week's cost again. Saved
+    /// products pick up the new per-package prices on the API, so they're reloaded when shown.
+    func savePrices(_ prices: [PriceableLine.ID: Int?]) async throws {
+        let (api, householdID) = try requireHousehold()
+        let started = scope
+        let byHandoff = Dictionary(grouping: prices, by: \.key.handoffID)
+        for (handoffID, entries) in byHandoff.sorted(by: { $0.key < $1.key }) {
+            let lines = entries.sorted { $0.key.lineID < $1.key.lineID }.map {
+                ShoppingLinePrice(lineID: $0.key.lineID, priceCents: $0.value)
+            }
+            for chunk in stride(from: 0, to: lines.count, by: ShoppingLimits.maxKeys) {
+                let request = ShoppingLinePricesRequest(
+                    lines: Array(lines[chunk..<min(chunk + ShoppingLimits.maxKeys, lines.count)]))
+                let updated = try await session.authorized { token in
+                    try await api.setLinePrices(
+                        householdID: householdID, handoffID: handoffID, request: request, accessToken: token)
+                }
+                guard started == scope else { return }
+                replaceHandoff(updated)
+            }
+        }
+        Self.logger.info("Saved \(prices.count, privacy: .public) line prices")
+        guard started == scope else { return }
+        await loadWeekCost()
+        if preferencesPhase == .loaded {
+            await loadPreferences()
+        }
+    }
+
+    /// Recent weeks' savings for the Savings screen.
+    func loadSavings(limit: Int = 12) async {
+        guard let api, let householdID else { return }
+        let started = scope
+        if savings == nil {
+            savingsPhase = .loading
+        }
+        do {
+            let loaded = try await session.authorized { token in
+                try await api.savings(householdID: householdID, limit: limit, accessToken: token)
+            }
+            guard started == scope else { return }
+            savings = loaded
+            savingsPhase = .loaded
+        } catch is CancellationError {
+            if started == scope, savingsPhase == .loading { savingsPhase = .idle }
+        } catch {
+            guard started == scope else { return }
+            Self.logger.notice("Savings load failed: \(Self.describe(error), privacy: .public)")
+            savingsPhase = savings == nil ? .failed(Self.message(for: error)) : .loaded
+        }
+    }
+
+    private func replaceHandoff(_ updated: ShoppingHandoff) {
+        if let index = weekHandoffs.firstIndex(where: { $0.id == updated.id }) {
+            weekHandoffs[index] = updated
+        }
+        if openHandoff?.id == updated.id {
+            openHandoff = updated.status == .open ? updated : nil
+        }
+    }
+
+    private func clearWeekCost() {
+        costWeek = nil
+        costPhase = .idle
+        weekCost = nil
+        weekHandoffs = []
+        isSavingSpend = false
     }
 
     // MARK: - Saved products
@@ -896,6 +1053,10 @@ final class ShoppingStore {
         storeRequests = []
         isCatalogAvailable = true
         planSignatures = [:]
+        clearWeekCost()
+        isCostAvailable = true
+        savingsPhase = .idle
+        savings = nil
     }
 
     // MARK: - Helpers

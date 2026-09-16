@@ -133,11 +133,14 @@ nonisolated struct ShoppingPreferenceRequest: Encodable, Equatable, Sendable {
     var displayName: String
     var packageSize: ShoppingPackageSizeInput?
     var ingredientName: String?
+    /// One package's price. `.keep` omits the key, so the stored price stays.
+    var price: FieldChange<Int> = .keep
 
     private enum CodingKeys: String, CodingKey {
         case productURL = "productUrl"
         case productID = "productId"
         case displayName, packageSize, ingredientName
+        case price = "priceCents"
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -153,6 +156,7 @@ nonisolated struct ShoppingPreferenceRequest: Encodable, Equatable, Sendable {
             try container.encodeNil(forKey: .packageSize)
         }
         try container.encodeIfPresent(ingredientName, forKey: .ingredientName)
+        try container.encodeChange(price, forKey: .price)
     }
 }
 
@@ -174,6 +178,9 @@ nonisolated struct ShoppingPreference: Decodable, Hashable, Sendable, Identifiab
     let createdAt: Date
     let updatedBy: String
     let updatedAt: Date
+    /// One package's price; `nil` when unknown or from a server without prices.
+    var priceCents: Int? = nil
+    var priceUpdatedAt: Date? = nil
 
     private enum CodingKeys: String, CodingKey {
         case id, provider, ingredientKey
@@ -181,7 +188,7 @@ nonisolated struct ShoppingPreference: Decodable, Hashable, Sendable, Identifiab
         case ingredientName
         case productID = "productId"
         case productURLString = "productUrl"
-        case displayName, packageSize, createdBy, createdAt, updatedBy, updatedAt
+        case displayName, packageSize, createdBy, createdAt, updatedBy, updatedAt, priceCents, priceUpdatedAt
     }
 }
 
@@ -337,6 +344,10 @@ nonisolated struct ShoppingHandoffLine: Decodable, Hashable, Sendable, Identifia
     var cart: ShoppingLineCart? = nil
     /// The planned recipes this line is for; `nil` from a server that doesn't send them.
     var recipeRefs: [GroceryRecipe]? = nil
+    /// What was paid for the line, all its packages together; `nil` until someone adds it.
+    var priceCents: Int? = nil
+    /// Whether a confirmed line became a pantry purchase; `nil` until confirmed.
+    var pantry: ShoppingLinePantry? = nil
 
     /// The planned recipes this line is for, sorted by name. Empty for an extra, and on
     /// handoffs stored before the API recorded them.
@@ -371,6 +382,30 @@ nonisolated struct ShoppingHandoffLine: Decodable, Hashable, Sendable, Identifia
             packagesOverridden, checkAmount, reason, reasonText, coverageText, coverage, coversWeek, searchTerms,
             confirmation, cart
         case recipeRefs = "recipes"
+        case priceCents, pantry
+    }
+}
+
+/// What confirming a line did to the pantry. Unknown values decode as-is.
+nonisolated struct ShoppingLinePantry: RawRepresentable, Codable, Hashable, Sendable {
+    let rawValue: String
+
+    init(rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    /// A pantry purchase with leftovers that count down as meals are cooked.
+    static let tracked = ShoppingLinePantry(rawValue: "tracked")
+    /// A fresh item used up this week, so no purchase was recorded.
+    static let notTracked = ShoppingLinePantry(rawValue: "not_tracked")
+
+    /// "Used this week" or "Added to pantry"; `nil` for a value this build doesn't know.
+    var text: String? {
+        switch self {
+        case .tracked: String(localized: "Added to pantry")
+        case .notTracked: String(localized: "Used this week")
+        default: nil
+        }
     }
 }
 
@@ -614,11 +649,36 @@ nonisolated struct ConfirmedOrderLine: Encodable, Equatable, Sendable {
     var lineID: String
     /// What was ordered; omitted to use the line's count.
     var packages: Int?
+    /// What was paid for the line, all packages together; omitted when unknown.
+    var priceCents: Int? = nil
 
     private enum CodingKeys: String, CodingKey {
         case lineID = "lineId"
-        case packages
+        case packages, priceCents
     }
+}
+
+/// One line of `POST .../handoffs/{handoffId}/prices`. A `nil` price is sent as `null`,
+/// which clears it.
+nonisolated struct ShoppingLinePrice: Encodable, Equatable, Sendable {
+    var lineID: String
+    var priceCents: Int?
+
+    private enum CodingKeys: String, CodingKey {
+        case lineID = "lineId"
+        case priceCents
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(lineID, forKey: .lineID)
+        try container.encodeNullable(priceCents, forKey: .priceCents)
+    }
+}
+
+/// The body of `POST .../handoffs/{handoffId}/prices`: at most `ShoppingLimits.maxKeys` lines.
+nonisolated struct ShoppingLinePricesRequest: Encodable, Equatable, Sendable {
+    var lines: [ShoppingLinePrice]
 }
 
 /// The body of `POST .../handoffs/{handoffId}/confirm`.

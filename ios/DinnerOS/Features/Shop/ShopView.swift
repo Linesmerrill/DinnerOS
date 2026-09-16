@@ -128,6 +128,7 @@ private struct ShopWeekList: View {
                     shopping.reviewOpenHandoff()
                 }
             }
+            WeekCostSection()
             switch shopping.proposalPhase {
             case .idle, .loading:
                 HStack(spacing: 8) {
@@ -157,6 +158,12 @@ private struct ShopWeekList: View {
         }
         .refreshable {
             await shopping.reload()
+            await shopping.loadWeekCost()
+        }
+        // The week's cost and handoffs, kept apart from the match so a slow or missing cost
+        // endpoint never holds up the list.
+        .task(id: "\(shopping.householdID ?? "")|\(shopping.week)") {
+            await shopping.loadWeekCost()
         }
         .sheet(isPresented: $isRequestingStore) {
             RequestStoreSheet(openStoreSetup: openStoreSetup)

@@ -91,6 +91,18 @@ nonisolated struct Household: Decodable, Equatable, Sendable, Identifiable {
     let createdBy: String
     let createdAt: Date
     let updatedAt: Date
+    /// What the household spent on meal kits, to compare grocery cost against; `nil` when not
+    /// set, which turns the comparison off.
+    var mealKit: MealKitBaseline? = nil
+}
+
+/// A meal kit baseline to save (`PATCH .../households/{id}` `mealKit`).
+nonisolated struct MealKitInput: Encodable, Equatable, Sendable {
+    static let weeklyCentsRange = 1...MoneyText.maxCents
+    static let mealsRange = 1...21
+
+    var weeklyCents: Int
+    var meals: Int
 }
 
 /// The caller's membership, returned when a household is created (`Membership`).
@@ -202,8 +214,25 @@ nonisolated struct HouseholdChanges: Encodable, Equatable, Sendable {
     /// A weekday code to remind on, or `""` to turn the order reminder off. `nil` leaves
     /// the household's order day alone.
     var orderDay: String?
+    /// The meal kit comparison: `.keep` omits it, `.clear` turns it off.
+    var mealKit: FieldChange<MealKitInput> = .keep
 
-    var isEmpty: Bool { name == nil && timeZone == nil && defaultServings == nil && orderDay == nil }
+    var isEmpty: Bool {
+        name == nil && timeZone == nil && defaultServings == nil && orderDay == nil && mealKit == .keep
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name, timeZone, defaultServings, orderDay, mealKit
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(name, forKey: .name)
+        try container.encodeIfPresent(timeZone, forKey: .timeZone)
+        try container.encodeIfPresent(defaultServings, forKey: .defaultServings)
+        try container.encodeIfPresent(orderDay, forKey: .orderDay)
+        try container.encodeChange(mealKit, forKey: .mealKit)
+    }
 }
 
 /// The secret presented to accept an invitation.

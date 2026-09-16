@@ -37,7 +37,7 @@ struct OrderConfirmationSheet: View {
             List {
                 Section {
                     Text(
-                        "Walmart doesn't tell \(configuration.displayName) what you ordered. Uncheck anything you didn't buy, and the rest goes in your pantry."
+                        "Walmart doesn't tell \(configuration.displayName) what you ordered. Uncheck anything you didn't buy, and the rest goes in your pantry. Prices are optional; add them now or later from Shop."
                     )
                     .foregroundStyle(.secondary)
                     if let errorMessage {
@@ -108,6 +108,10 @@ struct OrderConfirmationSheet: View {
             packages: Binding(
                 get: { draft.packages(for: line) },
                 set: { draft.setPackages($0, for: line) }),
+            priceText: Binding(
+                get: { draft.priceText(for: line) },
+                set: { draft.setPriceText($0, for: line) }),
+            priceError: draft.priceError(for: line),
             toggle: { draft.toggle(line) })
     }
 
@@ -214,6 +218,8 @@ private struct OrderLineRow: View {
     let detail: String?
     let isSelected: Bool
     @Binding var packages: Int
+    @Binding var priceText: String
+    let priceError: String?
     let toggle: () -> Void
 
     var body: some View {
@@ -258,6 +264,20 @@ private struct OrderLineRow: View {
                 .padding(.leading, 36)
                 .accessibilityLabel("Packages of \(line.name) ordered")
                 .accessibilityValue(ShoppingText.packages(packages))
+                LabeledContent("Price") {
+                    TextField("Price", text: $priceText, prompt: Text("Optional"))
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 120)
+                }
+                .font(.subheadline)
+                .padding(.leading, 36)
+                .accessibilityLabel("Price paid for \(line.name)")
+                if let priceError {
+                    FormErrorLabel(message: priceError)
+                        .font(.footnote)
+                        .padding(.leading, 36)
+                }
             }
         }
     }

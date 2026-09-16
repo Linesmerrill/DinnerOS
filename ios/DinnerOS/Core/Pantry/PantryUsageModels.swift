@@ -138,12 +138,29 @@ nonisolated struct NewPantryPurchase: Encodable, Equatable, Sendable {
     var week: String?
     /// The same ID on every attempt, so a retry after a lost response records one purchase.
     var clientPurchaseID: String
+    /// What was paid, in cents; omitted when unknown.
+    var priceCents: Int? = nil
 
     private enum CodingKeys: String, CodingKey {
         case itemID = "itemId"
         case ingredientID = "ingredientId"
         case name, source, quantity, unit, unitSize, week
         case clientPurchaseID = "clientPurchaseId"
+        case priceCents
+    }
+}
+
+/// The body of `PATCH .../pantry/purchases/{purchaseId}`. A `nil` price is sent as `null`.
+nonisolated struct PantryPurchasePriceUpdate: Encodable, Equatable, Sendable {
+    var priceCents: Int?
+
+    private enum CodingKeys: String, CodingKey {
+        case priceCents
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeNullable(priceCents, forKey: .priceCents)
     }
 }
 
@@ -163,6 +180,8 @@ nonisolated struct PantryPurchase: Decodable, Hashable, Sendable, Identifiable {
     let purchasedAt: Date
     /// The shopping handoff line a `provider` purchase was confirmed from; `nil` otherwise.
     let provider: PantryPurchaseProvider?
+    /// What was paid, in cents; `nil` when unknown or from a server without prices.
+    var priceCents: Int? = nil
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -170,8 +189,13 @@ nonisolated struct PantryPurchase: Decodable, Hashable, Sendable, Identifiable {
         case itemID = "itemId"
         case source, quantity, quantityValue, unit, unitSize, week
         case clientPurchaseID = "clientPurchaseId"
-        case recordedBy, purchasedAt, provider
+        case recordedBy, purchasedAt, provider, priceCents
     }
+}
+
+/// Response to `PATCH .../pantry/purchases/{purchaseId}`.
+nonisolated struct PantryPurchaseEnvelope: Decodable, Hashable, Sendable {
+    let purchase: PantryPurchase
 }
 
 /// Where a `provider` purchase came from (`PantryPurchaseProvider`).
