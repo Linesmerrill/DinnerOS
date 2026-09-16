@@ -322,7 +322,7 @@ struct MenuChipBar: View {
             }
         }
         .font(.subheadline.weight(.medium))
-        .foregroundStyle(isSelected ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.primary))
+        .foregroundStyle(isSelected ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.primary))
         .padding(.horizontal, 12)
         .frame(minHeight: 34)
         .background(

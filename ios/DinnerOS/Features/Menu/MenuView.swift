@@ -14,6 +14,7 @@ struct MenuView: View {
     @Environment(MealPlanner.self) private var planner
     @Environment(PairingsStore.self) private var pairings
     @Environment(\.appConfiguration) private var configuration
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var mode: MenuMode = .menu
     @State private var autopilotFlow = WeekAutopilotFlow()
@@ -130,7 +131,7 @@ struct MenuView: View {
             // Changing a filter reloads All Meals from its first page. Without this the
             // screen stays scrolled past that page and looks empty until you scroll back.
             .onChange(of: menu.allMeals.query) { _, _ in
-                withAnimation(.easeInOut(duration: 0.2)) {
+                withAnimation(MenuScroll.animation(reduceMotion: reduceMotion)) {
                     proxy.scrollTo(Self.allMealsAnchor, anchor: .top)
                 }
             }
@@ -254,6 +255,16 @@ struct MenuView: View {
                 actionError = HouseholdStore.message(for: error)
             }
         }
+    }
+}
+
+/// How the Menu moves itself.
+nonisolated enum MenuScroll {
+    /// The slide to All Meals after a filter changes, or `nil` under Reduce Motion — the jump
+    /// still happens, because landing on the new first page is the point; only the sliding is
+    /// the part someone asked us not to do.
+    static func animation(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.2)
     }
 }
 

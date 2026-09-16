@@ -97,7 +97,7 @@ struct ChoiceChip: View {
     private var foreground: Color {
         switch state {
         case .off: .primary
-        case .on: .white
+        case .on: .onAccent
         case .negative: .red
         }
     }

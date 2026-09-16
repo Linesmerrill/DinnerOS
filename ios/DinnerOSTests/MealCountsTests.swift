@@ -138,11 +138,12 @@ struct MenuCardShapeTests {
             ]) == nil)
     }
 
-    @Test func reservesTheSameNameHeightForEveryCardInARow() {
+    @Test func reservesTheSameNameHeightUntilAccessibilitySizes() {
         #expect(MenuCardMetrics.titleLines(for: .large) == 2)
         #expect(MenuCardMetrics.titleLines(for: .xxxLarge) == 2)
-        // Accessibility sizes get a third line — the same third line for every card.
-        #expect(MenuCardMetrics.titleLines(for: .accessibility1) == 3)
-        #expect(MenuCardMetrics.titleLines(for: .accessibility5) == 3)
+        // Accessibility sizes used to get a third line. At 300 points a line holds three or four
+        // words there, so any clamp truncated real names; the name wraps freely instead (#456).
+        #expect(MenuCardMetrics.titleLines(for: .accessibility1) == nil)
+        #expect(MenuCardMetrics.titleLines(for: .accessibility5) == nil)
     }
 }
