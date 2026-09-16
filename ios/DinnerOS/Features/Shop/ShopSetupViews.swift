@@ -9,6 +9,7 @@ struct ShopSetupView: View {
     @State private var storeNumber = ""
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var isRequestingStore = false
 
     private var canSave: Bool {
         shopping.canEdit && shopping.walmart != nil && ShoppingStoreNumber.error(storeNumber) == nil && !isSaving
@@ -63,6 +64,18 @@ struct ShopSetupView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            Section {
+                RequestStoreRow { isRequestingStore = true }
+            } footer: {
+                Text("Walmart is the only store we can send a list to today. Tell us where else you shop.")
+            }
+        }
+        .sheet(isPresented: $isRequestingStore) {
+            // Already on the setup screen, so an available store just closes the sheet.
+            RequestStoreSheet(openStoreSetup: {})
+        }
+        .task {
+            await shopping.loadCatalog()
         }
     }
 

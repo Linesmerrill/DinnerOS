@@ -41,6 +41,9 @@ struct ShopView: View {
                 guard let household else { return }
                 shopping.activate(householdID: household.id, timeZone: household.planningTimeZone)
                 await shopping.load()
+                // Loaded here too, so an API without the catalog hides the request row before
+                // anyone taps it.
+                await shopping.loadCatalog()
             }
     }
 
@@ -63,7 +66,7 @@ struct ShopView: View {
             }
         case .loaded:
             if shopping.isConfigured {
-                ShopWeekList { choice = $0 }
+                ShopWeekList(choose: { choice = $0 }, openStoreSetup: { isEditingStore = true })
             } else {
                 ShopSetupView()
             }
@@ -95,9 +98,20 @@ struct ShopView: View {
 /// left out, with the handoff button pinned below.
 private struct ShopWeekList: View {
     let choose: (ProductChoice) -> Void
+    let openStoreSetup: () -> Void
 
     @Environment(ShoppingStore.self) private var shopping
+    @Environment(PlanStore.self) private var plans
+    @Environment(PantryStore.self) private var pantry
+    @Environment(SpecialtyStore.self) private var specialties
+    @Environment(HouseholdStore.self) private var households
+
     @State private var showsNotIncluded = false
+    @State private var isRequestingStore = false
+    /// The shown week's grocery list, only so the export section has the same text the
+    /// Grocery List screen shares.
+    @State private var groceryModel: GroceryListModel?
+    @State private var exportController = GroceryExportController(remindersStore: EventKitRemindersStore())
 
     var body: some View {
         List {
@@ -129,9 +143,31 @@ private struct ShopWeekList: View {
                     sections(proposal)
                 }
             }
+            if let groceryModel {
+                GroceryExportSection(controller: exportController, model: groceryModel)
+            }
+            Section {
+                RequestStoreRow { isRequestingStore = true }
+            }
         }
         .refreshable {
             await shopping.reload()
+        }
+        .sheet(isPresented: $isRequestingStore) {
+            RequestStoreSheet(openStoreSetup: openStoreSetup)
+        }
+        .groceryExportPrompts(exportController)
+        .task(id: shopping.week) {
+            guard
+                let model = plans.makeGroceryList(
+                    week: shopping.week, purchases: pantry, specialties: specialties,
+                    canAddToPantry: households.access?.can(.pantryEdit) == true)
+            else {
+                groceryModel = nil
+                return
+            }
+            groceryModel = model
+            await model.load()
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if shopping.proposalPhase == .loaded, let proposal = shopping.proposal, !proposal.lines.isEmpty {
