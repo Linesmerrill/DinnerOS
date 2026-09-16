@@ -81,7 +81,7 @@ struct YourMealsSection: View {
                     .padding(.horizontal, 16)
             }
             if entries.isEmpty {
-                emptyState
+                emptyState(suggestionsPending: pendingProposalMeals != nil)
                     .padding(.horizontal, 16)
             } else {
                 mealCards
@@ -122,8 +122,27 @@ struct YourMealsSection: View {
         }
     }
 
+    /// The week has nothing in it yet.
+    ///
+    /// When Autopilot has already suggested meals, the card above is the thing to press, so this
+    /// keeps only the hint that meals can be added by hand. Offering a second Autopilot button
+    /// beside the first one asked the household to choose between two spellings of the same action.
     @ViewBuilder
-    private var emptyState: some View {
+    private func emptyState(suggestionsPending: Bool) -> some View {
+        if suggestionsPending {
+            if isEditable {
+                Text("or add meals below")
+                    .font(.footnote)
+                    .foregroundStyle(Color.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            fullEmptyState
+        }
+    }
+
+    @ViewBuilder
+    private var fullEmptyState: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label(
                 menu.selectedTiming == .past
