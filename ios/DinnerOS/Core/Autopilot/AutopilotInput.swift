@@ -153,6 +153,14 @@ nonisolated extension AutopilotSettings {
         schedule.mealsPerWeek = min(max(schedule.mealsPerWeek, 1), schedule.planDays.count)
     }
 
+    /// Plans or stops planning a night during setup, where the nights you cook *are* the
+    /// dinners you want: meals per week follows the count rather than asking twice (#337).
+    /// Preferences can separate the two again — plan six nights, ask for four dinners.
+    mutating func setPlanNight(_ day: PlanDay, included: Bool) {
+        setPlanDay(day, included: included)
+        schedule.mealsPerWeek = schedule.planDays.count
+    }
+
     mutating func setWeeknight(_ day: PlanDay, included: Bool) {
         var days = Set(schedule.weeknights)
         if included {
