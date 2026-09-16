@@ -459,6 +459,45 @@ credentials.
   out-of-stock or alternates flow, and the 8.0 spike's answers (whether the
   `goto.walmart.com` wrapper still opens the app, and the real URL limits).
 
+## Demand signal
+
+Phase 8a ships one provider, so the Shop tab's honest answer to "can I use my
+store?" is usually no. Rather than guess which grocer to build next, the API
+lets a household say what it wants and counts the answers (decisions #400–#404;
+endpoints in [api.md](api.md#request-a-store), the collection in
+[database.md](database.md#shopping)).
+
+- **The catalog is this document's conclusions, in code.**
+  `GET /api/v1/shopping/catalog` returns a curated, committed list of the
+  chains and services people actually ask for, each with a `status`:
+  - `available` — DinnerOS can hand a list to it today. Walmart only.
+  - `researched` — assessed in [Provider feasibility](#provider-feasibility):
+    Instacart, Kroger, Albertsons, Target, Amazon Fresh and Whole Foods, and
+    Shipt from the Target row. A banner inherits its parent's status, because
+    the same API and the same terms cover it — Fry's, Ralphs, King Soopers,
+    Smith's, Fred Meyer, QFC, Harris Teeter, and Dillons under Kroger;
+    Safeway, Vons, and Jewel-Osco under Albertsons. Each entry's `note` is
+    the one-line version of what the research found.
+  - `unsupported` — no integration and no research yet. Everything else.
+- **`status` is not a promise.** It says how far this document got, never what
+  a member can do right now. Only `available` takes a list, and the app must
+  not offer the others as usable.
+- **Requests are the input to the next phase.** `requests` counts the
+  households that asked for a store across all of DinnerOS, and
+  `requestedByHousehold` says whether the caller's own household is one of
+  them. When an `unsupported` store collects requests, the next step is to
+  research it here and move it to `researched`; when a `researched` one does,
+  it argues for building that integration in the phased plan below.
+- **A new request records `shopping.store_requested`** (the key, and whether
+  it was a catalog entry), so demand shows up in the behavior history as well
+  as in the counts. Updating a note records nothing, and the note itself never
+  enters an event.
+- **Asking for a store never makes it usable.** `internal/providers` stays the
+  registry of what works, and a request touches nothing in it. Free text that
+  matches no catalog name, key, or alias is recorded under its own normalized
+  key and does **not** join the catalog — the curated list changes only when
+  someone edits it here and in code.
+
 ## Phased plan
 
 | Phase | Scope | Needs from owner | Size |
