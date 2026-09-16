@@ -20,9 +20,9 @@ nonisolated enum AutopilotFixtures {
                              "mealsPerWeek":4,"defaultServings":null,"weeknightMaxMinutes":null},
                  "cookTime":{"quickMaxMinutes":20,"mediumMaxMinutes":35,"maxLongPerWeek":2,"minQuickPerWeek":0,
                              "avoidConsecutiveLong":true},
-                 "novelty":"balanced","equipment":[],"weekdayRules":[],
+                 "novelty":"balanced","equipment":[],"weekdayRules":[],"pairings":[],
                  "sections":{"taste":null,"restrictions":null,"schedule":null,"cookTime":null,"novelty":null,
-                             "equipment":null,"weekdayRules":null},
+                             "equipment":null,"weekdayRules":null,"pairings":null},
                  "effective":{"defaultServings":2},
                  "createdBy":null,"createdAt":null,"updatedBy":null,"updatedAt":null}
                 """#
@@ -45,9 +45,21 @@ nonisolated enum AutopilotFixtures {
                {"day":"sun","label":"Sunday smoker night","cuisines":[],"tags":[],"proteins":["chicken","pork"],
                 "methods":["smoker"],"timeBand":"long","frequency":"at_most_once"}
              ],
+             "pairings":[
+               {"id":"rule-1","label":"Pasta night",
+                "when":{"mealCategories":["pasta"],"cuisines":[],"tags":[],"proteins":[]},
+                "add":{"kind":"recipe","recipeId":"addon-1","recipeName":"Sample Garlic Bread","groceryItem":null},
+                "frequency":"always"},
+               {"id":"rule-2","label":"",
+                "when":{"mealCategories":["soup"],"cuisines":[],"tags":[],"proteins":[]},
+                "add":{"kind":"grocery_item","recipeId":null,"recipeName":null,
+                       "groceryItem":{"name":"Club Crackers","quantity":1,"unit":"package"}},
+                "frequency":"suggest"}
+             ],
              "sections":{"taste":\#(change),"restrictions":\#(change),"schedule":\#(change),
                          "cookTime":{"updatedBy":"\#(otherMemberID)","updatedAt":"2026-09-15T08:10:00.123456789Z"},
-                         "novelty":\#(change),"equipment":\#(change),"weekdayRules":\#(change)},
+                         "novelty":\#(change),"equipment":\#(change),"weekdayRules":\#(change),
+                         "pairings":\#(change)},
              "effective":{"defaultServings":2},
              "createdBy":"\#(Fixtures.user.id)","createdAt":"2026-09-14T18:30:00Z",
              "updatedBy":"\#(otherMemberID)","updatedAt":"2026-09-15T08:10:00Z"}
@@ -69,10 +81,15 @@ nonisolated enum AutopilotFixtures {
           "timeBands": [{"value":"quick","label":"Quick"},{"value":"medium","label":"Medium"},{"value":"long","label":"Long cook OK","description":"Longer than the medium limit"}],
           "frequencies": [{"value":"every_week","label":"Every week"},{"value":"at_most_once","label":"At most once a week"}],
           "days": [{"value":"mon","label":"Monday"},{"value":"sun","label":"Sunday"}],
+          "mealCategories": [{"value":"pasta","label":"Pasta","recipeCount":57},
+                             {"value":"soup","label":"Soup, stew & chili","recipeCount":44},
+                             {"value":"tacos","label":"Tacos & Mexican","recipeCount":57}],
+          "pairingFrequencies": [{"value":"always","label":"Always","description":"Included with the meal unless you leave it out"},
+                                 {"value":"suggest","label":"Suggest","description":"Offered with the meal"}],
           "catalogRecipeCount": 429,
           "limits": {"maxListValues":30,"maxExcludedIngredients":50,"maxValueLength":40,"maxIngredientLength":60,
                      "maxRuleValues":10,"maxLabelLength":40,"maxNoteLength":500,"minCookMinutes":5,"maxCookMinutes":480,
-                     "maxServings":12}
+                     "maxServings":12,"maxPairingRules":20,"maxGroceryItemNameLength":60,"maxGroceryItemQuantity":99}
         }
         """#.utf8)
 
@@ -104,6 +121,16 @@ nonisolated enum AutopilotFixtures {
         var timeBand = "quick"
         var reasons: [String] = ["Ready in 18 min"]
         var swapCount = 0
+        /// The slot's pairings, as `(key, name, included)`.
+        var pairings: [Pairing] = []
+
+        /// One add-on or grocery item offered with the slot's meal.
+        struct Pairing: Sendable {
+            var key: String
+            var name: String
+            var included: Bool
+            var isRecipe = true
+        }
     }
 
     static let defaultSlots = [
@@ -125,11 +152,19 @@ nonisolated enum AutopilotFixtures {
         let reasons = slot.reasons.enumerated()
             .map { #"{"code":"\#($0.offset == 0 ? "rule" : "rating")","text":"\#($0.element)"}"# }
             .joined(separator: ",")
+        let pairings = slot.pairings
+            .map { pairing in
+                PairingFixtures.pairing(
+                    key: pairing.key, name: pairing.name, isRecipe: pairing.isRecipe,
+                    extra: #""id":"\#(slot.day)/\#(pairing.key)","included":\#(pairing.included)"#)
+            }
+            .joined(separator: ",")
         return #"""
             {"id":"\#(slot.day)","day":"\#(slot.day)","date":"\#(date(week: week, day: slot.day))",
              "recipe":{"id":"\#(slot.recipeID)","name":"\#(slot.name)","imageUrl":"https://img.example.test/\#(slot.recipeID).jpg"},
              "servings":2,"cookMinutes":\#(minutes),"timeBand":"\#(slot.timeBand)","score":1.042,
-             "signals":{"rating":1,"rule":1,"variety":-0.15},"reasons":[\#(reasons)],"swapCount":\#(slot.swapCount)}
+             "signals":{"rating":1,"rule":1,"variety":-0.15},"reasons":[\#(reasons)],"swapCount":\#(slot.swapCount),
+             "pairings":[\#(pairings)]}
             """#
     }
 
@@ -224,6 +259,8 @@ nonisolated final class FakeAutopilotServer: Sendable {
         /// Days the plan already has an entry on.
         var plannedDays: Set<String> = []
         var planStatus = "draft"
+        /// The `pairingIds` the last accept sent, `nil` when it left the field out.
+        var acceptedPairingIDs: [String]?
         /// Method, path (without `/api/v1/`), and body of every request, in order.
         var log: [String] = []
         var bodies: [Data?] = []
@@ -237,6 +274,7 @@ nonisolated final class FakeAutopilotServer: Sendable {
 
     var log: [String] { state.withLock { $0.log } }
     var proposal: Proposal? { state.withLock { $0.proposal } }
+    var acceptedPairingIDs: [String]? { state.withLock { $0.acceptedPairingIDs } }
 
     /// The JSON body of the last request whose log line is `line`.
     func body(of line: String) -> [String: Any]? {
@@ -358,9 +396,29 @@ nonisolated final class FakeAutopilotServer: Sendable {
             }
             let plan = PlanFixtures.plan(householdID: state.householdID, week: proposal.week, entries: entries)
             let skippedJSON = skipped.map { #"{"slotId":"\#($0.day)","day":"\#($0.day)","reason":"dayTaken"}"# }
+            // The pairings the request asked for, of slots that were actually added.
+            let chosen = body["pairingIds"] as? [String]
+            let addedPairings =
+                added
+                .flatMap { slot in slot.pairings.map { (slot: slot, pairing: $0) } }
+                .filter { item in
+                    let id = "\(item.slot.day)/\(item.pairing.key)"
+                    return chosen?.contains(id) ?? item.pairing.included
+                }
+                .map { item in
+                    #"""
+                    {"id":"\#(item.slot.day)/\#(item.pairing.key)","slotId":"\#(item.slot.day)",
+                     "pairing":\#(
+                        PairingFixtures.pairing(
+                            key: item.pairing.key, name: item.pairing.name, isRecipe: item.pairing.isRecipe)),
+                     "entry":null,"groceryItem":null}
+                    """#
+                }
+            state.acceptedPairingIDs = chosen
             let json = #"""
                 {"proposal":\#(String(decoding: proposalJSON(state), as: UTF8.self)),"plan":\#(plan),
-                 "added":[\#(entries.joined(separator: ","))],"skipped":[\#(skippedJSON.joined(separator: ","))]}
+                 "added":[\#(entries.joined(separator: ","))],"skipped":[\#(skippedJSON.joined(separator: ","))],
+                 "pairingsAdded":[\#(addedPairings.joined(separator: ","))],"pairingsSkipped":[]}
                 """#
             return (200, Data(json.utf8))
         case ["reject"]:
