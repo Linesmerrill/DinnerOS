@@ -6,8 +6,9 @@ deterministic, explainable baseline plans a week from the household's taste
 profile, week context, history, what it learned from the household's
 feedback, and context signals (season, holidays, order day, and calendar and
 weather signals derived on the phone), and the household reviews, swaps, and
-accepts it. The iOS side that derives calendar and weather signals, and the
-private service (Phase 12), come later.
+accepts it. The iPhone derives the calendar and weather signals, and Siri can
+plan the week or say what's for dinner tonight. The private service (Phase 12)
+comes later.
 
 > Given a household, its behavioral history, preferences, context, a provider's
 > available catalog, constraints, and optional business objectives, construct
@@ -117,8 +118,14 @@ smoker night: chicken or pork, long cook OK":
   plainly it repeats the same dinner. A rule whose meal has no meal category
   ("Meatloaf à la Mom") caps on its own groups alone, as before.
 - `timeBand`: `quick` or `medium` prefer meals at or under that band that day;
-  `long` means "long cook OK": no weeknight limit that day, a small bonus for a
-  long meal, and it doesn't count against the week's long-meal allowance.
+  `long` means "a longer meal": no weeknight limit that day, and it doesn't
+  count against the week's long-meal allowance. The day **prefers genuine long
+  cooks** — an hour or more, or a recipe marked `LongCook` (a whole or large
+  cut, see [recipe attributes](#recipe-attributes)) — then the rest of the long
+  band. A meal with a known shorter cook time keeps half its rule credit and a
+  small time penalty, so "Sunday smoker night" goes to a pork shoulder rather
+  than a familiar 35-minute tenderloin, and still gets the tenderloin when
+  nothing long is left. An unknown cook time is neutral.
 - **Methods dominate.** When a rule sets methods, a meal must suit one of them
   (the recipe's method attributes, including overrides) to earn any rule
   credit, however well its proteins, cuisines, tags, or cook time match. On an
@@ -170,6 +177,7 @@ shows the result and its evidence.
 | Diets | evidence of a violation (meat or stock, seafood, dairy, eggs, honey, wheat, barley) always rules a diet out. Without evidence, a recipe needs ingredient data, or a tag that asserts the diet. |
 | Spicy | a `spicy` tag or name, or a heat ingredient (sriracha, jalapeño, chili flakes…); chili powder and paprika don't count. |
 | Smoker | In order: (1) a `smoker` tag or utensil always counts. (2) A dish that isn't a smoker meal never counts, matched in the name's main part before "with", "over", or "in" (so a side doesn't count): pasta shapes and noodles, ramen, soup, stew, pot pie, casserole, bake, stir-fry, fried rice, skillet, tacos, taquitos, burritos, enchiladas, quesadillas, bowls, wraps, pitas, sandwiches, sliders, burgers, pizza, flatbread, meatballs, meatloaf, patties, sausage, dumplings, gyoza, wontons, bibimbap, donburi, katsu, schnitzel. The evidence names it ("Not a smoker dish: pot pie"). (3) A whole or large cut of chicken, pork, beef, or turkey: whole chicken, bone-in chicken, legs, quarters, drumsticks, wings, spatchcock; pork shoulder, butt, tenderloin, filet, loin, chops, steak, belly, and ribs; brisket, beef or short ribs, tri-tip, chuck roast; turkey breast or legs. The cut must not be ground, sliced, diced, cubed, chopped, strips, cutlets, shredded, pulled, minced, cooked, deli, sausage, a mix, patties, crumbles, or meatballs. (4) "smoked" in the name or tags together with chicken, pork, beef, or turkey (so smoked paprika and smoked salmon don't count). Fish isn't included: smoker rules are about large meat cuts. |
+| Long cook | a whole or large cut that takes a genuinely long cook, whatever the recipe's stated time: whole chicken or turkey, spatchcock, turkey breast; pork shoulder, butt, belly, and ribs; brisket, beef or short ribs, chuck roast — not tenderloins, loins, chops, steaks, wings, or drumsticks. The same cut exclusions as Smoker apply (ground, pulled, sliced…), and a dish that isn't a smoker meal (short rib ramen) doesn't count. Sent to the provider as `Item.LongCook`; a long-cook weekday rule prefers these and meals of 60 minutes or more. |
 | Grill, air fryer, slow cooker, pressure cooker | keywords in the name, tags, or utensils. |
 | Meal category | the kind of dinner a pairing matches on: the keyword that comes **last** in the name, then tags that point at exactly one category, then a Mexican cuisine ([Meal categories](#meal-categories)). |
 
@@ -317,7 +325,7 @@ signals.
 | `weekdayAffinity` | 0…1 | share of the meal's planned days that were this weekday (needs 2) | 0.10 |
 | `taste` | −1…1 | liked cuisine +0.4, tag +0.4, protein +0.3; each disliked −0.5 | 0.25 × (1 + (1 − confidence)) |
 | `rule` | −1…1 | the day's rule: matched groups / set groups; −0.3 for no match on an every-week rule. When the rule sets methods and the meal suits none: −1 on an every-week rule, 0 on an at-most-once rule, whatever else matches | 0.45 |
-| `timeFit` | −1…1 | under the day's soft limit: 0.5 + 0.5 × (1 − minutes/limit); over: −2 × overage/limit; long meal on a long-cook day +0.5 | 0.20 |
+| `timeFit` | −1…1 | under the day's soft limit: 0.5 + 0.5 × (1 − minutes/limit); over: −2 × overage/limit. On a long-cook rule day: a genuine long cook (≥ 60 minutes or `LongCook`) +1, other long meals +0.5, a known shorter cook −0.5 (and its `rule` value is halved), unknown 0 | 0.20 |
 | `novelty` | −0.6…0.6 | new meal: favorites −0.6, balanced +0.1, adventurous +0.6; familiar: favorites +0.2, adventurous −0.1 | 0.15 |
 | `servingsFit` | −1…0 | when no authored size feeds the day's servings: −shortfall/servings | 0.25 |
 | `pantry` | 0…1 | ingredients running low it uses, /2 | 0.05 |
@@ -434,7 +442,7 @@ couldn't be filled are listed as `unfilled` (`no_candidates`,
   household ID, week, attempt, model version, and item ID. Learning sorts
   the interactions it uses before summing, and a test shuffles history and
   catalog with learning and every context signal present.
-- `modelVersion` (`baseline-2026.6`) is stored on every proposal and event.
+- `modelVersion` (`baseline-2026.7`) is stored on every proposal and event.
   `inputsHash` fingerprints the provider request, so identical inputs can be
   recognized.
 - **Tuning:** change `baseline.DefaultWeights` (or pass `Options.Weights`) and
@@ -728,6 +736,8 @@ in a few milliseconds (`BenchmarkGenerateWeek`).
 | Plan and review | Week → **Plan with Autopilot** row or ⋯ menu; **Autopilot suggested N meals → Review** (`WeekAutopilotSection`, `ProposalReviewView`) | Generates the shown week and opens the review: `messages` as notes, each slot's date, photo, name, `cookMinutes` with a Quick/Medium/Long badge, servings, and reasons joined with " · ", and `unfilled` days with their text. Each slot has an include checkmark and **Swap**; ⋯ has **Plan Again** and **Dismiss Suggestions**; **Add N Meals to Week** accepts with `excludeSlotIds`. The plan then shows the new entries with a sparkles badge, and skipped meals are explained. |
 | This Week's Plans | Week → **This Week's Plans…** row or ⋯ menu (`WeekContextSheet`) | Opens on three tiles — **Busy**, **Guests**, **Away** — that set the whole week in one tap, under one short line saying what the week is now; the exact numbers stay below them (a strict time limit, servings and meals for the week, per-day skip, limit, and servings, and a note). The tiles read the week back, so Guests is on when the week or any day serves extra, and turning it off clears both. **Save** sends the whole context; **Clear This Week's Plans** deletes it. Afterward the Week tab offers **Regenerate** or **Plan with Autopilot**, unless the week is skipped. |
 | Preferences | Household → **Autopilot Preferences**; Week → ⋯ → **Fine-tune Autopilot** (`AutopilotPreferencesView`, `AutopilotSectionEditor`) | Every section, in two groups: **From Setup** (taste, restrictions, schedule) and **Fine-tune Autopilot** (cook-time mix, equipment, weekday rules, novelty, pairings — what setup doesn't ask, kept at the API's defaults until changed). Each row carries a one-line description, a summary, and "Changed by *name* · *date*", and opens controls that save that section with `PATCH`. **Change History** lists profile, week context, and recipe override changes with who made them. **What Autopilot Learned** (`AutopilotLearningView`) lists the strongest learned adjustments — the recipe or attribute, an up or down arrow, and the same wording as a proposal reason — with **Reset Learning** (confirmed; `plan.edit` only). New learned and context reasons need no app change: they arrive in each slot's `reasons`. |
+| Calendar and weather | The first **Plan with Autopilot** on a device opens an explainer (`AutopilotContextExplainerView`) before any system prompt; **Continue** asks for calendar and location access, **Not Now** plans without asking. Autopilot Preferences → **Calendar & Weather** has a switch per signal with what iOS allows, and **Open Settings** when denied (`AutopilotDeviceContextSection`). The review shows Apple Weather's mark and **Data sources** link when a forecast shaped the week (`WeatherAttributionView`). See [what the phone reads](#on-the-iphone-what-is-read-and-sent). |
+| Siri | "Plan my dinners with DinnerOS" and "What's for dinner tonight in DinnerOS" (`DinnerIntents.swift`, `DinnerIntentActions`) | See [Siri](#siri). |
 | Recipe methods | A recipe → **Autopilot** (`RecipeAutopilotSection`) | Cook time and band, and **Good for Smoker** (and the household's other equipment): Automatic (Yes/No), Yes, or No, saved with `PUT .../override`. |
 
 Everything that changes Autopilot is hidden without `plan.edit`. Swaps,
@@ -873,9 +883,55 @@ only the derived values in the table above with a generate request
 times, a forecast, coordinates, or a location, and never calls a weather
 service. The values are validated and bounded (`400` otherwise), stored with
 the proposal (`context.signals`) so swaps use them, and not kept anywhere
-else. Generating again uses only what that request sends. The iOS side that
-computes them is a follow-up; until then no device signals are sent and
-Autopilot uses the server-side signals alone.
+else. Generating again uses only what that request sends.
+
+### On the iPhone: what is read and sent
+
+`AutopilotDeviceContext` builds the signals when a member generates or plans
+again (`AutopilotStore.deviceSignals`), for the week being planned, in the
+household's time zone. The providers sit behind protocols
+(`CalendarSignalSource`, `LocationSignalSource`, `WeatherSignalSource`), so
+tests use fakes and never touch EventKit, CoreLocation, or WeatherKit.
+
+| Signal | What the phone reads | How it's derived (on device) | What's sent |
+| --- | --- | --- | --- |
+| Calendar | Events from every calendar for the week (EventKit, **full access**, `NSCalendarsFullAccessUsageDescription`): only start and end, all-day, availability, and whether the member declined | The evening is **4–8 pm** in the household's time zone (daylight-saving aware). All-day, `free`-availability, and declined events are ignored; the rest are clipped to the window and overlaps merged. Free minutes ≥ 210 → `free`, < 90 → `busy`, otherwise `some`. Evenings already over aren't sent | `busyness`, `eveningFreeMinutes` (a fully booked evening sends 1) |
+| Weather | **Reduced-accuracy** When In Use location (`kCLLocationAccuracyReduced`, `NSLocationWhenInUseUsageDescription`), then Apple Weather's daily forecast (WeatherKit) | Day's **high** < 55 °F → `cold`, ≥ 85 °F → `hot`, otherwise `mild`. Precipitation counts at a ≥ 50% chance: snow, sleet, hail, or mixed → `snow`; rain → `rain`; otherwise `none`. Only days the forecast covers | `temperatureBand`, `precipitation` |
+
+Never sent: event titles, times, attendees, locations, or notes; the forecast
+itself; coordinates or any location. Nothing is logged but counts.
+
+**Permissions.** Nothing is asked at launch. The first time a member plans with
+Autopilot on a device, an explainer says what's used and what never leaves the
+phone; **Continue** shows the system prompts for the signals that are switched
+on, **Not Now** plans without asking and doesn't explain again. Both signals
+are on by default and can be switched off in Autopilot Preferences → Calendar
+& Weather (switching one on that was never asked for asks then). Denied,
+restricted, and write-only calendar access, a failed read, or no forecast
+simply leave that signal out: generate always works. Siri never prompts; it
+uses only what the member already allowed. The app has the WeatherKit
+entitlement, and Apple Weather's attribution (its mark and legal link) shows in
+the review whenever the proposal's `context.signals` carry weather.
+
+### Siri
+
+App Shortcuts (`DinnerShortcuts`), with the logic in `DinnerIntentActions`
+behind a `DinnerIntentServices` protocol that calls the existing stores:
+
+- **"Plan my dinners with DinnerOS"** plans the upcoming week — this week
+  Monday through Thursday, next week from Friday — through the same
+  `AutopilotStore.generate` path, so allowed device signals are sent. It
+  answers with a one-sentence summary ("Autopilot suggested 5 dinners for
+  Sep 21 – 27, starting with Smoked Pork Shoulder on Sunday…") and opens the
+  app on the review. Signed out, no household, no `plan.edit`, Autopilot not
+  set up, a finalized or skipped week, and nothing suggested each get their
+  own reply. When Apple Intelligence is available on the device (iOS 26,
+  Foundation Models), the summary may be rephrased more warmly; the plain text
+  is kept if the model is unavailable, takes over 3 seconds, or returns more
+  than one short sentence or drops the first meal.
+- **"What's for dinner tonight in DinnerOS"** reads today's entries in the
+  household's time zone ("Tonight's dinner is Chicken Tacos, with Garlic
+  Bread.") without opening the app or moving the week it shows.
 
 **Not built:** reading calendar busyness on the server, weather on the server
 (the household has only a time zone, too coarse for a forecast), and holidays

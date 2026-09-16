@@ -6,7 +6,7 @@ import UserNotifications
 /// wired before `didFinishLaunching` returns — a tap that launches the app is delivered
 /// right after it.
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
-    let dependencies = AppDependencies()
+    var dependencies: AppDependencies { .shared }
 
     func application(
         _ application: UIApplication,

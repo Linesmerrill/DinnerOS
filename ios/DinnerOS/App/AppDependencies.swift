@@ -4,6 +4,11 @@ import UIKit
 /// Builds the app's long-lived services from configuration. `DinnerOSApp` is the only
 /// place concrete implementations are chosen.
 final class AppDependencies {
+    /// The app's one set of services. The app delegate and App Intents share it, so Siri acts
+    /// on the same signed-in session and stores the screens show, even when it launches the
+    /// app in the background.
+    static let shared = AppDependencies()
+
     let configuration: AppConfiguration
     let session: AuthSession
     let households: HouseholdStore
@@ -24,6 +29,10 @@ final class AppDependencies {
     let menu: MenuStore
     let planner: MealPlanner
     let pairings: PairingsStore
+    /// Calendar and weather context for Autopilot, derived on this device.
+    let deviceContext: AutopilotDeviceContext
+    /// Destinations App Intents open.
+    let intentRouter = AppIntentRouter()
     /// `nil` when the build has no Google client ID; the Google button is then hidden.
     let googleSignIn: GoogleSignInService?
 
@@ -79,6 +88,16 @@ final class AppDependencies {
         }
         autopilot = AutopilotStore(
             session: session, api: client.map { AutopilotAPI(client: $0) }, prompts: UserDefaultsAutopilotPrompts())
+        let deviceContext = AutopilotDeviceContext(
+            calendar: EventKitCalendarSource(), location: CoreLocationSource(), weather: WeatherKitSource(),
+            settings: UserDefaultsDeviceContextSettings())
+        self.deviceContext = deviceContext
+        // Generate and Plan Again send the week's calendar and weather bands, in the household's
+        // time zone, from whatever the member allowed. It never prompts.
+        autopilot.deviceSignals = { [households, deviceContext] week in
+            let timeZone = households.current?.household.planningTimeZone ?? .autoupdatingCurrent
+            return await deviceContext.signals(for: week, timeZone: timeZone)
+        }
         // Accepting a proposal returns the plan, so the Menu shows it without reloading the plan. The
         // menu reloads too: its proposal card and Autopilot badges changed.
         autopilot.planDidChange = { [plans, menu] plan in

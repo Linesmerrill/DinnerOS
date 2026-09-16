@@ -130,6 +130,12 @@ struct ProposalReviewView: View {
                     Text("Someone who can plan meals can add these to the week.")
                 }
             }
+            // Apple Weather requires attribution wherever its forecast shaped what's shown.
+            if proposal.usesWeather {
+                Section {
+                    WeatherAttributionView()
+                }
+            }
         }
     }
 

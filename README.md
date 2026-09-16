@@ -29,7 +29,7 @@ Autopilot's first customer.
 | 9 | Ratings and behavioral events | ✅ Done (API and iOS) |
 | 10 | Autopilot V1: taste profile, week context, deterministic week proposals (generate, swap, accept) | ✅ Done (API and iOS) |
 | — | Push notifications (APNs, hourly reminder sweep), starter recipe library for new households, account deletion, privacy policy, external TestFlight | ✅ Done |
-| 11 | Autopilot learning from feedback and context engine (season, US holidays, order day, weekday; calendar and weather signals from the phone) | ✅ Done (API; iOS shows the reasons and "What Autopilot Learned"); the iPhone side that derives calendar and weather signals comes next |
+| 11 | Autopilot learning from feedback and context engine (season, US holidays, order day, weekday; calendar and weather signals from the phone) | ✅ Done (API and iOS: calendar busyness and weather bands derived on the iPhone, Siri "Plan my dinners" and "What's for dinner tonight") |
 | 12 | Autopilot private service | Later |
 
 ## Repository layout

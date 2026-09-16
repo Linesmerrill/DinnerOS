@@ -5,6 +5,8 @@ import SwiftUI
 struct AutopilotPreferencesView: View {
     @Environment(AutopilotStore.self) private var autopilot
     @Environment(HouseholdStore.self) private var households
+    /// Optional so previews needn't supply one.
+    @Environment(AutopilotDeviceContext.self) private var deviceContext: AutopilotDeviceContext?
 
     @State private var isOnboarding = false
 
@@ -90,6 +92,10 @@ struct AutopilotPreferencesView: View {
                 Text(
                     "Setup doesn't ask about these; Autopilot uses sensible defaults until you change them. Every change records who made it and when."
                 )
+            }
+            // Per device and per member, so it shows whatever the member's role.
+            if let deviceContext {
+                AutopilotDeviceContextSection(context: deviceContext)
             }
             Section {
                 NavigationLink {

@@ -853,8 +853,13 @@ nonisolated struct AutopilotProposal: Decodable, Equatable, Sendable, Identifiab
     let updatedAt: Date
     let decidedBy: String?
     let decidedAt: Date?
+    /// What the week was planned with; `nil` from a server older than the context engine.
+    var context: AutopilotProposalContext?
 
     var isPending: Bool { status == .proposed }
+
+    /// Whether a forecast shaped the week, so Apple Weather's attribution must be shown.
+    var usesWeather: Bool { context?.signals?.hasWeather == true }
 
     var rows: [Row] {
         (slots.map(Row.slot) + unfilled.map(Row.unfilled)).sorted { $0.day.offset < $1.day.offset }
@@ -870,7 +875,7 @@ nonisolated struct AutopilotProposal: Decodable, Equatable, Sendable, Identifiab
         case week, startDate, endDate, status, version, attempt, modelVersion, requestedMeals, plannedMeals,
             candidateCount, coldStart, slots, unfilled, messages, swapCount
         case excludedSlotIDs = "excludedSlotIds"
-        case generatedBy, generatedAt, updatedAt, decidedBy, decidedAt
+        case generatedBy, generatedAt, updatedAt, decidedBy, decidedAt, context
     }
 }
 
@@ -931,6 +936,8 @@ nonisolated extension AutopilotAcceptResult {
 nonisolated struct AutopilotGenerateRequest: Encodable, Hashable, Sendable {
     /// `nil` leaves the API's default (avoid the replaced proposal's meals).
     var avoidPrevious: Bool?
+    /// Calendar and weather bands derived on this device; `nil` sends none.
+    var signals: AutopilotDeviceSignals?
 }
 
 nonisolated struct AutopilotVersionRequest: Encodable, Hashable, Sendable {

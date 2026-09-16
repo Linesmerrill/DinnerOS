@@ -7,6 +7,7 @@ struct MainTabView: View {
     @Environment(ShoppingStore.self) private var shopping
     /// Optional so previews needn't supply one.
     @Environment(PushNotificationStore.self) private var push: PushNotificationStore?
+    @Environment(AppIntentRouter.self) private var router: AppIntentRouter?
     @State private var selection: AppTab = .menu
     /// A pantry item a tapped push opened; the bell opens the same screen.
     @State private var pushedPantryItem: PushedPantryItem?
@@ -67,6 +68,10 @@ struct MainTabView: View {
         .onChange(of: households.access, initial: true) { _, access in
             shopping.setPermissions(
                 canEdit: access?.can(.shoppingEdit) == true, canConfirm: access?.can(.pantryEdit) == true)
+        }
+        // Siri planned a week: the Menu tab opens its suggestions.
+        .onChange(of: router?.autopilotReviewWeek, initial: true) { _, week in
+            if week != nil { selection = .menu }
         }
         .sheet(item: confirmationPrompt) { handoff in
             OrderConfirmationSheet(handoff: handoff)

@@ -2184,7 +2184,7 @@ for unknown fields).
   "status": "proposed",
   "version": 2,
   "attempt": 1,
-  "modelVersion": "baseline-2026.6",
+  "modelVersion": "baseline-2026.7",
   "inputsHash": "9f2c4b1d0a7e6c35",
   "requestedMeals": 5,
   "plannedMeals": 3,
@@ -2305,7 +2305,7 @@ week. Nothing is stored: they are recomputed from events each time.
 
 ```json
 {
-  "modelVersion": "baseline-2026.6",
+  "modelVersion": "baseline-2026.7",
   "interactions": 214,
   "adjustments": [
     { "kind": "item", "key": "66e5a1f2c3b4a5d6e7f80915", "label": "Beef Tacos", "recipeId": "66e5a1f2c3b4a5d6e7f80915",

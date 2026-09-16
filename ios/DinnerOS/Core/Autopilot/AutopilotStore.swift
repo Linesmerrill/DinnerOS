@@ -66,6 +66,9 @@ final class AutopilotStore {
 
     /// Receives the plan an accepted proposal returns.
     @ObservationIgnored var planDidChange: ((Plan) -> Void)?
+    /// Calendar and weather signals derived on the device for a week, sent with generate.
+    /// Never prompts; `nil` or an empty result plans without them.
+    @ObservationIgnored var deviceSignals: ((ISOWeek) async -> AutopilotDeviceSignals?)?
 
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let api: AutopilotAPI?
@@ -362,8 +365,9 @@ final class AutopilotStore {
         isGenerating = true
         defer { isGenerating = false }
         notice = nil
+        let options = AutopilotGenerateRequest(signals: await deviceSignals?(target))
         let generated = try await mutate { api, householdID, token in
-            try await api.generate(householdID: householdID, week: target, accessToken: token)
+            try await api.generate(householdID: householdID, week: target, options: options, accessToken: token)
         }
         apply(generated)
         Self.logger.info("Autopilot week generated with \(generated.slots.count, privacy: .public) meals")

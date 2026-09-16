@@ -6,6 +6,8 @@ import SwiftUI
 final class WeekAutopilotFlow {
     enum Sheet: String, Identifiable {
         case onboarding, review, context
+        /// What calendar and weather context is read, before the system asks the first time.
+        case deviceContext
 
         var id: String { rawValue }
     }
@@ -32,6 +34,10 @@ final class WeekAutopilotFlow {
     var sheet: Sheet?
     var alert: Alert?
     var isShowingPreferences = false
+    /// Set by `WeekAutopilotModifier`; `nil` in previews, which plan without device context.
+    @ObservationIgnored var deviceContext: AutopilotDeviceContext?
+    /// The week to plan once the member has answered the explainer.
+    @ObservationIgnored private var weekAwaitingExplainer: ISOWeek?
 
     /// Plans the shown week, or asks the setup questions first when Autopilot isn't set up.
     func plan(autopilot: AutopilotStore, plans: PlanStore) {
@@ -51,6 +57,12 @@ final class WeekAutopilotFlow {
     }
 
     func generate(week: ISOWeek, autopilot: AutopilotStore) {
+        // The first time, say what's read before iOS asks for calendar and location access.
+        if let deviceContext, deviceContext.needsExplainer {
+            weekAwaitingExplainer = week
+            sheet = .deviceContext
+            return
+        }
         Task {
             do {
                 try await autopilot.generate(week: week)
@@ -60,6 +72,31 @@ final class WeekAutopilotFlow {
             } catch {
                 handle(error)
             }
+        }
+    }
+
+    /// The explainer's answer: asks for access (or not), then plans the week it interrupted.
+    func finishExplainer(allowing: Bool, autopilot: AutopilotStore) {
+        sheet = nil
+        let week = weekAwaitingExplainer
+        weekAwaitingExplainer = nil
+        Task {
+            if allowing {
+                await deviceContext?.continueFromExplainer()
+            } else {
+                deviceContext?.skipExplainer()
+            }
+            if let week {
+                generate(week: week, autopilot: autopilot)
+            }
+        }
+    }
+
+    /// Opens a week's suggestions that Siri planned.
+    func showReview(week: ISOWeek, plans: PlanStore) {
+        Task {
+            await plans.show(week: week)
+            sheet = .review
         }
     }
 
@@ -282,6 +319,9 @@ struct WeekAutopilotModifier: ViewModifier {
     @Environment(AutopilotStore.self) private var autopilot
     @Environment(PlanStore.self) private var plans
     @Environment(HouseholdStore.self) private var households
+    /// Optional so previews needn't supply them.
+    @Environment(AutopilotDeviceContext.self) private var deviceContext: AutopilotDeviceContext?
+    @Environment(AppIntentRouter.self) private var router: AppIntentRouter?
 
     private struct WeekKey: Equatable {
         let householdID: String?
@@ -292,6 +332,13 @@ struct WeekAutopilotModifier: ViewModifier {
         @Bindable var flow = flow
         return
             content
+            .onAppear { flow.deviceContext = deviceContext }
+            // "Plan my dinners" from Siri opens the suggestions it made.
+            .onChange(of: router?.autopilotReviewWeek, initial: true) { _, week in
+                guard let week, canEdit else { return }
+                router?.autopilotReviewWeek = nil
+                flow.showReview(week: week, plans: plans)
+            }
             .task(id: households.current?.household.id) {
                 guard let householdID = households.current?.household.id else { return }
                 await autopilot.activate(householdID: householdID)
@@ -320,6 +367,10 @@ struct WeekAutopilotModifier: ViewModifier {
                     WeekContextSheet(week: plans.week) {
                         flow.alert = .contextChanged(hasSuggestions: autopilot.pendingProposal != nil)
                     }
+                case .deviceContext:
+                    AutopilotContextExplainerView(
+                        onContinue: { flow.finishExplainer(allowing: true, autopilot: autopilot) },
+                        onNotNow: { flow.finishExplainer(allowing: false, autopilot: autopilot) })
                 }
             }
             .alert(title(flow.alert), isPresented: Binding(presenting: $flow.alert), presenting: flow.alert) { alert in
