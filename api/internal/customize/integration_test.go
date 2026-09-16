@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -84,11 +85,18 @@ func TestIntegrationCustomizeEndpoints(t *testing.T) {
 	planSvc.WithCustomizations(customizeSvc)
 	pantrySvc.SetCookAdjuster(customizeSvc)
 
-	_, entry, err := planSvc.AddEntry(ctx, hhAda, userAda, testWeek, planning.NewEntry{RecipeID: tacosID, Servings: 2})
+	// The plan is the current week's, and step 5 cooks the meal after the beef
+	// was bought. A meal cooked before a pantry item's cycle began deducts
+	// nothing by design (pantry.SkipBeforeCycle), and RecordPurchase stamps the
+	// cycle from the wall clock, so a fixed week and a fixed cooked time make
+	// this test pass or fail depending on when it runs.
+	planWeek := planning.WeekOf(time.Now().UTC()).String()
+
+	_, entry, err := planSvc.AddEntry(ctx, hhAda, userAda, planWeek, planning.NewEntry{RecipeID: tacosID, Servings: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := planSvc.AddEntry(ctx, hhAda, userAda, testWeek, planning.NewEntry{RecipeID: chiliID, Servings: 2}); err != nil {
+	if _, _, err := planSvc.AddEntry(ctx, hhAda, userAda, planWeek, planning.NewEntry{RecipeID: chiliID, Servings: 2}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -101,7 +109,7 @@ func TestIntegrationCustomizeEndpoints(t *testing.T) {
 
 	// 1. The app lists the meal's options for the entry's servings.
 	rec := do(t, router, http.MethodGet,
-		"/api/v1/households/"+hhAda+"/recipes/"+tacosID+"/customizations?entryId="+entry.ID+"&week="+testWeek, "", userAda)
+		"/api/v1/households/"+hhAda+"/recipes/"+tacosID+"/customizations?entryId="+entry.ID+"&week="+planWeek, "", userAda)
 	wantStatus(t, rec, http.StatusOK)
 	options := decodeBody[CustomizationsResponse](t, rec)
 	if len(options.Groups) != 1 || options.Servings != 2 {
@@ -118,7 +126,7 @@ func TestIntegrationCustomizeEndpoints(t *testing.T) {
 
 	// 2. The member swaps the pork for beef.
 	rec = do(t, router, http.MethodPut,
-		"/api/v1/households/"+hhAda+"/plans/"+testWeek+"/entries/"+entry.ID+"/customization",
+		"/api/v1/households/"+hhAda+"/plans/"+planWeek+"/entries/"+entry.ID+"/customization",
 		`{"selections":[{"ingredientKey":"`+group.IngredientKey+`","choiceId":"swap:ground-beef"}]}`, userAda)
 	wantStatus(t, rec, http.StatusOK)
 	plan := decodeBody[planning.PlanResponse](t, rec)
@@ -129,7 +137,7 @@ func TestIntegrationCustomizeEndpoints(t *testing.T) {
 
 	// 3. The week's grocery list buys beef instead of pork, aggregated with
 	// the chili's beef and with the provenance the app shows.
-	rec = do(t, router, http.MethodGet, "/api/v1/households/"+hhAda+"/plans/"+testWeek+"/grocery", "", userAda)
+	rec = do(t, router, http.MethodGet, "/api/v1/households/"+hhAda+"/plans/"+planWeek+"/grocery", "", userAda)
 	wantStatus(t, rec, http.StatusOK)
 	grocery := decodeBody[planning.GroceryListResponse](t, rec)
 	var beef *planning.GroceryItemResponse
@@ -158,7 +166,7 @@ func TestIntegrationCustomizeEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(stored) != 1 || stored[0].RecipeID != tacosID || stored[0].Week != testWeek {
+	if len(stored) != 1 || stored[0].RecipeID != tacosID || stored[0].Week != planWeek {
 		t.Fatalf("events = %+v", stored)
 	}
 	payload, _ := stored[0].Payload.(events.MealCustomized)
@@ -174,13 +182,12 @@ func TestIntegrationCustomizeEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	week, err := planning.ParseWeek(testWeek)
-	if err != nil {
-		t.Fatal(err)
+	if purchase.Item.Tracking == nil {
+		t.Fatalf("the purchased beef is not tracked: %+v", purchase.Item)
 	}
 	if _, applied, err := pantrySvc.ApplyCooked(ctx, pantry.CookedMeal{
 		HouseholdID: hhAda, UserID: userAda, RecipeID: tacosID, EntryID: entry.ID, Servings: 2,
-		OccurredAt: week.Monday().Add(48 * 60 * 60 * 1000 * 1000 * 1000),
+		OccurredAt: purchase.Item.Tracking.SegmentStartedAt.Add(time.Hour),
 	}); err != nil || !applied {
 		t.Fatalf("ApplyCooked() = %v, %v", applied, err)
 	}
@@ -193,10 +200,10 @@ func TestIntegrationCustomizeEndpoints(t *testing.T) {
 	}
 
 	// 6. A finalized plan can't be customized.
-	if _, err := planSvc.SetStatus(ctx, hhAda, testWeek, string(planning.StatusFinalized)); err != nil {
+	if _, err := planSvc.SetStatus(ctx, hhAda, planWeek, string(planning.StatusFinalized)); err != nil {
 		t.Fatal(err)
 	}
 	wantError(t, do(t, router, http.MethodPut,
-		"/api/v1/households/"+hhAda+"/plans/"+testWeek+"/entries/"+entry.ID+"/customization",
+		"/api/v1/households/"+hhAda+"/plans/"+planWeek+"/entries/"+entry.ID+"/customization",
 		`{"selections":[]}`, userAda), http.StatusConflict, "plan_finalized")
 }
