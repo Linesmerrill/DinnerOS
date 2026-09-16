@@ -78,8 +78,10 @@ final class WeekAutopilotFlow {
         }
     }
 
+    /// Shows the summary when something needs saying: a meal was skipped, or the add-ons
+    /// that came with the meals were added or left out.
     func accepted(_ result: AutopilotAcceptResult) {
-        if !result.skipped.isEmpty {
+        if !result.skipped.isEmpty || !result.pairingsAdded.isEmpty || !result.pairingsSkipped.isEmpty {
             alert = .accepted(result)
         }
     }
@@ -328,8 +330,15 @@ struct WeekAutopilotModifier: ViewModifier {
                 ? String(localized: "Autopilot can suggest this week's meals again with your changes.")
                 : String(localized: "Autopilot can suggest this week's meals with your changes.")
         case .accepted(let result):
-            result.skipped.map(\.explanation).joined(separator: " ")
-                + " " + String(localized: "Those meals weren't added, and nothing was replaced.")
+            [
+                result.skipped.isEmpty
+                    ? nil
+                    : result.skipped.map(\.explanation).joined(separator: " ") + " "
+                        + String(localized: "Those meals weren't added, and nothing was replaced."),
+                PairingFormat.acceptSummary(result),
+            ]
+            .compactMap { $0 }
+            .joined(separator: " ")
         case .error(let message):
             message
         }

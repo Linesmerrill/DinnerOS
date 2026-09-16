@@ -113,7 +113,9 @@ struct ProposalReviewView: View {
                             slot: slot, isIncluded: !autopilot.excludedSlotIDs.contains(slot.id),
                             isSwapping: autopilot.swappingSlotIDs.contains(slot.id), canEdit: canEdit,
                             isBusy: autopilot.isSaving,
+                            isPairingChosen: { autopilot.isPairingChosen($0) },
                             setIncluded: { autopilot.setSlot(slot.id, included: $0) },
+                            setPairing: { autopilot.setPairing($0, included: $1) },
                             swap: { swap(slot) })
                     case .unfilled(let unfilled):
                         UnfilledDayRow(unfilled: unfilled)
@@ -204,7 +206,10 @@ struct ProposalSlotRow: View {
     let isSwapping: Bool
     let canEdit: Bool
     let isBusy: Bool
+    /// Whether one of the slot's pairings is checked.
+    var isPairingChosen: (String) -> Bool = { _ in false }
     let setIncluded: (Bool) -> Void
+    var setPairing: (String, Bool) -> Void = { _, _ in }
     let swap: () -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -243,6 +248,16 @@ struct ProposalSlotRow: View {
                         .font(.subheadline)
                         .foregroundStyle(Color.secondary)
                 }
+                // Add-ons are secondary to the meal: small toggles under it, never a row.
+                if canEdit, !slot.pairings.isEmpty {
+                    ChipFlowLayout(spacing: 6) {
+                        ForEach(slot.pairings) { pairing in
+                            pairingToggle(pairing)
+                        }
+                    }
+                    .padding(.top, 2)
+                    .accessibilityHidden(true)
+                }
                 if canEdit {
                     Button(action: swap) {
                         if isSwapping {
@@ -272,8 +287,26 @@ struct ProposalSlotRow: View {
             if canEdit {
                 Button(isIncluded ? "Leave Out" : "Include") { setIncluded(!isIncluded) }
                 Button("Swap", action: swap)
+                ForEach(slot.pairings) { pairing in
+                    let isChosen = isPairingChosen(pairing.id)
+                    Button(isChosen ? "Don't Add \(pairing.name)" : "Add \(pairing.name)") {
+                        setPairing(pairing.id, !isChosen)
+                    }
+                }
             }
         }
+    }
+
+    /// "+ Garlic Bread", checked when accepting would add it.
+    private func pairingToggle(_ pairing: ProposalPairing) -> some View {
+        let isChosen = isPairingChosen(pairing.id)
+        return ChoiceChip(
+            title: pairing.name, state: isChosen ? .on : .off,
+            accessibilityValue: isChosen ? String(localized: "Adding") : String(localized: "Not adding")
+        ) {
+            setPairing(pairing.id, !isChosen)
+        }
+        .disabled(isBusy)
     }
 
     @ViewBuilder
