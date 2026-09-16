@@ -66,9 +66,14 @@ nonisolated struct AutopilotProposalStatus: RawRepresentable, Codable, Hashable,
 
 /// One of the taste profile's sections (`AutopilotSection`), in the order screens show them.
 nonisolated enum AutopilotSection: String, CaseIterable, Codable, Hashable, Sendable, Identifiable {
-    case taste, restrictions, schedule, cookTime, equipment, weekdayRules, novelty
+    case taste, restrictions, schedule, cookTime, equipment, weekdayRules, novelty, pairings
 
     var id: String { rawValue }
+
+    /// The sections a full `PUT .../profile` sends. `pairings` is left out on purpose: the
+    /// API **keeps** a household's pairing rules when a `PUT` omits them, so onboarding
+    /// never deletes rules that were made from suggestions.
+    static let replaceable: [AutopilotSection] = allCases.filter { $0 != .pairings }
 
     var title: String {
         switch self {
@@ -79,6 +84,7 @@ nonisolated enum AutopilotSection: String, CaseIterable, Codable, Hashable, Send
         case .equipment: String(localized: "Equipment")
         case .weekdayRules: String(localized: "Weekday Rules")
         case .novelty: String(localized: "Favorites or New")
+        case .pairings: String(localized: "Pairings")
         }
     }
 
@@ -91,6 +97,7 @@ nonisolated enum AutopilotSection: String, CaseIterable, Codable, Hashable, Send
         case .equipment: "frying.pan"
         case .weekdayRules: "calendar.day.timeline.left"
         case .novelty: "sparkles"
+        case .pairings: "takeoutbag.and.cup.and.straw"
         }
     }
 }
@@ -210,6 +217,8 @@ nonisolated struct AutopilotSettings: Encodable, Hashable, Sendable {
     var equipment: [String] = []
     /// At most one per day, in week order.
     var weekdayRules: [AutopilotWeekdayRule] = []
+    /// Add-on pairing rules ("pasta → Garlic Bread"), at most `limits.maxPairingRules`.
+    var pairings: [PairingRule] = []
 
     static let defaults = AutopilotSettings()
 
@@ -238,6 +247,7 @@ nonisolated struct AutopilotSettings: Encodable, Hashable, Sendable {
         case .novelty: copy.novelty = other.novelty
         case .equipment: copy.equipment = other.equipment
         case .weekdayRules: copy.weekdayRules = other.weekdayRules
+        case .pairings: copy.pairings = other.pairings
         }
         return copy
     }
@@ -248,11 +258,12 @@ nonisolated struct AutopilotSettings: Encodable, Hashable, Sendable {
     }
 
     fileprivate enum CodingKeys: String, CodingKey {
-        case taste, restrictions, schedule, cookTime, novelty, equipment, weekdayRules
+        case taste, restrictions, schedule, cookTime, novelty, equipment, weekdayRules, pairings
     }
 
+    /// The body of a full `PUT .../profile`, which never carries `pairings` (#311).
     func encode(to encoder: any Encoder) throws {
-        try AutopilotProfileUpdate(settings: self, sections: Set(AutopilotSection.allCases)).encode(to: encoder)
+        try AutopilotProfileUpdate(settings: self, sections: Set(AutopilotSection.replaceable)).encode(to: encoder)
     }
 
     fileprivate func encode(
@@ -266,6 +277,7 @@ nonisolated struct AutopilotSettings: Encodable, Hashable, Sendable {
         case .novelty: try container.encode(novelty, forKey: .novelty)
         case .equipment: try container.encode(equipment, forKey: .equipment)
         case .weekdayRules: try container.encode(weekdayRules, forKey: .weekdayRules)
+        case .pairings: try container.encode(pairings, forKey: .pairings)
         }
     }
 }
@@ -300,6 +312,7 @@ nonisolated struct AutopilotSectionChanges: Decodable, Hashable, Sendable {
     var novelty: AutopilotSectionChange?
     var equipment: AutopilotSectionChange?
     var weekdayRules: AutopilotSectionChange?
+    var pairings: AutopilotSectionChange?
 
     subscript(section: AutopilotSection) -> AutopilotSectionChange? {
         switch section {
@@ -310,6 +323,7 @@ nonisolated struct AutopilotSectionChanges: Decodable, Hashable, Sendable {
         case .novelty: novelty
         case .equipment: equipment
         case .weekdayRules: weekdayRules
+        case .pairings: pairings
         }
     }
 }
@@ -331,6 +345,8 @@ nonisolated struct AutopilotProfile: Decodable, Equatable, Sendable {
     let novelty: AutopilotNovelty
     let equipment: [String]
     let weekdayRules: [AutopilotWeekdayRule]
+    /// Add-on pairing rules. Read leniently: a server without pairings sends none.
+    var pairings: [PairingRule] = []
     let sections: AutopilotSectionChanges
     let effective: Effective
     let createdBy: String?
@@ -341,13 +357,38 @@ nonisolated struct AutopilotProfile: Decodable, Equatable, Sendable {
     var settings: AutopilotSettings {
         AutopilotSettings(
             taste: taste, restrictions: restrictions, schedule: schedule, cookTime: cookTime, novelty: novelty,
-            equipment: equipment, weekdayRules: weekdayRules)
+            equipment: equipment, weekdayRules: weekdayRules, pairings: pairings)
     }
 
-    private enum CodingKeys: String, CodingKey {
+    fileprivate enum CodingKeys: String, CodingKey {
         case householdID = "householdId"
-        case configured, taste, restrictions, schedule, cookTime, novelty, equipment, weekdayRules, sections,
-            effective, createdBy, createdAt, updatedBy, updatedAt
+        case configured, taste, restrictions, schedule, cookTime, novelty, equipment, weekdayRules, pairings,
+            sections, effective, createdBy, createdAt, updatedBy, updatedAt
+    }
+}
+
+/// `pairings` is additive, so it's read leniently. The decoder lives in an extension to keep
+/// the memberwise initializer.
+nonisolated extension AutopilotProfile {
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            householdID: try container.decode(String.self, forKey: .householdID),
+            configured: try container.decode(Bool.self, forKey: .configured),
+            taste: try container.decode(AutopilotTaste.self, forKey: .taste),
+            restrictions: try container.decode(AutopilotRestrictions.self, forKey: .restrictions),
+            schedule: try container.decode(AutopilotSchedule.self, forKey: .schedule),
+            cookTime: try container.decode(AutopilotCookTime.self, forKey: .cookTime),
+            novelty: try container.decode(AutopilotNovelty.self, forKey: .novelty),
+            equipment: try container.decode([String].self, forKey: .equipment),
+            weekdayRules: try container.decode([AutopilotWeekdayRule].self, forKey: .weekdayRules),
+            pairings: container.decodeLossyArray(PairingRule.self, forKey: .pairings),
+            sections: try container.decode(AutopilotSectionChanges.self, forKey: .sections),
+            effective: try container.decode(Effective.self, forKey: .effective),
+            createdBy: try container.decodeIfPresent(String.self, forKey: .createdBy),
+            createdAt: try container.decodeIfPresent(Date.self, forKey: .createdAt),
+            updatedBy: try container.decodeIfPresent(String.self, forKey: .updatedBy),
+            updatedAt: try container.decodeIfPresent(Date.self, forKey: .updatedAt))
     }
 }
 
@@ -376,9 +417,48 @@ nonisolated struct AutopilotLimits: Decodable, Hashable, Sendable {
     var minCookMinutes = 5
     var maxCookMinutes = 480
     var maxServings = 12
+    var maxPairingRules = 20
+    var maxGroceryItemNameLength = 60
+    var maxGroceryItemQuantity = 99
 
     /// The documented values, used until the vocabulary loads.
     static let defaults = AutopilotLimits()
+
+    fileprivate enum CodingKeys: String, CodingKey {
+        case maxListValues, maxExcludedIngredients, maxValueLength, maxIngredientLength, maxRuleValues,
+            maxLabelLength, maxNoteLength, minCookMinutes, maxCookMinutes, maxServings, maxPairingRules,
+            maxGroceryItemNameLength, maxGroceryItemQuantity
+    }
+}
+
+/// Every limit is read leniently, falling back to the documented default.
+///
+/// Swift's synthesized `Decodable` ignores a property's default value and requires the key, so
+/// a limit a newer build knows about but an older server doesn't send would fail the whole
+/// vocabulary — and with it every preference screen.
+nonisolated extension AutopilotLimits {
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = AutopilotLimits.defaults
+        self.init(
+            maxListValues: container.decodeLenientInt(forKey: .maxListValues) ?? defaults.maxListValues,
+            maxExcludedIngredients: container.decodeLenientInt(forKey: .maxExcludedIngredients)
+                ?? defaults.maxExcludedIngredients,
+            maxValueLength: container.decodeLenientInt(forKey: .maxValueLength) ?? defaults.maxValueLength,
+            maxIngredientLength: container.decodeLenientInt(forKey: .maxIngredientLength)
+                ?? defaults.maxIngredientLength,
+            maxRuleValues: container.decodeLenientInt(forKey: .maxRuleValues) ?? defaults.maxRuleValues,
+            maxLabelLength: container.decodeLenientInt(forKey: .maxLabelLength) ?? defaults.maxLabelLength,
+            maxNoteLength: container.decodeLenientInt(forKey: .maxNoteLength) ?? defaults.maxNoteLength,
+            minCookMinutes: container.decodeLenientInt(forKey: .minCookMinutes) ?? defaults.minCookMinutes,
+            maxCookMinutes: container.decodeLenientInt(forKey: .maxCookMinutes) ?? defaults.maxCookMinutes,
+            maxServings: container.decodeLenientInt(forKey: .maxServings) ?? defaults.maxServings,
+            maxPairingRules: container.decodeLenientInt(forKey: .maxPairingRules) ?? defaults.maxPairingRules,
+            maxGroceryItemNameLength: container.decodeLenientInt(forKey: .maxGroceryItemNameLength)
+                ?? defaults.maxGroceryItemNameLength,
+            maxGroceryItemQuantity: container.decodeLenientInt(forKey: .maxGroceryItemQuantity)
+                ?? defaults.maxGroceryItemQuantity)
+    }
 }
 
 /// Choices for the onboarding and preference screens (`AutopilotVocabulary`).
@@ -393,6 +473,10 @@ nonisolated struct AutopilotVocabulary: Decodable, Equatable, Sendable {
     let timeBands: [AutopilotOption]
     let frequencies: [AutopilotOption]
     let days: [AutopilotOption]
+    /// The meal categories pairing rules match on, with how many main meals are in each.
+    /// Read leniently: a server without pairings sends none, and the closed list stands in.
+    var mealCategories: [AutopilotOption] = []
+    var pairingFrequencies: [AutopilotOption] = []
     let catalogRecipeCount: Int
     let limits: AutopilotLimits
 
@@ -400,6 +484,50 @@ nonisolated struct AutopilotVocabulary: Decodable, Equatable, Sendable {
     /// cuisine, or a value from a newer server).
     static func label(for value: String, in options: [AutopilotOption]) -> String {
         options.first { $0.value == value }?.label ?? value.capitalized
+    }
+
+    /// The meal categories to offer, from the vocabulary when it has them, else the closed
+    /// list this build knows.
+    var mealCategoryOptions: [AutopilotOption] {
+        guard mealCategories.isEmpty else { return mealCategories }
+        return MealCategory.known.map {
+            AutopilotOption(value: $0.rawValue, label: $0.fallbackTitle, description: nil, recipeCount: nil)
+        }
+    }
+
+    var pairingFrequencyOptions: [AutopilotOption] {
+        guard pairingFrequencies.isEmpty else { return pairingFrequencies }
+        return PairingFrequency.known.map {
+            AutopilotOption(value: $0.rawValue, label: $0.title, description: nil, recipeCount: nil)
+        }
+    }
+
+    fileprivate enum CodingKeys: String, CodingKey {
+        case cuisines, tags, proteins, diets, allergens, equipment, novelty, timeBands, frequencies, days,
+            mealCategories, pairingFrequencies, catalogRecipeCount, limits
+    }
+}
+
+/// The pairing lists are additive, so they're read leniently. The decoder lives in an
+/// extension to keep the memberwise initializer.
+nonisolated extension AutopilotVocabulary {
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            cuisines: try container.decode([AutopilotOption].self, forKey: .cuisines),
+            tags: try container.decode([AutopilotOption].self, forKey: .tags),
+            proteins: try container.decode([AutopilotOption].self, forKey: .proteins),
+            diets: try container.decode([AutopilotOption].self, forKey: .diets),
+            allergens: try container.decode([AutopilotOption].self, forKey: .allergens),
+            equipment: try container.decode([AutopilotOption].self, forKey: .equipment),
+            novelty: try container.decode([AutopilotOption].self, forKey: .novelty),
+            timeBands: try container.decode([AutopilotOption].self, forKey: .timeBands),
+            frequencies: try container.decode([AutopilotOption].self, forKey: .frequencies),
+            days: try container.decode([AutopilotOption].self, forKey: .days),
+            mealCategories: container.decodeLossyArray(AutopilotOption.self, forKey: .mealCategories),
+            pairingFrequencies: container.decodeLossyArray(AutopilotOption.self, forKey: .pairingFrequencies),
+            catalogRecipeCount: try container.decode(Int.self, forKey: .catalogRecipeCount),
+            limits: try container.decode(AutopilotLimits.self, forKey: .limits))
     }
 }
 
@@ -548,10 +676,38 @@ nonisolated struct AutopilotSlot: Decodable, Hashable, Sendable, Identifiable {
     /// At most three, most important first.
     let reasons: [AutopilotText]
     let swapCount: Int
+    /// Add-ons and grocery items to offer with this meal. Ones with `included` are added when
+    /// the proposal is accepted unless the member takes them out.
+    var pairings: [ProposalPairing] = []
 
     /// The reasons joined for display, for example "Sunday smoker night · Pork · Long cook OK".
     var reasonText: String {
         reasons.map(\.text).filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    fileprivate enum CodingKeys: String, CodingKey {
+        case id, day, date, recipe, servings, cookMinutes, timeBand, score, signals, reasons, swapCount, pairings
+    }
+}
+
+/// `pairings` is additive and read leniently, so a pairing this build can't read costs one
+/// toggle rather than the whole proposal.
+nonisolated extension AutopilotSlot {
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(String.self, forKey: .id),
+            day: try container.decode(PlanDay.self, forKey: .day),
+            date: try container.decode(String.self, forKey: .date),
+            recipe: try container.decode(AutopilotSlotRecipe.self, forKey: .recipe),
+            servings: try container.decode(Int.self, forKey: .servings),
+            cookMinutes: try container.decodeIfPresent(Int.self, forKey: .cookMinutes),
+            timeBand: try container.decode(AutopilotTimeBand.self, forKey: .timeBand),
+            score: try container.decode(Double.self, forKey: .score),
+            signals: try container.decode([String: Double].self, forKey: .signals),
+            reasons: try container.decode([AutopilotText].self, forKey: .reasons),
+            swapCount: try container.decode(Int.self, forKey: .swapCount),
+            pairings: container.decodeLossyArray(ProposalPairing.self, forKey: .pairings))
     }
 }
 
@@ -657,6 +813,28 @@ nonisolated struct AutopilotAcceptResult: Decodable, Equatable, Sendable {
     /// The new entries, with origin `autopilot`.
     let added: [PlanEntry]
     let skipped: [AutopilotSkippedSlot]
+    /// The pairings added with the meals: add-on plan entries and grocery items.
+    var pairingsAdded: [AddedPairing] = []
+    /// Chosen pairings that weren't added.
+    var pairingsSkipped: [SkippedPairing] = []
+
+    fileprivate enum CodingKeys: String, CodingKey {
+        case proposal, plan, added, skipped, pairingsAdded, pairingsSkipped
+    }
+}
+
+/// The pairing lists are additive, so they're read leniently.
+nonisolated extension AutopilotAcceptResult {
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            proposal: try container.decode(AutopilotProposal.self, forKey: .proposal),
+            plan: try container.decode(Plan.self, forKey: .plan),
+            added: try container.decode([PlanEntry].self, forKey: .added),
+            skipped: try container.decode([AutopilotSkippedSlot].self, forKey: .skipped),
+            pairingsAdded: container.decodeLossyArray(AddedPairing.self, forKey: .pairingsAdded),
+            pairingsSkipped: container.decodeLossyArray(SkippedPairing.self, forKey: .pairingsSkipped))
+    }
 }
 
 nonisolated struct AutopilotGenerateRequest: Encodable, Hashable, Sendable {
@@ -671,10 +849,21 @@ nonisolated struct AutopilotVersionRequest: Encodable, Hashable, Sendable {
 nonisolated struct AutopilotAcceptRequest: Encodable, Hashable, Sendable {
     let version: Int
     let excludeSlotIDs: [String]
+    /// The slots' pairings to add, by `ProposalPairing.id`. `nil` leaves the field out, which
+    /// means the ones the proposal includes; an empty array adds none.
+    var pairingIDs: [String]?
 
     private enum CodingKeys: String, CodingKey {
         case version
         case excludeSlotIDs = "excludeSlotIds"
+        case pairingIDs = "pairingIds"
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(version, forKey: .version)
+        try container.encode(excludeSlotIDs, forKey: .excludeSlotIDs)
+        try container.encodeIfPresent(pairingIDs, forKey: .pairingIDs)
     }
 }
 
