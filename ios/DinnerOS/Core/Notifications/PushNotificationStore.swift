@@ -210,14 +210,30 @@ final class PushNotificationStore {
                 try await api.delete(token: registration.token, accessToken: accessToken)
             }
         }
-        let timeout = Task {
-            try await Task.sleep(for: Self.signOutTimeout)
-            deletion.cancel()
+        // Return on whichever comes first. Awaiting `deletion` after cancelling it would
+        // still wait for the request to wind down, which on a slow network can outlast
+        // the timeout by a lot.
+        let resumed = OSAllocatedUnfairLock(initialState: false)
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let resumeOnce = {
+                let first = resumed.withLock { done in
+                    defer { done = true }
+                    return !done
+                }
+                if first { continuation.resume() }
+            }
+            Task {
+                if case .failure(let error) = await deletion.result, !(error is CancellationError) {
+                    Self.logger.notice("Device token delete failed: \(Self.describe(error), privacy: .public)")
+                }
+                resumeOnce()
+            }
+            Task {
+                try? await Task.sleep(for: Self.signOutTimeout)
+                deletion.cancel()
+                resumeOnce()
+            }
         }
-        if case .failure(let error) = await deletion.result {
-            Self.logger.notice("Device token delete failed: \(Self.describe(error), privacy: .public)")
-        }
-        timeout.cancel()
     }
 
     // MARK: - Opening pushes
