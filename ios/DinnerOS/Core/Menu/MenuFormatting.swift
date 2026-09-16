@@ -5,35 +5,6 @@ import Foundation
 nonisolated enum MenuFormat {
     // MARK: Facts
 
-    /// For example `["30 min", "690 cal", "36g protein"]`, leaving out unknown values.
-    static func facts(
-        minutes: Int?, calories: Int?, proteinGrams: Int?, locale: Locale = .autoupdatingCurrent
-    ) -> [String] {
-        var parts: [String] = []
-        if let minutes, minutes > 0 {
-            parts.append(RecipeFormat.minutes(minutes))
-        }
-        if let calories, calories > 0 {
-            parts.append(String(localized: "\(calories.formatted(.number.locale(locale))) cal"))
-        }
-        if let proteinGrams, proteinGrams > 0 {
-            parts.append(String(localized: "\(proteinGrams.formatted(.number.locale(locale)))g protein"))
-        }
-        return parts
-    }
-
-    /// For example "30 min · 690 cal · 36g protein"; empty when nothing is known.
-    static func factsText(
-        minutes: Int?, calories: Int?, proteinGrams: Int?, locale: Locale = .autoupdatingCurrent
-    ) -> String {
-        facts(minutes: minutes, calories: calories, proteinGrams: proteinGrams, locale: locale)
-            .joined(separator: " · ")
-    }
-
-    static func factsText(for summary: RecipeSummary) -> String {
-        factsText(minutes: summary.displayMinutes, calories: summary.calories, proteinGrams: summary.proteinGrams)
-    }
-
     /// Spoken facts, for example `["30 minutes", "690 calories", "36 grams of protein"]`.
     static func spokenFacts(minutes: Int?, calories: Int?, proteinGrams: Int?) -> [String] {
         var parts: [String] = []

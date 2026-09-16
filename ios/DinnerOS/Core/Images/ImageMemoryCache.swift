@@ -10,8 +10,30 @@ nonisolated final class ImageMemoryCache: Sendable {
     /// The app's cache. Tests make their own.
     static let shared = ImageMemoryCache()
 
-    /// About sixteen full-screen photos, or several hundred card-sized ones.
-    static let defaultCostLimit = 64 * 1024 * 1024
+    /// How many bytes of decoded photos to keep, for this device.
+    static var defaultCostLimit: Int {
+        costLimit(physicalMemory: ProcessInfo.processInfo.physicalMemory)
+    }
+
+    /// A sixteenth of the device's memory, between `minimumCostLimit` and `maximumCostLimit`.
+    ///
+    /// A flat 64 MB was under the working set: a long All Meals scroll touches about 119 MB of
+    /// decoded photos, so `NSCache` evicted photos that were about to be scrolled back to and
+    /// the hit rate sat below what the scroll pattern allows. Sizing off the device instead of a
+    /// constant keeps the cache proportionate — a phone with 8 GB can hold a whole scroll, one
+    /// with 2 GB holds less and evicts sooner, which is the right answer on both. The floor
+    /// keeps a small device from thrashing on every card; the ceiling keeps the cache from
+    /// becoming the reason a big one is killed. Either way it stays bounded, `NSCache` still
+    /// evicts, and a memory warning still empties it outright.
+    static func costLimit(physicalMemory: UInt64) -> Int {
+        let share = physicalMemory / 16
+        return Int(min(max(share, UInt64(minimumCostLimit)), UInt64(maximumCostLimit)))
+    }
+
+    /// Enough for a screen of cards and the few on either side of it.
+    static let minimumCostLimit = 48 * 1024 * 1024
+    /// Comfortably over the 119 MB a long scroll touches, without holding much more than that.
+    static let maximumCostLimit = 192 * 1024 * 1024
 
     /// `NSCache` is thread-safe but isn't marked `Sendable`, so the guarantee is asserted here
     /// rather than wrapping every read in a lock that `NSCache` already holds.

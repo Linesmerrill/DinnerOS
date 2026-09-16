@@ -14,6 +14,9 @@ struct RecipePhoto: View {
     /// refines it once the frame is measured.
     var pointWidth: CGFloat = 360
     var cornerRadius: CGFloat = 18
+    /// The widest bucket to ask the CDN for. Cards keep the default cap; the hero, the one
+    /// photo shown full-screen, passes `nil` for the original.
+    var maxBucket: Int? = ImageKey.cardBucketCap
 
     @Environment(\.displayScale) private var displayScale
 
@@ -43,7 +46,7 @@ struct RecipePhoto: View {
     /// Only a measured width that lands in a different bucket changes the key, so refining the
     /// width usually costs nothing.
     private var key: ImageKey? {
-        ImageKey(url: url, pointWidth: measuredWidth ?? pointWidth, scale: displayScale)
+        ImageKey(url: url, pointWidth: measuredWidth ?? pointWidth, scale: displayScale, maxBucket: maxBucket)
     }
 
     @ViewBuilder
@@ -196,8 +199,13 @@ struct CardTitle: View {
     let name: String
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    /// One line of `.headline`, which grows with the text size.
-    @ScaledMetric(relativeTo: .headline) private var lineHeight = 21
+    /// One line of `.headline`, with room to spare.
+    ///
+    /// This has to be at least what a line of `.headline` actually occupies — about 20.9 points
+    /// at the default text size, once line spacing is counted. At 21 it wasn't: a two-line name
+    /// was offered 42 points, needed a fraction more, and SwiftUI dropped the second line, so
+    /// every long name read as "One-Pan Santa Fe Pork T…" in a box with an empty line under it.
+    @ScaledMetric(relativeTo: .headline) private var lineHeight = 22
 
     var body: some View {
         let lines = MenuCardMetrics.titleLines(for: dynamicTypeSize)
@@ -206,39 +214,15 @@ struct CardTitle: View {
             .foregroundStyle(Color.primary)
             .lineLimit(lines)
             .multilineTextAlignment(.leading)
-            .frame(height: lineHeight * CGFloat(lines), alignment: .topLeading)
+            // Wrap to the width the card gives, and take the height those lines need rather than
+            // the height the reserved box offers — `lineLimit` is what bounds it, not the frame.
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: lineHeight * CGFloat(lines), alignment: .topLeading)
     }
 }
 
 // MARK: - Text and chips
-
-/// "30 min · 690 cal · 36g protein". Hidden when nothing is known.
-struct FactsRow: View {
-    let minutes: Int?
-    let calories: Int?
-    let proteinGrams: Int?
-
-    init(minutes: Int?, calories: Int?, proteinGrams: Int?) {
-        self.minutes = minutes
-        self.calories = calories
-        self.proteinGrams = proteinGrams
-    }
-
-    init(summary: RecipeSummary) {
-        self.init(minutes: summary.displayMinutes, calories: summary.calories, proteinGrams: summary.proteinGrams)
-    }
-
-    var body: some View {
-        let text = MenuFormat.factsText(minutes: minutes, calories: calories, proteinGrams: proteinGrams)
-        if !text.isEmpty {
-            Text(text)
-                .font(.footnote)
-                .foregroundStyle(Color.secondary)
-                .lineLimit(2)
-        }
-    }
-}
 
 /// A small capsule, for badges and tags.
 struct MenuChip: View {
@@ -260,25 +244,6 @@ struct MenuChip: View {
         .padding(.vertical, 4)
         .foregroundStyle(isProminent ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary))
         .background(isProminent ? AnyShapeStyle(.tint.opacity(0.14)) : AnyShapeStyle(.quaternary), in: .capsule)
-    }
-}
-
-/// A card's badges, wrapping at large text sizes.
-struct BadgeRow: View {
-    let badges: [MenuBadge]
-    var limit = 3
-
-    var body: some View {
-        if !badges.isEmpty {
-            ChipFlowLayout(spacing: 6) {
-                ForEach(badges.prefix(limit)) { badge in
-                    MenuChip(
-                        text: badge.text, systemImage: badge.code.systemImage,
-                        isProminent: badge.code == .autopilotPick)
-                }
-            }
-            .accessibilityElement(children: .combine)
-        }
     }
 }
 
@@ -501,11 +466,8 @@ struct MenuCardPlaceholders: View {
         VStack(alignment: .leading, spacing: 20) {
             RecipePhoto(url: nil, pointWidth: 300)
                 .frame(width: 300)
-            BadgeRow(badges: [
-                MenuBadge(code: .autopilotPick, text: "Autopilot Pick"), MenuBadge(code: .quick, text: "Quick"),
-                MenuBadge(code: MenuBadgeCode(rawValue: "chef"), text: "Chef's Pick"),
-            ])
-            FactsRow(minutes: 30, calories: 690, proteinGrams: 36)
+            MenuChip(text: "Autopilot Pick", systemImage: "sparkles", isProminent: true)
+            MenuChip(text: "Quick", systemImage: "bolt.fill")
             ServingsStepper(label: "4 servings", decrease: {}, increase: {})
             ServingsStepper(label: "1 in your week (2 servings)", style: .bar, decrease: {}, increase: {})
             AddToWeekButton(isInPlan: false, isBusy: false, recipeName: "Tacos") {}
