@@ -38,6 +38,10 @@ type Store interface {
 	// GetRecipes returns the household's recipes with the given IDs, ordered
 	// by ID, skipping IDs that are malformed, missing, or another household's.
 	GetRecipes(ctx context.Context, householdID string, ids []string) ([]Recipe, error)
+	// ListRecipesAfter returns up to limit of the household's full recipes
+	// whose ID sorts after afterID (from the first when afterID is empty),
+	// ordered by ID, for paging through a whole household.
+	ListRecipesAfter(ctx context.Context, householdID, afterID string, limit int) ([]Recipe, error)
 	// ExistingRecipeIDs returns those of ids that are the household's
 	// recipes, in any order. Malformed IDs are skipped.
 	ExistingRecipeIDs(ctx context.Context, householdID string, ids []string) ([]string, error)

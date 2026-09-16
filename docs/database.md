@@ -91,6 +91,13 @@ Implemented in Phase 4 (`internal/recipes`; categories and units from `internal/
 | `ingredients` | key, name, category, categoryConfident, sourceRefs[] (source, sourceIngredientId), imageUrl, createdAt, updatedAt | **unique** `{key}`; `{sourceRefs.source, sourceRefs.sourceIngredientId}`; `{categoryConfident, key}` |
 | `import_reviews` | householdId, key, source, sourceRecipeId, recipeName, field, value, reason, status (`open`), createdAt, updatedAt | **unique** `{householdId, key}`; `{householdId, status, createdAt}` |
 
+A new household's `recipes` may be copies of the starter household's
+(`STARTER_RECIPES_HOUSEHOLD_ID`, #487): new `_id`s and `householdId`, the
+same `ingredients[].ingredientId` (the catalog is global), `orderWeeks`
+empty, `timesOrdered` 0, `lastOrderedWeek` `""`. The unique
+`{householdId, source, sourceRecipeId}` index is what keeps a repeated or
+concurrent copy from duplicating. No other collection is copied.
+
 `cookMinutes` in API responses is computed as max(`prepMinutes`,
 `totalMinutes`) and isn't stored ([architecture.md](architecture.md#decision-log), #127).
 `calories`, `proteinGrams`, and `timeBand` are derived on read too: the first

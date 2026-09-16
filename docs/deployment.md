@@ -167,6 +167,29 @@ so one deployment serves both kinds of build. Local development needs no APNs
 setup: without the variables the sweep is a logged no-op, and the simulator
 can't receive remote pushes anyway.
 
+### Starter recipe library
+
+New households get a copy of one household's recipes so friends and family
+who sign up don't start with an empty menu. Set `STARTER_RECIPES_HOUSEHOLD_ID`
+to that household's ID; unset, new households start empty. The copy runs in
+the background, and household creation waits up to 3 s for it (about half a
+second for ~460 recipes locally) and copies recipe content only, never order history,
+ratings, plans, pantry, or events. A failed copy is logged
+(`copy starter recipes failed`) and never fails the creation.
+
+To backfill an existing household, or finish a failed copy, run the command
+on a one-off dyno. It is a dry run without `-apply`, and re-running it never
+duplicates recipes:
+
+```sh
+heroku run -a dinneros-api -- /seedstarter -household <householdId>
+heroku run -a dinneros-api -- /seedstarter -household <householdId> -apply
+```
+
+It reads `MONGODB_URI`, `MONGODB_DATABASE`, and `STARTER_RECIPES_HOUSEHOLD_ID`
+(`-source <householdId>` overrides it). Locally:
+`go -C api run ./cmd/seedstarter -household <householdId>`.
+
 ### Invitation links
 
 Invitation emails link to `https://api.tlps.dev/invite#token=…`. The API serves
@@ -299,6 +322,7 @@ vars or GitHub Secrets.
 | `APP_URL_SCHEME` | Phase 3 | Optional, default `dinneros`. Must match `APP_URL_SCHEME` in `ios/Config/Shared.xcconfig`; the `/invite` page's **Open** button uses it. |
 | `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_AUTH_KEY` | push | ✅ Set. developer.apple.com → Certificates, Identifiers & Profiles → **Keys** → a key with **Apple Push Notifications service (APNs)** enabled (one key serves sandbox and production). `APNS_KEY_ID` is its 10-character key ID, `APNS_TEAM_ID` is `6VTPDG2HNK`, and `APNS_AUTH_KEY` is the **entire** downloaded `AuthKey_XXXX.p8`, BEGIN and END lines included (literal `\n` escapes are accepted too). Apple allows downloading it once; store it only here. Set all three or none: none makes push a logged no-op, a partial or unparseable set stops the API and the sweep at startup. Read only by `/sendreminders`. See [Push notifications](#push-notifications). |
 | `APNS_TOPIC` | push | Optional; defaults to `APPLE_BUNDLE_ID` (`com.linesmerrill.dinneros`). |
+| `STARTER_RECIPES_HOUSEHOLD_ID` | optional | The 24-character hex ID of the household whose recipes every new household receives as a starter library. Empty (the default) disables it; a malformed value stops the API at startup. Not a secret. See [Starter recipe library](#starter-recipe-library). |
 | `OPENAI_API_KEY` | future | platform.openai.com → API keys (backend only) |
 
 ### GitHub Actions

@@ -262,6 +262,22 @@ func (m *memoryStore) ListCatalog(_ context.Context, householdID string, limit i
 	return out, nil
 }
 
+func (m *memoryStore) ListRecipesAfter(_ context.Context, householdID, afterID string, limit int) ([]Recipe, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []Recipe
+	for _, r := range m.recipes {
+		if r.HouseholdID == householdID && r.ID > afterID {
+			out = append(out, cloneRecipe(r))
+		}
+	}
+	slices.SortFunc(out, func(a, b Recipe) int { return cmp.Compare(a.ID, b.ID) })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 func (m *memoryStore) ListMenuCatalog(_ context.Context, householdID string, limit int) ([]Recipe, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

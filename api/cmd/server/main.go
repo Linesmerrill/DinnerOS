@@ -144,8 +144,18 @@ func run() error {
 	}
 
 	authHandler := newAuthHandler(cfg, userService, tokens, logger)
-	householdService, householdHandler, invitationHandler := newHouseholdHandlers(cfg, db, userService, tokens, logger)
 	recipeService := recipes.NewService(recipes.NewMongoStore(db.Database()))
+	// New households get a copy of STARTER_RECIPES_HOUSEHOLD_ID's recipes in
+	// the background, so friends who sign up don't start with an empty menu.
+	starter := recipes.NewStarter(recipes.StarterOptions{
+		Service:           recipeService,
+		SourceHouseholdID: cfg.StarterRecipesHouseholdID,
+		Logger:            logger,
+	})
+	if !starter.Enabled() {
+		logger.Info("STARTER_RECIPES_HOUSEHOLD_ID is not set; new households start with no recipes")
+	}
+	householdService, householdHandler, invitationHandler := newHouseholdHandlers(cfg, db, userService, tokens, starter, logger)
 	// The recipe service is the pantry's view of the global ingredient catalog
 	// and of cooked recipes. The pantry decides grocery list statuses, deducts
 	// cooked recipes (an events listener), and raises low-stock notifications;
@@ -379,6 +389,10 @@ func run() error {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("graceful shutdown: %w", err)
 	}
+	// A copy cut off here is logged; cmd/seedstarter finishes it.
+	if err := starter.Wait(shutdownCtx); err != nil {
+		logger.Warn("starter recipe copies still running at shutdown", "error", err)
+	}
 	logger.Info("api stopped")
 	return nil
 }
@@ -419,11 +433,12 @@ func newAuthHandler(cfg config.Config, userService *users.Service, tokens *auth.
 
 // newHouseholdHandlers wires the households and invitations modules. The
 // household service is also the Authorizer for other household-scoped routes.
-func newHouseholdHandlers(cfg config.Config, db *mongodb.Client, userService *users.Service, tokens *auth.TokenService, logger *slog.Logger) (*households.Service, *households.Handler, *invitations.Handler) {
+func newHouseholdHandlers(cfg config.Config, db *mongodb.Client, userService *users.Service, tokens *auth.TokenService, starter *recipes.Starter, logger *slog.Logger) (*households.Service, *households.Handler, *invitations.Handler) {
 	householdService := households.NewService(households.ServiceOptions{
-		Store:  households.NewMongoStore(db.Database()),
-		Users:  userService,
-		Logger: logger,
+		Store:     households.NewMongoStore(db.Database()),
+		Users:     userService,
+		OnCreated: starter,
+		Logger:    logger,
 	})
 	invitationService := invitations.NewService(invitations.ServiceOptions{
 		Store:         invitations.NewMongoStore(db.Database()),

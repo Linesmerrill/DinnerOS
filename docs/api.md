@@ -88,7 +88,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/me` → `{user, identities}` | bearer | 2 | ✅ |
 | PUT | `/api/v1/me/device-tokens` `{token, environment, platform?}` → device token | bearer | 7 | ✅ |
 | DELETE | `/api/v1/me/device-tokens` `{token}` → `204` | bearer | 7 | ✅ |
-| POST | `/api/v1/households` `{name, timeZone, defaultServings?}` → `201 {household, membership}` | bearer | 3 | ✅ |
+| POST | `/api/v1/households` `{name, timeZone, defaultServings?}` → `201 {household, membership}`. When `STARTER_RECIPES_HOUSEHOLD_ID` is set, the new household's recipes are copied from that household; the response waits up to 3 s for the copy (typically under a second), and a slower copy finishes in the background | bearer | 3 | ✅ |
 | GET | `/api/v1/households` → `{items: [{household, role, permissions}]}` | bearer | 3 | ✅ |
 | GET | `/api/v1/households/{householdId}` → `{household, members, role, permissions}` | `household.view` | 3 | ✅ |
 | PATCH | `/api/v1/households/{householdId}` `{name?, timeZone?, defaultServings?, orderDay?}` → household | `household.update` | 3 | ✅ |
@@ -363,6 +363,17 @@ in `errors` by their index in `recipes`, and the rest still import.
 
 For a full order history against production, prefer the `importrecipes`
 command (see [import-format.md](import-format.md#loading-into-dinneros)).
+
+### Starter library
+
+There is no route for it. A household created while `STARTER_RECIPES_HOUSEHOLD_ID`
+is set receives a copy of that household's recipes, and `cmd/seedstarter`
+copies them into an existing household ([deployment.md](deployment.md#starter-recipe-library)).
+Copied recipes are ordinary recipes of the new household with new IDs: the
+same content, images and source links, and catalog ingredients, but no order
+history (`timesOrdered` 0, no `lastOrderedWeek`), ratings, or plans. A recipe
+the household already has from the same `source` (matched by `sourceRecipeId`
+or an alias, as import matches) is skipped.
 
 ## Plans
 

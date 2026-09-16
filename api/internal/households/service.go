@@ -15,14 +15,22 @@ type UserDirectory interface {
 	GetUser(ctx context.Context, id string) (users.User, error)
 }
 
+// CreatedListener hears about new households. It must return quickly and
+// cannot fail household creation: slow or fallible work (the starter recipe
+// library, *recipes.Starter) runs in the background.
+type CreatedListener interface {
+	HouseholdCreated(ctx context.Context, householdID string)
+}
+
 // Service implements household and membership use cases. Methods that act on
 // an existing household take the caller's Membership, loaded by Authorize (or
 // the RequirePermission middleware), and check its permissions themselves.
 type Service struct {
-	store  Store
-	users  UserDirectory
-	now    func() time.Time
-	logger *slog.Logger
+	store     Store
+	users     UserDirectory
+	onCreated CreatedListener
+	now       func() time.Time
+	logger    *slog.Logger
 }
 
 // ServiceOptions configures a Service.
@@ -30,13 +38,15 @@ type ServiceOptions struct {
 	Store  Store
 	Users  UserDirectory
 	Logger *slog.Logger
+	// OnCreated, when set, is told about each household Create makes.
+	OnCreated CreatedListener
 	// Now is the clock. Default time.Now.
 	Now func() time.Time
 }
 
 // NewService returns a Service.
 func NewService(opts ServiceOptions) *Service {
-	s := &Service{store: opts.Store, users: opts.Users, now: opts.Now, logger: opts.Logger}
+	s := &Service{store: opts.Store, users: opts.Users, onCreated: opts.OnCreated, now: opts.Now, logger: opts.Logger}
 	if s.now == nil {
 		s.now = time.Now
 	}
@@ -88,6 +98,9 @@ func (s *Service) Create(ctx context.Context, userID string, in CreateInput) (Ho
 		return Household{}, Membership{}, fmt.Errorf("create admin membership: %w", err)
 	}
 	s.logger.InfoContext(ctx, "household created", "householdId", h.ID, "userId", userID)
+	if s.onCreated != nil {
+		s.onCreated.HouseholdCreated(ctx, h.ID)
+	}
 	return h, m, nil
 }
 

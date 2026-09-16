@@ -524,6 +524,38 @@ func (s *MongoStore) ListCatalog(ctx context.Context, householdID string, limit 
 	return out, nil
 }
 
+// ListRecipesAfter implements Store with one query on the _id index.
+func (s *MongoStore) ListRecipesAfter(ctx context.Context, householdID, afterID string, limit int) ([]Recipe, error) {
+	hid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return nil, fmt.Errorf("recipes: household id: %w", err)
+	}
+	if limit <= 0 {
+		return nil, nil
+	}
+	filter := bson.D{{Key: "householdId", Value: hid}}
+	if afterID != "" {
+		after, err := mongodb.ParseID(afterID)
+		if err != nil {
+			return nil, fmt.Errorf("recipes: after id: %w", err)
+		}
+		filter = append(filter, bson.E{Key: "_id", Value: bson.D{{Key: "$gt", Value: after}}})
+	}
+	cur, err := s.recipes.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}).SetLimit(int64(limit)))
+	if err != nil {
+		return nil, translate(err)
+	}
+	var docs []recipeDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	var out []Recipe
+	for _, d := range docs {
+		out = append(out, d.toRecipe())
+	}
+	return out, nil
+}
+
 // ExistingRecipeIDs implements Store with an _id lookup that reads only IDs.
 func (s *MongoStore) ExistingRecipeIDs(ctx context.Context, householdID string, ids []string) ([]string, error) {
 	hid, err := mongodb.ParseID(householdID)

@@ -89,6 +89,11 @@ type Config struct {
 	// links untracked; no Walmart setting is required.
 	WalmartImpact WalmartImpact
 
+	// StarterRecipesHouseholdID is the household whose recipes are copied
+	// into every new household as a starter library. Empty (the default)
+	// disables it.
+	StarterRecipesHouseholdID string
+
 	// APNs signs and addresses Apple push notifications. Unset (the default
 	// in development) makes push a logged no-op.
 	APNs APNs
@@ -186,6 +191,7 @@ func (c Config) LogValue() slog.Value {
 		slog.String("mongoURI", RedactURI(c.MongoURI)),
 		slog.String("mongoDatabase", c.MongoDatabase),
 		slog.Bool("walmartAffiliateLinks", c.WalmartImpact.Enabled()),
+		slog.String("starterRecipesHouseholdId", c.StarterRecipesHouseholdID),
 		slog.Bool("apnsEnabled", c.APNs.Enabled()),
 		slog.String("apnsKeyId", c.APNs.KeyID),
 		slog.String("apnsTopic", c.APNs.Topic),
@@ -264,6 +270,11 @@ func Load(getenv func(string) string) (Config, error) {
 	errs = append(errs, loadAuth(&cfg, get)...)
 	errs = append(errs, loadEmail(&cfg, get)...)
 	errs = append(errs, loadShopping(&cfg, get)...)
+
+	cfg.StarterRecipesHouseholdID = strings.ToLower(get("STARTER_RECIPES_HOUSEHOLD_ID", ""))
+	if id := cfg.StarterRecipesHouseholdID; id != "" && !objectIDPattern.MatchString(id) {
+		errs = append(errs, fmt.Errorf("STARTER_RECIPES_HOUSEHOLD_ID must be a 24-character hex household ID, got %q", id))
+	}
 	errs = append(errs, loadAPNs(&cfg, get)...)
 
 	if err := errors.Join(errs...); err != nil {
@@ -319,6 +330,9 @@ func ParseAPNsKey(raw string) (*ecdsa.PrivateKey, error) {
 	}
 	return key, nil
 }
+
+// objectIDPattern matches a MongoDB ObjectID in hex.
+var objectIDPattern = regexp.MustCompile(`^[0-9a-f]{24}$`)
 
 // impactIDPattern matches one numeric Impact identifier.
 var impactIDPattern = regexp.MustCompile(`^[0-9]{1,20}$`)

@@ -134,6 +134,26 @@ func TestCreateHouseholdCleansUpWhenMembershipFails(t *testing.T) {
 	}
 }
 
+type createdRecorder []string
+
+func (r *createdRecorder) HouseholdCreated(_ context.Context, householdID string) {
+	*r = append(*r, householdID)
+}
+
+func TestCreateHouseholdNotifiesListener(t *testing.T) {
+	store := newMemoryStore()
+	var heard createdRecorder
+	svc := NewService(ServiceOptions{Store: store, OnCreated: &heard, Now: func() time.Time { return testNow }})
+	h, _, err := svc.Create(context.Background(), userAda, CreateInput{Name: "Home", TimeZone: "UTC"})
+	if err != nil || len(heard) != 1 || heard[0] != h.ID {
+		t.Fatalf("Create() = %+v, %v; listener heard %v", h, err, heard)
+	}
+	store.failCreateMembership = errors.New("boom")
+	if _, _, err := svc.Create(context.Background(), userAda, CreateInput{Name: "Cabin", TimeZone: "UTC"}); err == nil || len(heard) != 1 {
+		t.Errorf("failed Create() error = %v; listener heard %v", err, heard)
+	}
+}
+
 func TestListForUser(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()

@@ -33,6 +33,20 @@ func TestLoadShopping(t *testing.T) {
 	}
 }
 
+func TestLoadStarterRecipes(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil || cfg.StarterRecipesHouseholdID != "" {
+		t.Fatalf("defaults: StarterRecipesHouseholdID = %q, %v", cfg.StarterRecipesHouseholdID, err)
+	}
+	cfg, err = Load(env(map[string]string{"STARTER_RECIPES_HOUSEHOLD_ID": " 6AA940907895FF325B652912 "}))
+	if err != nil || cfg.StarterRecipesHouseholdID != "6aa940907895ff325b652912" {
+		t.Fatalf("configured: StarterRecipesHouseholdID = %q, %v", cfg.StarterRecipesHouseholdID, err)
+	}
+	if _, err := Load(env(map[string]string{"STARTER_RECIPES_HOUSEHOLD_ID": "Lines"})); err == nil || !strings.Contains(err.Error(), "STARTER_RECIPES_HOUSEHOLD_ID") {
+		t.Errorf("invalid: Load() error = %v", err)
+	}
+}
+
 func TestLoadEmailDefaults(t *testing.T) {
 	cfg, err := Load(env(nil))
 	if err != nil {
