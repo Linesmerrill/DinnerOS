@@ -90,6 +90,8 @@ func (h *Handler) Mount(r chi.Router) {
 		const plan = "/households/{householdId}/plans/{week}/shopping/{provider}"
 		r.With(view).Post(plan+"/match", h.match)
 		r.With(edit).Post(plan+"/handoffs", h.createHandoff)
+		r.With(edit).Post(plan+"/handoffs/start-over", h.startOver)
+		r.With(edit).Post(plan+"/handoffs/send-again", h.sendAgain)
 	})
 }
 
@@ -257,6 +259,42 @@ type HandoffLineResponse struct {
 	SearchTerms SearchTermsResponse `json:"searchTerms"`
 	// Confirmation is null on a match, which isn't stored.
 	Confirmation *ConfirmationResponse `json:"confirmation"`
+	// Cart is set on a match when the week has a current handoff, and null
+	// otherwise (and on stored handoffs, whose packages are what was sent).
+	Cart *LineCartResponse `json:"cart"`
+}
+
+// LineCartResponse is what a match line already has in the cart.
+type LineCartResponse struct {
+	SentPackages   int `json:"sentPackages"`
+	AddPackages    int `json:"addPackages"`
+	RemovePackages int `json:"removePackages"`
+}
+
+// SentLineResponse is a product in the cart that isn't one of the match's
+// lines.
+type SentLineResponse struct {
+	IngredientKey  string          `json:"ingredientKey"`
+	IngredientID   *string         `json:"ingredientId"`
+	Name           string          `json:"name"`
+	Category       string          `json:"category"`
+	Product        ProductResponse `json:"product"`
+	SentPackages   int             `json:"sentPackages"`
+	RemovePackages int             `json:"removePackages"`
+	Reason         SentReason      `json:"reason"`
+	Text           string          `json:"text"`
+}
+
+// CartStateResponse is what the week's current handoff put in the cart.
+type CartStateResponse struct {
+	HandoffID string             `json:"handoffId"`
+	SentAt    time.Time          `json:"sentAt"`
+	Other     []SentLineResponse `json:"other"`
+}
+
+// SendAgainRequest is the body of POST .../handoffs/send-again.
+type SendAgainRequest struct {
+	IngredientKey string `json:"ingredientKey"`
 }
 
 // SearchTermsResponse is the search DinnerOS suggests for a grocery line.
@@ -307,16 +345,23 @@ type ProposalResponse struct {
 	Excluded         []ExcludedResponse    `json:"excluded"`
 	CartLinks        []CartLinkResponse    `json:"cartLinks"`
 	AffiliateTracked bool                  `json:"affiliateTracked"`
+	// Cart is set on a match when the week has a current handoff; null
+	// otherwise, and always on a stored handoff.
+	Cart *CartStateResponse `json:"cart"`
 }
 
 // HandoffResponse is a stored handoff.
 type HandoffResponse struct {
 	ID string `json:"id"`
 	ProposalResponse
-	Status    HandoffStatus `json:"status"`
-	CreatedBy string        `json:"createdBy"`
-	CreatedAt time.Time     `json:"createdAt"`
-	UpdatedAt time.Time     `json:"updatedAt"`
+	Status HandoffStatus `json:"status"`
+	// Active is true while it is the week's current handoff.
+	Active       bool         `json:"active"`
+	ClosedAt     *time.Time   `json:"closedAt"`
+	ClosedReason *CloseReason `json:"closedReason"`
+	CreatedBy    string       `json:"createdBy"`
+	CreatedAt    time.Time    `json:"createdAt"`
+	UpdatedAt    time.Time    `json:"updatedAt"`
 }
 
 // HandoffListResponse is returned by GET .../shopping/handoffs.
@@ -530,7 +575,21 @@ func (h *Handler) lineResponse(provider providers.Key, l HandoffLine, stored boo
 		}
 		resp.Confirmation = c
 	}
+	if l.Cart != nil {
+		resp.Cart = &LineCartResponse{SentPackages: l.Cart.SentPackages, AddPackages: l.Cart.AddPackages, RemovePackages: l.Cart.RemovePackages}
+	}
 	return resp
+}
+
+func (h *Handler) sentText(provider providers.Key, l SentLine) string {
+	name := h.providerName(provider)
+	switch {
+	case l.RemovePackages > 0 && l.Reason == SentProductChanged:
+		return fmt.Sprintf("Replaced by another product; remove %d in the %s app", l.RemovePackages, name)
+	case l.RemovePackages > 0:
+		return fmt.Sprintf("No longer on the list; remove %d in the %s app", l.RemovePackages, name)
+	}
+	return fmt.Sprintf("In %s cart · %d", name, l.SentPackages)
 }
 
 func (h *Handler) exclusionText(provider providers.Key, reason ExclusionReason) string {
@@ -581,14 +640,34 @@ func (h *Handler) proposalResponse(p Proposal, stored bool) ProposalResponse {
 	for _, l := range p.Links {
 		resp.CartLinks = append(resp.CartLinks, CartLinkResponse{URL: l.URL, LineIDs: append([]string{}, l.LineIDs...), ItemCount: l.ItemCount})
 	}
+	if p.Cart != nil {
+		cart := &CartStateResponse{HandoffID: p.Cart.HandoffID, SentAt: p.Cart.SentAt, Other: make([]SentLineResponse, 0, len(p.Cart.Other))}
+		for _, l := range p.Cart.Other {
+			cart.Other = append(cart.Other, SentLineResponse{
+				IngredientKey: l.IngredientKey, IngredientID: optionalString(l.IngredientID()), Name: l.Name, Category: l.Category,
+				Product: ProductResponse{
+					ProductID: l.ProductID, DisplayName: l.ProductName, ProductURL: h.providerURL(p.Provider, l.ProductID),
+					PackageSize: packageSizeResponse(l.PackageSize),
+				},
+				SentPackages: l.SentPackages, RemovePackages: l.RemovePackages, Reason: l.Reason, Text: h.sentText(p.Provider, l),
+			})
+		}
+		resp.Cart = cart
+	}
 	return resp
 }
 
 func (h *Handler) handoffResponse(ho Handoff) HandoffResponse {
-	return HandoffResponse{
+	resp := HandoffResponse{
 		ID: ho.ID, ProposalResponse: h.proposalResponse(ho.Proposal, true), Status: ho.Status(),
+		Active: ho.Active, ClosedAt: optionalTime(ho.ClosedAt),
 		CreatedBy: ho.CreatedBy, CreatedAt: ho.CreatedAt, UpdatedAt: ho.UpdatedAt,
 	}
+	if ho.ClosedReason != "" {
+		reason := ho.ClosedReason
+		resp.ClosedReason = &reason
+	}
+	return resp
 }
 
 func (req MatchRequest) input() MatchInput {
@@ -745,12 +824,38 @@ func (h *Handler) createHandoff(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	ho, err := h.opts.Service.CreateHandoff(r.Context(), actor, chi.URLParam(r, "week"), chi.URLParam(r, "provider"), req.input())
+	ho, created, err := h.opts.Service.CreateHandoff(r.Context(), actor, chi.URLParam(r, "week"), chi.URLParam(r, "provider"), req.input())
 	if err != nil {
 		h.writeError(w, r, "create shopping handoff failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusCreated, h.handoffResponse(ho))
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	httpx.WriteJSON(w, status, h.handoffResponse(ho))
+}
+
+func (h *Handler) startOver(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	if err := h.opts.Service.StartOver(r.Context(), actor, chi.URLParam(r, "week"), chi.URLParam(r, "provider")); err != nil {
+		h.writeError(w, r, "start shopping handoff over failed", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) sendAgain(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	var req SendAgainRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	if err := h.opts.Service.SendAgain(r.Context(), actor, chi.URLParam(r, "week"), chi.URLParam(r, "provider"), req.IngredientKey); err != nil {
+		h.writeError(w, r, "send shopping line again failed", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) listHandoffs(w http.ResponseWriter, r *http.Request) {
@@ -983,7 +1088,7 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 		httpx.WriteError(w, r, http.StatusConflict, "conflict",
 			fmt.Sprintf("a household can ask for at most %d stores; withdraw one first", MaxStoreRequestsPerHousehold))
 	case errors.Is(err, ErrConflict):
-		httpx.WriteError(w, r, http.StatusConflict, "conflict", "another request is confirming this handoff; retry")
+		httpx.WriteError(w, r, http.StatusConflict, "conflict", "another request changed this handoff at the same time; retry")
 	case errors.Is(err, pantry.ErrConflict):
 		httpx.WriteError(w, r, http.StatusConflict, "conflict", "a pantry item changed at the same time; retry")
 	default:

@@ -83,6 +83,10 @@ final class ShoppingStore {
     private(set) var isCreatingHandoff = false
     private(set) var linkProgress: LinkProgress?
     private(set) var linkError: String?
+    /// Set when "Open in Walmart" found nothing new to add, so no link was opened.
+    private(set) var linkNotice: String?
+    /// "Send Again" or "Start Over" is in flight.
+    private(set) var isResending = false
 
     /// The shown week's newest handoff with a line still pending, for the banner.
     private(set) var openHandoff: ShoppingHandoff?
@@ -119,6 +123,27 @@ final class ShoppingStore {
     var affiliateTracked: Bool { proposal?.affiliateTracked ?? walmart?.affiliateTracked ?? false }
     var readyLines: [ShoppingHandoffLine] { proposal?.lines ?? [] }
     var hasPackageEdits: Bool { !packageOverrides.isEmpty }
+
+    /// Packages the next "Open in Walmart" adds for a line: its count, less what the week's
+    /// hand-off already put in the cart.
+    func addPackages(for line: ShoppingHandoffLine) -> Int {
+        max(packages(for: line) - line.sentPackages, 0)
+    }
+
+    /// Packages in the cart beyond the line's count, which a link can't take back.
+    func removePackages(for line: ShoppingHandoffLine) -> Int {
+        max(line.sentPackages - packages(for: line), 0)
+    }
+
+    /// Lines the next "Open in Walmart" adds something for.
+    var linesToAdd: [ShoppingHandoffLine] {
+        readyLines.filter { addPackages(for: $0) > 0 }
+    }
+
+    /// This week's list already went to Walmart and nothing new would be added.
+    var isEverythingInCart: Bool {
+        proposal?.cart != nil && !readyLines.isEmpty && linesToAdd.isEmpty
+    }
 
     /// Link progress for a handoff of the shown week.
     var weekLinkProgress: LinkProgress? {
@@ -252,6 +277,7 @@ final class ShoppingStore {
             refreshError = nil
             packageOverrides = [:]
             linkError = nil
+            linkNotice = nil
             openHandoff = nil
             // Each week has its own order state; the previous week's must not linger.
             orderReminder = nil
@@ -374,7 +400,12 @@ final class ShoppingStore {
 
     // MARK: - Handoff
 
-    /// Stores a handoff for the shown week and opens its first cart link.
+    /// Sends the shown week's list to its Walmart hand-off and opens the first cart link.
+    ///
+    /// Walmart's link adds to whatever the cart holds and DinnerOS can't read that cart, so the
+    /// API keeps what the week already sent and links only what's new. When nothing is, no
+    /// link opens and `linkNotice` says everything is already in the cart. The week is matched
+    /// again afterwards so the sent lines move under "In Walmart Cart" on every phone.
     func openInWalmart() async throws {
         let (api, householdID) = try requireHousehold()
         guard !isCreatingHandoff else { return }
@@ -384,6 +415,7 @@ final class ShoppingStore {
         let started = scope
         isCreatingHandoff = true
         linkError = nil
+        linkNotice = nil
         let handoff: ShoppingHandoff
         do {
             handoff = try await session.authorized { token in
@@ -396,13 +428,72 @@ final class ShoppingStore {
         }
         guard started == scope else { return }
         isCreatingHandoff = false
-        Self.logger.info("Shopping handoff created with \(handoff.cartLinks.count, privacy: .public) links")
-        linkProgress = LinkProgress(handoff: handoff)
-        dismissedHandoffIDs.remove(handoff.id)
+        Self.logger.info("Shopping handoff sent with \(handoff.cartLinks.count, privacy: .public) links")
         if handoff.status == .open, handoff.week == self.week.description {
             openHandoff = handoff
         }
+        guard !handoff.cartLinks.isEmpty else {
+            linkProgress = nil
+            linkNotice = ShoppingText.everythingInCart
+            await loadProposal(clearing: false)
+            return
+        }
+        linkProgress = LinkProgress(handoff: handoff)
+        dismissedHandoffIDs.remove(handoff.id)
         await openNextCartLink()
+        if handoff.week == self.week.description {
+            await loadProposal(clearing: false)
+        }
+    }
+
+    /// "Send Again": the member removed a line from the Walmart cart, so the next "Open in
+    /// Walmart" adds it in full. The week is matched again, which moves it back to Ready.
+    func sendAgain(_ line: ShoppingHandoffLine) async throws {
+        let (api, householdID) = try requireHousehold()
+        let started = scope
+        let week = week
+        let provider = provider
+        isResending = true
+        defer {
+            if started == scope { isResending = false }
+        }
+        try await session.authorized { token in
+            try await api.sendLineAgain(
+                householdID: householdID, week: week, provider: provider, ingredientKey: line.ingredientKey,
+                accessToken: token)
+        }
+        guard started == scope, week == self.week else { return }
+        Self.logger.info("Shopping line will be sent again")
+        linkNotice = nil
+        await loadProposal(clearing: false)
+    }
+
+    /// "Start Over": forgets what this week sent (the member emptied the Walmart cart) and
+    /// sends every line again.
+    func startOverAndSendEverything() async throws {
+        let (api, householdID) = try requireHousehold()
+        let started = scope
+        let week = week
+        let provider = provider
+        isResending = true
+        do {
+            try await session.authorized { token in
+                try await api.startOverHandoff(
+                    householdID: householdID, week: week, provider: provider, accessToken: token)
+            }
+        } catch {
+            if started == scope { isResending = false }
+            throw error
+        }
+        guard started == scope, week == self.week else { return }
+        isResending = false
+        Self.logger.info("Shopping handoff started over")
+        linkProgress = nil
+        linkNotice = nil
+        openHandoff = nil
+        confirmationPrompt = nil
+        await loadProposal(clearing: false)
+        try await openInWalmart()
     }
 
     /// Opens the handoff's next cart link in Walmart (the app when installed, otherwise Safari).
@@ -561,6 +652,13 @@ final class ShoppingStore {
         // Marking also reads the bell's copy of the reminder server-side, so the badge is
         // refreshed here alongside the pantry.
         await onPantryChanged?()
+        // Ordering checks out the Walmart cart, so the API closes the week's hand-off and the
+        // next send starts fresh; taking the mark back reopens it. The match shows either.
+        linkProgress = nil
+        linkNotice = nil
+        if isConfigured, proposal != nil {
+            await loadProposal(clearing: false)
+        }
     }
 
     // MARK: - Saved products
@@ -784,6 +882,8 @@ final class ShoppingStore {
         isCreatingHandoff = false
         linkProgress = nil
         linkError = nil
+        linkNotice = nil
+        isResending = false
         openHandoff = nil
         confirmationPrompt = nil
         orderReminder = nil

@@ -24,7 +24,8 @@ var (
 	ErrDuplicate = errors.New("shopping: duplicate")
 	// ErrForbidden means the actor's role lacks the permission.
 	ErrForbidden = errors.New("shopping: forbidden")
-	// ErrConflict means another request is confirming the same handoff line.
+	// ErrConflict means another request is confirming the same handoff line,
+	// or changed the handoff while it was being sent again.
 	ErrConflict = errors.New("shopping: concurrent change")
 	// ErrUnknownProvider is a provider key DinnerOS doesn't know.
 	ErrUnknownProvider = errors.New("shopping: unknown provider")
@@ -226,6 +227,64 @@ type HandoffLine struct {
 	// SkippedBy and SkippedAt are set when a member said it wasn't ordered.
 	SkippedBy string
 	SkippedAt time.Time
+
+	// Cart is set on a match line when the week has a current handoff: what
+	// that handoff already put in the provider's cart for this product. It is
+	// derived on read and never stored.
+	Cart *LineCart
+}
+
+// LineCart compares a match line with what the week's current handoff
+// already sent to the provider's cart for the same ingredient and product.
+type LineCart struct {
+	// SentPackages is what the handoff's links already added.
+	SentPackages int
+	// AddPackages is what the next send adds: Packages less SentPackages, or
+	// 0 when the cart already holds enough.
+	AddPackages int
+	// RemovePackages is SentPackages less Packages when the count went down.
+	// A cart link can only add, so the member removes these in the provider's
+	// app.
+	RemovePackages int
+}
+
+// SentReason says why a product in the cart isn't one of a match's lines.
+type SentReason string
+
+// Sent reasons.
+const (
+	// SentNotOnList: the ingredient is no longer on the week's list.
+	SentNotOnList SentReason = "not_on_list"
+	// SentProductChanged: the household saved another product for the
+	// ingredient since this one was sent.
+	SentProductChanged SentReason = "product_changed"
+	// SentNotIncluded: the line is on the list but left out of this match
+	// (checked off, in the pantry, not selected, and so on).
+	SentNotIncluded SentReason = "not_included"
+)
+
+// SentLine is a product the week's current handoff put in the cart that
+// isn't one of the match's lines.
+type SentLine struct {
+	LineSource
+	ProductID    string
+	ProductName  string
+	PackageSize  *PackageSize
+	SentPackages int
+	// RemovePackages is SentPackages when the product is no longer wanted
+	// (not on the list, or replaced by another product), else 0.
+	RemovePackages int
+	Reason         SentReason
+}
+
+// CartState is what the week's current handoff already put in the cart, set
+// on a match when there is one.
+type CartState struct {
+	HandoffID string
+	// SentAt is when the handoff last changed.
+	SentAt time.Time
+	// Other lists sent products that aren't among the match's lines.
+	Other []SentLine
 }
 
 // Excluded is a grocery line left out of a handoff.
@@ -253,13 +312,45 @@ type Proposal struct {
 	Excluded         []Excluded
 	Links            []CartLink
 	AffiliateTracked bool
+	// Cart is set on a match when the week has a current handoff (see
+	// Service.Match). It is never stored.
+	Cart *CartState
 }
 
-// Handoff is a stored proposal whose links a member opened, with what was
+// CloseReason says why a handoff stopped collecting sends.
+type CloseReason string
+
+// Close reasons.
+const (
+	// ClosedOrdered: a member marked the week ordered.
+	ClosedOrdered CloseReason = "ordered"
+	// ClosedStartedOver: a member chose to send everything again.
+	ClosedStartedOver CloseReason = "started_over"
+	// ClosedConfirmed: every line was confirmed or skipped, so the order was
+	// placed.
+	ClosedConfirmed CloseReason = "confirmed"
+)
+
+// Handoff is what a week's list sent to a provider's cart, with what was
 // confirmed.
+//
+// A household has at most one current handoff per week and provider
+// (Active). Opening the provider again adds to it: new lines, and for a line
+// whose package count went up, only the extra packages. Each line's Packages
+// is what its links have put in the cart so far, and Links are the latest
+// send's. Marking the week ordered, starting over, or answering every line
+// closes it, and the next send starts a new handoff.
 type Handoff struct {
 	ID string
 	Proposal
+	// Active is true while the handoff is the week's current one.
+	Active bool
+	// ClosedAt and ClosedReason are set once it isn't.
+	ClosedAt     time.Time
+	ClosedReason CloseReason
+	// Revision increases with every change to the lines, so two concurrent
+	// sends can't both add the same packages.
+	Revision  int64
 	CreatedBy string
 	CreatedAt time.Time
 	UpdatedAt time.Time

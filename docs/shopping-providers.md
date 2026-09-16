@@ -360,7 +360,8 @@ optional interfaces (checked with type assertions, like grocery.OutPantry):
 | `GET /households/{id}/shopping/{provider}/products?q=` | `household.view` | Search |
 | `GET/PUT/DELETE /households/{id}/shopping/{provider}/preferences/{ingredientKey}` | view / `shopping.edit` | Saved products |
 | `POST /households/{id}/plans/{week}/shopping/{provider}/match` | `household.view` | Proposal per `toBuy` line: product, packages, coverage text, stock, flags |
-| `POST /households/{id}/plans/{week}/shopping/{provider}/handoffs` | `shopping.edit` | Member-confirmed lines → stored handoff and URL |
+| `POST /households/{id}/plans/{week}/shopping/{provider}/handoffs` | `shopping.edit` | Member-confirmed lines → the week's handoff, with URLs for only what isn't in the cart yet |
+| `POST /households/{id}/plans/{week}/shopping/{provider}/handoffs/start-over` · `.../send-again` | `shopping.edit` | Send everything again, or one line |
 | `POST /households/{id}/shopping/handoffs/{handoffId}/confirm` | `pantry.edit` | Bought lines → `provider` pantry purchases |
 
 New collections: `shopping_product_preferences` (unique `{householdId,
@@ -471,6 +472,20 @@ credentials.
   Walmart", stepping through several cart links; and "Did you order these?"
   when the app returns, which checks confirmed lines off on the device. The
   commission line shows only when `affiliateTracked` is true.
+- **Sending again** (decision #495): Walmart's add-to-cart link adds to
+  whatever the cart holds and DinnerOS can't read or clear that cart, so
+  opening Walmart twice used to double every quantity. Now a household has
+  one current handoff per week and provider, and every stored line's
+  `packages` is what its links put in the cart. A later "Open in Walmart"
+  adds only new lines and the extra packages of a line whose count went up;
+  with nothing new the app opens nothing and says "Everything is already in
+  your Walmart cart". A decrease or a replaced product can't be undone by a
+  link, so the line says to remove it in the Walmart app. Marking the week
+  ordered, "Start Over", or answering every line in "Did you order these?"
+  closes the handoff, so the next send (and next week) starts with an empty
+  cart. "Send Again" on one line is for a member who removed it from the
+  cart. The state is server-side, so every member's phone agrees
+  ([API](api.md#sending-again)).
 - **Not done yet:** recording that the member opened the links, an
   out-of-stock or alternates flow, and the 8.0 spike's answers (whether the
   `goto.walmart.com` wrapper still opens the app, and the real URL limits).

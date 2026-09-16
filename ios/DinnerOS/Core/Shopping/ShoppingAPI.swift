@@ -92,13 +92,35 @@ nonisolated struct ShoppingAPI: Sendable {
                 .authorized(with: accessToken))
     }
 
-    /// Matches like `match` and stores the result as a handoff (`201`).
+    /// Matches like `match` and sends the result to the week's hand-off: `201` for a new one,
+    /// `200` when adding to the current one. Its `cartLinks` add only what isn't in the cart
+    /// yet, and are empty when nothing is new.
     func createHandoff(
         householdID: String, week: ISOWeek, provider: String, request: ShoppingMatchRequest, accessToken: String
     ) async throws -> ShoppingHandoff {
         try await client.send(
             try APIRequest.post(Self.weekPath(householdID, week, provider) + "/handoffs", body: request)
                 .authorized(with: accessToken))
+    }
+
+    /// Closes the week's current hand-off so the next `createHandoff` sends every line again
+    /// (`204`). Does nothing when there is none.
+    func startOverHandoff(householdID: String, week: ISOWeek, provider: String, accessToken: String) async throws {
+        try await client.sendIgnoringBody(
+            try APIRequest.post(
+                Self.weekPath(householdID, week, provider) + "/handoffs/start-over", body: [String: String]()
+            ).authorized(with: accessToken))
+    }
+
+    /// Forgets that one line was sent, so the next `createHandoff` adds it in full (`204`).
+    func sendLineAgain(
+        householdID: String, week: ISOWeek, provider: String, ingredientKey: String, accessToken: String
+    ) async throws {
+        try await client.sendIgnoringBody(
+            try APIRequest.post(
+                Self.weekPath(householdID, week, provider) + "/handoffs/send-again",
+                body: ["ingredientKey": ingredientKey]
+            ).authorized(with: accessToken))
     }
 
     /// Handoffs, newest first.

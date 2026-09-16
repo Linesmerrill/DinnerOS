@@ -127,13 +127,23 @@ func (s *Service) SetWeekOrdered(
 		}); err != nil {
 			return OrderReminder{}, fmt.Errorf("mark week ordered: %w", err)
 		}
+		// Ordering checks out the cart, so the week's handoff is done
+		// collecting sends: the next one starts with an empty cart.
+		if err := s.closeWeek(ctx, actor.HouseholdID, w.String()); err != nil {
+			return OrderReminder{}, err
+		}
 		// The bell's copy is marked read for the member who acted. Taking the
 		// mark back deliberately leaves it read: they did see it, and an
 		// unread badge reappearing would be its own kind of nagging.
 		s.markReminderRead(ctx, actor, w.String())
-	} else if err := s.store.UnmarkWeekOrdered(ctx, actor.HouseholdID, w.String()); err != nil &&
-		!errors.Is(err, ErrNotFound) {
-		return OrderReminder{}, fmt.Errorf("unmark week ordered: %w", err)
+	} else {
+		if err := s.store.UnmarkWeekOrdered(ctx, actor.HouseholdID, w.String()); err != nil && !errors.Is(err, ErrNotFound) {
+			return OrderReminder{}, fmt.Errorf("unmark week ordered: %w", err)
+		}
+		// A mis-tap mustn't make the next send fill the cart a second time.
+		if err := s.reopenWeek(ctx, actor.HouseholdID, w.String()); err != nil {
+			return OrderReminder{}, err
+		}
 	}
 	s.logger.InfoContext(ctx, "shopping week ordered set",
 		"householdId", actor.HouseholdID, "week", w.String(), "ordered", ordered)

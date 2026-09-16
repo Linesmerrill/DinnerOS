@@ -322,14 +322,14 @@ func TestIntegrationHandoffAndConfirm(t *testing.T) {
 	}
 
 	// Create.
-	if _, err := f.svc.CreateHandoff(ctx, viewer(), testWeek, "walmart", MatchInput{}); !errors.Is(err, ErrForbidden) {
+	if _, _, err := f.svc.CreateHandoff(ctx, viewer(), testWeek, "walmart", MatchInput{}); !errors.Is(err, ErrForbidden) {
 		t.Errorf("viewer error = %v", err)
 	}
-	_, err = f.svc.CreateHandoff(ctx, f.actor, testWeek, "walmart", MatchInput{Lines: []LineSelection{}})
+	_, _, err = f.svc.CreateHandoff(ctx, f.actor, testWeek, "walmart", MatchInput{Lines: []LineSelection{}})
 	wantValidation(t, err, "no grocery line")
-	h, err := f.svc.CreateHandoff(ctx, f.actor, testWeek, "walmart", MatchInput{CheckedOffKeys: []string{f.keys["Milk"]}})
-	if err != nil {
-		t.Fatal(err)
+	h, isNew, err := f.svc.CreateHandoff(ctx, f.actor, testWeek, "walmart", MatchInput{CheckedOffKeys: []string{f.keys["Milk"]}})
+	if err != nil || !isNew || !h.Active || h.Revision != 1 {
+		t.Fatalf("CreateHandoff() = %+v, %v, %v", h, isNew, err)
 	}
 	if h.ID == "" || len(h.Lines) != 4 || h.Status() != HandoffOpen || h.CreatedBy != testUser || h.StoreID != "5435" || reasons(h.Proposal)[f.keys["Milk"]] != ExcludedCheckedOff {
 		t.Fatalf("handoff = %+v", h)
@@ -432,10 +432,15 @@ func TestIntegrationHandoffAndConfirm(t *testing.T) {
 	}
 
 	// Skip the rest, then confirm a skipped line later.
-	h2, err := f.svc.CreateHandoff(ctx, f.actor, testWeek, "walmart", MatchInput{Lines: []LineSelection{
+	// Answering every line closed the first handoff, so this send starts a
+	// new one rather than adding to it.
+	if closed, _ := f.svc.GetHandoff(ctx, testHousehold, h.ID); closed.Active || closed.ClosedReason != ClosedConfirmed {
+		t.Errorf("answered handoff = active %v, reason %q", closed.Active, closed.ClosedReason)
+	}
+	h2, isNew, err := f.svc.CreateHandoff(ctx, f.actor, testWeek, "walmart", MatchInput{Lines: []LineSelection{
 		{IngredientKey: f.keys["Milk"]}, {IngredientKey: f.keys["Ground Beef"]}, {IngredientKey: f.keys["Kidney Beans"]},
 	}})
-	if err != nil || len(h2.Lines) != 3 {
+	if err != nil || !isNew || len(h2.Lines) != 3 || h2.ID == h.ID {
 		t.Fatalf("second handoff = %+v, %v", h2, err)
 	}
 	res, err = f.svc.Confirm(ctx, f.actor, h2.ID, ConfirmInput{Lines: []ConfirmLine{{LineID: "l1"}}, SkipRest: true})

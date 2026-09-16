@@ -214,9 +214,10 @@ private struct ShopWeekList: View {
                 }
             }
         }
-        if !proposal.lines.isEmpty {
+        let toSend = proposal.linesToSend
+        if !toSend.isEmpty {
             Section {
-                ForEach(proposal.lines) { line in
+                ForEach(toSend) { line in
                     ReadyLineRow(line: line, packages: packagesBinding(for: line), canEdit: shopping.canEdit) {
                         choose(ProductChoice(line: line))
                     }
@@ -226,6 +227,11 @@ private struct ShopWeekList: View {
             } footer: {
                 Text("Counts come from each product's package size. Check flagged lines before opening Walmart.")
             }
+        }
+        if !proposal.linesInCart.isEmpty || !proposal.otherInCart.isEmpty {
+            InWalmartCartSection(
+                proposal: proposal, packages: packagesBinding(for:),
+                changeProduct: { choose(ProductChoice(line: $0)) })
         }
         if !notIncluded.isEmpty {
             Section {
@@ -323,6 +329,12 @@ private struct ReadyLineRow: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+                    // Sent before at a lower count: only the difference goes to Walmart.
+                    if line.sentPackages > 0 {
+                        Text(ShoppingText.cartStatus(sent: line.sentPackages, wanted: packages))
+                            .font(.footnote)
+                            .foregroundStyle(.tint)
+                    }
                 }
                 .accessibilityElement(children: .combine)
                 Spacer(minLength: 0)
@@ -353,6 +365,144 @@ private struct ReadyLineRow: View {
             }
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// What this week's hand-off already put in the Walmart cart. Walmart's link only adds, so
+/// these lines stay out of the next "Open in Walmart" unless their count goes up; a lower count
+/// says what to remove in the Walmart app. "Send Again" and "Start Over" are for a cart the
+/// member emptied.
+private struct InWalmartCartSection: View {
+    let proposal: ShoppingProposal
+    let packages: (ShoppingHandoffLine) -> Binding<Int>
+    let changeProduct: (ShoppingHandoffLine) -> Void
+
+    @Environment(ShoppingStore.self) private var shopping
+    @Environment(HouseholdStore.self) private var households
+
+    @State private var isConfirmingStartOver = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Section {
+            if let errorMessage {
+                FormErrorLabel(message: errorMessage)
+            }
+            ForEach(proposal.linesInCart) { line in
+                InCartLineRow(
+                    line: line, packages: packages(line), canEdit: shopping.canEdit,
+                    sendAgain: { run { try await shopping.sendAgain(line) } },
+                    changeProduct: { changeProduct(line) })
+            }
+            ForEach(proposal.otherInCart) { line in
+                OtherInCartRow(line: line)
+            }
+            if shopping.canEdit {
+                Button("Start Over and Send Everything", systemImage: "arrow.counterclockwise") {
+                    isConfirmingStartOver = true
+                }
+                .disabled(shopping.isResending || shopping.isCreatingHandoff)
+                // Attached to the button: on iOS 26 the dialog is a popover anchored to it.
+                .confirmationDialog(
+                    "Send Everything Again?", isPresented: $isConfirmingStartOver, titleVisibility: .visible
+                ) {
+                    Button("Send Everything Again") {
+                        run { try await shopping.startOverAndSendEverything() }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(
+                        "Only do this if your Walmart cart is empty. Every item is added again, so anything still in the cart would be doubled."
+                    )
+                }
+            }
+        } header: {
+            Text("In Walmart Cart")
+        } footer: {
+            Text(
+                "Already sent to your Walmart cart this week, so opening Walmart again won't add them twice. Marking the week ordered starts fresh."
+            )
+        }
+    }
+
+    private func run(_ action: @escaping @MainActor () async throws -> Void) {
+        Task {
+            errorMessage = nil
+            do {
+                try await action()
+            } catch is CancellationError {
+                return
+            } catch {
+                errorMessage = ShopErrors.message(for: error, households: households)
+            }
+        }
+    }
+}
+
+private struct InCartLineRow: View {
+    let line: ShoppingHandoffLine
+    @Binding var packages: Int
+    let canEdit: Bool
+    let sendAgain: () -> Void
+    let changeProduct: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(line.name)
+                        .font(.headline)
+                    Text(line.product.displayName)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Label(ShoppingText.cartStatus(sent: line.sentPackages, wanted: packages), systemImage: "cart.fill")
+                        .font(.footnote)
+                        .foregroundStyle(
+                            packages < line.sentPackages ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.tint))
+                }
+                .accessibilityElement(children: .combine)
+                Spacer(minLength: 0)
+                if canEdit {
+                    Menu {
+                        Button("Send Again", systemImage: "arrow.clockwise", action: sendAgain)
+                        Button("Change Product", systemImage: "arrow.triangle.2.circlepath", action: changeProduct)
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .imageScale(.large)
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel("Options for \(line.name)")
+                    .accessibilityHint(
+                        "Send Again adds it to the Walmart cart next time, for when you removed it there.")
+                }
+            }
+            if canEdit {
+                Stepper(value: $packages, in: ShoppingLimits.packages) {
+                    Text(ShoppingText.packages(packages))
+                        .font(.subheadline)
+                }
+                .accessibilityLabel("Packages of \(line.name)")
+                .accessibilityValue(ShoppingText.packages(packages))
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+private struct OtherInCartRow: View {
+    let line: ShoppingSentLine
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(line.name.isEmpty ? line.product.displayName : line.name)
+            Text(line.product.displayName)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Label(line.text, systemImage: line.removePackages > 0 ? "minus.circle" : "cart.fill")
+                .font(.footnote)
+                .foregroundStyle(line.removePackages > 0 ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -562,8 +712,18 @@ private struct ShopHandoffBar: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                openButton(title: "Open in Walmart Again")
-                    .buttonStyle(.bordered)
+                if shopping.isEverythingInCart {
+                    everythingInCart
+                } else {
+                    openButton(title: "Add New Items in Walmart")
+                        .buttonStyle(.bordered)
+                    Text(summary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } else if shopping.isEverythingInCart {
+                // Walmart's link would only add these a second time.
+                everythingInCart
             } else {
                 openButton(title: "Open in Walmart")
                     .buttonStyle(.borderedProminent)
@@ -583,8 +743,22 @@ private struct ShopHandoffBar: View {
         .background(.bar)
     }
 
+    private var everythingInCart: some View {
+        Label(shopping.linkNotice ?? ShoppingText.everythingInCart, systemImage: "checkmark.circle")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+    }
+
+    /// Counts only what the link adds: lines already in the cart aren't sent again.
     private var summary: String {
-        let count = proposal.lines.count
+        let count = shopping.linesToAdd.count
+        if proposal.cart != nil {
+            return count == 1
+                ? String(localized: "Adds 1 new item to your Walmart cart. What's already there isn't added again.")
+                : String(
+                    localized: "Adds \(count) new items to your Walmart cart. What's already there isn't added again.")
+        }
         return count == 1
             ? String(localized: "Adds 1 item to your Walmart cart. You check out in Walmart.")
             : String(localized: "Adds \(count) items to your Walmart cart. You check out in Walmart.")

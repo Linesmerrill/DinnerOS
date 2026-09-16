@@ -304,13 +304,73 @@ nonisolated struct ShoppingHandoffLine: Decodable, Hashable, Sendable, Identifia
     let searchTerms: ShoppingSearchTerms
     /// `nil` on a match.
     let confirmation: ShoppingLineConfirmation?
+    /// On a match, what the week's Walmart hand-off already put in the cart for this line.
+    /// `nil` when nothing has been sent this week, and on stored handoffs.
+    var cart: ShoppingLineCart? = nil
+
+    /// Packages already in the Walmart cart.
+    var sentPackages: Int { cart?.sentPackages ?? 0 }
+
+    /// Sent before and not wanted in larger numbers, as the API matched it: the Shop tab lists
+    /// it under "In Walmart Cart".
+    var isInCart: Bool {
+        guard let cart else { return false }
+        return cart.sentPackages > 0 && cart.addPackages == 0
+    }
 
     private enum CodingKeys: String, CodingKey {
         case id, ingredientKey
         case ingredientID = "ingredientId"
         case name, category, amounts, quantityText, unquantified, groceryStatus, product, computedPackages, packages,
             packagesOverridden, checkAmount, reason, reasonText, coverageText, coverage, coversWeek, searchTerms,
-            confirmation
+            confirmation, cart
+    }
+}
+
+/// What a match line already has in the Walmart cart (`ShoppingLineCart`). A cart link can only
+/// add, so what went down is removed by the member in the Walmart app.
+nonisolated struct ShoppingLineCart: Decodable, Hashable, Sendable {
+    let sentPackages: Int
+    let addPackages: Int
+    let removePackages: Int
+}
+
+/// Why a product in the cart isn't one of the match's lines. Unknown values decode as-is.
+nonisolated struct ShoppingSentReason: RawRepresentable, Codable, Hashable, Sendable {
+    let rawValue: String
+
+    init(rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    static let notOnList = ShoppingSentReason(rawValue: "not_on_list")
+    static let productChanged = ShoppingSentReason(rawValue: "product_changed")
+    static let notIncluded = ShoppingSentReason(rawValue: "not_included")
+}
+
+/// A product the week's hand-off put in the cart that isn't a match line (`ShoppingSentLine`).
+nonisolated struct ShoppingSentLine: Decodable, Hashable, Sendable, Identifiable {
+    let ingredientKey: String
+    let name: String
+    let product: ShoppingLineProduct
+    let sentPackages: Int
+    let removePackages: Int
+    let reason: ShoppingSentReason
+    /// The API's display text, for example "No longer on the list; remove 2 in the Walmart app".
+    let text: String
+
+    var id: String { "\(ingredientKey)|\(product.productID)" }
+}
+
+/// What the week's current hand-off put in the cart (`ShoppingCartState`).
+nonisolated struct ShoppingCartState: Decodable, Hashable, Sendable {
+    let handoffID: String
+    let sentAt: Date
+    let other: [ShoppingSentLine]
+
+    private enum CodingKeys: String, CodingKey {
+        case handoffID = "handoffId"
+        case sentAt, other
     }
 }
 
@@ -407,6 +467,24 @@ nonisolated struct ShoppingProposal: Decodable, Hashable, Sendable {
     let excluded: [ShoppingExcludedLine]
     let cartLinks: [ShoppingCartLink]
     let affiliateTracked: Bool
+    /// Set on a match once this week's list went to Walmart; `cartLinks` then add only what
+    /// isn't in the cart yet.
+    var cart: ShoppingCartState? = nil
+
+    /// Lines still to send: never sent, or wanted in larger numbers than the cart holds.
+    var linesToSend: [ShoppingHandoffLine] {
+        lines.filter { !$0.isInCart }
+    }
+
+    /// Lines already in the Walmart cart at the matched count or more.
+    var linesInCart: [ShoppingHandoffLine] {
+        lines.filter(\.isInCart)
+    }
+
+    /// Products in the cart that aren't lines: off the list, replaced, or left out.
+    var otherInCart: [ShoppingSentLine] {
+        cart?.other ?? []
+    }
 
     /// Lines without a saved product. The API lists them in `excluded`, not `lines`.
     var needsProduct: [ShoppingExcludedLine] {
@@ -421,7 +499,7 @@ nonisolated struct ShoppingProposal: Decodable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case provider, week
         case storeID = "storeId"
-        case lines, excluded, cartLinks, affiliateTracked
+        case lines, excluded, cartLinks, affiliateTracked, cart
     }
 }
 
@@ -559,4 +637,33 @@ nonisolated enum ShoppingText {
     static func packages(_ count: Int) -> String {
         count == 1 ? String(localized: "1 package") : String(localized: "\(count) packages")
     }
+
+    /// "In Walmart cart · 2".
+    static func inCart(_ count: Int) -> String {
+        String(localized: "In Walmart cart · \(count)")
+    }
+
+    /// A link can't take packages out of the cart, so the member does: "Remove 1 in the Walmart app".
+    static func removeInWalmart(_ count: Int) -> String {
+        String(localized: "Remove \(count) in the Walmart app")
+    }
+
+    /// What the next "Open in Walmart" adds to a line already in the cart: "Adds 1 more".
+    static func addsMore(_ count: Int) -> String {
+        String(localized: "Adds \(count) more")
+    }
+
+    /// A sent line against the count wanted now: "In Walmart cart · 2", with "Adds 1 more" or
+    /// "Remove 1 in the Walmart app" when they differ.
+    static func cartStatus(sent: Int, wanted: Int) -> String {
+        if wanted > sent {
+            return "\(inCart(sent)) · \(addsMore(wanted - sent))"
+        }
+        if wanted < sent {
+            return "\(inCart(sent)) · \(removeInWalmart(sent - wanted))"
+        }
+        return inCart(sent)
+    }
+
+    static let everythingInCart = String(localized: "Everything is already in your Walmart cart")
 }

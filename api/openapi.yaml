@@ -2540,10 +2540,19 @@ paths:
     post:
       summary: Hand off the week's list
       description: |
-        Matches like `.../match` and stores the result as a handoff, so what
-        members confirm can be recorded. Open `cartLinks` in order; each adds
-        its products to the same cart. At least one line needs a saved
-        product. Requires `shopping.edit`.
+        Matches like `.../match` and sends the result to the week's handoff,
+        so what members confirm can be recorded. Open `cartLinks` in order;
+        each adds its products to the same cart.
+
+        A household has one current handoff per week and provider. The first
+        send stores it (`201`) with every line. Later sends add to it
+        (`200`) and their `cartLinks` add only what isn't in the cart yet:
+        new lines, and the extra packages of a line whose count went up.
+        When nothing is new, the handoff comes back unchanged with empty
+        `cartLinks`; open nothing. Marking the week ordered, starting over,
+        or answering every line closes it, and the next send stores a new
+        one. At least one line needs a saved product. Requires
+        `shopping.edit`.
       operationId: createShoppingHandoff
       tags: [shopping]
       security:
@@ -2555,12 +2564,89 @@ paths:
             schema:
               $ref: "#/components/schemas/ShoppingMatchRequest"
       responses:
-        "201":
-          description: The stored handoff.
+        "200":
+          description: The week's current handoff, with links for what this send adds (none when nothing is new).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ShoppingHandoff"
+        "201":
+          description: A new handoff for the week.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingHandoff"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/ProviderUnavailable"
+  /api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs/start-over:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+      - $ref: "#/components/parameters/ShoppingProvider"
+    post:
+      summary: Start the week's handoff over
+      description: |
+        Closes the week's current handoff (`closedReason: started_over`) and
+        marks its pending lines not ordered, so the next send adds every line
+        again. For a member who emptied the cart. Does nothing when there is
+        no current handoff. Requires `shopping.edit`.
+      operationId: startOverShoppingHandoff
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Started over.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ProviderUnavailable"
+  /api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs/send-again:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+      - $ref: "#/components/parameters/ShoppingProvider"
+    post:
+      summary: Send one line again
+      description: |
+        Removes one ingredient's pending lines from the week's current
+        handoff, so the next send adds it in full, for a member who removed
+        it from the cart. Confirmed lines stay (their purchases are
+        recorded). Does nothing when there is no current handoff or nothing
+        pending for the ingredient. Requires `shopping.edit`.
+      operationId: sendShoppingLineAgain
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ingredientKey]
+              properties:
+                ingredientKey:
+                  type: string
+      responses:
+        "204":
+          description: The line will be sent again.
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -9156,7 +9242,7 @@ components:
           format: date-time
     ShoppingHandoffLine:
       type: object
-      required: [id, ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, product, computedPackages, packages, packagesOverridden, checkAmount, reason, reasonText, coverageText, coverage, coversWeek, searchTerms, confirmation]
+      required: [id, ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, product, computedPackages, packages, packagesOverridden, checkAmount, reason, reasonText, coverageText, coverage, coversWeek, searchTerms, confirmation, cart]
       properties:
         id:
           type: string
@@ -9200,7 +9286,9 @@ components:
           description: Exact package math (docs/api.md#match-and-hand-off).
         packages:
           type: integer
-          description: What the cart link asks for.
+          description: |
+            On a match, what the week needs (the member's count when given).
+            On a stored handoff, what its links have put in the cart so far.
         packagesOverridden:
           type: boolean
         checkAmount:
@@ -9231,6 +9319,81 @@ components:
           oneOf:
             - $ref: "#/components/schemas/ShoppingLineConfirmation"
             - type: "null"
+        cart:
+          description: |
+            Set on a match when the week has a current handoff: what it already
+            put in the cart for this ingredient and product. Null otherwise,
+            and on stored handoffs, whose `packages` are what was sent.
+          oneOf:
+            - $ref: "#/components/schemas/ShoppingLineCart"
+            - type: "null"
+    ShoppingLineCart:
+      type: object
+      required: [sentPackages, addPackages, removePackages]
+      properties:
+        sentPackages:
+          type: integer
+          description: Packages the week's handoff already added to the cart.
+        addPackages:
+          type: integer
+          description: What the next send adds, `packages` less `sentPackages` (0 when the cart holds enough).
+        removePackages:
+          type: integer
+          description: |
+            `sentPackages` less `packages` when the count went down. A cart link
+            can only add, so the member removes these in the provider's app.
+    ShoppingSentLine:
+      type: object
+      description: A product the week's handoff put in the cart that isn't one of the match's lines.
+      required: [ingredientKey, ingredientId, name, category, product, sentPackages, removePackages, reason, text]
+      properties:
+        ingredientKey:
+          type: string
+        ingredientId:
+          type: [string, "null"]
+        name:
+          type: string
+        category:
+          type: string
+        product:
+          type: object
+          required: [productId, displayName, productUrl, packageSize]
+          properties:
+            productId:
+              type: string
+            displayName:
+              type: string
+            productUrl:
+              type: string
+            packageSize:
+              oneOf:
+                - $ref: "#/components/schemas/ShoppingAmount"
+                - type: "null"
+        sentPackages:
+          type: integer
+        removePackages:
+          type: integer
+          description: "`sentPackages` when the product is no longer wanted, else 0."
+        reason:
+          type: string
+          enum: [not_on_list, product_changed, not_included]
+        text:
+          type: string
+          example: No longer on the list; remove 2 in the Walmart app
+    ShoppingCartState:
+      type: object
+      required: [handoffId, sentAt, other]
+      properties:
+        handoffId:
+          type: string
+        sentAt:
+          type: string
+          format: date-time
+          description: When the handoff last changed.
+        other:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShoppingSentLine"
     ShoppingExcludedLine:
       type: object
       required: [ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, reason, text, searchTerms]
@@ -9316,8 +9479,16 @@ components:
           description: Distinct products in the link.
     ShoppingProposal:
       type: object
-      required: [provider, week, storeId, lines, excluded, cartLinks, affiliateTracked]
+      required: [provider, week, storeId, lines, excluded, cartLinks, affiliateTracked, cart]
       properties:
+        cart:
+          description: |
+            Set on a match when the week has a current handoff; then
+            `cartLinks` add only what isn't in the cart yet. Null otherwise,
+            and always on a stored handoff.
+          oneOf:
+            - $ref: "#/components/schemas/ShoppingCartState"
+            - type: "null"
         provider:
           type: string
           example: walmart
@@ -9343,7 +9514,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ShoppingProposal"
         - type: object
-          required: [id, status, createdBy, createdAt, updatedAt]
+          required: [id, status, active, closedAt, closedReason, createdBy, createdAt, updatedAt]
           properties:
             id:
               type: string
@@ -9351,6 +9522,19 @@ components:
               type: string
               enum: [open, done]
               description: "`open` while some line is pending."
+            active:
+              type: boolean
+              description: True while it is the week's current handoff, which later sends add to.
+            closedAt:
+              type: [string, "null"]
+              format: date-time
+            closedReason:
+              type: [string, "null"]
+              enum: [ordered, started_over, confirmed, null]
+              description: |
+                `ordered`: the week was marked ordered (taking that back reopens
+                it). `started_over`: a member started over. `confirmed`: every
+                line was confirmed or skipped.
             createdBy:
               type: string
             createdAt:

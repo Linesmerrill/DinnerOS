@@ -179,7 +179,9 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | PUT | `/api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}` `{productUrl or productId, displayName, packageSize?, ingredientName?}` → `201` saved product, or `200` when replaced | `shopping.edit` | 8a | ✅ |
 | DELETE | `/api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}` → `204` | `shopping.edit` | 8a | ✅ |
 | POST | `/api/v1/households/{householdId}/plans/{week}/shopping/{provider}/match` `{lines?, checkedOffKeys?, excludeKeys?}` → proposal (not stored) | `household.view` | 8a | ✅ |
-| POST | `/api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs` `{lines?, checkedOffKeys?, excludeKeys?}` → `201` handoff | `shopping.edit` | 8a | ✅ |
+| POST | `/api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs` `{lines?, checkedOffKeys?, excludeKeys?}` → `201` new handoff, or `200` the week's handoff with links for only what's new | `shopping.edit` | 8a | ✅ |
+| POST | `/api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs/start-over` → `204` | `shopping.edit` | 8a | ✅ |
+| POST | `/api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs/send-again` `{ingredientKey}` → `204` | `shopping.edit` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/handoffs` `?week&status&limit` → `{items}` | `household.view` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/handoffs/{handoffId}` → handoff | `household.view` | 8a | ✅ |
 | POST | `/api/v1/households/{householdId}/shopping/handoffs/{handoffId}/confirm` `{all}` or `{lines: [{lineId, packages?}], skipRest?}` → `{handoff, purchases}` | `pantry.edit` | 8a | ✅ |
@@ -1501,6 +1503,76 @@ starts past 2,000 characters or 40 products, so a big week can have several:
 open them one after another, each fills the same Walmart cart. With affiliate
 tracking each URL is a `goto.walmart.com` link wrapping that one. Creating a
 handoff with no line to add is `400`.
+
+#### Sending again
+
+Walmart's link **adds** its quantities to whatever the cart holds, and
+DinnerOS can't read or clear that cart. So a household has **one current
+handoff per week and provider** (`active: true`, one per household, week, and
+provider, enforced by a unique index), and every send adds to it only what
+isn't in the cart yet:
+
+| Situation | What the next `POST .../handoffs` links add |
+| --- | --- |
+| No current handoff | Every line (`201`, a new handoff) |
+| A line not sent yet | The whole line |
+| A line whose count went up (3 → 5) | Only the extra packages (`items=ID_2`) |
+| A line already sent in full | Nothing |
+| Nothing new at all | Nothing: `200` with `cartLinks: []`, and the handoff is unchanged. Open no link |
+| A line whose count went down | Nothing; the match reports `removePackages` for the member to remove in Walmart |
+| A line whose saved product changed | The new product in full; the old one is reported in `cart.other` |
+
+A stored handoff line's `packages` is what its links have put in the cart so
+far, which is also what "Did you order these?" confirms by default; a later
+send grows a pending line in place. A **confirmed** line counts as sent but is
+never grown (its purchase is recorded): extra packages go on a new line.
+`cartLinks` on the handoff are the latest send's. Two members sending at once
+can't both add the same packages: the handoff carries a revision, and the
+losing send is recomputed (a `409` only after three tries).
+
+When the week has a current handoff, **a match says what's in the cart**:
+each line has `cart: {sentPackages, addPackages, removePackages}` (null
+without one), its `cartLinks` add only `addPackages`, and `cart` lists the
+products in the cart that aren't lines:
+
+```json
+"cart": {
+  "handoffId": "66e5a1f2c3b4a5d6e7f80b01",
+  "sentAt": "2026-09-15T18:30:00Z",
+  "other": [
+    {
+      "ingredientKey": "66e5a1f2c3b4a5d6e7f80a19", "ingredientId": "66e5a1f2c3b4a5d6e7f80a19",
+      "name": "Kidney Beans", "category": "pantry",
+      "product": { "productId": "123456780", "displayName": "Kidney beans", "productUrl": "https://www.walmart.com/ip/123456780", "packageSize": null },
+      "sentPackages": 2, "removePackages": 2, "reason": "not_on_list",
+      "text": "No longer on the list; remove 2 in the Walmart app"
+    }
+  ]
+}
+```
+
+`reason` is `not_on_list` or `product_changed` (both with `removePackages` =
+`sentPackages`), or `not_included` (still on the list, left out of this match:
+checked off, in the pantry, not selected; `removePackages: 0`).
+
+**The handoff closes** (`active: false`, `closedAt`, `closedReason`), and the
+next send starts a new one with an empty cart, when:
+
+- the week is **marked ordered** (`PUT .../weeks/{week}/order`,
+  `closedReason: ordered`). Taking the mark back reopens the newest one it
+  closed if it still has pending lines, so a mis-tap doesn't fill the cart
+  twice. Another week always has its own handoff.
+- a member **starts over**: `POST .../handoffs/start-over` (`shopping.edit`,
+  `204`) closes it (`started_over`) and marks its pending lines `skipped`, so
+  "Did you order these?" asks about the new handoff instead.
+- **every line is confirmed or skipped** (`confirmed`): the order was placed.
+
+`POST .../handoffs/send-again` `{ "ingredientKey": "…" }` (`shopping.edit`,
+`204`) removes that ingredient's pending lines from the current handoff, so
+the next send adds it in full, for a member who removed it from the cart.
+Neither call does anything without a current handoff. A handoff stored before
+handoffs were kept per week (no `revision`) still counts as the current one
+while it is open, and becomes active on the next send.
 
 `GET .../shopping/handoffs` (`household.view`) lists handoffs newest first:
 `?week=2026-W38`, `?status=open` (some line pending) or `done`, `?limit=`

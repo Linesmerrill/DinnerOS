@@ -50,6 +50,16 @@ func (s *orderStore) UnmarkWeekOrdered(_ context.Context, householdID, week stri
 	return nil
 }
 
+// The order reminder closes and reopens the week's handoffs; these tests have
+// none (integration_test.go covers that).
+func (s *orderStore) CloseWeekHandoffs(context.Context, string, string, CloseReason, time.Time) (int, error) {
+	return 0, nil
+}
+
+func (s *orderStore) ListHandoffs(context.Context, string, HandoffFilter) ([]Handoff, error) {
+	return nil, nil
+}
+
 type orderHouseholds struct{ household households.Household }
 
 func (h orderHouseholds) GetHousehold(context.Context, string) (households.Household, error) {

@@ -31,8 +31,30 @@ type Store interface {
 	// DeletePreference removes the saved product for one ingredient.
 	DeletePreference(ctx context.Context, householdID string, provider providers.Key, ingredientKey string) error
 
-	// InsertHandoff stores h, assigning its ID.
+	// InsertHandoff stores h, assigning its ID, as the week's active handoff
+	// for its provider at revision 1. Another active one for the same week and
+	// provider is ErrDuplicate.
 	InsertHandoff(ctx context.Context, h Handoff) (Handoff, error)
+	// ActiveHandoff returns the household's active handoff for a week and
+	// provider, or ErrNotFound.
+	ActiveHandoff(ctx context.Context, householdID, week string, provider providers.Key) (Handoff, error)
+	// UpdateHandoffSend replaces h's lines, exclusions, links, and store, marks
+	// it active, and bumps its revision, provided it is still at revision.
+	// Otherwise it returns ErrConflict. Activating it beside another active
+	// handoff is ErrDuplicate.
+	UpdateHandoffSend(ctx context.Context, h Handoff, revision int64) (Handoff, error)
+	// RemovePendingLines removes an active handoff's pending lines for one
+	// ingredient and reports whether any were removed.
+	RemovePendingLines(ctx context.Context, householdID, handoffID, ingredientKey string, at time.Time) (bool, error)
+	// CloseHandoff makes a handoff inactive with a reason, unless it is
+	// already closed.
+	CloseHandoff(ctx context.Context, householdID, handoffID string, reason CloseReason, at time.Time) error
+	// CloseWeekHandoffs closes every handoff of the week that isn't closed,
+	// for every provider, and returns how many it closed.
+	CloseWeekHandoffs(ctx context.Context, householdID, week string, reason CloseReason, at time.Time) (int, error)
+	// ReopenHandoff makes a closed handoff active again. Another active one
+	// for the same week and provider is ErrDuplicate.
+	ReopenHandoff(ctx context.Context, householdID, handoffID string, at time.Time) error
 	// GetHandoff returns one of the household's handoffs.
 	GetHandoff(ctx context.Context, householdID, id string) (Handoff, error)
 	// ListHandoffs returns the household's handoffs, newest first.

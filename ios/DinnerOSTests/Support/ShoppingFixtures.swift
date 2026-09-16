@@ -74,7 +74,7 @@ nonisolated enum ShoppingFixtures {
         productID: String, displayName: String, size: String?, computed: Int, packages: Int? = nil,
         reason: String? = nil, reasonText: String? = nil, coverage: String = "",
         coverageRule: String = "per_amount", coversWeek: Bool = false, searchTerms: String? = nil,
-        confirmation: String? = nil
+        confirmation: String? = nil, cart: String? = nil
     ) -> String {
         let ingredientID = key.hasPrefix("name:") ? "null" : #""\#(key)""#
         let count = packages ?? computed
@@ -88,8 +88,16 @@ nonisolated enum ShoppingFixtures {
              "checkAmount":\#(reason != nil),"reason":\#(string(reason)),"reasonText":\#(string(reasonText)),
              "coverageText":"\#(coverage)","coverage":"\#(coverageRule)","coversWeek":\#(coversWeek),
              "searchTerms":\#(searchTerms ?? searchTermsJSON(name)),
-             "confirmation":\#(confirmation ?? "null")}
+             "confirmation":\#(confirmation ?? "null"),"cart":\#(cart ?? "null")}
             """#
+    }
+
+    static func lineCartJSON(sent: Int, add: Int, remove: Int) -> String {
+        #"{"sentPackages":\#(sent),"addPackages":\#(add),"removePackages":\#(remove)}"#
+    }
+
+    static func cartStateJSON(handoffID: String, other: [String] = []) -> String {
+        #"{"handoffId":"\#(handoffID)","sentAt":"2026-09-15T18:30:00Z","other":[\#(other.joined(separator: ","))]}"#
     }
 
     static func excludedJSON(
@@ -112,12 +120,13 @@ nonisolated enum ShoppingFixtures {
 
     static func proposalFields(
         week: String = "2026-W38", storeID: String? = "5435", lines: [String], excluded: [String], links: [String],
-        affiliateTracked: Bool = false
+        affiliateTracked: Bool = false, cart: String? = nil
     ) -> String {
         #"""
         "provider":"walmart","week":"\#(week)","storeId":\#(string(storeID)),
         "lines":[\#(lines.joined(separator: ","))],"excluded":[\#(excluded.joined(separator: ","))],
-        "cartLinks":[\#(links.joined(separator: ","))],"affiliateTracked":\#(affiliateTracked)
+        "cartLinks":[\#(links.joined(separator: ","))],"affiliateTracked":\#(affiliateTracked),
+        "cart":\#(cart ?? "null")
         """#
     }
 
@@ -234,7 +243,17 @@ nonisolated final class FakeShoppingServer: Sendable {
         var week: String
         var lines: [Line]
         var excluded: [String]
+        /// The week's current hand-off, which later sends add to.
+        var active = true
+        var closedReason: String?
+        /// The latest send: line IDs with the packages its links add.
+        var sent: [Line] = []
         var isOpen: Bool { lines.contains { $0.status == "pending" } }
+
+        /// Packages in the cart per ingredient key (skipped lines don't count).
+        var sentByKey: [String: Int] {
+            lines.filter { $0.status != "skipped" }.reduce(into: [:]) { $0[$1.key, default: 0] += $1.packages }
+        }
     }
 
     struct State: Sendable {
@@ -364,8 +383,21 @@ nonisolated final class FakeShoppingServer: Sendable {
                 let week = rest[2]
                 if body["ordered"] as? Bool == true {
                     state.orderedWeeks.insert(week)
+                    // Ordering checks out the cart: the week's hand-off closes.
+                    for index in state.handoffs.indices where state.handoffs[index].week == week {
+                        if state.handoffs[index].active {
+                            state.handoffs[index].active = false
+                            state.handoffs[index].closedReason = "ordered"
+                        }
+                    }
                 } else {
                     state.orderedWeeks.remove(week)
+                    if let index = state.handoffs.lastIndex(where: { $0.week == week }),
+                        state.handoffs[index].closedReason == "ordered", state.handoffs[index].isOpen
+                    {
+                        state.handoffs[index].active = true
+                        state.handoffs[index].closedReason = nil
+                    }
                 }
                 return (200, Self.orderReminderJSON(state, week: week))
             case ("POST", 5) where rest[0] == "plans" && rest[2] == "shopping" && rest[4] == "match":
@@ -376,10 +408,26 @@ nonisolated final class FakeShoppingServer: Sendable {
                 guard !lines.isEmpty else {
                     return (400, Fixtures.errorJSON(code: "validation_failed", message: "no line to hand off"))
                 }
-                let handoff = Handoff(id: "handoff-\(state.nextID)", week: rest[1], lines: lines, excluded: excluded)
-                state.nextID += 1
-                state.handoffs.append(handoff)
-                return (201, Data(Self.handoffJSON(state, handoff).utf8))
+                return Self.send(week: rest[1], lines: lines, excluded: excluded, state: &state)
+            case ("POST", 6) where rest[0] == "plans" && rest[2] == "shopping" && rest[4] == "handoffs":
+                guard let index = state.handoffs.firstIndex(where: { $0.week == rest[1] && $0.active }) else {
+                    return (204, Data())
+                }
+                switch rest[5] {
+                case "start-over":
+                    for line in state.handoffs[index].lines.indices
+                    where state.handoffs[index].lines[line].status == "pending" {
+                        state.handoffs[index].lines[line].status = "skipped"
+                    }
+                    state.handoffs[index].active = false
+                    state.handoffs[index].closedReason = "started_over"
+                case "send-again":
+                    let key = body["ingredientKey"] as? String
+                    state.handoffs[index].lines.removeAll { $0.key == key && $0.status == "pending" }
+                default:
+                    return (404, Fixtures.errorJSON(code: "not_found"))
+                }
+                return (204, Data())
             case ("GET", 2) where rest == ["shopping", "handoffs"]:
                 let items = state.handoffs.reversed().filter { handoff in
                     (query["week"].map { $0 == handoff.week } ?? true)
@@ -444,6 +492,39 @@ nonisolated final class FakeShoppingServer: Sendable {
         return (lines, excluded)
     }
 
+    /// The first send of a week stores a hand-off with every line (`201`); later sends add only
+    /// new lines and extra packages to it (`200`), with no links when nothing is new.
+    private static func send(
+        week: String, lines: [Line], excluded: [String], state: inout State
+    ) -> (status: Int, body: Data) {
+        guard let index = state.handoffs.firstIndex(where: { $0.week == week && $0.active }) else {
+            let handoff = Handoff(
+                id: "handoff-\(state.nextID)", week: week, lines: lines, excluded: excluded, sent: lines)
+            state.nextID += 1
+            state.handoffs.append(handoff)
+            return (201, Data(Self.handoffJSON(state, handoff).utf8))
+        }
+        var handoff = state.handoffs[index]
+        let sent = handoff.sentByKey
+        var lastID = handoff.lines.compactMap { Int($0.id.dropFirst()) }.max() ?? 0
+        handoff.sent = []
+        for line in lines {
+            let add = line.packages - (sent[line.key] ?? 0)
+            guard add > 0 else { continue }
+            if let pending = handoff.lines.firstIndex(where: { $0.key == line.key && $0.status == "pending" }) {
+                handoff.lines[pending].packages += add
+                handoff.sent.append(Line(id: handoff.lines[pending].id, key: line.key, packages: add))
+            } else {
+                lastID += 1
+                handoff.lines.append(Line(id: "l\(lastID)", key: line.key, packages: add))
+                handoff.sent.append(Line(id: "l\(lastID)", key: line.key, packages: add))
+            }
+        }
+        handoff.excluded = excluded
+        state.handoffs[index] = handoff
+        return (200, Data(Self.handoffJSON(state, handoff).utf8))
+    }
+
     private static func savePreference(
         _ body: [String: Any], key: String, state: inout State
     ) -> (status: Int, body: Data) {
@@ -506,6 +587,10 @@ nonisolated final class FakeShoppingServer: Sendable {
             }
             handoff.lines[lineIndex] = line
         }
+        if !handoff.isOpen, handoff.active {
+            handoff.active = false
+            handoff.closedReason = "confirmed"
+        }
         state.handoffs[index] = handoff
         let json = #"{"handoff":\#(handoffJSON(state, handoff)),"purchases":[\#(purchases.joined(separator: ","))]}"#
         return (200, Data(json.utf8))
@@ -525,7 +610,7 @@ nonisolated final class FakeShoppingServer: Sendable {
     }
 
     /// Stored handoff lines carry a confirmation; match lines have `null`.
-    private static func lineJSON(_ line: Line, state: State, stored: Bool) -> String {
+    private static func lineJSON(_ line: Line, state: State, stored: Bool, cart: String? = nil) -> String {
         let grocery = state.grocery.first { $0.key == line.key }
         let product = state.products[line.key]
         let confirmation =
@@ -535,7 +620,7 @@ nonisolated final class FakeShoppingServer: Sendable {
             productID: product?.productID ?? "0", displayName: product?.displayName ?? "",
             size: sizeJSON(product), computed: grocery?.computed ?? 1,
             packages: line.packages == grocery?.computed ? nil : line.packages,
-            coverage: "\(line.packages) packages", confirmation: confirmation)
+            coverage: "\(line.packages) packages", confirmation: confirmation, cart: cart)
     }
 
     private static func linksJSON(_ lines: [Line], state: State) -> [String] {
@@ -553,12 +638,32 @@ nonisolated final class FakeShoppingServer: Sendable {
         }
     }
 
+    /// With a current hand-off for the week, each line carries its cart state and the links add
+    /// only what isn't in the cart yet.
     private static func proposalJSON(_ state: State, week: String, lines: [Line], excluded: [String]) -> String {
-        let lineJSON = lines.map { Self.lineJSON($0, state: state, stored: false) }
+        guard let handoff = state.handoffs.first(where: { $0.week == week && $0.active }) else {
+            let lineJSON = lines.map { Self.lineJSON($0, state: state, stored: false) }
+            return "{"
+                + ShoppingFixtures.proposalFields(
+                    week: week, storeID: state.storeID, lines: lineJSON, excluded: excluded,
+                    links: linksJSON(lines, state: state))
+                + "}"
+        }
+        let sent = handoff.sentByKey
+        var adds: [Line] = []
+        let lineJSON = lines.map { line -> String in
+            let already = sent[line.key] ?? 0
+            let add = max(line.packages - already, 0)
+            if add > 0 {
+                adds.append(Line(id: line.id, key: line.key, packages: add))
+            }
+            let cart = ShoppingFixtures.lineCartJSON(sent: already, add: add, remove: max(already - line.packages, 0))
+            return Self.lineJSON(line, state: state, stored: false, cart: cart)
+        }
         return "{"
             + ShoppingFixtures.proposalFields(
                 week: week, storeID: state.storeID, lines: lineJSON, excluded: excluded,
-                links: linksJSON(lines, state: state))
+                links: linksJSON(adds, state: state), cart: ShoppingFixtures.cartStateJSON(handoffID: handoff.id))
             + "}"
     }
 
@@ -568,7 +673,7 @@ nonisolated final class FakeShoppingServer: Sendable {
             fields: ShoppingFixtures.proposalFields(
                 week: handoff.week, storeID: state.storeID,
                 lines: handoff.lines.map { lineJSON($0, state: state, stored: true) },
-                excluded: handoff.excluded, links: linksJSON(handoff.lines, state: state)))
+                excluded: handoff.excluded, links: linksJSON(handoff.sent, state: state)))
     }
 
     private static func purchaseJSON(

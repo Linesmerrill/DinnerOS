@@ -45,6 +45,10 @@ enum ShopPreviewData {
                 "l2", key: "garlic", name: "Garlic", product: "Sample garlic, 3 ct", size: amount("3", "count", "3 ct"),
                 packages: 1, coverage: "1 × 3 ct", reason: .unitNotConvertible,
                 reasonText: "Check amount: 4 cloves doesn't convert to a 3 ct package"),
+            line(
+                "l3", key: "onion", name: "Yellow Onion", product: "Sample yellow onions, 3 lb",
+                size: amount("3", "lb"), packages: 1, coverage: "1 × 3 lb covers this week",
+                cart: ShoppingLineCart(sentPackages: 2, addPackages: 0, removePackages: 1)),
         ],
         excluded: [
             excluded("name:flour tortillas", "Flour Tortillas", reason: .noProduct, text: "Choose a Walmart product"),
@@ -55,7 +59,8 @@ enum ShopPreviewData {
                 urlString: "https://www.walmart.com/sc/cart/addToCart?items=100000001_3,100000002",
                 lineIDs: ["l1", "l2"], itemCount: 2)
         ],
-        affiliateTracked: true)
+        affiliateTracked: true,
+        cart: ShoppingCartState(handoffID: "handoff-preview", sentAt: .now.addingTimeInterval(-3_600), other: []))
 
     /// The order day has arrived and nobody has marked the week, so the banner shows.
     static let orderReminder = OrderReminder(
@@ -110,7 +115,7 @@ enum ShopPreviewData {
 
     private static func line(
         _ id: String, key: String, name: String, product: String, size: ShoppingAmount?, packages: Int,
-        coverage: String, reason: ShoppingCheckReason? = nil, reasonText: String? = nil
+        coverage: String, reason: ShoppingCheckReason? = nil, reasonText: String? = nil, cart: ShoppingLineCart? = nil
     ) -> ShoppingHandoffLine {
         ShoppingHandoffLine(
             id: id, ingredientKey: key, ingredientID: nil, name: name, category: "produce", amounts: [],
@@ -124,7 +129,8 @@ enum ShopPreviewData {
                 query: "fresh whole \(name)", qualifiers: ["fresh", "whole"], avoid: ["powder", "minced", "dried"],
                 why: "Produce: the fresh whole item, not a dried, powdered or prepared form."),
             confirmation: ShoppingLineConfirmation(
-                status: .pending, packages: nil, purchaseID: nil, confirmedAt: nil, skippedAt: nil))
+                status: .pending, packages: nil, purchaseID: nil, confirmedAt: nil, skippedAt: nil),
+            cart: cart)
     }
 
     private static func excluded(

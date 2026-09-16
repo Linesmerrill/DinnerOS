@@ -55,6 +55,16 @@ func Indexes() []mongodb.IndexSet {
 					Keys:    bson.D{{Key: "householdId", Value: 1}, {Key: "week", Value: 1}, {Key: "createdAt", Value: -1}},
 					Options: options.Index().SetName("householdId_week_createdAt"),
 				},
+				{
+					// One current handoff per household, week, and provider,
+					// which is how two members sending at once can't both
+					// start one. Closed handoffs, and those stored before
+					// handoffs were kept per week, have no active field.
+					Keys: bson.D{{Key: "householdId", Value: 1}, {Key: "week", Value: 1}, {Key: "provider", Value: 1}},
+					Options: options.Index().SetUnique(true).
+						SetPartialFilterExpression(bson.D{{Key: "active", Value: true}}).
+						SetName("householdId_week_provider_active_unique"),
+				},
 			},
 		},
 		{
@@ -407,9 +417,15 @@ type handoffDoc struct {
 	Excluded         []excludedDoc `bson:"excluded"`
 	Links            []linkDoc     `bson:"links"`
 	AffiliateTracked bool          `bson:"affiliateTracked"`
-	CreatedBy        bson.ObjectID `bson:"createdBy"`
-	CreatedAt        time.Time     `bson:"createdAt"`
-	UpdatedAt        time.Time     `bson:"updatedAt"`
+	// Active is stored only while true, for the partial unique index.
+	Active       bool       `bson:"active,omitempty"`
+	ClosedAt     *time.Time `bson:"closedAt,omitempty"`
+	ClosedReason string     `bson:"closedReason,omitempty"`
+	// Revision is missing (0) on handoffs stored before it existed.
+	Revision  int64         `bson:"revision,omitempty"`
+	CreatedBy bson.ObjectID `bson:"createdBy"`
+	CreatedAt time.Time     `bson:"createdAt"`
+	UpdatedAt time.Time     `bson:"updatedAt"`
 }
 
 func newSourceDoc(s LineSource) sourceDoc {
@@ -452,23 +468,10 @@ func newHandoffDoc(h Handoff, id, hid bson.ObjectID) (handoffDoc, error) {
 		ID: id, HouseholdID: hid, Week: h.Week, Provider: string(h.Provider), StoreID: h.StoreID,
 		Lines: make([]lineDoc, 0, len(h.Lines)), Excluded: make([]excludedDoc, 0, len(h.Excluded)), Links: make([]linkDoc, 0, len(h.Links)),
 		AffiliateTracked: h.AffiliateTracked, CreatedBy: createdBy, CreatedAt: h.CreatedAt, UpdatedAt: h.UpdatedAt,
+		Active: h.Active, ClosedAt: timeOrNil(h.ClosedAt), ClosedReason: string(h.ClosedReason), Revision: h.Revision,
 	}
-	for _, l := range h.Lines {
-		confirmedBy, err := optionalUser(l.ConfirmedBy)
-		if err != nil {
-			return handoffDoc{}, err
-		}
-		skippedBy, err := optionalUser(l.SkippedBy)
-		if err != nil {
-			return handoffDoc{}, err
-		}
-		d.Lines = append(d.Lines, lineDoc{
-			ID: l.ID, Source: newSourceDoc(l.LineSource), ProductID: l.ProductID, ProductName: l.ProductName,
-			PackageSize: sizeDoc(l.PackageSize), Coverage: string(l.Coverage), ComputedPackages: l.ComputedPackages,
-			Packages: l.Packages, Reason: string(l.Reason), CoversWeek: l.CoversWeek,
-			Status: string(l.Status), Confirmed: l.ConfirmedPackages, PurchaseID: l.PurchaseID,
-			ConfirmedBy: confirmedBy, ConfirmedAt: timeOrNil(l.ConfirmedAt), SkippedBy: skippedBy, SkippedAt: timeOrNil(l.SkippedAt),
-		})
+	if d.Lines, err = newLineDocs(h.Lines); err != nil {
+		return handoffDoc{}, err
 	}
 	for _, e := range h.Excluded {
 		d.Excluded = append(d.Excluded, excludedDoc{Source: newSourceDoc(e.LineSource), Reason: string(e.Reason)})
@@ -479,6 +482,28 @@ func newHandoffDoc(h Handoff, id, hid bson.ObjectID) (handoffDoc, error) {
 	return d, nil
 }
 
+func newLineDocs(lines []HandoffLine) ([]lineDoc, error) {
+	out := make([]lineDoc, 0, len(lines))
+	for _, l := range lines {
+		confirmedBy, err := optionalUser(l.ConfirmedBy)
+		if err != nil {
+			return nil, err
+		}
+		skippedBy, err := optionalUser(l.SkippedBy)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, lineDoc{
+			ID: l.ID, Source: newSourceDoc(l.LineSource), ProductID: l.ProductID, ProductName: l.ProductName,
+			PackageSize: sizeDoc(l.PackageSize), Coverage: string(l.Coverage), ComputedPackages: l.ComputedPackages,
+			Packages: l.Packages, Reason: string(l.Reason), CoversWeek: l.CoversWeek,
+			Status: string(l.Status), Confirmed: l.ConfirmedPackages, PurchaseID: l.PurchaseID,
+			ConfirmedBy: confirmedBy, ConfirmedAt: timeOrNil(l.ConfirmedAt), SkippedBy: skippedBy, SkippedAt: timeOrNil(l.SkippedAt),
+		})
+	}
+	return out, nil
+}
+
 func (d handoffDoc) toHandoff() Handoff {
 	h := Handoff{
 		ID: d.ID.Hex(),
@@ -486,6 +511,7 @@ func (d handoffDoc) toHandoff() Handoff {
 			HouseholdID: d.HouseholdID.Hex(), Week: d.Week, Provider: providers.Key(d.Provider), StoreID: d.StoreID,
 			AffiliateTracked: d.AffiliateTracked,
 		},
+		Active: d.Active, ClosedAt: timeOrZero(d.ClosedAt), ClosedReason: CloseReason(d.ClosedReason), Revision: d.Revision,
 		CreatedBy: hexOrEmpty(d.CreatedBy), CreatedAt: d.CreatedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
 	}
 	for _, l := range d.Lines {
@@ -517,10 +543,142 @@ func (s *MongoStore) InsertHandoff(ctx context.Context, h Handoff) (Handoff, err
 	if err != nil {
 		return Handoff{}, err
 	}
+	d.Active, d.ClosedAt, d.ClosedReason, d.Revision = true, nil, "", 1
 	if _, err := s.handoffs.InsertOne(ctx, d); err != nil {
 		return Handoff{}, translate(err)
 	}
 	return d.toHandoff(), nil
+}
+
+func handoffFilter(householdID, id string) (bson.D, error) {
+	hid, err := householdOID(householdID)
+	if err != nil {
+		return nil, err
+	}
+	oid, err := mongodb.ParseID(id)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	return bson.D{{Key: "_id", Value: oid}, {Key: "householdId", Value: hid}}, nil
+}
+
+// ActiveHandoff implements Store.
+func (s *MongoStore) ActiveHandoff(ctx context.Context, householdID, week string, provider providers.Key) (Handoff, error) {
+	hid, err := householdOID(householdID)
+	if err != nil {
+		return Handoff{}, err
+	}
+	var d handoffDoc
+	filter := bson.D{{Key: "householdId", Value: hid}, {Key: "week", Value: week}, {Key: "provider", Value: string(provider)}, {Key: "active", Value: true}}
+	if err := s.handoffs.FindOne(ctx, filter).Decode(&d); err != nil {
+		return Handoff{}, translate(err)
+	}
+	return d.toHandoff(), nil
+}
+
+// UpdateHandoffSend implements Store.
+func (s *MongoStore) UpdateHandoffSend(ctx context.Context, h Handoff, revision int64) (Handoff, error) {
+	filter, err := handoffFilter(h.HouseholdID, h.ID)
+	if err != nil {
+		return Handoff{}, err
+	}
+	// Handoffs stored before revisions existed have none, which reads as 0.
+	if revision == 0 {
+		filter = append(filter, bson.E{Key: "revision", Value: bson.D{{Key: "$in", Value: bson.A{nil, 0}}}})
+	} else {
+		filter = append(filter, bson.E{Key: "revision", Value: revision})
+	}
+	hid, _ := householdOID(h.HouseholdID)
+	d, err := newHandoffDoc(h, bson.ObjectID{}, hid)
+	if err != nil {
+		return Handoff{}, err
+	}
+	res, err := s.handoffs.UpdateOne(ctx, filter, bson.D{
+		{Key: "$set", Value: bson.D{
+			{Key: "lines", Value: d.Lines}, {Key: "excluded", Value: d.Excluded}, {Key: "links", Value: d.Links},
+			{Key: "storeId", Value: d.StoreID}, {Key: "affiliateTracked", Value: d.AffiliateTracked},
+			{Key: "active", Value: true}, {Key: "updatedAt", Value: h.UpdatedAt},
+		}},
+		{Key: "$unset", Value: bson.D{{Key: "closedAt", Value: ""}, {Key: "closedReason", Value: ""}}},
+		{Key: "$inc", Value: bson.D{{Key: "revision", Value: 1}}},
+	})
+	if err != nil {
+		return Handoff{}, translate(err)
+	}
+	if res.MatchedCount == 0 {
+		return Handoff{}, ErrConflict
+	}
+	return s.GetHandoff(ctx, h.HouseholdID, h.ID)
+}
+
+// RemovePendingLines implements Store.
+func (s *MongoStore) RemovePendingLines(ctx context.Context, householdID, handoffID, ingredientKey string, at time.Time) (bool, error) {
+	filter, err := lineFilter(householdID, handoffID, bson.D{{Key: "ingredientKey", Value: ingredientKey}, {Key: "status", Value: string(LinePending)}})
+	if err != nil {
+		return false, err
+	}
+	filter = append(filter, bson.E{Key: "active", Value: true})
+	res, err := s.handoffs.UpdateOne(ctx, filter, bson.D{
+		{Key: "$pull", Value: bson.D{{Key: "lines", Value: bson.D{{Key: "ingredientKey", Value: ingredientKey}, {Key: "status", Value: string(LinePending)}}}}},
+		{Key: "$set", Value: bson.D{{Key: "updatedAt", Value: at}}},
+		{Key: "$inc", Value: bson.D{{Key: "revision", Value: 1}}},
+	})
+	if err != nil {
+		return false, translate(err)
+	}
+	return res.ModifiedCount > 0, nil
+}
+
+func closeUpdate(reason CloseReason, at time.Time) bson.D {
+	return bson.D{
+		{Key: "$set", Value: bson.D{{Key: "closedAt", Value: at}, {Key: "closedReason", Value: string(reason)}}},
+		{Key: "$unset", Value: bson.D{{Key: "active", Value: ""}}},
+	}
+}
+
+var notClosed = bson.E{Key: "closedAt", Value: bson.D{{Key: "$exists", Value: false}}}
+
+// CloseHandoff implements Store.
+func (s *MongoStore) CloseHandoff(ctx context.Context, householdID, handoffID string, reason CloseReason, at time.Time) error {
+	filter, err := handoffFilter(householdID, handoffID)
+	if err != nil {
+		return err
+	}
+	_, err = s.handoffs.UpdateOne(ctx, append(filter, notClosed), closeUpdate(reason, at))
+	return translate(err)
+}
+
+// CloseWeekHandoffs implements Store.
+func (s *MongoStore) CloseWeekHandoffs(ctx context.Context, householdID, week string, reason CloseReason, at time.Time) (int, error) {
+	hid, err := householdOID(householdID)
+	if err != nil {
+		return 0, err
+	}
+	res, err := s.handoffs.UpdateMany(ctx, bson.D{{Key: "householdId", Value: hid}, {Key: "week", Value: week}, notClosed}, closeUpdate(reason, at))
+	if err != nil {
+		return 0, translate(err)
+	}
+	return int(res.ModifiedCount), nil
+}
+
+// ReopenHandoff implements Store.
+func (s *MongoStore) ReopenHandoff(ctx context.Context, householdID, handoffID string, at time.Time) error {
+	filter, err := handoffFilter(householdID, handoffID)
+	if err != nil {
+		return err
+	}
+	res, err := s.handoffs.UpdateOne(ctx, filter, bson.D{
+		{Key: "$set", Value: bson.D{{Key: "active", Value: true}, {Key: "updatedAt", Value: at}}},
+		{Key: "$unset", Value: bson.D{{Key: "closedAt", Value: ""}, {Key: "closedReason", Value: ""}}},
+		{Key: "$inc", Value: bson.D{{Key: "revision", Value: 1}}},
+	})
+	if err != nil {
+		return translate(err)
+	}
+	if res.MatchedCount == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // GetHandoff implements Store.
@@ -587,6 +745,10 @@ func lineFilter(householdID, handoffID string, match bson.D) (bson.D, error) {
 	return bson.D{{Key: "_id", Value: oid}, {Key: "householdId", Value: hid}, {Key: "lines", Value: bson.D{{Key: "$elemMatch", Value: match}}}}, nil
 }
 
+// incRevision is part of every update to a handoff's lines, so a send that
+// read the lines before the change conflicts instead of overwriting it.
+var incRevision = bson.E{Key: "$inc", Value: bson.D{{Key: "revision", Value: 1}}}
+
 // ClaimLine implements Store.
 func (s *MongoStore) ClaimLine(ctx context.Context, householdID, handoffID, lineID string, now, staleBefore time.Time) (bool, error) {
 	filter, err := lineFilter(householdID, handoffID, bson.D{
@@ -600,7 +762,7 @@ func (s *MongoStore) ClaimLine(ctx context.Context, householdID, handoffID, line
 	if err != nil {
 		return false, err
 	}
-	res, err := s.handoffs.UpdateOne(ctx, filter, bson.D{{Key: "$set", Value: bson.D{{Key: "lines.$.claimedAt", Value: now}}}})
+	res, err := s.handoffs.UpdateOne(ctx, filter, bson.D{{Key: "$set", Value: bson.D{{Key: "lines.$.claimedAt", Value: now}}}, incRevision})
 	if err != nil {
 		return false, translate(err)
 	}
@@ -613,7 +775,7 @@ func (s *MongoStore) ReleaseLine(ctx context.Context, householdID, handoffID, li
 	if err != nil {
 		return err
 	}
-	_, err = s.handoffs.UpdateOne(ctx, filter, bson.D{{Key: "$unset", Value: bson.D{{Key: "lines.$.claimedAt", Value: ""}}}})
+	_, err = s.handoffs.UpdateOne(ctx, filter, bson.D{{Key: "$unset", Value: bson.D{{Key: "lines.$.claimedAt", Value: ""}}}, incRevision})
 	return translate(err)
 }
 
@@ -634,6 +796,7 @@ func (s *MongoStore) ConfirmLine(ctx context.Context, householdID, handoffID str
 			{Key: "lines.$.confirmedAt", Value: line.ConfirmedAt}, {Key: "updatedAt", Value: at},
 		}},
 		{Key: "$unset", Value: bson.D{{Key: "lines.$.claimedAt", Value: ""}, {Key: "lines.$.skippedBy", Value: ""}, {Key: "lines.$.skippedAt", Value: ""}}},
+		incRevision,
 	})
 	if err != nil {
 		return translate(err)
@@ -657,7 +820,7 @@ func (s *MongoStore) SkipLine(ctx context.Context, householdID, handoffID, lineI
 	res, err := s.handoffs.UpdateOne(ctx, filter, bson.D{{Key: "$set", Value: bson.D{
 		{Key: "lines.$.status", Value: string(LineSkipped)}, {Key: "lines.$.skippedBy", Value: by},
 		{Key: "lines.$.skippedAt", Value: at}, {Key: "updatedAt", Value: at},
-	}}})
+	}}, incRevision})
 	if err != nil {
 		return false, translate(err)
 	}

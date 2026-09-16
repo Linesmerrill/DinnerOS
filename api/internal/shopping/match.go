@@ -205,16 +205,29 @@ func buildProposal(p providers.GroceryProvider, settings Settings, g planning.Gr
 	for _, l := range out.Lines {
 		items = append(items, providers.CartItem{ProductID: l.ProductID, Quantity: l.Packages, LineIDs: []string{l.ID}})
 	}
-	links, err := p.BuildCartLinks(items, providers.StoreRef{StoreID: out.StoreID})
-	if err != nil {
+	var err error
+	if out.Links, err = cartLinks(p, items, out.StoreID); err != nil {
 		return Proposal{}, err
+	}
+	return out, nil
+}
+
+// cartLinks builds the provider's links for items; no items is no links.
+func cartLinks(p providers.GroceryProvider, items []providers.CartItem, storeID string) ([]CartLink, error) {
+	out := []CartLink{}
+	if len(items) == 0 {
+		return out, nil
+	}
+	links, err := p.BuildCartLinks(items, providers.StoreRef{StoreID: storeID})
+	if err != nil {
+		return nil, err
 	}
 	for _, link := range links {
 		cl := CartLink{URL: link.URL, ItemCount: len(link.Items)}
 		for _, it := range link.Items {
 			cl.LineIDs = append(cl.LineIDs, it.LineIDs...)
 		}
-		out.Links = append(out.Links, cl)
+		out = append(out, cl)
 	}
 	return out, nil
 }

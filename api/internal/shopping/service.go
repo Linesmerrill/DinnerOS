@@ -323,65 +323,274 @@ func normalizePackageSize(size *PackageSize) (*PackageSize, error) {
 // --- Match and handoff --------------------------------------------------------
 
 // Match matches the week's grocery list to the household's saved products
-// for a provider, without storing anything.
+// for a provider, without storing anything. When the week has a current
+// handoff, every line carries what it already put in the cart, the match
+// lists sent products that aren't lines, and the links add only what isn't
+// in the cart yet.
 func (s *Service) Match(ctx context.Context, householdID, week, provider string, in MatchInput) (Proposal, error) {
+	proposal, _, _, err := s.match(ctx, householdID, week, provider, in)
+	return proposal, err
+}
+
+func (s *Service) match(ctx context.Context, householdID, week, provider string, in MatchInput) (Proposal, providers.GroceryProvider, *Handoff, error) {
 	if householdID == "" {
-		return Proposal{}, errHouseholdRequired
+		return Proposal{}, nil, nil, errHouseholdRequired
 	}
 	p, err := s.Provider(provider)
 	if err != nil {
-		return Proposal{}, err
+		return Proposal{}, nil, nil, err
 	}
 	if in, err = validateMatchInput(in); err != nil {
-		return Proposal{}, err
+		return Proposal{}, nil, nil, err
 	}
 	settings, err := s.Settings(ctx, householdID)
 	if err != nil {
-		return Proposal{}, err
+		return Proposal{}, nil, nil, err
 	}
 	g, err := s.grocery.GroceryList(ctx, householdID, week)
 	if err != nil {
-		return Proposal{}, err
+		return Proposal{}, nil, nil, err
 	}
 	prefs, err := s.store.ListPreferences(ctx, householdID, p.Key())
 	if err != nil {
-		return Proposal{}, fmt.Errorf("list saved products: %w", err)
+		return Proposal{}, nil, nil, fmt.Errorf("list saved products: %w", err)
 	}
-	return buildProposal(p, settings, g, prefs, in)
+	proposal, err := buildProposal(p, settings, g, prefs, in)
+	if err != nil {
+		return Proposal{}, nil, nil, err
+	}
+	current, err := s.currentHandoff(ctx, householdID, proposal.Week, p.Key())
+	if err != nil {
+		return Proposal{}, nil, nil, err
+	}
+	if current != nil {
+		if err := applyCart(p, &proposal, *current); err != nil {
+			return Proposal{}, nil, nil, err
+		}
+	}
+	return proposal, p, current, nil
 }
 
-// CreateHandoff matches the week's list like Match and stores the result,
-// so what members confirm can be recorded. It needs at least one line with a
-// saved product.
-func (s *Service) CreateHandoff(ctx context.Context, actor households.Membership, week, provider string, in MatchInput) (Handoff, error) {
+// currentHandoff returns the week's handoff still collecting sends for a
+// provider, or nil. That is the active one; failing that, the newest open
+// handoff stored before handoffs were kept per week, so a cart filled just
+// before this change isn't filled again.
+func (s *Service) currentHandoff(ctx context.Context, householdID, week string, provider providers.Key) (*Handoff, error) {
+	h, err := s.store.ActiveHandoff(ctx, householdID, week, provider)
+	if err == nil {
+		return &h, nil
+	}
+	if !errors.Is(err, ErrNotFound) {
+		return nil, fmt.Errorf("get active handoff: %w", err)
+	}
+	open, err := s.store.ListHandoffs(ctx, householdID, HandoffFilter{Week: week, Status: HandoffOpen, Limit: MaxHandoffList})
+	if err != nil {
+		return nil, fmt.Errorf("list open handoffs: %w", err)
+	}
+	for _, h := range open {
+		if h.Provider == provider && h.ClosedAt.IsZero() && h.Revision == 0 {
+			return &h, nil
+		}
+	}
+	return nil, nil
+}
+
+// maxSendAttempts bounds retries when another member changes the handoff
+// between reading and writing it.
+const maxSendAttempts = 3
+
+// CreateHandoff sends the week's list to the provider's cart and returns the
+// week's current handoff with links for what this send adds.
+//
+// The first send of a week stores a new handoff with every matched line.
+// Later sends add to it only what isn't in the cart yet: new lines, and the
+// extra packages of a line whose count went up (see Handoff). When nothing
+// is new, the handoff comes back unchanged with no links. created reports
+// whether a handoff was stored. It needs at least one line with a saved
+// product.
+func (s *Service) CreateHandoff(ctx context.Context, actor households.Membership, week, provider string, in MatchInput) (h Handoff, created bool, err error) {
 	if err := authorize(actor, households.PermShoppingEdit); err != nil {
-		return Handoff{}, err
+		return Handoff{}, false, err
 	}
-	proposal, err := s.Match(ctx, actor.HouseholdID, week, provider, in)
-	if err != nil {
-		return Handoff{}, err
+	for range maxSendAttempts {
+		proposal, p, current, err := s.match(ctx, actor.HouseholdID, week, provider, in)
+		if err != nil {
+			return Handoff{}, false, err
+		}
+		if len(proposal.Lines) == 0 {
+			return Handoff{}, false, invalid("no grocery line has a saved product to add to the cart")
+		}
+		now := s.timestamp()
+		if current == nil {
+			h, err := s.store.InsertHandoff(ctx, Handoff{Proposal: proposal, CreatedBy: actor.UserID, CreatedAt: now, UpdatedAt: now})
+			if errors.Is(err, ErrDuplicate) {
+				continue // another member started the week's handoff first
+			}
+			if err != nil {
+				return Handoff{}, false, fmt.Errorf("insert handoff: %w", err)
+			}
+			packages := 0
+			for _, l := range h.Lines {
+				packages += l.Packages
+			}
+			s.recordSend(ctx, actor, h, h.Lines, packages, now)
+			return h, true, nil
+		}
+		next, lineIDs, packages, err := mergeSend(p, *current, proposal, now)
+		if err != nil {
+			return Handoff{}, false, err
+		}
+		if len(lineIDs) == 0 {
+			unchanged := *current
+			unchanged.Links = []CartLink{}
+			s.logger.InfoContext(ctx, "shopping handoff already in cart", "householdId", actor.HouseholdID, "handoffId", current.ID)
+			return unchanged, false, nil
+		}
+		saved, err := s.store.UpdateHandoffSend(ctx, next, current.Revision)
+		if errors.Is(err, ErrConflict) || errors.Is(err, ErrDuplicate) {
+			continue
+		}
+		if err != nil {
+			return Handoff{}, false, fmt.Errorf("update handoff: %w", err)
+		}
+		var sent []HandoffLine
+		for _, id := range lineIDs {
+			if l, ok := saved.Line(id); ok {
+				sent = append(sent, l)
+			}
+		}
+		s.recordSend(ctx, actor, saved, sent, packages, now)
+		return saved, false, nil
 	}
-	if len(proposal.Lines) == 0 {
-		return Handoff{}, invalid("no grocery line has a saved product to add to the cart")
+	return Handoff{}, false, ErrConflict
+}
+
+// recordSend records shopping.handoff_created for one send: the lines its
+// links touch, and the packages they add.
+func (s *Service) recordSend(ctx context.Context, actor households.Membership, h Handoff, lines []HandoffLine, packages int, at time.Time) {
+	payload := events.ShoppingHandoffCreated{
+		HandoffID: h.ID, Provider: string(h.Provider), Lines: len(lines), Packages: packages, Excluded: len(h.Excluded), Links: len(h.Links),
 	}
-	now := s.timestamp()
-	h, err := s.store.InsertHandoff(ctx, Handoff{Proposal: proposal, CreatedBy: actor.UserID, CreatedAt: now, UpdatedAt: now})
-	if err != nil {
-		return Handoff{}, fmt.Errorf("insert handoff: %w", err)
-	}
-	payload := events.ShoppingHandoffCreated{HandoffID: h.ID, Provider: string(h.Provider), Lines: len(h.Lines), Excluded: len(h.Excluded), Links: len(h.Links)}
-	for _, l := range h.Lines {
-		payload.Packages += l.Packages
+	for _, l := range lines {
 		if l.Reason != "" {
 			payload.CheckAmount++
 		}
 	}
 	events.RecordOrLog(ctx, s.events, s.logger, events.Event{
-		HouseholdID: h.HouseholdID, UserID: actor.UserID, Type: events.TypeShoppingHandoffCreated, Week: h.Week, OccurredAt: now, Payload: payload,
+		HouseholdID: h.HouseholdID, UserID: actor.UserID, Type: events.TypeShoppingHandoffCreated, Week: h.Week, OccurredAt: at, Payload: payload,
 	})
-	s.logger.InfoContext(ctx, "shopping handoff created", "householdId", h.HouseholdID, "handoffId", h.ID, "provider", h.Provider,
-		"lines", len(h.Lines), "links", len(h.Links))
-	return h, nil
+	s.logger.InfoContext(ctx, "shopping handoff sent", "householdId", h.HouseholdID, "handoffId", h.ID, "provider", h.Provider,
+		"lines", len(lines), "links", len(h.Links))
+}
+
+// sendTarget checks a start-over or send-again request and returns the
+// week's current handoff, or nil when there is none.
+func (s *Service) sendTarget(ctx context.Context, actor households.Membership, week, provider string) (*Handoff, error) {
+	if err := authorize(actor, households.PermShoppingEdit); err != nil {
+		return nil, err
+	}
+	p, err := s.Provider(provider)
+	if err != nil {
+		return nil, err
+	}
+	w, err := planning.ParseWeek(week)
+	if err != nil {
+		return nil, err
+	}
+	return s.currentHandoff(ctx, actor.HouseholdID, w.String(), p.Key())
+}
+
+// StartOver closes the week's current handoff so the next send adds every
+// line again, for when a member emptied the cart or wants to rebuild it. Its
+// pending lines are marked not ordered, so "Did you order these?" asks about
+// the new handoff instead. Without a current handoff it does nothing.
+func (s *Service) StartOver(ctx context.Context, actor households.Membership, week, provider string) error {
+	current, err := s.sendTarget(ctx, actor, week, provider)
+	if err != nil || current == nil {
+		return err
+	}
+	now := s.timestamp()
+	for _, l := range current.Lines {
+		if l.Status != LinePending {
+			continue
+		}
+		if _, err := s.store.SkipLine(ctx, current.HouseholdID, current.ID, l.ID, actor.UserID, now); err != nil {
+			return fmt.Errorf("skip handoff line: %w", err)
+		}
+	}
+	if err := s.store.CloseHandoff(ctx, current.HouseholdID, current.ID, ClosedStartedOver, now); err != nil {
+		return fmt.Errorf("close handoff: %w", err)
+	}
+	s.logger.InfoContext(ctx, "shopping handoff started over", "householdId", current.HouseholdID, "handoffId", current.ID)
+	return nil
+}
+
+// SendAgain forgets that one ingredient's pending lines were sent, so the
+// next send adds them in full, for when a member removed the product from
+// the cart. A confirmed line stays: its purchase is recorded. Without a
+// current handoff, or nothing pending for the ingredient, it does nothing.
+func (s *Service) SendAgain(ctx context.Context, actor households.Membership, week, provider, ingredientKey string) error {
+	key, err := normalizeIngredientKey(ingredientKey)
+	if err != nil {
+		return err
+	}
+	current, err := s.sendTarget(ctx, actor, week, provider)
+	if err != nil || current == nil {
+		return err
+	}
+	if !current.Active {
+		// A handoff stored before handoffs were kept per week becomes the
+		// active one first, so the removal below applies to it.
+		next := *current
+		next.UpdatedAt = s.timestamp()
+		if _, err := s.store.UpdateHandoffSend(ctx, next, current.Revision); err != nil && !errors.Is(err, ErrConflict) && !errors.Is(err, ErrDuplicate) {
+			return fmt.Errorf("activate handoff: %w", err)
+		}
+	}
+	removed, err := s.store.RemovePendingLines(ctx, current.HouseholdID, current.ID, key, s.timestamp())
+	if err != nil {
+		return fmt.Errorf("remove handoff lines: %w", err)
+	}
+	s.logger.InfoContext(ctx, "shopping handoff line sent again", "householdId", current.HouseholdID, "handoffId", current.ID, "removed", removed)
+	return nil
+}
+
+// closeWeek closes the week's handoffs once it is marked ordered: the cart
+// was checked out, so the next send starts a new handoff.
+func (s *Service) closeWeek(ctx context.Context, householdID, week string) error {
+	n, err := s.store.CloseWeekHandoffs(ctx, householdID, week, ClosedOrdered, s.timestamp())
+	if err != nil {
+		return fmt.Errorf("close week handoffs: %w", err)
+	}
+	if n > 0 {
+		s.logger.InfoContext(ctx, "shopping handoffs closed", "householdId", householdID, "week", week, "count", n)
+	}
+	return nil
+}
+
+// reopenWeek undoes closeWeek when the ordered mark is taken back: for each
+// provider, the newest handoff becomes current again if marking the week
+// closed it and it still has pending lines, so the cart it filled isn't
+// filled again.
+func (s *Service) reopenWeek(ctx context.Context, householdID, week string) error {
+	list, err := s.store.ListHandoffs(ctx, householdID, HandoffFilter{Week: week, Limit: MaxHandoffList})
+	if err != nil {
+		return fmt.Errorf("list week handoffs: %w", err)
+	}
+	seen := map[providers.Key]bool{}
+	for _, h := range list {
+		if seen[h.Provider] {
+			continue
+		}
+		seen[h.Provider] = true
+		if h.Active || h.ClosedReason != ClosedOrdered || h.Status() != HandoffOpen {
+			continue
+		}
+		if err := s.store.ReopenHandoff(ctx, householdID, h.ID, s.timestamp()); err != nil && !errors.Is(err, ErrDuplicate) {
+			return fmt.Errorf("reopen handoff: %w", err)
+		}
+	}
+	return nil
 }
 
 var isoWeek = regexp.MustCompile(`^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$`)
@@ -479,6 +688,16 @@ func (s *Service) Confirm(ctx context.Context, actor households.Membership, hand
 	}
 	if res.Handoff, err = s.store.GetHandoff(ctx, h.HouseholdID, h.ID); err != nil {
 		return ConfirmResult{}, err
+	}
+	// Every line answered means the order was placed, so the week's next
+	// send starts a new handoff rather than adding to this one.
+	if res.Handoff.Status() == HandoffDone && res.Handoff.ClosedAt.IsZero() {
+		if err := s.store.CloseHandoff(ctx, h.HouseholdID, h.ID, ClosedConfirmed, s.timestamp()); err != nil {
+			return ConfirmResult{}, fmt.Errorf("close handoff: %w", err)
+		}
+		if res.Handoff, err = s.store.GetHandoff(ctx, h.HouseholdID, h.ID); err != nil {
+			return ConfirmResult{}, err
+		}
 	}
 	if payload.Confirmed > 0 || payload.Skipped > 0 {
 		events.RecordOrLog(ctx, s.events, s.logger, events.Event{

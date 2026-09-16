@@ -23,8 +23,10 @@ struct ShoppingStoreTests {
     private static let confirmRoute = "POST /households/household-1/shopping/handoffs/handoff-1/confirm"
 
     /// "Now" is Wednesday, September 16, 2026 at noon UTC: 2026-W38 in Denver.
-    private func makeHarness(_ state: FakeShoppingServer.State = .init()) async throws -> Harness {
-        let server = FakeShoppingServer(state)
+    private func makeHarness(
+        _ state: FakeShoppingServer.State = .init(), sharing shared: FakeShoppingServer? = nil
+    ) async throws -> Harness {
+        let server = shared ?? FakeShoppingServer(state)
         let transport = StubTransport { request in server.handle(request) }
         let client = APIClient(baseURL: try #require(URL(string: Fixtures.baseURLString)), transport: transport)
         let stored = StoredSession(tokens: Fixtures.tokens(), user: Fixtures.user)
@@ -411,6 +413,164 @@ struct ShoppingStoreTests {
         #expect(store.linkProgress == nil)
         #expect(!store.isCreatingHandoff)
         #expect(harness.recorder.opened.isEmpty)
+    }
+
+    // MARK: Sending again
+
+    private static let cartURL = "https://www.walmart.com/sc/cart/addToCart?items="
+
+    /// The TestFlight bug: the list went to Walmart, the member came back to add more, and
+    /// opening Walmart again re-added everything, doubling the cart.
+    @Test func openingWalmartAgainWithNothingNewOpensNoLink() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.load()
+        #expect(store.proposal?.cart == nil)
+        #expect(!store.isEverythingInCart)
+
+        try await store.openInWalmart()
+
+        #expect(harness.recorder.opened.map(\.absoluteString) == [Self.cartURL + "100000001_3,100000002&storeId=5435"])
+        // Matched again: both lines are now in the cart.
+        let proposal = try #require(store.proposal)
+        #expect(proposal.cart?.handoffID == "handoff-1")
+        #expect(proposal.linesToSend.isEmpty)
+        #expect(proposal.linesInCart.map(\.ingredientKey) == ["i-beef", "i-cilantro"])
+        #expect(proposal.lines.first?.cart == ShoppingLineCart(sentPackages: 3, addPackages: 0, removePackages: 0))
+        #expect(store.isEverythingInCart)
+        #expect(store.linkNotice == nil)
+
+        try await store.openInWalmart()
+
+        #expect(harness.recorder.opened.count == 1)
+        #expect(store.linkNotice == "Everything is already in your Walmart cart")
+        #expect(store.linkProgress == nil)
+        #expect(harness.server.handoffs.count == 1)
+        #expect(harness.server.handoffs.first?.lines.map(\.packages) == [3, 1])
+    }
+
+    @Test func aHigherCountAndANewLineSendOnlyTheDifference() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.load()
+        try await store.openInWalmart()
+        let beef = try #require(store.readyLines.first)
+
+        store.setPackages(5, for: beef)
+
+        #expect(store.addPackages(for: beef) == 2)
+        #expect(store.linesToAdd.map(\.ingredientKey) == ["i-beef"])
+        #expect(!store.isEverythingInCart)
+        #expect(ShoppingText.cartStatus(sent: beef.sentPackages, wanted: 5) == "In Walmart cart · 3 · Adds 2 more")
+
+        try await store.openInWalmart()
+
+        #expect(harness.recorder.opened.last?.absoluteString == Self.cartURL + "100000001_2&storeId=5435")
+        #expect(harness.server.handoffs.count == 1)
+        #expect(harness.server.handoffs.first?.lines.map(\.packages) == [5, 1])
+        #expect(store.isEverythingInCart)
+
+        // The member plans another meal: only its line goes to Walmart.
+        harness.server.update { state in
+            state.grocery.append(.init(key: "i-lime", name: "Lime", category: "produce", computed: 2))
+            state.products["i-lime"] = .init(
+                productID: "100000003", displayName: "Test limes", ingredientName: "Lime", sizeQuantity: "1",
+                sizeUnit: "count")
+        }
+        await store.reload()
+        #expect(store.proposal?.linesToSend.map(\.ingredientKey) == ["i-lime"])
+
+        try await store.openInWalmart()
+
+        #expect(harness.recorder.opened.last?.absoluteString == Self.cartURL + "100000003_2&storeId=5435")
+        #expect(harness.server.handoffs.first?.lines.map(\.id) == ["l1", "l2", "l3"])
+    }
+
+    @Test func aLowerCountSaysToRemoveItInTheWalmartApp() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.load()
+        try await store.openInWalmart()
+        let beef = try #require(store.proposal?.linesInCart.first)
+
+        store.setPackages(1, for: beef)
+
+        #expect(store.removePackages(for: beef) == 2)
+        #expect(store.addPackages(for: beef) == 0)
+        #expect(ShoppingText.cartStatus(sent: 3, wanted: 1) == "In Walmart cart · 3 · Remove 2 in the Walmart app")
+        // A link can only add, so there's still nothing to open.
+        #expect(store.isEverythingInCart)
+        try await store.openInWalmart()
+        #expect(harness.recorder.opened.count == 1)
+    }
+
+    @Test func sendAgainAndStartOverPutLinesBackInTheCart() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.load()
+        try await store.openInWalmart()
+        let cilantro = try #require(store.proposal?.linesInCart.last)
+
+        try await store.sendAgain(cilantro)
+
+        #expect(
+            harness.server.bodies("POST /households/household-1/plans/2026-W38/shopping/walmart/handoffs/send-again")
+                .last?["ingredientKey"] as? String == "i-cilantro")
+        #expect(store.proposal?.linesToSend.map(\.ingredientKey) == ["i-cilantro"])
+        #expect(!store.isResending)
+        try await store.openInWalmart()
+        #expect(harness.recorder.opened.last?.absoluteString == Self.cartURL + "100000002&storeId=5435")
+
+        try await store.startOverAndSendEverything()
+
+        #expect(
+            harness.server.log.contains(
+                "POST /households/household-1/plans/2026-W38/shopping/walmart/handoffs/start-over"))
+        #expect(harness.server.handoffs.map(\.active) == [false, true])
+        #expect(harness.server.handoffs.first?.lines.map(\.status) == ["skipped", "skipped"])
+        #expect(harness.recorder.opened.last?.absoluteString == Self.cartURL + "100000001_3,100000002&storeId=5435")
+        #expect(store.linkProgress?.handoff.id == "handoff-2")
+        #expect(store.proposal?.cart?.handoffID == "handoff-2")
+    }
+
+    /// The sent state lives on the API, so a second member's phone sees the first one's send.
+    @Test func anotherMembersPhoneSeesWhatWasSent() async throws {
+        let first = try await makeHarness()
+        let second = try await makeHarness(sharing: first.server)
+        await first.store.load()
+        await second.store.load()
+        try await first.store.openInWalmart()
+
+        await second.store.reload()
+
+        #expect(second.store.proposal?.linesInCart.map(\.ingredientKey) == ["i-beef", "i-cilantro"])
+        #expect(second.store.isEverythingInCart)
+        try await second.store.openInWalmart()
+        #expect(second.recorder.opened.isEmpty)
+        #expect(second.store.linkNotice == ShoppingText.everythingInCart)
+    }
+
+    @Test func markingTheWeekOrderedStartsTheNextSendFresh() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.load()
+        try await store.openInWalmart()
+        #expect(store.isEverythingInCart)
+
+        try await store.setWeekOrdered(true)
+
+        #expect(store.proposal?.cart == nil)
+        #expect(!store.isEverythingInCart)
+        #expect(store.linkProgress == nil)
+
+        // Taking the mark back brings the cart state back, so a mis-tap can't double the cart.
+        try await store.setWeekOrdered(false)
+        #expect(store.isEverythingInCart)
+
+        try await store.setWeekOrdered(true)
+        try await store.openInWalmart()
+        #expect(harness.server.handoffs.count == 2)
+        #expect(harness.recorder.opened.last?.absoluteString == Self.cartURL + "100000001_3,100000002&storeId=5435")
     }
 
     // MARK: Did you order these?
