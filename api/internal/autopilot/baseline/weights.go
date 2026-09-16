@@ -41,7 +41,8 @@ const (
 	// SignalObjective is the bounded business boost, when present.
 	SignalObjective = "objective"
 
-	// SignalVariety is the week penalty for repeating cuisines and proteins.
+	// SignalVariety is the week penalty for repeating cuisines, cuisine
+	// regions, meal categories, and proteins.
 	SignalVariety = "variety"
 	// SignalCookTimeMix is the week penalty for too many long meals,
 	// back-to-back long meals, or too few quick meals.
@@ -82,6 +83,14 @@ type Weights struct {
 	// sharing a cuisine or a protein.
 	CuisineRepeat float64
 	ProteinRepeat float64
+	// CuisineRegionRepeat applies per pair sharing only a cuisine region
+	// ("italian" and "greek" are both southern european). It is a partial
+	// repeat, so it is lower than CuisineRepeat, and the two never stack:
+	// a shared cuisine already implies a shared region.
+	CuisineRegionRepeat float64
+	// MealCategoryRepeat applies per pair sharing a meal category, so two
+	// pastas repeat even when their cuisines differ or are missing.
+	MealCategoryRepeat float64
 	// ExtraLong applies per long meal beyond the week's allowance.
 	ExtraLong float64
 	// ConsecutiveLong applies per pair of long meals on adjacent days.
@@ -114,15 +123,17 @@ func DefaultWeights() Weights {
 		Novelty:             0.15,
 		ServingsFit:         0.25,
 		Pantry:              0.05,
-		Avoid:               0.30,
+		Avoid:               0.35,
 
-		CuisineRepeat:   0.20,
-		ProteinRepeat:   0.15,
-		ExtraLong:       0.35,
-		ConsecutiveLong: 0.25,
-		MissingQuick:    0.35,
-		RuleRepeat:      0.40,
-		NoveltyBudget:   0.20,
-		Unfilled:        1.0,
+		CuisineRepeat:       0.20,
+		CuisineRegionRepeat: 0.10,
+		MealCategoryRepeat:  0.20,
+		ProteinRepeat:       0.15,
+		ExtraLong:           0.35,
+		ConsecutiveLong:     0.25,
+		MissingQuick:        0.35,
+		RuleRepeat:          0.40,
+		NoveltyBudget:       0.20,
+		Unfilled:            1.0,
 	}
 }

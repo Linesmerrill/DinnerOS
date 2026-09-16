@@ -2239,7 +2239,7 @@ doesn't use are left out.
 ```json
 {
   "items": [
-    { "week": "2026-W30", "weekStart": "2026-07-20", "weekEnd": "2026-07-26", "timing": "past", "plannedCount": 5, "cookedCount": 3, "orderedCount": 4, "status": "finalized" }
+    { "week": "2026-W30", "weekStart": "2026-07-20", "weekEnd": "2026-07-26", "timing": "past", "plannedCount": 5, "addOnCount": 1, "cookedCount": 3, "orderedCount": 4, "status": "finalized" }
   ],
   "earliestWeek": "2023-W05"
 }
@@ -2247,9 +2247,17 @@ doesn't use are left out.
 
 - `around` defaults to the current week; `before` and `after` default to 8 and
   4 and are clamped to 52 each. Weeks are oldest first.
-- `plannedCount` is plan entries, `cookedCount` distinct `recipe.cooked`
+- `plannedCount` is planned **main meals**, `addOnCount` the week's planned
+  add-ons (a pairing's garlic bread), `cookedCount` distinct `recipe.cooked`
   events in that week, and `orderedCount` main meals whose `orderWeeks`
-  contain it (add-ons excluded).
+  contain it. Add-ons are excluded from every count that says "meals", so a
+  week with five dinners and a garlic bread reads `plannedCount: 5,
+  addOnCount: 1` — show it as "5 meals · 1 add-on", never as six meals.
+- The same rule holds elsewhere: a proposal's `plannedMeals` counts only main
+  meals, because add-ons never take a day slot and are never Autopilot
+  candidates. `GET .../menu`'s `plan.entries`, by contrast, is the raw entry
+  list and **does** include add-on entries, so count meals there by excluding
+  entries whose recipe is an add-on rather than taking `entries.length`.
 - `status` is `draft`, `finalized`, or `none` when no plan is stored.
 - `earliestWeek` is the earliest week with a planned entry or an ordered main
   meal, so the app knows how far back "Past" goes. It is `null` for a

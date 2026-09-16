@@ -105,22 +105,35 @@ struct MenuView: View {
         }
     }
 
+    /// Anchors All Meals so a new filter can bring its first page back into view.
+    private static let allMealsAnchor = "all-meals"
+
     private var menuContent: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 28) {
-                if let refreshError = menu.refreshError {
-                    FormErrorLabel(message: refreshError)
-                        .padding(.horizontal, 16)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 28) {
+                    if let refreshError = menu.refreshError {
+                        FormErrorLabel(message: refreshError)
+                            .padding(.horizontal, 16)
+                    }
+                    YourMealsSection(flow: autopilotFlow)
+                    PairingSuggestionsSection()
+                    sections
+                    if menu.selectedTiming != .past {
+                        AllMealsSection(list: menu.allMeals, canAdd: canAddMeals)
+                            .id(Self.allMealsAnchor)
+                    }
                 }
-                YourMealsSection(flow: autopilotFlow)
-                PairingSuggestionsSection()
-                sections
-                if menu.selectedTiming != .past {
-                    AllMealsSection(list: menu.allMeals, canAdd: canAddMeals)
+                .padding(.top, 12)
+                .padding(.bottom, 24)
+            }
+            // Changing a filter reloads All Meals from its first page. Without this the
+            // screen stays scrolled past that page and looks empty until you scroll back.
+            .onChange(of: menu.allMeals.query) { _, _ in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    proxy.scrollTo(Self.allMealsAnchor, anchor: .top)
                 }
             }
-            .padding(.top, 12)
-            .padding(.bottom, 24)
         }
         .refreshable {
             async let menuReload: Void = menu.reload()

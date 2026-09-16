@@ -100,6 +100,26 @@ nonisolated enum AutopilotSection: String, CaseIterable, Codable, Hashable, Send
         case .pairings: "takeoutbag.and.cup.and.straw"
         }
     }
+
+    /// One line under the preference row saying what the section decides.
+    var detail: String {
+        switch self {
+        case .taste: String(localized: "Cuisines, food types, and proteins you like or don't.")
+        case .restrictions: String(localized: "Allergens, diets, and ingredients to never suggest.")
+        case .schedule: String(localized: "How many dinners, which nights, and servings.")
+        case .cookTime: String(localized: "What counts as quick, and how many long cooks a week.")
+        case .equipment: String(localized: "The smoker, grill, or air fryer you cook with.")
+        case .weekdayRules: String(localized: "Habits for a day, like Taco Tuesday.")
+        case .novelty: String(localized: "Stick to favorites, or mix in something new.")
+        case .pairings: String(localized: "Add-ons that come with a meal, like garlic bread.")
+        }
+    }
+
+    /// Whether first-run setup asks about this section. The rest keep the API's defaults
+    /// until someone changes them here (#330).
+    var isInSetup: Bool {
+        AutopilotOnboardingStep.allCases.contains { $0.section == self }
+    }
 }
 
 // MARK: - Profile sections
