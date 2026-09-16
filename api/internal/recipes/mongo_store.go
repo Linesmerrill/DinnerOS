@@ -21,8 +21,8 @@ const (
 	ImportReviewsCollection = "import_reviews"
 )
 
-// Review item statuses.
-const reviewStatusOpen = "open"
+// reviewStatusOpen is the status every newly recorded item gets.
+const reviewStatusOpen = ReviewStatusOpen
 
 // listCollation makes list sorting and tag/cuisine filters case-insensitive.
 // List queries and the indexes that serve them must use the same collation.
@@ -787,6 +787,60 @@ func (s *MongoStore) SaveReviewItems(ctx context.Context, householdID string, it
 	}
 	_, err = s.reviews.BulkWrite(ctx, models, options.BulkWrite().SetOrdered(false))
 	return translate(err)
+}
+
+// reviewDoc is a stored import review item.
+type reviewDoc struct {
+	HouseholdID    bson.ObjectID `bson:"householdId"`
+	Key            string        `bson:"key"`
+	Source         string        `bson:"source"`
+	SourceRecipeID string        `bson:"sourceRecipeId"`
+	RecipeName     string        `bson:"recipeName"`
+	Field          string        `bson:"field"`
+	Value          string        `bson:"value"`
+	Reason         string        `bson:"reason"`
+	Status         string        `bson:"status"`
+	CreatedAt      time.Time     `bson:"createdAt"`
+}
+
+// ListReviewItems implements Store, reading the householdId_status_createdAt
+// index.
+func (s *MongoStore) ListReviewItems(ctx context.Context, householdID, status string, limit int) ([]ReviewRecord, error) {
+	hid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return nil, nil
+	}
+	filter := bson.D{{Key: "householdId", Value: hid}}
+	if status != "" {
+		filter = append(filter, bson.E{Key: "status", Value: status})
+	}
+	opts := options.Find().
+		SetSort(bson.D{{Key: "createdAt", Value: 1}, {Key: "key", Value: 1}}).
+		SetLimit(int64(limit))
+	cur, err := s.reviews.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, translate(err)
+	}
+	var docs []reviewDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	var out []ReviewRecord
+	for _, d := range docs {
+		out = append(out, ReviewRecord{
+			ReviewItem: ReviewItem{
+				Source:         d.Source,
+				SourceRecipeID: d.SourceRecipeID,
+				RecipeName:     d.RecipeName,
+				Field:          d.Field,
+				Value:          d.Value,
+				Reason:         d.Reason,
+			},
+			Status:    d.Status,
+			CreatedAt: d.CreatedAt,
+		})
+	}
+	return out, nil
 }
 
 // translate maps platform errors to this package's sentinels.

@@ -741,6 +741,56 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/recipes/import-reviews:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: List import review items
+      description: |
+        Things an importer could not map confidently, oldest first. Requires
+        `recipes.import`, because they are import bookkeeping.
+
+        A `variant` item means the delivered menu variant differed from the
+        canonical recipe page the details came from, so the stored ingredients
+        may name a different protein than the box held. `value` is the
+        delivered variant's name. Resolving one needs an account capture of
+        that delivered ID and a re-import; nothing closes an item
+        automatically.
+      operationId: listImportReviews
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: "`open` (default) for unresolved items, `all` for every status."
+          schema:
+            type: string
+            enum: [open, all]
+            default: open
+        - name: limit
+          in: query
+          description: Page size. Values above 500 are treated as 500.
+          schema:
+            type: integer
+            minimum: 1
+            default: 200
+      responses:
+        "200":
+          description: The household's review items.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportReviewListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/v1/households/{householdId}/recipes/import:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -4135,6 +4185,41 @@ components:
           items:
             type: object
             description: ReviewItem (docs/import-format.md).
+    ImportReviewListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportReview"
+    ImportReview:
+      type: object
+      required: [recipeName, source, sourceRecipeId, field, reason, status, createdAt]
+      properties:
+        recipeId:
+          type: string
+          description: The household recipe this is about. Absent when no stored recipe carries the source ID.
+        recipeName:
+          type: string
+        source:
+          type: string
+        sourceRecipeId:
+          type: string
+        field:
+          type: string
+          description: "What could not be mapped: variant, steps, cookTime, or ingredients.<name>.unit."
+        value:
+          type: string
+          description: What the source said. Absent when the source said nothing.
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [open]
+        createdAt:
+          type: string
+          format: date-time
     ImportResult:
       type: object
       required: [created, updated, unchanged, ingredientsCreated, reviewItems, errors]

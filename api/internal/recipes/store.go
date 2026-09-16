@@ -60,4 +60,8 @@ type Store interface {
 	// SaveReviewItems records review items. Items already recorded for the
 	// household (same reviewKey) are left unchanged.
 	SaveReviewItems(ctx context.Context, householdID string, items []ReviewItem, now time.Time) error
+	// ListReviewItems returns up to limit of the household's review items
+	// with the given status, oldest first. An empty status returns every
+	// item. Records carry no RecipeID; the service resolves it.
+	ListReviewItems(ctx context.Context, householdID, status string, limit int) ([]ReviewRecord, error)
 }

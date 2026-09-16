@@ -322,3 +322,61 @@ func TestImportExtendsServerReadDeadline(t *testing.T) {
 		t.Errorf("without extension the slow upload succeeded; the test no longer exercises the deadline")
 	}
 }
+
+func TestImportReviewsEndpoint(t *testing.T) {
+	srv := newRecipeTestServer(t, nil)
+	reviewsPath := recipesPath(hhAda) + "/import-reviews"
+	if rec := srv.do(t, http.MethodPost, recipesPath(hhAda)+"/import", mustJSON(t, handlerFixture()), userAda); rec.Code != http.StatusOK {
+		t.Fatalf("import status = %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	rec := srv.do(t, http.MethodGet, reviewsPath, "", userAda)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d (%s)", rec.Code, rec.Body.String())
+	}
+	got := decodeBody[ImportReviewListResponse](t, rec)
+	if len(got.Items) != 1 {
+		t.Fatalf("items = %d, want 1 (%s)", len(got.Items), rec.Body.String())
+	}
+	item := got.Items[0]
+	if item.Field != "steps" || item.SourceRecipeID != "r-cake" || item.RecipeName != "Lava Cake" {
+		t.Errorf("item = %+v", item)
+	}
+	if item.Status != ReviewStatusOpen {
+		t.Errorf("status = %q, want %q", item.Status, ReviewStatusOpen)
+	}
+	if item.CreatedAt.IsZero() {
+		t.Error("createdAt is zero")
+	}
+
+	// The item names its recipe, so a client can open it.
+	list := decodeBody[RecipeListResponse](t, srv.do(t, http.MethodGet, recipesPath(hhAda), "", userAda))
+	var cakeID string
+	for _, s := range list.Items {
+		if s.Name == "Lava Cake" {
+			cakeID = s.ID
+		}
+	}
+	if cakeID == "" {
+		t.Fatal("Lava Cake was not imported")
+	}
+	if item.RecipeID != cakeID {
+		t.Errorf("recipeId = %q, want %q", item.RecipeID, cakeID)
+	}
+
+	// status=all is the same open item here; an unknown status is rejected.
+	if all := decodeBody[ImportReviewListResponse](t, srv.do(t, http.MethodGet, reviewsPath+"?status=all", "", userAda)); len(all.Items) != 1 {
+		t.Errorf("status=all items = %d, want 1", len(all.Items))
+	}
+	wantError(t, srv.do(t, http.MethodGet, reviewsPath+"?status=resolved", "", userAda), http.StatusBadRequest, "validation_failed")
+	wantError(t, srv.do(t, http.MethodGet, reviewsPath+"?limit=0", "", userAda), http.StatusBadRequest, "validation_failed")
+
+	// Review items are import bookkeeping: viewing the household is not enough.
+	if rec := srv.do(t, http.MethodGet, reviewsPath, "", userViewer); rec.Code != http.StatusForbidden {
+		t.Errorf("viewer status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+	// Another household's import is not visible here.
+	if other := decodeBody[ImportReviewListResponse](t, srv.do(t, http.MethodGet, recipesPath(hhBob)+"/import-reviews", "", userBob)); len(other.Items) != 0 {
+		t.Errorf("hhBob items = %d, want 0", len(other.Items))
+	}
+}

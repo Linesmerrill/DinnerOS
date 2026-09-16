@@ -197,3 +197,19 @@ type ReviewItem struct {
 	Value          string
 	Reason         string
 }
+
+// Review item statuses. An item is Open until a person resolves it; nothing
+// closes one automatically, because only a person can say what the box held.
+const (
+	ReviewStatusOpen = "open"
+)
+
+// ReviewRecord is a stored ReviewItem with the bookkeeping the store adds.
+// RecipeID is the household recipe the item is about, empty when the import
+// that recorded it no longer matches a stored recipe.
+type ReviewRecord struct {
+	ReviewItem
+	RecipeID  string
+	Status    string
+	CreatedAt time.Time
+}

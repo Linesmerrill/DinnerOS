@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -350,6 +351,58 @@ func reviewItems(file ImportFile) []ReviewItem {
 		}
 	}
 	return out
+}
+
+// Review listing page sizes.
+const (
+	// DefaultReviewLimit is the page size when the caller names none.
+	DefaultReviewLimit = 200
+	// MaxReviewLimit caps the page size.
+	MaxReviewLimit = 500
+)
+
+// ImportReviews returns the household's import review items with status
+// (empty for every status), oldest first, each carrying the ID of the recipe
+// it is about when that recipe is still stored.
+func (s *Service) ImportReviews(ctx context.Context, householdID, status string, limit int) ([]ReviewRecord, error) {
+	if householdID == "" {
+		return nil, errHouseholdRequired
+	}
+	if limit <= 0 {
+		limit = DefaultReviewLimit
+	}
+	limit = min(limit, MaxReviewLimit)
+
+	items, err := s.store.ListReviewItems(ctx, householdID, status, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list review items: %w", err)
+	}
+
+	// An item names a recipe by source ID; the stored recipe may carry it as
+	// an alias, because clones of one dish merge under the newest ID.
+	idsBySource := map[string][]string{}
+	for _, it := range items {
+		if it.SourceRecipeID != "" {
+			idsBySource[it.Source] = append(idsBySource[it.Source], it.SourceRecipeID)
+		}
+	}
+	recipeIDs := map[sourceRecipeKey]string{}
+	for _, source := range slices.Sorted(maps.Keys(idsBySource)) {
+		found, err := s.store.FindRecipesBySourceIDs(ctx, householdID, source, idsBySource[source])
+		if err != nil {
+			return nil, fmt.Errorf("find recipes for review items: %w", err)
+		}
+		for _, r := range found {
+			recipeIDs[sourceRecipeKey{source, r.SourceRecipeID}] = r.ID
+			for _, alias := range r.SourceAliases {
+				recipeIDs[sourceRecipeKey{source, alias}] = r.ID
+			}
+		}
+	}
+	for i := range items {
+		items[i].RecipeID = recipeIDs[sourceRecipeKey{items[i].Source, items[i].SourceRecipeID}]
+	}
+	return items, nil
 }
 
 // reviewKey identifies a review item so re-imports don't duplicate it.
