@@ -66,6 +66,9 @@ const (
 	// TypeShoppingOrderConfirmed: a member confirmed what was ordered from a
 	// handoff.
 	TypeShoppingOrderConfirmed Type = "shopping.order_confirmed"
+	// TypeShoppingStoreRequested: a household asked DinnerOS to support a
+	// grocer or delivery service.
+	TypeShoppingStoreRequested Type = "shopping.store_requested"
 )
 
 // Source says who observed an event.
@@ -367,6 +370,24 @@ type ShoppingOrderConfirmed struct {
 	Skipped   int    `json:"skipped" bson:"skipped"`
 }
 
+// MaxStoreKeyLength bounds a requested store's key.
+const MaxStoreKeyLength = 64
+
+// ShoppingStoreRequested is the payload of shopping.store_requested: a
+// household asked for a store DinnerOS doesn't hand lists to yet. It holds the
+// store key and whether the key came from the curated catalog, which is the
+// demand signal that decides what gets integrated next
+// (docs/shopping-providers.md#demand-signal). A member's note is never copied
+// into events.
+type ShoppingStoreRequested struct {
+	// Key is a catalog key ("kroger"), or the key normalized from a name a
+	// member typed ("some-local-market").
+	Key string `json:"key" bson:"key"`
+	// Catalog is true when Key names a curated catalog entry, and false when
+	// the member typed a store the catalog doesn't list.
+	Catalog bool `json:"catalog" bson:"catalog"`
+}
+
 // Allowed values for optional enumerated payload fields.
 var (
 	ViewSurfaces = []string{"detail", "plan", "search", "recommendation"}
@@ -435,6 +456,9 @@ func (ShoppingHandoffCreated) EventType() Type { return TypeShoppingHandoffCreat
 
 // EventType implements Payload.
 func (ShoppingOrderConfirmed) EventType() Type { return TypeShoppingOrderConfirmed }
+
+// EventType implements Payload.
+func (ShoppingStoreRequested) EventType() Type { return TypeShoppingStoreRequested }
 
 func (p RecipeViewed) validate() error {
 	return optionalEnum("surface", p.Surface, ViewSurfaces)
@@ -600,6 +624,13 @@ func (p ShoppingOrderConfirmed) validate() error {
 	return validHandoff(p.HandoffID, p.Provider)
 }
 
+func (p ShoppingStoreRequested) validate() error {
+	if p.Key == "" || len(p.Key) > MaxStoreKeyLength {
+		return invalid("key is required")
+	}
+	return nil
+}
+
 // typeSpec describes the rules for one event type.
 type typeSpec struct {
 	// recipe events require RecipeID; other events must not carry one.
@@ -637,6 +668,7 @@ var typeSpecs = map[Type]typeSpec{
 	TypeMealCustomized:                 {recipe: true, decode: decoder[MealCustomized]()},
 	TypeShoppingHandoffCreated:         {decode: decoder[ShoppingHandoffCreated]()},
 	TypeShoppingOrderConfirmed:         {decode: decoder[ShoppingOrderConfirmed]()},
+	TypeShoppingStoreRequested:         {decode: decoder[ShoppingStoreRequested]()},
 }
 
 func decoder[P Payload]() func([]byte, func([]byte, any) error) (Payload, error) {
