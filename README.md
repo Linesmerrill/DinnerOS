@@ -22,12 +22,13 @@ Autopilot's first customer.
 | 2 | Authentication (Sign in with Apple, Google) — API and iOS | ✅ Done |
 | 3 | Households, roles, and invitations (Resend email) — API and iOS | ✅ Done |
 | 4 | Recipes, ingredient catalog, units, recipe import — API and iOS library | ✅ Done |
-| 5 | HelloFresh historical importer (full order history loaded) | ✅ Done; exact variant capture for some recipes pending |
-| 6 | Weekly planner and week grocery list | API ✅ Done; iOS in progress |
-| 7 | Pantry and grocery engine | Grocery engine, pantry API, and iOS Pantry tab ✅ (applied to week grocery lists); saved lists pending |
-| 8 | Shopping providers | Walmart cart handoff API (8a) ✅; iOS Shop tab ✅; product search (8b) and Instacart later |
+| 5 | HelloFresh historical importer (full order history, exact delivered variants from account captures and recipe cards) | ✅ Done; 40 older variants can't be recovered and keep the canonical recipe |
+| 6 | Weekly planner and week grocery list, including skip-once / never-buy ingredients | ✅ Done (API and iOS) |
+| 7 | Pantry and grocery engine, specialty ingredient substitutes, low-stock alerts | ✅ Done; saved lists pending |
+| 8 | Shopping providers | Walmart cart handoff, category-aware search, product links with name and size, pack coverage ✅; order-day reminders ✅; Instacart later |
 | 9 | Ratings and behavioral events | ✅ Done (API and iOS) |
 | 10 | Autopilot V1: taste profile, week context, deterministic week proposals (generate, swap, accept) | ✅ Done (API and iOS); learning from feedback comes later |
+| — | Push notifications (APNs, hourly reminder sweep), starter recipe library for new households, account deletion, privacy policy, external TestFlight | ✅ Done |
 | 11–12 | Autopilot context engine and private service | Later |
 
 ## Repository layout
