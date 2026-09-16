@@ -74,10 +74,10 @@ func needsOf(amounts []Amount) []ingredients.Amount {
 	return out
 }
 
-// PackageCount recomputes a line's package count from its stored amounts and
-// package size.
+// PackageCount recomputes a line's package count from its stored amounts,
+// package size, and coverage rule.
 func (l HandoffLine) PackageCount() providers.PackageCount {
-	return providers.CountPackages(needsOf(l.Amounts), amountFromSize(l.PackageSize))
+	return providers.CountPackagesFor(needsOf(l.Amounts), amountFromSize(l.PackageSize), l.Coverage)
 }
 
 func validateMatchInput(in MatchInput) (MatchInput, error) {
@@ -181,9 +181,14 @@ func buildProposal(p providers.GroceryProvider, settings Settings, g planning.Gr
 			line := HandoffLine{
 				ID: "l" + strconv.Itoa(len(out.Lines)+1), LineSource: src,
 				ProductID: pref.ProductID, ProductName: pref.DisplayName, PackageSize: pref.PackageSize, Status: LinePending,
+				// Resolved here, and stored on the line, so a handoff read
+				// back later recomputes the count it was created with even
+				// if the household changes the rule afterwards.
+				Coverage: coverageFor(pref.Coverage, src.Category),
 			}
 			count := line.PackageCount()
-			line.ComputedPackages, line.Packages, line.Reason = count.Packages, count.Packages, count.Reason
+			line.ComputedPackages, line.Packages = count.Packages, count.Packages
+			line.Reason, line.CoversWeek = count.Reason, count.CoversWeek
 			if sel.Packages > 0 {
 				line.Packages = sel.Packages
 			}

@@ -113,7 +113,10 @@ enum ShopPreviewData {
                 productID: "100000001", displayName: product, productURLString: "https://www.walmart.com/ip/100000001",
                 packageSize: size),
             computedPackages: packages, packages: packages, packagesOverridden: false, checkAmount: reason != nil,
-            reason: reason, reasonText: reasonText, coverageText: coverage,
+            reason: reason, reasonText: reasonText, coverageText: coverage, coverage: "per_week", coversWeek: false,
+            searchTerms: ShoppingSearchTerms(
+                query: "fresh whole \(name)", qualifiers: ["fresh", "whole"], avoid: ["powder", "minced", "dried"],
+                why: "Produce: the fresh whole item, not a dried, powdered or prepared form."),
             confirmation: ShoppingLineConfirmation(
                 status: .pending, packages: nil, purchaseID: nil, confirmedAt: nil, skippedAt: nil))
     }
@@ -123,6 +126,7 @@ enum ShopPreviewData {
     ) -> ShoppingExcludedLine {
         ShoppingExcludedLine(
             ingredientKey: key, ingredientID: nil, name: name, category: "bakery", amounts: [], quantityText: "6",
-            unquantified: false, groceryStatus: .toBuy, reason: reason, text: text)
+            unquantified: false, groceryStatus: .toBuy, reason: reason, text: text,
+            searchTerms: ShoppingSearchTerms.plain(name))
     }
 }

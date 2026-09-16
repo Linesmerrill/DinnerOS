@@ -296,7 +296,9 @@ func TestIntegrationHandoffAndConfirm(t *testing.T) {
 	if l := lineFor(t, m, "Yellow Onion"); l.Packages != 1 || l.Reason != "" {
 		t.Errorf("onion = %+v", l)
 	}
-	if l := lineFor(t, m, "Garlic"); l.Packages != 1 || l.Reason != providers.ReasonUnitNotConvertible {
+	// 4 cloves against a bulb can't be measured, so the weekly rule buys one
+	// bulb for the week instead of flagging the line (docs/api.md#coverage).
+	if l := lineFor(t, m, "Garlic"); l.Packages != 1 || l.Reason != "" || !l.CoversWeek || l.Coverage != providers.CoveragePerWeek {
 		t.Errorf("garlic = %+v", l)
 	}
 	if l := lineFor(t, m, "Milk"); l.Packages != 1 || l.Reason != providers.ReasonNoPackageSize {
@@ -333,7 +335,9 @@ func TestIntegrationHandoffAndConfirm(t *testing.T) {
 		t.Fatalf("handoff = %+v", h)
 	}
 	stored, err := f.svc.GetHandoff(ctx, testHousehold, h.ID)
-	if err != nil || len(stored.Lines) != 4 || stored.Links[0].URL != h.Links[0].URL || lineFor(t, stored.Proposal, "Garlic").Reason != providers.ReasonUnitNotConvertible ||
+	storedGarlic := lineFor(t, stored.Proposal, "Garlic")
+	if err != nil || len(stored.Lines) != 4 || stored.Links[0].URL != h.Links[0].URL ||
+		storedGarlic.Coverage != providers.CoveragePerWeek || !storedGarlic.CoversWeek || storedGarlic.Reason != "" ||
 		stored.Lines[0].Amounts[0].Quantity == "" || !stored.CreatedAt.Equal(testNow) {
 		t.Errorf("GetHandoff() = %+v, %v", stored, err)
 	}

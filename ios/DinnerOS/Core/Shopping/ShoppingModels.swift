@@ -293,8 +293,15 @@ nonisolated struct ShoppingHandoffLine: Decodable, Hashable, Sendable, Identifia
     let reason: ShoppingCheckReason?
     /// For example "Check amount: 4 cloves doesn't convert to a 3 ct package".
     let reasonText: String?
-    /// For example "3 × 16 oz covers 36 oz".
+    /// For example "3 × 16 oz covers 36 oz", or "1 × 1 ct covers this week (4 cloves)".
     let coverageText: String
+    /// The rule the count was computed under: `per_week` or `per_amount`.
+    let coverage: String
+    /// True when one package is assumed to cover the week because the need couldn't be
+    /// measured against it. `checkAmount` is false in that case.
+    let coversWeek: Bool
+    /// What to search for to find this product again.
+    let searchTerms: ShoppingSearchTerms
     /// `nil` on a match.
     let confirmation: ShoppingLineConfirmation?
 
@@ -302,7 +309,30 @@ nonisolated struct ShoppingHandoffLine: Decodable, Hashable, Sendable, Identifia
         case id, ingredientKey
         case ingredientID = "ingredientId"
         case name, category, amounts, quantityText, unquantified, groceryStatus, product, computedPackages, packages,
-            packagesOverridden, checkAmount, reason, reasonText, coverageText, confirmation
+            packagesOverridden, checkAmount, reason, reasonText, coverageText, coverage, coversWeek, searchTerms,
+            confirmation
+    }
+}
+
+/// The search the API suggests for a grocery line (`ShoppingSearchTerms`).
+///
+/// These are words to search Walmart with, not results: DinnerOS has no product-search API, so
+/// it can't filter `avoid` out itself and shows it to the member instead.
+nonisolated struct ShoppingSearchTerms: Decodable, Hashable, Sendable {
+    /// What to search for, for example "fresh whole Garlic".
+    let query: String
+    /// The words added ahead of the ingredient name, for example ["fresh", "whole"]. Empty when
+    /// the category has no bias, or the name already states a form ("Garlic Powder").
+    let qualifiers: [String]
+    /// Wrong-form products to skip, for example ["powder", "minced", "dried"].
+    let avoid: [String]
+    /// One sentence explaining the bias, or empty when none was applied.
+    let why: String
+
+    /// For a line the API didn't send terms for, such as a saved product opened from the
+    /// Saved Products screen.
+    static func plain(_ name: String) -> ShoppingSearchTerms {
+        ShoppingSearchTerms(query: name, qualifiers: [], avoid: [], why: "")
     }
 }
 
@@ -339,13 +369,15 @@ nonisolated struct ShoppingExcludedLine: Decodable, Hashable, Sendable, Identifi
     let reason: ShoppingExclusionReason
     /// The API's display text, for example "Choose a Walmart product".
     let text: String
+    /// What to search for when choosing a product for this line.
+    let searchTerms: ShoppingSearchTerms
 
     var id: String { "\(reason.rawValue)|\(ingredientKey)" }
 
     private enum CodingKeys: String, CodingKey {
         case ingredientKey
         case ingredientID = "ingredientId"
-        case name, category, amounts, quantityText, unquantified, groceryStatus, reason, text
+        case name, category, amounts, quantityText, unquantified, groceryStatus, reason, text, searchTerms
     }
 }
 

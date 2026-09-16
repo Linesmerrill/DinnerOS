@@ -240,8 +240,24 @@ lines.
    unavailable items and show the top few. The member picks one, and the
    choice is saved.
 3. **No search yet (8a):** the member pastes a Walmart product link. The
-   `itemId` is read from the URL string (`/ip/<slug>/<itemId>`), without
-   fetching the page, and the member types the package size.
+   `itemId`, the product **name**, and often the **package size** are all
+   read from the URL string (`/ip/<slug>/<itemId>`), without fetching the
+   page, so pasting a link is the whole interaction and the member types
+   nothing. The slug is the product title with hyphens for spaces
+   (`/ip/Garlic-Bulb-Fresh-Whole-Each/123` → "Garlic Bulb Fresh Whole Each",
+   1 ct), so the original punctuation doesn't survive and an ambiguous size
+   (`-2-5-lb`, which could be 2.5 lb or 5 lb) yields no size rather than a
+   wrong one. Both are defaults shown for confirmation, never facts from
+   Walmart.
+
+   DinnerOS also suggests **what to search for**, because searching an
+   ingredient's bare name is the wrong search: "garlic" ranks garlic powder,
+   garlic salt and garlic snacks above the bulb. The suggestion is biased by
+   the line's grocery category — produce searches "fresh whole …" — and
+   carries the forms to avoid. Without a search API DinnerOS cannot filter
+   those out itself, so they are shown to the member as a hint and the
+   search opens in Walmart's own app. A name that already states a form
+   ("Garlic Powder") is searched as itself.
 4. **Lines that need a person:** uncatalogued or unusual lines ("Tex-Mex paste
    alternative") and unquantified lines are never auto-matched. They show as
    "Choose a product" or can be left out of the handoff.

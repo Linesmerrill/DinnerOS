@@ -222,8 +222,8 @@ struct ShoppingAPITests {
 
         // Ready lines, including each "check amount" reason.
         #expect(proposal.lines.map(\.id) == ["l1", "l2", "l3", "l4"])
-        #expect(proposal.lines.map(\.reason) == [nil, .unitNotConvertible, .noPackageSize, .packageCountCapped])
-        #expect(proposal.lines.map(\.checkAmount) == [false, true, true, true])
+        #expect(proposal.lines.map(\.reason) == [nil, nil, .noPackageSize, .packageCountCapped])
+        #expect(proposal.lines.map(\.checkAmount) == [false, false, true, true])
         let beef = proposal.lines[0]
         #expect(beef.name == "Ground Beef")
         #expect(beef.category == "meat-seafood")
@@ -236,7 +236,22 @@ struct ShoppingAPITests {
         #expect(beef.coverageText == "3 × 16 oz covers 36 oz")
         #expect(beef.reasonText == nil)
         #expect(beef.confirmation == nil)
-        #expect(proposal.lines[1].reasonText == "Check amount: 4 cloves doesn't convert to a 3 ct package")
+        // A measurable need is counted exactly, whatever the coverage rule.
+        #expect(beef.coverage == "per_amount")
+        #expect(!beef.coversWeek)
+
+        // Garlic: 4 cloves can't be measured against a bulb, so one bulb is taken to cover the
+        // week rather than the line being flagged for someone to check every week.
+        let garlic = proposal.lines[1]
+        #expect(garlic.reasonText == nil)
+        #expect(garlic.coverage == "per_week")
+        #expect(garlic.coversWeek)
+        #expect(garlic.coverageText == "1 × 1 ct covers this week (4 cloves)")
+        // The bare ingredient name is the wrong search, so the API sends a better one.
+        #expect(garlic.searchTerms.query == "fresh whole Garlic")
+        #expect(garlic.searchTerms.qualifiers == ["fresh", "whole"])
+        #expect(garlic.searchTerms.avoid.contains("powder"))
+        #expect(garlic.searchTerms.why.hasPrefix("Produce"))
         #expect(proposal.lines[2].product.packageSize == nil)
         #expect(proposal.lines[3].packagesOverridden)
         #expect(proposal.lines[3].computedPackages == 99)
@@ -246,6 +261,8 @@ struct ShoppingAPITests {
         #expect(proposal.needsProduct.map(\.ingredientKey) == ["name:flour tortillas"])
         #expect(proposal.needsProduct.first?.ingredientID == nil)
         #expect(proposal.needsProduct.first?.text == "Choose a Walmart product")
+        // A line needing a product is exactly where the suggested search is used.
+        #expect(proposal.needsProduct.first?.searchTerms.query == "Flour Tortillas")
         #expect(
             proposal.notIncluded.map(\.reason) == [
                 .inPantry, .pantryHint, .houseMade, .checkedOff, .excluded, .notSelected, .notOnList,

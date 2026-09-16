@@ -78,6 +78,55 @@ func TestWalmartParseProduct(t *testing.T) {
 	}
 }
 
+// A pasted link carries the product's name in its slug, so the member
+// doesn't have to type it. Nothing is fetched: this is the link's own text.
+func TestWalmartParseProductReadsTheSlug(t *testing.T) {
+	w := NewWalmart(WalmartOptions{})
+	tests := []struct {
+		name, in, wantName, wantSize string
+	}{
+		// The owner's garlic: "Each" names a single item, so one bulb.
+		{"garlic bulb", "https://www.walmart.com/ip/Garlic-Bulb-Fresh-Whole-Each/12345678", "Garlic Bulb Fresh Whole Each", "1 ct"},
+		{"ounces", "https://www.walmart.com/ip/Great-Value-Test-Beans-15-oz/123456789", "Great Value Test Beans 15 oz", "15 oz"},
+		{"pounds", "https://www.walmart.com/ip/Test-Rice-2-lb/98765432", "Test Rice 2 lb", "2 lb"},
+		{"count", "https://www.walmart.com/ip/Test-Eggs-Large-12-Count/98765432", "Test Eggs Large 12 Count", "12 ct"},
+		{"fluid ounces", "https://www.walmart.com/ip/Test-Juice-64-fl-oz/98765432", "Test Juice 64 fl oz", "64 fl oz"},
+		{"grams", "https://www.walmart.com/ip/Test-Flour-500-g/98765432", "Test Flour 500 g", "500 g"},
+		{"no size in the slug", "https://www.walmart.com/ip/Test-Snack-Pack/98765432", "Test Snack Pack", ""},
+		{"percent-encoded", "https://www.walmart.com/ip/Caf%C3%A9-Test-Coffee/100000001", "Café Test Coffee", ""},
+		{"query string is not the name", "https://www.walmart.com/ip/Test-Rice-2-lb/98765432?classType=REGULAR", "Test Rice 2 lb", "2 lb"},
+		// A decimal written as two numbers can't be told from a whole one,
+		// so no size is claimed rather than the wrong one.
+		{"ambiguous decimal", "https://www.walmart.com/ip/Test-Chicken-2-5-lb/98765432", "Test Chicken 2 5 lb", ""},
+		// Nothing to read: these still parse, they just carry no name.
+		{"no slug", "https://www.walmart.com/ip/98765432", "", ""},
+		{"bare item ID", "98765432", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ref, err := w.ParseProduct(tt.in)
+			if err != nil {
+				t.Fatalf("ParseProduct(%q) error = %v", tt.in, err)
+			}
+			if ref.Name != tt.wantName {
+				t.Errorf("Name = %q, want %q", ref.Name, tt.wantName)
+			}
+			switch {
+			case tt.wantSize == "":
+				if ref.Size != nil {
+					t.Errorf("Size = %q, want none", AmountText(*ref.Size))
+				}
+			case ref.Size == nil:
+				t.Errorf("Size = none, want %q", tt.wantSize)
+			default:
+				if got := AmountText(*ref.Size); got != tt.wantSize {
+					t.Errorf("Size = %q, want %q", got, tt.wantSize)
+				}
+			}
+		})
+	}
+}
+
 func TestWalmartNormalizeStoreID(t *testing.T) {
 	w := NewWalmart(WalmartOptions{})
 	for in, want := range map[string]string{"5435": "5435", " 100 ": "100", "007": "7", "999999": "999999"} {

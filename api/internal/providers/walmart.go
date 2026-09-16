@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 )
 
 // Walmart link format and limits.
@@ -137,19 +139,102 @@ func (w *Walmart) ParseProduct(input string) (ProductRef, error) {
 		return ProductRef{}, invalid("only walmart.com product links are supported; %s", walmartLinkHelp)
 	}
 	segments := strings.Split(strings.TrimSuffix(strings.TrimPrefix(u.Path, "/"), "/"), "/")
-	var id string
+	var id, slug string
 	switch {
 	case len(segments) == 2 && segments[0] == "ip":
 		id = segments[1]
 	case len(segments) == 3 && segments[0] == "ip" && segments[1] != "":
-		id = segments[2]
+		id, slug = segments[2], segments[1]
 	default:
 		return ProductRef{}, invalid("that walmart.com link isn't a product page; %s", walmartLinkHelp)
 	}
 	if !walmartItemID.MatchString(id) {
 		return ProductRef{}, invalid("that walmart.com link has no item ID; %s", walmartLinkHelp)
 	}
-	return ProductRef{ProductID: id, URL: w.ProductURL(id)}, nil
+	ref := ProductRef{ProductID: id, URL: w.ProductURL(id)}
+	if words := slugWords(slug); len(words) > 0 {
+		ref.Name = strings.Join(words, " ")
+		ref.Size = slugSize(words)
+	}
+	return ref, nil
+}
+
+// slugWords splits a product-page slug into its words. A Walmart slug is the
+// product title with spaces and punctuation replaced by hyphens
+// ("Garlic-Bulb-Fresh-Whole-Each"), so the words come back but the original
+// punctuation does not: the name is "Garlic Bulb Fresh Whole Each", not
+// "Garlic Bulb Fresh Whole, Each". Empty words are dropped, and a slug of
+// nothing but separators gives no words.
+func slugWords(slug string) []string {
+	if slug == "" || len(slug) > MaxProductInputLength {
+		return nil
+	}
+	words := strings.FieldsFunc(slug, func(r rune) bool { return r == '-' || r == '_' || r == '+' })
+	out := make([]string, 0, len(words))
+	for _, word := range words {
+		if word = strings.TrimSpace(word); word != "" {
+			out = append(out, word)
+		}
+	}
+	return out
+}
+
+// slugUnits maps the size words a Walmart slug uses to DinnerOS unit codes.
+// Every result is checked against ingredients.LookupUnit, so a code this map
+// gets wrong yields no size rather than a wrong one.
+var slugUnits = map[string]string{
+	"oz": "oz", "ounce": "oz", "ounces": "oz",
+	"floz": "floz",
+	"lb":   "lb", "lbs": "lb", "pound": "lb", "pounds": "lb",
+	"g": "g", "gram": "g", "grams": "g",
+	"ml": "ml", "milliliter": "ml", "milliliters": "ml",
+	"ct": "count", "count": "count", "each": "count",
+}
+
+// slugSize reads a package size from a slug's trailing words: "Test-Rice-2-lb"
+// is 2 lb, "Eggs-Large-12-Count" is 12 ct, and a trailing "Each" is 1 ct.
+//
+// It returns nil rather than a guess whenever the words are ambiguous. The
+// important case is a decimal written as two numbers: "Chicken-2-5-lb" is
+// 2.5 lb, not 5 lb, and a slug can't tell the two apart, so a number
+// preceded by another number yields no size at all. Walmart's own page is
+// never fetched, so an unreadable slug means the member fills the size in.
+func slugSize(words []string) *ingredients.Amount {
+	if len(words) == 0 {
+		return nil
+	}
+	unitWord, rest := strings.ToLower(words[len(words)-1]), words[:len(words)-1]
+	// "fl oz" arrives as two words.
+	if unitWord == "oz" && len(rest) > 0 && strings.EqualFold(rest[len(rest)-1], "fl") {
+		unitWord, rest = "floz", rest[:len(rest)-1]
+	}
+	code, ok := slugUnits[unitWord]
+	if !ok {
+		return nil
+	}
+	unit, err := ingredients.LookupUnit(code)
+	if err != nil {
+		return nil
+	}
+	// "Each" names a single item and carries no number of its own.
+	if unitWord == "each" {
+		return &ingredients.Amount{Quantity: ingredients.NewQuantity(1, 1), Unit: unit}
+	}
+	if len(rest) == 0 {
+		return nil
+	}
+	number := rest[len(rest)-1]
+	quantity, err := ingredients.ParseQuantity(number)
+	if err != nil || quantity.IsZero() {
+		return nil
+	}
+	// A number right before the number is an unreadable decimal ("2-5-lb").
+	if len(rest) > 1 {
+		if _, err := ingredients.ParseQuantity(rest[len(rest)-2]); err == nil {
+			return nil
+		}
+	}
+	return &ingredients.Amount{Quantity: quantity, Unit: unit}
 }
 
 // NormalizeStoreID implements GroceryProvider: a Walmart store number is 1

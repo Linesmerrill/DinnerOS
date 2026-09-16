@@ -39,6 +39,24 @@ struct ProductLinkTests {
         #expect(ProductLink.walmartItemID(inURL: "https://example.com/ip/100000001") == nil)
     }
 
+    /// The slug names the product, so the member doesn't retype it. Nothing is fetched, so the
+    /// name is only as good as the slug: hyphens become spaces and the punctuation is lost.
+    @Test func theProductNameIsReadFromTheLinksSlug() {
+        #expect(
+            ProductLink.walmartProductName(inURL: "https://www.walmart.com/ip/Garlic-Bulb-Fresh-Whole-Each/100000001")
+                == "Garlic Bulb Fresh Whole Each")
+        #expect(
+            ProductLink.walmartProductName(inURL: "https://walmart.com/ip/Test-Rice-2-lb/100000002?classType=REGULAR")
+                == "Test Rice 2 lb")
+        #expect(
+            ProductLink.walmartProductName(inURL: "https://www.walmart.com/ip/Caf%C3%A9-Test-Coffee/100000003")
+                == "Café Test Coffee")
+        // Nothing to read, so nothing is claimed.
+        #expect(ProductLink.walmartProductName(inURL: "https://www.walmart.com/ip/100000001") == nil)
+        #expect(ProductLink.walmartProductName(inURL: "https://example.com/ip/Test-Beef/100000001") == nil)
+        #expect(ProductLink.walmartProductName(inURL: "https://www.walmart.com/search?q=garlic") == nil)
+    }
+
     @Test func theSearchLinkEncodesTheIngredientName() {
         #expect(
             ProductLink.walmartSearchURL(for: " red onion & garlic ")?.absoluteString
@@ -64,6 +82,27 @@ struct SavedProductDraftTests {
                     product: .url("https://www.walmart.com/ip/Test-Beef/100000001"),
                     displayName: "Test Brand ground beef",
                     packageSize: ShoppingPackageSizeInput(quantity: "3/2", unit: "lb"), ingredientName: "Ground Beef"))
+    }
+
+    /// Pasting a link fills the name in, so the member types nothing at all.
+    @Test func theNameIsFilledInFromTheLink() {
+        var draft = SavedProductDraft()
+        draft.linkText = "https://www.walmart.com/ip/Garlic-Bulb-Fresh-Whole-Each/100000001"
+        draft.fillNameFromLink()
+        #expect(draft.displayName == "Garlic Bulb Fresh Whole Each")
+        #expect(draft.isValid)
+
+        // A name the member has edited is never overwritten.
+        draft.displayName = "Garlic"
+        draft.fillNameFromLink()
+        #expect(draft.displayName == "Garlic")
+
+        // A link carrying no name leaves the field alone, and the API will ask for one.
+        var bare = SavedProductDraft()
+        bare.linkText = "https://www.walmart.com/ip/100000001"
+        bare.fillNameFromLink()
+        #expect(bare.displayName.isEmpty)
+        #expect(!bare.isValid)
     }
 
     @Test func anItemNumberWithoutASizeSendsTheIDAndNoSize() {

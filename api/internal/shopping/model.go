@@ -101,20 +101,29 @@ type Preference struct {
 	DisplayName string
 	// PackageSize is nil when the member didn't give one.
 	PackageSize *PackageSize
-	CreatedBy   string
-	CreatedAt   time.Time
-	UpdatedBy   string
-	UpdatedAt   time.Time
+	// Coverage overrides how a package maps to a week's need. Empty follows
+	// the ingredient's grocery category (coverage.go).
+	Coverage  providers.Coverage
+	CreatedBy string
+	CreatedAt time.Time
+	UpdatedBy string
+	UpdatedAt time.Time
 }
 
 // PreferenceInput saves a product for an ingredient. Exactly one of
 // ProductURL and ProductID is required.
 type PreferenceInput struct {
-	ProductURL     string
-	ProductID      string
-	DisplayName    string
+	ProductURL string
+	ProductID  string
+	// DisplayName is optional when the link's slug names the product; it is
+	// required when it doesn't (a bare item ID, or a link with no slug).
+	DisplayName string
+	// PackageSize is optional: the link's slug supplies one when it carries
+	// an unambiguous size.
 	PackageSize    *PackageSize
 	IngredientName string
+	// Coverage is the member's override, or empty to follow the category.
+	Coverage providers.Coverage
 }
 
 // ExclusionReason says why a grocery line isn't in a handoff.
@@ -193,12 +202,19 @@ type HandoffLine struct {
 	ProductID   string
 	ProductName string
 	PackageSize *PackageSize
-	// ComputedPackages is providers.CountPackages; Packages is what the link
-	// asks for (the member's override when given).
+	// Coverage is the rule the count was computed under, already resolved
+	// from the saved product and the line's category, so a stored handoff
+	// recomputes the same count later.
+	Coverage providers.Coverage
+	// ComputedPackages is providers.CountPackagesFor; Packages is what the
+	// link asks for (the member's override when given).
 	ComputedPackages int
 	Packages         int
 	// Reason is set when the computed count needs checking.
 	Reason providers.Reason
+	// CoversWeek is true when the count rests on the weekly coverage rule
+	// rather than on measured package math.
+	CoversWeek bool
 
 	Status LineStatus
 	// ConfirmedPackages, PurchaseID, ConfirmedBy, and ConfirmedAt are set
