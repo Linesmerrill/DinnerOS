@@ -195,8 +195,16 @@ Canonical cuisines form a small hierarchy, so choices keep their specificity:
   and excluding `asian` excludes Japanese ones. Liking `italian` doesn't match
   a recipe labeled only `southern european`: a label can't be more specific
   than its source.
-- Variety compares only a recipe's own cuisines: two Italian dinners repeat,
-  but Italian and French don't.
+- **Weekday rules match one step further**, in the other direction only: a rule
+  for `italian` also matches a recipe the catalog labeled just `southern
+  european`, because it could be Italian. It does not match a recipe labeled
+  `french`, which shares only the broader `european` region. Catalogs label
+  plenty of Italian food with the region alone, and such a recipe would
+  otherwise escape both the rule and its `at_most_once` limit. Likes,
+  dislikes, and exclusions keep the stricter reading above.
+- Variety counts a shared cuisine as a full repeat (−0.20) and a shared region
+  as a partial one (−0.10), never both: two Italian dinners repeat fully,
+  Italian and French partially, Italian and Thai not at all.
 - `asian` is the parent of `east asian`, not a synonym: catalogs use it for
   East and Southeast Asian dishes alike. `american` means `north american`.
   `mediterranean` spans regions, so it has no parent.
@@ -208,6 +216,31 @@ Canonical cuisines form a small hierarchy, so choices keep their specificity:
 - Tags only merge case, spacing, and a few spellings missing a space
   (`familyfriendly` → `family friendly`). The rest are distinct labels, not
   synonyms.
+
+### Food types
+
+Catalog tags mix real food characteristics ("One Pot", "Kid Friendly",
+"Spicy") with the source's own bookkeeping ("SEO", "dinners"). Only the first
+kind is offered as a choice, so `recommendations/tags.go` hides the rest:
+
+1. **A denylist of internal tags**, matched on the canonical value:
+   `seo`, `dinner`, `dinners`, `lunch`, `lunches`, `breakfast`, `breakfasts`,
+   `grocery`, `sides`, `lto`, `deals-of-theweek`, `static-position`,
+   `ineligible-reco`, `free-addon`, and `quick prep internal`. These name a
+   meal slot, a catalog shelf, a merchandising slot, or a pricing rule — never
+   what the food is like.
+2. **Anything on more than 90% of the catalog** (`NearUniversalTagShare`). A
+   tag that matches nearly every recipe filters nothing.
+
+Hidden tags are dropped in `buildVocabulary`, before the 60-option cap, so
+hiding one frees a slot for a real choice. That is the single place the menu's
+Food Types chips, the Autopilot vocabulary, and the weekday-rule and taste
+pickers all read, so they agree by construction.
+
+**Hiding changes only what is offered.** Canonicalization, validation, stored
+profiles, and tag matching are untouched: a household that already likes or
+excludes a hidden tag keeps working, and `?tag=` still filters by it. Labels
+keep today's spelling — the most common one the catalog uses.
 
 ### History
 
@@ -257,7 +290,7 @@ signals.
 | `novelty` | −0.6…0.6 | new meal: favorites −0.6, balanced +0.1, adventurous +0.6; familiar: favorites +0.2, adventurous −0.1 | 0.15 |
 | `servingsFit` | −1…0 | when no authored size feeds the day's servings: −shortfall/servings | 0.25 |
 | `pantry` | 0…1 | ingredients running low it uses, /2 | 0.05 |
-| `avoid` | −1…0 | a previous pending proposal's meal (regenerate) | 0.30 |
+| `avoid` | −1…0 | a previous pending proposal's meal (regenerate) | 0.35 |
 | `objective` | ±0.2 | tenant business boost (DinnerOS sends none) | 1 |
 
 The day's soft limit is, in order: none on a long-cook rule day, the quick band
@@ -276,7 +309,9 @@ the same meals.
 
 ```text
 objective = Σ meal scores
-          − 0.20 per pair of meals sharing a cuisine (their own, not regions)
+          − 0.20 per pair of meals sharing a cuisine (their own)
+          − 0.10 per pair sharing only a cuisine region (Italian and Greek are both southern european); never on top of the cuisine penalty
+          − 0.20 per pair sharing a meal category (two pastas, whatever their cuisine labels say)
           − 0.15 per pair sharing a protein
           − 0.35 per long meal beyond maxLongPerWeek, and per long meal on a busy week's weeknight (long-cook rule days exempt)
           − 0.25 per pair of long meals on adjacent days (when avoidConsecutiveLong)
@@ -350,7 +385,7 @@ couldn't be filled are listed as `unfilled` (`no_candidates`,
   catalog, ratings, and history are normalized and ordered internally, so their
   order doesn't matter (tested). Ties break with an FNV-1a hash of
   household ID, week, attempt, model version, and item ID.
-- `modelVersion` (`baseline-2026.2`) is stored on every proposal and event.
+- `modelVersion` (`baseline-2026.3`) is stored on every proposal and event.
   `inputsHash` fingerprints the provider request, so identical inputs can be
   recognized.
 - **Tuning:** change `baseline.DefaultWeights` (or pass `Options.Weights`) and
@@ -437,6 +472,10 @@ name, then tags, then cuisines. The list is closed and small, and lives in the
 - The heuristic gives at most one category. A household can override any of
   them per recipe (yes/no/auto), exactly like cooking methods, and overrides
   decide what history is counted under.
+- Categories also feed **week variety**: they reach Autopilot as
+  `Item.MealCategories`, and a week pays −0.20 per pair sharing one. That is
+  what stops two pastas landing in the same week when their cuisine labels
+  differ or are missing ([week objective](#week-objective-and-search)).
 
 ### Learned pairings
 
@@ -624,10 +663,10 @@ baseline alone plans a 500-recipe, 5000-interaction week in a few milliseconds
 
 | Flow | Where | What happens |
 | --- | --- | --- |
-| Onboarding | Offered once on the Week tab's first visit while the profile isn't configured; also **Set Up Autopilot** (**Run Setup Again** once set up) in the Week menu (⋯) and Preferences (`AutopilotOnboardingView`) | A welcome, then one step per section: taste chips from the vocabulary with recipe counts (tap to like, again for "not for us"), restrictions, schedule, cook-time mix, equipment, weekday rules (with templates such as "Smoker night: chicken or pork, long cook OK"), and novelty. **Skip** keeps a step's defaults. **Finish** saves every section with one `PUT` and offers **Plan My Week**. |
+| Onboarding | Offered once on the Week tab's first visit while the profile isn't configured; also **Set Up Autopilot** (**Run Setup Again** once set up) in the Week menu (⋯) and Preferences (`AutopilotOnboardingView`, `AutopilotOnboardingSteps`) | **Three** one-screen questions, opening straight on the first, with a progress bar and a "2 of 3" count: **What do you like?** (a grid of cuisine tiles, each a real catalog photo under a scrim — tap to like, again for "no thanks", again to clear, or long-press to pick), **Anything to avoid?** (allergen and diet chips plus one "Add an ingredient" field), and **How do your weeks look?** (dinners a week, which nights, servings). The grid offers the specific cuisines people recognize, using a region only when nothing under it has enough recipes, and every tile gets a distinct photo — a plain tinted tile when none is left (#334, #335). At most one subtitle line per screen; longer explanations sit behind an info button. **Skip** is in the nav bar on every step and keeps that section's server defaults; **Set Up Later** is on the first step. **Finish** saves every section with one `PUT` and offers **Plan My Week**, plus a quiet **Fine-tune Autopilot** row. The cook-time mix, equipment, weekday rules, novelty, and pairings are no longer asked here — they live in Preferences (#330). |
 | Plan and review | Week → **Plan with Autopilot** row or ⋯ menu; **Autopilot suggested N meals → Review** (`WeekAutopilotSection`, `ProposalReviewView`) | Generates the shown week and opens the review: `messages` as notes, each slot's date, photo, name, `cookMinutes` with a Quick/Medium/Long badge, servings, and reasons joined with " · ", and `unfilled` days with their text. Each slot has an include checkmark and **Swap**; ⋯ has **Plan Again** and **Dismiss Suggestions**; **Add N Meals to Week** accepts with `excludeSlotIds`. The plan then shows the new entries with a sparkles badge, and skipped meals are explained. |
 | This Week's Plans | Week → **This Week's Plans…** row or ⋯ menu (`WeekContextSheet`) | Skip the week, busy weeknights, a strict time limit, servings and meals for the week, per-day skip, limit, and servings, and a note. **Save** sends the whole context; **Clear This Week's Plans** deletes it. Afterward the Week tab offers **Regenerate** or **Plan with Autopilot**. |
-| Preferences | Household → **Autopilot Preferences**; Week → ⋯ → **Autopilot Preferences** (`AutopilotPreferencesView`, `AutopilotSectionEditor`) | One row per section with a summary and "Changed by *name* · *date*". Each section opens the same controls as onboarding and saves that section with `PATCH`. **Change History** lists profile, week context, and recipe override changes with who made them. |
+| Preferences | Household → **Autopilot Preferences**; Week → ⋯ → **Fine-tune Autopilot** (`AutopilotPreferencesView`, `AutopilotSectionEditor`) | Every section, in two groups: **From Setup** (taste, restrictions, schedule) and **Fine-tune Autopilot** (cook-time mix, equipment, weekday rules, novelty, pairings — what setup doesn't ask, kept at the API's defaults until changed). Each row carries a one-line description, a summary, and "Changed by *name* · *date*", and opens controls that save that section with `PATCH`. **Change History** lists profile, week context, and recipe override changes with who made them. |
 | Recipe methods | A recipe → **Autopilot** (`RecipeAutopilotSection`) | Cook time and band, and **Good for Smoker** (and the household's other equipment): Automatic (Yes/No), Yes, or No, saved with `PUT .../override`. |
 
 Everything that changes Autopilot is hidden without `plan.edit`. Swaps,

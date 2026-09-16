@@ -225,7 +225,9 @@ struct WeekAutopilotMenuItems: View {
                     }
                 }
             }
-            Button("Autopilot Preferences", systemImage: "slider.horizontal.3") { flow.isShowingPreferences = true }
+            // The cook-time mix, equipment, weekday rules, and pairings setup no longer asks
+            // about all live here (#330).
+            Button("Fine-tune Autopilot", systemImage: "slider.horizontal.3") { flow.isShowingPreferences = true }
         }
     }
 }

@@ -3833,7 +3833,7 @@ components:
           example: 2023-W05
     WeekSummary:
       type: object
-      required: [week, weekStart, weekEnd, timing, plannedCount, cookedCount, orderedCount, status]
+      required: [week, weekStart, weekEnd, timing, plannedCount, addOnCount, cookedCount, orderedCount, status]
       properties:
         week:
           type: string
@@ -3849,7 +3849,14 @@ components:
           enum: [past, current, upcoming]
         plannedCount:
           type: integer
-          description: Plan entries that week.
+          description: |
+            Planned main meals that week. Add-ons are excluded, so this is the
+            number to show as "meals".
+        addOnCount:
+          type: integer
+          description: |
+            Planned add-ons that week (a pairing's garlic bread). Counted
+            separately so "5 meals · 1 add-on" reads correctly.
         cookedCount:
           type: integer
           description: Distinct recipe.cooked events that week.

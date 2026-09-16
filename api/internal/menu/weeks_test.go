@@ -60,6 +60,43 @@ func TestBuildWeekStrip(t *testing.T) {
 	if strip.Earliest == nil || *strip.Earliest != week("2023-W05") {
 		t.Errorf("earliest = %v, want 2023-W05", strip.Earliest)
 	}
+	// W37's summary carries no recipe IDs, so its entry count stands in.
+	if strip.Weeks[1].AddOns != 0 {
+		t.Errorf("addOns = %d without recipe IDs, want 0", strip.Weeks[1].AddOns)
+	}
+}
+
+// TestWeekStripCountsAddOnsSeparately: a week of two dinners and two add-ons
+// is two meals, not four.
+func TestWeekStripCountsAddOnsSeparately(t *testing.T) {
+	stored := time.Date(2026, 9, 7, 18, 0, 0, 0, time.UTC)
+	catalog := []recipes.Recipe{
+		newRecipe("m1", "Pasta"), newRecipe("m2", "Tacos"),
+		newRecipe("a1", "Garlic Bread", addon()), newRecipe("a2", "Side Salad", addon()),
+	}
+	summary := func(ids ...string) map[planning.Week]planning.Summary {
+		return map[planning.Week]planning.Summary{
+			current: {Week: current, Status: planning.StatusDraft, EntryCount: len(ids), RecipeIDs: ids, UpdatedAt: stored},
+		}
+	}
+	only := func(plans map[planning.Week]planning.Summary) WeekSummary {
+		t.Helper()
+		strip := buildWeekStrip(current, current, current, time.UTC, plans, catalog, nil, nil)
+		if len(strip.Weeks) != 1 {
+			t.Fatalf("strip has %d weeks, want 1", len(strip.Weeks))
+		}
+		return strip.Weeks[0]
+	}
+
+	got := only(summary("m1", "a1", "m2", "a2"))
+	if got.Planned != 2 || got.AddOns != 2 {
+		t.Errorf("planned = %d, addOns = %d; want 2 meals and 2 add-ons", got.Planned, got.AddOns)
+	}
+
+	// An entry whose recipe has left the catalog still counts as a meal.
+	if got := only(summary("m1", "a1", "gone")); got.Planned != 2 || got.AddOns != 1 {
+		t.Errorf("planned = %d, addOns = %d; want 2 meals and 1 add-on", got.Planned, got.AddOns)
+	}
 }
 
 func TestBuildWeekStripWithoutHistory(t *testing.T) {

@@ -135,6 +135,10 @@ type Summary struct {
 	Week       Week
 	Status     Status
 	EntryCount int
+	// RecipeIDs are the week's entries' recipes, in entry order. Planning
+	// doesn't know which are add-ons; callers that care (the menu's week
+	// strip) decide with the catalog. Empty for a week without entries.
+	RecipeIDs []string
 	// UpdatedAt is zero for weeks nobody has planned.
 	UpdatedAt time.Time
 }
