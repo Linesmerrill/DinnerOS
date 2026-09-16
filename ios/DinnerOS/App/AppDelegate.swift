@@ -25,21 +25,33 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         dependencies.push.didFailToRegister(error)
     }
 
+    // The completion-handler forms, not the async ones: UIKit's generated wrapper for the
+    // async form calls the completion off the main thread, which crashes (a SIGABRT in
+    // _performBlockAfterCATransactionCommitSynchronizes, TestFlight build 27).
+
     /// A push while the app is open still shows as a banner, and the bell's count follows.
     nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter, willPresent notification: UNNotification
-    ) async -> UNNotificationPresentationOptions {
-        await dependencies.push.notificationReceived()
-        return [.banner, .list, .sound]
+        _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping @Sendable (UNNotificationPresentationOptions) -> Void
+    ) {
+        Task { @MainActor in
+            await dependencies.push.notificationReceived()
+            completionHandler([.banner, .list, .sound])
+        }
     }
 
     /// Tapping a push opens what its row on the bell opens.
     nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
-    ) async {
-        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
-            let route = PushRoute(userInfo: response.notification.request.content.userInfo)
-        else { return }
-        await dependencies.push.open(route)
+        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping @Sendable () -> Void
+    ) {
+        let isDefaultAction = response.actionIdentifier == UNNotificationDefaultActionIdentifier
+        let route = PushRoute(userInfo: response.notification.request.content.userInfo)
+        Task { @MainActor in
+            if isDefaultAction, let route {
+                dependencies.push.open(route)
+            }
+            completionHandler()
+        }
     }
 }
