@@ -148,10 +148,13 @@ func (s *snapshot) newToYou() Section {
 	return sec
 }
 
-// ruleSections returns one section per weekday rule, Monday first.
+// ruleSections returns one section per weekday rule, in the household's week
+// order.
 func (s *snapshot) ruleSections() []Section {
 	rules := slices.Clone(s.in.Profile.WeekdayRules)
-	slices.SortStableFunc(rules, func(a, b recommendations.WeekdayRule) int { return cmp.Compare(dayIndex(a.Day), dayIndex(b.Day)) })
+	slices.SortStableFunc(rules, func(a, b recommendations.WeekdayRule) int {
+		return cmp.Compare(s.dayIndex(a.Day), s.dayIndex(b.Day))
+	})
 	perDay := map[string]int{}
 	var out []Section
 	for _, rule := range rules {
@@ -316,13 +319,15 @@ func (s *snapshot) sides() Section {
 	return sec
 }
 
-// historyPlanned: the week's plan entries by day (unscheduled last), one card
+// historyPlanned: the week's plan entries in week order (unscheduled last), one card
 // per recipe carrying all its entry IDs. Add-ons are included: it is a record
 // of the plan.
 func (s *snapshot) historyPlanned() Section {
 	sec := Section{ID: SectionHistoryPlanned, Kind: KindHistory, Title: "You Planned", Subtitle: "What was on the plan"}
 	entries := slices.Clone(s.in.Plan.Entries)
-	slices.SortStableFunc(entries, func(a, b planning.Entry) int { return cmp.Compare(dayIndex(string(a.Day)), dayIndex(string(b.Day))) })
+	slices.SortStableFunc(entries, func(a, b planning.Entry) int {
+		return cmp.Compare(s.dayIndex(string(a.Day)), s.dayIndex(string(b.Day)))
+	})
 	week := s.in.Week.String()
 	seen := map[string]bool{}
 	for _, e := range entries {

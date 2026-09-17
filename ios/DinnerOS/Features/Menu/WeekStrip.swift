@@ -158,7 +158,7 @@ struct WeekStrip: View {
 
     /// The shown week, named the way its pill names it.
     private var collapsedTitle: String {
-        let range = plans.week.rangeLabel()
+        let range = plans.week.rangeLabel(weekStartsOn: plans.weekStartsOn)
         guard let name = MenuFormat.relativeWeekName(plans.week, current: menu.currentWeek) else {
             return range
         }
@@ -206,7 +206,7 @@ struct WeekStrip: View {
                         } label: {
                             WeekPill(
                                 item: item, isSelected: item.week == plans.week,
-                                currentWeek: menu.currentWeek)
+                                currentWeek: menu.currentWeek, weekStartsOn: menu.weekStartsOn)
                         }
                         .buttonStyle(.plain)
                         .id(item.id)
@@ -248,6 +248,7 @@ struct WeekPill: View {
     let item: WeekStripItem
     let isSelected: Bool
     let currentWeek: ISOWeek
+    let weekStartsOn: PlanDay
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -255,7 +256,7 @@ struct WeekPill: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(
                     isSelected ? AnyShapeStyle(Color.onAccent.opacity(0.9)) : AnyShapeStyle(Color.secondary))
-            Text(item.week.rangeLabel())
+            Text(item.week.rangeLabel(weekStartsOn: weekStartsOn))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(isSelected ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.primary))
             detail
@@ -296,9 +297,9 @@ struct WeekPill: View {
     }
 
     private var accessibilityLabel: String {
-        var parts = [relativeName ?? item.week.rangeLabel()]
+        var parts = [relativeName ?? item.week.rangeLabel(weekStartsOn: weekStartsOn)]
         if relativeName != nil {
-            parts.append(item.week.rangeLabel())
+            parts.append(item.week.rangeLabel(weekStartsOn: weekStartsOn))
         }
         if let detail = MenuFormat.weekPillDetail(item.summary, timing: item.timing) {
             parts.append(detail)

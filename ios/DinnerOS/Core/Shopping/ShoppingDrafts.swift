@@ -269,10 +269,10 @@ nonisolated struct OrderConfirmationGroups: Equatable, Sendable {
     let shared: [SharedLine]
     let extras: [ShoppingHandoffLine]
 
-    /// Groups `lines` by the meals in `entries`, the handoff week's plan. Without a plan
-    /// (another week is loaded) the meals come from the lines' own recipes, with no photo or
-    /// day, in the order they first appear.
-    init(lines: [ShoppingHandoffLine], entries: [PlanEntry]?) {
+    /// Groups `lines` by the meals in `entries`, the handoff week's plan, with days in the order a
+    /// week starting on `weekStartsOn` lists them. Without a plan (another week is loaded) the
+    /// meals come from the lines' own recipes, with no photo or day, in the order they first appear.
+    init(lines: [ShoppingHandoffLine], entries: [PlanEntry]?, weekStartsOn: PlanDay) {
         struct MealInfo {
             let name: String
             let imageURL: URL?
@@ -283,8 +283,8 @@ nonisolated struct OrderConfirmationGroups: Equatable, Sendable {
         var addOns: Set<String> = []
         if let entries {
             let planned = entries.enumerated().sorted { a, b in
-                let dayA = a.element.day?.offset ?? PlanDay.allCases.count
-                let dayB = b.element.day?.offset ?? PlanDay.allCases.count
+                let dayA = a.element.day?.position(inWeekStartingOn: weekStartsOn) ?? PlanDay.allCases.count
+                let dayB = b.element.day?.position(inWeekStartingOn: weekStartsOn) ?? PlanDay.allCases.count
                 return dayA != dayB ? dayA < dayB : a.offset < b.offset
             }
             for (_, entry) in planned {

@@ -53,6 +53,12 @@ type SkipSource interface {
 	GrocerySkips(ctx context.Context, householdID, week string) (grocery.SkipSet, error)
 }
 
+// WeekStartSource says which day a household's week starts on ("sun".."sat").
+// *households.Service implements it.
+type WeekStartSource interface {
+	WeekStartsOn(ctx context.Context, householdID string) (string, error)
+}
+
 // Service implements the weekly planner. Like recipes.Service it takes a
 // household ID: HTTP routes authorize first with households.RequirePermission.
 type Service struct {
@@ -71,8 +77,10 @@ type Service struct {
 	customizations CustomizationSource
 	// events is optional; without it entry changes record nothing.
 	events events.Recorder
-	logger *slog.Logger
-	now    func() time.Time
+	// weekStart is optional; without it weeks start on Monday.
+	weekStart WeekStartSource
+	logger    *slog.Logger
+	now       func() time.Time
 }
 
 // NewService returns a Service.
@@ -110,6 +118,59 @@ func (s *Service) WithEvents(recorder events.Recorder, logger *slog.Logger) *Ser
 	return s
 }
 
+// WithWeekStart makes plans carry the household's first day of the week
+// (Plan.FirstDay), which decides the dates their days fall on, and returns s.
+func (s *Service) WithWeekStart(source WeekStartSource) *Service {
+	s.weekStart = source
+	return s
+}
+
+// FirstDay returns the day the household's week starts on: Monday without a
+// source or when the stored value is unknown.
+func (s *Service) FirstDay(ctx context.Context, householdID string) (Day, error) {
+	if s.weekStart == nil {
+		return LegacyWeekStart, nil
+	}
+	v, err := s.weekStart.WeekStartsOn(ctx, householdID)
+	if err != nil {
+		return "", fmt.Errorf("planning: load week start: %w", err)
+	}
+	if d, err := ParseDay(v); err == nil {
+		return d, nil
+	}
+	return LegacyWeekStart, nil
+}
+
+// stamp sets p.FirstDay from the household, passing err through. Reads use
+// it; writes use written, so a failed lookup can't fail a change that was
+// already saved.
+func (s *Service) stamp(ctx context.Context, householdID string, p Plan, err error) (Plan, error) {
+	if err != nil {
+		return p, err
+	}
+	first, ferr := s.FirstDay(ctx, householdID)
+	if ferr != nil {
+		return Plan{}, ferr
+	}
+	p.FirstDay = first
+	return p, nil
+}
+
+// written loads the household's first day, then runs write and sets the
+// returned plan's FirstDay.
+func (s *Service) written(ctx context.Context, householdID string, write func() (Plan, error)) (Plan, error) {
+	first, err := s.FirstDay(ctx, householdID)
+	if err != nil {
+		return Plan{}, err
+	}
+	p, err := write()
+	if err != nil {
+		return p, err
+	}
+	p.FirstDay = first
+	return p, nil
+}
+
 // Get returns the household's plan for week. A week nobody has planned is an
 // empty draft, not ErrNotFound.
 func (s *Service) Get(ctx context.Context, householdID, week string) (Plan, error) {
@@ -123,9 +184,9 @@ func (s *Service) Get(ctx context.Context, householdID, week string) (Plan, erro
 func (s *Service) getOrEmpty(ctx context.Context, householdID string, w Week) (Plan, error) {
 	p, err := s.store.GetPlan(ctx, householdID, w)
 	if errors.Is(err, ErrNotFound) {
-		return Plan{HouseholdID: householdID, Week: w, Status: StatusDraft}, nil
+		p, err = Plan{HouseholdID: householdID, Week: w, Status: StatusDraft}, nil
 	}
-	return p, err
+	return s.stamp(ctx, householdID, p, err)
 }
 
 // List returns one summary per week from..to inclusive, including weeks
@@ -254,7 +315,12 @@ func (s *Service) AddEntries(ctx context.Context, householdID, userID, week stri
 		entries = append(entries, e)
 	}
 
-	p, ids, err := s.store.AddEntries(ctx, householdID, w, entries, MaxEntriesPerWeek, now)
+	var ids []string
+	p, err := s.written(ctx, householdID, func() (Plan, error) {
+		p, added, err := s.store.AddEntries(ctx, householdID, w, entries, MaxEntriesPerWeek, now)
+		ids = added
+		return p, err
+	})
 	if err != nil {
 		return Plan{}, nil, err
 	}
@@ -269,7 +335,7 @@ func (s *Service) AddEntries(ctx context.Context, householdID, userID, week stri
 			HouseholdID: householdID, UserID: userID, Type: events.TypeRecipePlanned, RecipeID: e.RecipeID,
 			Week: w.String(), OccurredAt: now,
 			Payload: events.RecipePlanned{
-				EntryID: e.ID, Day: string(e.Day), Date: entryDate(w, e.Day), Servings: e.Servings,
+				EntryID: e.ID, Day: string(e.Day), Date: p.DateOf(e.Day), Servings: e.Servings,
 				Origin: string(e.Origin), ProposalID: e.ProposalID,
 			},
 		})
@@ -329,7 +395,18 @@ func (s *Service) ListPlans(ctx context.Context, householdID, from, to string) (
 	case n > MaxRangeWeeks:
 		return nil, fmt.Errorf("%w: a range covers at most %d weeks", ErrInvalidRange, MaxRangeWeeks)
 	}
-	return s.store.ListPlans(ctx, householdID, fw, tw)
+	plans, err := s.store.ListPlans(ctx, householdID, fw, tw)
+	if err != nil || len(plans) == 0 {
+		return plans, err
+	}
+	first, err := s.FirstDay(ctx, householdID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range plans {
+		plans[i].FirstDay = first
+	}
+	return plans, nil
 }
 
 // UpdateEntry changes an entry's day, servings, or note. New servings must be
@@ -378,7 +455,9 @@ func (s *Service) UpdateEntry(ctx context.Context, householdID, week, entryID st
 			return Plan{}, err
 		}
 	}
-	return s.store.UpdateEntry(ctx, householdID, w, entryID, c, s.now().UTC())
+	return s.written(ctx, householdID, func() (Plan, error) {
+		return s.store.UpdateEntry(ctx, householdID, w, entryID, c, s.now().UTC())
+	})
 }
 
 // DeleteEntry removes an entry from the week. userID is the member removing
@@ -403,7 +482,9 @@ func (s *Service) DeleteEntry(ctx context.Context, householdID, userID, week, en
 		}
 	}
 	now := s.now().UTC()
-	p, err := s.store.DeleteEntry(ctx, householdID, w, entryID, now)
+	p, err := s.written(ctx, householdID, func() (Plan, error) {
+		return s.store.DeleteEntry(ctx, householdID, w, entryID, now)
+	})
 	if err != nil {
 		return Plan{}, err
 	}
@@ -411,19 +492,10 @@ func (s *Service) DeleteEntry(ctx context.Context, householdID, userID, week, en
 		events.RecordOrLog(ctx, s.events, s.logger, events.Event{
 			HouseholdID: householdID, UserID: userID, Type: events.TypeRecipeUnplanned, RecipeID: removed.RecipeID,
 			Week: w.String(), OccurredAt: now,
-			Payload: events.RecipeUnplanned{EntryID: removed.ID, Day: string(removed.Day), Date: entryDate(w, removed.Day), Origin: string(removed.Origin)},
+			Payload: events.RecipeUnplanned{EntryID: removed.ID, Day: string(removed.Day), Date: p.DateOf(removed.Day), Origin: string(removed.Origin)},
 		})
 	}
 	return p, nil
-}
-
-// entryDate is the YYYY-MM-DD of an entry's day in week w, or "" when the
-// entry isn't scheduled.
-func entryDate(w Week, d Day) string {
-	if d == "" {
-		return ""
-	}
-	return w.Date(d)
 }
 
 // SetStatus finalizes a week or returns it to draft.
@@ -436,7 +508,9 @@ func (s *Service) SetStatus(ctx context.Context, householdID, week, status strin
 	if err != nil {
 		return Plan{}, err
 	}
-	return s.store.SetStatus(ctx, householdID, w, st, s.now().UTC())
+	return s.written(ctx, householdID, func() (Plan, error) {
+		return s.store.SetStatus(ctx, householdID, w, st, s.now().UTC())
+	})
 }
 
 // GroceryList aggregates the week's entries into a grocery list using each

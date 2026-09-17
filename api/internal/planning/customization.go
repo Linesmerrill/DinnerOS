@@ -45,7 +45,9 @@ func (s *Service) SetEntryCustomizations(ctx context.Context, householdID, week,
 	if list == nil {
 		list = []Customization{}
 	}
-	return s.store.UpdateEntry(ctx, householdID, w, entryID, EntryChanges{Customizations: &list}, s.now().UTC())
+	return s.written(ctx, householdID, func() (Plan, error) {
+		return s.store.UpdateEntry(ctx, householdID, w, entryID, EntryChanges{Customizations: &list}, s.now().UTC())
+	})
 }
 
 // FindEntry finds an entry by ID in the household's plans from
@@ -63,7 +65,8 @@ func (s *Service) FindEntry(ctx context.Context, householdID, entryID string, ne
 	}
 	for _, p := range plans {
 		if e, ok := p.entry(entryID); ok {
-			return p, e, true, nil
+			p, err := s.stamp(ctx, householdID, p, nil)
+			return p, e, err == nil, err
 		}
 	}
 	return Plan{}, Entry{}, false, nil

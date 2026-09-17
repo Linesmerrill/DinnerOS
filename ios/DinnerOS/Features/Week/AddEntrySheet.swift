@@ -126,7 +126,7 @@ struct AddEntrySheet: View {
 
     private func weekTitle(_ option: ISOWeek) -> String {
         let current = plans.currentWeek
-        let range = option.rangeLabel()
+        let range = option.rangeLabel(weekStartsOn: plans.weekStartsOn)
         let relative: String? =
             switch option {
             case current: String(localized: "This Week")
@@ -146,7 +146,8 @@ struct AddEntrySheet: View {
 
     private func prepare() async {
         if let household = households.current?.household {
-            await plans.activate(householdID: household.id, timeZone: household.planningTimeZone)
+            await plans.activate(
+                householdID: household.id, timeZone: household.planningTimeZone, weekStartsOn: household.weekStartsOn)
         }
         if week == nil {
             week = plans.currentWeek

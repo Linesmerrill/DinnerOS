@@ -11,13 +11,14 @@ nonisolated enum MealFeedback {
     /// Whether a planned meal's night has arrived in the week being shown.
     ///
     /// Every meal in a past week has had its night. In the current week, a meal has had its night
-    /// once its day is today or earlier. A meal planned for the week without a day hasn't: there
-    /// is no night to ask about. Nothing in an upcoming week has happened yet.
-    static func hasHappened(day: PlanDay?, timing: WeekTiming, today: PlanDay?) -> Bool {
+    /// once its day is today or earlier in a week that starts on `weekStartsOn`, so with Sunday
+    /// weeks, Sunday's meal has happened by Monday. A meal planned for the week without a day
+    /// hasn't: there is no night to ask about. Nothing in an upcoming week has happened yet.
+    static func hasHappened(day: PlanDay?, timing: WeekTiming, today: PlanDay?, weekStartsOn: PlanDay) -> Bool {
         if timing == .past {
             return true
         }
         guard timing == .current, let day, let today else { return false }
-        return day.offset <= today.offset
+        return day.position(inWeekStartingOn: weekStartsOn) <= today.position(inWeekStartingOn: weekStartsOn)
     }
 }

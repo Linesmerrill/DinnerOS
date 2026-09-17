@@ -50,13 +50,16 @@ type WeekStrip struct {
 	// Earliest is the earliest week with a planned entry or an ordered main
 	// meal, or nil.
 	Earliest *planning.Week
+	// FirstDay is the household's first day of the week, which decides the
+	// dates each week covers.
+	FirstDay planning.Day
 }
 
 // Weeks returns the strip from before weeks before around ("" for the current
 // week) to after weeks after it. before and after are clamped to 0–52.
 func (s *Service) Weeks(ctx context.Context, householdID, around string, before, after int) (WeekStrip, error) {
 	before, after = min(max(before, 0), MaxWeeksAround), min(max(after, 0), MaxWeeksAround)
-	current, loc, err := s.clock(ctx, householdID)
+	current, loc, first, err := s.clock(ctx, householdID)
 	if err != nil {
 		return WeekStrip{}, err
 	}
@@ -92,7 +95,7 @@ func (s *Service) Weeks(ctx context.Context, householdID, around string, before,
 	}
 	// Cooking is recorded during or after the week; a week's margin covers
 	// time zones and early check-offs.
-	cooked, err := s.cookedEvents(ctx, householdID, from.Monday().AddDate(0, 0, -7))
+	cooked, err := s.cookedEvents(ctx, householdID, from.StartOn(first).AddDate(0, 0, -7))
 	if err != nil {
 		return WeekStrip{}, err
 	}
@@ -104,17 +107,17 @@ func (s *Service) Weeks(ctx context.Context, householdID, around string, before,
 	if ok {
 		earliestPlanned = &earliest
 	}
-	return buildWeekStrip(from, to, current, loc, plans, catalog, cooked, earliestPlanned), nil
+	return buildWeekStrip(from, to, current, loc, first, plans, catalog, cooked, earliestPlanned), nil
 }
 
-func buildWeekStrip(from, to, current planning.Week, loc *time.Location, plans map[planning.Week]planning.Summary,
+func buildWeekStrip(from, to, current planning.Week, loc *time.Location, first planning.Day, plans map[planning.Week]planning.Summary,
 	catalog []recipes.Recipe, cooked []events.Event, earliestPlanned *planning.Week) WeekStrip {
 	if loc == nil {
 		loc = time.UTC
 	}
 	ordered := map[string]int{}
 	addons := map[string]bool{}
-	strip := WeekStrip{Earliest: earliestPlanned}
+	strip := WeekStrip{Earliest: earliestPlanned, FirstDay: first}
 	for _, r := range catalog {
 		if r.IsAddon {
 			addons[r.ID] = true
@@ -132,7 +135,7 @@ func buildWeekStrip(from, to, current planning.Week, loc *time.Location, plans m
 	}
 	cookedKeys := map[string]map[string]bool{}
 	for _, e := range cooked {
-		week, key := eventWeek(e, loc), e.RecipeID
+		week, key := eventWeek(e, loc, first), e.RecipeID
 		if p, ok := e.Payload.(events.RecipeCooked); ok {
 			if p.EntryID != "" {
 				key = "entry:" + p.EntryID

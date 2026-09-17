@@ -76,10 +76,14 @@ func parseOrigin(o Origin) (Origin, error) {
 type Plan struct {
 	HouseholdID string
 	Week        Week
-	Status      Status
-	Entries     []Entry
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// FirstDay is the household's first day of the week, which decides the
+	// dates Week covers and each entry's date. The service fills it in; empty
+	// means Monday.
+	FirstDay  Day
+	Status    Status
+	Entries   []Entry
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // Entry is a recipe planned for the week.
@@ -146,6 +150,23 @@ type Summary struct {
 	RecipeIDs []string
 	// UpdatedAt is zero for weeks nobody has planned.
 	UpdatedAt time.Time
+}
+
+// First returns the plan's first day of the week, Monday when unset.
+func (p Plan) First() Day {
+	if p.FirstDay == "" {
+		return LegacyWeekStart
+	}
+	return p.FirstDay
+}
+
+// DateOf returns the date of day d in the plan's week, or "" when d is empty
+// (an unscheduled entry).
+func (p Plan) DateOf(d Day) string {
+	if d == "" {
+		return ""
+	}
+	return p.Week.DateOn(p.First(), d)
 }
 
 // entry returns the entry with id, if present.

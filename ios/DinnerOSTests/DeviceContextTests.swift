@@ -10,7 +10,7 @@ private func utc(_ string: String) -> Date {
 private let denver = TimeZone(identifier: "America/Denver") ?? .gmt
 private let tokyo = TimeZone(identifier: "Asia/Tokyo") ?? .gmt
 /// Monday September 14 to Sunday September 20, 2026.
-private let week = ISOWeek("2026-W38") ?? .current(in: .gmt)
+private let week = ISOWeek("2026-W38") ?? .current(in: .gmt, weekStartsOn: .mon)
 
 // MARK: - Calendar busyness
 
@@ -21,9 +21,9 @@ struct CalendarBusynessTests {
     }
 
     @Test func eveningWindowIsFourToEightInTheHouseholdsTimeZone() throws {
-        #expect(CalendarBusyness.window(day: .mon, week: week, timeZone: denver) == monday)
+        #expect(CalendarBusyness.window(day: .mon, week: week, timeZone: denver, weekStartsOn: .mon) == monday)
         // Tokyo (UTC+9): Sunday 4 pm is 07:00 UTC the same day.
-        let sunday = try #require(CalendarBusyness.window(day: .sun, week: week, timeZone: tokyo))
+        let sunday = try #require(CalendarBusyness.window(day: .sun, week: week, timeZone: tokyo, weekStartsOn: .mon))
         #expect(sunday.start == utc("2026-09-20T07:00:00Z"))
         #expect(sunday.duration == 4 * 3600)
     }
@@ -31,8 +31,9 @@ struct CalendarBusynessTests {
     @Test func eveningWindowFollowsDaylightSavingTime() throws {
         // US daylight saving time ends Sunday November 1, 2026: 4 pm is MST (UTC−7) that day.
         let week = try #require(ISOWeek("2026-W44"))
-        let saturday = try #require(CalendarBusyness.window(day: .sat, week: week, timeZone: denver))
-        let sunday = try #require(CalendarBusyness.window(day: .sun, week: week, timeZone: denver))
+        let saturday = try #require(
+            CalendarBusyness.window(day: .sat, week: week, timeZone: denver, weekStartsOn: .mon))
+        let sunday = try #require(CalendarBusyness.window(day: .sun, week: week, timeZone: denver, weekStartsOn: .mon))
         #expect(saturday.start == utc("2026-10-31T22:00:00Z"))
         #expect(sunday.start == utc("2026-11-01T23:00:00Z"))
         #expect(sunday.duration == 4 * 3600)
@@ -92,16 +93,22 @@ struct CalendarBusynessTests {
     @Test func weekLeavesOutEveningsAlreadyOver() {
         // Wednesday 9 pm in Denver: Monday to Wednesday evenings are over.
         let now = utc("2026-09-17T03:00:00Z")
-        let evenings = CalendarBusyness.week(week, timeZone: denver, intervals: [], onOrAfter: now)
+        let evenings = CalendarBusyness.week(week, timeZone: denver, weekStartsOn: .mon, intervals: [], onOrAfter: now)
         #expect(Set(evenings.keys) == [.thu, .fri, .sat, .sun])
     }
 
     @Test func theSameEventFallsOnDifferentEveningsByTimeZone() {
         // 23:00–01:00 UTC is 5–7 pm Monday in Denver, but Tuesday morning in Tokyo.
         let event = CalendarBusyInterval(start: utc("2026-09-14T23:00:00Z"), end: utc("2026-09-15T01:00:00Z"))
-        #expect(CalendarBusyness.week(week, timeZone: denver, intervals: [event])[.mon]?.freeMinutes == 120)
-        #expect(CalendarBusyness.week(week, timeZone: tokyo, intervals: [event])[.mon]?.freeMinutes == 240)
-        #expect(CalendarBusyness.week(week, timeZone: tokyo, intervals: [event])[.tue]?.freeMinutes == 240)
+        #expect(
+            CalendarBusyness.week(week, timeZone: denver, weekStartsOn: .mon, intervals: [event])[.mon]?.freeMinutes
+                == 120)
+        #expect(
+            CalendarBusyness.week(week, timeZone: tokyo, weekStartsOn: .mon, intervals: [event])[.mon]?.freeMinutes
+                == 240)
+        #expect(
+            CalendarBusyness.week(week, timeZone: tokyo, weekStartsOn: .mon, intervals: [event])[.tue]?.freeMinutes
+                == 240)
     }
 }
 
@@ -137,7 +144,7 @@ struct WeatherBandingTests {
             DailyForecastSample(
                 date: utc("2026-09-22T06:00:00Z"), highFahrenheit: 60, precipitation: .none, precipitationChance: 0),
         ]
-        let bands = WeatherBanding.week(week, timeZone: denver, forecast: forecast)
+        let bands = WeatherBanding.week(week, timeZone: denver, weekStartsOn: .mon, forecast: forecast)
         #expect(
             bands == [
                 .tue: DayWeatherBands(temperature: .cold, precipitation: .rain),
@@ -306,7 +313,7 @@ struct AutopilotDeviceContextTests {
         let h = harness()
         #expect(h.context.needsExplainer)
         // Planning before the explainer never prompts and sends nothing.
-        #expect(await h.context.signals(for: week, timeZone: denver) == nil)
+        #expect(await h.context.signals(for: week, timeZone: denver, weekStartsOn: .mon) == nil)
         #expect(h.calendar.requests == 0 && h.location.requests == 0)
 
         await h.context.continueFromExplainer()
@@ -315,7 +322,7 @@ struct AutopilotDeviceContextTests {
         #expect(h.context.calendarAuthorization == .granted && h.context.locationAuthorization == .granted)
         #expect(!h.context.needsExplainer)
         #expect(h.settings.hasSeenExplainer)
-        let signals = await h.context.signals(for: week, timeZone: denver)
+        let signals = await h.context.signals(for: week, timeZone: denver, weekStartsOn: .mon)
         #expect(signals?.days.first { $0.day == .mon }?.busyness == .busy)
         #expect(signals?.days.first { $0.day == .mon }?.eveningFreeMinutes == 30)
         #expect(
@@ -328,7 +335,7 @@ struct AutopilotDeviceContextTests {
         let h = harness()
         h.context.skipExplainer()
         #expect(!h.context.needsExplainer)
-        #expect(await h.context.signals(for: week, timeZone: denver) == nil)
+        #expect(await h.context.signals(for: week, timeZone: denver, weekStartsOn: .mon) == nil)
         #expect(h.calendar.requests == 0 && h.location.requests == 0)
     }
 
@@ -339,13 +346,13 @@ struct AutopilotDeviceContextTests {
 
     @Test func deniedSignalsAreLeftOutAndPlanningStillWorks() async {
         let h = harness(calendar: FakeCalendarSource(.denied), location: FakeLocationSource(.granted))
-        let signals = await h.context.signals(for: week, timeZone: denver)
+        let signals = await h.context.signals(for: week, timeZone: denver, weekStartsOn: .mon)
         #expect(h.calendar.reads == 0)
         #expect(signals?.days.allSatisfy { !$0.hasCalendar } == true)
         #expect(signals?.hasWeather == true)
 
         let none = harness(calendar: FakeCalendarSource(.denied), location: FakeLocationSource(.denied))
-        #expect(await none.context.signals(for: week, timeZone: denver) == nil)
+        #expect(await none.context.signals(for: week, timeZone: denver, weekStartsOn: .mon) == nil)
         #expect(none.weather.reads == 0)
     }
 
@@ -354,12 +361,12 @@ struct AutopilotDeviceContextTests {
         let h = harness(
             calendar: FakeCalendarSource(.granted), location: FakeLocationSource(.granted), settings: settings)
         #expect(!h.context.usesCalendar)
-        _ = await h.context.signals(for: week, timeZone: denver)
+        _ = await h.context.signals(for: week, timeZone: denver, weekStartsOn: .mon)
         #expect(h.calendar.reads == 0)
 
         await h.context.setUsesWeather(false)
         #expect(!h.settings.usesWeather)
-        #expect(await h.context.signals(for: week, timeZone: denver) == nil)
+        #expect(await h.context.signals(for: week, timeZone: denver, weekStartsOn: .mon) == nil)
         #expect(h.weather.reads == 1)
     }
 
@@ -378,7 +385,7 @@ struct AutopilotDeviceContextTests {
         let location = FakeLocationSource(.granted)
         location.fails = true
         let h = harness(calendar: calendar, location: location)
-        #expect(await h.context.signals(for: week, timeZone: denver) == nil)
+        #expect(await h.context.signals(for: week, timeZone: denver, weekStartsOn: .mon) == nil)
     }
 
     @Test func permissionChangedInSettingsIsNoticed() {
@@ -392,7 +399,7 @@ struct AutopilotDeviceContextTests {
         let h = harness(
             calendar: FakeCalendarSource(.denied), location: FakeLocationSource(.granted),
             now: utc("2026-09-30T18:00:00Z"))
-        #expect(await h.context.signals(for: week, timeZone: denver) == nil)
+        #expect(await h.context.signals(for: week, timeZone: denver, weekStartsOn: .mon) == nil)
         #expect(h.weather.reads == 0)
     }
 }

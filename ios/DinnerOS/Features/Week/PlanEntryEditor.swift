@@ -143,11 +143,13 @@ struct DayPicker: View {
     let week: ISOWeek
     @Binding var selection: PlanDay?
 
+    @Environment(PlanStore.self) private var plans
+
     var body: some View {
         Picker("Day", selection: $selection) {
             Text("No Day").tag(PlanDay?.none)
-            ForEach(PlanDay.allCases) { day in
-                Text(day.title(in: week)).tag(PlanDay?.some(day))
+            ForEach(PlanDay.week(startingOn: plans.weekStartsOn)) { day in
+                Text(day.title(in: week, weekStartsOn: plans.weekStartsOn)).tag(PlanDay?.some(day))
             }
         }
     }

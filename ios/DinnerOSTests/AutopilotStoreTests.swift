@@ -18,7 +18,7 @@ struct AutopilotStoreTests {
         var plans: [Plan] = []
     }
 
-    private let week = ISOWeek("2026-W38") ?? .current(in: .gmt)
+    private let week = ISOWeek("2026-W38") ?? .current(in: .gmt, weekStartsOn: .mon)
 
     private func makeHarness(server: FakeAutopilotServer = FakeAutopilotServer()) async throws -> Harness {
         let transport = StubTransport { request in server.handle(request) }

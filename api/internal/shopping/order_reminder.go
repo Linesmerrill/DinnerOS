@@ -171,7 +171,7 @@ func (s *Service) Refresh(ctx context.Context, householdID string) error {
 	if hh.OrderDay == "" {
 		return nil
 	}
-	week := planning.WeekOf(s.now().In(orderLocation(hh.TimeZone)))
+	week := planning.WeekOfOn(s.now().In(orderLocation(hh.TimeZone)), planning.Day(hh.FirstDay()))
 	stored, err := s.orderedWeek(ctx, householdID, week.String())
 	if err != nil {
 		return err
@@ -218,7 +218,8 @@ func (s *Service) buildReminder(hh households.Household, w planning.Week, ordere
 	if hh.OrderDay == "" {
 		return r
 	}
-	r.DueOn = w.Date(planning.Day(hh.OrderDay))
+	first := planning.Day(hh.FirstDay())
+	r.DueOn = w.DateOn(first, planning.Day(hh.OrderDay))
 	if r.DueOn == "" {
 		return r
 	}
@@ -227,7 +228,7 @@ func (s *Service) buildReminder(hh households.Household, w planning.Week, ordere
 	// A reminder belongs to its own week: it starts on the order day and
 	// stops when the week ends. That is what makes next week start fresh,
 	// and what stops a run of unmarked past weeks all asking at once.
-	r.Due = today >= r.DueOn && today <= w.Date(planning.Sunday)
+	r.Due = today >= r.DueOn && today <= w.EndDateOn(first)
 	r.Remind = r.Due && !r.Ordered
 	return r
 }

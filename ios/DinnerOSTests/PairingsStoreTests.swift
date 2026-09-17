@@ -27,7 +27,7 @@ struct PairingsStoreTests {
         var profiles: [AutopilotProfile] = []
     }
 
-    private let week = ISOWeek("2026-W38") ?? .current(in: .gmt)
+    private let week = ISOWeek("2026-W38") ?? .current(in: .gmt, weekStartsOn: .mon)
 
     private func makeHarness(
         server: FakePairingsServer = FakePairingsServer(), planServer: FakePlanServer = FakePlanServer()
@@ -42,7 +42,7 @@ struct PairingsStoreTests {
         let session = AuthSession(api: AuthAPI(client: client), store: InMemoryTokenStore(session: stored))
         await session.restore()
         let plans = PlanStore(session: session, api: PlansAPI(client: client), checks: InMemoryGroceryChecks())
-        await plans.activate(householdID: "household-1", timeZone: .gmt)
+        await plans.activate(householdID: "household-1", timeZone: .gmt, weekStartsOn: .mon)
         let households = HouseholdStore.preview(
             session: session, phase: .ready, current: HouseholdPreviewData.detail)
         let library = RecipeLibrary(session: session, api: RecipesAPI(client: client))

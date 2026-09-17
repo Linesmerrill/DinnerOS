@@ -127,7 +127,9 @@ final class ShoppingStore {
     private(set) var canConfirm = false
 
     /// This week in the household's time zone, as the Week tab counts it.
-    var currentWeek: ISOWeek { .current(in: timeZone, now: now()) }
+    var currentWeek: ISOWeek { .current(in: timeZone, weekStartsOn: weekStartsOn, now: now()) }
+    /// The day the household's weeks start on, which decides the dates a week key covers.
+    private(set) var weekStartsOn: PlanDay = PlanDay.defaultWeekStart
     var walmart: ShoppingProvider? { providers.first { $0.key == provider } }
     var isConfigured: Bool { settings?.provider == provider }
     var affiliateTracked: Bool { proposal?.affiliateTracked ?? walmart?.affiliateTracked ?? false }
@@ -199,7 +201,7 @@ final class ShoppingStore {
         self.checks = checks
         self.now = now
         self.openURL = openURL
-        week = .current(in: .autoupdatingCurrent, now: now())
+        week = .current(in: .autoupdatingCurrent, weekStartsOn: PlanDay.defaultWeekStart, now: now())
     }
 
     /// A store frozen in the given state, for SwiftUI previews. It has no network access.
@@ -236,10 +238,25 @@ final class ShoppingStore {
 
     /// Shows `householdID`, starting at this week in `timeZone`. Another household or user
     /// clears what was loaded. Loads nothing; the Shop tab loads when it appears.
-    func activate(householdID: String, timeZone: TimeZone) {
+    ///
+    /// A new `weekStartsOn` for the same household drops the shown week's match, cost, and order
+    /// state, since the server moved meals whose dates now fall in a neighbouring week; the next
+    /// `load()` asks again. When this week was shown, the new this week is shown instead.
+    func activate(householdID: String, timeZone: TimeZone, weekStartsOn: PlanDay) {
+        let wasCurrent = week == currentWeek
+        let startChanged = weekStartsOn != self.weekStartsOn
         self.timeZone = timeZone
+        self.weekStartsOn = weekStartsOn
         let currentUserID = session.currentUser?.id
-        guard householdID != self.householdID || currentUserID != userID else { return }
+        guard householdID != self.householdID || currentUserID != userID else {
+            if startChanged {
+                resetWeek(to: wasCurrent ? currentWeek : week)
+                planSignatures = [:]
+                savingsPhase = .idle
+                savings = nil
+            }
+            return
+        }
         clear()
         self.householdID = householdID
         userID = currentUserID
@@ -282,20 +299,25 @@ final class ShoppingStore {
     /// Shows `newWeek` and matches it. Changed package counts belong to the previous week.
     func show(week newWeek: ISOWeek) async {
         if newWeek != week {
-            proposalGeneration += 1
-            week = newWeek
-            proposal = nil
-            proposalPhase = .idle
-            refreshError = nil
-            packageOverrides = [:]
-            linkError = nil
-            linkNotice = nil
-            openHandoff = nil
-            // Each week has its own order state; the previous week's must not linger.
-            orderReminder = nil
-            clearWeekCost()
+            resetWeek(to: newWeek)
         }
         await load()
+    }
+
+    /// Forgets the shown week's match, handoff, order state, and cost, and shows `newWeek`.
+    private func resetWeek(to newWeek: ISOWeek) {
+        proposalGeneration += 1
+        week = newWeek
+        proposal = nil
+        proposalPhase = .idle
+        refreshError = nil
+        packageOverrides = [:]
+        linkError = nil
+        linkNotice = nil
+        openHandoff = nil
+        // Each week has its own order state; the previous week's must not linger.
+        orderReminder = nil
+        clearWeekCost()
     }
 
     func showCurrentWeek() async {

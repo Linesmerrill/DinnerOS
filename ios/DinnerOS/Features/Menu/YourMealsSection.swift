@@ -14,7 +14,7 @@ struct YourMealsSection: View {
     @State private var editingEntry: PlanEntry?
 
     private var entries: [PlanEntry] {
-        plans.plan?.entries ?? []
+        plans.plan?.entriesInDayOrder(weekStartsOn: plans.weekStartsOn) ?? []
     }
 
     private var canEdit: Bool {
@@ -222,7 +222,8 @@ struct MealCard: View {
     /// Whether the meal's night has passed, so the card may ask about it at all. The same gate
     /// covers both questions, so a card never asks one and not the other.
     private var hasHappened: Bool {
-        MealFeedback.hasHappened(day: entry.day, timing: menu.selectedTiming, today: plans.today)
+        MealFeedback.hasHappened(
+            day: entry.day, timing: menu.selectedTiming, today: plans.today, weekStartsOn: plans.weekStartsOn)
     }
 
     /// Whether to ask how the meal went: only once its night has passed, and only when the menu
@@ -390,7 +391,7 @@ struct MealCard: View {
         if isEditable {
             Section {
                 Menu("Move To…", systemImage: "arrow.up.and.down.text.horizontal") {
-                    ForEach(PlanDay.allCases) { day in
+                    ForEach(PlanDay.week(startingOn: plans.weekStartsOn)) { day in
                         Button(day.name()) {
                             Task { await planner.move(entry, to: day) }
                         }

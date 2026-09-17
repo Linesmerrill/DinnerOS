@@ -216,10 +216,10 @@ nonisolated enum AutopilotFormat {
 
     // MARK: History
 
-    /// A title for a history item, such as "Cook-Time Mix", "Week of Sep 14, 2026", or
-    /// "Good for Smoker".
+    /// A title for a history item, such as "Cook-Time Mix", "Week of Sep 13, 2026", or
+    /// "Good for Smoker". A week is named by its first day in a week starting on `weekStartsOn`.
     static func historyTitle(
-        _ item: AutopilotHistoryItem, vocabulary: AutopilotVocabulary?, recipeName: String?,
+        _ item: AutopilotHistoryItem, vocabulary: AutopilotVocabulary?, recipeName: String?, weekStartsOn: PlanDay,
         locale: Locale = .autoupdatingCurrent
     ) -> String {
         switch item.type {
@@ -228,7 +228,7 @@ nonisolated enum AutopilotFormat {
             return titles.isEmpty ? String(localized: "Preferences") : titles.formatted(.list(type: .and))
         case AutopilotHistoryItem.weekContextUpdated:
             guard let week = item.week.flatMap({ ISOWeek($0) }) else { return String(localized: "This Week's Plans") }
-            return week.weekOf(locale: locale)
+            return week.weekOf(weekStartsOn: weekStartsOn, locale: locale)
         case AutopilotHistoryItem.recipeOverrideUpdated:
             let method = label(item.method ?? "", vocabulary?.equipment ?? [])
             let title = String(localized: "Good for \(method)")

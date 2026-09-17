@@ -100,9 +100,9 @@ struct GroceryExportTests {
     @Test func theListIsNamedForTheAppAndTheWeek() throws {
         let week = try week()
 
-        let name = GroceryReminderPlan.listName(appName: "DinnerOS", week: week, locale: locale)
+        let name = GroceryReminderPlan.listName(appName: "DinnerOS", week: week, weekStartsOn: .mon, locale: locale)
 
-        #expect(name == "DinnerOS · \(week.rangeLabel(locale: locale))")
+        #expect(name == "DinnerOS · \(week.rangeLabel(weekStartsOn: .mon, locale: locale))")
         #expect(name.hasPrefix("DinnerOS · "))
     }
 
@@ -207,9 +207,10 @@ struct GroceryExportTests {
         let store = FakeRemindersStore()
         let controller = GroceryExportController(remindersStore: store, defaultsSuite: freshDefaults())
         let week = try week()
-        let expectedName = GroceryReminderPlan.listName(appName: "DinnerOS", week: week)
+        let expectedName = GroceryReminderPlan.listName(appName: "DinnerOS", week: week, weekStartsOn: .mon)
 
-        await controller.addToReminders(list: try list(), week: week, checked: [], appName: "DinnerOS")
+        await controller.addToReminders(
+            list: try list(), week: week, weekStartsOn: .mon, checked: [], appName: "DinnerOS")
 
         // Nothing is written, and the system's access prompt waits for the explainer.
         let explainer = try #require(controller.explainer)
@@ -226,7 +227,8 @@ struct GroceryExportTests {
         #expect(controller.hasExplained)
 
         // Later taps go straight through.
-        await controller.addToReminders(list: try list(), week: week, checked: [], appName: "DinnerOS")
+        await controller.addToReminders(
+            list: try list(), week: week, weekStartsOn: .mon, checked: [], appName: "DinnerOS")
         #expect(controller.explainer == nil)
         #expect(controller.existingList?.name == expectedName)
     }
@@ -235,9 +237,11 @@ struct GroceryExportTests {
         let store = FakeRemindersStore()
         let controller = GroceryExportController(remindersStore: store, defaultsSuite: freshDefaults())
 
-        await controller.addToReminders(list: try list(), week: try week(), checked: [], appName: "DinnerOS")
+        await controller.addToReminders(
+            list: try list(), week: try week(), weekStartsOn: .mon, checked: [], appName: "DinnerOS")
         controller.explainer = nil
-        await controller.addToReminders(list: try list(), week: try week(), checked: [], appName: "DinnerOS")
+        await controller.addToReminders(
+            list: try list(), week: try week(), weekStartsOn: .mon, checked: [], appName: "DinnerOS")
 
         #expect(controller.explainer != nil)
         #expect(!controller.hasExplained)
@@ -279,11 +283,11 @@ struct GroceryExportTests {
         let list = try list()
 
         // Both actions send `GroceryListModel.plainText()`, which is this call.
-        let text = GroceryListText.make(list, week: week, checked: ["i-salt"], locale: locale)
+        let text = GroceryListText.make(list, week: week, weekStartsOn: .mon, checked: ["i-salt"], locale: locale)
 
         #expect(
             text == """
-                Grocery List: \(week.rangeLabel(locale: locale))
+                Grocery List: \(week.rangeLabel(weekStartsOn: .mon, locale: locale))
 
                 Produce
                 - [ ] Yellow Onion, 1 ½ + 8 oz
@@ -305,6 +309,10 @@ struct GroceryExportTests {
 
         let fromModel = try #require(model.plainText(locale: locale))
 
-        #expect(fromModel == GroceryListText.make(try list(), week: model.week, checked: ["i-salt"], locale: locale))
+        #expect(
+            fromModel
+                == GroceryListText.make(
+                    try list(), week: model.week, weekStartsOn: model.weekStartsOn, checked: ["i-salt"], locale: locale)
+        )
     }
 }

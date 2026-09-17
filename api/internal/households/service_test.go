@@ -257,6 +257,87 @@ func TestUpdateHouseholdOrderDay(t *testing.T) {
 	}
 }
 
+// fakeWeekStartListener records week start changes, and what the household's
+// first day was when each was asked for.
+type fakeWeekStartListener struct {
+	store    *memoryStore
+	changes  []string
+	finished int
+	fail     error
+}
+
+func (f *fakeWeekStartListener) ChangeWeekStart(ctx context.Context, householdID, from, to string) (int, error) {
+	stored, _ := f.store.GetHousehold(ctx, householdID)
+	f.changes = append(f.changes, from+">"+to+" (stored "+stored.FirstDay()+")")
+	return 1, f.fail
+}
+
+func (f *fakeWeekStartListener) FinishWeekStart(context.Context, string) error {
+	f.finished++
+	return nil
+}
+
+func TestUpdateHouseholdWeekStartsOn(t *testing.T) {
+	svc, store := newTestService(t)
+	listener := &fakeWeekStartListener{store: store}
+	svc.WithWeekStartListener(listener)
+	ctx := context.Background()
+	h, admin := newHousehold(t, svc, nil)
+
+	if h.WeekStartsOn != DefaultWeekStart || h.FirstDay() != "sun" {
+		t.Errorf("new household WeekStartsOn = %q, want sun", h.WeekStartsOn)
+	}
+	if (Household{}).FirstDay() != "mon" {
+		t.Error("a household that never chose must start weeks on Monday")
+	}
+
+	// Meals move before the new first day is saved, so a failed move leaves
+	// the household as it was.
+	listener.fail = errors.New("boom")
+	if _, err := svc.Update(ctx, admin, UpdateInput{WeekStartsOn: ptr("mon")}); err == nil {
+		t.Fatal("Update() with a failing move succeeded")
+	}
+	if got, _ := store.GetHousehold(ctx, h.ID); got.WeekStartsOn != "sun" {
+		t.Errorf("after a failed move WeekStartsOn = %q, want sun", got.WeekStartsOn)
+	}
+	listener.fail = nil
+	updated, err := svc.Update(ctx, admin, UpdateInput{WeekStartsOn: ptr("mon")})
+	if err != nil || updated.WeekStartsOn != "mon" || updated.Name != h.Name {
+		t.Fatalf("Update(weekStartsOn mon) = %+v, %v", updated, err)
+	}
+	if len(listener.changes) != 2 || listener.changes[1] != "sun>mon (stored sun)" || listener.finished != 1 {
+		t.Errorf("listener changes = %v, finished %d", listener.changes, listener.finished)
+	}
+	// The same first day again moves nothing.
+	if _, err := svc.Update(ctx, admin, UpdateInput{WeekStartsOn: ptr("mon")}); err != nil || len(listener.changes) != 2 {
+		t.Errorf("unchanged first day: err %v, changes %v", err, listener.changes)
+	}
+
+	// A household created before the setting existed reads as Monday-first.
+	legacy := store.households[h.ID]
+	legacy.WeekStartsOn = ""
+	store.households[h.ID] = legacy
+	if day, err := svc.WeekStartsOn(ctx, h.ID); err != nil || day != "mon" {
+		t.Errorf("legacy WeekStartsOn() = %q, %v; want mon", day, err)
+	}
+	if _, err := svc.Update(ctx, admin, UpdateInput{WeekStartsOn: ptr("sun")}); err != nil || listener.changes[2] != "mon>sun (stored mon)" {
+		t.Errorf("legacy → sun: err %v, changes %v", err, listener.changes)
+	}
+
+	var ve *ValidationError
+	for _, bad := range []string{"", "Sunday", "sunday", "7"} {
+		if _, err := svc.Update(ctx, admin, UpdateInput{WeekStartsOn: ptr(bad)}); !errors.As(err, &ve) {
+			t.Errorf("Update(weekStartsOn %q) error = %v, want ValidationError", bad, err)
+		}
+	}
+	if _, _, err := svc.Create(ctx, userBob, CreateInput{Name: "Bob's", TimeZone: "America/Denver", WeekStartsOn: ptr("fri")}); err != nil {
+		t.Errorf("Create(weekStartsOn fri) error = %v", err)
+	}
+	if _, _, err := svc.Create(ctx, userBob, CreateInput{Name: "Bob's", TimeZone: "America/Denver", WeekStartsOn: ptr("x")}); !errors.As(err, &ve) {
+		t.Errorf("Create(weekStartsOn x) error = %v, want ValidationError", err)
+	}
+}
+
 func TestUpdateHouseholdMealKit(t *testing.T) {
 	svc, _ := newTestService(t)
 	ctx := context.Background()

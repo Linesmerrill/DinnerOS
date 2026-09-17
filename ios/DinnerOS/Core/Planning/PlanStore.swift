@@ -33,8 +33,11 @@ final class PlanStore {
     /// Entries can change only while the plan is a draft. The API enforces it too.
     var isDraft: Bool { plan?.status == .draft }
 
+    /// The day the household's weeks start on, which decides the dates a week key covers.
+    private(set) var weekStartsOn: PlanDay = PlanDay.defaultWeekStart
+
     /// This week in the household's time zone.
-    var currentWeek: ISOWeek { .current(in: timeZone, now: now()) }
+    var currentWeek: ISOWeek { .current(in: timeZone, weekStartsOn: weekStartsOn, now: now()) }
 
     /// Today, when the shown week is this week.
     var today: PlanDay? {
@@ -63,7 +66,7 @@ final class PlanStore {
         self.api = api
         self.checks = checks
         self.now = now
-        week = .current(in: .autoupdatingCurrent, now: now())
+        week = .current(in: .autoupdatingCurrent, weekStartsOn: PlanDay.defaultWeekStart, now: now())
     }
 
     /// A store frozen with `plan`, for SwiftUI previews. It has no network access.
@@ -82,9 +85,21 @@ final class PlanStore {
 
     /// Shows `householdID`'s plans, starting at this week in `timeZone`. Loads unless that
     /// household's week is already loaded or loading.
-    func activate(householdID: String, timeZone: TimeZone) async {
+    ///
+    /// A new `weekStartsOn` for the same household reloads the shown week: the server moved any
+    /// meal whose date now falls in a neighbouring week. When this week was shown, the new this
+    /// week is shown instead.
+    func activate(householdID: String, timeZone: TimeZone, weekStartsOn: PlanDay) async {
+        let wasCurrent = week == currentWeek
+        let startChanged = weekStartsOn != self.weekStartsOn
         self.timeZone = timeZone
+        self.weekStartsOn = weekStartsOn
         if householdID == self.householdID, phase != .idle {
+            guard startChanged else { return }
+            let newWeek = wasCurrent ? currentWeek : week
+            let clearing = newWeek != week
+            week = newWeek
+            await load(clearing: clearing)
             return
         }
         if householdID != self.householdID {
@@ -265,7 +280,7 @@ final class PlanStore {
         return GroceryListModel(
             householdID: householdID, week: week, session: session, api: api, checks: checks, purchases: purchases,
             specialties: specialties, skips: skips, canAddToPantry: canAddToPantry,
-            canSkipIngredients: canSkipIngredients)
+            canSkipIngredients: canSkipIngredients, weekStartsOn: weekStartsOn)
     }
 
     // MARK: - Reset

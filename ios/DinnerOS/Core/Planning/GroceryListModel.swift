@@ -140,6 +140,8 @@ final class GroceryListModel {
 
     let householdID: String
     let week: ISOWeek
+    /// The household's week start day, which dates the list's week in its title and export.
+    let weekStartsOn: PlanDay
     private(set) var phase: Phase = .idle
     private(set) var list: GroceryList?
     /// Set when a reload failed while the list stayed on screen.
@@ -228,10 +230,12 @@ final class GroceryListModel {
     init(
         householdID: String, week: ISOWeek, session: AuthSession, api: PlansAPI?, checks: any GroceryCheckStorage,
         purchases: (any PantryPurchaseRecording)? = nil, specialties: (any SpecialtyChoosing)? = nil,
-        skips: (any GrocerySkipping)? = nil, canAddToPantry: Bool = false, canSkipIngredients: Bool = false
+        skips: (any GrocerySkipping)? = nil, canAddToPantry: Bool = false, canSkipIngredients: Bool = false,
+        weekStartsOn: PlanDay = PlanDay.defaultWeekStart
     ) {
         self.householdID = householdID
         self.week = week
+        self.weekStartsOn = weekStartsOn
         self.session = session
         self.api = api
         self.checks = checks
@@ -247,7 +251,7 @@ final class GroceryListModel {
 
     /// A model frozen with `list`, for SwiftUI previews.
     static func preview(session: AuthSession, list: GroceryList, checked: Set<String> = []) -> GroceryListModel {
-        let week = ISOWeek(list.week) ?? .current(in: .gmt)
+        let week = ISOWeek(list.week) ?? .current(in: .gmt, weekStartsOn: PlanDay.defaultWeekStart)
         let checks = InMemoryGroceryChecks()
         checks.setCheckedItems(checked, householdID: "household-preview", week: week)
         let model = GroceryListModel(
@@ -551,7 +555,7 @@ final class GroceryListModel {
 
     /// The list as plain text for sharing, or `nil` before it loads.
     func plainText(locale: Locale = .autoupdatingCurrent) -> String? {
-        list.map { GroceryListText.make($0, week: week, checked: checked, locale: locale) }
+        list.map { GroceryListText.make($0, week: week, weekStartsOn: weekStartsOn, checked: checked, locale: locale) }
     }
 }
 
@@ -577,9 +581,10 @@ nonisolated enum GroceryListText {
     ///
     /// Categories keep the server's aisle order. Skipped entries are listed at the end.
     static func make(
-        _ list: GroceryList, week: ISOWeek, checked: Set<String>, locale: Locale = .autoupdatingCurrent
+        _ list: GroceryList, week: ISOWeek, weekStartsOn: PlanDay, checked: Set<String>,
+        locale: Locale = .autoupdatingCurrent
     ) -> String {
-        var blocks = [String(localized: "Grocery List: \(week.rangeLabel(locale: locale))")]
+        var blocks = [String(localized: "Grocery List: \(week.rangeLabel(weekStartsOn: weekStartsOn, locale: locale))")]
         let toMake = list.batches.filter { $0.status == .make }
         if !toMake.isEmpty {
             let lines = toMake.map { batch in

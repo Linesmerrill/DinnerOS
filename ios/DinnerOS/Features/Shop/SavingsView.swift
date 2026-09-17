@@ -10,7 +10,7 @@ struct SavingsView: View {
                 Section {
                     WeekCostSummary(cost: cost)
                 } header: {
-                    Text(ISOWeek(cost.week)?.rangeLabel() ?? cost.week)
+                    Text(ISOWeek(cost.week)?.rangeLabel(weekStartsOn: shopping.weekStartsOn) ?? cost.week)
                 } footer: {
                     if let kit = cost.mealKit {
                         Text("Meal kit: \(WeekCostText.mealKit(kit)).")
@@ -64,7 +64,8 @@ struct SavingsView: View {
         if let savings = shopping.savings, !savings.weeks.isEmpty {
             Section {
                 ForEach(savings.weeks) { week in
-                    SavingsWeekRow(week: week, comparesMealKit: savings.mealKit != nil)
+                    SavingsWeekRow(
+                        week: week, comparesMealKit: savings.mealKit != nil, weekStartsOn: shopping.weekStartsOn)
                 }
             } header: {
                 Text("Recent Weeks")
@@ -127,11 +128,12 @@ private struct WeekCostItemRow: View {
 private struct SavingsWeekRow: View {
     let week: SavingsWeek
     let comparesMealKit: Bool
+    let weekStartsOn: PlanDay
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(ISOWeek(week.week)?.rangeLabel() ?? week.week)
+                Text(ISOWeek(week.week)?.rangeLabel(weekStartsOn: weekStartsOn) ?? week.week)
                 Spacer(minLength: 8)
                 Text(WeekCostText.amount(week.spentCents))
                     .monospacedDigit()

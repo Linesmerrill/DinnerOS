@@ -37,9 +37,11 @@ struct ShopView: View {
             .sheet(isPresented: $isEditingStore) {
                 ShopStoreSettingsSheet()
             }
-            .task(id: household?.id) {
+            .task(id: household?.weekScope) {
                 guard let household else { return }
-                shopping.activate(householdID: household.id, timeZone: household.planningTimeZone)
+                shopping.activate(
+                    householdID: household.id, timeZone: household.planningTimeZone,
+                    weekStartsOn: household.weekStartsOn)
                 await shopping.load()
                 // Loaded here too, so an API without the catalog hides the request row before
                 // anyone taps it.
@@ -881,7 +883,7 @@ private struct ShopWeekSwitcher: View {
             .labelStyle(.iconOnly)
             Spacer(minLength: 0)
             VStack(spacing: 4) {
-                Text(week.rangeLabel())
+                Text(week.rangeLabel(weekStartsOn: shopping.weekStartsOn))
                     .font(.headline)
                 if let relative = relativeName(week) {
                     Text(relative)

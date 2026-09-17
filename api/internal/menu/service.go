@@ -115,7 +115,10 @@ func timingOf(w, current planning.Week) Timing {
 type Menu struct {
 	Week        planning.Week
 	CurrentWeek planning.Week
-	Timing      Timing
+	// FirstDay is the household's first day of the week, which decides the
+	// dates Week covers.
+	FirstDay planning.Day
+	Timing   Timing
 	// Plan is nil when nothing is stored for the week.
 	Plan *planning.Plan
 	// Proposal is the week's Autopilot proposal, if any.
@@ -129,7 +132,7 @@ type Menu struct {
 // Menu returns the Menu screen for week ("" for the household's current week).
 // userID is the caller, whose own ratings appear as myRating.
 func (s *Service) Menu(ctx context.Context, householdID, userID, week string) (Menu, error) {
-	current, loc, err := s.clock(ctx, householdID)
+	current, loc, first, err := s.clock(ctx, householdID)
 	if err != nil {
 		return Menu{}, err
 	}
@@ -137,13 +140,13 @@ func (s *Service) Menu(ctx context.Context, householdID, userID, week string) (M
 	if err != nil {
 		return Menu{}, err
 	}
-	in, err := s.load(ctx, householdID, userID, w, current, loc)
+	in, err := s.load(ctx, householdID, userID, w, current, loc, first)
 	if err != nil {
 		return Menu{}, err
 	}
 	snap := newSnapshot(in)
 	m := Menu{
-		Week: w, CurrentWeek: current, Timing: timingOf(w, current), Proposal: in.Proposal,
+		Week: w, CurrentWeek: current, FirstDay: first, Timing: timingOf(w, current), Proposal: in.Proposal,
 		Sections: snap.sections(timingOf(w, current)), Bands: snap.bands,
 	}
 	if !in.Plan.CreatedAt.IsZero() {
@@ -153,17 +156,19 @@ func (s *Service) Menu(ctx context.Context, householdID, userID, week string) (M
 	return m, nil
 }
 
-// clock returns the household's current ISO week and time zone.
-func (s *Service) clock(ctx context.Context, householdID string) (planning.Week, *time.Location, error) {
+// clock returns the household's current week, time zone, and first day of the
+// week.
+func (s *Service) clock(ctx context.Context, householdID string) (planning.Week, *time.Location, planning.Day, error) {
 	h, err := s.opts.Households.GetHousehold(ctx, householdID)
 	if err != nil {
-		return planning.Week{}, nil, fmt.Errorf("load household: %w", err)
+		return planning.Week{}, nil, "", fmt.Errorf("load household: %w", err)
 	}
 	loc, err := time.LoadLocation(h.TimeZone)
 	if err != nil {
 		loc = time.UTC
 	}
-	return planning.WeekOf(s.now().In(loc)), loc, nil
+	first := planning.Day(h.FirstDay())
+	return planning.WeekOfOn(s.now().In(loc), first), loc, first, nil
 }
 
 func parseWeek(value string, current planning.Week) (planning.Week, error) {
@@ -179,8 +184,8 @@ func parseWeek(value string, current planning.Week) (planning.Week, error) {
 
 // load reads everything a snapshot of week needs: the catalog, ratings,
 // profile, overrides, cooked events, and the week's plan and proposal.
-func (s *Service) load(ctx context.Context, householdID, userID string, w, current planning.Week, loc *time.Location) (snapshotInput, error) {
-	in := snapshotInput{UserID: userID, Week: w, Current: current, Location: loc}
+func (s *Service) load(ctx context.Context, householdID, userID string, w, current planning.Week, loc *time.Location, first planning.Day) (snapshotInput, error) {
+	in := snapshotInput{UserID: userID, Week: w, Current: current, Location: loc, FirstDay: first}
 	var err error
 	if in.Catalog, err = s.opts.Recipes.MenuCatalog(ctx, householdID); err != nil {
 		return snapshotInput{}, fmt.Errorf("load catalog: %w", err)

@@ -136,6 +136,16 @@ func (s *Service) Profile(ctx context.Context, householdID string) (Profile, err
 	return canonicalProfile(p), nil
 }
 
+// FirstDay returns the day the household's week starts on, which decides the
+// dates of a week's days in responses and events.
+func (s *Service) FirstDay(ctx context.Context, householdID string) (planning.Day, error) {
+	h, err := s.households.GetHousehold(ctx, householdID)
+	if err != nil {
+		return "", fmt.Errorf("load household: %w", err)
+	}
+	return planning.Day(h.FirstDay()), nil
+}
+
 // DefaultServings resolves the profile's servings: its own value, or the
 // household's default when it has none.
 func (s *Service) DefaultServings(ctx context.Context, p Profile) (int, error) {
@@ -635,7 +645,7 @@ func (s *Service) Swap(ctx context.Context, householdID, userID, week, slotID st
 	s.record(ctx, events.Event{
 		HouseholdID: householdID, UserID: userID, Type: events.TypeMealSwapped, RecipeID: next.RecipeID, Week: w.String(), OccurredAt: now,
 		Payload: events.MealSwapped{
-			ProposalID: saved.ID, SlotID: next.ID, Day: next.Day, Date: w.Date(planning.Day(next.Day)),
+			ProposalID: saved.ID, SlotID: next.ID, Day: next.Day, Date: plan.DateOf(planning.Day(next.Day)),
 			PreviousRecipeID: current.RecipeID, ModelVersion: res.ModelVersion, SwapNumber: next.SwapCount,
 		},
 	})
@@ -788,7 +798,7 @@ func (s *Service) AcceptWithPairings(ctx context.Context, householdID, userID, w
 		sl := saved.Slots[saved.slot(id)]
 		s.record(ctx, events.Event{
 			HouseholdID: householdID, UserID: userID, Type: events.TypeMealRejected, RecipeID: sl.RecipeID, Week: w.String(), OccurredAt: now,
-			Payload: events.MealRejected{ProposalID: saved.ID, SlotID: sl.ID, Day: sl.Day, Date: w.Date(planning.Day(sl.Day)), ModelVersion: saved.ModelVersion},
+			Payload: events.MealRejected{ProposalID: saved.ID, SlotID: sl.ID, Day: sl.Day, Date: updated.DateOf(planning.Day(sl.Day)), ModelVersion: saved.ModelVersion},
 		})
 	}
 	pairingsAdded := s.finishProposalPairings(ctx, householdID, userID, saved, w, mealEntries, addonChoices, added[mealCount:],

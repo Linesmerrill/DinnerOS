@@ -44,6 +44,9 @@ final class HouseholdStore {
     private(set) var inviteStatus: InviteStatus?
 
     var access: HouseholdAccess? { current?.access }
+
+    /// The day the current household's weeks start on; Sunday until one loads.
+    var weekStartsOn: PlanDay { current?.household.weekStartsOn ?? PlanDay.defaultWeekStart }
     var hasPendingInvite: Bool { pendingInviteToken != nil }
 
     @ObservationIgnored private let session: AuthSession

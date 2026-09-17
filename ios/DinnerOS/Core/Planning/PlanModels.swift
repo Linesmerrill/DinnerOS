@@ -1,20 +1,16 @@
 import Foundation
 
-/// A day of an ISO week (`PlanDay` in `api/openapi.yaml`), Monday first.
+/// A day of the week (`PlanDay` in `api/openapi.yaml`). Cases are Monday first, the ISO order;
+/// a household's week may start on another day (`ISOWeek+Planning.swift`).
 nonisolated enum PlanDay: String, Codable, CaseIterable, Hashable, Sendable, Identifiable {
     case mon, tue, wed, thu, fri, sat, sun
 
     var id: String { rawValue }
 
-    /// Days after the week's Monday.
+    /// The ISO index, Monday 0 through Sunday 6. For a household's order, use
+    /// `position(inWeekStartingOn:)`.
     var offset: Int {
         PlanDay.allCases.firstIndex(of: self) ?? 0
-    }
-
-    /// The day's calendar date in `week`, as midnight UTC (the same convention as
-    /// `ISOWeek.startDate`).
-    func date(in week: ISOWeek) -> Date? {
-        week.startDate.map { $0.addingTimeInterval(TimeInterval(offset) * 86_400) }
     }
 }
 

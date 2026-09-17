@@ -51,7 +51,8 @@ struct AutopilotGenerateSignalsTests {
 
 @MainActor
 final class FakeDinnerIntentServices: DinnerIntentServices {
-    var accountState: IntentAccount = .ready(IntentHousehold(id: "household-1", timeZone: denver, canPlan: true))
+    var accountState: IntentAccount = .ready(
+        IntentHousehold(id: "household-1", timeZone: denver, canPlan: true, weekStartsOn: .mon))
     var configured = true
     var planJSON = PlanFixtures.plan()
     var proposalJSON = AutopilotFixtures.proposal()
@@ -93,11 +94,45 @@ struct DinnerIntentTests {
     @Test func upcomingWeekIsThisWeekUntilFriday() {
         let thisWeek = ISOWeek("2026-W38")
         let nextWeek = ISOWeek("2026-W39")
-        #expect(DinnerIntentActions.upcomingWeek(now: utc("2026-09-14T15:00:00Z"), timeZone: denver) == thisWeek)
-        #expect(DinnerIntentActions.upcomingWeek(now: utc("2026-09-18T05:59:00Z"), timeZone: denver) == thisWeek)
+        #expect(
+            DinnerIntentActions.upcomingWeek(now: utc("2026-09-14T15:00:00Z"), timeZone: denver, weekStartsOn: .mon)
+                == thisWeek)
+        #expect(
+            DinnerIntentActions.upcomingWeek(now: utc("2026-09-18T05:59:00Z"), timeZone: denver, weekStartsOn: .mon)
+                == thisWeek)
         // Friday 12:01 am in Denver.
-        #expect(DinnerIntentActions.upcomingWeek(now: utc("2026-09-18T06:01:00Z"), timeZone: denver) == nextWeek)
-        #expect(DinnerIntentActions.upcomingWeek(now: utc("2026-09-20T20:00:00Z"), timeZone: denver) == nextWeek)
+        #expect(
+            DinnerIntentActions.upcomingWeek(now: utc("2026-09-18T06:01:00Z"), timeZone: denver, weekStartsOn: .mon)
+                == nextWeek)
+        #expect(
+            DinnerIntentActions.upcomingWeek(now: utc("2026-09-20T20:00:00Z"), timeZone: denver, weekStartsOn: .mon)
+                == nextWeek)
+    }
+
+    /// With Sunday weeks, "this week" runs Sunday through Wednesday; Thursday plans the next one.
+    @Test func upcomingWeekFollowsTheWeekStartDay() {
+        let thisWeek = ISOWeek("2026-W38")
+        let nextWeek = ISOWeek("2026-W39")
+        // Sunday, September 13, 2026 in Denver starts 2026-W38 for a Sunday household.
+        #expect(
+            DinnerIntentActions.upcomingWeek(now: utc("2026-09-13T18:00:00Z"), timeZone: denver, weekStartsOn: .sun)
+                == thisWeek)
+        #expect(
+            DinnerIntentActions.upcomingWeek(now: utc("2026-09-16T18:00:00Z"), timeZone: denver, weekStartsOn: .sun)
+                == thisWeek)
+        #expect(
+            DinnerIntentActions.upcomingWeek(now: utc("2026-09-17T18:00:00Z"), timeZone: denver, weekStartsOn: .sun)
+                == nextWeek)
+        // Sunday, September 20 is already 2026-W39, and early in it.
+        #expect(
+            DinnerIntentActions.upcomingWeek(now: utc("2026-09-20T18:00:00Z"), timeZone: denver, weekStartsOn: .sun)
+                == nextWeek)
+    }
+
+    @Test func aSundayHouseholdHearsItsWeeksDates() {
+        let week = PlanningWeek(week: ISOWeek("2026-W38") ?? .current(in: .gmt, weekStartsOn: .sun), weekStartsOn: .sun)
+        let text = DinnerIntentText.planDinners(.finalized(week), locale: en)
+        #expect(text.replacing("\u{2009}", with: " ").contains("Sep 13 – 19"))
     }
 
     @Test func planDinnersGeneratesOpensTheReviewAndSummarizes() async throws {
@@ -113,11 +148,13 @@ struct DinnerIntentTests {
             Issue.record("outcome = \(outcome)")
             return
         }
-        #expect(planned == week)
+        #expect(planned == PlanningWeek(week: week, weekStartsOn: .mon))
         #expect(meals.first?.day == .mon)
         #expect(meals.map(\.day) == meals.sorted { $0.day.offset < $1.day.offset }.map(\.day))
         let text = DinnerIntentText.planDinners(outcome, locale: en)
-        #expect(text.hasPrefix("Autopilot suggested \(meals.count) dinners for \(week.rangeLabel(locale: en))"))
+        #expect(
+            text.hasPrefix(
+                "Autopilot suggested \(meals.count) dinners for \(week.rangeLabel(weekStartsOn: .mon, locale: en))"))
         #expect(text.contains("starting with \(meals[0].name) on Monday"))
         #expect(await actions.dialog(for: outcome) == text)
     }
@@ -165,7 +202,8 @@ struct DinnerIntentTests {
         #expect(DinnerIntentText.planDinners(outcome).contains("not in a household"))
 
         (outcome, services) = await run {
-            $0.accountState = .ready(IntentHousehold(id: "household-1", timeZone: denver, canPlan: false))
+            $0.accountState = .ready(
+                IntentHousehold(id: "household-1", timeZone: denver, canPlan: false, weekStartsOn: .mon))
         }
         #expect(outcome == .notAllowed)
         #expect(services.generatedWeeks.isEmpty)
@@ -175,21 +213,22 @@ struct DinnerIntentTests {
         #expect(services.generatedWeeks.isEmpty)
 
         (outcome, services) = await run { $0.planJSON = PlanFixtures.plan(status: "finalized") }
-        #expect(outcome == .finalized(week))
+        #expect(outcome == .finalized(PlanningWeek(week: week, weekStartsOn: .mon)))
         #expect(services.generatedWeeks.isEmpty)
         #expect(
-            DinnerIntentText.planDinners(outcome, locale: en).contains("\(week.rangeLabel(locale: en)) is finalized"))
+            DinnerIntentText.planDinners(outcome, locale: en).contains(
+                "\(week.rangeLabel(weekStartsOn: .mon, locale: en)) is finalized"))
 
         (outcome, services) = await run {
             $0.generateError = APIError.server(status: 409, code: "plan_finalized", message: "", requestID: nil)
         }
-        #expect(outcome == .finalized(week))
+        #expect(outcome == .finalized(PlanningWeek(week: week, weekStartsOn: .mon)))
         #expect(services.reviewed.isEmpty)
 
         (outcome, services) = await run {
             $0.proposalJSON = AutopilotFixtures.proposal(slots: [], messages: [])
         }
-        #expect(outcome == .nothingSuggested(week))
+        #expect(outcome == .nothingSuggested(PlanningWeek(week: week, weekStartsOn: .mon)))
         #expect(services.reviewed.isEmpty)
 
         (outcome, _) = await run {

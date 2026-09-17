@@ -134,8 +134,8 @@ struct MenuRecipeCard: View {
     @ViewBuilder
     private var dayMenuItems: some View {
         if !card.inPlan {
-            ForEach(PlanDay.allCases) { day in
-                Button(day.title(in: plans.week)) {
+            ForEach(PlanDay.week(startingOn: plans.weekStartsOn)) { day in
+                Button(day.title(in: plans.week, weekStartsOn: plans.weekStartsOn)) {
                     add(day: day)
                 }
             }

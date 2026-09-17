@@ -3,11 +3,11 @@ import Foundation
 /// A synthetic week plan and grocery list for SwiftUI previews. Not DEBUG-only because
 /// `#Preview` bodies are type-checked in Release builds too.
 enum PlanPreviewData {
-    static let week = ISOWeek("2026-W38") ?? .current(in: .gmt)
+    static let week = ISOWeek("2026-W38") ?? .current(in: .gmt, weekStartsOn: PlanDay.defaultWeekStart)
 
     static let plan = Plan(
-        householdID: HouseholdPreviewData.household.id, week: "2026-W38", startDate: "2026-09-14",
-        endDate: "2026-09-20", status: .draft,
+        householdID: HouseholdPreviewData.household.id, week: "2026-W38", startDate: "2026-09-13",
+        endDate: "2026-09-19", status: .draft,
         entries: [
             entry(
                 "entry-1", recipe: "recipe-1", name: "Skillet Test Tacos", day: .mon, servings: 4, note: "Extra lime"),
@@ -17,8 +17,8 @@ enum PlanPreviewData {
         createdAt: .now, updatedAt: .now)
 
     static let emptyPlan = Plan(
-        householdID: HouseholdPreviewData.household.id, week: "2026-W38", startDate: "2026-09-14",
-        endDate: "2026-09-20", status: .draft, entries: [], createdAt: nil, updatedAt: nil)
+        householdID: HouseholdPreviewData.household.id, week: "2026-W38", startDate: "2026-09-13",
+        endDate: "2026-09-19", status: .draft, entries: [], createdAt: nil, updatedAt: nil)
 
     static let groceryList = GroceryList(
         week: "2026-W38", status: .draft, pantryApplied: false,

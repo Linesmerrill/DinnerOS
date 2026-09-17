@@ -25,7 +25,7 @@ struct MenuBottomBar: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(MenuFormat.bottomBarTitle(counts: counts, timing: menu.selectedTiming))
                     .font(.headline)
-                Text(plans.week.rangeLabel())
+                Text(plans.week.rangeLabel(weekStartsOn: plans.weekStartsOn))
                     .font(.caption)
                     .foregroundStyle(Color.secondary)
             }

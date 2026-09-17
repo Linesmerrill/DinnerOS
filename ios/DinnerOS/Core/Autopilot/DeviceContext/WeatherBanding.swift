@@ -58,15 +58,16 @@ nonisolated enum WeatherBanding {
 
     /// The bands for each day of `week` the forecast covers, matching samples to days in
     /// `timeZone`.
-    static func week(_ week: ISOWeek, timeZone: TimeZone, forecast: [DailyForecastSample]) -> [PlanDay: DayWeatherBands]
-    {
+    static func week(
+        _ week: ISOWeek, timeZone: TimeZone, weekStartsOn: PlanDay, forecast: [DailyForecastSample]
+    ) -> [PlanDay: DayWeatherBands] {
         var local = Calendar(identifier: .gregorian)
         local.timeZone = timeZone
         var result: [PlanDay: DayWeatherBands] = [:]
         for sample in forecast {
             let parts = local.dateComponents([.year, .month, .day], from: sample.date)
             for day in PlanDay.allCases where result[day] == nil {
-                guard let date = day.date(in: week) else { continue }
+                guard let date = day.date(in: week, weekStartsOn: weekStartsOn) else { continue }
                 var utc = Calendar(identifier: .gregorian)
                 utc.timeZone = .gmt
                 let dayParts = utc.dateComponents([.year, .month, .day], from: date)

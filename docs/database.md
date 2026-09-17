@@ -54,7 +54,7 @@ Implemented in Phase 3 (`internal/households`, `internal/invitations`).
 
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `households` | name, defaultServings (1–12, default 2), timeZone (IANA name), orderDay (`mon`–`sun`, absent when unset), mealKit{weeklyCents, meals} (absent when unset), createdBy, adminCount, createdAt, updatedAt | — (looked up by `_id` only) |
+| `households` | name, defaultServings (1–12, default 2), timeZone (IANA name), orderDay (`mon`–`sun`, absent when unset), weekStartsOn (`sun`–`sat`; `sun` for new households, absent for households created before it existed, which read as `mon`), mealKit{weeklyCents, meals} (absent when unset), createdBy, adminCount, createdAt, updatedAt | — (looked up by `_id` only) |
 | `household_memberships` | householdId, userId, role (`admin`/`member`), createdAt, updatedAt | **unique** `{householdId, userId}`; `{userId}` |
 | `household_invitations` | householdId, email (trimmed, lowercase), role, tokenHash, codeHash, expiresAt, pending, acceptedAt, acceptedBy, revokedAt, createdBy, createdAt | **unique** `{tokenHash}`; **unique** `{codeHash}`; **unique partial** `{householdId, email}` where `pending: true` |
 
@@ -160,11 +160,15 @@ Implemented in Phase 6 (`internal/planning`).
 
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `weekly_plans` | householdId, week (`2026-W38`), startDate (Monday, `YYYY-MM-DD`), status (`draft`/`finalized`), entries[] (id, recipeId, recipeName, recipeImageUrl, day (`mon`–`sun`; absent when unscheduled), servings, note, addedBy, addedAt, origin (`autopilot`; absent for manual), proposalId (autopilot entries)), createdAt, updatedAt | **unique** `{householdId, week}` |
+| `weekly_plans` | householdId, week (`2026-W38`), startDate (Monday, `YYYY-MM-DD`), status (`draft`/`finalized`), entries[] (id, recipeId, recipeName, recipeImageUrl, day (`mon`–`sun`; absent when unscheduled), servings, note, addedBy, addedAt, origin (`autopilot`; absent for manual), proposalId (autopilot entries), weekStartMark (only while a first-day change is moving entries)), createdAt, updatedAt | **unique** `{householdId, week}` |
 
-- One document per household and ISO week, created by the first added entry
-  or status change. Reading an unplanned week writes nothing. ISO weeks have
-  no time zone; `startDate` is stored for future date queries.
+- One document per household and week key, created by the first added entry
+  or status change. Reading an unplanned week writes nothing. Week keys have
+  no time zone; `startDate` is the key's ISO Monday, stored for future date
+  queries. The dates a key covers, and so the date of an entry's `day`, follow
+  the household's `weekStartsOn` (Sunday-first `2026-W38` is Sep 13–19;
+  decision 503). Changing `weekStartsOn` moves each scheduled entry whose date
+  would change into the neighboring week, keeping its date.
 - `week` is zero-padded, so string order is week order, and the unique index
   also serves range queries (`week: {$gte, $lte}`). Summaries project
   `entryCount` with `$size`.

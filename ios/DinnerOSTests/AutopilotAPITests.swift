@@ -294,7 +294,8 @@ struct AutopilotAPITests {
         #expect(proposal.slot(id: "wed")?.reasonText == "")
         #expect(proposal.unfilled.map(\.day) == [.thu])
         #expect(proposal.messages.first?.code == "not_enough_candidates")
-        #expect(proposal.rows.map(\.id) == ["mon", "wed", "thu", "sun"])
+        #expect(proposal.rows(weekStartsOn: .mon).map(\.id) == ["mon", "wed", "thu", "sun"])
+        #expect(proposal.rows(weekStartsOn: .sun).map(\.id) == ["sun", "mon", "wed", "thu"])
         #expect(proposal.decidedBy == nil)
     }
 

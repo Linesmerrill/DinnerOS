@@ -84,7 +84,7 @@ struct EventReporterTests {
         let clock: ManualClock
     }
 
-    private let week = ISOWeek("2026-W38") ?? .current(in: .gmt)
+    private let week = ISOWeek("2026-W38") ?? .current(in: .gmt, weekStartsOn: .mon)
 
     private func makeHarness(
         storage: any EventQueueStorage = InMemoryEventQueueStorage(),

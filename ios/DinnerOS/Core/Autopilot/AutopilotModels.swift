@@ -861,8 +861,11 @@ nonisolated struct AutopilotProposal: Decodable, Equatable, Sendable, Identifiab
     /// Whether a forecast shaped the week, so Apple Weather's attribution must be shown.
     var usesWeather: Bool { context?.signals?.hasWeather == true }
 
-    var rows: [Row] {
-        (slots.map(Row.slot) + unfilled.map(Row.unfilled)).sorted { $0.day.offset < $1.day.offset }
+    /// Slots and unfilled days in the order a week starting on `weekStartsOn` lists them.
+    func rows(weekStartsOn: PlanDay) -> [Row] {
+        (slots.map(Row.slot) + unfilled.map(Row.unfilled)).sorted {
+            $0.day.position(inWeekStartingOn: weekStartsOn) < $1.day.position(inWeekStartingOn: weekStartsOn)
+        }
     }
 
     func slot(id: String) -> AutopilotSlot? {

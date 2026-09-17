@@ -111,7 +111,7 @@ struct WeekContextSheet: View {
             Section {
                 WeekPresetTiles(draft: $draft, guestServings: guestServings)
             } header: {
-                Text(week.weekOf())
+                Text(week.weekOf(weekStartsOn: households.weekStartsOn))
             } footer: {
                 Text(presetFooter)
             }
@@ -137,12 +137,17 @@ struct WeekContextSheet: View {
                     Text("Guests and Extra Meals")
                 }
                 Section {
-                    ForEach(PlanDay.allCases) { day in
+                    ForEach(PlanDay.week(startingOn: households.weekStartsOn)) { day in
                         NavigationLink {
-                            DayOverrideForm(title: day.title(in: week), limits: limits, override: $draft[day])
-                                .disabled(!canEdit)
+                            DayOverrideForm(
+                                title: day.title(in: week, weekStartsOn: households.weekStartsOn), limits: limits,
+                                override: $draft[day]
+                            )
+                            .disabled(!canEdit)
                         } label: {
-                            LabeledContent(day.title(in: week), value: Self.summary(draft[day]))
+                            LabeledContent(
+                                day.title(in: week, weekStartsOn: households.weekStartsOn),
+                                value: Self.summary(draft[day]))
                         }
                     }
                 } header: {

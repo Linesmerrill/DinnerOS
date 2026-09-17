@@ -12,6 +12,26 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/recommendations"
 )
 
+// With Sunday-first weeks, a meal cooked on a Sunday belongs to the week that
+// Sunday starts, and the week's entries are listed Sunday first.
+func TestSundayFirstWeeks(t *testing.T) {
+	sunday := events.Event{RecipeID: "r1", Payload: events.RecipeCooked{Date: "2026-09-20"}}
+	if got := eventWeek(sunday, time.UTC, planning.Sunday); got != "2026-W39" {
+		t.Errorf("Sunday-first week of Sep 20 = %s, want 2026-W39", got)
+	}
+	if got := eventWeek(sunday, time.UTC, ""); got != "2026-W38" {
+		t.Errorf("Monday-first week of Sep 20 = %s, want 2026-W38", got)
+	}
+	s := &snapshot{in: snapshotInput{FirstDay: planning.Sunday}}
+	if s.dayIndex("sun") != 0 || s.dayIndex("sat") != 6 || s.dayIndex("") != 7 {
+		t.Errorf("Sunday-first day order: sun %d, sat %d, none %d", s.dayIndex("sun"), s.dayIndex("sat"), s.dayIndex(""))
+	}
+	strip := buildWeekStrip(week("2026-W38"), week("2026-W38"), week("2026-W38"), time.UTC, planning.Sunday, nil, nil, []events.Event{sunday}, nil)
+	if strip.FirstDay != planning.Sunday || strip.Weeks[0].Cooked != 0 {
+		t.Errorf("strip = %+v; Sep 20 must not count as cooked in Sunday-first 2026-W38", strip)
+	}
+}
+
 func TestBuildWeekStrip(t *testing.T) {
 	loc, err := time.LoadLocation("America/Denver")
 	if err != nil {
@@ -38,7 +58,7 @@ func TestBuildWeekStrip(t *testing.T) {
 	}
 	earliestPlanned := week("2024-W10")
 
-	strip := buildWeekStrip(week("2026-W36"), week("2026-W40"), current, loc, plans, catalog, cooked, &earliestPlanned)
+	strip := buildWeekStrip(week("2026-W36"), week("2026-W40"), current, loc, planning.Monday, plans, catalog, cooked, &earliestPlanned)
 
 	want := []WeekSummary{
 		{Week: week("2026-W36"), Timing: TimingPast, Status: WeekStatusNone},
@@ -81,7 +101,7 @@ func TestWeekStripCountsAddOnsSeparately(t *testing.T) {
 	}
 	only := func(plans map[planning.Week]planning.Summary) WeekSummary {
 		t.Helper()
-		strip := buildWeekStrip(current, current, current, time.UTC, plans, catalog, nil, nil)
+		strip := buildWeekStrip(current, current, current, time.UTC, planning.Monday, plans, catalog, nil, nil)
 		if len(strip.Weeks) != 1 {
 			t.Fatalf("strip has %d weeks, want 1", len(strip.Weeks))
 		}
@@ -100,7 +120,7 @@ func TestWeekStripCountsAddOnsSeparately(t *testing.T) {
 }
 
 func TestBuildWeekStripWithoutHistory(t *testing.T) {
-	strip := buildWeekStrip(week("2026-W37"), current, current, time.UTC, nil, nil, nil, nil)
+	strip := buildWeekStrip(week("2026-W37"), current, current, time.UTC, planning.Monday, nil, nil, nil, nil)
 	if strip.Earliest != nil {
 		t.Errorf("earliest = %v, want none", strip.Earliest)
 	}

@@ -191,7 +191,7 @@ func (h *Handler) menu(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := MenuResponse{
-		Week: m.Week.String(), WeekStart: m.Week.Date(planning.Monday), WeekEnd: m.Week.Date(planning.Sunday),
+		Week: m.Week.String(), WeekStart: m.Week.StartDateOn(m.FirstDay), WeekEnd: m.Week.EndDateOn(m.FirstDay),
 		CurrentWeek: m.CurrentWeek.String(), Timing: m.Timing, Sections: make([]SectionResponse, 0, len(m.Sections)),
 	}
 	if m.Plan != nil {
@@ -306,7 +306,7 @@ func (h *Handler) weeks(w http.ResponseWriter, r *http.Request) {
 	resp := WeeksResponse{Items: make([]WeekSummaryResponse, 0, len(strip.Weeks))}
 	for _, ws := range strip.Weeks {
 		resp.Items = append(resp.Items, WeekSummaryResponse{
-			Week: ws.Week.String(), WeekStart: ws.Week.Date(planning.Monday), WeekEnd: ws.Week.Date(planning.Sunday), Timing: ws.Timing,
+			Week: ws.Week.String(), WeekStart: ws.Week.StartDateOn(strip.FirstDay), WeekEnd: ws.Week.EndDateOn(strip.FirstDay), Timing: ws.Timing,
 			PlannedCount: ws.Planned, AddOnCount: ws.AddOns, CookedCount: ws.Cooked, OrderedCount: ws.Ordered, Status: ws.Status,
 		})
 	}

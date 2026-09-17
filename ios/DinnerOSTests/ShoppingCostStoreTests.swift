@@ -45,7 +45,8 @@ struct ShoppingCostStoreTests {
         let store = ShoppingStore(
             session: session, api: ShoppingAPI(client: client), checks: InMemoryGroceryChecks(), now: { instant },
             openURL: { _ in false })
-        store.activate(householdID: "household-1", timeZone: TimeZone(identifier: "America/Denver") ?? .gmt)
+        store.activate(
+            householdID: "household-1", timeZone: TimeZone(identifier: "America/Denver") ?? .gmt, weekStartsOn: .mon)
         store.setPermissions(canEdit: true, canConfirm: true)
         return (store, transport)
     }

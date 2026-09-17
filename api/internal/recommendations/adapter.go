@@ -69,6 +69,7 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 	if err != nil {
 		return autopilot.Input{}, inputData{}, fmt.Errorf("load household: %w", err)
 	}
+	first := planning.Day(household.FirstDay())
 	catalog, err := s.recipes.Catalog(ctx, householdID)
 	if err != nil {
 		return autopilot.Input{}, inputData{}, fmt.Errorf("load catalog: %w", err)
@@ -92,7 +93,7 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 		var r learningRead
 		r.feedback, r.err = s.events.List(ctx, events.Query{
 			HouseholdID: householdID, Types: learningEventTypes,
-			Since: w.Monday().AddDate(0, 0, -7*learningWeeks), Limit: learningEventLimit, Newest: true,
+			Since: w.StartOn(first).AddDate(0, 0, -7*learningWeeks), Limit: learningEventLimit, Newest: true,
 		})
 		if r.err != nil {
 			r.err = fmt.Errorf("load feedback events: %w", r.err)
@@ -108,7 +109,7 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 	}
 	outcomes, err := s.events.List(ctx, events.Query{
 		HouseholdID: householdID, Types: []events.Type{events.TypeRecipeCooked, events.TypeRecipeSkipped},
-		Since: w.Monday().AddDate(0, 0, -7*historyWeeks), Limit: events.MaxListLimit,
+		Since: w.StartOn(first).AddDate(0, 0, -7*historyWeeks), Limit: events.MaxListLimit,
 	})
 	if err != nil {
 		<-learningDone
@@ -133,8 +134,9 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 		Week:        w.String(),
 		Preferences: profile.preferences(household.DefaultServings),
 		Context:     wc.providerContext(s.pantryLow(ctx, householdID)),
+		WeekStart:   autopilot.Day(first),
 	}
-	data := inputData{byID: make(map[string]recipes.Recipe, len(catalog)), context: weekContext(w, household.TimeZone, household.OrderDay, device)}
+	data := inputData{byID: make(map[string]recipes.Recipe, len(catalog)), context: weekContext(w, first, household.TimeZone, household.OrderDay, device)}
 	data.context.apply(&in.Context)
 	bands := profile.bands()
 	addonIDs := map[string]bool{}
@@ -186,11 +188,11 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 			if err != nil {
 				day = e.OccurredAt.In(loc)
 			}
-			week = planning.WeekOf(day).String()
+			week = planning.WeekOfOn(day, first).String()
 		}
 		in.History = append(in.History, autopilot.Interaction{ItemID: e.RecipeID, Kind: kind, Week: week, Reason: reason, At: e.OccurredAt, Busy: busy[week]})
 	}
-	s.addFeedback(&in, &data, feedback, loc)
+	s.addFeedback(&in, &data, feedback, loc, first)
 	for _, e := range plan.Entries {
 		// Add-ons (a pairing's garlic bread) go with a meal; they don't take
 		// its day or count as a meal.
@@ -206,14 +208,14 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 // provider learns from, and finds the last learning reset. Events are newest
 // first; when the read hit its limit, learning starts at the oldest event
 // read, so a reset that fell past the limit can't let older feedback back in.
-func (s *Service) addFeedback(in *autopilot.Input, data *inputData, list []events.Event, loc *time.Location) {
+func (s *Service) addFeedback(in *autopilot.Input, data *inputData, list []events.Event, loc *time.Location, first planning.Day) {
 	if len(list) >= learningEventLimit {
 		in.LearningSince = list[len(list)-1].OccurredAt
 	}
 	for _, e := range list {
 		week := e.Week
 		if week == "" {
-			week = planning.WeekOf(e.OccurredAt.In(loc)).String()
+			week = planning.WeekOfOn(e.OccurredAt.In(loc), first).String()
 		}
 		h := autopilot.Interaction{ItemID: e.RecipeID, Week: week, At: e.OccurredAt}
 		switch payload := e.Payload.(type) {

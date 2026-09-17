@@ -59,9 +59,10 @@ struct MainTabView: View {
         }
         // Another household clears the previous one's shopping state. The open handoff is read
         // so "Did you order these?" can be asked when the app returns from Walmart.
-        .task(id: households.current?.household.id) {
+        .task(id: households.current?.household.weekScope) {
             guard let household = households.current?.household else { return }
-            shopping.activate(householdID: household.id, timeZone: household.planningTimeZone)
+            shopping.activate(
+                householdID: household.id, timeZone: household.planningTimeZone, weekStartsOn: household.weekStartsOn)
             await shopping.refreshOpenHandoff(presenting: false)
         }
         // Hiding controls is a convenience; the API enforces both permissions.
@@ -119,7 +120,8 @@ struct MainTabView: View {
             pushedPantryItem = PushedPantryItem(itemID: itemID)
         } else if let week = route.subject?.shoppingWeek.flatMap(ISOWeek.init) {
             selection = .shop
-            shopping.activate(householdID: current.id, timeZone: current.planningTimeZone)
+            shopping.activate(
+                householdID: current.id, timeZone: current.planningTimeZone, weekStartsOn: current.weekStartsOn)
             let shopping = shopping
             Task { await shopping.show(week: week) }
         } else {

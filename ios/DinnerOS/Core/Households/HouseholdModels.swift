@@ -94,6 +94,32 @@ nonisolated struct Household: Decodable, Equatable, Sendable, Identifiable {
     /// What the household spent on meal kits, to compare grocery cost against; `nil` when not
     /// set, which turns the comparison off.
     var mealKit: MealKitBaseline? = nil
+    /// The day the household's weeks start on. Week keys stay ISO weeks; this decides which
+    /// seven dates a key covers (`ISOWeek.startDate(weekStartsOn:)`).
+    var weekStartsOn: PlanDay = PlanDay.isoWeekStart
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, defaultServings, timeZone, orderDay, createdBy, createdAt, updatedAt, mealKit, weekStartsOn
+    }
+}
+
+nonisolated extension Household {
+    /// `weekStartsOn` is additive: a server that doesn't send it, or sends a day this build
+    /// doesn't know, lays weeks out Monday to Sunday, the way it stored them.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(String.self, forKey: .id),
+            name: try container.decode(String.self, forKey: .name),
+            defaultServings: try container.decode(Int.self, forKey: .defaultServings),
+            timeZone: try container.decode(String.self, forKey: .timeZone),
+            orderDay: try container.decodeIfPresent(String.self, forKey: .orderDay),
+            createdBy: try container.decode(String.self, forKey: .createdBy),
+            createdAt: try container.decode(Date.self, forKey: .createdAt),
+            updatedAt: try container.decode(Date.self, forKey: .updatedAt),
+            mealKit: try container.decodeIfPresent(MealKitBaseline.self, forKey: .mealKit),
+            weekStartsOn: container.decodeLenient(PlanDay.self, forKey: .weekStartsOn) ?? PlanDay.isoWeekStart)
+    }
 }
 
 /// A meal kit baseline to save (`PATCH .../households/{id}` `mealKit`).
@@ -216,13 +242,17 @@ nonisolated struct HouseholdChanges: Encodable, Equatable, Sendable {
     var orderDay: String?
     /// The meal kit comparison: `.keep` omits it, `.clear` turns it off.
     var mealKit: FieldChange<MealKitInput> = .keep
+    /// The day weeks start on. The server moves meals whose dates now fall in a neighbouring
+    /// week into that week; `nil` leaves it alone.
+    var weekStartsOn: PlanDay? = nil
 
     var isEmpty: Bool {
         name == nil && timeZone == nil && defaultServings == nil && orderDay == nil && mealKit == .keep
+            && weekStartsOn == nil
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, timeZone, defaultServings, orderDay, mealKit
+        case name, timeZone, defaultServings, orderDay, mealKit, weekStartsOn
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -232,6 +262,7 @@ nonisolated struct HouseholdChanges: Encodable, Equatable, Sendable {
         try container.encodeIfPresent(defaultServings, forKey: .defaultServings)
         try container.encodeIfPresent(orderDay, forKey: .orderDay)
         try container.encodeChange(mealKit, forKey: .mealKit)
+        try container.encodeIfPresent(weekStartsOn, forKey: .weekStartsOn)
     }
 }
 

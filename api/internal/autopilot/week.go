@@ -27,6 +27,40 @@ func WeekStart(week string) (time.Time, error) {
 	return jan4.AddDate(0, 0, -offset+7*(number-1)), nil
 }
 
+// WeekStartOn returns the first day (UTC midnight) of week when weeks start
+// on first: the ISO Monday moved by 0 to 3 days for Monday to Thursday, and
+// back 3 to 1 days for Friday to Sunday, so the week keeps most of its ISO
+// week. An empty or unknown first day means Monday.
+func WeekStartOn(week string, first Day) (time.Time, error) {
+	monday, err := WeekStart(week)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return monday.AddDate(0, 0, startOffset(first)), nil
+}
+
+func startOffset(first Day) int {
+	switch i := first.Index(); {
+	case i < 0:
+		return 0
+	case i > 3:
+		return i - 7
+	default:
+		return i
+	}
+}
+
+// Position returns d's place in the week (0 for the first day) when weeks
+// start on first, or -1 for an unknown day. An empty or unknown first day
+// means Monday.
+func (d Day) Position(first Day) int {
+	i := d.Index()
+	if i < 0 {
+		return -1
+	}
+	return (i - max(first.Index(), 0) + len(Days)) % len(Days)
+}
+
 // WeeksBetween returns how many weeks b is after a (negative when before).
 // ok is false when either week is invalid.
 func WeeksBetween(a, b string) (weeks int, ok bool) {

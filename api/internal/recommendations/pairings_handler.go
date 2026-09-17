@@ -345,11 +345,11 @@ func pairingGroceryItemJSON(g WeekGroceryItem) PairingGroceryItemJSON {
 
 func newWeekPairingsResponse(v WeekPairingsView) WeekPairingsResponse {
 	resp := WeekPairingsResponse{
-		Week: v.Week.String(), StartDate: v.Week.Date(planning.Monday), EndDate: v.Week.Date(planning.Sunday),
+		Week: v.Week.String(), StartDate: v.Week.StartDateOn(v.FirstDay), EndDate: v.Week.EndDateOn(v.FirstDay),
 		Meals: make([]MealPairingsJSON, 0, len(v.Meals)), GroceryItems: make([]PairingGroceryItemJSON, 0, len(v.GroceryItems)),
 	}
 	for _, m := range v.Meals {
-		e := planning.NewEntryResponse(v.Week, m.Entry)
+		e := planning.NewEntryResponse(planning.Plan{Week: v.Week, FirstDay: v.FirstDay}, m.Entry)
 		resp.Meals = append(resp.Meals, MealPairingsJSON{
 			EntryID: e.ID, Day: e.Day, Date: e.Date, Recipe: ProposalRecipeJSON{ID: e.Recipe.ID, Name: e.Recipe.Name, ImageURL: e.Recipe.ImageURL},
 			Servings: e.Servings, MealCategories: orEmptyStrings(m.MealCategories), Pairings: pairingsJSON(m.Pairings),
@@ -377,7 +377,7 @@ func acceptPairingsJSON(res AcceptResult) ([]AddedPairingJSON, []SkippedPairingJ
 	for _, a := range res.PairingsAdded {
 		aj := AddedPairingJSON{ID: a.ID, SlotID: a.SlotID, Pairing: pairingJSON(a.Pairing)}
 		if a.Entry != nil {
-			e := planning.NewEntryResponse(res.Plan.Week, *a.Entry)
+			e := planning.NewEntryResponse(res.Plan, *a.Entry)
 			aj.Entry = &e
 		}
 		if a.GroceryItem != nil {
@@ -418,7 +418,7 @@ func (h *Handler) acceptPairing(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := PairingAcceptResponse{Status: res.Status, Pairing: pairingJSON(res.Pairing), Plan: planning.NewPlanResponse(res.Plan)}
 	if res.Entry != nil {
-		e := planning.NewEntryResponse(res.Plan.Week, *res.Entry)
+		e := planning.NewEntryResponse(res.Plan, *res.Entry)
 		resp.Entry = &e
 	}
 	if res.GroceryItem != nil {

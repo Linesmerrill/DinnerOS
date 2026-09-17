@@ -7,6 +7,8 @@ nonisolated struct IntentHousehold: Equatable, Sendable {
     let timeZone: TimeZone
     /// Whether the member may plan meals (`plan.edit`).
     let canPlan: Bool
+    /// The day the household's weeks start on.
+    var weekStartsOn: PlanDay = PlanDay.defaultWeekStart
 }
 
 /// Where the member stands before an intent can do anything.
@@ -44,11 +46,21 @@ nonisolated enum PlanDinnersOutcome: Equatable, Sendable {
     case unavailable(String)
     case notAllowed
     case notSetUp
-    case finalized(ISOWeek)
-    case skipped(ISOWeek)
-    case nothingSuggested(ISOWeek)
-    /// Meals in day order, as "Monday: Tacos".
-    case planned(ISOWeek, meals: [PlannedMeal])
+    case finalized(PlanningWeek)
+    case skipped(PlanningWeek)
+    case nothingSuggested(PlanningWeek)
+    /// Meals in the week's day order, as "Monday: Tacos".
+    case planned(PlanningWeek, meals: [PlannedMeal])
+}
+
+/// A week key and the day the household's weeks start on, which together name its dates.
+nonisolated struct PlanningWeek: Hashable, Sendable {
+    let week: ISOWeek
+    let weekStartsOn: PlanDay
+
+    func rangeLabel(locale: Locale = .autoupdatingCurrent) -> String {
+        week.rangeLabel(weekStartsOn: weekStartsOn, locale: locale)
+    }
 }
 
 nonisolated struct PlannedMeal: Equatable, Sendable {
@@ -83,14 +95,13 @@ final class DinnerIntentActions {
         self.now = now
     }
 
-    /// The week "Plan my dinners" plans: this week Monday through Thursday, while most of its
-    /// dinners are still ahead; next week from Friday on, when households plan the week coming.
-    static func upcomingWeek(now: Date, timeZone: TimeZone) -> ISOWeek {
-        let current = ISOWeek.current(in: timeZone, now: now)
-        switch PlanDay.containing(now, in: timeZone) {
-        case .fri, .sat, .sun: return current.next
-        default: return current
-        }
+    /// The week "Plan my dinners" plans: this week for its first four days, while most of its
+    /// dinners are still ahead (Monday through Thursday for Monday weeks, Sunday through
+    /// Wednesday for Sunday weeks); next week after that, when households plan the week coming.
+    static func upcomingWeek(now: Date, timeZone: TimeZone, weekStartsOn: PlanDay) -> ISOWeek {
+        let current = ISOWeek.current(in: timeZone, weekStartsOn: weekStartsOn, now: now)
+        let today = PlanDay.containing(now, in: timeZone)
+        return today.position(inWeekStartingOn: weekStartsOn) >= 4 ? current.next : current
     }
 
     func planDinners() async -> PlanDinnersOutcome {
@@ -102,25 +113,27 @@ final class DinnerIntentActions {
         case .ready(let ready): household = ready
         }
         guard household.canPlan else { return .notAllowed }
-        let week = Self.upcomingWeek(now: now(), timeZone: household.timeZone)
+        let week = Self.upcomingWeek(now: now(), timeZone: household.timeZone, weekStartsOn: household.weekStartsOn)
+        let named = PlanningWeek(week: week, weekStartsOn: household.weekStartsOn)
         do {
             guard try await services.isAutopilotConfigured(householdID: household.id) else { return .notSetUp }
             if try await services.plan(week: week, householdID: household.id).status != .draft {
-                return .finalized(week)
+                return .finalized(named)
             }
             let proposal = try await services.generate(week: week, householdID: household.id)
             guard !proposal.slots.isEmpty else {
                 let skipped = proposal.messages.contains { $0.code == "week_skipped" }
-                return skipped ? .skipped(week) : .nothingSuggested(week)
+                return skipped ? .skipped(named) : .nothingSuggested(named)
             }
             services.openReview(week: week)
-            let meals = proposal.slots.sorted { $0.day.offset < $1.day.offset }.map {
-                PlannedMeal(day: $0.day, name: $0.recipe.name)
-            }
+            let start = household.weekStartsOn
+            let meals = proposal.slots
+                .sorted { $0.day.position(inWeekStartingOn: start) < $1.day.position(inWeekStartingOn: start) }
+                .map { PlannedMeal(day: $0.day, name: $0.recipe.name) }
             Self.logger.info("Siri planned \(meals.count, privacy: .public) meals")
-            return .planned(week, meals: meals)
+            return .planned(named, meals: meals)
         } catch let error where AutopilotConflict(error) == .planFinalized {
-            return .finalized(week)
+            return .finalized(named)
         } catch {
             return .unavailable(HouseholdStore.message(for: error))
         }
@@ -135,7 +148,7 @@ final class DinnerIntentActions {
         case .ready(let ready): household = ready
         }
         let date = now()
-        let week = ISOWeek.current(in: household.timeZone, now: date)
+        let week = ISOWeek.current(in: household.timeZone, weekStartsOn: household.weekStartsOn, now: date)
         let today = PlanDay.containing(date, in: household.timeZone)
         do {
             let entries = try await services.plan(week: week, householdID: household.id).entries.filter {

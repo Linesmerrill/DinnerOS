@@ -124,8 +124,11 @@ struct RecipePlanBar: View {
             : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
         return layout {
             Menu {
-                Section(entry.day?.title(in: plans.week) ?? String(localized: "Unscheduled")) {
-                    ForEach(PlanDay.allCases) { day in
+                Section(
+                    entry.day?.title(in: plans.week, weekStartsOn: plans.weekStartsOn)
+                        ?? String(localized: "Unscheduled")
+                ) {
+                    ForEach(PlanDay.week(startingOn: plans.weekStartsOn)) { day in
                         Button(day.name()) {
                             Task { await planner.move(entry, to: day) }
                         }

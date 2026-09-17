@@ -28,7 +28,8 @@ struct OrderConfirmationSheet: View {
     private var groups: OrderConfirmationGroups {
         let plan = plans?.plan
         return OrderConfirmationGroups(
-            lines: draft.lines, entries: plan?.week == handoff.week ? plan?.entries : nil)
+            lines: draft.lines, entries: plan?.week == handoff.week ? plan?.entries : nil,
+            weekStartsOn: plans?.weekStartsOn ?? PlanDay.defaultWeekStart)
     }
 
     var body: some View {

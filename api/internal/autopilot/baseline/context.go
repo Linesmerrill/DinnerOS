@@ -213,7 +213,7 @@ func (m *model) contextFor(s *slot, it *item) (float64, []reason) {
 
 	// Order date: perishable meals early in the order week.
 	if !m.ctx.orderDate.IsZero() && perishable(it) {
-		date := m.weekStart.AddDate(0, 0, s.day)
+		date := m.date(s.day)
 		since := ((int(date.Sub(m.ctx.orderDate).Hours()/24))%7 + 7) % 7
 		order := m.ctx.orderDate.Weekday().String()
 		switch {

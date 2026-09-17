@@ -138,7 +138,8 @@ smoker night: chicken or pork, long cook OK":
 
 ### Week context
 
-Per ISO week, all optional: `skip` the week, `busy`, `maxMinutes` (hard cap),
+Per week (keyed like an ISO week; its dates follow the household's
+`weekStartsOn`), all optional: `skip` the week, `busy`, `maxMinutes` (hard cap),
 `servings`, `mealsPerWeek`, per-day overrides (`skip`, `maxMinutes`,
 `servings`), and a free-text `note` that V1 stores but doesn't interpret.
 Guests are a servings override for the week or a day, or more meals.
@@ -919,7 +920,7 @@ App Shortcuts (`DinnerShortcuts`), with the logic in `DinnerIntentActions`
 behind a `DinnerIntentServices` protocol that calls the existing stores:
 
 - **"Plan my dinners with DinnerOS"** plans the upcoming week — this week
-  Monday through Thursday, next week from Friday — through the same
+  its first four days, next week after that (Sunday–Wednesday for a Sunday-first household) — through the same
   `AutopilotStore.generate` path, so allowed device signals are sent. It
   answers with a one-sentence summary ("Autopilot suggested 5 dinners for
   Sep 21 – 27, starting with Smoked Pork Shoulder on Sunday…") and opens the

@@ -174,7 +174,7 @@ struct ShoppingCatalogTests {
         let store = ShoppingStore(
             session: session, api: ShoppingAPI(client: client), checks: InMemoryGroceryChecks(),
             openURL: { _ in true })
-        store.activate(householdID: "household-1", timeZone: .gmt)
+        store.activate(householdID: "household-1", timeZone: .gmt, weekStartsOn: .mon)
         return Harness(store: store, transport: transport)
     }
 

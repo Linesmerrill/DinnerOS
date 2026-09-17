@@ -67,18 +67,26 @@ struct AutopilotFormattingTests {
         let vocabulary = try vocabulary()
         let items = try JSONCoding.makeDecoder().decode(AutopilotHistory.self, from: AutopilotFixtures.history).items
 
-        #expect(AutopilotFormat.historyTitle(items[0], vocabulary: vocabulary, recipeName: nil) == "Cook-Time Mix")
+        #expect(
+            AutopilotFormat.historyTitle(items[0], vocabulary: vocabulary, recipeName: nil, weekStartsOn: .mon)
+                == "Cook-Time Mix")
         #expect(AutopilotFormat.historyLines(items[0], vocabulary: vocabulary) == ["Max long meals: 2 → 1"])
         #expect(
             AutopilotFormat.historyLines(items[1], vocabulary: vocabulary)
                 == ["Liked cuisines: added Thai; removed italian"])
         #expect(
-            AutopilotFormat.historyTitle(items[2], vocabulary: vocabulary, recipeName: nil, locale: locale)
+            AutopilotFormat.historyTitle(
+                items[2], vocabulary: vocabulary, recipeName: nil, weekStartsOn: .mon, locale: locale)
                 == "Week of Sep 14, 2026")
+        #expect(
+            AutopilotFormat.historyTitle(
+                items[2], vocabulary: vocabulary, recipeName: nil, weekStartsOn: .sun, locale: locale)
+                == "Week of Sep 13, 2026")
         #expect(AutopilotFormat.historyLines(items[2], vocabulary: vocabulary) == ["Time limit: not set → 20"])
         #expect(AutopilotFormat.historyLines(items[3], vocabulary: vocabulary) == ["Cleared"])
         #expect(
-            AutopilotFormat.historyTitle(items[4], vocabulary: vocabulary, recipeName: "Pork Shoulder")
+            AutopilotFormat.historyTitle(
+                items[4], vocabulary: vocabulary, recipeName: "Pork Shoulder", weekStartsOn: .mon)
                 == "Good for Smoker: Pork Shoulder")
         #expect(AutopilotFormat.historyLines(items[4], vocabulary: vocabulary) == ["Automatic → Yes"])
         #expect(AutopilotFormat.fieldName("weekdayRules.sun") == "Sunday rule")

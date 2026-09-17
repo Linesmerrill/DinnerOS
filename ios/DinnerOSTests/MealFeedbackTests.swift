@@ -10,36 +10,46 @@ struct MealFeedbackTests {
 
     @Test func everyMealInAPastWeekHasHadItsNight() {
         for day in PlanDay.allCases {
-            #expect(MealFeedback.hasHappened(day: day, timing: .past, today: nil))
+            #expect(MealFeedback.hasHappened(day: day, timing: .past, today: nil, weekStartsOn: .mon))
         }
         // A past week's meal with no day still happened, or didn't, a week ago either way.
-        #expect(MealFeedback.hasHappened(day: nil, timing: .past, today: nil))
+        #expect(MealFeedback.hasHappened(day: nil, timing: .past, today: nil, weekStartsOn: .mon))
     }
 
     @Test func thisWeekAsksOnlyAboutTodayAndTheDaysBefore() {
-        #expect(MealFeedback.hasHappened(day: .mon, timing: .current, today: .wed))
+        #expect(MealFeedback.hasHappened(day: .mon, timing: .current, today: .wed, weekStartsOn: .mon))
         #expect(
-            MealFeedback.hasHappened(day: .wed, timing: .current, today: .wed),
+            MealFeedback.hasHappened(day: .wed, timing: .current, today: .wed, weekStartsOn: .mon),
             "tonight's meal is fair to ask about")
-        #expect(!MealFeedback.hasHappened(day: .thu, timing: .current, today: .wed))
-        #expect(!MealFeedback.hasHappened(day: .sun, timing: .current, today: .mon))
+        #expect(!MealFeedback.hasHappened(day: .thu, timing: .current, today: .wed, weekStartsOn: .mon))
+        #expect(!MealFeedback.hasHappened(day: .sun, timing: .current, today: .mon, weekStartsOn: .mon))
+    }
+
+    /// With Sunday weeks, Sunday comes first: by Monday its meal has happened, and Saturday's hasn't.
+    @Test func thisWeekFollowsTheHouseholdsWeekStartDay() {
+        #expect(MealFeedback.hasHappened(day: .sun, timing: .current, today: .mon, weekStartsOn: .sun))
+        #expect(!MealFeedback.hasHappened(day: .sat, timing: .current, today: .mon, weekStartsOn: .sun))
+        #expect(!MealFeedback.hasHappened(day: .sun, timing: .current, today: .mon, weekStartsOn: .mon))
+        // Saturday weeks: Friday is the last night.
+        #expect(MealFeedback.hasHappened(day: .sat, timing: .current, today: .fri, weekStartsOn: .sat))
+        #expect(!MealFeedback.hasHappened(day: .fri, timing: .current, today: .sat, weekStartsOn: .sat))
     }
 
     /// Asking about a meal planned for the week without a night would be asking about nothing.
     @Test func aMealWithNoDayIsNeverAskedAboutInTheCurrentWeek() {
-        #expect(!MealFeedback.hasHappened(day: nil, timing: .current, today: .wed))
+        #expect(!MealFeedback.hasHappened(day: nil, timing: .current, today: .wed, weekStartsOn: .mon))
     }
 
     @Test func anUpcomingWeekIsNeverAskedAbout() {
         for day in PlanDay.allCases {
-            #expect(!MealFeedback.hasHappened(day: day, timing: .upcoming, today: .wed))
+            #expect(!MealFeedback.hasHappened(day: day, timing: .upcoming, today: .wed, weekStartsOn: .mon))
         }
     }
 
     /// A week the app can't place — no "today" for the current week — asks nothing rather than
     /// asking about every meal in it.
     @Test func withoutATodayTheCurrentWeekAsksNothing() {
-        #expect(!MealFeedback.hasHappened(day: .mon, timing: .current, today: nil))
+        #expect(!MealFeedback.hasHappened(day: .mon, timing: .current, today: nil, weekStartsOn: .mon))
     }
 
     // MARK: - Showing a saved rating on the cards
@@ -56,7 +66,7 @@ struct MealFeedbackTests {
         await session.restore()
         let instant = try #require(JSONCoding.parseDate("2026-09-16T12:00:00Z"))
         let store = MenuStore(session: session, api: MenuAPI(client: client), now: { instant })
-        await store.activate(householdID: "household-1", timeZone: Self.denver)
+        await store.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .mon)
         return store
     }
 

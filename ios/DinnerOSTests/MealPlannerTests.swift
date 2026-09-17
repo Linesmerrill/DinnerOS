@@ -26,7 +26,7 @@ struct MealPlannerTests {
         let library = RecipeLibrary(session: session, api: RecipesAPI(client: client))
         // The preview household's usual size is 4.
         let households = HouseholdPreviewData.store(session: session)
-        await plans.activate(householdID: "household-1", timeZone: .gmt)
+        await plans.activate(householdID: "household-1", timeZone: .gmt, weekStartsOn: .mon)
         await library.activate(householdID: "household-1")
         let planner = MealPlanner(plans: plans, library: library, households: households)
         return Harness(planner: planner, plans: plans, planServer: planServer)

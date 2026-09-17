@@ -47,8 +47,11 @@ final class MenuStore {
     /// The Menu screen's All Meals list.
     let allMeals: MenuRecipeList
 
+    /// The day the household's weeks start on, which decides the dates a week key covers.
+    private(set) var weekStartsOn: PlanDay = PlanDay.defaultWeekStart
+
     /// This week in the household's time zone.
-    var currentWeek: ISOWeek { .current(in: timeZone, now: now()) }
+    var currentWeek: ISOWeek { .current(in: timeZone, weekStartsOn: weekStartsOn, now: now()) }
 
     /// The selected week's timing, from the menu when it's loaded.
     var selectedTiming: WeekTiming {
@@ -100,7 +103,7 @@ final class MenuStore {
         self.session = session
         self.api = api
         self.now = now
-        let week = ISOWeek.current(in: .autoupdatingCurrent, now: now())
+        let week = ISOWeek.current(in: .autoupdatingCurrent, weekStartsOn: PlanDay.defaultWeekStart, now: now())
         selectedWeek = week
         oldestWeek = week.adding(weeks: -Self.weeksBefore)
         allMeals = MenuRecipeList(session: session, api: api)
@@ -133,9 +136,28 @@ final class MenuStore {
 
     /// Shows `householdID`'s menu, starting at this week in `timeZone`. Loads unless that
     /// household's menu is already loaded or loading.
-    func activate(householdID: String, timeZone: TimeZone) async {
+    ///
+    /// A new `weekStartsOn` for the same household reloads the menu, the strip's counts, and All
+    /// Meals: the server moved meals whose dates now fall in a neighbouring week. When this week
+    /// was selected, the new this week is selected instead.
+    func activate(householdID: String, timeZone: TimeZone, weekStartsOn: PlanDay) async {
+        let wasCurrent = selectedWeek == currentWeek
+        let startChanged = weekStartsOn != self.weekStartsOn
         self.timeZone = timeZone
+        self.weekStartsOn = weekStartsOn
         if householdID == self.householdID, phase != .idle {
+            guard startChanged else { return }
+            knownPlans = [:]
+            if wasCurrent, selectedWeek != currentWeek {
+                selectedWeek = currentWeek
+                async let meals: Void = allMeals.setWeek(selectedWeek)
+                async let weeks: Void = loadWeeks(around: selectedWeek)
+                await loadMenu(clearing: true)
+                await meals
+                await weeks
+            } else {
+                await reload()
+            }
             return
         }
         if householdID != self.householdID {

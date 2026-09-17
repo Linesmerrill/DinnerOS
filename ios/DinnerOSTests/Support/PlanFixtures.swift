@@ -74,8 +74,10 @@ nonisolated enum PlanFixtures {
         }
         """#.utf8)
 
-    static func dates(for week: String) -> (String, String) {
-        guard let parsed = ISOWeek(week), let start = parsed.startDate, let end = parsed.endDate else {
+    static func dates(for week: String, weekStartsOn: PlanDay = .mon) -> (String, String) {
+        guard let parsed = ISOWeek(week), let start = parsed.startDate(weekStartsOn: weekStartsOn),
+            let end = parsed.endDate(weekStartsOn: weekStartsOn)
+        else {
             return ("", "")
         }
         let style = Date.ISO8601FormatStyle(timeZone: .gmt).year().month().day()

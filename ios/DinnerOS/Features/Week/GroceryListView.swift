@@ -138,7 +138,8 @@ struct GroceryListContent: View {
                         ShareLink(
                             item: text,
                             subject: Text("Grocery List"),
-                            preview: SharePreview(Text("Grocery List: \(model.week.rangeLabel())"))
+                            preview: SharePreview(
+                                Text("Grocery List: \(model.week.rangeLabel(weekStartsOn: model.weekStartsOn))"))
                         ) {
                             Label("Share", systemImage: "square.and.arrow.up")
                         }
@@ -254,7 +255,7 @@ struct GroceryListContent: View {
             }
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(model.week.rangeLabel())
+                    Text(model.week.rangeLabel(weekStartsOn: model.weekStartsOn))
                         .font(.headline)
                     if !list.isEmpty {
                         Text("\(model.remainingCount) of \(list.allItems.count) left to check off")

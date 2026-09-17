@@ -22,6 +22,15 @@ type CreatedListener interface {
 	HouseholdCreated(ctx context.Context, householdID string)
 }
 
+// WeekStartListener keeps week-based data in step when a household's first
+// day of the week changes. *planning.Service implements it: ChangeWeekStart
+// moves scheduled meals whose date now falls in another week into that week
+// (before the new first day is saved), and FinishWeekStart tidies up after.
+type WeekStartListener interface {
+	ChangeWeekStart(ctx context.Context, householdID, from, to string) (int, error)
+	FinishWeekStart(ctx context.Context, householdID string) error
+}
+
 // Service implements household and membership use cases. Methods that act on
 // an existing household take the caller's Membership, loaded by Authorize (or
 // the RequirePermission middleware), and check its permissions themselves.
@@ -29,6 +38,7 @@ type Service struct {
 	store     Store
 	users     UserDirectory
 	onCreated CreatedListener
+	weekStart WeekStartListener
 	now       func() time.Time
 	logger    *slog.Logger
 }
@@ -40,13 +50,16 @@ type ServiceOptions struct {
 	Logger *slog.Logger
 	// OnCreated, when set, is told about each household Create makes.
 	OnCreated CreatedListener
+	// OnWeekStart, when set, moves meals when the first day of the week
+	// changes. Without it the first day can still change, and nothing moves.
+	OnWeekStart WeekStartListener
 	// Now is the clock. Default time.Now.
 	Now func() time.Time
 }
 
 // NewService returns a Service.
 func NewService(opts ServiceOptions) *Service {
-	s := &Service{store: opts.Store, users: opts.Users, onCreated: opts.OnCreated, now: opts.Now, logger: opts.Logger}
+	s := &Service{store: opts.Store, users: opts.Users, onCreated: opts.OnCreated, weekStart: opts.OnWeekStart, now: opts.Now, logger: opts.Logger}
 	if s.now == nil {
 		s.now = time.Now
 	}
@@ -73,12 +86,19 @@ func (s *Service) Create(ctx context.Context, userID string, in CreateInput) (Ho
 	if err := validateServings(servings); err != nil {
 		return Household{}, Membership{}, err
 	}
+	weekStart := DefaultWeekStart
+	if in.WeekStartsOn != nil {
+		if weekStart, err = normalizeWeekStart(*in.WeekStartsOn); err != nil {
+			return Household{}, Membership{}, err
+		}
+	}
 
 	now := s.now().UTC()
 	h, err := s.store.CreateHousehold(ctx, Household{
 		Name:            name,
 		DefaultServings: servings,
 		TimeZone:        tz,
+		WeekStartsOn:    weekStart,
 		CreatedBy:       userID,
 		CreatedAt:       now,
 		UpdatedAt:       now,
@@ -191,8 +211,8 @@ func (s *Service) Update(ctx context.Context, actor Membership, in UpdateInput) 
 		return Household{}, ErrForbidden
 	}
 	var patch HouseholdPatch
-	if in.Name == nil && in.TimeZone == nil && in.DefaultServings == nil && in.OrderDay == nil && !in.SetMealKit {
-		return Household{}, invalid("at least one of name, timeZone, defaultServings, orderDay, or mealKit is required")
+	if in.Name == nil && in.TimeZone == nil && in.DefaultServings == nil && in.OrderDay == nil && in.WeekStartsOn == nil && !in.SetMealKit {
+		return Household{}, invalid("at least one of name, timeZone, defaultServings, orderDay, weekStartsOn, or mealKit is required")
 	}
 	if in.SetMealKit {
 		if err := validateMealKit(in.MealKit); err != nil {
@@ -232,11 +252,67 @@ func (s *Service) Update(ctx context.Context, actor Membership, in UpdateInput) 
 		}
 		patch.OrderDay = &day
 	}
+	moving := false
+	if in.WeekStartsOn != nil {
+		day, err := normalizeWeekStart(*in.WeekStartsOn)
+		if err != nil {
+			return Household{}, err
+		}
+		patch.WeekStartsOn = &day
+		if moving, err = s.moveForWeekStart(ctx, actor.HouseholdID, day); err != nil {
+			return Household{}, err
+		}
+	}
 	h, err := s.store.UpdateHousehold(ctx, actor.HouseholdID, patch, s.now().UTC())
 	if err != nil {
 		return Household{}, err
 	}
+	if moving {
+		// The marks only guard a retry of this change; leaving them behind
+		// is harmless, so a failure here doesn't fail the saved change.
+		if err := s.weekStart.FinishWeekStart(ctx, actor.HouseholdID); err != nil {
+			s.logger.ErrorContext(ctx, "finish week start change", "householdId", actor.HouseholdID, "error", err)
+		}
+	}
 	return h, nil
+}
+
+// moveForWeekStart moves the household's meals for a new first day of the
+// week, before it is saved, so every meal keeps its date. It reports whether
+// the first day actually changes.
+func (s *Service) moveForWeekStart(ctx context.Context, householdID, to string) (bool, error) {
+	current, err := s.store.GetHousehold(ctx, householdID)
+	if err != nil {
+		return false, err
+	}
+	from := current.FirstDay()
+	if from == to || s.weekStart == nil {
+		return false, nil
+	}
+	moved, err := s.weekStart.ChangeWeekStart(ctx, householdID, from, to)
+	if err != nil {
+		return false, fmt.Errorf("move meals for the new week start: %w", err)
+	}
+	s.logger.InfoContext(ctx, "week start changed", "householdId", householdID, "from", from, "to", to, "movedEntries", moved)
+	return true, nil
+}
+
+// WithWeekStartListener sets the listener that moves meals when a household's
+// first day of the week changes (ServiceOptions.OnWeekStart), for wiring
+// modules that are built after households, and returns s.
+func (s *Service) WithWeekStartListener(l WeekStartListener) *Service {
+	s.weekStart = l
+	return s
+}
+
+// WeekStartsOn returns the day the household's week starts on ("sun".."sat").
+// It implements planning.WeekStartSource.
+func (s *Service) WeekStartsOn(ctx context.Context, householdID string) (string, error) {
+	h, err := s.store.GetHousehold(ctx, householdID)
+	if err != nil {
+		return "", err
+	}
+	return h.FirstDay(), nil
 }
 
 // ChangeRole sets targetUserID's role. It requires members.changeRole, and the

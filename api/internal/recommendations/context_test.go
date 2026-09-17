@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot"
+	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
 )
 
 func date(s string) time.Time {
@@ -85,7 +86,7 @@ func TestUSHolidays(t *testing.T) {
 
 func TestWeekContextSignals(t *testing.T) {
 	w := mustWeek(t, "2026-W48") // Thanksgiving week: Mon 2026-11-23
-	c := weekContext(w, "America/Denver", "sat", DeviceSignals{Days: []DeviceDaySignals{{Day: "tue", Busyness: "busy", EveningFreeMinutes: 25}, {Day: "wed", TemperatureBand: "cold", Precipitation: "snow"}}})
+	c := weekContext(w, planning.Monday, "America/Denver", "sat", DeviceSignals{Days: []DeviceDaySignals{{Day: "tue", Busyness: "busy", EveningFreeMinutes: 25}, {Day: "wed", TemperatureBand: "cold", Precipitation: "snow"}}})
 	if c.Season != "fall" || c.OrderDate != "2026-11-28" || len(c.Holidays) != 1 || c.Holidays[0] != (Holiday{Day: "thu", Name: "Thanksgiving", Kind: "feast"}) {
 		t.Fatalf("weekContext() = %+v", c)
 	}
@@ -108,8 +109,18 @@ func TestWeekContextSignals(t *testing.T) {
 		t.Errorf("thu = %+v", thu)
 	}
 
+	// Sunday-first weeks: 2026-W40 runs Sun Sep 27 to Sat Oct 3, so a Sunday
+	// order day is the week's first date, not Oct 4.
+	if sun := weekContext(mustWeek(t, "2026-W40"), planning.Sunday, "America/Denver", "sun", DeviceSignals{}); sun.OrderDate != "2026-09-27" {
+		t.Errorf("Sunday-first order date = %q, want 2026-09-27", sun.OrderDate)
+	}
+	// Thanksgiving (Thu Nov 26) stays in 2026-W48 with Sunday-first weeks.
+	if sun := weekContext(w, planning.Sunday, "America/Denver", "", DeviceSignals{}); len(sun.Holidays) != 1 || sun.Holidays[0].Day != "thu" {
+		t.Errorf("Sunday-first holidays = %+v", sun.Holidays)
+	}
+
 	// Nothing known: no signals at all.
-	empty := weekContext(mustWeek(t, "2026-W38"), "", "", DeviceSignals{})
+	empty := weekContext(mustWeek(t, "2026-W38"), planning.Monday, "", "", DeviceSignals{})
 	awc := autopilot.WeekContext{}
 	empty.apply(&awc)
 	if len(empty.Holidays) != 0 || empty.OrderDate != "" || len(awc.Days) != 0 {

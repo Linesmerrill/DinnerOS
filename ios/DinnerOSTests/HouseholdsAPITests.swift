@@ -25,6 +25,50 @@ struct HouseholdsAPITests {
         #expect(detail.household.orderDay == nil)
     }
 
+    private func decodeHousehold(weekStartsOn: String?) throws -> Household {
+        var json = HouseholdFixtures.household(id: "household-1", name: "Lovelace")
+        if let weekStartsOn {
+            json = json.replacingOccurrences(of: #""timeZone":"#, with: #""weekStartsOn":\#(weekStartsOn),"timeZone":"#)
+        }
+        return try JSONCoding.makeDecoder().decode(Household.self, from: Data(json.utf8))
+    }
+
+    @Test func aHouseholdDecodesTheDayItsWeeksStartOn() throws {
+        #expect(try decodeHousehold(weekStartsOn: #""sun""#).weekStartsOn == .sun)
+        #expect(try decodeHousehold(weekStartsOn: #""sat""#).weekStartsOn == .sat)
+        #expect(try decodeHousehold(weekStartsOn: #""mon""#).weekStartsOn == .mon)
+    }
+
+    /// An older server has ISO weeks, Monday to Sunday, and a newer one may send a day this build
+    /// doesn't know; neither fails the household.
+    @Test func aMissingOrUnknownWeekStartReadsAsMonday() throws {
+        #expect(try decodeHousehold(weekStartsOn: nil).weekStartsOn == .mon)
+        #expect(try decodeHousehold(weekStartsOn: #""someday""#).weekStartsOn == .mon)
+        #expect(try decodeHousehold(weekStartsOn: "null").weekStartsOn == .mon)
+        #expect(try decodeHousehold(weekStartsOn: "3").weekStartsOn == .mon)
+        #expect(try decodeHousehold(weekStartsOn: nil).name == "Lovelace")
+    }
+
+    @Test func updateHouseholdSendsTheWeekStartDayOnlyWhenItChanges() async throws {
+        let transport = StubTransport { _ in
+            (200, Data(HouseholdFixtures.household(id: "household-1", name: "Lovelace").utf8))
+        }
+        let api = try makeAPI(transport)
+
+        var changes = HouseholdChanges()
+        #expect(changes.isEmpty)
+        changes.weekStartsOn = .sun
+        #expect(!changes.isEmpty)
+        _ = try await api.updateHousehold(id: "household-1", changes: changes, accessToken: "token-1")
+        #expect(transport.requests.last?.httpMethod == "PATCH")
+        #expect(transport.requests.last?.url?.path() == "/api/v1/households/household-1")
+        #expect(transport.requests.last?.jsonBody == ["weekStartsOn": "sun"])
+
+        _ = try await api.updateHousehold(
+            id: "household-1", changes: HouseholdChanges(orderDay: "thu", weekStartsOn: .sat), accessToken: "token-1")
+        #expect(transport.requests.last?.jsonBody == ["orderDay": "thu", "weekStartsOn": "sat"])
+    }
+
     @Test func updateHouseholdSendsOnlyTheOrderDayItMeansTo() async throws {
         let transport = StubTransport { _ in
             (200, Data(HouseholdFixtures.household(id: "household-1", name: "Lovelace").utf8))

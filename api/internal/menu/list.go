@@ -82,7 +82,7 @@ func (s *Service) Recipes(ctx context.Context, householdID, userID string, q Lis
 	if err != nil {
 		return ListPage{}, err
 	}
-	current, loc, err := s.clock(ctx, householdID)
+	current, loc, first, err := s.clock(ctx, householdID)
 	if err != nil {
 		return ListPage{}, err
 	}
@@ -90,7 +90,7 @@ func (s *Service) Recipes(ctx context.Context, householdID, userID string, q Lis
 	if err != nil {
 		return ListPage{}, err
 	}
-	in, err := s.load(ctx, householdID, userID, w, current, loc)
+	in, err := s.load(ctx, householdID, userID, w, current, loc, first)
 	if err != nil {
 		return ListPage{}, err
 	}

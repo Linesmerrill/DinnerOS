@@ -564,7 +564,8 @@ reminder for the week once that day arrives — until someone says they ordered.
   There is no scheduler, no background job, and nothing that can drift or fire
   twice.
 - **It belongs to its own week.** It starts on the order day and stops when the
-  week ends, so next week starts fresh instead of a run of old unmarked weeks
+  week ends (the week's dates follow the household's `weekStartsOn`, so with
+  Sunday-first weeks a Sunday order day is the week's first day), so next week starts fresh instead of a run of old unmarked weeks
   all asking at once.
 - **Only a person marks a week ordered.** Nothing infers it. A Walmart hand-off
   is not proof an order was placed — the cart link opens Walmart and DinnerOS

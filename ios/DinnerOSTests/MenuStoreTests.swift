@@ -38,7 +38,7 @@ struct MenuStoreTests {
 
     private func activated(_ menuServer: FakeMenuServer = FakeMenuServer()) async throws -> Harness {
         let harness = try await makeHarness(menuServer: menuServer)
-        await harness.store.activate(householdID: "household-1", timeZone: Self.denver)
+        await harness.store.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .mon)
         return harness
     }
 
@@ -72,8 +72,24 @@ struct MenuStoreTests {
         #expect(log.contains("GET /households/household-1/menu?week=2026-W38"))
 
         // Activating the same household again doesn't refetch.
-        await store.activate(householdID: "household-1", timeZone: Self.denver)
+        await store.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .mon)
         #expect(harness.menuServer.log.count == log.count)
+    }
+
+    /// The server moved meals across weeks, so a new start day refetches the menu and the strip's
+    /// counts for the same week key, which is still this week on a Wednesday.
+    @Test func aNewWeekStartDayReloadsTheMenuAndWeeks() async throws {
+        let harness = try await activated()
+        let store = harness.store
+        let before = harness.menuServer.log.filter { $0.contains("menu?week=2026-W38") }.count
+
+        await store.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .sun)
+
+        #expect(store.weekStartsOn == .sun)
+        #expect(store.selectedWeek.description == "2026-W38")
+        #expect(store.phase == .loaded)
+        #expect(harness.menuServer.log.filter { $0.contains("menu?week=2026-W38") }.count == before + 1)
+        #expect(harness.menuServer.weekQueries.count == 2)
     }
 
     @Test func switchingWeeksLoadsThatWeeksMenu() async throws {
@@ -295,7 +311,7 @@ struct MenuStoreTests {
         await store.allMeals.load()
         let more = store.makeList(query: MenuRecipeQuery(sort: .popular))
         await more.load()
-        await plans.activate(householdID: "household-1", timeZone: Self.denver)
+        await plans.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .mon)
 
         let entry = try await plans.addEntry(NewPlanEntry(recipeID: "recipe-1", day: .tue, servings: 2))
 
@@ -378,7 +394,7 @@ struct MenuStoreTests {
         query.search = "soup"
         await store.allMeals.setQuery(query)
 
-        await store.activate(householdID: "household-2", timeZone: Self.denver)
+        await store.activate(householdID: "household-2", timeZone: Self.denver, weekStartsOn: .mon)
 
         #expect(store.householdID == "household-2")
         #expect(store.selectedWeek.description == "2026-W38")

@@ -321,8 +321,10 @@ type MealPairings struct {
 
 // WeekPairingsView is a week's pairing suggestions and paired grocery items.
 type WeekPairingsView struct {
-	Week  planning.Week
-	Meals []MealPairings
+	Week planning.Week
+	// FirstDay is the household's first day of the week, for the meals' dates.
+	FirstDay planning.Day
+	Meals    []MealPairings
 	// GroceryItems are on the week's grocery list: their meal is still planned.
 	GroceryItems []WeekGroceryItem
 }
@@ -353,7 +355,7 @@ func (s *Service) WeekPairings(ctx context.Context, householdID, userID, week, e
 }
 
 func (d *pairingData) weekView(w planning.Week, plan planning.Plan, entryID string) WeekPairingsView {
-	view := WeekPairingsView{Week: w}
+	view := WeekPairingsView{Week: w, FirstDay: plan.First()}
 	for _, e := range plan.Entries {
 		r, ok := d.byID[e.RecipeID]
 		if !ok || r.IsAddon || (entryID != "" && e.ID != entryID) {

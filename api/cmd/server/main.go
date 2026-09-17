@@ -179,7 +179,8 @@ func run() error {
 	skipsService := skips.NewService(skips.NewMongoStore(db.Database()), recipeService, logger)
 	planService := planning.NewService(planning.NewMongoStore(db.Database()), recipeService).
 		WithPantry(pantryService).WithSpecialties(substitutesService).WithSkips(skipsService).
-		WithEvents(behavior.events, logger)
+		WithEvents(behavior.events, logger).WithWeekStart(householdService)
+	householdService.WithWeekStartListener(planService)
 	planHandler := planning.NewHandler(planning.HandlerOptions{
 		Service:    planService,
 		Authorizer: householdService,

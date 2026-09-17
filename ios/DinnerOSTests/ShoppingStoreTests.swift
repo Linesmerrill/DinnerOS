@@ -42,7 +42,7 @@ struct ShoppingStoreTests {
                 return recorder.opens
             })
         store.onPantryChanged = { recorder.pantryRefreshes += 1 }
-        store.activate(householdID: "household-1", timeZone: Self.denver)
+        store.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .mon)
         store.setPermissions(canEdit: true, canConfirm: true)
         return Harness(store: store, server: server, checks: checks, recorder: recorder)
     }
@@ -55,6 +55,25 @@ struct ShoppingStoreTests {
 
     private static let orderRoute = "GET /households/household-1/shopping/weeks/2026-W38/order"
     private static let setOrderRoute = "PUT /households/household-1/shopping/weeks/2026-W38/order"
+
+    /// A new start day drops the week's order state so the next load asks the server again,
+    /// whose meals for the week may have moved.
+    @Test func aNewWeekStartDayForgetsTheWeeksStateUntilItLoadsAgain() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.load()
+        #expect(store.orderReminder != nil)
+        let orderLoads = harness.server.log.filter { $0 == Self.orderRoute }.count
+
+        store.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .sun)
+
+        #expect(store.weekStartsOn == .sun)
+        #expect(store.week == (try week()))
+        #expect(store.orderReminder == nil)
+        await store.load()
+        #expect(store.orderReminder != nil)
+        #expect(harness.server.log.filter { $0 == Self.orderRoute }.count == orderLoads + 1)
+    }
 
     @Test func theWeeksOrderReminderLoadsWithTheWeek() async throws {
         let harness = try await makeHarness()
@@ -796,11 +815,11 @@ struct ShoppingStoreTests {
         await store.showCurrentWeek()
 
         // The same household keeps its state.
-        store.activate(householdID: "household-1", timeZone: Self.denver)
+        store.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .mon)
         #expect(store.proposal != nil)
         #expect(store.linkProgress != nil)
 
-        store.activate(householdID: "household-2", timeZone: Self.denver)
+        store.activate(householdID: "household-2", timeZone: Self.denver, weekStartsOn: .mon)
 
         #expect(store.householdID == "household-2")
         #expect(store.setupPhase == .idle)

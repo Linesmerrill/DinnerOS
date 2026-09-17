@@ -298,8 +298,12 @@ struct AutopilotHistoryView: View {
         let who = AutopilotFormat.memberName(
             item.userID, members: households.current?.members, currentUserID: session.currentUser?.id)
         return VStack(alignment: .leading, spacing: 4) {
-            Text(AutopilotFormat.historyTitle(item, vocabulary: autopilot.vocabulary, recipeName: recipeName))
-                .font(.headline)
+            Text(
+                AutopilotFormat.historyTitle(
+                    item, vocabulary: autopilot.vocabulary, recipeName: recipeName,
+                    weekStartsOn: households.weekStartsOn)
+            )
+            .font(.headline)
             ForEach(AutopilotFormat.historyLines(item, vocabulary: autopilot.vocabulary), id: \.self) { line in
                 Text(line)
                     .font(.subheadline)

@@ -45,8 +45,8 @@ nonisolated enum CalendarBusyness {
 
     /// The evening window of `day` in `week`, in `timeZone`. Handles daylight-saving days,
     /// since the window is built from wall-clock hours rather than a fixed offset.
-    static func window(day: PlanDay, week: ISOWeek, timeZone: TimeZone) -> DateInterval? {
-        guard let utcDate = day.date(in: week) else { return nil }
+    static func window(day: PlanDay, week: ISOWeek, timeZone: TimeZone, weekStartsOn: PlanDay) -> DateInterval? {
+        guard let utcDate = day.date(in: week, weekStartsOn: weekStartsOn) else { return nil }
         var utc = Calendar(identifier: .gregorian)
         utc.timeZone = .gmt
         let parts = utc.dateComponents([.year, .month, .day], from: utcDate)
@@ -62,9 +62,11 @@ nonisolated enum CalendarBusyness {
     }
 
     /// The span that covers every evening of `week`, to fetch events once.
-    static func weekSpan(week: ISOWeek, timeZone: TimeZone) -> DateInterval? {
-        guard let first = window(day: .mon, week: week, timeZone: timeZone),
-            let last = window(day: .sun, week: week, timeZone: timeZone)
+    static func weekSpan(week: ISOWeek, timeZone: TimeZone, weekStartsOn: PlanDay) -> DateInterval? {
+        let days = PlanDay.week(startingOn: weekStartsOn)
+        guard let firstDay = days.first, let lastDay = days.last,
+            let first = window(day: firstDay, week: week, timeZone: timeZone, weekStartsOn: weekStartsOn),
+            let last = window(day: lastDay, week: week, timeZone: timeZone, weekStartsOn: weekStartsOn)
         else { return nil }
         return DateInterval(start: first.start, end: last.end)
     }
@@ -99,11 +101,14 @@ nonisolated enum CalendarBusyness {
     /// Every evening of `week` from `onOrAfter` on; earlier evenings are left out, since there's
     /// nothing left to plan for them.
     static func week(
-        _ week: ISOWeek, timeZone: TimeZone, intervals: [CalendarBusyInterval], onOrAfter now: Date? = nil
+        _ week: ISOWeek, timeZone: TimeZone, weekStartsOn: PlanDay, intervals: [CalendarBusyInterval],
+        onOrAfter now: Date? = nil
     ) -> [PlanDay: EveningBusyness] {
         var result: [PlanDay: EveningBusyness] = [:]
         for day in PlanDay.allCases {
-            guard let window = window(day: day, week: week, timeZone: timeZone) else { continue }
+            guard let window = window(day: day, week: week, timeZone: timeZone, weekStartsOn: weekStartsOn) else {
+                continue
+            }
             if let now, window.end <= now { continue }
             result[day] = evening(window, intervals: intervals)
         }

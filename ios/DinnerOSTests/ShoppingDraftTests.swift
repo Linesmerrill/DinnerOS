@@ -322,7 +322,7 @@ struct OrderConfirmationGroupsTests {
             entry("r-pasta", day: .wed), entry("r-bread", day: .wed, isAddon: true), entry("r-tacos", day: .mon),
         ]
 
-        let groups = OrderConfirmationGroups(lines: try lines(), entries: entries)
+        let groups = OrderConfirmationGroups(lines: try lines(), entries: entries, weekStartsOn: .mon)
 
         #expect(groups.meals.map(\.name) == ["Tacos", "Pasta"])
         #expect(groups.meals.map { $0.lines.map(\.name) } == [["Tortillas", "Ground Beef"], ["Cavatappi"]])
@@ -338,8 +338,20 @@ struct OrderConfirmationGroupsTests {
         #expect(all.map(\.id).sorted() == ["l1", "l2", "l3", "l4", "l5", "l6"])
     }
 
+    @Test func mealsFollowTheHouseholdsWeekStartDay() throws {
+        let entries = [
+            entry("r-tacos", day: .mon), entry("r-bread", day: .mon, isAddon: true), entry("r-pasta", day: .sun),
+        ]
+
+        let sunday = OrderConfirmationGroups(lines: try lines(), entries: entries, weekStartsOn: .sun)
+        let monday = OrderConfirmationGroups(lines: try lines(), entries: entries, weekStartsOn: .mon)
+
+        #expect(sunday.meals.map(\.day) == [.sun, .mon])
+        #expect(monday.meals.map(\.day) == [.mon, .sun])
+    }
+
     @Test func withoutThePlanMealsComeFromTheLinesThemselves() throws {
-        let groups = OrderConfirmationGroups(lines: try lines(), entries: nil)
+        let groups = OrderConfirmationGroups(lines: try lines(), entries: nil, weekStartsOn: .mon)
 
         // In the order the lines first name them; add-ons can't be told apart without the plan.
         #expect(groups.meals.map(\.name) == ["Pasta", "Tacos", "Garlic Bread"])

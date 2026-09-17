@@ -77,7 +77,7 @@ struct AccessibilityTests {
             summary: WeekSummary(week: week.description, timing: .current, plannedCount: 5, addOnCount: 1),
             timing: .current)
         for size in [DynamicTypeSize.large, .accessibility3, .accessibility5] {
-            let pill = WeekPill(item: item, isSelected: true, currentWeek: week)
+            let pill = WeekPill(item: item, isSelected: true, currentWeek: week, weekStartsOn: .sun)
                 .dynamicTypeSize(...WeekStripMetrics.largestTypeSize)
                 .environment(\.dynamicTypeSize, size)
             let controller = UIHostingController(rootView: pill)

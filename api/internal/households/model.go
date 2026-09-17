@@ -95,12 +95,26 @@ type Household struct {
 	// ("mon".."sun"), or "" when they haven't chosen one. It drives the
 	// shopping order reminder (docs/shopping-providers.md#order-reminders).
 	OrderDay string
+	// WeekStartsOn is the first day of the household's week ("sun".."sat"). It
+	// decides which dates each week covers (planning.Week.DateOn). "" is a
+	// household created before the setting existed, whose weeks start on
+	// Monday; read it through FirstDay.
+	WeekStartsOn string
 	// MealKit is what the household spent on meal kits, the baseline the
 	// weekly grocery cost is compared with, or nil when not set.
 	MealKit   *MealKit
 	CreatedBy string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+// FirstDay returns the day the household's week starts on, "mon" for a
+// household that never chose one.
+func (h Household) FirstDay() string {
+	if h.WeekStartsOn == "" {
+		return LegacyWeekStart
+	}
+	return h.WeekStartsOn
 }
 
 // Membership places a user in a household with a role. A user may belong to
@@ -134,6 +148,8 @@ type CreateInput struct {
 	Name            string
 	TimeZone        string
 	DefaultServings *int
+	// WeekStartsOn nil uses DefaultWeekStart.
+	WeekStartsOn *string
 }
 
 // UpdateInput is a partial update; nil fields are left unchanged. A non-nil
@@ -143,6 +159,7 @@ type UpdateInput struct {
 	TimeZone        *string
 	DefaultServings *int
 	OrderDay        *string
+	WeekStartsOn    *string
 	// SetMealKit changes the meal kit baseline to MealKit; nil clears it.
 	SetMealKit bool
 	MealKit    *MealKit
@@ -154,6 +171,7 @@ type HouseholdPatch struct {
 	TimeZone        *string
 	DefaultServings *int
 	OrderDay        *string
+	WeekStartsOn    *string
 	// SetMealKit sets MealKit, or removes it when MealKit is nil.
 	SetMealKit bool
 	MealKit    *MealKit
@@ -198,6 +216,24 @@ func normalizeOrderDay(day string) (string, error) {
 	}
 	if !slices.Contains(OrderDays, day) {
 		return "", invalid("orderDay must be one of mon, tue, wed, thu, fri, sat, sun, or empty to clear it")
+	}
+	return day, nil
+}
+
+// DefaultWeekStart is the first day of the week for new households, and
+// LegacyWeekStart the first day of households created before they could
+// choose (ISO weeks). They match planning.DefaultWeekStart and
+// planning.LegacyWeekStart.
+const (
+	DefaultWeekStart = "sun"
+	LegacyWeekStart  = "mon"
+)
+
+// normalizeWeekStart accepts a weekday code.
+func normalizeWeekStart(day string) (string, error) {
+	day = strings.TrimSpace(day)
+	if !slices.Contains(OrderDays, day) {
+		return "", invalid("weekStartsOn must be one of sun, mon, tue, wed, thu, fri, sat")
 	}
 	return day, nil
 }

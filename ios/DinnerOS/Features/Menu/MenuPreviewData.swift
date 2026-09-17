@@ -64,7 +64,7 @@ enum MenuPreviewData {
     ]
 
     static let menu = WeekMenu(
-        week: week.description, weekStart: "2026-09-14", weekEnd: "2026-09-20", timing: .current,
+        week: week.description, weekStart: "2026-09-13", weekEnd: "2026-09-19", timing: .current,
         plan: PlanPreviewData.plan, proposal: nil, sections: sections)
 
     static let pastMenu = WeekMenu(
@@ -76,7 +76,7 @@ enum MenuPreviewData {
         ])
 
     static let proposalMenu = WeekMenu(
-        week: week.description, weekStart: "2026-09-14", weekEnd: "2026-09-20", timing: .current,
+        week: week.description, weekStart: "2026-09-13", weekEnd: "2026-09-19", timing: .current,
         plan: PlanPreviewData.emptyPlan,
         proposal: MenuProposalSummary(id: "proposal-1", status: .proposed, version: 2, plannedMeals: 4),
         sections: sections)
@@ -148,7 +148,7 @@ enum MenuPreviewData {
 
     /// The week's open suggestions, plus a grocery item already on the list.
     static let weekPairings = WeekPairings(
-        week: week.description, startDate: "2026-09-14", endDate: "2026-09-20",
+        week: week.description, startDate: "2026-09-13", endDate: "2026-09-19",
         meals: [
             MealPairings(
                 entryID: "entry-2", day: .wed, date: "2026-09-16",

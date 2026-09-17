@@ -30,6 +30,8 @@ struct RecipeCustomizationSection: View {
 struct RecipeDescriptionSection: View {
     let recipe: Recipe
 
+    @Environment(HouseholdStore.self) private var households
+
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             if let description = recipe.description, !description.isEmpty {
@@ -53,7 +55,7 @@ struct RecipeDescriptionSection: View {
                     Text(RecipeFormat.timesOrdered(recipe.timesOrdered))
                         .foregroundStyle(Color.secondary)
                     ForEach(recipe.orderWeeks.reversed().prefix(6), id: \.self) { week in
-                        Text(ISOWeek(week)?.weekOf() ?? week)
+                        Text(ISOWeek(week)?.weekOf(weekStartsOn: households.weekStartsOn) ?? week)
                     }
                 }
             }

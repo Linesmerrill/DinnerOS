@@ -129,11 +129,11 @@ struct GroceryListTextTests {
     @Test func exportsCategoriesInOrderWithChecksStatusesAndSkippedEntries() throws {
         let week = try #require(ISOWeek("2026-W38"))
 
-        let text = GroceryListText.make(try list(), week: week, checked: ["i-salt"], locale: locale)
+        let text = GroceryListText.make(try list(), week: week, weekStartsOn: .mon, checked: ["i-salt"], locale: locale)
 
         #expect(
             text == """
-                Grocery List: \(week.rangeLabel(locale: locale))
+                Grocery List: \(week.rangeLabel(weekStartsOn: .mon, locale: locale))
 
                 Produce
                 - [ ] Yellow Onion, 1 ½ + 8 oz
@@ -151,7 +151,7 @@ struct GroceryListTextTests {
         let week = try #require(ISOWeek("2026-W38"))
         let empty = GroceryList(week: "2026-W38", status: .draft, pantryApplied: false, categories: [], skipped: [])
 
-        let text = GroceryListText.make(empty, week: week, checked: [], locale: locale)
+        let text = GroceryListText.make(empty, week: week, weekStartsOn: .mon, checked: [], locale: locale)
 
         #expect(text.hasSuffix("\n\nNothing to buy."))
         #expect(!text.contains("Not included"))

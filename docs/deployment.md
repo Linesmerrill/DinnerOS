@@ -190,6 +190,24 @@ It reads `MONGODB_URI`, `MONGODB_DATABASE`, and `STARTER_RECIPES_HOUSEHOLD_ID`
 (`-source <householdId>` overrides it). Locally:
 `go -C api run ./cmd/seedstarter -household <householdId>`.
 
+### First day of the week backfill
+
+Households created before `weekStartsOn` existed have Monday-first weeks (the
+field is absent and reads as `mon`); new households start on Sunday. `/weekstart`
+moves the households that never chose to Sunday-first weeks through the same
+code path as Household Settings, moving each scheduled meal whose date now falls
+in the neighboring week into that week (decision 503). It never touches a
+household that chose, is a dry run without `-apply`, and is safe to re-run:
+
+```sh
+heroku run -a dinneros-api -- /weekstart -all
+heroku run -a dinneros-api -- /weekstart -all -apply
+```
+
+`-household <householdId>` limits it to one household and `-to mon` picks another
+day. It reads `MONGODB_URI` and `MONGODB_DATABASE`. The moved meals of a week
+already ordered then sit on the next week's list, so run it between shops.
+
 ### Invitation links
 
 Invitation emails link to `https://api.tlps.dev/invite#token=…`. The API serves

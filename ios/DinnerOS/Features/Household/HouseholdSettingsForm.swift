@@ -14,6 +14,7 @@ struct HouseholdSettingsForm: View {
     @State private var defaultServings: Int
     /// The API's weekday code, or "" for no reminder.
     @State private var orderDay: String
+    @State private var weekStartsOn: PlanDay
     /// What a week of meal kits cost, as typed; empty turns the comparison off.
     @State private var mealKitAmount: String
     @State private var mealKitMeals: Int
@@ -28,6 +29,7 @@ struct HouseholdSettingsForm: View {
         _timeZone = State(initialValue: household.timeZone)
         _defaultServings = State(initialValue: household.defaultServings)
         _orderDay = State(initialValue: household.orderDay ?? "")
+        _weekStartsOn = State(initialValue: household.weekStartsOn)
     }
 
     private var trimmedName: String {
@@ -43,7 +45,8 @@ struct HouseholdSettingsForm: View {
             defaultServings: defaultServings == household.defaultServings ? nil : defaultServings,
             // "" clears the order day; nil would leave it alone.
             orderDay: orderDay == (household.orderDay ?? "") ? nil : orderDay,
-            mealKit: mealKitChange ?? .keep)
+            mealKit: mealKitChange ?? .keep,
+            weekStartsOn: weekStartsOn == household.weekStartsOn ? nil : weekStartsOn)
     }
 
     /// The meal kit comparison as the form has it; `nil` while the amount isn't valid.
@@ -68,6 +71,17 @@ struct HouseholdSettingsForm: View {
                 }
             } footer: {
                 Text("Weekly plans follow the household's time zone and start from its default servings.")
+            }
+            Section {
+                Picker("Week Starts On", selection: $weekStartsOn) {
+                    ForEach(WeekStartChoices.days, id: \.self) { day in
+                        Text(day.name()).tag(day)
+                    }
+                }
+            } header: {
+                Text("Week")
+            } footer: {
+                Text("Meals keep their dates; a meal that now falls in another week moves to that week's list.")
             }
             Section {
                 Picker("Order Day", selection: $orderDay) {

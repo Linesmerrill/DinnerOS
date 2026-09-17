@@ -150,6 +150,44 @@ func TestOrderReminderFollowsTheOrderDay(t *testing.T) {
 	}
 }
 
+// With Sunday-first weeks 2026-W38 runs Sunday the 13th through Saturday the
+// 19th: a Sunday order day is due on the 13th, and the reminder stops after
+// Saturday, when Sunday the 20th already belongs to 2026-W39.
+func TestOrderReminderFollowsTheWeekStart(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		day     int
+		wantDue bool
+	}{{12, false}, {13, true}, {19, true}, {20, false}}
+	for _, tc := range cases {
+		svc, _, notifier := newOrderService(t, "sun", denverNoon(t, tc.day))
+		hh := svc.households.(orderHouseholds)
+		hh.household.WeekStartsOn = "sun"
+		svc.households = hh
+		r, err := svc.OrderReminder(ctx, testHousehold, testWeek)
+		if err != nil {
+			t.Fatalf("OrderReminder() error = %v", err)
+		}
+		if r.DueOn != "2026-09-13" || r.Due != tc.wantDue {
+			t.Errorf("Sep %d: DueOn = %q, Due = %v; want 2026-09-13, %v", tc.day, r.DueOn, r.Due, tc.wantDue)
+		}
+		// The sweep asks about the household's current week.
+		if err := svc.Refresh(ctx, testHousehold); err != nil {
+			t.Fatal(err)
+		}
+		wantWeek := testWeek
+		switch tc.day {
+		case 12: // Saturday of Sunday-first 2026-W37, whose Sunday order day passed
+			wantWeek = "2026-W37"
+		case 20:
+			wantWeek = "2026-W39"
+		}
+		if len(notifier.created) != 1 || notifier.created[0].Subject.ID != wantWeek {
+			t.Errorf("Sep %d: notifications = %+v; want one for %s", tc.day, notifier.created, wantWeek)
+		}
+	}
+}
+
 func TestOrderReminderOffWithoutAnOrderDay(t *testing.T) {
 	svc, _, _ := newOrderService(t, "", denverNoon(t, 19))
 	r, err := svc.OrderReminder(context.Background(), testHousehold, testWeek)

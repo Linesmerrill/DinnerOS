@@ -100,7 +100,7 @@ enum AutopilotPreviewData {
 
     static let proposal: AutopilotProposal? = decode(
         #"""
-        {"id":"proposal-1","householdId":"household-1","week":"2026-W38","startDate":"2026-09-14","endDate":"2026-09-20",
+        {"id":"proposal-1","householdId":"household-1","week":"2026-W38","startDate":"2026-09-13","endDate":"2026-09-19",
          "status":"proposed","version":2,"attempt":1,"modelVersion":"baseline-2026.1","inputsHash":"preview",
          "requestedMeals":4,"plannedMeals":3,"candidateCount":3,"coldStart":false,
          "slots":[
@@ -111,7 +111,7 @@ enum AutopilotPreviewData {
            {"id":"wed","day":"wed","date":"2026-09-16","recipe":{"id":"recipe-3","name":"Placeholder Pasta Bake"},"servings":4,
             "cookMinutes":30,"timeBand":"medium","score":0.8,"signals":{},"reasons":[{"code":"new","text":"Something new to try"}],
             "swapCount":1},
-           {"id":"sun","day":"sun","date":"2026-09-20","recipe":{"id":"recipe-4","name":"Sample Smoked Pork Shoulder"},"servings":4,
+           {"id":"sun","day":"sun","date":"2026-09-13","recipe":{"id":"recipe-4","name":"Sample Smoked Pork Shoulder"},"servings":4,
             "cookMinutes":240,"timeBand":"long","score":1.2,"signals":{},
             "reasons":[{"code":"rule","text":"Smoker night · Pork · Long cook OK"}],"swapCount":0}
          ],
@@ -124,7 +124,7 @@ enum AutopilotPreviewData {
 
     static let context: AutopilotWeekContext? = decode(
         #"""
-        {"householdId":"household-1","week":"2026-W38","startDate":"2026-09-14","endDate":"2026-09-20","configured":true,
+        {"householdId":"household-1","week":"2026-W38","startDate":"2026-09-13","endDate":"2026-09-19","configured":true,
          "skip":false,"busy":true,"mealsPerWeek":null,"maxMinutes":null,"servings":null,
          "days":[{"day":"fri","skip":false,"maxMinutes":null,"servings":6}],"note":"Guests Friday",
          "updatedBy":"user-ada","updatedAt":"2026-09-14T19:00:00Z"}

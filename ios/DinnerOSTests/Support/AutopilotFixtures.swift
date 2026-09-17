@@ -142,7 +142,8 @@ nonisolated enum AutopilotFixtures {
     ]
 
     static func date(week: String, day: String) -> String {
-        guard let parsed = ISOWeek(week), let planDay = PlanDay(rawValue: day), let date = planDay.date(in: parsed)
+        guard let parsed = ISOWeek(week), let planDay = PlanDay(rawValue: day),
+            let date = planDay.date(in: parsed, weekStartsOn: .mon)
         else { return "" }
         return date.formatted(Date.ISO8601FormatStyle(timeZone: .gmt).year().month().day())
     }

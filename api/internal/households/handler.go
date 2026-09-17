@@ -67,6 +67,9 @@ type HouseholdResponse struct {
 	TimeZone        string `json:"timeZone"`
 	// OrderDay is null until the household picks a grocery order day.
 	OrderDay *string `json:"orderDay"`
+	// WeekStartsOn is the first day of the household's week: "sun" for new
+	// households, "mon" for households that never chose.
+	WeekStartsOn string `json:"weekStartsOn"`
 	// MealKit is null until the household says what it spent on meal kits.
 	MealKit   *MealKitJSON `json:"mealKit"`
 	CreatedBy string       `json:"createdBy"`
@@ -101,6 +104,7 @@ func NewHouseholdResponse(hh Household) HouseholdResponse {
 		DefaultServings: hh.DefaultServings,
 		TimeZone:        hh.TimeZone,
 		OrderDay:        orderDayOrNil(hh.OrderDay),
+		WeekStartsOn:    hh.FirstDay(),
 		CreatedBy:       hh.CreatedBy,
 		CreatedAt:       hh.CreatedAt.UTC(),
 		UpdatedAt:       hh.UpdatedAt.UTC(),
@@ -174,6 +178,8 @@ type createHouseholdRequest struct {
 	Name            string `json:"name"`
 	TimeZone        string `json:"timeZone"`
 	DefaultServings *int   `json:"defaultServings"`
+	// WeekStartsOn is optional; new households start weeks on Sunday.
+	WeekStartsOn *string `json:"weekStartsOn"`
 }
 
 type updateHouseholdRequest struct {
@@ -182,6 +188,9 @@ type updateHouseholdRequest struct {
 	DefaultServings *int    `json:"defaultServings"`
 	// OrderDay set to "" clears the household's order day.
 	OrderDay *string `json:"orderDay"`
+	// WeekStartsOn changes the first day of the week, moving meals whose date
+	// now falls in another week into that week.
+	WeekStartsOn *string `json:"weekStartsOn"`
 	// MealKit set to null clears the meal kit baseline; absent leaves it.
 	MealKit httpx.Optional[MealKitJSON] `json:"mealKit"`
 }
@@ -254,7 +263,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	in := UpdateInput{Name: req.Name, TimeZone: req.TimeZone, DefaultServings: req.DefaultServings, OrderDay: req.OrderDay, SetMealKit: req.MealKit.Set}
+	in := UpdateInput{Name: req.Name, TimeZone: req.TimeZone, DefaultServings: req.DefaultServings, OrderDay: req.OrderDay, WeekStartsOn: req.WeekStartsOn, SetMealKit: req.MealKit.Set}
 	if v := req.MealKit.Value; v != nil {
 		in.MealKit = &MealKit{WeeklyCents: v.WeeklyCents, Meals: v.Meals}
 	}

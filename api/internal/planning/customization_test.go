@@ -49,7 +49,7 @@ func TestSetEntryCustomizations(t *testing.T) {
 		t.Errorf("stored = %+v", got)
 	}
 	// The wire form carries them.
-	if resp := NewEntryResponse(p.Week, p.Entries[0]); len(resp.Customizations) != 1 || resp.Customizations[0].ChoiceID != "swap:ground-beef" {
+	if resp := NewEntryResponse(p, p.Entries[0]); len(resp.Customizations) != 1 || resp.Customizations[0].ChoiceID != "swap:ground-beef" {
 		t.Errorf("entry response = %+v", resp.Customizations)
 	}
 
@@ -61,7 +61,7 @@ func TestSetEntryCustomizations(t *testing.T) {
 	if got := p.Entries[0].Customizations; len(got) != 0 {
 		t.Errorf("after the reset = %+v", got)
 	}
-	if resp := NewEntryResponse(p.Week, p.Entries[0]); resp.Customizations != nil {
+	if resp := NewEntryResponse(p, p.Entries[0]); resp.Customizations != nil {
 		t.Errorf("reset entry response = %+v", resp.Customizations)
 	}
 

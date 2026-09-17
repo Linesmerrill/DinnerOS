@@ -72,6 +72,9 @@ type entryDoc struct {
 	ProposalID string `bson:"proposalId,omitempty"`
 	// Customizations is absent when the meal isn't customized.
 	Customizations []customizationDoc `bson:"customizations,omitempty"`
+	// WeekStartMark is set only while a change of the household's first day
+	// of the week is moving entries between weeks (week_start.go).
+	WeekStartMark string `bson:"weekStartMark,omitempty"`
 }
 
 type customizationDoc struct {

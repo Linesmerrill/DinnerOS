@@ -62,6 +62,9 @@ type householdDoc struct {
 	TimeZone        string        `bson:"timeZone"`
 	// OrderDay is absent for a household that never set one.
 	OrderDay string `bson:"orderDay,omitempty"`
+	// WeekStartsOn is absent for a household created before the setting
+	// existed, whose weeks start on Monday.
+	WeekStartsOn string `bson:"weekStartsOn,omitempty"`
 	// MealKit is absent until the household sets a meal kit baseline.
 	MealKit   *mealKitDoc   `bson:"mealKit,omitempty"`
 	CreatedBy bson.ObjectID `bson:"createdBy"`
@@ -88,6 +91,7 @@ func (d householdDoc) toHousehold() Household {
 		DefaultServings: d.DefaultServings,
 		TimeZone:        d.TimeZone,
 		OrderDay:        d.OrderDay,
+		WeekStartsOn:    d.WeekStartsOn,
 		CreatedBy:       d.CreatedBy.Hex(),
 		CreatedAt:       d.CreatedAt.UTC(),
 		UpdatedAt:       d.UpdatedAt.UTC(),
@@ -125,6 +129,7 @@ func (s *MongoStore) CreateHousehold(ctx context.Context, h Household) (Househol
 		Name:            h.Name,
 		DefaultServings: h.DefaultServings,
 		TimeZone:        h.TimeZone,
+		WeekStartsOn:    h.WeekStartsOn,
 		CreatedBy:       createdBy,
 		AdminCount:      1,
 		CreatedAt:       h.CreatedAt,
@@ -234,6 +239,9 @@ func (s *MongoStore) UpdateHousehold(ctx context.Context, id string, patch House
 	}
 	if patch.OrderDay != nil {
 		set = append(set, bson.E{Key: "orderDay", Value: *patch.OrderDay})
+	}
+	if patch.WeekStartsOn != nil {
+		set = append(set, bson.E{Key: "weekStartsOn", Value: *patch.WeekStartsOn})
 	}
 	update := bson.D{}
 	if patch.SetMealKit && patch.MealKit != nil {

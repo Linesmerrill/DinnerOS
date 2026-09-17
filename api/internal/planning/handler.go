@@ -305,23 +305,24 @@ func timePtr(t time.Time) *time.Time {
 // return plans (accepting an Autopilot proposal).
 func NewPlanResponse(p Plan) PlanResponse { return newPlanResponse(p) }
 
-// NewEntryResponse returns the wire form of an entry in week w.
-func NewEntryResponse(w Week, e Entry) EntryResponse { return newEntryResponse(w, e) }
+// NewEntryResponse returns the wire form of an entry of plan p, whose week and
+// first day decide the entry's date.
+func NewEntryResponse(p Plan, e Entry) EntryResponse { return newEntryResponse(p, e) }
 
 func newPlanResponse(p Plan) PlanResponse {
 	resp := PlanResponse{
 		HouseholdID: p.HouseholdID, Week: p.Week.String(),
-		StartDate: p.Week.Date(Monday), EndDate: p.Week.Date(Sunday),
+		StartDate: p.Week.StartDateOn(p.First()), EndDate: p.Week.EndDateOn(p.First()),
 		Status: p.Status, Entries: make([]EntryResponse, 0, len(p.Entries)),
 		CreatedAt: timePtr(p.CreatedAt), UpdatedAt: timePtr(p.UpdatedAt),
 	}
 	for _, e := range p.Entries {
-		resp.Entries = append(resp.Entries, newEntryResponse(p.Week, e))
+		resp.Entries = append(resp.Entries, newEntryResponse(p, e))
 	}
 	return resp
 }
 
-func newEntryResponse(w Week, e Entry) EntryResponse {
+func newEntryResponse(p Plan, e Entry) EntryResponse {
 	resp := EntryResponse{
 		ID: e.ID,
 		Recipe: EntryRecipeResponse{
@@ -336,7 +337,7 @@ func newEntryResponse(w Week, e Entry) EntryResponse {
 		resp.Customizations = append(resp.Customizations, EntryCustomizationResponse(c))
 	}
 	if e.Day != "" {
-		day, date := e.Day, w.Date(e.Day)
+		day, date := e.Day, p.DateOf(e.Day)
 		resp.Day, resp.Date = &day, &date
 	}
 	return resp
@@ -575,10 +576,15 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "list plans failed", err)
 		return
 	}
+	first, err := h.opts.Service.FirstDay(r.Context(), actor.HouseholdID)
+	if err != nil {
+		h.writeError(w, r, "list plans failed", err)
+		return
+	}
 	resp := PlanListResponse{Items: make([]PlanSummaryResponse, 0, len(items))}
 	for _, s := range items {
 		resp.Items = append(resp.Items, PlanSummaryResponse{
-			Week: s.Week.String(), StartDate: s.Week.Date(Monday), Status: s.Status,
+			Week: s.Week.String(), StartDate: s.Week.StartDateOn(first), Status: s.Status,
 			EntryCount: s.EntryCount, UpdatedAt: timePtr(s.UpdatedAt),
 		})
 	}
@@ -624,7 +630,7 @@ func (h *Handler) addEntry(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "add plan entry failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusCreated, AddEntryResponse{Entry: newEntryResponse(p.Week, e), Plan: newPlanResponse(p)})
+	httpx.WriteJSON(w, http.StatusCreated, AddEntryResponse{Entry: newEntryResponse(p, e), Plan: newPlanResponse(p)})
 }
 
 func (h *Handler) updateEntry(w http.ResponseWriter, r *http.Request) {

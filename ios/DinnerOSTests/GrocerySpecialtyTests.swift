@@ -336,7 +336,8 @@ struct GroceryListSpecialtyActionTests {
         let list = try specialtyList()
         let week = try #require(ISOWeek("2026-W38"))
 
-        let text = GroceryListText.make(list, week: week, checked: [], locale: Locale(identifier: "en_US"))
+        let text = GroceryListText.make(
+            list, week: week, weekStartsOn: .mon, checked: [], locale: Locale(identifier: "en_US"))
 
         #expect(
             text.contains(

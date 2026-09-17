@@ -582,10 +582,10 @@ func (req profileRequest) update() (ProfileUpdate, error) {
 	return u, nil
 }
 
-func newWeekContextResponse(c WeekContext) WeekContextResponse {
+func newWeekContextResponse(c WeekContext, first planning.Day) WeekContextResponse {
 	w, _ := planning.ParseWeek(c.Week)
 	resp := WeekContextResponse{
-		HouseholdID: c.HouseholdID, Week: c.Week, StartDate: w.Date(planning.Monday), EndDate: w.Date(planning.Sunday),
+		HouseholdID: c.HouseholdID, Week: c.Week, StartDate: w.StartDateOn(first), EndDate: w.EndDateOn(first),
 		Configured: c.Configured(), Skip: c.Skip, Busy: c.Busy, MealsPerWeek: optionalInt(c.MealsPerWeek),
 		MaxMinutes: optionalInt(c.MaxMinutes), Servings: optionalInt(c.Servings), Days: []DayOverrideJSON{}, Note: c.Note,
 		UpdatedBy: optionalString(c.UpdatedBy), UpdatedAt: optionalTime(c.UpdatedAt),
@@ -621,20 +621,20 @@ func (req weekContextRequest) context() (WeekContext, error) {
 	return c, nil
 }
 
-func newProposalResponse(p Proposal) ProposalResponse {
+func newProposalResponse(p Proposal, first planning.Day) ProposalResponse {
 	w, _ := planning.ParseWeek(p.Week)
 	resp := ProposalResponse{
-		ID: p.ID, HouseholdID: p.HouseholdID, Week: p.Week, StartDate: w.Date(planning.Monday), EndDate: w.Date(planning.Sunday),
+		ID: p.ID, HouseholdID: p.HouseholdID, Week: p.Week, StartDate: w.StartDateOn(first), EndDate: w.EndDateOn(first),
 		Status: p.Status, Version: p.Version, Attempt: p.Attempt, ModelVersion: p.ModelVersion, InputsHash: p.InputsHash,
 		RequestedMeals: p.Requested, PlannedMeals: p.Planned, CandidateCount: p.Candidates, ColdStart: p.ColdStart,
 		Slots: []SlotJSON{}, Unfilled: []UnfilledJSON{}, Messages: []TextJSON{}, Objective: ObjectiveJSON(p.Objective),
-		Context:   proposalContextJSON(p.Week, p.Context),
+		Context:   proposalContextJSON(p.Week, first, p.Context),
 		SwapCount: p.SwapCount, ExcludedSlots: orEmptyStrings(p.ExcludedSlots), GeneratedBy: p.GeneratedBy,
 		GeneratedAt: p.GeneratedAt, UpdatedAt: p.UpdatedAt, DecidedBy: optionalString(p.DecidedBy), DecidedAt: optionalTime(p.DecidedAt),
 	}
 	for _, s := range p.Slots {
 		sj := SlotJSON{
-			ID: s.ID, Day: s.Day, Date: w.Date(planning.Day(s.Day)),
+			ID: s.ID, Day: s.Day, Date: w.DateOn(first, planning.Day(s.Day)),
 			Recipe:   ProposalRecipeJSON{ID: s.RecipeID, Name: s.RecipeName, ImageURL: s.RecipeImageURL},
 			Servings: s.Servings, CookMinutes: optionalInt(s.CookMinutes), TimeBand: s.TimeBand, Score: s.Score,
 			Signals: s.Signals, Reasons: []TextJSON{}, SwapCount: s.SwapCount, Pairings: proposalPairingsJSON(s.ID, s.Pairings),
@@ -648,7 +648,7 @@ func newProposalResponse(p Proposal) ProposalResponse {
 		resp.Slots = append(resp.Slots, sj)
 	}
 	for _, u := range p.Unfilled {
-		resp.Unfilled = append(resp.Unfilled, UnfilledJSON{Day: u.Day, Date: w.Date(planning.Day(u.Day)), Code: u.Code, Text: u.Text})
+		resp.Unfilled = append(resp.Unfilled, UnfilledJSON{Day: u.Day, Date: w.DateOn(first, planning.Day(u.Day)), Code: u.Code, Text: u.Text})
 	}
 	for _, m := range p.Messages {
 		resp.Messages = append(resp.Messages, TextJSON(m))
@@ -835,7 +835,11 @@ func (h *Handler) getContext(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "get week context failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, newWeekContextResponse(c))
+	first, ok := h.firstDay(w, r, "get week context failed")
+	if !ok {
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, newWeekContextResponse(c, first))
 }
 
 func (h *Handler) putContext(w http.ResponseWriter, r *http.Request) {
@@ -854,7 +858,11 @@ func (h *Handler) putContext(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "save week context failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, newWeekContextResponse(c))
+	first, ok := h.firstDay(w, r, "save week context failed")
+	if !ok {
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, newWeekContextResponse(c, first))
 }
 
 func (h *Handler) deleteContext(w http.ResponseWriter, r *http.Request) {
@@ -896,7 +904,7 @@ func (h *Handler) generate(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "generate autopilot week failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusCreated, newProposalResponse(p))
+	h.writeProposal(w, r, http.StatusCreated, p)
 }
 
 func (h *Handler) getProposal(w http.ResponseWriter, r *http.Request) {
@@ -905,7 +913,7 @@ func (h *Handler) getProposal(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "get autopilot proposal failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, newProposalResponse(p))
+	h.writeProposal(w, r, http.StatusOK, p)
 }
 
 func decodeVersion(w http.ResponseWriter, r *http.Request, v *int64) (int64, bool) {
@@ -931,7 +939,7 @@ func (h *Handler) swap(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "swap autopilot meal failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, newProposalResponse(p))
+	h.writeProposal(w, r, http.StatusOK, p)
 }
 
 func (h *Handler) accept(w http.ResponseWriter, r *http.Request) {
@@ -950,12 +958,12 @@ func (h *Handler) accept(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := AcceptResponse{
-		Proposal: newProposalResponse(res.Proposal), Plan: planning.NewPlanResponse(res.Plan),
+		Proposal: newProposalResponse(res.Proposal, res.Plan.First()), Plan: planning.NewPlanResponse(res.Plan),
 		Added: make([]planning.EntryResponse, 0, len(res.Added)), Skipped: make([]SkippedSlotJSON, 0, len(res.Skipped)),
 	}
 	resp.PairingsAdded, resp.PairingsSkipped = acceptPairingsJSON(res)
 	for _, e := range res.Added {
-		resp.Added = append(resp.Added, planning.NewEntryResponse(res.Plan.Week, e))
+		resp.Added = append(resp.Added, planning.NewEntryResponse(res.Plan, e))
 	}
 	for _, s := range res.Skipped {
 		resp.Skipped = append(resp.Skipped, SkippedSlotJSON(s))
@@ -978,7 +986,27 @@ func (h *Handler) reject(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "reject autopilot week failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, newProposalResponse(p))
+	h.writeProposal(w, r, http.StatusOK, p)
+}
+
+// firstDay loads the household's first day of the week for a response,
+// writing the error and returning false when it can't.
+func (h *Handler) firstDay(w http.ResponseWriter, r *http.Request, msg string) (planning.Day, bool) {
+	first, err := h.opts.Service.FirstDay(r.Context(), actor(r).HouseholdID)
+	if err != nil {
+		h.writeError(w, r, msg, err)
+		return "", false
+	}
+	return first, true
+}
+
+// writeProposal writes a proposal with its dates in the household's week.
+func (h *Handler) writeProposal(w http.ResponseWriter, r *http.Request, status int, p Proposal) {
+	first, ok := h.firstDay(w, r, "load household failed")
+	if !ok {
+		return
+	}
+	httpx.WriteJSON(w, status, newProposalResponse(p, first))
 }
 
 // writeError maps service errors to responses.

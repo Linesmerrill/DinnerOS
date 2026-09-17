@@ -9,14 +9,18 @@ struct ISOWeekTests {
     @Test func formatsMonthAndWeek() throws {
         let week = try #require(ISOWeek("2026-W37"))
         #expect(week.monthAndYear(locale: locale) == "Sep 2026")
-        #expect(week.weekOf(locale: locale) == "Week of Sep 7, 2026")
+        #expect(week.weekOf(weekStartsOn: .mon, locale: locale) == "Week of Sep 7, 2026")
+        #expect(week.weekOf(weekStartsOn: .sun, locale: locale) == "Week of Sep 6, 2026")
         #expect(week.description == "2026-W37")
     }
 
     @Test func weekOneReadsAsJanuaryEvenWhenItStartsInDecember() throws {
         let week = try #require(ISOWeek("2026-W01"))
         #expect(week.monthAndYear(locale: locale) == "Jan 2026")
-        #expect(week.weekOf(locale: locale) == "Week of Dec 29, 2025")
+        #expect(week.weekOf(weekStartsOn: .mon, locale: locale) == "Week of Dec 29, 2025")
+        #expect(week.weekOf(weekStartsOn: .sun, locale: locale) == "Week of Dec 28, 2025")
+        // A Sunday or Saturday week 1 still reads as January: its Thursday is in the ISO year.
+        #expect(week.monthAndYear(locale: locale) == "Jan 2026")
     }
 
     @Test func week53OnlyInLongYears() {

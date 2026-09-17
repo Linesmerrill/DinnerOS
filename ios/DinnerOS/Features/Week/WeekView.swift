@@ -84,7 +84,7 @@ struct WeekView: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             } else {
-                ForEach(PlanDay.allCases) { day in
+                ForEach(PlanDay.week(startingOn: plans.weekStartsOn)) { day in
                     Section {
                         let entries = plan.entries(on: day)
                         if entries.isEmpty {
@@ -95,7 +95,9 @@ struct WeekView: View {
                             row(entry)
                         }
                     } header: {
-                        DayHeader(title: day.title(in: plans.week), isToday: day == plans.today)
+                        DayHeader(
+                            title: day.title(in: plans.week, weekStartsOn: plans.weekStartsOn),
+                            isToday: day == plans.today)
                     }
                 }
                 let unscheduled = plan.entries(on: nil)
@@ -214,7 +216,7 @@ struct WeekView: View {
             if canEditEntries {
                 Section {
                     Menu("Move To…", systemImage: "arrow.up.and.down.text.horizontal") {
-                        ForEach(PlanDay.allCases) { day in
+                        ForEach(PlanDay.week(startingOn: plans.weekStartsOn)) { day in
                             Button(day.name()) {
                                 perform { try await plans.moveEntry(id: entry.id, to: day) }
                             }

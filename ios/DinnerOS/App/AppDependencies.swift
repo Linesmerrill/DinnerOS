@@ -96,7 +96,7 @@ final class AppDependencies {
         // time zone, from whatever the member allowed. It never prompts.
         autopilot.deviceSignals = { [households, deviceContext] week in
             let timeZone = households.current?.household.planningTimeZone ?? .autoupdatingCurrent
-            return await deviceContext.signals(for: week, timeZone: timeZone)
+            return await deviceContext.signals(for: week, timeZone: timeZone, weekStartsOn: households.weekStartsOn)
         }
         // Accepting a proposal returns the plan, so the Menu shows it without reloading the plan. The
         // menu reloads too: its proposal card and Autopilot badges changed.

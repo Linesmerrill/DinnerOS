@@ -192,7 +192,7 @@ struct RecipeExtrasTests {
         let session = AuthSession(api: AuthAPI(client: client), store: InMemoryTokenStore(session: stored))
         await session.restore()
         let plans = PlanStore(session: session, api: PlansAPI(client: client), checks: InMemoryGroceryChecks())
-        await plans.activate(householdID: "household-1", timeZone: .gmt)
+        await plans.activate(householdID: "household-1", timeZone: .gmt, weekStartsOn: .mon)
         let entry = try await plans.addEntry(NewPlanEntry(recipeID: "recipe-1", servings: 2))
         server.failNext()
 

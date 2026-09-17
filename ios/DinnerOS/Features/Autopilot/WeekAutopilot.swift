@@ -326,6 +326,8 @@ struct WeekAutopilotModifier: ViewModifier {
     private struct WeekKey: Equatable {
         let householdID: String?
         let week: ISOWeek
+        /// A new start day moves slot dates, so the week's proposal and context reload.
+        var weekStartsOn: PlanDay?
     }
 
     func body(content: Content) -> some View {
@@ -348,7 +350,11 @@ struct WeekAutopilotModifier: ViewModifier {
                     flow.sheet = .onboarding
                 }
             }
-            .task(id: WeekKey(householdID: households.current?.household.id, week: plans.week)) {
+            .task(
+                id: WeekKey(
+                    householdID: households.current?.household.id, week: plans.week,
+                    weekStartsOn: households.current?.household.weekStartsOn)
+            ) {
                 guard let householdID = households.current?.household.id else { return }
                 await autopilot.showWeek(plans.week, householdID: householdID)
             }

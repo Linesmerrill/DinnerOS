@@ -98,7 +98,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/households` `{name, timeZone, defaultServings?}` → `201 {household, membership}`. When `STARTER_RECIPES_HOUSEHOLD_ID` is set, the new household's recipes are copied from that household; the response waits up to 3 s for the copy (typically under a second), and a slower copy finishes in the background | bearer | 3 | ✅ |
 | GET | `/api/v1/households` → `{items: [{household, role, permissions}]}` | bearer | 3 | ✅ |
 | GET | `/api/v1/households/{householdId}` → `{household, members, role, permissions}` | `household.view` | 3 | ✅ |
-| PATCH | `/api/v1/households/{householdId}` `{name?, timeZone?, defaultServings?, orderDay?, mealKit?}` → household | `household.update` | 3 | ✅ |
+| PATCH | `/api/v1/households/{householdId}` `{name?, timeZone?, defaultServings?, orderDay?, weekStartsOn?, mealKit?}` → household | `household.update` | 3 | ✅ |
 | PATCH | `/api/v1/households/{householdId}/members/{userId}` `{role}` → member | `members.changeRole` | 3 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/members/{userId}` → `204` | `members.remove`, or your own ID to leave | 3 | ✅ |
 | POST | `/api/v1/households/{householdId}/invitations` `{email, role}` → `201 {invitation, code, emailDelivered}` | `members.invite`, rate limited | 3 | ✅ |
@@ -393,9 +393,21 @@ or an alias, as import matches) is skipped.
 
 ## Plans
 
-A plan is a household's recipes for one ISO week (`2026-W38`, Monday to
-Sunday). The week number must exist in its year: 2026 has 53 weeks, 2025 has
+A plan is a household's recipes for one week, keyed like an ISO week
+(`2026-W38`). The week number must exist in its year: 2026 has 53 weeks, 2025 has
 52. An invalid week is `400 validation_failed`.
+
+The dates a week covers follow the household's **`weekStartsOn`** (`sun` for new
+households, `mon` for households created before the setting): the key's ISO
+Monday moved by 0 to +3 days for Monday–Thursday and −3 to −1 for
+Friday–Sunday, so every week keeps at least four days of its ISO week.
+Sunday-first `2026-W38` is Sunday Sep 13 – Saturday Sep 19, 2026, and Sunday
+Sep 20 is in `2026-W39`. Every `startDate`/`endDate`, menu
+`weekStart`/`weekEnd`, entry and slot `date`, order reminder `dueOn`, and
+"current week" follows it. `PATCH /households/{householdId}` with a new
+`weekStartsOn` first moves each scheduled entry whose date would otherwise
+change into the neighboring week (same ID, day, and date; finalized weeks
+included), so no meal changes date (decision 503).
 
 ### Get a week
 

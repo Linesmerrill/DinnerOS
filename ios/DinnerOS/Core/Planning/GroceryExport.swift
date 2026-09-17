@@ -59,9 +59,11 @@ nonisolated enum GroceryRemindersError: Error, Equatable {
 /// The titles reuse `GroceryListText.amountText`, so a reminder reads the way the grocery
 /// list's own line does.
 nonisolated enum GroceryReminderPlan {
-    /// For example "DinnerOS · Sep 14–20".
-    static func listName(appName: String, week: ISOWeek, locale: Locale = .autoupdatingCurrent) -> String {
-        "\(appName) · \(week.rangeLabel(locale: locale))"
+    /// For example "DinnerOS · Sep 13–19".
+    static func listName(
+        appName: String, week: ISOWeek, weekStartsOn: PlanDay, locale: Locale = .autoupdatingCurrent
+    ) -> String {
+        "\(appName) · \(week.rangeLabel(weekStartsOn: weekStartsOn, locale: locale))"
     }
 
     /// The lines still to buy, in the server's aisle order, so Reminders shows them grouped by

@@ -102,14 +102,19 @@ func normalizeDeviceSignals(in DeviceSignals) (DeviceSignals, error) {
 
 // weekContext computes the server-side signals for a week and adds the
 // device's.
-func weekContext(w planning.Week, timeZone, orderDay string, device DeviceSignals) ProposalContext {
-	c := ProposalContext{Season: seasonOf(w.Monday().AddDate(0, 0, 3), timeZone), Device: device}
+//
+// The week's dates follow the household's first day of the week: the order
+// date is the order day inside that range, and holidays are listed in week
+// order.
+func weekContext(w planning.Week, first planning.Day, timeZone, orderDay string, device DeviceSignals) ProposalContext {
+	start := w.StartOn(first)
+	c := ProposalContext{Season: seasonOf(start.AddDate(0, 0, 3), timeZone), Device: device}
 	if orderDay != "" {
-		c.OrderDate = w.Date(planning.Day(orderDay))
+		c.OrderDate = w.DateOn(first, planning.Day(orderDay))
 	}
-	for i, day := range optionValues(DayOptions) {
-		if h, ok := usHoliday(w.Monday().AddDate(0, 0, i)); ok {
-			h.Day = day
+	for i, day := range planning.DaysFrom(first) {
+		if h, ok := usHoliday(start.AddDate(0, 0, i)); ok {
+			h.Day = string(day)
 			c.Holidays = append(c.Holidays, h)
 		}
 	}

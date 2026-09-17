@@ -50,7 +50,7 @@ func runAddEntriesContract(t *testing.T, store Store, hh, otherHH string) {
 
 	// Manual entries default to the manual origin, in responses too.
 	mp, manual := mustAdd(t, svc, hh, userAda, testWeek, NewEntry{RecipeID: recipeSalad, Servings: 2})
-	if manual.Origin != OriginManual || newEntryResponse(mp.Week, Entry{}).Origin != OriginManual {
+	if manual.Origin != OriginManual || newEntryResponse(mp, Entry{}).Origin != OriginManual {
 		t.Errorf("manual origin = %q", manual.Origin)
 	}
 

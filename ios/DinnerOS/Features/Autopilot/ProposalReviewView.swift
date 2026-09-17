@@ -10,6 +10,7 @@ struct ProposalReviewView: View {
     let onAccepted: (AutopilotAcceptResult) -> Void
 
     @Environment(AutopilotStore.self) private var autopilot
+    @Environment(HouseholdStore.self) private var households
     @Environment(\.dismiss) private var dismiss
 
     @State private var actionError: String?
@@ -106,7 +107,7 @@ struct ProposalReviewView: View {
                 }
             }
             Section {
-                ForEach(proposal.rows) { row in
+                ForEach(proposal.rows(weekStartsOn: households.weekStartsOn)) { row in
                     switch row {
                     case .slot(let slot):
                         ProposalSlotRow(
@@ -122,7 +123,7 @@ struct ProposalReviewView: View {
                     }
                 }
             } header: {
-                Text(week.weekOf())
+                Text(week.weekOf(weekStartsOn: households.weekStartsOn))
             } footer: {
                 if canEdit {
                     Text("Switch off meals you don't want. Nothing is added to your week until you add them.")

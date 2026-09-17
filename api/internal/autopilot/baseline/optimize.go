@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot"
 )
@@ -60,6 +61,26 @@ func (m *model) requestedMeals() int {
 // and a day whose rule allows a long cook keeps it. Hard caps apply anyway.
 func (m *model) busyOn(day int) bool {
 	return m.ctx.busy && day >= 0 && m.prefs.weeknights[day] && !m.longOKOn(day)
+}
+
+// date returns the calendar date of day (an index in autopilot.Days) in the
+// week being planned.
+func (m *model) date(day int) time.Time {
+	return m.weekStart.AddDate(0, 0, (day-m.firstDay+7)%7)
+}
+
+// neighbors returns the days (indexes in autopilot.Days) right before and
+// after day within the week being planned. With Sunday-first weeks, Sunday's
+// only neighbor is Monday and Saturday's is Friday.
+func (m *model) neighbors(day int) []int {
+	pos := (day - m.firstDay + 7) % 7
+	var out []int
+	for _, p := range []int{pos - 1, pos + 1} {
+		if p >= 0 && p < 7 {
+			out = append(out, (p+m.firstDay)%7)
+		}
+	}
+	return out
 }
 
 // overLong reports whether another long meal on day, not allowed by the day's
@@ -262,8 +283,8 @@ func (m *model) penalties(st *state, it *item, day int, longOK bool) [4]float64 
 			p[1] -= w.ExtraLong
 		}
 		if m.prefs.avoidConsecutiveLong && day >= 0 {
-			for _, n := range []int{day - 1, day + 1} {
-				if n >= 0 && n < 7 && st.bands[n] == autopilot.BandLong {
+			for _, n := range m.neighbors(day) {
+				if st.bands[n] == autopilot.BandLong {
 					p[1] -= w.ConsecutiveLong
 				}
 			}

@@ -73,8 +73,10 @@ final class GroceryExportController {
     /// Sends the unchecked lines to a Reminders list named for the week. The first time on a
     /// device it explains what will happen first, before Reminders access is asked for. Offers
     /// Replace or Add when a list with that name is already there.
-    func addToReminders(list: GroceryList, week: ISOWeek, checked: Set<String>, appName: String) async {
-        let name = GroceryReminderPlan.listName(appName: appName, week: week)
+    func addToReminders(
+        list: GroceryList, week: ISOWeek, weekStartsOn: PlanDay, checked: Set<String>, appName: String
+    ) async {
+        let name = GroceryReminderPlan.listName(appName: appName, week: week, weekStartsOn: weekStartsOn)
         let drafts = GroceryReminderPlan.drafts(for: list, checked: checked)
         guard !drafts.isEmpty else {
             report(error: String(localized: "Nothing to add: every item is checked off."))
@@ -193,7 +195,8 @@ struct GroceryExportActions: View {
             guard let list = model.list else { return }
             Task {
                 await controller.addToReminders(
-                    list: list, week: model.week, checked: model.checked, appName: configuration.displayName)
+                    list: list, week: model.week, weekStartsOn: model.weekStartsOn, checked: model.checked,
+                    appName: configuration.displayName)
             }
         } label: {
             Label("Add to Reminders", systemImage: "list.bullet.clipboard")
@@ -205,7 +208,8 @@ struct GroceryExportActions: View {
                 ShareLink(
                     item: text,
                     subject: Text("Grocery List"),
-                    preview: SharePreview(Text("Grocery List: \(model.week.rangeLabel())"))
+                    preview: SharePreview(
+                        Text("Grocery List: \(model.week.rangeLabel(weekStartsOn: model.weekStartsOn))"))
                 ) {
                     Label("Share", systemImage: "square.and.arrow.up")
                 }

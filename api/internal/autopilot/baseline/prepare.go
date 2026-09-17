@@ -35,8 +35,10 @@ type model struct {
 	// dayCounts is how often the household planned meals on each weekday.
 	dayCounts [7]int
 
-	// weekStart is the Monday of the week being planned.
+	// weekStart is the first day of the week being planned, and firstDay its
+	// index in Days (0 for Monday), from Input.WeekStart.
 	weekStart time.Time
+	firstDay  int
 	// learned is what the household's feedback taught (learn.go).
 	learned learning
 
@@ -189,12 +191,12 @@ func skipAboutTheMeal(reason string) bool {
 }
 
 func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
-	start, err := autopilot.WeekStart(in.Week)
+	start, err := autopilot.WeekStartOn(in.Week, in.WeekStart)
 	if err != nil {
 		return nil, err
 	}
 	m := &model{
-		w: p.weights, version: p.version, beam: p.beam, perSlot: p.perSlot, week: in.Week, weekStart: start,
+		w: p.weights, version: p.version, beam: p.beam, perSlot: p.perSlot, week: in.Week, weekStart: start, firstDay: max(in.WeekStart.Index(), 0),
 		seed:     hashString(fmt.Sprintf("%s|%s|%d|%s", in.HouseholdID, in.Week, attempt, p.version)),
 		byID:     map[string]*item{},
 		rejected: map[string]int{},

@@ -93,7 +93,7 @@ final class LiveDinnerIntentServices: DinnerIntentServices {
         return .ready(
             IntentHousehold(
                 id: current.id, timeZone: current.planningTimeZone,
-                canPlan: households.access?.can(.planEdit) == true))
+                canPlan: households.access?.can(.planEdit) == true, weekStartsOn: current.weekStartsOn))
     }
 
     func isAutopilotConfigured(householdID: String) async throws -> Bool {

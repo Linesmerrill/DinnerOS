@@ -63,7 +63,7 @@ struct AddRecipesSheet: View {
                 }
                 ToolbarItem(placement: .status) {
                     if addedTotal > 0 {
-                        Text("Added \(addedTotal) to \(week.rangeLabel())")
+                        Text("Added \(addedTotal) to \(week.rangeLabel(weekStartsOn: plans.weekStartsOn))")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }

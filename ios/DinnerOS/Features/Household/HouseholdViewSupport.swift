@@ -33,7 +33,8 @@ enum HouseholdPreviewData {
 
     static let household = Household(
         id: "household-1", name: "The Lovelace Kitchen", defaultServings: 4, timeZone: "America/Denver",
-        orderDay: "thu", createdBy: "user-ada", createdAt: .now, updatedAt: .now)
+        orderDay: "thu", createdBy: "user-ada", createdAt: .now, updatedAt: .now,
+        weekStartsOn: .sun)
 
     static let detail = HouseholdDetail(
         household: household,

@@ -63,7 +63,7 @@ func (s *Service) Learning(ctx context.Context, householdID string) (Learning, e
 	if err != nil {
 		loc = time.UTC
 	}
-	w := planning.WeekOf(s.now().In(loc))
+	w := planning.WeekOfOn(s.now().In(loc), planning.Day(household.FirstDay()))
 	profile, err := s.Profile(ctx, householdID)
 	if err != nil {
 		return Learning{}, err

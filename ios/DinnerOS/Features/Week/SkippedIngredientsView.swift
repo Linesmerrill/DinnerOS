@@ -170,7 +170,7 @@ struct SkippedIngredientsView: View {
 #Preview {
     let session = HouseholdPreviewData.session()
     NavigationStack {
-        SkippedIngredientsView(week: .current(in: .gmt))
+        SkippedIngredientsView(week: .current(in: .gmt, weekStartsOn: PlanDay.defaultWeekStart))
     }
     .environment(HouseholdPreviewData.store(session: session))
     .environment(

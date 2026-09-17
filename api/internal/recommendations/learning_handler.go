@@ -78,14 +78,14 @@ type ProposalContextJSON struct {
 	Signals   DeviceSignalsJSON `json:"signals"`
 }
 
-func proposalContextJSON(week string, c ProposalContext) ProposalContextJSON {
+func proposalContextJSON(week string, first planning.Day, c ProposalContext) ProposalContextJSON {
 	w, _ := planning.ParseWeek(week)
 	out := ProposalContextJSON{
 		Season: optionalString(c.Season), OrderDate: optionalString(c.OrderDate), Holidays: []HolidayJSON{},
 		Signals: deviceSignalsJSON(c.Device),
 	}
 	for _, h := range c.Holidays {
-		out.Holidays = append(out.Holidays, HolidayJSON{Day: h.Day, Date: w.Date(planning.Day(h.Day)), Name: h.Name, Kind: h.Kind})
+		out.Holidays = append(out.Holidays, HolidayJSON{Day: h.Day, Date: w.DateOn(first, planning.Day(h.Day)), Name: h.Name, Kind: h.Kind})
 	}
 	return out
 }

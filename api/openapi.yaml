@@ -4410,12 +4410,12 @@ components:
           example: 2026-W38
         weekStart:
           type: string
-          description: The week's Monday, YYYY-MM-DD.
-          example: 2026-09-14
+          description: The week's first day, YYYY-MM-DD, which depends on the household's `weekStartsOn` (Sunday-first 2026-W38 starts 2026-09-13).
+          example: 2026-09-13
         weekEnd:
           type: string
-          description: The week's Sunday, YYYY-MM-DD.
-          example: 2026-09-20
+          description: The week's last day, YYYY-MM-DD.
+          example: 2026-09-19
         currentWeek:
           type: string
           description: The household's current week, which `timing` compares to.
@@ -5118,7 +5118,7 @@ components:
         - shopping.edit
     Household:
       type: object
-      required: [id, name, defaultServings, timeZone, orderDay, mealKit, createdBy, createdAt, updatedAt]
+      required: [id, name, defaultServings, timeZone, orderDay, weekStartsOn, mealKit, createdBy, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -5141,6 +5141,8 @@ components:
           enum: [mon, tue, wed, thu, fri, sat, sun, null]
           description: The weekday the household means to place its grocery order; null until someone picks one, which leaves order reminders off.
           example: thu
+        weekStartsOn:
+          $ref: "#/components/schemas/WeekStartDay"
         mealKit:
           description: What the household spent on meal kits, compared with its weekly grocery cost; null until set.
           oneOf:
@@ -5212,7 +5214,19 @@ components:
           minimum: 1
           maximum: 12
           default: 2
-    UpdateHouseholdRequest:
+        weekStartsOn:
+          $ref: "#/components/schemas/WeekStartDay"
+    WeekStartDay:
+      type: string
+      enum: [sun, mon, tue, wed, thu, fri, sat]
+      default: sun
+      description: >-
+        The first day of the household's week. It decides which dates each week key covers: week `YYYY-Www`
+        starts on the ISO week's Monday moved by 0 to +3 days (Monday to Thursday) or −3 to −1 days (Friday to
+        Sunday), so Sunday-first 2026-W38 is Sep 13–19, 2026. Every `startDate`, `endDate`, `weekStart`,
+        `weekEnd`, entry and slot `date`, `dueOn`, and "current week" follows it. New households default to
+        `sun`; households created before the setting existed read `mon`.
+      example: sun
       type: object
       additionalProperties: false
       minProperties: 1
@@ -5233,6 +5247,13 @@ components:
           enum: [mon, tue, wed, thu, fri, sat, sun, ""]
           description: The grocery order day. An empty string clears it, turning order reminders off; omitting the field leaves it unchanged.
           example: thu
+        weekStartsOn:
+          allOf:
+            - $ref: "#/components/schemas/WeekStartDay"
+          description: >-
+            Changes the first day of the week. Scheduled plan entries whose calendar date now falls in the
+            neighboring week are moved into that week (same ID, day, and date; finalized weeks included), so no
+            meal changes date. Reload plans, menus, and shopping weeks afterwards.
         mealKit:
           description: The meal kit baseline; null turns the comparison off, omitting it leaves it unchanged.
           oneOf:
@@ -5547,7 +5568,9 @@ components:
     IsoWeek:
       type: string
       pattern: "^[0-9]{4}-W[0-9]{2}$"
-      description: ISO 8601 week, Monday to Sunday. The week must exist in its year (52 or 53 weeks).
+      description: >-
+        A week key in ISO 8601 form. The week must exist in its year (52 or 53 weeks). The dates it covers
+        follow the household's `weekStartsOn` (see WeekStartDay); with `mon` it is the ISO week itself.
       example: 2026-W38
     PlanDay:
       type: [string, "null"]
@@ -5568,13 +5591,13 @@ components:
         startDate:
           type: string
           format: date
-          description: The week's Monday.
-          example: "2026-09-14"
+          description: The week's first day (the household's weekStartsOn).
+          example: "2026-09-13"
         endDate:
           type: string
           format: date
-          description: The week's Sunday.
-          example: "2026-09-20"
+          description: The week's last day.
+          example: "2026-09-19"
         status:
           $ref: "#/components/schemas/PlanStatus"
         entries:
@@ -7818,13 +7841,13 @@ components:
         startDate:
           type: string
           format: date
-          description: The week's Monday.
-          example: "2026-09-14"
+          description: The week's first day (the household's weekStartsOn).
+          example: "2026-09-13"
         endDate:
           type: string
           format: date
-          description: The week's Sunday.
-          example: "2026-09-20"
+          description: The week's last day.
+          example: "2026-09-19"
         configured:
           type: boolean
           description: False when the week has no saved context.
@@ -7927,7 +7950,7 @@ components:
         date:
           type: string
           format: date
-          example: "2026-09-20"
+          example: "2026-09-13"
         recipe:
           type: object
           description: Snapshot taken when the meal was proposed.
@@ -8058,13 +8081,13 @@ components:
         startDate:
           type: string
           format: date
-          description: The week's Monday.
-          example: "2026-09-14"
+          description: The week's first day (the household's weekStartsOn).
+          example: "2026-09-13"
         endDate:
           type: string
           format: date
-          description: The week's Sunday.
-          example: "2026-09-20"
+          description: The week's last day.
+          example: "2026-09-19"
         status:
           $ref: "#/components/schemas/AutopilotProposalStatus"
         version:
@@ -9268,7 +9291,7 @@ components:
           example: thu
         dueOn:
           type: [string, "null"]
-          description: The order day's calendar date in this week; null without an order day.
+          description: The order day's calendar date in this week (whose dates follow the household's weekStartsOn); null without an order day.
           example: "2026-09-17"
         due:
           type: boolean

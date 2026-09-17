@@ -18,24 +18,19 @@ nonisolated struct ISOWeek: Hashable, Sendable, Comparable {
         guard let monday = startDate, Self.calendar.component(.weekOfYear, from: monday) == week else { return nil }
     }
 
-    /// Midnight UTC on the Monday that starts the week.
+    /// Midnight UTC on the week's ISO Monday. A household's week may start on another day; show
+    /// dates with `startDate(weekStartsOn:)`.
     var startDate: Date? {
         Self.calendar.date(
             from: DateComponents(weekday: 2, weekOfYear: week, yearForWeekOfYear: year))
     }
 
     /// Short month and year, for example "Sep 2026". Uses the week's Thursday, which
-    /// always falls in the week's ISO year, so week 1 never reads as December.
+    /// always falls in the week's ISO year, so week 1 never reads as December. It's inside the
+    /// week whichever day the household's week starts on.
     func monthAndYear(locale: Locale = .autoupdatingCurrent) -> String {
         guard let thursday = startDate.map({ $0.addingTimeInterval(3 * 86_400) }) else { return description }
         return thursday.formatted(Self.style(locale: locale).month(.abbreviated).year())
-    }
-
-    /// For example "Week of Sep 7, 2026".
-    func weekOf(locale: Locale = .autoupdatingCurrent) -> String {
-        guard let monday = startDate else { return description }
-        let date = monday.formatted(Self.style(locale: locale).month(.abbreviated).day().year())
-        return String(localized: "Week of \(date)")
     }
 
     static func < (lhs: ISOWeek, rhs: ISOWeek) -> Bool {

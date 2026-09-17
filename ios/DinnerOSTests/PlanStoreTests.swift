@@ -28,7 +28,7 @@ struct PlanStoreTests {
 
     private func activated(_ server: FakePlanServer = FakePlanServer()) async throws -> Harness {
         let harness = try await makeHarness(server: server)
-        await harness.store.activate(householdID: "household-1", timeZone: Self.denver)
+        await harness.store.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .mon)
         return harness
     }
 
@@ -40,7 +40,7 @@ struct PlanStoreTests {
         let store = harness.store
         #expect(store.phase == .idle)
 
-        await store.activate(householdID: "household-1", timeZone: Self.denver)
+        await store.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .mon)
 
         #expect(store.week.description == "2026-W38")
         #expect(store.today == .sun)
@@ -50,8 +50,45 @@ struct PlanStoreTests {
         #expect(harness.server.log == ["GET /households/household-1/plans/2026-W38"])
 
         // Activating the same household again doesn't refetch.
-        await store.activate(householdID: "household-1", timeZone: Self.denver)
+        await store.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .mon)
         #expect(harness.server.log.count == 1)
+    }
+
+    /// Sunday noon in Denver is the end of 2026-W38 for a Monday household and the start of
+    /// 2026-W39 for a Sunday one. Changing the start day reloads, and follows this week.
+    @Test func aNewWeekStartDayReloadsAndFollowsThisWeek() async throws {
+        let harness = try await makeHarness(now: "2026-09-20T18:00:00Z")
+        let store = harness.store
+        await store.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .mon)
+        #expect(store.week.description == "2026-W38")
+        #expect(store.weekStartsOn == .mon)
+
+        await store.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .sun)
+
+        #expect(store.weekStartsOn == .sun)
+        #expect(store.week.description == "2026-W39")
+        #expect(store.today == .sun)
+        #expect(store.phase == .loaded)
+        #expect(store.plan?.week == "2026-W39")
+        #expect(
+            harness.server.log == [
+                "GET /households/household-1/plans/2026-W38", "GET /households/household-1/plans/2026-W39",
+            ])
+    }
+
+    /// A week other than this one stays shown, reloaded, since its meals may have moved.
+    @Test func aNewWeekStartDayReloadsAnotherShownWeekInPlace() async throws {
+        let harness = try await activated()
+        let store = harness.store
+        let later = try #require(ISOWeek("2026-W40"))
+        await store.show(week: later)
+
+        await store.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .sat)
+
+        #expect(store.week == later)
+        #expect(store.phase == .loaded)
+        #expect(harness.server.log.last == "GET /households/household-1/plans/2026-W40")
+        #expect(harness.server.log.count == 3)
     }
 
     /// The grocery list screen builds its model from here, and answers `nil` without a
@@ -62,7 +99,7 @@ struct PlanStoreTests {
 
         #expect(harness.store.makeGroceryList(week: week) == nil)
 
-        await harness.store.activate(householdID: "household-1", timeZone: Self.denver)
+        await harness.store.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .mon)
 
         #expect(harness.store.makeGroceryList(week: week) != nil)
     }
@@ -279,7 +316,7 @@ struct PlanStoreTests {
         await store.show(week: store.week.adding(weeks: 3))
 
         server.update { $0.householdID = "household-2" }
-        await store.activate(householdID: "household-2", timeZone: Self.denver)
+        await store.activate(householdID: "household-2", timeZone: Self.denver, weekStartsOn: .mon)
 
         #expect(store.householdID == "household-2")
         #expect(store.week.description == "2026-W38")

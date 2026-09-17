@@ -36,6 +36,8 @@ type snapshotInput struct {
 	Week     planning.Week
 	Current  planning.Week
 	Location *time.Location
+	// FirstDay is the household's first day of the week; empty means Monday.
+	FirstDay planning.Day
 	// Catalog is the household's recipes ordered by ID.
 	Catalog   []recipes.Recipe
 	Ratings   []ratings.Rating
@@ -140,7 +142,7 @@ func newSnapshot(in snapshotInput) *snapshot {
 			if it.cookedWeeks == nil {
 				it.cookedWeeks = map[string]bool{}
 			}
-			it.cookedWeeks[eventWeek(e, in.Location)] = true
+			it.cookedWeeks[eventWeek(e, in.Location, in.FirstDay)] = true
 		}
 	}
 	for _, e := range in.Plan.Entries {
@@ -175,18 +177,19 @@ func bandLimits(b autopilot.TimeBands) (quick, medium int) {
 	return quick, medium
 }
 
-// eventWeek is the ISO week a cooked event belongs to: its week, else its
-// payload date, else when it occurred in the household's time zone.
-func eventWeek(e events.Event, loc *time.Location) string {
+// eventWeek is the week a cooked event belongs to: its week, else the week
+// of its payload date, else of when it occurred in the household's time zone,
+// with weeks starting on first.
+func eventWeek(e events.Event, loc *time.Location, first planning.Day) string {
 	if e.Week != "" {
 		return e.Week
 	}
 	if p, ok := e.Payload.(events.RecipeCooked); ok && p.Date != "" {
 		if d, err := time.Parse(time.DateOnly, p.Date); err == nil {
-			return planning.WeekOf(d).String()
+			return planning.WeekOfOn(d, first).String()
 		}
 	}
-	return planning.WeekOf(e.OccurredAt.In(loc)).String()
+	return planning.WeekOfOn(e.OccurredAt.In(loc), first).String()
 }
 
 // affinity is the share of the household's main-meal orders that had each
@@ -405,11 +408,11 @@ func methodName(v string) string { return optionLabel(recommendations.EquipmentO
 
 func dayName(v string) string { return optionLabel(recommendations.DayOptions, v) }
 
-func dayIndex(day string) int {
-	for i, o := range recommendations.DayOptions {
-		if o.Value == day {
-			return i
-		}
+// dayIndex is day's position in the household's week (0 for its first day),
+// with unknown and empty days last.
+func (s *snapshot) dayIndex(day string) int {
+	if i := planning.Day(day).OrderOn(s.in.FirstDay); i >= 0 {
+		return i
 	}
 	return len(recommendations.DayOptions)
 }

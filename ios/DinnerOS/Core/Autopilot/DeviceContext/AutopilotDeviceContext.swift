@@ -96,10 +96,10 @@ final class AutopilotDeviceContext {
 
     /// The signals for `week` in the household's `timeZone`, or `nil` when there are none.
     /// Never prompts.
-    func signals(for week: ISOWeek, timeZone: TimeZone) async -> AutopilotDeviceSignals? {
+    func signals(for week: ISOWeek, timeZone: TimeZone, weekStartsOn: PlanDay) async -> AutopilotDeviceSignals? {
         refreshAuthorization()
-        async let calendarBands = calendarSignals(week: week, timeZone: timeZone)
-        async let weatherBands = weatherSignals(week: week, timeZone: timeZone)
+        async let calendarBands = calendarSignals(week: week, timeZone: timeZone, weekStartsOn: weekStartsOn)
+        async let weatherBands = weatherSignals(week: week, timeZone: timeZone, weekStartsOn: weekStartsOn)
         let (busy, bands) = await (calendarBands, weatherBands)
         let signals = AutopilotDeviceSignals.combine(calendar: busy, weather: bands)
         Self.logger.info(
@@ -114,13 +114,16 @@ final class AutopilotDeviceContext {
         weatherAttribution = await weather.attribution()
     }
 
-    private func calendarSignals(week: ISOWeek, timeZone: TimeZone) async -> [PlanDay: EveningBusyness] {
+    private func calendarSignals(week: ISOWeek, timeZone: TimeZone, weekStartsOn: PlanDay) async -> [PlanDay:
+        EveningBusyness]
+    {
         guard usesCalendar, calendar.authorization == .granted,
-            let span = CalendarBusyness.weekSpan(week: week, timeZone: timeZone)
+            let span = CalendarBusyness.weekSpan(week: week, timeZone: timeZone, weekStartsOn: weekStartsOn)
         else { return [:] }
         do {
             let intervals = try await calendar.busyIntervals(in: span)
-            return CalendarBusyness.week(week, timeZone: timeZone, intervals: intervals, onOrAfter: now())
+            return CalendarBusyness.week(
+                week, timeZone: timeZone, weekStartsOn: weekStartsOn, intervals: intervals, onOrAfter: now())
         } catch {
             // The error type only; never event details.
             Self.logger.notice("Calendar read failed: \(String(describing: type(of: error)), privacy: .public)")
@@ -128,9 +131,11 @@ final class AutopilotDeviceContext {
         }
     }
 
-    private func weatherSignals(week: ISOWeek, timeZone: TimeZone) async -> [PlanDay: DayWeatherBands] {
+    private func weatherSignals(week: ISOWeek, timeZone: TimeZone, weekStartsOn: PlanDay) async -> [PlanDay:
+        DayWeatherBands]
+    {
         guard usesWeather, location.authorization == .granted,
-            let span = CalendarBusyness.weekSpan(week: week, timeZone: timeZone)
+            let span = CalendarBusyness.weekSpan(week: week, timeZone: timeZone, weekStartsOn: weekStartsOn)
         else { return [:] }
         // A forecast reaches about ten days out; a week entirely past or beyond it has none.
         let start = max(span.start, now())
@@ -138,7 +143,7 @@ final class AutopilotDeviceContext {
         do {
             let coordinate = try await location.approximateLocation()
             let forecast = try await weather.dailyForecast(at: coordinate, from: start, to: span.end)
-            return WeatherBanding.week(week, timeZone: timeZone, forecast: forecast)
+            return WeatherBanding.week(week, timeZone: timeZone, weekStartsOn: weekStartsOn, forecast: forecast)
         } catch {
             Self.logger.notice("Weather read failed: \(String(describing: type(of: error)), privacy: .public)")
             return [:]

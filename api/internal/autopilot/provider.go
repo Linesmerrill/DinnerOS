@@ -28,6 +28,11 @@ type Input struct {
 	HouseholdID string
 	// Week is the ISO week being planned ("2026-W38").
 	Week string
+	// WeekStart is the household's first day of the week, which decides the
+	// dates Week covers and which days are neighbors: with Sunday, 2026-W38
+	// runs Sunday Sep 13 to Saturday Sep 19, and Saturday and Sunday aren't
+	// adjacent. Empty means Monday (the ISO week itself).
+	WeekStart Day
 	// Catalog is every item the household could eat. Order doesn't matter.
 	Catalog     []Item
 	Preferences Preferences
