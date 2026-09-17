@@ -25,14 +25,7 @@ struct RecipePhoto: View {
     @State private var measuredWidth: CGFloat?
 
     var body: some View {
-        placeholder
-            .overlay {
-                CachedImage(key: key) {
-                    ShimmerView()
-                } fallback: {
-                    fallbackGlyph
-                }
-            }
+        sized
             .clipShape(.rect(cornerRadius: cornerRadius))
             .onGeometryChange(for: CGFloat.self) {
                 $0.size.width
@@ -49,20 +42,66 @@ struct RecipePhoto: View {
         ImageKey(url: url, pointWidth: measuredWidth ?? pointWidth, scale: displayScale, maxBucket: maxBucket)
     }
 
+    /// The photo's box, with the image filling it. The box's size never depends on the image:
+    /// a loaded photo, the shimmer, and the fallback glyph are all drawn inside the same frame.
     @ViewBuilder
-    private var placeholder: some View {
-        let base = Rectangle().fill(Color(.secondarySystemBackground))
+    private var sized: some View {
         if let aspectRatio {
-            base.aspectRatio(aspectRatio, contentMode: .fit)
+            RecipePhotoFrame(aspectRatio: aspectRatio, idealWidth: pointWidth) {
+                filled
+            }
         } else {
-            base
+            filled
         }
+    }
+
+    private var filled: some View {
+        Rectangle()
+            .fill(Color(.secondarySystemBackground))
+            .overlay {
+                CachedImage(key: key) {
+                    ShimmerView()
+                } fallback: {
+                    fallbackGlyph
+                }
+            }
     }
 
     private var fallbackGlyph: some View {
         Image(systemName: "fork.knife")
             .font(.title2)
             .foregroundStyle(.tertiary)
+    }
+}
+
+/// Sizes a photo from the width it's offered alone: the height is always `width / aspectRatio`,
+/// whatever height the parent proposes.
+///
+/// `.aspectRatio(_, contentMode: .fit)` also honours a proposed height. A carousel card is a
+/// `VStack` of the photo and rows under it, and a lazy horizontal stack proposes every card the
+/// height it measured for the first few; a card with more rows under its photo (a past meal's
+/// outcome and rating) left the photo less height, and `.fit` shrank it in both directions. So
+/// neighbouring cards showed photos of different sizes. Ignoring the height makes every photo
+/// in a row the same size, and the rows below take the space they need instead.
+struct RecipePhotoFrame: Layout {
+    let aspectRatio: CGFloat
+    /// The width used when the parent proposes none, such as inside a horizontal scroll view.
+    var idealWidth: CGFloat
+
+    static func size(proposedWidth: CGFloat?, aspectRatio: CGFloat, idealWidth: CGFloat) -> CGSize {
+        let width = proposedWidth.flatMap { $0.isFinite ? max($0, 0) : nil } ?? idealWidth
+        return CGSize(width: width, height: aspectRatio > 0 ? width / aspectRatio : width)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        Self.size(proposedWidth: proposal.width, aspectRatio: aspectRatio, idealWidth: idealWidth)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for subview in subviews {
+            subview.place(
+                at: CGPoint(x: bounds.midX, y: bounds.midY), anchor: .center, proposal: ProposedViewSize(bounds.size))
+        }
     }
 }
 
@@ -517,5 +556,39 @@ struct MenuCardPlaceholders: View {
             MenuCardPlaceholders()
         }
         .padding()
+    }
+}
+
+/// Photos in a paging row, as Your Meals lays them out: loading, failed, and missing photos, with
+/// and without badges, and cards with rows under their photo. Every photo is the same size.
+#Preview("Carousel photos, mixed") {
+    let urls: [URL?] =
+        MenuPreviewData.cards.map(\.recipe.imageURL) + [nil, URL(string: "https://invalid.example/x.jpg")]
+    ScrollView {
+        ScrollView(.horizontal) {
+            LazyHStack(alignment: .top, spacing: 12) {
+                ForEach(Array(urls.enumerated()), id: \.offset) { index, url in
+                    VStack(alignment: .leading, spacing: 8) {
+                        RecipePhoto(url: url, pointWidth: 300)
+                            .overlay(alignment: .bottomLeading) {
+                                if index.isMultiple(of: 2) {
+                                    TimeBadge(minutes: 25, isQuick: true)
+                                        .padding(8)
+                                }
+                            }
+                            .border(.red.opacity(0.5))
+                        CardTitle(
+                            name: index.isMultiple(of: 3)
+                                ? "Sweet Chili Beef & Green Bean Bowls" : "Turkey Ragù Spaghetti")
+                        if index.isMultiple(of: 3) {
+                            ServingsStepper(label: "4 servings", decrease: {}, increase: {})
+                            ServingsStepper(label: "2 servings", decrease: {}, increase: {})
+                        }
+                    }
+                    .containerRelativeFrame(.horizontal) { width, _ in width * 0.84 }
+                }
+            }
+            .padding(.horizontal, 16)
+        }
     }
 }

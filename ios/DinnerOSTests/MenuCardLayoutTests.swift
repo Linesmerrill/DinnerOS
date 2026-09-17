@@ -106,4 +106,62 @@ struct MenuCardLayoutTests {
         let proposal = CGSize(width: Self.cardWidth, height: UIView.layoutFittingCompressedSize.height)
         #expect(long.sizeThatFits(in: proposal).height == short.sizeThatFits(in: proposal).height)
     }
+
+    // MARK: - Photos
+
+    /// The size SwiftUI gives `view` when its parent proposes `proposal`.
+    private func fittingSize(_ view: some View, proposal: CGSize) -> CGSize {
+        UIHostingController(rootView: AnyView(view)).sizeThatFits(in: proposal)
+    }
+
+    /// A carousel photo keeps its size whatever height it's offered. `.aspectRatio(.fit)` used to
+    /// shrink it when a lazy stack proposed a card less height than its rows needed, so one card's
+    /// photo came out shorter and narrower than its neighbour's.
+    @Test(arguments: [40.0, 120.0, 165.0, 600.0, .infinity])
+    func aCardPhotoIsTheSameSizeWhateverHeightItIsOffered(height: CGFloat) {
+        let photo = RecipePhoto(url: nil, pointWidth: Self.cardWidth).frame(width: Self.cardWidth)
+        let size = fittingSize(photo, proposal: CGSize(width: Self.cardWidth, height: height))
+        #expect(size == CGSize(width: Self.cardWidth, height: Self.cardWidth * 3 / 4))
+    }
+
+    /// Loading, failed, and missing photos are all drawn in the same box as a loaded one, and a
+    /// badge laid over the photo doesn't change it.
+    @Test func aPhotoWithABadgeOrStillLoadingIsTheSameSize() throws {
+        let url = try #require(URL(string: "https://images.example.com/recipes/tall.jpg"))
+        let proposal = CGSize(width: Self.cardWidth, height: 90)
+        let plain = fittingSize(RecipePhoto(url: nil, pointWidth: Self.cardWidth), proposal: proposal)
+        let loading = fittingSize(
+            RecipePhoto(url: url, pointWidth: Self.cardWidth)
+                .overlay(alignment: .bottomLeading) { TimeBadge(minutes: 25, isQuick: true) },
+            proposal: proposal)
+        #expect(plain == CGSize(width: Self.cardWidth, height: 165))
+        #expect(loading == plain)
+    }
+
+    /// A card with rows under its photo, squeezed to a lazy stack's height, keeps the photo's size
+    /// and lets the card grow instead.
+    @Test func rowsUnderAPhotoDoNotShrinkIt() {
+        let card = VStack(alignment: .leading, spacing: 8) {
+            RecipePhoto(url: nil, pointWidth: Self.cardWidth)
+            CardTitle(name: Self.longName)
+            Color.gray.frame(height: 44)
+            Color.gray.frame(height: 44)
+        }
+        .frame(width: Self.cardWidth)
+        let size = fittingSize(card, proposal: CGSize(width: Self.cardWidth, height: 200))
+        #expect(size.height >= 165 + 44 + 44)
+    }
+
+    @Test(arguments: [(220.0, 4.0 / 3.0, 165.0), (400.0, 16.0 / 10.0, 250.0), (48.0, 1.0, 48.0)])
+    func photoFrameHeightFollowsTheWidthAlone(width: CGFloat, ratio: CGFloat, height: CGFloat) {
+        #expect(
+            RecipePhotoFrame.size(proposedWidth: width, aspectRatio: ratio, idealWidth: 999)
+                == CGSize(width: width, height: height))
+        #expect(
+            RecipePhotoFrame.size(proposedWidth: nil, aspectRatio: ratio, idealWidth: width)
+                == CGSize(width: width, height: height))
+        #expect(
+            RecipePhotoFrame.size(proposedWidth: .infinity, aspectRatio: ratio, idealWidth: width)
+                == CGSize(width: width, height: height))
+    }
 }
