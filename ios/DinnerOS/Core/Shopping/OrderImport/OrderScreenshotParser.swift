@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// One item read from order screenshots.
@@ -39,18 +40,23 @@ nonisolated struct ParsedOrder: Hashable, Sendable {
 /// totals. Deterministic, so it's the fallback for Apple Intelligence and the check on it.
 ///
 /// It expects the app's layout: an item name (sometimes wrapped over two lines), then lines
-/// like "Qty 2", "2 x $2.49", "Weight-adjusted", and the price. A price that comes before the
-/// first name means the screenshots put prices first, and every item is read that way.
-/// Was-prices, per-unit prices, and item savings are ignored; "Subtotal", fees, "Tax", "Driver
-/// tip", "Savings", and "Total" become the order's totals.
+/// like "Qty 2", "2 x $2.49", "Weight-adjusted", and the price. The cart screen prints the price
+/// *above* the name instead, so which side a price is on is decided from where the rows sit
+/// (`pricesComeFirst`), not from the order they're read in. Was-prices, per-unit prices, average
+/// prices, and item savings are ignored; "Subtotal", fees, "Tax", "Driver tip", "Savings", and
+/// "Total" become the order's totals.
 nonisolated enum OrderScreenshotParser {
     static func parse(text: String) -> ParsedOrder {
         parse(lines: text.components(separatedBy: .newlines))
     }
 
     static func parse(lines: [String]) -> ParsedOrder {
-        let tokens = lines.map(classify)
-        var builder = Builder(pricesFirst: pricesComeFirst(tokens))
+        parse(rows: lines.map { RecognizedRow(text: $0) })
+    }
+
+    static func parse(rows: [RecognizedRow]) -> ParsedOrder {
+        let tokens = rows.map { classify($0.text) }
+        var builder = Builder(pricesFirst: pricesComeFirst(tokens: tokens, rows: rows))
         for token in tokens {
             builder.consume(token)
         }
@@ -89,9 +95,13 @@ nonisolated enum OrderScreenshotParser {
         let prices = priceMatches(in: line)
         let label = labelText(line)
 
-        // An item's own was-price or savings, checked before the order's "Savings" line.
+        // An item's own was-price, average price, or savings, before the order's "Savings" line.
         if lower.range(of: wasPricePattern, options: .regularExpression) != nil {
             return .ignoredPrice
+        }
+        // The cart's quantity stepper, "- 2 +", is how many of this item are in the cart.
+        if let match = line.wholeMatch(of: #/[-−–—]?\s*(\d{1,2})\s*\+/#), let count = Int(match.1) {
+            return .quantity(count, price: nil)
         }
         if let kind = summaryKind(label) {
             return .summary(kind, amount: prices.last.map { abs($0.cents) })
@@ -126,10 +136,11 @@ nonisolated enum OrderScreenshotParser {
         }
         // A name, maybe with its price on the same row: "Great Value Sour Cream, 16 oz $2.48".
         if let price = prices.last, price.cents >= 0, price.range.upperBound == line.endIndex {
-            let name = String(line[..<price.range.lowerBound]).trimmingCharacters(in: .whitespaces)
-            return isName(name) ? .name(name, trailingPrice: price.cents) : .noise
+            let name = String(line[..<price.range.lowerBound])
+            return OrderTitleCleaner.clean(name).map { .name($0, trailingPrice: price.cents) } ?? .noise
         }
-        return prices.isEmpty && isName(line) ? .name(line, trailingPrice: nil) : .noise
+        guard prices.isEmpty, let name = OrderTitleCleaner.clean(line) else { return .noise }
+        return .name(name, trailingPrice: nil)
     }
 
     // MARK: - Assembly
@@ -286,8 +297,43 @@ nonisolated enum OrderScreenshotParser {
         }
     }
 
-    /// Whether the first item line is a price rather than a name.
-    private static func pricesComeFirst(_ tokens: [Token]) -> Bool {
+    /// Whether each item's price is printed above its name, as the Walmart cart screen prints it.
+    ///
+    /// Reading order can't answer this. A cart screen opens with chrome that reads like a name,
+    /// and every price sits between the name above it and the name it belongs to, so taking the
+    /// price that follows a name gives each item its neighbour's price. Instead every price votes
+    /// for the side its nearest name is on, and the majority decides for the whole read.
+    static func pricesComeFirst(tokens: [Token], rows: [RecognizedRow]) -> Bool {
+        var names: [CGFloat] = []
+        var prices: [CGFloat] = []
+        for (token, row) in zip(tokens, rows) where row.hasLayout {
+            switch token {
+            case .name: names.append(row.rect.midY)
+            case .price: prices.append(row.rect.midY)
+            default: continue
+            }
+        }
+        if names.count >= 2, prices.count >= 2 {
+            var above = 0
+            var below = 0
+            for price in prices {
+                let nearestAbove = names.filter { $0 < price }.max()
+                let nearestBelow = names.filter { $0 > price }.min()
+                switch (nearestAbove, nearestBelow) {
+                case (let up?, let down?):
+                    if (down - price) < (price - up) { below += 1 } else { above += 1 }
+                case (nil, .some): below += 1
+                case (.some, nil): above += 1
+                case (nil, nil): continue
+                }
+            }
+            if above != below { return below > above }
+        }
+        return firstItemRowIsAPrice(tokens)
+    }
+
+    /// Without a layout to read, whether the first item line is a price rather than a name.
+    private static func firstItemRowIsAPrice(_ tokens: [Token]) -> Bool {
         for token in tokens {
             switch token {
             case .name: return false
@@ -306,9 +352,11 @@ nonisolated enum OrderScreenshotParser {
         let range: Range<String.Index>
     }
 
-    /// Dollar amounts in a line: "$4.98", "-$3.00", "$1,234.50", and "4.98" standing alone.
+    /// Dollar amounts in a line: "$4.98", "-$3.00", "$1,234.50", "4.98" standing alone, and
+    /// "$4 98" — the Walmart app's raised cents, when they reached here as their own word.
     static func priceMatches(in line: String) -> [PriceMatch] {
-        let pattern = #/(?<sign>[-–−]\s?)?\$\s?(?<whole>\d{1,3}(?:,\d{3})+|\d{1,6})(?:[.,](?<fraction>\d{2}))?(?!\d)/#
+        let pattern =
+            #/(?<sign>[-–−]\s?)?\$\s?(?<whole>\d{1,3}(?:,\d{3})+|\d{1,6})(?:[.,]|\s(?=\d{2}(?!\d)))?(?<fraction>\d{2})?(?!\d)/#
         var matches: [PriceMatch] = line.matches(of: pattern).compactMap { match in
             let whole = Int(match.output.whole.replacingOccurrences(of: ",", with: "")) ?? 0
             let fraction = match.output.fraction.flatMap { Int($0) } ?? 0
@@ -403,7 +451,7 @@ nonisolated enum OrderScreenshotParser {
     }
 
     private static let wasPricePattern =
-        #"^(was|reg\.?|regular price|list price|orig(inal)?( price)?|you save[d]?|saved|rollback)\b"#
+        #"^(was|reg\.?|regular price|list price|orig(inal)?( price)?|you save[d]?|saved|rollback|avg\.?|average)\b"#
 
     private static let noisePatterns: [String] = [
         #"^order (details|#|number|placed|summary|info)"#,
@@ -420,14 +468,12 @@ nonisolated enum OrderScreenshotParser {
         #"^(walmart\+?|walmart\.com|store|from store|sold and shipped by)\b"#,
         #"^(temporary hold|authorization|charged|charge)\b"#,
         #"^(address|deliver to|delivery address|instructions)\b"#,
+        // The cart screen's own chrome, above and below the items.
+        #"^(cart|your cart|continue to checkout|check ?out|reserve a time|select a time)\b"#,
+        #"^(items? in cart|saved for later|recommended|you might also|based on your)\b"#,
     ]
 
     private static func isNoise(_ lower: String) -> Bool {
         noisePatterns.contains { lower.range(of: $0, options: .regularExpression) != nil }
-    }
-
-    /// At least three letters, and not only a size or count.
-    private static func isName(_ text: String) -> Bool {
-        text.count(where: \.isLetter) >= 3
     }
 }
