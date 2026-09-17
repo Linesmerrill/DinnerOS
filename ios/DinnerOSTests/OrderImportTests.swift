@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Testing
 
@@ -122,8 +123,97 @@ struct OrderScreenshotParserTests {
         #expect(order.totalCents == nil)
     }
 
+    @Test func readsAWalmartCartWithPricesAboveNames() {
+        let rows = OrderTextLayout.rows(CostFixtures.cartPieces())
+
+        let order = OrderScreenshotParser.parse(rows: rows)
+
+        #expect(order.items.map(\.name) == CostFixtures.cartItems.map(\.name))
+        #expect(order.items.map(\.priceCents) == CostFixtures.cartItems.map(\.cents))
+        #expect(order.items.map(\.quantity) == CostFixtures.cartItems.map(\.quantity))
+        #expect(order.totalCents == 2_459)
+        // The card whose price scrolled off the top of the screenshot has no price to save.
+        #expect(!order.items.contains { $0.name.contains("Tortillas") })
+    }
+
+    /// Build 31 bound the price that *followed* a name to it, so every line took the next item's
+    /// price and the last had none. The layout, not the reading order, says which side to look.
+    @Test func cartPricesDontShiftOntoTheNextItem() {
+        let rows = OrderTextLayout.rows(CostFixtures.cartPieces())
+
+        let order = OrderScreenshotParser.parse(rows: rows)
+
+        let byName = Dictionary(order.items.map { ($0.name, $0.priceCents) }, uniquingKeysWith: { first, _ in first })
+        #expect(byName["Fresh Zucchini, Each"] == 126)
+        #expect(byName["Fresh Whole Yellow Onion, Each"] == 132)
+        #expect(byName["Sample Brand Garlic Breadsticks, 11.25 oz"] == 312)
+        // The prices each of those took in build 31: the item below's.
+        #expect(byName["Fresh Zucchini, Each"] != 268)
+        #expect(byName["Fresh Whole Yellow Onion, Each"] != 296)
+        #expect(order.items.count == CostFixtures.cartItems.count)
+        let tokens = rows.map { OrderScreenshotParser.classify($0.text) }
+        #expect(OrderScreenshotParser.pricesComeFirst(tokens: tokens, rows: rows))
+    }
+
+    @Test func cartPricesAreCentsNotWholeDollars() {
+        let order = OrderScreenshotParser.parse(rows: OrderTextLayout.rows(CostFixtures.cartPieces()))
+        let locale = Locale(identifier: "en_US")
+
+        // "$1" with a small raised "26" is $1.26, not $126.00.
+        #expect(order.items.map(\.priceCents).allSatisfy { $0 < 1_000 })
+        #expect(order.items.map { MoneyText.editingText($0.priceCents) }.first == "1.26")
+        #expect(order.items.map { MoneyText.format($0.priceCents, locale: locale) }.first == "$1.26")
+        #expect(MoneyText.format(order.totalCents ?? 0, locale: locale) == "$24.59")
+    }
+
+    @Test func raisedCentsJoinOntoTheirDollars() {
+        let dollars = RecognizedPiece("$2", CGRect(x: 0.2, y: 0.1, width: 0.05, height: 0.02))
+        let cents = RecognizedPiece("68", CGRect(x: 0.255, y: 0.095, width: 0.03, height: 0.012))
+        let unitPrice = RecognizedPiece("16.8¢/oz", CGRect(x: 0.2, y: 0.14, width: 0.1, height: 0.012))
+
+        #expect(OrderTextLayout.isRaisedCents(after: dollars, cents))
+        #expect(OrderTextLayout.rows([cents, dollars, unitPrice]).map(\.text) == ["$2.68", "16.8¢/oz"])
+        #expect(OrderScreenshotParser.classify("$2.68") == .price(268))
+        // Same size and on the same baseline: two separate readings, not one price.
+        let sameSize = RecognizedPiece("68", CGRect(x: 0.255, y: 0.1, width: 0.03, height: 0.02))
+        #expect(!OrderTextLayout.isRaisedCents(after: dollars, sameSize))
+        // And when they arrive as one string anyway, the space still reads as a decimal point.
+        #expect(OrderScreenshotParser.classify("$2 68") == .price(268))
+    }
+
+    @Test(arguments: [
+        (
+            "Fresh Zucchini, Each Subscribe - SNAP EBT eligible Free 90-day returns Remove Save for later 2 +",
+            "Fresh Zucchini, Each"
+        ),
+        (
+            "88¢/lb | Final cost by weight Fresh Whole Yellow Onion, Each Subscribe - SNAP EBT",
+            "Fresh Whole Yellow Onion, Each"
+        ),
+        ("Sample Brand Fresh Shallots, 16 oz Best seller", "Sample Brand Fresh Shallots, 16 oz"),
+        ("$1.12/lb Testfield Farms Ground Beef 80/20", "Testfield Farms Ground Beef 80/20"),
+        ("Great Value Sour Cream, 16 oz", "Great Value Sour Cream, 16 oz"),
+    ])
+    func stripsTheAppsChromeFromTitles(line: String, title: String) {
+        #expect(OrderTitleCleaner.clean(line) == title)
+    }
+
+    @Test(arguments: [
+        "Subscribe", "SNAP EBT eligible", "Free 90-day returns", "Remove", "Save for later", "Best seller",
+        "10K+ bought since yesterday", "Bought 5 times", "Multipack Quantity", "Count Per Pack", "88¢/lb",
+        "88¢/lb | Final cost by weight", "Gift eligible", "Sponsored",
+    ])
+    func rowsThatAreOnlyChromeArentTitles(line: String) {
+        #expect(OrderTitleCleaner.clean(line) == nil)
+        #expect(OrderScreenshotParser.classify(line) != .name(line, trailingPrice: nil))
+    }
+
     @Test(arguments: [
         ("$4.98", OrderScreenshotParser.Token.price(498)),
+        ("avg $0.63 ea", .ignoredPrice),
+        ("You save $0.25", .ignoredPrice),
+        ("- 2 +", .quantity(2, price: nil)),
+        ("Estimated total $24.59", .summary(.total, amount: 2_459)),
         ("Was $5.48", .ignoredPrice),
         ("-$1.00", .ignoredPrice),
         ("$0.31/oz", .ignoredPrice),

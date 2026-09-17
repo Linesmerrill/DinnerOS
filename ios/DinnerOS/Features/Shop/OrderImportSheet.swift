@@ -60,7 +60,7 @@ struct OrderImportSheet: View {
         List {
             Section {
                 Text(
-                    "In the Walmart app, open the order, then take screenshots of the order details from the first item to the total."
+                    "In the Walmart app, open the order details or your cart, then take screenshots from the first item to the total."
                 )
                 if isReading {
                     HStack(spacing: 8) {
@@ -172,6 +172,8 @@ private struct OrderImportReview: View {
                     }
                 } header: {
                     Text("Matched")
+                } footer: {
+                    Text("Each price is what the whole line came to, all packages together.")
                 }
             }
             let unmatched = draft.unmatchedRows
@@ -232,11 +234,18 @@ private struct ImportRow: View {
                     }
                 }
                 Spacer(minLength: 8)
-                TextField("Price", text: priceBinding, prompt: Text("Price"))
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .frame(maxWidth: 100)
-                    .accessibilityLabel("Price for \(row.item.name)")
+                HStack(spacing: 2) {
+                    Text(verbatim: "$")
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    TextField("Price", text: priceBinding, prompt: Text("Price"))
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .monospacedDigit()
+                        .accessibilityLabel("Price for \(row.item.name)")
+                        .accessibilityValue(row.priceCents.map { MoneyText.format($0) } ?? row.priceText)
+                }
+                .frame(maxWidth: 110)
             }
             Picker("For", selection: lineBinding) {
                 Text("Don't Use").tag(PriceableLine.ID?.none)
@@ -264,6 +273,10 @@ private struct ImportRow: View {
         var parts: [String] = []
         if row.item.quantity > 1 {
             parts.append(String(localized: "Qty \(row.item.quantity)"))
+            // The price is the whole line, so show what one of them came to.
+            if let cents = row.priceCents {
+                parts.append(String(localized: "\(MoneyText.format(cents / row.item.quantity)) each"))
+            }
         }
         if row.item.isWeightAdjusted {
             parts.append(String(localized: "Weight-adjusted"))

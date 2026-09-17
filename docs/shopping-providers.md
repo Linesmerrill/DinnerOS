@@ -363,7 +363,7 @@ everywhere and stored in integer US cents.
 | --- | --- | --- |
 | Typed | "Did You Order These?" (per line), Choose Product (per package), Add Prices under This Week's Cost | `priceCents` on confirm, `POST .../handoffs/{id}/prices`, or the saved product |
 | Order total | This Week's Cost: the total with fees, tax, and tip | `PUT .../shopping/weeks/{week}/spend` |
-| Order screenshots | Shop → This Week's Cost → Import Prices from Order Screenshots…: the member picks screenshots of the Walmart app's order details | Only the prices (and total) the member confirms on the review screen |
+| Order screenshots | Shop → This Week's Cost → Import Prices from Order Screenshots…: the member picks screenshots of the Walmart app's order details or cart | Only the prices (and total) the member confirms on the review screen |
 
 **Screenshot import runs on the iPhone.** The picked images stay in memory:
 Vision (`RecognizeTextRequest`) reads their text on device. When Apple
@@ -379,6 +379,33 @@ medium, or low confidence. The review screen shows matched items (reassignable
 or unused), unmatched items (assignable), lines still without a price, and the
 detected total; saving sends only those numbers. No image, recognized text,
 or unused item leaves the phone, and nothing is stored on it.
+
+**The layout decides what belongs to what.** Recognition keeps each row's box
+(`RecognizedRow`, normalized with the origin at the top left, one screen of
+offset per screenshot). Three things need it:
+
+- **Which side the price is on.** The order-details screen prints the price
+  under the name; the cart prints it *above*. Every bare price votes for the
+  side its nearest name sits on and the majority decides for the whole read
+  (`OrderScreenshotParser.pricesComeFirst`), because a screenshot often opens
+  mid-card with a name whose price scrolled off, and binding the price that
+  *follows* a name then shifts every price onto the item below it.
+- **Raised cents.** The cart draws a price as large dollars with small, raised
+  cents. They arrive as two pieces, and joined with a space ("$1 26") they
+  parse as $126.00, so `OrderTextLayout` rejoins them on the decimal point the
+  screen only implies.
+- **Titles.** `OrderTitleCleaner` keeps the product name and drops what the app
+  prints around it: a unit price above it ("88¢/lb | Final cost by weight"),
+  and Subscribe, SNAP EBT eligible, Free N-day returns, Gift eligible, Remove,
+  Save for later, badges ("Best seller", "Rollback", "10K+ bought since
+  yesterday"), Multipack Quantity, and Count Per Pack below it. Rows that are
+  only chrome aren't names at all, so they can't be glued onto the title above
+  them. The quantity stepper ("- 2 +") reads as the item's quantity.
+
+**An imported price is the whole line**, what the cart or the order charged for
+the quantity in it — the same thing "Add Prices" asks for and what the week's
+cost adds up. The review screen shows it as currency with the quantity and, for
+a line of more than one, what one came to.
 
 A Share extension from Photos isn't built: it needs its own app extension
 target and gives nothing the in-app picker doesn't.

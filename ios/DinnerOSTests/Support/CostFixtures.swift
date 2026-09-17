@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 @testable import DinnerOS
@@ -142,4 +143,103 @@ nonisolated enum CostFixtures {
         Qty 2 $5.96
         Order total $8.44
         """
+
+    // MARK: - Cart screenshots with a layout
+
+    /// Builds the recognized pieces of a Walmart-cart-style screenshot: a card per item with the
+    /// price *above* the name, prices drawn as big dollars with small raised cents, and the app's
+    /// chrome under the name. Coordinates are normalized with the origin at the top left, so `y`
+    /// grows downward, and they run past 1 the way several stacked screenshots do.
+    nonisolated struct CartScreen {
+        private(set) var pieces: [RecognizedPiece] = []
+        private var y: CGFloat = 0.01
+        private let height: CGFloat = 0.008
+        private let step: CGFloat = 0.011
+        private let column: CGFloat = 0.28
+
+        /// One row of text.
+        mutating func text(_ value: String) {
+            pieces.append(RecognizedPiece(value, CGRect(x: column, y: y, width: 0.6, height: height)))
+            y += step
+        }
+
+        /// A price the way the app draws it: "$1" in large type with "26" small and raised.
+        mutating func price(_ cents: Int) {
+            pieces.append(RecognizedPiece("$\(cents / 100)", CGRect(x: column, y: y, width: 0.06, height: height)))
+            pieces.append(
+                RecognizedPiece(
+                    String(format: "%02d", cents % 100),
+                    CGRect(x: column + 0.065, y: y - height * 0.25, width: 0.03, height: height * 0.7)))
+            y += step
+        }
+
+        /// A whole card: the price, anything printed between it and the name, the name, and the
+        /// boilerplate every card carries.
+        mutating func card(price cents: Int, name: String, quantity: Int = 1, between: [String] = []) {
+            price(cents)
+            for line in between {
+                text(line)
+            }
+            text(name)
+            text("Subscribe")
+            text("SNAP EBT eligible")
+            text("Free 90-day returns")
+            text("Remove")
+            text("Save for later")
+            if quantity > 1 {
+                text("- \(quantity) +")
+            }
+        }
+    }
+
+    /// A cart as it reads on an iPhone, prices above names.
+    ///
+    /// The first screenshot was taken mid-scroll, so it opens with a name whose price was cut off
+    /// above it — which is what makes reading order alone bind every price to the wrong item. Two
+    /// cards arrive with their chrome joined onto the name, as recognition returns them when the
+    /// rows sit close together.
+    static func cartPieces() -> [RecognizedPiece] {
+        var screen = CartScreen()
+        screen.text("Cart (12 items)")
+        // The card at the top of the screenshot, its price scrolled off: no price to save.
+        screen.text("Sample Brand Flour Tortillas, 10 ct")
+        screen.text("Subscribe")
+        screen.text("Save for later")
+        screen.price(126)
+        screen.text("avg $0.63 ea")
+        screen.text("Fresh Zucchini, Each Subscribe - SNAP EBT eligible Free 90-day returns Remove Save for later")
+        screen.text("- 2 +")
+        screen.card(price: 268, name: "Sample Brand Fresh Shallots, 16 oz", between: ["Best seller"])
+        screen.card(price: 50, name: "Fresh Lime, Each")
+        screen.card(price: 137, name: "Testfield Farms Sour Cream, 8 oz", between: ["Was $1.62", "You save $0.25"])
+        screen.card(price: 347, name: "Testfield Farms Cream Cheese, 8 oz", between: ["Rollback"])
+        screen.card(price: 208, name: "Sample Brand Shredded Parmesan, 6 oz", between: ["10K+ bought since yesterday"])
+        screen.card(price: 113, name: "Fresh Green Onion, Bunch")
+        screen.price(132)
+        screen.text("88¢/lb | Final cost by weight Fresh Whole Yellow Onion, Each Subscribe - SNAP EBT")
+        screen.text("Remove")
+        screen.card(price: 296, name: "Fresh Poblano Pepper, 16 oz", between: ["$2.96/lb"])
+        screen.card(price: 93, name: "Fresh Cilantro, Bunch")
+        screen.card(price: 312, name: "Sample Brand Garlic Breadsticks, 11.25 oz", between: ["Multipack Quantity: 1"])
+        screen.card(price: 377, name: "Testfield Farms Ground Cayenne Pepper, 2.25 oz", quantity: 3)
+        screen.text("Estimated total $24.59")
+        screen.text("Continue to checkout")
+        return screen.pieces
+    }
+
+    /// Every item in `cartPieces`, in order, with the price printed on its own card.
+    static let cartItems: [(name: String, cents: Int, quantity: Int)] = [
+        ("Fresh Zucchini, Each", 126, 2),
+        ("Sample Brand Fresh Shallots, 16 oz", 268, 1),
+        ("Fresh Lime, Each", 50, 1),
+        ("Testfield Farms Sour Cream, 8 oz", 137, 1),
+        ("Testfield Farms Cream Cheese, 8 oz", 347, 1),
+        ("Sample Brand Shredded Parmesan, 6 oz", 208, 1),
+        ("Fresh Green Onion, Bunch", 113, 1),
+        ("Fresh Whole Yellow Onion, Each", 132, 1),
+        ("Fresh Poblano Pepper, 16 oz", 296, 1),
+        ("Fresh Cilantro, Bunch", 93, 1),
+        ("Sample Brand Garlic Breadsticks, 11.25 oz", 312, 1),
+        ("Testfield Farms Ground Cayenne Pepper, 2.25 oz", 377, 3),
+    ]
 }

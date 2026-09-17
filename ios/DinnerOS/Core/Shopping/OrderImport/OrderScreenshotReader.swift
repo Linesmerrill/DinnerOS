@@ -28,13 +28,14 @@ nonisolated struct OrderScreenshotReader: Sendable {
     private static let logger = Logger(subsystem: "DinnerOS", category: "order-import")
 
     func read(images: [Data]) async throws -> Result {
-        var lines: [String] = []
-        for image in images {
+        var rows: [RecognizedRow] = []
+        for (index, image) in images.enumerated() {
             try Task.checkCancellation()
-            lines += try await Self.recognizeLines(in: image)
+            rows += try await Self.recognizeRows(in: image).map { $0.movedDown(byScreens: index) }
         }
-        guard !lines.isEmpty else { throw ReadError.noText }
-        let parsed = OrderScreenshotParser.parse(lines: lines)
+        guard !rows.isEmpty else { throw ReadError.noText }
+        let lines = rows.map(\.text)
+        let parsed = OrderScreenshotParser.parse(rows: rows)
         if let generated = await Self.structureWithModel(lines: lines) {
             let merged = OrderImportMerge.merge(
                 parsed: parsed, modelItems: generated.items, modelTotal: generated.total, lines: lines)
@@ -48,35 +49,24 @@ nonisolated struct OrderScreenshotReader: Sendable {
         return Result(order: parsed, usedModel: false)
     }
 
-    /// Accurate recognition with language correction, one string per visual row: text on the
-    /// same row (a name and its price) is joined left to right.
-    static func recognizeLines(in image: Data) async throws -> [String] {
+    /// Accurate recognition with language correction, one row per visual row, top to bottom:
+    /// text on the same row (a name and its price) is joined left to right, and each row keeps
+    /// where it sits so the parser can tell a price above a name from one below it.
+    static func recognizeRows(in image: Data) async throws -> [RecognizedRow] {
         var request = RecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true
         let observations = try await request.perform(on: image)
-        let pieces: [(rect: CGRect, text: String)] = observations.compactMap { observation in
+        let pieces: [RecognizedPiece] = observations.compactMap { observation in
             guard let text = observation.topCandidates(1).first?.string else { return nil }
-            return (observation.boundingBox.cgRect, text)
+            return RecognizedPiece(text, topDown(observation.boundingBox.cgRect))
         }
-        return rows(pieces)
+        return OrderTextLayout.rows(pieces)
     }
 
-    /// Groups recognized pieces into rows, top to bottom. Vision's coordinates start at the
-    /// bottom left.
-    static func rows(_ pieces: [(rect: CGRect, text: String)]) -> [String] {
-        let sorted = pieces.sorted { $0.rect.midY > $1.rect.midY }
-        var rows: [[(rect: CGRect, text: String)]] = []
-        for piece in sorted {
-            if let last = rows.last?.last,
-                abs(last.rect.midY - piece.rect.midY) < max(last.rect.height, piece.rect.height) / 2
-            {
-                rows[rows.count - 1].append(piece)
-            } else {
-                rows.append([piece])
-            }
-        }
-        return rows.map { row in row.sorted { $0.rect.minX < $1.rect.minX }.map(\.text).joined(separator: " ") }
+    /// Vision's normalized box, which starts at the bottom left, with the origin at the top left.
+    static func topDown(_ rect: CGRect) -> CGRect {
+        CGRect(x: rect.minX, y: 1 - rect.maxY, width: rect.width, height: rect.height)
     }
 
     /// The model's items and total, or `nil` when Apple Intelligence isn't available, the text
