@@ -246,7 +246,10 @@ repository variable `TESTFLIGHT_ENABLED` is `true`.
 Apple limits uploads per app per day ("Upload limit reached … wait 1 day",
 error 90382; hit on 2026-09-16 after about eight uploads). Every push to `main`
 that touches `ios/` uploads, so batch app changes into a few larger pushes a day
-rather than pushing each small fix.
+rather than pushing each small fix. A failed upload, including a capped one, is
+reported as a warning and leaves the check green, because Heroku deploys the API
+only when every check on the commit passes (a red upload held back three API
+deploys on 2026-09-16). Lint and test failures still fail the check.
 
 Status: ✅ enabled and working. The first build was uploaded on 2026-09-15 by run
 34927108505, and internal testers in "Household" receive new builds

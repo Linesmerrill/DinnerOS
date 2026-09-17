@@ -101,7 +101,14 @@ jobs:
           ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
           echo "GIT_SSH_COMMAND=ssh -i ~/.ssh/match_deploy_key -o IdentitiesOnly=yes" >> "$GITHUB_ENV"
 
+      # A failed upload (Apple's daily limit, a signing or processing hiccup) must not
+      # turn the commit's checks red: Heroku deploys the API only once every check
+      # passes. Lint and tests above still fail the run. The step below surfaces the
+      # failure as a warning; re-run the workflow to retry the upload.
       - name: fastlane beta
+        id: beta
+        continue-on-error: true
+        timeout-minutes: 70
         working-directory: ios
         env:
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
@@ -113,6 +120,10 @@ jobs:
           TESTFLIGHT_EXTERNAL_GROUPS: ${{ vars.TESTFLIGHT_EXTERNAL_GROUPS }}
           TESTFLIGHT_CHANGELOG: ${{ github.event.head_commit.message }}
         run: bundle exec fastlane beta
+
+      - name: Report a failed upload
+        if: steps.beta.outcome == 'failure'
+        run: echo "::warning title=TestFlight upload failed::No build was uploaded. Check the fastlane beta log, then re-run iOS CI from Actions (Apple's daily upload limit resets after a day)."
 
   signing:
     name: Sync signing certificate
