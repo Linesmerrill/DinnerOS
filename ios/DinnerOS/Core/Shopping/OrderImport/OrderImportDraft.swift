@@ -15,9 +15,13 @@ nonisolated struct ModelOrderItem: Hashable, Sendable {
 /// The model's items replace the parser's only when there are at least as many of them.
 nonisolated enum OrderImportMerge {
     static func merge(
-        parsed: ParsedOrder, modelItems: [ModelOrderItem], modelTotal: String?, lines: [String]
+        parsed: ParsedOrder, modelItems: [ModelOrderItem], modelTotal: String?, lines: [String],
+        style: OrderScreenshotParser.PriceStyle = .decimal
     ) -> ParsedOrder {
-        let seenPrices = Set(lines.flatMap { OrderScreenshotParser.priceMatches(in: $0).map { abs($0.cents) } })
+        // The amounts as the parser reads them: a model that copies "$244" off a cart where that
+        // means $2.44 has the wrong number, and its item is dropped rather than saved as $244.00.
+        let seenPrices = Set(
+            lines.flatMap { OrderScreenshotParser.priceMatches(in: $0).map { abs($0.read(as: style).cents) } })
         let notCharged = Set(parsed.items.filter { !$0.wasCharged }.map { OrderPriceMatcher.normalizedName($0.name) })
         let parsedByName = Dictionary(
             parsed.items.map { (OrderPriceMatcher.normalizedName($0.name), $0) },

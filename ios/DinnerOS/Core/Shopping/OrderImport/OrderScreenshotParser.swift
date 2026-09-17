@@ -34,6 +34,17 @@ nonisolated struct ParsedOrder: Hashable, Sendable {
     /// Every fee added together.
     var feesCents: Int?
     var savingsCents: Int?
+
+    /// Whether the items' prices can sit inside the order's total, or `nil` without a total.
+    ///
+    /// Screenshots often show only part of a cart, so the items can add up to much less, but
+    /// never to more: the total carries every item plus fees, tax, and tip. A read that breaks
+    /// this has misread the prices themselves — reading "$2" and a raised "44" as $244.00 puts
+    /// the items a hundred times over the total.
+    var itemsFitTotal: Bool? {
+        guard let totalCents else { return nil }
+        return items.filter(\.wasCharged).reduce(0) { $0 + $1.priceCents } <= totalCents
+    }
 }
 
 /// Reads Walmart order-details text, as on-device text recognition returns it, into items and
@@ -55,12 +66,48 @@ nonisolated enum OrderScreenshotParser {
     }
 
     static func parse(rows: [RecognizedRow]) -> ParsedOrder {
-        let tokens = rows.map { classify($0.text) }
+        parse(rows: rows, style: priceStyle(rows: rows))
+    }
+
+    static func parse(rows: [RecognizedRow], style: PriceStyle) -> ParsedOrder {
+        let tokens = rows.map { classify($0.text, style: style) }
         var builder = Builder(pricesFirst: pricesComeFirst(tokens: tokens, rows: rows))
-        for token in tokens {
-            builder.consume(token)
+        for (token, row) in zip(tokens, rows) {
+            builder.consume(token, at: row.rect)
         }
         return builder.finish()
+    }
+
+    // MARK: - How the prices are written
+
+    /// How a screen writes a price, which decides what an amount without a decimal point means.
+    ///
+    /// The Walmart app draws a price as large dollars with small, raised cents, and recognition
+    /// often returns the two as one word with nothing between them: $2.44 arrives as "$244" and
+    /// $0.64 as "$64". Read as dollars they're a hundred times too much, which is how the review
+    /// screen came to show "244.00".
+    enum PriceStyle: Equatable, Sendable {
+        /// Amounts mean what they say: "$244" is $244.00. Anything without raised cents.
+        case decimal
+        /// An amount written without a decimal point ends in its cents: "$244" is $2.44, "$64"
+        /// is $0.64. An amount that carries a decimal point or a thousands comma is left alone.
+        case raisedCents
+    }
+
+    /// Which way this read's amounts are written.
+    ///
+    /// Two things say "raised cents", and either is enough. Several amounts written without a
+    /// decimal point is one: a screen that prints "$2.44" prints it everywhere, so bare amounts
+    /// mean the separator was never recognized. The order's own total is the other: it is printed
+    /// large, with a real decimal point, and the items can't add up to more than it does
+    /// (`ParsedOrder.itemsFitTotal`), so a read that overshoots it has misread every price.
+    static func priceStyle(rows: [RecognizedRow]) -> PriceStyle {
+        let bare = rows.flatMap { priceMatches(in: $0.text).filter(\.isSeparatorless) }
+        guard !bare.isEmpty else { return .decimal }
+        if bare.count(where: { $0.digits >= 3 }) >= 2 {
+            return .raisedCents
+        }
+        return parse(rows: rows, style: .decimal).itemsFitTotal == false ? .raisedCents : .decimal
     }
 
     // MARK: - Tokens
@@ -87,17 +134,20 @@ nonisolated enum OrderScreenshotParser {
         case noise
     }
 
-    static func classify(_ raw: String) -> Token {
+    static func classify(_ raw: String, style: PriceStyle = .decimal) -> Token {
         let line = raw.replacingOccurrences(of: "\u{00A0}", with: " ")
             .split(whereSeparator: \.isWhitespace).joined(separator: " ")
         guard !line.isEmpty else { return .noise }
         let lower = line.lowercased()
-        let prices = priceMatches(in: line)
+        let prices = priceMatches(in: line).map { $0.read(as: style) }
         let label = labelText(line)
 
         // An item's own was-price, average price, or savings, before the order's "Savings" line.
-        if lower.range(of: wasPricePattern, options: .regularExpression) != nil {
-            return .ignoredPrice
+        // It has to carry an amount: "Original Ranch Dressing" is a product, not a was-price.
+        if !prices.isEmpty || line.contains("¢") {
+            if lower.range(of: wasPricePattern, options: .regularExpression) != nil {
+                return .ignoredPrice
+            }
         }
         // The cart's quantity stepper, "- 2 +", is how many of this item are in the cart.
         if let match = line.wholeMatch(of: #/[-−–—]?\s*(\d{1,2})\s*\+/#), let count = Int(match.1) {
@@ -123,11 +173,14 @@ nonisolated enum OrderScreenshotParser {
             if price.cents < 0 {
                 return .ignoredPrice
             }
-            if rest.isEmpty || rest.lowercased() == "each" || rest.lowercased() == "ea" {
+            if rest.isEmpty {
                 return .price(price.cents)
             }
-            // "$0.31/oz", "$1.12/lb", "$2.48 ea": a price per unit, not what was paid.
-            if rest.hasPrefix("/") || rest.lowercased().hasPrefix("per ") {
+            // "$0.31/oz", "$1.12/lb", "$0.25 ea": a price per unit, not what the line came to.
+            // A cart prints both on the same card, and only the bare amount is the line's.
+            if rest.hasPrefix("/") || ["each", "ea", "ea.", "per"].contains(rest.lowercased())
+                || rest.lowercased().hasPrefix("per ")
+            {
                 return .ignoredPrice
             }
         }
@@ -155,6 +208,8 @@ nonisolated enum OrderScreenshotParser {
         var status: ParsedOrderItem.Status?
         /// Still reading a wrapped name: nothing but name lines since it started.
         var isNameOpen = true
+        /// Where the last row of the name sits, so a continuation can be checked against it.
+        var nameRect: CGRect = .null
     }
 
     private struct Builder {
@@ -172,7 +227,7 @@ nonisolated enum OrderScreenshotParser {
             self.pricesFirst = pricesFirst
         }
 
-        mutating func consume(_ token: Token) {
+        mutating func consume(_ token: Token, at rect: CGRect = .null) {
             if case .price = token {
             } else if case .summary = token {
             } else {
@@ -202,8 +257,11 @@ nonisolated enum OrderScreenshotParser {
                     current?.isNameOpen = false
                 }
             case .name(let text, let trailingPrice):
-                if var draft = current, draft.isNameOpen, draft.price == nil {
+                if var draft = current, draft.isNameOpen, draft.price == nil,
+                    Builder.continuesName(draft.nameRect, rect)
+                {
                     draft.name += " " + text
+                    draft.nameRect = rect
                     if let trailingPrice {
                         draft.price = trailingPrice
                         draft.isNameOpen = false
@@ -211,7 +269,7 @@ nonisolated enum OrderScreenshotParser {
                     current = draft
                 } else {
                     finishItem()
-                    var draft = Draft(name: text, price: trailingPrice)
+                    var draft = Draft(name: text, price: trailingPrice, nameRect: rect)
                     if pricesFirst {
                         draft.leadingPrice = pendingPrice
                         pendingPrice = nil
@@ -258,6 +316,16 @@ nonisolated enum OrderScreenshotParser {
                 order.feesCents = fees.reduce(0, +)
             }
             return order
+        }
+
+        /// Whether a name row carries on the name above it: the line under it, starting at the
+        /// same edge. Words picked out of a product photo sit elsewhere on the card, so they
+        /// don't get glued onto the title. Without a layout, reading order is all there is.
+        static func continuesName(_ name: CGRect, _ next: CGRect) -> Bool {
+            guard !name.isNull, !next.isNull else { return true }
+            guard abs(next.minX - name.minX) <= 0.03 else { return false }
+            let gap = next.minY - name.maxY
+            return gap >= -name.height && gap <= name.height * 1.2
         }
 
         private func apply(_ marker: Marker, to draft: inout Draft) {
@@ -350,6 +418,16 @@ nonisolated enum OrderScreenshotParser {
     struct PriceMatch {
         let cents: Int
         let range: Range<String.Index>
+        /// Written with neither a decimal point nor a thousands comma, as "$244" is.
+        let isSeparatorless: Bool
+        /// How many digits the amount was written with, "$244" being three.
+        let digits: Int
+
+        /// The same amount read the way this screen writes its prices.
+        func read(as style: PriceStyle) -> PriceMatch {
+            guard style == .raisedCents, isSeparatorless else { return self }
+            return PriceMatch(cents: cents / 100, range: range, isSeparatorless: true, digits: digits)
+        }
     }
 
     /// Dollar amounts in a line: "$4.98", "-$3.00", "$1,234.50", "4.98" standing alone, and
@@ -358,14 +436,22 @@ nonisolated enum OrderScreenshotParser {
         let pattern =
             #/(?<sign>[-–−]\s?)?\$\s?(?<whole>\d{1,3}(?:,\d{3})+|\d{1,6})(?:[.,]|\s(?=\d{2}(?!\d)))?(?<fraction>\d{2})?(?!\d)/#
         var matches: [PriceMatch] = line.matches(of: pattern).compactMap { match in
-            let whole = Int(match.output.whole.replacingOccurrences(of: ",", with: "")) ?? 0
+            let written = match.output.whole
+            let whole = Int(written.replacingOccurrences(of: ",", with: "")) ?? 0
             let fraction = match.output.fraction.flatMap { Int($0) } ?? 0
             let cents = whole * 100 + fraction
-            return PriceMatch(cents: match.output.sign == nil ? cents : -cents, range: match.range)
+            return PriceMatch(
+                cents: match.output.sign == nil ? cents : -cents, range: match.range,
+                isSeparatorless: match.output.fraction == nil && !written.contains(","),
+                digits: written.count(where: \.isNumber))
         }
         if matches.isEmpty, let bare = line.wholeMatch(of: #/(?<sign>-)?(?<whole>\d{1,4})\.(?<fraction>\d{2})/#) {
             let cents = (Int(bare.output.whole) ?? 0) * 100 + (Int(bare.output.fraction) ?? 0)
-            matches = [PriceMatch(cents: bare.output.sign == nil ? cents : -cents, range: bare.range)]
+            matches = [
+                PriceMatch(
+                    cents: bare.output.sign == nil ? cents : -cents, range: bare.range, isSeparatorless: false,
+                    digits: bare.output.whole.count)
+            ]
         }
         return matches
     }

@@ -48,7 +48,7 @@ nonisolated struct RecognizedRow: Hashable, Sendable {
 /// as $126.00, so they're rejoined here with the decimal point the screen only implies.
 nonisolated enum OrderTextLayout {
     static func rows(_ pieces: [RecognizedPiece]) -> [RecognizedRow] {
-        let sorted = pieces.sorted { $0.rect.midY < $1.rect.midY }
+        let sorted = withoutProductPhotos(pieces).sorted { $0.rect.midY < $1.rect.midY }
         var grouped: [[RecognizedPiece]] = []
         for piece in sorted {
             if let last = grouped.last?.last,
@@ -64,6 +64,27 @@ nonisolated enum OrderTextLayout {
             let rect = ordered.dropFirst().reduce(ordered[0].rect) { $0.union($1.rect) }
             return RecognizedRow(text: join(ordered), rect: rect)
         }
+    }
+
+    /// Drops the words recognition picks out of the product photos.
+    ///
+    /// A card's photo sits to the left of the column its price and name are in, and the packaging
+    /// in it is printed text too, so "Sour Cream Original" off the tub lands on the same row as
+    /// the name and reads as part of it. The column is where most of the screen's text begins;
+    /// anything that ends before it belongs to a photo. A screen whose text doesn't line up in a
+    /// column (or has no room for photos) is left alone.
+    static func withoutProductPhotos(_ pieces: [RecognizedPiece]) -> [RecognizedPiece] {
+        let bucketWidth = 0.02
+        let counted = Dictionary(grouping: pieces) { ($0.rect.minX / bucketWidth).rounded(.down) }
+        let column =
+            counted
+            .filter { $0.value.count >= 4 }
+            .min { left, right in
+                left.value.count != right.value.count ? left.value.count > right.value.count : left.key < right.key
+            }
+        guard let start = column?.value.map(\.rect.minX).min(), start >= 0.1 else { return pieces }
+        // A photo's words end before the column's text begins, however close they come to it.
+        return pieces.filter { $0.rect.maxX > start }
     }
 
     /// The row's text, with raised cents joined onto their dollars as "$1.26".

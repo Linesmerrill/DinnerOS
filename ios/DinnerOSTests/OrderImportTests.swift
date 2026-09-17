@@ -166,6 +166,74 @@ struct OrderScreenshotParserTests {
         #expect(MoneyText.format(order.totalCents ?? 0, locale: locale) == "$24.59")
     }
 
+    /// Build 33 read a real cart's "$244" as $244.00, so every row showed cents times a hundred.
+    @Test func joinedRaisedCentsAreReadAsCents() {
+        let rows = OrderTextLayout.rows(CostFixtures.realCartPieces())
+
+        let order = OrderScreenshotParser.parse(rows: rows)
+
+        #expect(OrderScreenshotParser.priceStyle(rows: rows) == .raisedCents)
+        #expect(order.items.map(\.name) == CostFixtures.realCartItems.map(\.name))
+        #expect(order.items.map(\.priceCents) == CostFixtures.realCartItems.map(\.cents))
+        #expect(order.items.map(\.quantity) == CostFixtures.realCartItems.map(\.quantity))
+        #expect(order.totalCents == 13_127)
+        // What build 33 showed instead: the cents read as whole dollars.
+        #expect(!order.items.map(\.priceCents).contains { $0 % 100 == 0 && $0 >= 5_000 })
+        let locale = Locale(identifier: "en_US")
+        #expect(
+            order.items.map { MoneyText.format($0.priceCents, locale: locale) }.prefix(3) == [
+                "$2.44", "$1.98", "$1.37",
+            ])
+        #expect(MoneyText.format(order.totalCents ?? 0, locale: locale) == "$131.27")
+    }
+
+    @Test func itemPricesHaveToFitInsideTheOrderTotal() {
+        let rows = OrderTextLayout.rows(CostFixtures.realCartPieces())
+
+        let order = OrderScreenshotParser.parse(rows: rows)
+
+        // The screenshots show 17 of 24 items, so they come to part of the total, never more.
+        let spent = order.items.reduce(0) { $0 + $1.priceCents }
+        #expect(spent == 3_620)
+        #expect(order.itemsFitTotal == true)
+        // Read as whole dollars the same screen is a hundred times over the total.
+        #expect(OrderScreenshotParser.parse(rows: rows, style: .decimal).itemsFitTotal == false)
+        #expect(ParsedOrder().itemsFitTotal == nil)
+    }
+
+    /// One bare amount isn't a pattern, so the order's own total is what settles it.
+    @Test func aLoneBareAmountIsSettledByTheTotal() {
+        let rows = [
+            RecognizedRow(text: "$298", rect: CGRect(x: 0.3, y: 0.1, width: 0.1, height: 0.02)),
+            RecognizedRow(
+                text: "Sample Brand Oat Milk, 64 fl oz", rect: CGRect(x: 0.3, y: 0.13, width: 0.5, height: 0.02)),
+            RecognizedRow(text: "Estimated total $3.50", rect: CGRect(x: 0.3, y: 0.2, width: 0.5, height: 0.02)),
+        ]
+
+        #expect(OrderScreenshotParser.priceStyle(rows: rows) == .raisedCents)
+        #expect(OrderScreenshotParser.parse(rows: rows).items.map(\.priceCents) == [298])
+        // An order screen that writes its prices in full keeps reading them in full.
+        #expect(OrderScreenshotParser.priceStyle(rows: [RecognizedRow(text: "Total $130.42")]) == .decimal)
+        #expect(OrderScreenshotParser.parse(text: CostFixtures.orderDetailsText).items.map(\.priceCents).first == 248)
+    }
+
+    @Test func wordsReadOffTheProductPhotoArentPartOfTheName() {
+        let pieces = CostFixtures.realCartPieces()
+
+        let names = OrderScreenshotParser.parse(rows: OrderTextLayout.rows(pieces)).items.map(\.name)
+
+        // The tub's own printing and the bag's label sit in the photo column, left of the text.
+        #expect(names.contains("Great Value All Natural Sour Cream, 8 oz"))
+        #expect(names.contains("Harborline Fresh Whole Shallots, 16 oz Bag"))
+        #expect(!names.contains { $0.contains("Original") || $0.lowercased().hasSuffix("shallots") })
+        #expect(OrderTextLayout.withoutProductPhotos(pieces).count < pieces.count)
+        // A screen whose text is one column, with no room for photos beside it, is left alone.
+        let column = (0..<6).map {
+            RecognizedPiece("row \($0)", CGRect(x: 0.04, y: 0.1 * Double($0), width: 0.5, height: 0.02))
+        }
+        #expect(OrderTextLayout.withoutProductPhotos(column).count == column.count)
+    }
+
     @Test func raisedCentsJoinOntoTheirDollars() {
         let dollars = RecognizedPiece("$2", CGRect(x: 0.2, y: 0.1, width: 0.05, height: 0.02))
         let cents = RecognizedPiece("68", CGRect(x: 0.255, y: 0.095, width: 0.03, height: 0.012))
