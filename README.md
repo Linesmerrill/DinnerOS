@@ -108,6 +108,7 @@ every credential and where to get it.
 - [Specialty ingredients](docs/specialty-ingredients.md): meal-kit blends and sauces, store alternatives, house-made batches
 - [Autopilot](docs/autopilot.md): recommendation and week-optimization architecture
 - [Deployment](docs/deployment.md): Heroku, TestFlight, and required credentials
+- [Handoff](docs/handoff.md): live environment, standing rules, merge-and-verify workflow, open threads
 
 ## Naming
 
