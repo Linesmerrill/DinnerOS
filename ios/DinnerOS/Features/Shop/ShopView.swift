@@ -9,6 +9,9 @@ struct ShopView: View {
     @State private var choice: ProductChoice?
     @State private var isEditingStore = false
     @State private var isShowingSavedProducts = false
+    /// The cost card's sheet is held and presented here, not on the card: the card is a list
+    /// section that comes and goes with the week's cost (decision 510).
+    @State private var weekCostSheet: WeekCostSheet?
 
     private var household: Household? {
         households.current?.household
@@ -36,6 +39,14 @@ struct ShopView: View {
             }
             .sheet(isPresented: $isEditingStore) {
                 ShopStoreSettingsSheet()
+            }
+            .sheet(item: $weekCostSheet) { sheet in
+                WeekCostSheetView(sheet: sheet)
+            }
+            // A meal kit saved in Household changes every comparison. Watched here rather than
+            // on the card, which isn't on screen for every week that has a cost to reload.
+            .onChange(of: household?.mealKit) {
+                Task { await shopping.loadWeekCost() }
             }
             .task(id: household?.weekScope) {
                 guard let household else { return }
@@ -68,7 +79,9 @@ struct ShopView: View {
             }
         case .loaded:
             if shopping.isConfigured {
-                ShopWeekList(choose: { choice = $0 }, openStoreSetup: { isEditingStore = true })
+                ShopWeekList(
+                    choose: { choice = $0 }, openStoreSetup: { isEditingStore = true },
+                    openWeekCost: { weekCostSheet = $0 })
             } else {
                 ShopSetupView()
             }
@@ -101,6 +114,7 @@ struct ShopView: View {
 private struct ShopWeekList: View {
     let choose: (ProductChoice) -> Void
     let openStoreSetup: () -> Void
+    let openWeekCost: (WeekCostSheet) -> Void
 
     @Environment(ShoppingStore.self) private var shopping
     @Environment(PlanStore.self) private var plans
@@ -130,7 +144,7 @@ private struct ShopWeekList: View {
                     shopping.reviewOpenHandoff()
                 }
             }
-            WeekCostSection()
+            WeekCostSection(open: openWeekCost)
             switch shopping.proposalPhase {
             case .idle, .loading:
                 HStack(spacing: 8) {

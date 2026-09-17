@@ -1,22 +1,42 @@
 import SwiftUI
 
+/// The sheets the cost card opens. `ShopView` owns the selection and presents them, because
+/// the card itself is not somewhere a presentation can live (decision 510): it is a `Section`
+/// that hides itself between `WeekCostCard.isVisible` values, and every week-cost load changes
+/// one.
+enum WeekCostSheet: String, Identifiable, CaseIterable {
+    case orderTotal, prices, importScreenshots, mealKit
+
+    var id: String { rawValue }
+}
+
+/// Whether the Shop tab's cost card is on screen.
+///
+/// A pure rule so the reason the card can't host its own sheet is testable: `loadWeekCost()`
+/// reads the week's handoffs and its cost in two round trips, so on a week with neither loaded
+/// yet this answers `false`, then `true` — the card, and anything attached to it, is torn down
+/// and built again in between.
+nonisolated enum WeekCostCard {
+    static func isVisible(isCostAvailable: Bool, hasCostContent: Bool, hasHandoffs: Bool) -> Bool {
+        isCostAvailable && (hasCostContent || hasHandoffs)
+    }
+}
+
 /// The Shop tab's cost card for the shown week: what was spent, used, and stocked, cost per
 /// meal against the meal kit, and the ways to add prices. Shown once the week has a handoff or
 /// a spend, and only on an API with the cost endpoints.
+///
+/// It opens sheets through `open` rather than presenting them; see `WeekCostSheet`.
 struct WeekCostSection: View {
+    let open: (WeekCostSheet) -> Void
+
     @Environment(ShoppingStore.self) private var shopping
     @Environment(HouseholdStore.self) private var households
 
-    @State private var sheet: Sheet?
-
-    private enum Sheet: String, Identifiable {
-        case orderTotal, prices, importScreenshots, mealKit
-
-        var id: String { rawValue }
-    }
-
     private var isVisible: Bool {
-        shopping.isCostAvailable && (shopping.weekCost?.hasContent == true || !shopping.weekHandoffs.isEmpty)
+        WeekCostCard.isVisible(
+            isCostAvailable: shopping.isCostAvailable, hasCostContent: shopping.weekCost?.hasContent == true,
+            hasHandoffs: !shopping.weekHandoffs.isEmpty)
     }
 
     var body: some View {
@@ -33,33 +53,16 @@ struct WeekCostSection: View {
                     }
                 }
                 if shopping.canEdit {
-                    Button(orderTotalTitle, systemImage: "sum") { sheet = .orderTotal }
+                    Button(orderTotalTitle, systemImage: "sum") { open(.orderTotal) }
                 }
                 if shopping.canConfirm, !shopping.priceableLines.isEmpty {
-                    Button("Add Prices", systemImage: "tag") { sheet = .prices }
+                    Button("Add Prices", systemImage: "tag") { open(.prices) }
                     Button("Import Prices from Order Screenshots…", systemImage: "photo.on.rectangle") {
-                        sheet = .importScreenshots
+                        open(.importScreenshots)
                     }
                 }
             } header: {
                 Text("This Week's Cost")
-            }
-            .sheet(item: $sheet) { sheet in
-                switch sheet {
-                case .orderTotal: OrderTotalSheet(currentCents: shopping.weekCost?.orderTotalCents)
-                case .prices: LinePricesSheet(lines: shopping.priceableLines)
-                case .importScreenshots: OrderImportSheet()
-                case .mealKit:
-                    if let household = households.current?.household {
-                        NavigationStack {
-                            HouseholdSettingsForm(household: household)
-                        }
-                    }
-                }
-            }
-            // A meal kit saved in Household changes every comparison.
-            .onChange(of: households.current?.household.mealKit) {
-                Task { await shopping.loadWeekCost() }
             }
         }
     }
@@ -72,13 +75,35 @@ struct WeekCostSection: View {
     @ViewBuilder
     private var mealKitPrompt: some View {
         if households.access?.can(.householdUpdate) == true {
-            Button("Compare with a Meal Kit", systemImage: "shippingbox") { sheet = .mealKit }
+            Button("Compare with a Meal Kit", systemImage: "shippingbox") { open(.mealKit) }
                 .font(.subheadline)
                 .accessibilityHint("Opens household settings to add what you spent on meal kits.")
         } else {
             Text("Ask a household admin to add a meal kit price in Household settings to compare.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// What a `WeekCostSheet` shows, built where it is presented rather than inside the card.
+struct WeekCostSheetView: View {
+    let sheet: WeekCostSheet
+
+    @Environment(ShoppingStore.self) private var shopping
+    @Environment(HouseholdStore.self) private var households
+
+    var body: some View {
+        switch sheet {
+        case .orderTotal: OrderTotalSheet(currentCents: shopping.weekCost?.orderTotalCents)
+        case .prices: LinePricesSheet(lines: shopping.priceableLines)
+        case .importScreenshots: OrderImportSheet()
+        case .mealKit:
+            if let household = households.current?.household {
+                NavigationStack {
+                    HouseholdSettingsForm(household: household)
+                }
+            }
         }
     }
 }
