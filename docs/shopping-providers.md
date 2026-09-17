@@ -391,9 +391,20 @@ offset per screenshot). Three things need it:
   mid-card with a name whose price scrolled off, and binding the price that
   *follows* a name then shifts every price onto the item below it.
 - **Raised cents.** The cart draws a price as large dollars with small, raised
-  cents. They arrive as two pieces, and joined with a space ("$1 26") they
-  parse as $126.00, so `OrderTextLayout` rejoins them on the decimal point the
-  screen only implies.
+  cents, and the decimal point is drawn, not written. When they arrive as two
+  pieces `OrderTextLayout` rejoins them on that implied point; usually they
+  arrive as one word instead ("$244", "$64"), and then the whole read decides.
+  `OrderScreenshotParser.priceStyle` reads every separator-less amount as
+  ending in its cents when two or more amounts on the screen carry no
+  separator, or when reading them in full puts the items over the order's own
+  total (`ParsedOrder.itemsFitTotal`, which is also the check that the read
+  makes sense at all). An amount written with a decimal point or a thousands
+  comma — the estimated total, a unit price, a was-price — is never re-read.
+- **Photos.** The card's photo is to the left of that column and the packaging
+  in it is printed text, so "Sour Cream Original" off the tub lands on the name's
+  row. `OrderTextLayout.withoutProductPhotos` drops pieces that end before the
+  column begins, and a name only carries onto the next row when that row starts
+  at the same edge.
 - **Titles.** `OrderTitleCleaner` keeps the product name and drops what the app
   prints around it: a unit price above it ("88¢/lb | Final cost by weight"),
   and Subscribe, SNAP EBT eligible, Free N-day returns, Gift eligible, Remove,

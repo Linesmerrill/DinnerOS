@@ -163,6 +163,17 @@ nonisolated enum CostFixtures {
             y += step
         }
 
+        /// A word off the product's photo, in the photo's column to the left of the text.
+        mutating func photoWord(_ value: String, x: CGFloat = 0.08) {
+            pieces.append(RecognizedPiece(value, CGRect(x: x, y: y - step, width: 0.12, height: height)))
+        }
+
+        /// A price as recognition usually returns it from a real screenshot: the large dollars
+        /// and the small raised cents read as one word, with nothing between them ("$244").
+        mutating func joinedPrice(_ cents: Int) {
+            text("$\(cents)")
+        }
+
         /// A price the way the app draws it: "$1" in large type with "26" small and raised.
         mutating func price(_ cents: Int) {
             pieces.append(RecognizedPiece("$\(cents / 100)", CGRect(x: column, y: y, width: 0.06, height: height)))
@@ -177,10 +188,33 @@ nonisolated enum CostFixtures {
         /// boilerplate every card carries.
         mutating func card(price cents: Int, name: String, quantity: Int = 1, between: [String] = []) {
             price(cents)
+            finishCard(name: name, quantity: quantity, between: between)
+        }
+
+        /// The same card, with the price recognized as one word the way a real screenshot gives
+        /// it, and optional words read off the product's photo beside the name.
+        mutating func joinedCard(
+            price cents: Int, name: String, quantity: Int = 1, between: [String] = [], photo: [String] = []
+        ) {
+            joinedPrice(cents)
+            finishCard(name: name, quantity: quantity, between: between, photo: photo)
+        }
+
+        mutating func finishCard(
+            name: String, quantity: Int, between: [String] = [], photo: [String] = []
+        ) {
             for line in between {
                 text(line)
             }
             text(name)
+            for (index, word) in photo.enumerated() {
+                photoWord(word, x: 0.06 + CGFloat(index) * 0.07)
+            }
+            chrome(quantity: quantity)
+        }
+
+        /// What every card carries under its name.
+        mutating func chrome(quantity: Int = 1) {
             text("Subscribe")
             text("SNAP EBT eligible")
             text("Free 90-day returns")
@@ -226,6 +260,75 @@ nonisolated enum CostFixtures {
         screen.text("Continue to checkout")
         return screen.pieces
     }
+
+    /// A cart the size of a real week's shop, as recognition actually returns one: every price is
+    /// one word with no decimal point ("$244" for $2.44, "$64" for $0.64), unit prices and
+    /// was-prices sit on the cards, two cards carry words read off the product photos, and the
+    /// estimated total at the bottom is the one amount printed with a real decimal point.
+    ///
+    /// The prices and the layout are a real cart's; the brand names are the invented ones the
+    /// other fixtures use.
+    static func realCartPieces() -> [RecognizedPiece] {
+        var screen = CartScreen()
+        screen.text("Cart (24 items)")
+        screen.joinedCard(price: 244, name: "Sample Brand Super Soft Flour Tortillas Street Tacos, 12 ct")
+        screen.joinedCard(price: 198, name: "Great Value Light Brown Sugar, 32 oz")
+        // A name that wraps, with the tub's own printing read off the photo beside it.
+        screen.joinedPrice(137)
+        screen.text("17.1¢/oz")
+        screen.text("Great Value All Natural Sour")
+        screen.photoWord("Sour Cream", x: 0.06)
+        screen.photoWord("Original", x: 0.15)
+        screen.text("Cream, 8 oz")
+        screen.chrome()
+        screen.joinedCard(price: 208, name: "Great Value Parmesan Finely Shredded, 6 oz Bag", between: ["34.7¢/oz"])
+        screen.joinedCard(
+            price: 268, name: "Harborline Fresh Whole Shallots, 16 oz Bag", between: ["16.8¢/oz"],
+            photo: ["shallots"])
+        screen.joinedCard(price: 64, name: "Garlic Bulb Fresh Whole, Each")
+        screen.joinedCard(price: 258, name: "Marketside Fresh Green Beans, 12 oz", between: ["21.5¢/oz"])
+        screen.joinedCard(price: 397, name: "Fresh Ginger Root, Each", between: ["$3.97 ea", "$3.97/lb"])
+        screen.joinedCard(
+            price: 126, name: "Fresh Zucchini, Each", quantity: 2,
+            between: ["avg $0.63 ea", "$1.25/lb", "Was $0.71 ea", "You save $0.16"])
+        screen.joinedCard(price: 50, name: "Fresh Lime, Each", quantity: 2, between: ["$0.25 ea"])
+        screen.joinedCard(
+            price: 347, name: "Testfield Farms Cream Cheese Spread, 8 oz",
+            between: ["Was $3.97", "43.4¢/oz", "You save $0.50"])
+        screen.joinedCard(price: 113, name: "Fresh Whole Green Onion, 1 Bunch")
+        screen.joinedCard(
+            price: 132, name: "Fresh Whole Yellow Onion, Each", quantity: 2, between: ["avg $0.66 ea", "88¢/lb"])
+        screen.joinedCard(price: 296, name: "Fresh Poblano Peppers, 16 oz", between: ["18.5¢/oz"])
+        screen.joinedCard(price: 93, name: "Fresh Whole Green Cilantro Bunch")
+        screen.joinedCard(
+            price: 312, name: "Sample Brand Real Garlic Breadsticks, 10.5 oz 6 ct", between: ["29.7¢/oz"])
+        screen.joinedCard(price: 377, name: "Great Value Cayenne Pepper, 2.25 oz", between: ["$1.68/oz"])
+        screen.text("Was $133.24")
+        screen.text("Estimated total $131.27")
+        screen.text("Continue to checkout")
+        return screen.pieces
+    }
+
+    /// Every item in `realCartPieces`, in order, as the review screen should show it.
+    static let realCartItems: [(name: String, cents: Int, quantity: Int)] = [
+        ("Sample Brand Super Soft Flour Tortillas Street Tacos, 12 ct", 244, 1),
+        ("Great Value Light Brown Sugar, 32 oz", 198, 1),
+        ("Great Value All Natural Sour Cream, 8 oz", 137, 1),
+        ("Great Value Parmesan Finely Shredded, 6 oz Bag", 208, 1),
+        ("Harborline Fresh Whole Shallots, 16 oz Bag", 268, 1),
+        ("Garlic Bulb Fresh Whole, Each", 64, 1),
+        ("Marketside Fresh Green Beans, 12 oz", 258, 1),
+        ("Fresh Ginger Root, Each", 397, 1),
+        ("Fresh Zucchini, Each", 126, 2),
+        ("Fresh Lime, Each", 50, 2),
+        ("Testfield Farms Cream Cheese Spread, 8 oz", 347, 1),
+        ("Fresh Whole Green Onion, 1 Bunch", 113, 1),
+        ("Fresh Whole Yellow Onion, Each", 132, 2),
+        ("Fresh Poblano Peppers, 16 oz", 296, 1),
+        ("Fresh Whole Green Cilantro Bunch", 93, 1),
+        ("Sample Brand Real Garlic Breadsticks, 10.5 oz 6 ct", 312, 1),
+        ("Great Value Cayenne Pepper, 2.25 oz", 377, 1),
+    ]
 
     /// Every item in `cartPieces`, in order, with the price printed on its own card.
     static let cartItems: [(name: String, cents: Int, quantity: Int)] = [

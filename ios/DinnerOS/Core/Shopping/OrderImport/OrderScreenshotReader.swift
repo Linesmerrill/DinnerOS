@@ -35,10 +35,11 @@ nonisolated struct OrderScreenshotReader: Sendable {
         }
         guard !rows.isEmpty else { throw ReadError.noText }
         let lines = rows.map(\.text)
-        let parsed = OrderScreenshotParser.parse(rows: rows)
+        let style = OrderScreenshotParser.priceStyle(rows: rows)
+        let parsed = OrderScreenshotParser.parse(rows: rows, style: style)
         if let generated = await Self.structureWithModel(lines: lines) {
             let merged = OrderImportMerge.merge(
-                parsed: parsed, modelItems: generated.items, modelTotal: generated.total, lines: lines)
+                parsed: parsed, modelItems: generated.items, modelTotal: generated.total, lines: lines, style: style)
             let usedModel = merged.items != parsed.items
             Self.logger.info(
                 "Order import read \(merged.items.count, privacy: .public) items; model used: \(usedModel, privacy: .public)"
