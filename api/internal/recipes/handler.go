@@ -46,6 +46,10 @@ type HandlerOptions struct {
 	// TimeBands, when set, supplies the household's Autopilot cook-time bands
 	// for timeBand. Without it, or when it fails, the default bands apply.
 	TimeBands TimeBandReader
+	// Specialties, when set, applies the household's specialty ingredient
+	// choices to cooking instructions. Without it the steps read as the
+	// recipe was written and specialtiesApplied is false.
+	Specialties SpecialtySource
 }
 
 // RatingReader loads rating aggregates for recipes. *ratings.Service
@@ -87,6 +91,7 @@ func (h *Handler) Mount(r chi.Router) {
 		view := households.RequirePermission(h.opts.Authorizer, households.PermHouseholdView, h.logger)
 		r.With(view).Get("/households/{householdId}/recipes", h.list)
 		r.With(view).Get("/households/{householdId}/recipes/{recipeId}", h.get)
+		r.With(view).Get("/households/{householdId}/recipes/{recipeId}/instructions", h.instructions)
 		imports := households.RequirePermission(h.opts.Authorizer, households.PermRecipesImport, h.logger)
 		// Review items are import bookkeeping, so whoever may import may read
 		// them. The static path wins over /{recipeId} in chi.

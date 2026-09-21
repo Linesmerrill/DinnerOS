@@ -29,6 +29,11 @@ struct RecipeDetailView: View {
     @State private var selections: [String: String] = [:]
     @State private var pairings = RecipePairings.empty
     @State private var stepsExpanded = false
+    /// The steps as the server renders them for `servings`, with the household's specialty
+    /// choices applied. `nil` until they load, or when the server doesn't render them.
+    @State private var instructions: RecipeInstructions?
+    /// Opens the specialty ingredient setup, from a step that names something unchosen.
+    @State private var showsSpecialtySetup = false
     @State private var heroHeight: CGFloat = 320
     @State private var showsNavigationBar = false
 
@@ -80,8 +85,11 @@ struct RecipeDetailView: View {
                         RecipeDetailTabPicker(tabs: availableTabs, selection: tabSelection)
                     }
                     if let recipe, !recipe.steps.isEmpty {
-                        CookingStepsSection(steps: recipe.steps, isExpanded: $stepsExpanded)
-                            .padding(.horizontal, 16)
+                        CookingStepsSection(
+                            steps: recipe.steps, instructions: instructions,
+                            chooseSpecialty: { _ in showsSpecialtySetup = true }, isExpanded: $stepsExpanded
+                        )
+                        .padding(.horizontal, 16)
                     }
                 }
                 .padding(.bottom, 24)
@@ -115,8 +123,15 @@ struct RecipeDetailView: View {
                 selections: customizationSelections)
         }
         .overlay(alignment: .bottom) { toast }
+        // Attached to the screen's root, never inside a section (decision 510).
+        .sheet(isPresented: $showsSpecialtySetup, onDismiss: { Task { await loadInstructions() } }) {
+            SpecialtyIngredientsSheet()
+        }
         .task { await load(reload: false) }
         .task(id: summary.id) { await loadExtras() }
+        // The rendered steps depend on the serving size and on choices that can change
+        // elsewhere, so they reload rather than being cached with the recipe.
+        .task(id: InstructionsKey(recipeID: summary.id, servings: servings)) { await loadInstructions() }
         .task(id: ViewedKey(recipeID: summary.id, isActive: scenePhase == .active)) {
             // Counts as viewed after staying on screen, in the foreground, for a few
             // seconds. Leaving the screen or the app cancels the wait.
@@ -310,6 +325,14 @@ struct RecipeDetailView: View {
             ?? loaded.preferredServings(householdDefault: households.current?.household.defaultServings)
     }
 
+    /// The rendered steps for the chosen serving size. A server that doesn't render them, or
+    /// a failure, leaves the recipe's own steps on screen rather than an error: nobody should
+    /// lose the instructions because a substitution couldn't be looked up.
+    private func loadInstructions() async {
+        guard recipe != nil else { return }
+        instructions = (try? await library.instructions(recipeID: summary.id, servings: servings)) ?? instructions
+    }
+
     /// Customizations and pairings are optional: a household or server without them shows nothing.
     private func loadExtras() async {
         async let pairings: Void = loadPairings()
@@ -463,6 +486,12 @@ private struct HeroToolbarButton: ViewModifier {
             content
         }
     }
+}
+
+/// Reloads the rendered steps when the recipe or the serving size changes.
+private struct InstructionsKey: Equatable {
+    let recipeID: String
+    let servings: Int?
 }
 
 private struct ViewedKey: Equatable {

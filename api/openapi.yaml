@@ -856,6 +856,54 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/recipes/{recipeId}/instructions:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/RecipeID"
+    get:
+      summary: Get cooking instructions
+      description: |
+        The recipe's steps rendered for one serving size, the way a member
+        reads them while cooking. Requires `household.view`.
+
+        Every ingredient the recipe lists is marked where a step names it, as
+        an `ingredient` segment carrying the amount for `servings`, and a
+        specialty ingredient reads as whatever the household chose to buy or
+        make (docs/specialty-ingredients.md). Nothing is stored: a changed
+        choice shows on the next read.
+
+        Joining every segment's `text` in order gives the step's `text`
+        exactly, so a client needs no character offsets.
+      operationId: getRecipeInstructions
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: servings
+          in: query
+          description: |
+            One of the recipe's `servings`. Amounts are never scaled from
+            another serving size, so any other value is a 400. Defaults to the
+            recipe's smallest size.
+          schema:
+            type: integer
+            minimum: 1
+            example: 4
+      responses:
+        "200":
+          description: The rendered instructions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecipeInstructions"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/recipes/import-reviews:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -4806,6 +4854,157 @@ components:
         rawText:
           type: string
           example: ½ ounce Parmesan Cheese
+    RecipeInstructions:
+      type: object
+      required: [recipeId, recipeName, servings, servingOptions, specialtiesApplied, steps, substitutions, unchosenSpecialties]
+      properties:
+        recipeId:
+          type: string
+        recipeName:
+          type: string
+        servings:
+          type: integer
+          description: The serving size every amount below is for.
+          example: 4
+        servingOptions:
+          type: array
+          items:
+            type: integer
+        specialtiesApplied:
+          type: boolean
+          description: |
+            False when the server could not consult the household's specialty
+            ingredient choices, so the steps read as the recipe was written.
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/InstructionStep"
+        substitutions:
+          type: array
+          description: The specialty ingredients that read differently because of the household's choices.
+          items:
+            $ref: "#/components/schemas/InstructionSubstitution"
+        unchosenSpecialties:
+          type: array
+          description: |
+            Specialty ingredients this recipe uses that the household has not
+            decided about. They read as the card wrote them; offer the choice.
+          items:
+            type: object
+            required: [id, key, name]
+            properties:
+              id:
+                type: string
+              key:
+                type: string
+              name:
+                type: string
+    InstructionStep:
+      type: object
+      required: [index, text, segments, notes]
+      properties:
+        index:
+          type: integer
+        text:
+          type: string
+          description: The whole step; equals every segment's text joined in order.
+          example: Whisk 2 tbsp gochujang with 2 tbsp Tomato Paste.
+        originalText:
+          type: string
+          description: The recipe's own wording, present only when a substitution changed it.
+        imageUrl:
+          type: string
+        segments:
+          type: array
+          items:
+            $ref: "#/components/schemas/InstructionSegment"
+        notes:
+          type: array
+          description: |
+            Sentences to show under the step when a substitution changes the
+            amount or the method in a way a swapped word cannot say.
+          items:
+            type: object
+            required: [kind, text]
+            properties:
+              kind:
+                type: string
+                enum: [substitution]
+              specialtyId:
+                type: string
+              text:
+                type: string
+    InstructionSegment:
+      type: object
+      required: [kind, text]
+      properties:
+        kind:
+          type: string
+          enum: [text, ingredient]
+        text:
+          type: string
+        ingredientId:
+          type: string
+          description: Catalog ingredient, absent when the catalog does not know it.
+        name:
+          type: string
+          description: What the segment stands for, after any substitution.
+        amount:
+          description: |
+            The amount for `servings`. Absent when the recipe gave none, when
+            an earlier mention in the same step already carried it, or when a
+            substitution's amount does not convert exactly.
+          type: object
+          required: [quantity, quantityValue, unit, text]
+          properties:
+            quantity:
+              type: string
+              description: Exact amount as "n" or "n/d".
+              example: 1/2
+            quantityValue:
+              type: number
+            unit:
+              type: string
+              example: tbsp
+            text:
+              type: string
+              example: ½ tbsp
+        spicy:
+          type: boolean
+          description: |
+            The ingredient brings heat. Clients must pair any colour they use
+            for it with a non-colour signal.
+        substituted:
+          type: boolean
+          description: The household's specialty choice changed this mention.
+        specialtyId:
+          type: string
+        specialtyName:
+          type: string
+    InstructionSubstitution:
+      type: object
+      required: [specialtyId, specialtyKey, specialtyName, optionId, optionName, type, source, text]
+      properties:
+        specialtyId:
+          type: string
+        specialtyKey:
+          type: string
+        specialtyName:
+          type: string
+        optionId:
+          type: string
+        optionName:
+          type: string
+        type:
+          type: string
+          enum: [store_alternative, house_made_batch]
+        source:
+          type: string
+          description: Who decided: a member, or the household's standing strategy.
+          enum: [household, strategy]
+        text:
+          type: string
+          example: Tex-Mex Paste → 2 tsp Tomato Paste and ½ tsp Chili Powder
     ImportFile:
       type: object
       description: The recipe import contract. Field-level rules are in docs/import-format.md.

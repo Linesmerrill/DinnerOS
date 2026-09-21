@@ -163,6 +163,10 @@ type Specialty struct {
 	ID   string
 	Key  string
 	Name string
+	// Aliases are the other names the same specialty ingredient goes by
+	// ("Sichuan Paste" for "Szechuan Paste"). Cooking instructions look for
+	// them in step text; the grocery list doesn't use them.
+	Aliases []string
 	// UnitSizes convert its discrete units ("1 count = 2 tsp").
 	UnitSizes []UnitSize
 	// Choice is nil when the household hasn't chosen.

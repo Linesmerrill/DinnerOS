@@ -217,15 +217,31 @@ struct RecipeNutritionSection: View {
 // MARK: - Steps
 
 /// The numbered cooking steps, with their photos, behind a disclosure row.
+///
+/// When the server has rendered the steps (`instructions`), those are shown instead of the
+/// recipe's own text: they name what the household actually buys or makes and bold every
+/// ingredient with its amount. Without them — an older server, or a load that failed — the
+/// recipe's own steps still read.
 struct CookingStepsSection: View {
     let steps: [RecipeStep]
+    var instructions: RecipeInstructions?
+    var chooseSpecialty: ((InstructionSpecialtyRef) -> Void)?
     @Binding var isExpanded: Bool
+
+    private var count: Int { instructions?.steps.count ?? steps.count }
 
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
             VStack(alignment: .leading, spacing: 20) {
-                ForEach(steps) { step in
-                    RecipeStepRow(step: step)
+                if let instructions, !instructions.steps.isEmpty {
+                    ForEach(instructions.steps) { step in
+                        InstructionStepRow(step: step)
+                    }
+                    InstructionSubstitutionsFooter(instructions: instructions, chooseSpecialty: chooseSpecialty)
+                } else {
+                    ForEach(steps) { step in
+                        RecipeStepRow(step: step)
+                    }
                 }
             }
             .padding(.top, 12)
@@ -234,7 +250,7 @@ struct CookingStepsSection: View {
                 Text("Cooking Steps")
                     .font(.title3.weight(.semibold))
                 Spacer(minLength: 8)
-                Text("\(steps.count)")
+                Text("\(count)")
                     .font(.subheadline)
                     .foregroundStyle(Color.secondary)
             }
