@@ -175,6 +175,9 @@ struct MenuView: View {
                         FormErrorLabel(message: refreshError)
                             .padding(.horizontal, 16)
                     }
+                    // Above the week, not under All Meals: a household with nothing in its
+                    // library has nothing to plan, so getting recipes in comes first (#530).
+                    GetStartedSection()
                     YourMealsSection(flow: autopilotFlow)
                     PairingSuggestionsSection()
                     sections

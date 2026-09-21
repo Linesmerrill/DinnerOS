@@ -380,6 +380,54 @@ then cancel their jobs. Deleting their DinnerOS account does both.
 
 See [deployment.md](deployment.md#meal-kit-recipe-import) for the Heroku steps.
 
+## Where the import is offered
+
+Three places, one flow. `MealKitSignInFlow` is the only sign-in; nothing keeps a
+second copy of it.
+
+| Where | What it is | When it shows |
+| --- | --- | --- |
+| `MealKitImportOfferView` | The offer right after a household is created | Once, in `CreateHouseholdForm` |
+| `GetStartedSection` (Menu tab) | The first-run surface at the top of the Menu, above Your Meals | Whenever the household's library is empty (#530) |
+| `MealKitImportStatusView` (Household tab) | The full status: failures, Import Review, import again, unlink | Always, for a member with `recipes.import` |
+
+The Menu surface is the one a new household actually meets, because onboarding
+is a moment and the Menu is where they land afterwards. It offers importing
+first, the catalog (`DiscoverRoute`) second, and typing a recipe
+(`AddRecipeView`) third, and it starts the import itself rather than pointing at
+the Household tab.
+
+What it says is decided by `FirstRunRecipes.state(for:)`, which is pure and
+tested in words rather than checked by eye:
+
+| State | What the household sees |
+| --- | --- |
+| `hidden` | The library has recipes, hasn't loaded, is filtered, or this member dismissed it |
+| `offer` | No account linked: **Import from HelloFresh**, with the credential explanation under it |
+| `linked` | An account is connected but nothing has run: **Import Now** |
+| `importing` | The run's own progress, and "you can close the app" — the job is on the server |
+| `needsSignIn` | The stored session expired: **Sign In Again** |
+| `stopped` | The run gave up, with its message: **Try Again** |
+| `imported(count)` | A run finished and added recipes this list hasn't caught up with: **Show Them** |
+| `foundNothing` | A run finished having found nothing: **Try Again**, plus the catalog |
+| `unavailable` | No `recipes.import`, or no import on this server: the catalog and typing a recipe |
+
+Three details are deliberate. A member **without `recipes.import` never reads the
+status** (`FirstRunRecipes.readsImportStatus`), because that request is a
+guaranteed `403`; they are offered the catalog instead, and told plainly that
+importing is up to whoever manages the household. A run started by **another
+member** shows here too, because the job belongs to the household, so a second
+phone sees progress rather than an offer to start a second import. And a
+**finished** run triggers one library read, so the surface gives way to the
+recipes it just claimed.
+
+Dismissal is stored by `FirstRunDismissalStorage` in `UserDefaults`, keyed by
+user **and** household — one member closing it is not the household saying it,
+and one phone may hold two households at different stages. It is a preference
+about a screen, not household data, so it never reaches the server. Recipes beat
+dismissal in both directions: a household with recipes never sees the surface,
+and a dismissal is never undone by a later import.
+
 ## The seam into the library
 
 `mealkit.RecipePublisher` is the only way recipes leave this package:
