@@ -32,6 +32,7 @@ Autopilot's first customer.
 | 10 | Autopilot V1: taste profile, week context, deterministic week proposals (generate, swap, accept) | ✅ Done (API and iOS) |
 | — | Push notifications (APNs, hourly reminder sweep), starter recipe library for new households, account deletion, privacy policy, external TestFlight | ✅ Done |
 | 11 | Autopilot learning from feedback and context engine (season, US holidays, order day, weekday; calendar and weather signals from the phone) | ✅ Done (API and iOS: calendar busyness and weather bands derived on the iPhone, Siri "Plan my dinners" and "What's for dinner tonight") |
+| — | Meal-kit recipe import at onboarding (HelloFresh): link once, encrypted session tokens, durable Mongo job queue with leases and checkpoints, scheduled worker, push when done or when it needs you, reviewable result, unlink | ✅ API, worker, and iOS. Off until `MEAL_KIT_IMPORT_ENABLED` and `RECIPE_IMPORT_ENCRYPTION_KEY` are set; the HelloFresh account endpoints need verifying against a real account first ([docs](docs/meal-kit-import.md)) |
 | 12 | Autopilot private service | Later |
 
 ## Repository layout
@@ -50,6 +51,7 @@ DinnerOS/
 │   ├── Config/             xcconfig files + Info.plist (name, bundle ID, API URL)
 │   └── fastlane/           Test and TestFlight lanes
 ├── importers/hellofresh/   Offline importer for our own order history (Phase 5)
+│                           (the in-app equivalent is api/internal/mealkit)
 ├── docs/                   Architecture and design documentation
 ├── .github/workflows/      API and iOS CI
 ├── docker-compose.yml      Local MongoDB (and optional containerized API)
@@ -105,6 +107,7 @@ every credential and where to get it.
 - [Authentication](docs/authentication.md): identity providers, sessions, authorization
 - [API](docs/api.md): REST conventions and the OpenAPI spec
 - [Grocery engine](docs/grocery-engine.md): ingredient normalization, units, aggregation
+- [Meal-kit import](docs/meal-kit-import.md): asynchronous per-member import of a household's own order history — job lifecycle, credential lifecycle, rate-limit policy, and the operator runbook
 - [Pantry usage](docs/pantry-usage.md): purchases, cooking deductions, learned usage, low-stock alerts, notifications
 - [Shopping providers](docs/shopping-providers.md): Walmart, Instacart, and Kroger handoff research and the Phase 8 plan
 - [Specialty ingredients](docs/specialty-ingredients.md): meal-kit blends and sauces, store alternatives, house-made batches

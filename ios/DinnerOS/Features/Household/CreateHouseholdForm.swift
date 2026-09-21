@@ -6,7 +6,11 @@ struct CreateHouseholdForm: View {
     var onCreated: () -> Void = {}
 
     @Environment(HouseholdStore.self) private var households
+    /// Optional so previews and the Household tab's sheet needn't supply one.
+    @Environment(MealKitImportStore.self) private var mealKit: MealKitImportStore?
     @State private var name = ""
+    /// The household that was just created, which the import offer is for.
+    @State private var createdHouseholdID: String?
     @State private var timeZone = TimeZone.current.identifier
     @State private var isSaving = false
     @State private var errorMessage: String?
@@ -57,6 +61,11 @@ struct CreateHouseholdForm: View {
         }
         .disabled(isSaving)
         .onAppear { isNameFocused = true }
+        // Onboarding's second step: bring the recipes you already ordered, or skip and add
+        // them by hand. Pushed rather than presented, so Back is never a dead end.
+        .navigationDestination(item: $createdHouseholdID) { _ in
+            MealKitImportOfferView(onDone: onCreated)
+        }
     }
 
     private func create() async {
@@ -66,7 +75,14 @@ struct CreateHouseholdForm: View {
         defer { isSaving = false }
         do {
             try await households.createHousehold(name: trimmedName, timeZone: timeZone)
-            onCreated()
+            // Offer the import only when there is a store to do it with and the new
+            // household is the selected one; otherwise this was the last step.
+            if let mealKit, let householdID = households.current?.household.id {
+                mealKit.activate(householdID: householdID)
+                createdHouseholdID = householdID
+            } else {
+                onCreated()
+            }
         } catch is CancellationError {
             // The screen went away.
         } catch {

@@ -112,6 +112,11 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/recipes/{recipeId}` → recipe | `household.view` | 4 | ✅ |
 | POST | `/api/v1/households/{householdId}/recipes/import` import file → `{created, updated, unchanged, ingredientsCreated, reviewItems, errors}` | `recipes.import` | 4 | ✅ |
 | GET | `/api/v1/households/{householdId}/recipes/import-reviews` `?status=open\|all&limit` → `{items}`, oldest first | `recipes.import` | 4 | ✅ |
+| GET | `/api/v1/households/{householdId}/meal-kit/{source}` → `{source, enabled, link, latestJob}` | `recipes.import` | — | ✅ |
+| PUT | `/api/v1/households/{householdId}/meal-kit/{source}/link` `{email, password, startImport?}` → `{source, enabled, link, latestJob}` | `recipes.import` | — | ✅ |
+| DELETE | `/api/v1/households/{householdId}/meal-kit/{source}/link` → `204` (deletes the stored tokens and cancels every run) | `recipes.import` | — | ✅ |
+| POST | `/api/v1/households/{householdId}/meal-kit/{source}/imports` → `202` job | `recipes.import` | — | ✅ |
+| GET | `/api/v1/households/{householdId}/meal-kit/{source}/imports` → `{items}`, newest first | `recipes.import` | — | ✅ |
 | GET | `/api/v1/households/{householdId}/plans` `?from&to` → `{items: [{week, startDate, status, entryCount, updatedAt}]}` | `household.view` | 6 | ✅ |
 | GET | `/api/v1/households/{householdId}/plans/{week}` → plan (an empty draft if unplanned) | `household.view` | 6 | ✅ |
 | POST | `/api/v1/households/{householdId}/plans/{week}/entries` `{recipeId, day?, servings, note?}` → `201 {entry, plan}` | `plan.edit` | 6 | ✅ |
@@ -490,6 +495,45 @@ same content, images and source links, and catalog ingredients, but no order
 history (`timesOrdered` 0, no `lastOrderedWeek`), ratings, or plans. A recipe
 the household already has from the same `source` (matched by `sourceRecipeId`
 or an alias, as import matches) is skipped.
+
+### Meal-kit import
+
+Asynchronous import of a household's own meal-kit order history
+([meal-kit-import.md](meal-kit-import.md)). `{source}` is `hellofresh`; any
+other value is 404.
+
+A member links the account once (`PUT .../link`). The API signs in to the
+meal-kit service, stores **only** the resulting session and refresh tokens,
+envelope-encrypted with `RECIPE_IMPORT_ENCRYPTION_KEY`, and queues a job. The
+password is used for that one exchange and is never stored, logged, or
+returned. The app can be closed immediately: a scheduled worker
+(`cmd/importmealkit`) fetches the recipes that account ordered and puts them
+through the same `recipes.Service.Import` a file import uses, so they arrive
+with the same validation, alias splitting, and review items.
+
+- `enabled: false` means the server has no import encryption key. The app
+  offers adding recipes by hand instead, and `PUT .../link` answers `503
+  import_disabled`.
+- `POST .../imports` answers `409 not_linked` with no linked account, and
+  returns the run that is already queued, running, or paused rather than a
+  second one.
+- `status` is `queued`, `running`, `paused_auth`, `succeeded`, `dead`, or
+  `canceled`. `paused_auth` waits for the member to sign in again, which
+  resumes the run where it stopped. `lastError.message` is written for a person
+  and never contains a token, a URL, or fetched page content.
+- `failures[]` lists the recipes of the order history that did not make it,
+  with a reason each. Things the importer could not map confidently are not
+  failures: they are review items, read through
+  [`/recipes/import-reviews`](#recipe-import).
+- `DELETE .../link` deletes the tokens and cancels every queued, running, or
+  paused run immediately. A worker mid-run stops at its next write.
+- No response carries the member's email address: `accountLabel` is a generic
+  display string such as "HelloFresh account".
+
+The worker is polite by policy, not by accident: one request at a time, at
+least 2.5 s apart with jitter, retries with backoff on 429 and 5xx, a hard stop
+on 403, an honest `User-Agent`, and a real per-run cap
+([meal-kit-import.md](meal-kit-import.md#being-a-good-citizen)).
 
 ## Plans
 

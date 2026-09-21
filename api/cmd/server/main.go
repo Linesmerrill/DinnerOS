@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/account"
 	"github.com/Linesmerrill/DinnerOS/api/internal/applinks"
@@ -24,6 +25,8 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/httpapi"
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/mealkit"
+	mealkitsources "github.com/Linesmerrill/DinnerOS/api/internal/mealkit/sources"
 	"github.com/Linesmerrill/DinnerOS/api/internal/menu"
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
@@ -328,6 +331,24 @@ func run() error {
 		Tokens:  tokens,
 		Logger:  logger,
 	})
+	// Meal-kit recipe import. The web dyno only links accounts and enqueues
+	// jobs; the fetching is cmd/importmealkit's, on Heroku Scheduler
+	// (docs/meal-kit-import.md). Without RECIPE_IMPORT_ENCRYPTION_KEY the
+	// service is disabled and every route answers 503 rather than storing a
+	// token in the clear.
+	mealKitService, err := newMealKitService(cfg, db.Database(), notificationService, logger)
+	if err != nil {
+		return err
+	}
+	if !mealKitService.Enabled() {
+		logger.Info("meal-kit recipe import is off; set MEAL_KIT_IMPORT_ENABLED=true and RECIPE_IMPORT_ENCRYPTION_KEY to enable it")
+	}
+	mealKitHandler := mealkit.NewHandler(mealkit.HandlerOptions{
+		Service:    mealKitService,
+		Authorizer: householdService,
+		Tokens:     tokens,
+		Logger:     logger,
+	})
 
 	srv := &http.Server{
 		Addr: cfg.Addr(),
@@ -360,6 +381,7 @@ func run() error {
 				shoppingHandler.Mount(r)
 				notificationHandler.Mount(r)
 				deviceTokenHandler.Mount(r)
+				mealKitHandler.Mount(r)
 				accountHandler.Mount(r)
 				behavior.ratingHandler.Mount(r)
 				behavior.eventHandler.Mount(r)
@@ -416,6 +438,7 @@ func indexSets() []mongodb.IndexSet {
 		substitutes.Indexes(),
 		shopping.Indexes(),
 		skips.Indexes(),
+		mealkit.Indexes(),
 		behaviorIndexes(),
 		recommendations.Indexes(),
 	)
@@ -487,6 +510,26 @@ func newHouseholdHandlers(cfg config.Config, db *mongodb.Client, userService *us
 		CreateRateLimit: ratelimit.New(ratelimit.Options{Burst: inviteCreateRateBurst, Every: inviteCreateRateEvery}).Middleware,
 	})
 	return householdService, householdHandler, invitationHandler
+}
+
+// newMealKitService builds the meal-kit import service. A configured
+// encryption key turns the feature on; without one the service is returned
+// disabled, which is what every route and the worker check.
+func newMealKitService(cfg config.Config, db *mongo.Database, notifier *notifications.Service, logger *slog.Logger) (*mealkit.Service, error) {
+	opts := mealkit.ServiceOptions{
+		Store:    mealkit.NewMongoStore(db),
+		Notifier: notifier,
+		Logger:   logger,
+	}
+	if cfg.MealKitImport.Active() {
+		cipher, err := mealkit.NewCipher(cfg.MealKitImport.EncryptionKey)
+		if err != nil {
+			return nil, err
+		}
+		opts.Cipher = cipher
+		opts.Sources = mealkitsources.All(mealkitsources.Options{HelloFreshBaseURL: cfg.MealKitImport.HelloFreshBaseURL})
+	}
+	return mealkit.NewService(opts), nil
 }
 
 // newWalmartProvider returns the Walmart provider, with Impact affiliate

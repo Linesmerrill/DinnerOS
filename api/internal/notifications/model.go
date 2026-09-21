@@ -48,6 +48,11 @@ const (
 	// meals and should move to the fridge
 	// (docs/pantry-usage.md#thaw-reminders).
 	TypePantryThaw Type = "pantry.thaw"
+	// TypeRecipeImportFinished: a meal-kit recipe import run finished.
+	TypeRecipeImportFinished Type = "recipe_import.finished"
+	// TypeRecipeImportAttention: a meal-kit recipe import needs a person —
+	// the session expired, the service refused us, or the run gave up.
+	TypeRecipeImportAttention Type = "recipe_import.attention"
 )
 
 // SubjectKind is the kind of record a notification points at.
@@ -58,6 +63,8 @@ const (
 	SubjectPantryItem SubjectKind = "pantry_item"
 	// SubjectShoppingWeek is an ISO week ("2026-W38"): the week to open.
 	SubjectShoppingWeek SubjectKind = "shopping_week"
+	// SubjectRecipeImport is a meal-kit import job ID: the run to open.
+	SubjectRecipeImport SubjectKind = "recipe_import_job"
 )
 
 // Subject is the record a notification is about, so an app can open it.

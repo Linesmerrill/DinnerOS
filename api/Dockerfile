@@ -11,6 +11,9 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/sendreminders ./cm
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/seedstarter ./cmd/seedstarter
 # The first-day-of-the-week backfill, run by hand as `heroku run /weekstart ...`.
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/weekstart ./cmd/weekstart
+# The meal-kit recipe import worker Heroku Scheduler runs as `/importmealkit`
+# (docs/meal-kit-import.md).
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/importmealkit ./cmd/importmealkit
 
 # Heroku starts containers with `/bin/sh -c <CMD>`, so the runtime image needs a
 # shell (distroless has none). Keep it minimal and non-root.
@@ -20,6 +23,7 @@ COPY --from=build /out/server /server
 COPY --from=build /out/sendreminders /sendreminders
 COPY --from=build /out/seedstarter /seedstarter
 COPY --from=build /out/weekstart /weekstart
+COPY --from=build /out/importmealkit /importmealkit
 EXPOSE 8080
 USER app
 # Heroku injects PORT; the server reads it from the environment.

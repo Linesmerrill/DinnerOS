@@ -344,6 +344,38 @@ the push sweep).
   finds a household's devices with `{userId: {$in: memberIds}}`.
 - Retention: kept indefinitely for now, like events.
 
+### Meal-kit import
+
+Implemented in `internal/mealkit` ([meal-kit-import.md](meal-kit-import.md)).
+These two collections are the only new state: imported recipes land in
+`recipes` through the ordinary import pipeline, never by a second path.
+
+| Collection | Key fields | Indexes |
+| --- | --- | --- |
+| `meal_kit_links` | householdId, userId, source (`hellofresh`), status (`active`/`needs_reauth`), accountLabel, secret{keyId, key, ciphertext}, expiresAt, createdAt, updatedAt, lastUsedAt | **unique** `{householdId, source}`; `{userId}` |
+| `meal_kit_jobs` | householdId, userId, linkId, source, status (`queued`/`running`/`paused_auth`/`succeeded`/`dead`/`canceled`), attempts, maxAttempts, availableAt, leaseOwner, leaseExpiresAt, checkpoint{phase, orders[], done[], failures[], imported, updated, unchanged, reviewItems}, lastError{code, message, at}, createdAt, updatedAt, startedAt, finishedAt | `{householdId, _id: -1}`; `{status, availableAt}` |
+
+- **The link never holds a password**, and `secret` is envelope-encrypted: a
+  random per-link data key sealed with `RECIPE_IMPORT_ENCRYPTION_KEY`, and the
+  tokens sealed with that data key. Without the config var the document is
+  useless, which is why it is safe in MongoDB. `keyId` is a hash prefix of the
+  key-encryption key, so a rotation can tell which links still need re-wrapping.
+- **The queue.** A worker claims with one `findOneAndUpdate` matching either a
+  `queued` job whose `availableAt` has passed or a `running` job whose
+  `leaseExpiresAt` has passed, sorted by `availableAt`, setting the lease and
+  `$inc`-ing `attempts`. One document, one claim: that is what makes
+  overlapping workers safe. Every later write carries
+  `{status: "running", leaseOwner: <this worker>}`, so a canceled job (an
+  unlink) or a taken-over lease stops the worker at its next write.
+- **Resumable.** `checkpoint.orders` is the account's order history, read once;
+  `checkpoint.done` grows only after a batch of recipes has been through the
+  import pipeline. A restart re-fetches at most one batch.
+- **Bounded.** `checkpoint.failures` is capped at 100 entries, so one bad run
+  cannot grow an unbounded document.
+- Retention: jobs are kept as the household's import history; links are deleted
+  on unlink, on the member's account deletion (`{userId}`), and with the
+  household.
+
 ### Grocery lists
 
 | Collection | Key fields | Indexes |
