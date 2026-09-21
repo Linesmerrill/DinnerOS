@@ -328,11 +328,8 @@ type fakeSource struct {
 	// refreshed is the token Refresh hands back. Empty means Refresh fails.
 	refreshed string
 
-	signIn      Tokens
-	signInErr   error
-	fetched     []string
-	refreshes   int
-	signInCalls int
+	fetched   []string
+	refreshes int
 	// beforeRecipe runs before each Recipe call, for racing an unlink in.
 	beforeRecipe func(o OrderedRecipe)
 }
@@ -340,13 +337,6 @@ type fakeSource struct {
 var _ Source = (*fakeSource)(nil)
 
 func (f *fakeSource) Name() string { return SourceHelloFresh }
-
-func (f *fakeSource) SignIn(_ context.Context, _, _ string) (Tokens, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.signInCalls++
-	return f.signIn, f.signInErr
-}
 
 func (f *fakeSource) Refresh(_ context.Context, _ Tokens) (Tokens, error) {
 	f.mu.Lock()

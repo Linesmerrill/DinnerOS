@@ -10,6 +10,31 @@ nonisolated enum MealKitService: String, CaseIterable, Sendable {
         case .helloFresh: "HelloFresh"
         }
     }
+
+    /// The service's own sign-in page, loaded in a web view so the member types their password
+    /// into the real site rather than into us. `nil` would mean we can't offer the sign-in at
+    /// all, which the screens handle rather than force-unwrapping a constant.
+    var loginURL: URL? {
+        switch self {
+        case .helloFresh: URL(string: "https://www.hellofresh.com/login")
+        }
+    }
+
+    /// The cookie the service's own login writes. Captured from a signed-in session; see
+    /// `docs/meal-kit-import.md`.
+    var sessionCookieName: String {
+        switch self {
+        case .helloFresh: "apiV2Auth"
+        }
+    }
+
+    /// The domain that cookie must come from, so a cookie set by some other site in the web view
+    /// is never mistaken for the member's meal-kit session.
+    var cookieDomain: String {
+        switch self {
+        case .helloFresh: "hellofresh.com"
+        }
+    }
 }
 
 /// The stored connection to a meal-kit account (`MealKitLink` in `api/openapi.yaml`).
@@ -206,10 +231,21 @@ nonisolated struct MealKitImportJobList: Decodable, Hashable, Sendable {
 
 /// Body of `PUT .../meal-kit/{source}/link`.
 ///
-/// The password is sent once, over TLS, so the server can exchange it for session tokens.
-/// It is never stored on the device or on the server, and nothing logs it.
+/// It carries the session the member's own sign-in on the meal kit's website produced — never a
+/// password, because they never type one into this app. The server stores it encrypted; nothing
+/// on this device keeps it, and nothing logs it.
 nonisolated struct MealKitLinkRequest: Encodable, Sendable {
-    let email: String
-    let password: String
+    let accessToken: String
+    /// Omitted when the sign-in produced none; the session then simply expires sooner.
+    let refreshToken: String?
+    /// Omitted when the cookie didn't say enough to work it out.
+    let expiresAt: Date?
     let startImport: Bool
+
+    init(session: MealKitWebSession, startImport: Bool) {
+        accessToken = session.accessToken
+        refreshToken = session.refreshToken.isEmpty ? nil : session.refreshToken
+        expiresAt = session.expiresAt
+        self.startImport = startImport
+    }
 }

@@ -4,7 +4,7 @@ import Foundation
 /// (`/api/v1/households/{householdId}/meal-kit/{source}`). Use them through
 /// `AuthSession.authorized`.
 ///
-/// Nothing here logs a request: the link body carries the member's meal-kit password.
+/// Nothing here logs a request: the link body carries the member's meal-kit session.
 nonisolated struct MealKitAPI: Sendable {
     let client: APIClient
 
@@ -20,17 +20,18 @@ nonisolated struct MealKitAPI: Sendable {
         try await client.send(APIRequest.get(path(householdID, service)).authorized(with: accessToken))
     }
 
-    /// Links the account and, by default, queues an import.
+    /// Links the account with the session the member's own sign-in produced and, by default,
+    /// queues an import.
     ///
-    /// The password is used by the server for one token exchange and then discarded; it is
-    /// never written to the Keychain, `UserDefaults`, or a log on this device either.
+    /// `session` is the meal kit's tokens; `accessToken` is our own API's. Neither is written to
+    /// the Keychain, `UserDefaults`, or a log on this device.
     func link(
-        householdID: String, service: MealKitService, email: String, password: String,
+        householdID: String, service: MealKitService, session: MealKitWebSession,
         startImport: Bool = true, accessToken: String
     ) async throws -> MealKitStatus {
         let request = try APIRequest.put(
             path(householdID, service, "/link"),
-            body: MealKitLinkRequest(email: email, password: password, startImport: startImport))
+            body: MealKitLinkRequest(session: session, startImport: startImport))
         return try await client.send(request.authorized(with: accessToken))
     }
 

@@ -94,14 +94,13 @@ nonisolated enum MealKitFormatting {
         return parts.joined(separator: ", ") + "."
     }
 
-    /// Why an email and password are being asked for, in the sign-in form's footer. It says
-    /// what is kept and what isn't, because a password prompt inside another app deserves
-    /// an explanation.
+    /// What the sign-in actually does, shown under the button that starts it. A sign-in to
+    /// someone else's account from inside another app deserves saying plainly who sees what.
     static func credentialExplanation(for service: MealKitService) -> String {
         String(
             localized: """
-                We sign in to \(service.displayName) once to read your order history. \
-                Only the session it gives back is kept, encrypted — your password is never stored.
+                You sign in on \(service.displayName)'s own page, so your password never reaches \
+                DinnerOS. Only the session it hands back is kept, encrypted, to read your order history.
                 """)
     }
 }

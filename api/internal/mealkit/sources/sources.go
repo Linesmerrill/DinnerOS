@@ -6,6 +6,8 @@
 package sources
 
 import (
+	"log/slog"
+
 	"github.com/Linesmerrill/DinnerOS/api/internal/mealkit"
 	"github.com/Linesmerrill/DinnerOS/api/internal/mealkit/hellofresh"
 )
@@ -18,6 +20,10 @@ type Options struct {
 	// Fetcher, when set, replaces the polite HTTP client. Tests use it; in
 	// production each source gets its own with the default politeness.
 	Fetcher *mealkit.Fetcher
+	// Logger, when set, receives debug-level diagnostics about a response a
+	// source could not read: status shape, content type, and a short redacted
+	// excerpt. Never a token or a cookie.
+	Logger *slog.Logger
 }
 
 // All returns the meal-kit clients keyed by name. Both cmd/server and
@@ -27,6 +33,7 @@ func All(opts Options) map[string]mealkit.Source {
 		mealkit.SourceHelloFresh: hellofresh.New(hellofresh.Options{
 			Fetcher: opts.Fetcher,
 			BaseURL: opts.HelloFreshBaseURL,
+			Logger:  opts.Logger,
 		}),
 	}
 }

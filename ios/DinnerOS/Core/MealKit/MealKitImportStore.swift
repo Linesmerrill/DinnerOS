@@ -109,18 +109,19 @@ final class MealKitImportStore {
         }
     }
 
-    /// Links the meal-kit account and queues an import.
+    /// Links the meal-kit account with the session the member's own sign-in produced, and queues
+    /// an import.
     ///
-    /// The password is passed straight to the API call and is never stored on this device.
-    /// Throws so the form can show the failure next to the fields.
-    func link(email: String, password: String, startImport: Bool = true) async throws {
+    /// `webSession` goes straight into the API call and is never stored on this device. Throws so
+    /// the sign-in screen can show the failure.
+    func link(webSession: MealKitWebSession, startImport: Bool = true) async throws {
         guard let api, let householdID else { return }
         isWorking = true
         defer { isWorking = false }
         let started = scope
         let result = try await session.authorized { token in
             try await api.link(
-                householdID: householdID, service: service, email: email, password: password,
+                householdID: householdID, service: service, session: webSession,
                 startImport: startImport, accessToken: token)
         }
         guard started == scope else { return }

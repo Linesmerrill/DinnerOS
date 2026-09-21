@@ -171,9 +171,10 @@ can't receive remote pushes anyway.
 
 New households can import the recipes they actually ordered from their meal-kit
 service instead of starting empty ([meal-kit-import.md](meal-kit-import.md)).
-The member links the account in the app; a worker binary in the same container
-image, `/importmealkit`, does the fetching on **Heroku Scheduler**. The web dyno
-only signs in once and queues the job.
+The member signs in on the meal kit's own site in a web view in the app, which
+hands the API the session that login produced; a worker binary in the same
+container image, `/importmealkit`, does the fetching on **Heroku Scheduler**.
+The web dyno only seals the tokens and queues the job.
 
 The feature is **off** unless `MEAL_KIT_IMPORT_ENABLED=true`, and turning it on
 without `RECIPE_IMPORT_ENCRYPTION_KEY` stops the API and the worker at startup

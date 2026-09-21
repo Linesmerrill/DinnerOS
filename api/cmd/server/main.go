@@ -545,7 +545,9 @@ func newMealKitService(cfg config.Config, db *mongo.Database, notifier *notifica
 			return nil, err
 		}
 		opts.Cipher = cipher
-		opts.Sources = mealkitsources.All(mealkitsources.Options{HelloFreshBaseURL: cfg.MealKitImport.HelloFreshBaseURL})
+		opts.Sources = mealkitsources.All(mealkitsources.Options{
+			HelloFreshBaseURL: cfg.MealKitImport.HelloFreshBaseURL, Logger: logger,
+		})
 	}
 	return mealkit.NewService(opts), nil
 }

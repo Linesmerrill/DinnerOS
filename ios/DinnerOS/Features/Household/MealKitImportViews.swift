@@ -28,7 +28,8 @@ struct MealKitImportOfferView: View {
                     } label: {
                         MealKitOptionLabel(
                             title: "Import from \(service.displayName)",
-                            detail: "Sign in once. We'll fetch the recipes you ordered while you get on with things.",
+                            detail:
+                                "Sign in on \(service.displayName)'s own page. We'll fetch what you ordered.",
                             systemImage: "shippingbox.fill")
                     }
                 } footer: {
@@ -53,8 +54,9 @@ struct MealKitImportOfferView: View {
         .task { await mealKit.load() }
         .sheet(isPresented: $isSigningIn) {
             NavigationStack {
-                MealKitSignInForm {
-                    isSigningIn = false; onDone()
+                MealKitSignInFlow {
+                    isSigningIn = false
+                    onDone()
                 }
             }
         }
@@ -81,96 +83,57 @@ struct MealKitImportOfferView: View {
     }
 }
 
-/// The one-time meal-kit sign-in.
+/// The one-time meal-kit sign-in: the service's own login page, then the link.
 ///
-/// The password lives in this view's state and in the request body, and nowhere else: it is
-/// never written to the Keychain or `UserDefaults`, and the field is cleared as soon as the
-/// request returns either way.
-struct MealKitSignInForm: View {
+/// There is no password field here, and there never was one that worked. The member signs in on
+/// HelloFresh's own page in `MealKitWebLoginView`; what comes back is the session that login
+/// produced, which goes straight to our API and is stored encrypted. Nothing on this device keeps
+/// it, and our server never sees a password at all.
+struct MealKitSignInFlow: View {
     var onLinked: () -> Void = {}
 
     @Environment(MealKitImportStore.self) private var mealKit
     @Environment(\.dismiss) private var dismiss
-    @State private var email = ""
-    @State private var password = ""
+    /// Kept only while a link is failing, so **Try Again** does not mean signing in again.
+    @State private var session: MealKitWebSession?
     @State private var errorMessage: String?
-    @FocusState private var focus: Field?
-
-    private enum Field { case email, password }
 
     private var service: MealKitService { mealKit.service }
 
-    private var canSubmit: Bool {
-        !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty && !mealKit.isWorking
-    }
-
     var body: some View {
-        Form {
-            Section {
-                TextField("Email", text: $email)
-                    .textContentType(.username)
-                    .keyboardType(.emailAddress)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .focused($focus, equals: .email)
-                    .submitLabel(.next)
-                    .onSubmit { focus = .password }
-                SecureField("Password", text: $password)
-                    .textContentType(.password)
-                    .focused($focus, equals: .password)
-                    .submitLabel(.go)
-                    .onSubmit { Task { await link() } }
-            } header: {
-                Text("\(service.displayName) Account")
-            } footer: {
-                Text(MealKitFormatting.credentialExplanation(for: service))
+        MealKitWebLoginView(
+            service: service,
+            onSession: { session in
+                self.session = session
+                Task { await link(session) }
+            },
+            onCancel: { dismiss() }
+        )
+        .alert("Couldn't connect", isPresented: showingError) {
+            Button("Try Again") {
+                guard let session else { return }
+                Task { await link(session) }
             }
-            if let errorMessage {
-                Section {
-                    FormErrorLabel(message: errorMessage)
-                }
-            }
-            Section {
-                Text("We only read the recipes on your order history — nothing else from your account.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+            Button("Not Now", role: .cancel) { dismiss() }
+        } message: {
+            Text(errorMessage ?? "")
         }
-        .navigationTitle("Connect \(service.displayName)")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                if mealKit.isWorking {
-                    ProgressView()
-                } else {
-                    Button("Connect") { Task { await link() } }
-                        .disabled(!canSubmit)
-                }
-            }
-        }
-        .disabled(mealKit.isWorking)
-        .onAppear { focus = .email }
     }
 
-    private func link() async {
-        guard canSubmit else { return }
+    private var showingError: Binding<Bool> {
+        Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
+    }
+
+    private func link(_ session: MealKitWebSession) async {
         errorMessage = nil
-        let submitted = password
         do {
-            try await mealKit.link(email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: submitted)
-            password = ""
+            try await mealKit.link(webSession: session)
+            self.session = nil
             onLinked()
             dismiss()
         } catch is CancellationError {
-            password = ""
         } catch {
-            // Never keep the attempt around: a retry types it again.
-            password = ""
             errorMessage = HouseholdStore.message(for: error)
-            focus = .password
         }
     }
 }
@@ -217,7 +180,7 @@ struct MealKitImportStatusView: View {
         .task(id: mealKit.isImporting) { await mealKit.pollWhileImporting() }
         .refreshable { await mealKit.refresh() }
         .sheet(isPresented: $isSigningIn) {
-            NavigationStack { MealKitSignInForm() }
+            NavigationStack { MealKitSignInFlow() }
         }
         .confirmationDialog(
             "Unlink your \(service.displayName) account?", isPresented: $isConfirmingUnlink, titleVisibility: .visible

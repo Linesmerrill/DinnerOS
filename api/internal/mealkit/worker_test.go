@@ -31,7 +31,6 @@ func newWorkerFixture(t *testing.T, orders []OrderedRecipe) *workerFixture {
 		publisher: &fakePublisher{},
 		notifier:  &fakeNotifier{},
 	}
-	f.source.signIn = Tokens{AccessToken: "access", RefreshToken: "refresh", ExpiresAt: time.Now().Add(time.Hour)}
 	f.service = NewService(ServiceOptions{
 		Store: f.store, Cipher: testCipher(t),
 		Sources:  map[string]Source{SourceHelloFresh: f.source},
@@ -39,7 +38,8 @@ func newWorkerFixture(t *testing.T, orders []OrderedRecipe) *workerFixture {
 	})
 	status, err := f.service.Link(context.Background(), LinkRequest{
 		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
-		Email: "cook@example.com", Password: "pw", StartImport: true,
+		Tokens:      Tokens{AccessToken: "access", RefreshToken: "refresh", ExpiresAt: time.Now().Add(time.Hour)},
+		StartImport: true,
 	})
 	if err != nil {
 		t.Fatalf("Link() error = %v", err)

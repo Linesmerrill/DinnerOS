@@ -113,7 +113,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/households/{householdId}/recipes/import` import file → `{created, updated, unchanged, ingredientsCreated, reviewItems, errors}` | `recipes.import` | 4 | ✅ |
 | GET | `/api/v1/households/{householdId}/recipes/import-reviews` `?status=open\|all&limit` → `{items}`, oldest first | `recipes.import` | 4 | ✅ |
 | GET | `/api/v1/households/{householdId}/meal-kit/{source}` → `{source, enabled, link, latestJob}` | `recipes.import` | — | ✅ |
-| PUT | `/api/v1/households/{householdId}/meal-kit/{source}/link` `{email, password, startImport?}` → `{source, enabled, link, latestJob}` | `recipes.import` | — | ✅ |
+| PUT | `/api/v1/households/{householdId}/meal-kit/{source}/link` `{accessToken, refreshToken?, expiresAt?, startImport?}` → `{source, enabled, link, latestJob}` | `recipes.import` | — | ✅ |
 | DELETE | `/api/v1/households/{householdId}/meal-kit/{source}/link` → `204` (deletes the stored tokens and cancels every run) | `recipes.import` | — | ✅ |
 | POST | `/api/v1/households/{householdId}/meal-kit/{source}/imports` → `202` job | `recipes.import` | — | ✅ |
 | GET | `/api/v1/households/{householdId}/meal-kit/{source}/imports` → `{items}`, newest first | `recipes.import` | — | ✅ |
@@ -512,11 +512,12 @@ Asynchronous import of a household's own meal-kit order history
 ([meal-kit-import.md](meal-kit-import.md)). `{source}` is `hellofresh`; any
 other value is 404.
 
-A member links the account once (`PUT .../link`). The API signs in to the
-meal-kit service, stores **only** the resulting session and refresh tokens,
-envelope-encrypted with `RECIPE_IMPORT_ENCRYPTION_KEY`, and queues a job. The
-password is used for that one exchange and is never stored, logged, or
-returned. The app can be closed immediately: a scheduled worker
+A member signs in on the meal kit's **own website**, in a web view in the app,
+and the app sends the session that login produced to `PUT .../link`. The API
+stores **only** those tokens, envelope-encrypted with
+`RECIPE_IMPORT_ENCRYPTION_KEY`, and queues a job. **No password is involved:
+neither this API nor the app ever sees one**, and nothing in the body is logged
+or returned. The app can be closed immediately: a scheduled worker
 (`cmd/importmealkit`) fetches the recipes that account ordered and puts them
 through the same `recipes.Service.Import` a file import uses, so they arrive
 with the same validation, alias splitting, and review items.

@@ -15,29 +15,34 @@ Implemented in `api/internal/mealkit` (queue, service, worker, HTTP),
 ## What it is not
 
 - It does not crawl HelloFresh. The only things it requests are the account's
-  own deliveries endpoint and the recipe pages those deliveries name.
+  own plans, its past-deliveries endpoint, and the recipe pages those
+  deliveries name.
 - It does not write to the recipe collections. Everything goes through
   `recipes.Service.Import`, the same pipeline a file import uses
   ([import-format.md](import-format.md)), so imported recipes get the same
   validation, alias splitting, ingredient creation, and review items.
-- It does not store a password. Ever. See
-  [The credential lifecycle](#the-credential-lifecycle).
+- It does not ask for a password. The member signs in on HelloFresh's own
+  page, in a web view, and neither the app nor the API ever sees what they
+  typed. See [The credential lifecycle](#the-credential-lifecycle).
 
 ## The shape
 
 ```text
-iPhone                    API (web dyno)              MongoDB              Worker (Scheduler)
-  │  PUT .../meal-kit/hellofresh/link                    │                       │
-  │  {email, password} ────────▶ sign in once ───────────┼──▶ HelloFresh         │
-  │                             seal tokens ────────────▶│ meal_kit_links        │
-  │                             enqueue ────────────────▶│ meal_kit_jobs         │
-  │  ◀──── 200 {link, job}       (app can close)         │                       │
-  │                                                      │◀── claim (findAndModify)
-  │                                                      │    order history      │
-  │                                                      │    recipe pages (rate limited)
-  │                                                      │    recipes.Service.Import
-  │                                                      │◀── checkpoint after each batch
-  │  ◀──── push: "Your recipes are ready" ───── notifications outbox ◀───────────┘
+iPhone                              API (web dyno)        MongoDB        Worker (Scheduler)
+  │  WKWebView → hellofresh.com/login                 │                       │
+  │  (their password, their site, their password manager)                     │
+  │  ◀── apiV2Auth cookie                             │                       │
+  │  PUT .../meal-kit/hellofresh/link                 │                       │
+  │  {accessToken, refreshToken, expiresAt} ──▶ seal ▶│ meal_kit_links        │
+  │                              enqueue ────────────▶│ meal_kit_jobs         │
+  │  ◀──── 200 {link, job}       (app can close)      │                       │
+  │                                                   │◀── claim (findAndModify)
+  │                                                   │    plans → subscription id
+  │                                                   │    past-deliveries, week by week
+  │                                                   │    recipe pages (rate limited)
+  │                                                   │    recipes.Service.Import
+  │                                                   │◀── checkpoint after each batch
+  │  ◀──── push: "Your recipes are ready" ─── notifications outbox ◀──────────┘
   │  GET .../meal-kit/hellofresh  →  what was imported, what failed and why
 ```
 
@@ -92,46 +97,134 @@ retryable and skip straight to `paused_auth` or `dead`.
 
 ## The credential lifecycle
 
-> **A note on the original wording.** This was first described as storing the
+> **A note on two earlier wordings.** This was first described as storing the
 > credential "hashed". A hash is one-way: we could never replay it to fetch
-> anything, so it cannot be what a background job needs. What is stored is the
-> **session and refresh tokens**, *encrypted* (reversible, by us, with a key
-> that is not in the database). The password is not stored in any form.
+> anything, so it cannot be what a background job needs. It was then built as a
+> password sign-in: the app collected an email and password and the server
+> exchanged them for tokens. That is gone too — HelloFresh has no password
+> grant we can call, and asking for someone's password in our own UI was the
+> wrong shape even when we thought it would work. **The member signs in on
+> HelloFresh's page; we keep only the session it produces, encrypted.**
 
-1. **Sign-in, once.** `PUT .../meal-kit/{source}/link` carries the email and
-   password over TLS. The handler passes them straight to `Source.SignIn`,
-   which exchanges them for tokens. The password lives in that one call stack
-   and is never written to Mongo, a log, or a response.
-2. **At rest: envelope encryption.** Each link gets a random 32-byte data key
-   (DEK). The tokens are sealed with the DEK (AES-256-GCM); the DEK is sealed
-   with a key-encryption key (KEK) derived from `RECIPE_IMPORT_ENCRYPTION_KEY`.
-   What MongoDB holds is `{keyId, key, ciphertext}` — useless without the
-   config var. Rotating the KEK means re-wrapping small DEKs, not
-   re-encrypting every secret.
-3. **Startup.** With `MEAL_KIT_IMPORT_ENABLED=true` and no
+1. **Sign-in, on HelloFresh's site.** `MealKitWebLoginView` loads
+   `https://www.hellofresh.com/login` in a `WKWebView` with a **non-persistent**
+   data store. The member sees the real domain (it is printed under the title),
+   their password manager fills it, and nothing in DinnerOS reads the page,
+   evaluates script in it, screenshots it, or logs anything about it beyond
+   which stage of the flow we are in.
+   - `ASWebAuthenticationSession` cannot be used here: its ephemeral session
+     gives no cookie access, and HelloFresh offers no third-party OAuth
+     callback to redirect to.
+2. **The session, out of the cookie.** On success HelloFresh writes the
+   `apiV2Auth` cookie. The app polls its own web view's cookie store, parses
+   the tokens out (`MealKitWebSession`), and `PUT`s **only** the access token,
+   the refresh token, and the computed expiry to
+   `.../meal-kit/hellofresh/link`. The cookie also carries `user_data` — email,
+   id, roles. **None of it is decoded or sent.** The link's display label stays
+   the generic `"HelloFresh account"`, as it already was.
+3. **The web view is wiped.** When the screen goes away, whichever way it went,
+   every website data type is removed from the store. No HelloFresh session
+   lingers inside DinnerOS.
+4. **At rest: envelope encryption.** Unchanged. Each link gets a random 32-byte
+   data key (DEK). The tokens are sealed with the DEK (AES-256-GCM); the DEK is
+   sealed with a key-encryption key (KEK) derived from
+   `RECIPE_IMPORT_ENCRYPTION_KEY`. What MongoDB holds is
+   `{keyId, key, ciphertext}` — useless without the config var.
+5. **Startup.** With `MEAL_KIT_IMPORT_ENABLED=true` and no
    `RECIPE_IMPORT_ENCRYPTION_KEY`, the API and the worker refuse to start and
    say which variable is missing. There is no path that stores a token in the
    clear.
-4. **Use.** Only the worker decrypts, and only into memory. `mealkit.Tokens`
-   implements `slog.LogValuer` and prints as `redacted`, so a token handed to a
-   logger by accident still does not appear.
-5. **Refresh.** A session that is spent (or rejected mid-run) is refreshed once
-   and the new one re-sealed and stored.
-6. **Expiry.** A refresh that fails pauses the job at `paused_auth`, marks the
-   link `needs_reauth`, and sends the needs-attention notification. Signing in
-   again replaces the tokens and requeues the paused job where it stopped — it
-   does not start over.
-7. **Unlink.** `DELETE .../link` deletes the stored tokens first, then cancels
-   every non-terminal job for that service. A worker mid-run finds its next
-   conditional write rejected and stops without touching the library again.
-8. **Account deletion.** A member's links go with their account
-   (`PurgeUser`); a household's links and jobs go with the household
-   (`PurgeHousehold`). Both are wired into `newAccountService`, and
-   `TestIntegrationAccountDeletion` fails if a future collection is not.
+6. **Use.** Only the worker decrypts, and only into memory. `mealkit.Tokens`
+   implements `slog.LogValuer` and prints as `redacted`.
+7. **Refresh — not implemented, deliberately.** HelloFresh's refresh request has
+   not been observed, and `hellofresh.Client.Refresh` therefore returns
+   `ErrAuthExpired` without making a request. Guessing at an auth contract would
+   mean firing an unknown request at someone else's auth service and retrying it
+   when it failed. The cost is that an expired session pauses the job and the
+   member signs in again through the web login, which is a few taps.
+8. **Expiry.** As before: the job pauses at `paused_auth`, the link goes
+   `needs_reauth`, the needs-attention notification goes out, and signing in
+   again replaces the tokens and requeues the paused job where it stopped.
+9. **Unlink.** `DELETE .../link` deletes the stored tokens first, then cancels
+   every non-terminal job for that service.
+10. **Account deletion.** A member's links go with their account (`PurgeUser`);
+    a household's links and jobs go with the household (`PurgeHousehold`).
 
-Nothing about the credential comes back over the API: the link response
-carries a generic `accountLabel` ("HelloFresh account"), never the email
-address and never anything derived from a token.
+Nothing about the credential comes back over the API: the link response carries
+a generic `accountLabel`, never an address and never anything derived from a
+token. **What the API stores about the account is the access token, the refresh
+token, and an expiry — nothing else.**
+
+### What the sign-in screen handles
+
+| What happens | What the member sees |
+| --- | --- |
+| They tap Cancel | The sheet closes; nothing is linked |
+| The login page will not load | "We couldn't load the … sign-in page", with **Try Again** |
+| They finish, but no cookie appears within 30 s | "We couldn't pick up your … sign-in", with **Try Again** |
+| The login lands somewhere unexpected on HelloFresh | The 30 s clock starts there too, so it ends in the message above rather than spinning |
+| The link call fails after a good sign-in | An alert with **Try Again**, which retries the link with the session already in hand — not another sign-in |
+
+## What is verified, and what is not
+
+These shapes were **captured live from a signed-in HelloFresh session** in a
+browser (values redacted). That capture, not a public write-up, is the source.
+
+**Verified.**
+
+- The session cookie `apiV2Auth`: URL-encoded JSON carrying `access_token`,
+  `refresh_token`, `expires_in`, `issued_at`, `refresh_expires_in`,
+  `token_type`, and `user_data`.
+- `GET /gw/my-deliveries/past-deliveries?country=US&from=<ISO week>&locale=en-US&rating-scale=5&subscription=<id>`
+  → `200`, shaped `{"weeks":[{"week","menuId","meals":[…],"addons":[…]}]}`.
+  Each meal carries `id`, `name`, `headline`, `prepTime`, `totalTime`, `image`,
+  `websiteURL`, `tags`, `nutrition`, `cuisines`, `category`.
+- `websiteURL` is the recipe page, so nothing has to build a URL from an id any
+  more. It is still only followed when it already starts with
+  `https://www.hellofresh.com/recipes/`; anything else is rebuilt from the id
+  and name we validated ourselves.
+- The old `GET /gw/api/customers/me/deliveries` **does not exist**. Neither
+  does a password grant at `/gw/auth/token` that we can call.
+
+**Not verified — one live run settles each.**
+
+| Unknown | What this build does | How it fails if wrong |
+| --- | --- | --- |
+| Whether these endpoints accept `Authorization: Bearer <access_token>` rather than the cookie | Sends the bearer header | `401` → `ErrAuthExpired` → the job pauses and asks for a new sign-in |
+| The `/gw/api/plans?includeCanceled=false` response shape | Accepts `{items:[…]}`, `{plans:[…]}`, or a bare array, and takes the first `id`/`subscriptionId` | `ParseError` "HelloFresh did not name a subscription this build can read" |
+| How the history paging terminates | Starts at the current ISO week and steps `from` to the week before the earliest week each page returned; stops on an empty page, on no progress, or after 40 pages | Too few weeks imported, or the 40-page cap; never a loop |
+| The refresh request | Does not make one (see above) | n/a — the member re-links |
+| `country`/`locale` outside the US | Hard-coded `US`/`en-US` (`hellofresh.Options`) | Empty or wrong-region history for a non-US household |
+
+**Diagnostics for the next live attempt.** `hellofresh.Client` takes a
+`*slog.Logger` (wired from `cmd/server` and `cmd/importmealkit`). When a
+response cannot be read it logs, at **debug** level only:
+
+```text
+level=DEBUG msg="meal-kit response was unreadable" source=hellofresh
+  endpoint=plans|past-deliveries contentType=… finalPath=… bytes=… excerpt="…"
+```
+
+`finalPath` is the path after redirects with the query dropped (it carries the
+subscription id). `excerpt` is at most 300 characters with any JSON field whose
+name looks like a token, secret, password, cookie, authorization, or session
+replaced, and any bare JWT removed. It is a *response* body, so it cannot
+contain a password — the member never typed one into this process — and it is
+redacted anyway. Turn it on with `LOG_LEVEL=debug` for one run; leave it off
+otherwise.
+
+### Add-ons are imported
+
+`past-deliveries` separates `meals` from `addons` (garlic bread, a side salad).
+Both are imported, with add-ons flagged `isAddon`, because the household paid
+for them and ate them and will want to cook them again; the flag already exists
+in the import contract, so the library can tell a side from a main without us
+dropping half of what was delivered.
+
+`meals[].tags` carries a `{"name":"Spicy","type":"spicy"}` tag. The importer
+does not read tags from this endpoint — the recipe page is the source of truth
+for the recipe itself — but it is there if the spicy-highlighting work ever
+wants a cheaper signal than a page fetch.
 
 ## Being a good citizen
 
@@ -148,7 +241,7 @@ The policy lives in `mealkit.Fetcher` and is the same for every source:
 | 401 | Refresh once, else pause for a new sign-in | An expired session is not a reason to hammer. |
 | Per-run cap | 40 recipe pages | A real cap, not a comment. The rest waits for the next scheduled run. |
 | User-Agent | `DinnerOS/1.0 (+https://api.tlps.dev; personal meal-kit order history import)` | Honest: who we are, why, and where to complain. No browser impersonation. |
-| Scope | The account's deliveries endpoint and the recipe pages it names | Only what the household ordered. |
+| Scope | The account's plans, its past-deliveries endpoint, and the recipe pages it names | Only what the household ordered. |
 
 **Fetched pages are data.** Nothing read from HelloFresh is ever treated as an
 instruction, and no URL that comes back in account data is followed unless it
@@ -169,7 +262,7 @@ Either way the library only ever receives complete, validated recipes.
 | --- | --- | --- | --- |
 | Finished, everything imported | `succeeded` | "Your recipes are ready" | *n* recipes added |
 | Finished, some recipes unreadable | `succeeded` | "…*k* could not be imported" | The list of failures with reasons |
-| Session expired, refresh failed | `paused_auth` | "Sign in to finish importing" | A **Sign In Again** button; progress is kept |
+| Session expired (there is no refresh) | `paused_auth` | "Sign in to finish importing" | A **Sign In Again** button that reopens the web login; progress is kept |
 | HelloFresh changed its layout | `dead` (`parse`) | "Recipe import needs you" | "We could not read …. Nothing was changed in your recipes." |
 | HelloFresh refused us (403) | `dead` (`blocked`) | "Recipe import needs you" | "…refused our requests… Try again later." |
 | Network trouble | `queued`, retried | none until it gives up | "Importing your recipes…" |
@@ -283,6 +376,7 @@ then cancel their jobs. Deleting their DinnerOS account does both.
 | `RECIPE_IMPORT_ENCRYPTION_KEY` | — | The KEK for stored tokens. **Required** when enabled; missing stops startup. `openssl rand -base64 48`. |
 | `MEAL_KIT_RECIPES_PER_RUN` | `40` | Recipe pages one run fetches per job. Lower is more polite. |
 | `MEAL_KIT_HELLOFRESH_BASE_URL` | HelloFresh | Overrides the account API origin; for testing against a stub. Must be https. |
+| `LOG_LEVEL=debug` | `info` | Turns on the redacted response diagnostics above for one run. |
 
 See [deployment.md](deployment.md#meal-kit-recipe-import) for the Heroku steps.
 
@@ -301,14 +395,34 @@ The worker, the queue, and the sources know nothing beyond this interface, so
 when the global recipe catalog grows its own "publish an imported recipe"
 interface, `publisher.go` is the one file that changes.
 
-## Open question for the owner
+## Still to check on a device
 
-The HelloFresh account endpoints in `internal/mealkit/hellofresh` — the token
-exchange and the deliveries endpoint — are written against the shapes this
-build expects, with `MEAL_KIT_HELLOFRESH_BASE_URL` to point them elsewhere.
-They have **not** been verified against a real signed-in HelloFresh account,
-because doing so needs the owner's own credentials. Confirm them (and the
-recipe page's embedded data, which the offline importer in `importers/hellofresh`
-already reads successfully) before turning `MEAL_KIT_IMPORT_ENABLED` on in
-production. If they differ, only `hellofresh.go` changes: the queue, the
-worker, the encryption, and the app do not care.
+The endpoints above were captured from a signed-in browser, and the client was
+written against that capture, but **this flow has not yet run end to end from
+the app**. One live attempt settles all of it. Watch, in order:
+
+1. **The web login.** The sheet shows `www.hellofresh.com` under the title; the
+   password manager offers to fill; after signing in the veil says "Finishing
+   up…" and the sheet closes on its own. If it instead shows "We couldn't pick
+   up your HelloFresh sign-in", the cookie name or domain has changed.
+2. **The link call.** `PUT .../meal-kit/hellofresh/link` → `200`, and the
+   status screen shows "HelloFresh account connected …". A `400` here means the
+   cookie parsed to an empty access token.
+3. **The worker run** (`heroku run /importmealkit`, or the local command), with
+   `LOG_LEVEL=debug`:
+   - `meal-kit import queued` → the job exists.
+   - If the plans call is wrong: the debug line with `endpoint=plans` says
+     whether it was HTML (a redirect to a login page — the bearer header is not
+     accepted) or JSON in a shape we did not expect (read `excerpt` and fix
+     `plansResponse`).
+   - If past-deliveries is wrong: the same line with
+     `endpoint=past-deliveries`.
+   - On success: `recipesFound` on the job should be roughly the number of
+     recipes the household has ever received, and the `from` walk should have
+     stopped on an empty page rather than at the 40-page cap.
+4. **The recipe pages.** These already work offline
+   (`importers/hellofresh`), so a failure here is a rate-limit or a layout
+   change, and the failure list on the job says which.
+
+Only `hellofresh.go` changes if any of it is different: the queue, the worker,
+the encryption, and the app do not care.

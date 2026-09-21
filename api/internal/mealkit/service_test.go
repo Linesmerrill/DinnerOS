@@ -3,6 +3,7 @@ package mealkit
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -18,12 +19,15 @@ func newTestService(t *testing.T, store *memoryStore, src *fakeSource) *Service 
 
 func TestLinkStoresOnlyEncryptedTokensAndQueuesAnImport(t *testing.T) {
 	store := &memoryStore{}
-	src := &fakeSource{signIn: Tokens{AccessToken: "access-value", RefreshToken: "refresh-value", ExpiresAt: time.Now().Add(time.Hour)}}
-	svc := newTestService(t, store, src)
+	svc := newTestService(t, store, &fakeSource{})
 
 	status, err := svc.Link(context.Background(), LinkRequest{
 		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
-		Email: "cook@example.com", Password: "hunter2", StartImport: true,
+		Tokens: Tokens{
+			AccessToken: "access-value", RefreshToken: "refresh-value",
+			ExpiresAt: time.Now().Add(time.Hour),
+		},
+		StartImport: true,
 	})
 	if err != nil {
 		t.Fatalf("Link() error = %v", err)
@@ -31,16 +35,16 @@ func TestLinkStoresOnlyEncryptedTokensAndQueuesAnImport(t *testing.T) {
 	if status.Link == nil || status.Link.Status != LinkActive || status.Job == nil || status.Job.Status != JobQueued {
 		t.Fatalf("status = %+v", status)
 	}
-	if status.Link.AccountLabel == "cook@example.com" {
-		t.Error("the link carries the member's email address")
+	if strings.Contains(status.Link.AccountLabel, "@") {
+		t.Errorf("the link label looks like an address: %q", status.Link.AccountLabel)
 	}
 
 	stored, err := store.GetLink(context.Background(), hhAda, SourceHelloFresh)
 	if err != nil {
 		t.Fatalf("GetLink() error = %v", err)
 	}
-	// The password is nowhere, and the tokens are only there encrypted.
-	for _, secret := range []string{"hunter2", "access-value", "refresh-value"} {
+	// The tokens are only ever there encrypted.
+	for _, secret := range []string{"access-value", "refresh-value"} {
 		if containsBytes(stored.Secret.Ciphertext, secret) || containsBytes(stored.Secret.Key, secret) {
 			t.Errorf("%q is readable in the stored link", secret)
 		}
@@ -65,31 +69,38 @@ func indexOf(haystack []byte, needle string) int {
 	return -1
 }
 
-func TestLinkRejectsBadInputAndBadCredentials(t *testing.T) {
-	store := &memoryStore{}
-	src := &fakeSource{signIn: Tokens{AccessToken: "access"}}
-	svc := newTestService(t, store, src)
-	base := LinkRequest{HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh, Email: "cook@example.com", Password: "pw"}
+func TestLinkRejectsBadInputAndASessionThatIsNotOne(t *testing.T) {
+	svc := newTestService(t, &memoryStore{}, &fakeSource{})
+	base := LinkRequest{
+		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
+		Tokens: Tokens{AccessToken: "access-value"},
+	}
 
 	for name, mutate := range map[string]func(LinkRequest) LinkRequest{
 		"no household": func(r LinkRequest) LinkRequest { r.HouseholdID = ""; return r },
 		"bad source":   func(r LinkRequest) LinkRequest { r.Source = "blueapron"; return r },
-		"bad email":    func(r LinkRequest) LinkRequest { r.Email = "not-an-email"; return r },
-		"no password":  func(r LinkRequest) LinkRequest { r.Password = "  "; return r },
+		"no session":   func(r LinkRequest) LinkRequest { r.Tokens = Tokens{}; return r },
+		"blank session": func(r LinkRequest) LinkRequest {
+			r.Tokens = Tokens{AccessToken: "   ", RefreshToken: "r"}
+			return r
+		},
 	} {
 		if _, err := svc.Link(context.Background(), mutate(base)); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
 	}
 
-	src.signInErr = ErrAuthExpired
-	_, err := svc.Link(context.Background(), base)
+	// A rejected session must not be quoted back at the caller.
+	_, err := svc.Link(context.Background(), LinkRequest{
+		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
+		Tokens: Tokens{RefreshToken: "refresh-value"},
+	})
 	var validation *ValidationError
 	if !errors.As(err, &validation) {
-		t.Fatalf("rejected sign-in = %v, want a validation error", err)
+		t.Fatalf("a session without an access token = %v, want a validation error", err)
 	}
-	if indexOf([]byte(validation.Message), "pw") >= 0 {
-		t.Errorf("the message quotes the password: %q", validation.Message)
+	if strings.Contains(validation.Message, "refresh-value") {
+		t.Errorf("the message quotes the token: %q", validation.Message)
 	}
 }
 
@@ -99,7 +110,8 @@ func TestLinkIsDisabledWithoutAnEncryptionKey(t *testing.T) {
 		t.Fatal("Enabled() is true without a cipher")
 	}
 	_, err := svc.Link(context.Background(), LinkRequest{
-		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh, Email: "a@b.com", Password: "pw",
+		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
+		Tokens: Tokens{AccessToken: "access-value"},
 	})
 	if !errors.Is(err, ErrDisabled) {
 		t.Errorf("Link() = %v, want ErrDisabled", err)
@@ -111,8 +123,7 @@ func TestLinkIsDisabledWithoutAnEncryptionKey(t *testing.T) {
 
 func TestStartImportNeedsALinkAndNeverDuplicatesARun(t *testing.T) {
 	store := &memoryStore{}
-	src := &fakeSource{signIn: Tokens{AccessToken: "access"}}
-	svc := newTestService(t, store, src)
+	svc := newTestService(t, store, &fakeSource{})
 
 	if _, err := svc.StartImport(context.Background(), hhAda, userAda, SourceHelloFresh); !errors.Is(err, ErrNoLink) {
 		t.Fatalf("StartImport() without a link = %v, want ErrNoLink", err)
@@ -120,7 +131,7 @@ func TestStartImportNeedsALinkAndNeverDuplicatesARun(t *testing.T) {
 
 	status, err := svc.Link(context.Background(), LinkRequest{
 		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
-		Email: "cook@example.com", Password: "pw", StartImport: false,
+		Tokens: Tokens{AccessToken: "access-value"}, StartImport: false,
 	})
 	if err != nil {
 		t.Fatalf("Link() error = %v", err)
@@ -141,10 +152,10 @@ func TestStartImportNeedsALinkAndNeverDuplicatesARun(t *testing.T) {
 
 func TestLinkAgainResumesAJobThatPausedForSignIn(t *testing.T) {
 	store := &memoryStore{}
-	src := &fakeSource{signIn: Tokens{AccessToken: "access"}}
-	svc := newTestService(t, store, src)
+	svc := newTestService(t, store, &fakeSource{})
 	if _, err := svc.Link(context.Background(), LinkRequest{
-		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh, Email: "a@b.com", Password: "pw", StartImport: true,
+		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
+		Tokens: Tokens{AccessToken: "access-value"}, StartImport: true,
 	}); err != nil {
 		t.Fatalf("Link() error = %v", err)
 	}
@@ -152,7 +163,8 @@ func TestLinkAgainResumesAJobThatPausedForSignIn(t *testing.T) {
 	store.jobs[0].Status = JobPausedAuth
 
 	status, err := svc.Link(context.Background(), LinkRequest{
-		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh, Email: "a@b.com", Password: "pw", StartImport: true,
+		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
+		Tokens: Tokens{AccessToken: "access-value"}, StartImport: true,
 	})
 	if err != nil {
 		t.Fatalf("re-link error = %v", err)
@@ -167,10 +179,10 @@ func TestLinkAgainResumesAJobThatPausedForSignIn(t *testing.T) {
 
 func TestUnlinkDeletesTheTokensAndStopsEveryJob(t *testing.T) {
 	store := &memoryStore{}
-	src := &fakeSource{signIn: Tokens{AccessToken: "access"}}
-	svc := newTestService(t, store, src)
+	svc := newTestService(t, store, &fakeSource{})
 	if _, err := svc.Link(context.Background(), LinkRequest{
-		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh, Email: "a@b.com", Password: "pw", StartImport: true,
+		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
+		Tokens: Tokens{AccessToken: "access-value"}, StartImport: true,
 	}); err != nil {
 		t.Fatalf("Link() error = %v", err)
 	}

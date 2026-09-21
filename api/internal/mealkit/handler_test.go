@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -23,7 +22,7 @@ func newHandlerFixture(t *testing.T, enabled bool) *handlerFixture {
 	t.Helper()
 	f := &handlerFixture{
 		store:  &memoryStore{},
-		source: &fakeSource{signIn: Tokens{AccessToken: "access", RefreshToken: "refresh", ExpiresAt: time.Now().Add(time.Hour)}},
+		source: &fakeSource{},
 	}
 	opts := ServiceOptions{Store: f.store, Sources: map[string]Source{SourceHelloFresh: f.source}}
 	if enabled {
@@ -75,7 +74,7 @@ func TestMealKitRoutesRequireTheImportPermission(t *testing.T) {
 func TestLinkStartsAnImportAndStatusReportsIt(t *testing.T) {
 	f := newHandlerFixture(t, true)
 
-	rec := f.do(http.MethodPut, linkPath, `{"email":"cook@example.com","password":"hunter2"}`, userAda)
+	rec := f.do(http.MethodPut, linkPath, `{"accessToken":"session-value","refreshToken":"refresh-value"}`, userAda)
 	var linked StatusResponse
 	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &linked) != nil {
 		t.Fatalf("link = %d %s", rec.Code, rec.Body)
@@ -117,7 +116,7 @@ func TestLinkStartsAnImportAndStatusReportsIt(t *testing.T) {
 
 func TestUnlinkRemovesTheLinkAndIsRepeatable(t *testing.T) {
 	f := newHandlerFixture(t, true)
-	if rec := f.do(http.MethodPut, linkPath, `{"email":"cook@example.com","password":"pw"}`, userAda); rec.Code != http.StatusOK {
+	if rec := f.do(http.MethodPut, linkPath, `{"accessToken":"session-value"}`, userAda); rec.Code != http.StatusOK {
 		t.Fatalf("link = %d %s", rec.Code, rec.Body)
 	}
 	for range 2 {
@@ -136,9 +135,9 @@ func TestUnlinkRemovesTheLinkAndIsRepeatable(t *testing.T) {
 func TestMealKitRoutesRefuseBadInputAndUnknownServices(t *testing.T) {
 	f := newHandlerFixture(t, true)
 	for name, body := range map[string]string{
-		"bad email":     `{"email":"nope","password":"pw"}`,
-		"no password":   `{"email":"cook@example.com","password":""}`,
-		"unknown field": `{"email":"cook@example.com","password":"pw","token":"x"}`,
+		"no token":      `{"accessToken":"   "}`,
+		"missing token": `{"refreshToken":"r"}`,
+		"unknown field": `{"accessToken":"a","password":"pw"}`,
 	} {
 		if rec := f.do(http.MethodPut, linkPath, body, userAda); rec.Code != http.StatusBadRequest {
 			t.Errorf("%s = %d %s", name, rec.Code, rec.Body)
@@ -160,7 +159,7 @@ func TestMealKitRoutesSayTheFeatureIsOffWhenItIs(t *testing.T) {
 	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &status) != nil || status.Enabled {
 		t.Fatalf("status = %d %s", rec.Code, rec.Body)
 	}
-	rec = f.do(http.MethodPut, linkPath, `{"email":"cook@example.com","password":"pw"}`, userAda)
+	rec = f.do(http.MethodPut, linkPath, `{"accessToken":"session-value"}`, userAda)
 	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "import_disabled") {
 		t.Errorf("link with the feature off = %d %s", rec.Code, rec.Body)
 	}

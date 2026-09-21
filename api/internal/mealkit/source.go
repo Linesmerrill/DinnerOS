@@ -8,6 +8,10 @@ import (
 
 // Source is one meal-kit service, as the worker sees it.
 //
+// A Source never signs anyone in. The member signs in on the service's own
+// page in a web view and the app sends us the session that login produced, so
+// no password reaches this process at all.
+//
 // Every method returns:
 //
 //   - ErrAuthExpired when the account's tokens no longer work, so the job
@@ -25,12 +29,10 @@ import (
 type Source interface {
 	// Name is the import source, e.g. SourceHelloFresh.
 	Name() string
-	// SignIn exchanges a member's credentials for session tokens. The
-	// password is used here and nowhere else: it is never returned, stored,
-	// or logged.
-	SignIn(ctx context.Context, email, password string) (Tokens, error)
 	// Refresh exchanges a refresh token for a new session. It returns
-	// ErrAuthExpired when the refresh token is spent.
+	// ErrAuthExpired when the refresh token is spent — or when this build
+	// does not know the service's refresh request, which pauses the job and
+	// asks the member to sign in again rather than guessing at a contract.
 	Refresh(ctx context.Context, t Tokens) (Tokens, error)
 	// OrderHistory returns only the recipes on this account's own order
 	// history — never a catalog, a browse page, or anything the household did

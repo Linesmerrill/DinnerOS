@@ -57,11 +57,18 @@ func (h *Handler) Mount(r chi.Router) {
 
 // LinkRequestBody is the body of PUT .../meal-kit/{source}/link.
 //
-// The password is used once to obtain session tokens and is never stored.
-// Neither field is ever logged.
+// It carries the session the member's own sign-in on the meal kit's website
+// produced — never a password: they never type one into this app. Nothing here
+// is logged, and nothing is echoed back.
 type LinkRequestBody struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	// AccessToken is the meal-kit session token. Required.
+	AccessToken string `json:"accessToken"`
+	// RefreshToken is optional: a session without one simply expires sooner
+	// and the member links again.
+	RefreshToken string `json:"refreshToken,omitempty"`
+	// ExpiresAt is when the session stops working, when the client could work
+	// it out. Omitted means "we do not know", and the worker finds out.
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
 	// StartImport defaults to true: linking an account is how onboarding
 	// starts an import.
 	StartImport *bool `json:"startImport,omitempty"`
@@ -204,11 +211,15 @@ func (h *Handler) link(w http.ResponseWriter, r *http.Request) {
 	if body.StartImport != nil {
 		start = *body.StartImport
 	}
+	tokens := Tokens{AccessToken: body.AccessToken, RefreshToken: body.RefreshToken}
+	if body.ExpiresAt != nil {
+		tokens.ExpiresAt = body.ExpiresAt.UTC()
+	}
 	status, err := h.opts.Service.Link(r.Context(), LinkRequest{
 		HouseholdID: householdID, UserID: userID, Source: source,
-		Email: body.Email, Password: body.Password, StartImport: start,
+		Tokens: tokens, StartImport: start,
 	})
-	// body.Password goes out of scope here and is never written anywhere.
+	// body goes out of scope here; the tokens are only ever written sealed.
 	if err != nil {
 		h.writeError(w, r, "link meal-kit account failed", err)
 		return

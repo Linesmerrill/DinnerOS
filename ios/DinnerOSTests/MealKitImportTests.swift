@@ -3,8 +3,8 @@ import Testing
 
 @testable import DinnerOS
 
-/// Synthetic status payloads shaped like the API's. No real account, and the "password" here
-/// is a literal in a test, never a credential.
+/// Synthetic status payloads shaped like the API's, and a synthetic sign-in cookie shaped like
+/// HelloFresh's. No real account: every token here is a literal in a test, never a credential.
 private nonisolated enum MealKitFixtures {
     static let linkJSON = #"""
         {"source":"hellofresh","status":"active","accountLabel":"HelloFresh account",
@@ -23,6 +23,20 @@ private nonisolated enum MealKitFixtures {
          "attempts":1,"maxAttempts":5,"lastError":\(lastError),
          "createdAt":"2026-09-20T10:00:00Z","updatedAt":"2026-09-20T10:05:00Z","finishedAt":\(finishedAt)}
         """
+    }
+
+    /// A cookie value shaped like the one the sign-in writes: URL-encoded JSON.
+    static func cookie(
+        accessToken: String = "not-a-real-access-token", refreshToken: String? = "not-a-real-refresh-token",
+        expiresIn: String? = "3600", issuedAt: String? = "1790000000", extra: String = ""
+    ) -> String {
+        var fields = [#""access_token":"\#(accessToken)""#]
+        if let refreshToken { fields.append(#""refresh_token":"\#(refreshToken)""#) }
+        if let expiresIn { fields.append(#""expires_in":\#(expiresIn)"#) }
+        if let issuedAt { fields.append(#""issued_at":\#(issuedAt)"#) }
+        if !extra.isEmpty { fields.append(extra) }
+        let json = "{" + fields.joined(separator: ",") + "}"
+        return json.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? json
     }
 
     static func statusJSON(enabled: Bool = true, link: String? = linkJSON, job: String? = nil) -> Data {
@@ -73,26 +87,30 @@ struct MealKitImportTests {
         #expect(job.progress == 0.25)
     }
 
-    @Test func linkSendsTheCredentialInTheBodyAndNeverInTheURL() async throws {
+    @Test func linkSendsTheSessionInTheBodyAndNeverInTheURL() async throws {
         let transport = StubTransport { _ in
             (200, MealKitFixtures.statusJSON(job: MealKitFixtures.jobJSON(status: "queued", phase: "orders")))
         }
+        let session = try #require(MealKitWebSession(cookieValue: MealKitFixtures.cookie()))
 
         _ = try await MealKitAPI(client: makeClient(transport)).link(
-            householdID: "household-1", service: .helloFresh, email: "cook@example.com",
-            password: "not-a-real-password", accessToken: "token-1")
+            householdID: "household-1", service: .helloFresh, session: session, accessToken: "token-1")
 
         let request = try #require(transport.requests.first)
         #expect(request.httpMethod == "PUT")
         #expect(request.url?.path() == "/api/v1/households/household-1/meal-kit/hellofresh/link")
-        // The credential must not reach a URL, which request logs keep.
+        // The session must not reach a URL, which request logs keep.
         #expect(request.url?.query() == nil)
-        #expect(request.url?.absoluteString.contains("not-a-real-password") == false)
+        #expect(request.url?.absoluteString.contains("not-a-real-access-token") == false)
         let body = try #require(request.httpBody)
         let fields = try #require(try? JSONSerialization.jsonObject(with: body) as? [String: Any])
-        #expect(fields["email"] as? String == "cook@example.com")
-        #expect(fields["password"] as? String == "not-a-real-password")
+        #expect(fields["accessToken"] as? String == "not-a-real-access-token")
+        #expect(fields["refreshToken"] as? String == "not-a-real-refresh-token")
+        #expect(fields["expiresAt"] != nil)
         #expect(fields["startImport"] as? Bool == true)
+        // No password field: there is no password anywhere in this flow.
+        #expect(fields["password"] == nil)
+        #expect(fields["email"] == nil)
     }
 
     @Test func unlinkAndStartImportUseTheRightRoutes() async throws {
@@ -142,7 +160,8 @@ struct MealKitImportTests {
         }
         let store = try await makeStore(transport)
 
-        try await store.link(email: "cook@example.com", password: "not-a-real-password")
+        let session = try #require(MealKitWebSession(cookieValue: MealKitFixtures.cookie()))
+        try await store.link(webSession: session)
 
         #expect(store.link?.accountLabel == "HelloFresh account")
         #expect(store.job?.state == .queued)
@@ -150,19 +169,20 @@ struct MealKitImportTests {
         #expect(store.isWorking == false)
     }
 
-    @Test func aFailedSignInSurfacesAndLeavesNothingLinked() async throws {
+    @Test func aRejectedSessionSurfacesAndLeavesNothingLinked() async throws {
         let transport = StubTransport { _ in
             (
                 400,
                 Data(
-                    #"{"error":{"code":"validation_failed","message":"that email and password did not sign in to the meal-kit account"}}"#
+                    #"{"error":{"code":"validation_failed","message":"the hellofresh sign-in did not produce a session; sign in again"}}"#
                         .utf8)
             )
         }
         let store = try await makeStore(transport)
+        let session = try #require(MealKitWebSession(cookieValue: MealKitFixtures.cookie()))
 
         await #expect(throws: (any Error).self) {
-            try await store.link(email: "cook@example.com", password: "wrong")
+            try await store.link(webSession: session)
         }
         #expect(store.link == nil)
         #expect(store.isWorking == false)
@@ -303,11 +323,72 @@ struct MealKitImportTests {
         #expect(summary.detail.contains("1 couldn't be imported"))
     }
 
-    @Test func theCredentialExplanationSaysWhatIsAndIsNotKept() {
+    @Test func theCredentialExplanationSaysWhoSeesThePassword() {
         let text = MealKitFormatting.credentialExplanation(for: .helloFresh)
         #expect(text.contains("HelloFresh"))
         #expect(text.contains("encrypted"))
-        #expect(text.lowercased().contains("password is never stored"))
+        // It has to say the password does not come here, because that is the whole design.
+        #expect(text.lowercased().contains("password never reaches"))
+    }
+
+    // MARK: - The sign-in cookie
+
+    @Test func aSessionIsReadOutOfTheSignInCookie() throws {
+        let issued = Date(timeIntervalSince1970: 1_790_000_000)
+        let session = try #require(MealKitWebSession(cookieValue: MealKitFixtures.cookie()))
+
+        #expect(session.accessToken == "not-a-real-access-token")
+        #expect(session.refreshToken == "not-a-real-refresh-token")
+        #expect(session.expiresAt == issued.addingTimeInterval(3600))
+    }
+
+    @Test func aCookieThatIsNotASessionIsNoSession() {
+        let notSessions = [
+            "": "an empty cookie",
+            "not-json-at-all": "something that isn't JSON",
+            #"{"refresh_token":"r"}"#.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "":
+                "a cookie with no access token",
+        ]
+        for (value, what) in notSessions {
+            #expect(MealKitWebSession(cookieValue: value) == nil, "\(what) was read as a session")
+        }
+        // A cookie whose access token is only whitespace is not a session either.
+        #expect(MealKitWebSession(cookieValue: MealKitFixtures.cookie(accessToken: "   ")) == nil)
+    }
+
+    @Test func aSessionWithoutALifetimeDoesNotInventOne() throws {
+        let session = try #require(
+            MealKitWebSession(cookieValue: MealKitFixtures.cookie(refreshToken: nil, expiresIn: nil)))
+
+        #expect(session.refreshToken.isEmpty)
+        #expect(session.expiresAt == nil)
+    }
+
+    @Test func aSessionIssuedInMillisecondsStillExpiresWhenItShould() throws {
+        let session = try #require(
+            MealKitWebSession(cookieValue: MealKitFixtures.cookie(issuedAt: "1790000000000")))
+
+        #expect(session.expiresAt == Date(timeIntervalSince1970: 1_790_000_000).addingTimeInterval(3600))
+    }
+
+    @Test func nothingElseInTheCookieIsTakenFromTheAccount() throws {
+        let cookie = MealKitFixtures.cookie(extra: #""user_data":{"email":"cook@example.com","id":"u-1"}"#)
+        let session = try #require(MealKitWebSession(cookieValue: cookie))
+
+        // The request body is the whole of what leaves the device.
+        let body = try JSONCoding.makeEncoder().encode(MealKitLinkRequest(session: session, startImport: true))
+        let text = try #require(String(data: body, encoding: .utf8))
+        #expect(!text.contains("cook@example.com"))
+        #expect(!text.contains("u-1"))
+    }
+
+    @Test func theSignInPageIsTheServicesOwnDomain() throws {
+        let url = try #require(MealKitService.helloFresh.loginURL)
+
+        #expect(url.scheme == "https")
+        #expect(url.host() == "www.hellofresh.com")
+        #expect(MealKitService.helloFresh.cookieDomain == "hellofresh.com")
+        #expect(MealKitService.helloFresh.sessionCookieName == "apiV2Auth")
     }
 
     @Test func aHouseholdThatNeverImportedIsOfferedTheImport() {

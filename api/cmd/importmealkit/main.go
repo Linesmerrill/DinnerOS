@@ -104,7 +104,9 @@ func newWorker(cfg config.Config, db *mongodb.Client, logger *slog.Logger) (*mea
 		return nil, err
 	}
 	store := mealkit.NewMongoStore(database)
-	srcs := mealkitsources.All(mealkitsources.Options{HelloFreshBaseURL: cfg.MealKitImport.HelloFreshBaseURL})
+	srcs := mealkitsources.All(mealkitsources.Options{
+		HelloFreshBaseURL: cfg.MealKitImport.HelloFreshBaseURL, Logger: logger,
+	})
 	notifier := notifications.NewService(notifications.ServiceOptions{
 		Store: notifications.NewMongoStore(database), Logger: logger,
 	})

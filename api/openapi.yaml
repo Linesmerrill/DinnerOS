@@ -1378,10 +1378,12 @@ paths:
     put:
       summary: Link a meal-kit account
       description: |
-        Signs in to the meal-kit account once and stores only the resulting
-        session and refresh tokens, envelope-encrypted with
-        `RECIPE_IMPORT_ENCRYPTION_KEY`. **The password is used for that one
-        exchange and is never stored or logged.** Requires `recipes.import`.
+        Stores the session the member's own sign-in on the meal kit's website
+        produced, envelope-encrypted with `RECIPE_IMPORT_ENCRYPTION_KEY`.
+        **No password is involved: the member signs in on HelloFresh's own
+        page in a web view, and neither this API nor the app ever sees their
+        password.** Nothing in the body is logged or echoed back. Requires
+        `recipes.import`.
 
         Linking again replaces the stored tokens and resumes a run that paused
         waiting for a new sign-in. With `startImport` (the default) it also
@@ -6065,18 +6067,28 @@ components:
             description: ReviewItem (docs/import-format.md).
     MealKitLinkRequest:
       type: object
-      required: [email, password]
+      required: [accessToken]
       properties:
-        email:
-          type: string
-          format: email
-          description: The address the member signs in to the meal-kit service with.
-        password:
+        accessToken:
           type: string
           format: password
           description: |
-            Used once to obtain session tokens and then discarded. It is never
-            stored, logged, or returned.
+            The meal-kit session token the member's own sign-in produced, read
+            from the service's session cookie in the web view. Stored
+            encrypted; never logged or returned.
+        refreshToken:
+          type: string
+          format: password
+          description: |
+            The refresh token from the same session, when there is one. A
+            session without one simply expires sooner and the member links
+            again.
+        expiresAt:
+          type: string
+          format: date-time
+          description: |
+            When the session stops working, when the client could work it out
+            from the sign-in. Omitted means "unknown".
         startImport:
           type: boolean
           default: true

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/mail"
 	"strings"
 	"time"
 
@@ -36,8 +35,9 @@ type ServiceOptions struct {
 	MaxAttempts int
 }
 
-// Service links meal-kit accounts and enqueues import jobs. It never fetches
-// anything itself beyond the one sign-in: the work is the Worker's.
+// Service links meal-kit accounts and enqueues import jobs. It fetches
+// nothing at all: the work is the Worker's, and the sign-in is the member's
+// own, on the meal kit's website.
 type Service struct {
 	store    Store
 	cipher   *Cipher
@@ -122,22 +122,23 @@ func (s *Service) ListJobs(ctx context.Context, householdID string, limit int) (
 
 // LinkRequest is a member connecting their meal-kit account.
 //
-// Password is used once, here, to obtain session tokens and is then gone: it
-// is not stored, not logged, and not kept in the returned values. That is the
-// whole reason this method exists rather than the app handing us a password
-// per run.
+// The tokens come from the member's own sign-in on the meal kit's website,
+// inside a web view in the app: they typed their password into HelloFresh's
+// page, not into ours, and neither this process nor this API has ever seen it.
+// What arrives here is the session that login produced, and nothing else about
+// the account travels with it — no email address, no profile.
 type LinkRequest struct {
 	HouseholdID string
 	UserID      string
 	Source      string
-	Email       string
-	Password    string
+	// Tokens are the session the member's browser login produced.
+	Tokens Tokens
 	// StartImport enqueues a run as soon as the link is stored.
 	StartImport bool
 }
 
-// Link signs in to the meal-kit account once, stores only the resulting
-// session and refresh tokens (encrypted), and optionally enqueues an import.
+// Link stores the session and refresh tokens (encrypted) and optionally
+// enqueues an import.
 //
 // A link that already existed is replaced, and any job that was paused
 // waiting for a new sign-in becomes runnable again.
@@ -151,27 +152,17 @@ func (s *Service) Link(ctx context.Context, req LinkRequest) (Status, error) {
 	if !KnownSource(req.Source) {
 		return Status{}, invalid("source must be %q", SourceHelloFresh)
 	}
-	email := strings.TrimSpace(req.Email)
-	if _, err := mail.ParseAddress(email); err != nil {
-		return Status{}, invalid("email must be the address you sign in to %s with", req.Source)
-	}
-	if strings.TrimSpace(req.Password) == "" {
-		return Status{}, invalid("password is required")
-	}
-	src, err := s.Source(req.Source)
-	if err != nil {
+	if _, err := s.Source(req.Source); err != nil {
 		return Status{}, invalid("%s imports are not available on this server", req.Source)
 	}
-
-	tokens, err := src.SignIn(ctx, email, req.Password)
-	if err != nil {
-		// The password never reaches a log line, and neither does the error
-		// from the source, which could echo the request.
-		s.logger.InfoContext(ctx, "meal-kit sign-in failed", "source", req.Source, "householdId", req.HouseholdID, "reason", signInReason(err))
-		return Status{}, signInError(err)
+	tokens := Tokens{
+		AccessToken:  strings.TrimSpace(req.Tokens.AccessToken),
+		RefreshToken: strings.TrimSpace(req.Tokens.RefreshToken),
+		ExpiresAt:    req.Tokens.ExpiresAt,
 	}
-	if tokens.Empty() {
-		return Status{}, invalid("%s did not return a session; check the email and password", req.Source)
+	if tokens.AccessToken == "" {
+		// Never quote the value back: it is a credential either way.
+		return Status{}, invalid("the %s sign-in did not produce a session; sign in again", req.Source)
 	}
 
 	secret, err := s.cipher.SealTokens(tokens)
@@ -297,35 +288,4 @@ func accountLabel(source string) string {
 		return "HelloFresh account"
 	}
 	return source + " account"
-}
-
-// signInError maps a source failure onto something safe to return.
-func signInError(err error) error {
-	switch {
-	case errors.Is(err, ErrAuthExpired):
-		return invalid("that email and password did not sign in to the meal-kit account")
-	case errors.Is(err, ErrBlocked):
-		return invalid("the meal-kit service refused the sign-in. Try again later")
-	}
-	var parse *ParseError
-	if errors.As(err, &parse) {
-		return invalid("%s", parse.Detail)
-	}
-	return invalid("could not reach the meal-kit service. Try again in a few minutes")
-}
-
-// signInReason is the one word that may be logged about a sign-in failure.
-// The error itself is never logged: it can quote the request we sent.
-func signInReason(err error) string {
-	switch {
-	case errors.Is(err, ErrAuthExpired):
-		return "rejected"
-	case errors.Is(err, ErrBlocked):
-		return "blocked"
-	}
-	var parse *ParseError
-	if errors.As(err, &parse) {
-		return "unreadable_response"
-	}
-	return "unreachable"
 }
