@@ -62,7 +62,8 @@ func (m *memoryStore) ListItems(_ context.Context, householdID string, f ListFil
 		case it.HouseholdID != householdID,
 			f.Status != "" && it.Status != f.Status,
 			f.Category != "" && it.Category != f.Category,
-			f.Staple != nil && it.IsStaple != *f.Staple:
+			f.Staple != nil && it.IsStaple != *f.Staple,
+			f.Storage != "" && it.Storage.Or() != f.Storage:
 			continue
 		}
 		if nameRe != nil || keyRe != nil {

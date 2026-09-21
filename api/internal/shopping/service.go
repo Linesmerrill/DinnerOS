@@ -56,6 +56,12 @@ type ServiceOptions struct {
 	// Catalog, when set, checks catalog IDs and names saved products.
 	Catalog Catalog
 	Pantry  Pantry
+	// Frozen, when set, reads the household's freezer, so a bulk pack whose
+	// remainder is already sealed says so (bulkpack.go).
+	Frozen FrozenStockReader
+	// Leftovers, when set, ranks second meals for a bulk pack's surplus.
+	// Without it a bulk pack comes back with no suggestions.
+	Leftovers LeftoverPlanner
 	// Plans, when set, counts a week's meals for its cost per meal.
 	Plans Planner
 	// Households, when set, reads the household's order day and time zone for
@@ -80,6 +86,8 @@ type Service struct {
 	grocery    GrocerySource
 	catalog    Catalog
 	pantry     Pantry
+	frozen     FrozenStockReader
+	leftovers  LeftoverPlanner
 	plans      Planner
 	households HouseholdSource
 	notifier   Notifier
@@ -95,7 +103,8 @@ func NewService(o ServiceOptions) *Service {
 		logger = slog.New(slog.DiscardHandler)
 	}
 	return &Service{
-		store: o.Store, providers: o.Providers, grocery: o.Grocery, catalog: o.Catalog, pantry: o.Pantry, plans: o.Plans,
+		store: o.Store, providers: o.Providers, grocery: o.Grocery, catalog: o.Catalog, pantry: o.Pantry,
+		frozen: o.Frozen, leftovers: o.Leftovers, plans: o.Plans,
 		households: o.Households, notifier: o.Notifier, events: o.Events, logger: logger, now: time.Now,
 	}
 }

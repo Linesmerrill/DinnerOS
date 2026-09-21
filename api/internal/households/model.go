@@ -100,12 +100,30 @@ type Household struct {
 	// household created before the setting existed, whose weeks start on
 	// Monday; read it through FirstDay.
 	WeekStartsOn string
+	// ThawReminderHour is the local hour (0–23) the household wants its
+	// thaw reminders, or nil for DefaultThawReminderHour. Moving a frozen
+	// item to the fridge is a morning errand, so the default is early and
+	// the setting exists because not every household's morning is the same
+	// (docs/pantry-usage.md#thaw-reminders).
+	ThawReminderHour *int
 	// MealKit is what the household spent on meal kits, the baseline the
 	// weekly grocery cost is compared with, or nil when not set.
 	MealKit   *MealKit
 	CreatedBy string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+// DefaultThawReminderHour is when thaw reminders go out for a household
+// that hasn't chosen an hour.
+const DefaultThawReminderHour = 6
+
+// ThawHour returns the local hour the household wants thaw reminders.
+func (h Household) ThawHour() int {
+	if h.ThawReminderHour == nil {
+		return DefaultThawReminderHour
+	}
+	return *h.ThawReminderHour
 }
 
 // FirstDay returns the day the household's week starts on, "mon" for a
@@ -160,6 +178,10 @@ type UpdateInput struct {
 	DefaultServings *int
 	OrderDay        *string
 	WeekStartsOn    *string
+	// SetThawReminderHour changes the thaw reminder hour to
+	// ThawReminderHour; nil returns the household to the default.
+	SetThawReminderHour bool
+	ThawReminderHour    *int
 	// SetMealKit changes the meal kit baseline to MealKit; nil clears it.
 	SetMealKit bool
 	MealKit    *MealKit
@@ -172,6 +194,10 @@ type HouseholdPatch struct {
 	DefaultServings *int
 	OrderDay        *string
 	WeekStartsOn    *string
+	// SetThawReminderHour sets ThawReminderHour, or removes it when
+	// ThawReminderHour is nil.
+	SetThawReminderHour bool
+	ThawReminderHour    *int
 	// SetMealKit sets MealKit, or removes it when MealKit is nil.
 	SetMealKit bool
 	MealKit    *MealKit
@@ -207,6 +233,14 @@ func normalizeTimeZone(tz string) (string, error) {
 // OrderDays are the weekday codes an order day may take, Monday first. They
 // match planning.Day, without depending on that package.
 var OrderDays = []string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+
+// validateThawReminderHour accepts a local hour of the day.
+func validateThawReminderHour(hour *int) error {
+	if hour != nil && (*hour < 0 || *hour > 23) {
+		return invalid("thawReminderHour must be between 0 and 23, or null")
+	}
+	return nil
+}
 
 // normalizeOrderDay accepts a weekday code, or "" meaning no order day.
 func normalizeOrderDay(day string) (string, error) {

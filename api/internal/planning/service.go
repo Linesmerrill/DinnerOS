@@ -79,8 +79,13 @@ type Service struct {
 	events events.Recorder
 	// weekStart is optional; without it weeks start on Monday.
 	weekStart WeekStartSource
-	logger    *slog.Logger
-	now       func() time.Time
+	// frozen, households, and thawNotifier are set by WithFreezer; without
+	// them thaw reminders are off (thaw.go).
+	frozen       FrozenSource
+	households   HouseholdSource
+	thawNotifier ThawNotifier
+	logger       *slog.Logger
+	now          func() time.Time
 }
 
 // NewService returns a Service.

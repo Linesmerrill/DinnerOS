@@ -51,6 +51,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(edit).Post(base, h.add)
 		r.With(edit).Post(base+"/bulk", h.bulk)
 		r.With(edit).Post(base+"/staples/defaults", h.addDefaultStaples)
+		r.With(edit).Post(base+"/freezer", h.freeze)
 		r.With(edit).Post(base+"/purchases", h.recordPurchase)
 		r.With(edit).Patch(base+"/purchases/{purchaseId}", h.setPurchasePrice)
 		r.With(view).Get(base+"/settings", h.getSettings)
@@ -82,6 +83,11 @@ type PantryItemResponse struct {
 	IsStaple      bool     `json:"isStaple"`
 	ExpiresOn     *string  `json:"expiresOn"`
 	Note          string   `json:"note"`
+	// Storage is pantry or freezer. Frozen is set only for a freezer item:
+	// when it was sealed, into how many portions, and how long one portion
+	// takes to thaw (docs/pantry-usage.md#the-freezer).
+	Storage Storage         `json:"storage"`
+	Frozen  *FrozenResponse `json:"frozen"`
 	// StatusSource is person, or estimate when the usage estimate marked
 	// the item low.
 	StatusSource StatusSource `json:"statusSource"`
@@ -176,6 +182,7 @@ func newItemResponse(item Item) PantryItemResponse {
 	resp := PantryItemResponse{
 		ID: item.ID, HouseholdID: item.HouseholdID, Key: item.Key, DisplayName: item.DisplayName, Category: item.Category,
 		Status: item.Status, IsStaple: item.IsStaple, Note: item.Note, UpdatedBy: item.UpdatedBy,
+		Storage:      item.Storage.Or(),
 		StatusSource: item.StatusSource, UnitSize: unitSizeResponse(item.UnitSize),
 		CreatedAt: item.CreatedAt.UTC(), UpdatedAt: item.UpdatedAt.UTC(),
 	}
@@ -202,7 +209,78 @@ func newItemResponse(item Item) PantryItemResponse {
 		date := item.ExpiresOn
 		resp.ExpiresOn = &date
 	}
+	if item.Storage == StorageFreezer {
+		resp.Frozen = newFrozenResponse(item)
+	}
 	return resp
+}
+
+// FrozenResponse describes a freezer item: when it went in, how it was
+// portioned, and the thaw estimate for one portion.
+type FrozenResponse struct {
+	// FrozenOn is a calendar date, or null for an item frozen before the
+	// date was recorded.
+	FrozenOn *string `json:"frozenOn"`
+	// Portions is at least 1.
+	Portions int          `json:"portions"`
+	Thaw     ThawResponse `json:"thaw"`
+}
+
+// ThawResponse is how long one portion takes to thaw in the fridge.
+// Measured is false when the amount isn't a weight and Hours is the default.
+type ThawResponse struct {
+	Hours         int      `json:"hours"`
+	Measured      bool     `json:"measured"`
+	PortionOunces *float64 `json:"portionOunces"`
+	Summary       string   `json:"summary"`
+}
+
+func newFrozenResponse(item Item) *FrozenResponse {
+	e := ThawFor(item)
+	resp := &FrozenResponse{Portions: e.Portions, Thaw: NewThawResponse(e)}
+	if item.FrozenOn != "" {
+		on := item.FrozenOn
+		resp.FrozenOn = &on
+	}
+	return resp
+}
+
+// NewThawResponse renders a thaw estimate, for other modules' responses.
+func NewThawResponse(e ThawEstimate) ThawResponse {
+	resp := ThawResponse{Hours: e.Hours, Measured: e.Measured, Summary: e.Summary}
+	if e.PortionOunces != nil {
+		v, _ := e.PortionOunces.Float64()
+		resp.PortionOunces = &v
+	}
+	return resp
+}
+
+// FreezeRequest is the body of POST .../pantry/freezer: what was sealed.
+type FreezeRequest struct {
+	IngredientID string               `json:"ingredientId"`
+	Name         string               `json:"name"`
+	Quantity     string               `json:"quantity"`
+	Unit         string               `json:"unit"`
+	Portions     int                  `json:"portions"`
+	Note         string               `json:"note"`
+	Source       *FreezeSourceRequest `json:"source"`
+}
+
+// FreezeSourceRequest names the handoff line a remainder came from, which
+// makes freezing it idempotent.
+type FreezeSourceRequest struct {
+	Provider  string `json:"provider"`
+	HandoffID string `json:"handoffId"`
+	LineID    string `json:"lineId"`
+}
+
+// FreezeResponse is returned by POST .../pantry/freezer.
+type FreezeResponse struct {
+	Item PantryItemResponse `json:"item"`
+	// AlreadyFrozen is true when this handoff line had been sealed before
+	// and nothing changed.
+	AlreadyFrozen bool         `json:"alreadyFrozen"`
+	Thaw          ThawResponse `json:"thaw"`
 }
 
 func (req UpdatePantryItemRequest) input() (UpdateInput, error) {
@@ -273,7 +351,9 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func parseListQuery(v url.Values) (ListQuery, error) {
-	q := ListQuery{Status: v.Get("status"), Category: v.Get("category"), Search: v.Get("q")}
+	q := ListQuery{
+		Status: v.Get("status"), Category: v.Get("category"), Search: v.Get("q"), Storage: v.Get("storage"),
+	}
 	if s := v.Get("staple"); s != "" {
 		b, err := strconv.ParseBool(s)
 		if err != nil {
@@ -379,4 +459,33 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 		h.logger.ErrorContext(r.Context(), msg, "error", err)
 		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "internal server error")
 	}
+}
+
+func (h *Handler) freeze(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	var req FreezeRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	in := FreezeInput{
+		IngredientID: req.IngredientID, Name: req.Name, Quantity: req.Quantity, Unit: req.Unit,
+		Portions: req.Portions, Note: req.Note,
+	}
+	if src := req.Source; src != nil {
+		in.Source = &FreezeSource{Provider: src.Provider, HandoffID: src.HandoffID, LineID: src.LineID}
+	}
+	res, err := h.opts.Service.Freeze(r.Context(), actor, in)
+	if err != nil {
+		h.writeError(w, r, "freeze pantry item failed", err)
+		return
+	}
+	status := http.StatusOK
+	if res.Created {
+		status = http.StatusCreated
+	}
+	httpx.WriteJSON(w, status, FreezeResponse{
+		Item:          h.itemResponse(r, res.Item),
+		AlreadyFrozen: res.AlreadyFrozen,
+		Thaw:          NewThawResponse(res.Thaw),
+	})
 }

@@ -570,6 +570,12 @@ private struct GroceryItemRow: View {
             Label("In your pantry", systemImage: "checkmark.seal")
                 .font(.caption)
                 .foregroundStyle(.tint)
+        case .fromFreezer:
+            // The line stays on the list rather than disappearing like a pantry
+            // one: somebody has to take it out of the freezer in time.
+            Label("Grab from the freezer", systemImage: "snowflake")
+                .font(.caption)
+                .foregroundStyle(.tint)
         default:
             EmptyView()
         }
@@ -586,6 +592,7 @@ private struct GroceryItemRow: View {
         case .pantryHint: parts.append(String(localized: "Pantry staple"))
         case .inPantry where item.isHouseMade: parts.append(String(localized: "In pantry, house-made"))
         case .inPantry: parts.append(String(localized: "In your pantry"))
+        case .fromFreezer: parts.append(String(localized: "Grab from the freezer"))
         default: break
         }
         return parts.joined(separator: ", ")

@@ -77,6 +77,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(edit).Put(base+"/settings", h.putSettings)
 		r.With(view).Get(base+"/handoffs", h.listHandoffs)
 		r.With(view).Get(base+"/handoffs/{handoffId}", h.getHandoff)
+		r.With(view).Get(base+"/handoffs/{handoffId}/bulk-packs", h.bulkPacks)
 		r.With(pantryEdit).Post(base+"/handoffs/{handoffId}/confirm", h.confirm)
 		r.With(pantryEdit).Post(base+"/handoffs/{handoffId}/prices", h.setPrices)
 		r.With(view).Get(base+"/weeks/{week}/cost", h.getWeekCost)
@@ -717,6 +718,8 @@ func (h *Handler) exclusionText(provider providers.Key, reason ExclusionReason) 
 		// Not in the pantry at all: the recipe calls it a staple most
 		// kitchens keep, which is all this knows.
 		return "Usually on hand"
+	case ExcludedInFreezer:
+		return "Grab from the freezer"
 	case ExcludedHouseMade:
 		return "House-made batch in pantry"
 	case ExcludedCheckedOff:

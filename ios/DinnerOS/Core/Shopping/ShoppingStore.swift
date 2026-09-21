@@ -90,6 +90,14 @@ final class ShoppingStore {
 
     /// The shown week's newest handoff with a line still pending, for the banner.
     private(set) var openHandoff: ShoppingHandoff?
+    /// The week's bulk packs, loaded on demand (docs/shopping-providers.md#bulk-packs).
+    private(set) var bulkPacks: ShoppingBulkPackList?
+    private(set) var isLoadingBulkPacks = false
+
+    /// Packs still worth asking about: not already frozen, and not answered this session.
+    var openBulkPacks: [ShoppingBulkPack] {
+        (bulkPacks?.open ?? []).filter { !settledBulkPackIDs.contains($0.lineID) }
+    }
     /// The handoff "Did you order these?" asks about. The app shell presents it.
     private(set) var confirmationPrompt: ShoppingHandoff?
 
@@ -167,6 +175,8 @@ final class ShoppingStore {
     /// pantry and the unread count here.
     @ObservationIgnored var onPantryChanged: (@MainActor () async -> Void)?
 
+    @ObservationIgnored private var settledBulkPackIDs: Set<String> = []
+    @ObservationIgnored private var bulkPackGeneration = 0
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let api: ShoppingAPI?
     @ObservationIgnored private let checks: any GroceryCheckStorage
@@ -586,6 +596,34 @@ final class ShoppingStore {
         } catch {
             Self.logger.notice("Open handoff check failed: \(Self.describe(error), privacy: .public)")
         }
+    }
+
+    // MARK: - Bulk packs
+
+    /// Loads the handoff's bulk packs — lines whose packages hold far more than the week
+    /// needs — and keeps them for the sheet. A failure is quiet: the packs are an offer,
+    /// and an error about a missing offer helps nobody.
+    func loadBulkPacks(handoffID: String) async {
+        guard let api, let householdID else { return }
+        bulkPackGeneration += 1
+        let started = bulkPackGeneration
+        isLoadingBulkPacks = true
+        defer { if started == bulkPackGeneration { isLoadingBulkPacks = false } }
+        do {
+            let loaded = try await session.authorized { token in
+                try await api.bulkPacks(householdID: householdID, handoffID: handoffID, accessToken: token)
+            }
+            guard started == bulkPackGeneration else { return }
+            bulkPacks = loaded
+        } catch is CancellationError {
+        } catch {
+            Self.logger.notice("Bulk packs failed to load: \(Self.describe(error), privacy: .public)")
+        }
+    }
+
+    /// Hides one pack for the rest of this session, after the member has answered it.
+    func settleBulkPack(_ pack: ShoppingBulkPack) {
+        settledBulkPackIDs.insert(pack.lineID)
     }
 
     /// Asks about the open handoff now, from the banner.
@@ -1044,6 +1082,7 @@ final class ShoppingStore {
         householdID = nil
         userID = nil
         dismissedHandoffIDs = []
+        settledBulkPackIDs = []
         canEdit = false
         canConfirm = false
     }
@@ -1058,6 +1097,9 @@ final class ShoppingStore {
         proposal = nil
         refreshError = nil
         packageOverrides = [:]
+        bulkPackGeneration += 1
+        bulkPacks = nil
+        isLoadingBulkPacks = false
         isCreatingHandoff = false
         linkProgress = nil
         linkError = nil

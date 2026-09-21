@@ -8,6 +8,7 @@ struct RootView: View {
     @Environment(ImportReviewStore.self) private var importReviews
     @Environment(PlanStore.self) private var plans
     @Environment(PantryStore.self) private var pantry
+    @Environment(ThawStore.self) private var thaw
     @Environment(SpecialtyStore.self) private var specialties
     @Environment(GrocerySkipStore.self) private var grocerySkips
     @Environment(AutopilotStore.self) private var autopilot
@@ -38,6 +39,7 @@ struct RootView: View {
                     importReviews.reset()
                     plans.reset()
                     pantry.reset()
+                    thaw.reset()
                     specialties.reset()
                     grocerySkips.reset()
                     autopilot.reset()
@@ -102,6 +104,7 @@ struct RootView: View {
         .environment(RecipePreviewData.library(session: session))
         .environment(PlanPreviewData.store(session: session))
         .environment(PantryPreviewData.store(session: session))
+        .environment(ThawStore.preview(session: session, due: nil))
         .environment(SpecialtyPreviewData.store(session: session))
         .environment(GrocerySkipStore.preview(session: session))
         .environment(AutopilotPreviewData.store(session: session))
@@ -118,6 +121,7 @@ struct RootView: View {
         .environment(RecipeLibrary.preview(session: session, phase: .idle))
         .environment(PlanStore.preview(session: session, plan: nil, phase: .idle))
         .environment(PantryStore.preview(session: session, phase: .idle))
+        .environment(ThawStore.preview(session: session, due: nil))
         .environment(SpecialtyStore.preview(session: session, phase: .idle))
         .environment(GrocerySkipStore.preview(session: session, phase: .idle))
         .environment(AutopilotStore.preview(session: session, profile: nil, vocabulary: nil))

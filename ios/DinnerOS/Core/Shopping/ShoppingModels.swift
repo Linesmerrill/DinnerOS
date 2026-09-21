@@ -489,6 +489,8 @@ nonisolated struct ShoppingExclusionReason: RawRepresentable, Codable, Hashable,
     static let inPantry = ShoppingExclusionReason(rawValue: "in_pantry")
     static let pantryHint = ShoppingExclusionReason(rawValue: "pantry_hint")
     static let houseMade = ShoppingExclusionReason(rawValue: "house_made")
+    /// Frozen pantry stock covers it, so the cart leaves it alone.
+    static let inFreezer = ShoppingExclusionReason(rawValue: "in_freezer")
     static let checkedOff = ShoppingExclusionReason(rawValue: "checked_off")
     static let excluded = ShoppingExclusionReason(rawValue: "excluded")
     static let notSelected = ShoppingExclusionReason(rawValue: "not_selected")

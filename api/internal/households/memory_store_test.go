@@ -93,6 +93,13 @@ func (m *memoryStore) UpdateHousehold(_ context.Context, id string, patch Househ
 	if patch.WeekStartsOn != nil {
 		h.WeekStartsOn = *patch.WeekStartsOn
 	}
+	if patch.SetThawReminderHour {
+		h.ThawReminderHour = nil
+		if patch.ThawReminderHour != nil {
+			hour := *patch.ThawReminderHour
+			h.ThawReminderHour = &hour
+		}
+	}
 	if patch.SetMealKit {
 		h.MealKit = nil
 		if patch.MealKit != nil {

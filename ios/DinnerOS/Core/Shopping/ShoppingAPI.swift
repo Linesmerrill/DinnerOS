@@ -143,6 +143,15 @@ nonisolated struct ShoppingAPI: Sendable {
             APIRequest.get(Self.path(householdID) + "/handoffs/\(handoffID)").authorized(with: accessToken))
     }
 
+    /// The handoff's bulk packs: lines whose packages hold far more than the week needs,
+    /// each with the recipes Autopilot would plan for the rest and whether the remainder
+    /// is already in the freezer.
+    func bulkPacks(householdID: String, handoffID: String, accessToken: String) async throws -> ShoppingBulkPackList {
+        try await client.send(
+            APIRequest.get(Self.path(householdID) + "/handoffs/\(handoffID)/bulk-packs")
+                .authorized(with: accessToken))
+    }
+
     /// Records what a member says was ordered. Idempotent per line.
     func confirm(
         householdID: String, handoffID: String, request: ConfirmShoppingOrderRequest, accessToken: String

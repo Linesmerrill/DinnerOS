@@ -251,6 +251,34 @@ final class PantryStore {
         return response
     }
 
+    /// Records a bulk pack's remainder in the freezer, in `householdID`'s pantry (the shown
+    /// pantry's when `nil`). The Shop tab calls it before the Pantry tab has ever been
+    /// opened, so the returned item is applied only when it belongs to the shown pantry.
+    ///
+    /// It is idempotent per handoff line: sealing the same line again changes nothing.
+    @discardableResult
+    func freeze(request: FreezePantryItemRequest, householdID: String? = nil) async throws
+        -> FreezePantryItemResponse
+    {
+        guard let api else { throw AuthSessionError.notConfigured }
+        guard let target = householdID ?? self.householdID else { throw AuthSessionError.signedOut }
+        let started = generation
+        let response: FreezePantryItemResponse
+        if target == self.householdID {
+            response = try await perform { token in
+                try await api.freeze(householdID: target, request: request, accessToken: token)
+            }
+            if started == generation { apply([response.item]) }
+        } else {
+            response = try await session.authorized { token in
+                try await api.freeze(householdID: target, request: request, accessToken: token)
+            }
+            onChange?()
+        }
+        Self.logger.info("Pantry item frozen (alreadyFrozen: \(response.alreadyFrozen, privacy: .public))")
+        return response
+    }
+
     /// Shows an item another feature changed (a house-made batch recorded from specialty
     /// ingredients), when it belongs to the shown pantry.
     func applyChangedItem(_ item: PantryItem, householdID: String) {

@@ -26,6 +26,8 @@ Autopilot's first customer.
 | 6 | Weekly planner and week grocery list, including skip-once / never-buy ingredients | ✅ Done (API and iOS) |
 | 7 | Pantry and grocery engine, specialty ingredient substitutes, low-stock alerts | ✅ Done; cooking instructions read with the household's substitutes and bold every ingredient with its amount; saved lists pending |
 | 8 | Shopping providers | Walmart cart handoff, category-aware search, product links with name and size, pack coverage ✅; order-day reminders ✅; prices (typed or from order screenshots read on the iPhone), weekly cost vs meal kit, and leftovers tracking ✅; Instacart later |
+| 7 | Pantry and grocery engine, specialty ingredient substitutes, low-stock alerts, freezer carryover and thaw reminders | ✅ Done; saved lists pending |
+| 8 | Shopping providers | Walmart cart handoff, category-aware search, product links with name and size, pack coverage ✅; order-day reminders ✅; prices (typed or from order screenshots read on the iPhone), weekly cost vs meal kit, and leftovers tracking ✅; bulk packs (plan a second meal, or portion and freeze the rest) ✅; Instacart later |
 | 9 | Ratings and behavioral events | ✅ Done (API and iOS) |
 | 10 | Autopilot V1: taste profile, week context, deterministic week proposals (generate, swap, accept) | ✅ Done (API and iOS) |
 | — | Push notifications (APNs, hourly reminder sweep), starter recipe library for new households, account deletion, privacy policy, external TestFlight | ✅ Done |

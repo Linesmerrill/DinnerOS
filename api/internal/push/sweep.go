@@ -68,7 +68,17 @@ type SweepOptions struct {
 	// QuietStart and QuietEnd are local hours [QuietStart, QuietEnd) when
 	// nothing is pushed. Equal values disable quiet hours.
 	QuietStart, QuietEnd int
+	// QuietExempt are types quiet hours do not hold back. Nil means
+	// DefaultQuietExempt.
+	QuietExempt []notifications.Type
 }
+
+// DefaultQuietExempt are the notification types quiet hours do not defer:
+// reminders the household itself scheduled for an early hour. A thaw
+// reminder set for 6am is an errand with a deadline, and holding it until
+// the quiet hours end at 8 would be the app overruling the member about
+// their own morning.
+var DefaultQuietExempt = []notifications.Type{notifications.TypePantryThaw}
 
 // Sweeper is one run of the reminder sweep.
 type Sweeper struct {
@@ -88,6 +98,9 @@ func NewSweeper(opts SweepOptions) *Sweeper {
 	}
 	if opts.QuietStart == 0 && opts.QuietEnd == 0 {
 		opts.QuietStart, opts.QuietEnd = DefaultQuietStart, DefaultQuietEnd
+	}
+	if opts.QuietExempt == nil {
+		opts.QuietExempt = DefaultQuietExempt
 	}
 	return &Sweeper{opts: opts}
 }
@@ -214,7 +227,7 @@ func (r *sweepRun) deliver(ctx context.Context, n notifications.Notification) {
 		return
 	}
 	stale := now.Sub(n.CreatedAt) > r.opts.MaxAge
-	if !stale && h != nil && r.quiet(h) {
+	if !stale && h != nil && !slices.Contains(r.opts.QuietExempt, n.Type) && r.quiet(h) {
 		r.report.Deferred++
 		return
 	}

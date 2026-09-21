@@ -356,6 +356,16 @@ nonisolated struct GroceryItemStatus: RawRepresentable, Codable, Hashable, Senda
     static let pantryHint = GroceryItemStatus(rawValue: "pantryHint")
     /// The household pantry has it (Phase 7).
     static let inPantry = GroceryItemStatus(rawValue: "inPantry")
+    /// Frozen pantry stock covers it. Unlike `inPantry` the line stays on the list,
+    /// de-emphasized, so somebody takes it out of the freezer in time; no export buys it.
+    static let fromFreezer = GroceryItemStatus(rawValue: "fromFreezer")
+
+    /// Whether the household still has to buy it. A status this build doesn't know counts
+    /// as "buy it": leaving something off the shopping list is the damaging mistake, not
+    /// putting something on it that turns out to be at home.
+    var needsBuying: Bool {
+        self != .inPantry && self != .fromFreezer
+    }
 }
 
 /// One aggregated ingredient.

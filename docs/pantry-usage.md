@@ -253,6 +253,143 @@ next time any member opens the pantry or notifications, or at the next hourly
 push sweep, whichever comes first. `Refresh` is idempotent, so overlapping
 sweeps and in-app reads are safe.
 
+## The freezer
+
+A pantry item now knows where in the house it's kept: `storage` is `pantry` or
+`freezer`, and an empty value means `pantry`, so every item written before the
+freezer existed reads exactly as it did.
+
+**Why there is a freezer at all.** The week's list forces package sizes nobody
+asked for. The smallest pork loin at the store is 4 lb and Thursday's meal uses
+10 oz, so the week buys 54 oz it has no plan for. The leftovers rule
+deliberately refuses to track meat as shelf stock
+([What goes in the pantry](#what-goes-in-the-pantry)): calling raw pork
+"in stock" would be a lie, and it would keep the line off next week's list. So
+the remainder went unrecorded — and next month's list bought another four-pound
+loin. The freezer is the third answer: neither a lie about a shelf nor silence.
+
+**Freezing** (`POST .../pantry/freezer`, `pantry.Service.Freeze`) records:
+
+- **the amount actually sealed** — the real remainder ("16 oz"), never the
+  package size. It's required;
+- **how many portions** it was split into (`portions`, 0 meaning one, up to
+  `MaxPortions`);
+- **the date** it was sealed (`frozenOn`);
+- **the handoff line it came from** (`frozenFrom`, `<handoffId>:<lineId>`).
+  That last one makes freezing **idempotent**: sealing the same line twice
+  changes nothing and returns the item as it already stands. Without a source
+  it's an ordinary write, so a member can freeze something the app never
+  bought.
+
+The ingredient's pantry item is added when it's missing, and the sealed amount
+restocks it and starts an ordinary usage cycle (`CycleFrozen`). Everything in
+this document then applies unchanged: cooked meals count the freezer down like
+any other pantry amount, segments close, the rate is learned, and the item goes
+`low` when the estimate says so. A frozen item keeps no `expiresOn` — a fridge
+date from before it was sealed would only mislead.
+
+**A frozen item stays on the grocery list.** This is the point of the whole
+feature, so `GroceryPantry` sorts in-stock items by storage:
+
+| Pantry item | In `PantryStock` | Grocery status of its lines |
+| --- | --- | --- |
+| `in_stock`, `storage: pantry` | `InStock` | `inPantry` — off the list |
+| `in_stock`, `storage: freezer` | `InFreezer` | `fromFreezer` — still on the list, de-emphasized, "Grab from the freezer" |
+
+An `inPantry` line disappears, which is right for a tub of sour cream and wrong
+for four pounds of pork: something has to take it out of the freezer in time.
+So a `fromFreezer` line is shown and not bought. The freezer beats the staple
+hint and beats buying it again, but loses to a fresh item already in the pantry
+(that one is nearer to hand) and to a skip (the household asked for it to stay
+off the list). Exports leave it out with the reason `in_freezer`
+([shopping-providers.md](shopping-providers.md#bulk-packs)), and
+[grocery-engine.md](grocery-engine.md#pantry) lists the status beside the
+others.
+
+Where the remainder comes from in the first place — which lines are bulk packs,
+and the choice between freezing one and planning a second meal with it — is in
+[shopping-providers.md](shopping-providers.md#bulk-packs).
+
+## Thaw reminders
+
+The freezer only works if something takes the food out of it in time. A pork
+loin sealed in March isn't dinner on a Thursday unless somebody remembers on
+Thursday *morning*, and "I'll remember" is exactly the thing that fails.
+
+### How long it takes
+
+`pantry.ThawFor` estimates fridge thawing for **one portion**:
+
+```text
+hours = portion ounces ÷ 16 × hours per pound
+```
+
+| Constant | Value | Why |
+| --- | --- | --- |
+| `FridgeHoursPerPound` | 5 | USDA fridge-thaw guidance is roughly a day per 4–5 lb of meat; 5 hours per pound is that range taken on the safe side |
+| `LightHoursPerPound` | 2 | bakery, deli and dairy: bread and deli slices aren't a dense frozen block |
+| `MinThawHours` | 2 | the floor — even one small portion needs a couple of hours out |
+| `MaxThawHours` | 48 | the ceiling — beyond two days the advice is the same: start now |
+| `DefaultThawHours` | 8 | when the amount isn't a weight and can't be converted to one. Long enough to be safe, short enough to be actionable; the estimate is then marked `measured: false` |
+
+The result is clamped to `[MinThawHours, MaxThawHours]` and rounded to whole
+hours, because nobody plans a thaw to the minute.
+
+**It weighs one portion, not the bag.** A 64 oz pack split into four sealed
+portions is **5 hours, not 20**. That is the difference between "put it in the
+fridge after lunch" and "you should have started yesterday" — an estimate for
+the whole bag would be wrong for every household that did the sensible thing
+and portioned it, and wrong in the direction that makes the advice ignorable.
+
+A volume converts to a weight through the item's typical density (the same
+table cooked deductions use, see [Unit conversion](#unit-conversion)); a
+discrete unit with a known size converts through that size. Anything else falls
+back to `DefaultThawHours`.
+
+### The reminder
+
+Like the grocery order reminder, **nothing is stored**. "Is a frozen item
+needed today, and has it long enough to thaw?" is a question about today,
+answered from facts that already exist: the week's plan, its recipes'
+ingredients, and what's in the freezer. It's derived on read, and — for a phone
+nobody opened — by the hourly sweep.
+
+- **It fires on the day a planned meal needs the item.** Today's plan entries
+  are read in the household's time zone, their recipes' ingredients are matched
+  against in-stock freezer items by the same keys a grocery line carries (the
+  catalog ingredient ID, or the normalized name), and each match becomes one
+  item with the meals that need it named.
+- **`DinnerHour` = 18 local is the only guess in the model,** and the advice is
+  anchored to it. The move-by time is dinner less the estimate, so five hours
+  reads: *"Chicken Thighs is for Tuscan Chicken tonight. This usually takes
+  about 5 hours in the fridge — put it in the fridge by 1 PM, or this morning
+  if that's easier."*
+- **When the move-by time has already passed** (the usual case for anything
+  longer than a workday) the wording changes to *"— move it over this
+  morning"* rather than pretending the deadline is still ahead.
+- **The household picks the hour** (`thawReminderHour` on the household, 0–23,
+  default `households.DefaultThawReminderHour` = 6). Before that hour nothing
+  is created: the errand is theirs to do when they're up, and a reminder that
+  arrives after the errand is useless while one at 4am is worse than useless.
+- **One per item per day.** The notification is
+  `notifications.TypePantryThaw` (`pantry.thaw`), its subject is the pantry
+  item, and its dedupe key is `pantry.thaw:<date>:<itemId>`, so however often
+  the bell is read the household gets one reminder per item per day.
+- **Delivery is the existing path**: created by the same `Refresher` that runs
+  on a notification read and by `cmd/sendreminders` on the hourly Heroku
+  Scheduler run, then pushed by the sweep
+  ([Push delivery](#push-delivery)). Before pushing, the sweep asks whether the
+  reminder is still true (`push.Relevance`): an item that was taken out, or
+  whose meal moved, is `skipped`.
+- **Thaw reminders are exempt from quiet hours** (`push.DefaultQuietExempt`).
+  Everything else waits out the household's night and arrives after 08:00, but
+  a 6am reminder the household itself scheduled must not be held until 8 —
+  by then the fridge has lost two hours it can't get back.
+
+`GET /households/{id}/thaw` returns what to move today: the date, the
+household's reminder hour, and for each item its meals, the hours, whether they
+were measured, the move-by time, and the sentence above ready to show.
+
 ## Notifications
 
 `notifications` holds household notifications. Every member sees the same

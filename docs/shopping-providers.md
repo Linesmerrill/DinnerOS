@@ -704,6 +704,66 @@ Symbol, whether it sorts into its own aisles, and its paste steps. The button,
 the explainer, the confirmation, and the seen-state key all read from it. That
 is as far as the abstraction goes on purpose — until a second app turns up that
 needs something other than a paste, there is nothing to generalize.
+## Bulk packs
+
+The store's smallest pork loin is 4 lb. Thursday's meal uses 10 oz. The week
+buys 54 ounces of pork it has no plan for, and until now nothing said so.
+
+**What counts as a bulk pack** (`shopping/bulkpack.go`) is the loud form of a
+disagreement the package math already computes: a `per_week` line
+([Package count](#package-count)) whose measured surplus is at least
+`MinBulkSurplusPercent` = **50%** of what it bought, and which the pantry is
+**not** tracking.
+
+- **Half is the threshold** because below it the surplus is a portion, not a
+  second meal. A 16 oz pack for 10 oz is ordinary shopping; a 64 oz pack for
+  10 oz is not.
+- **Tracked leftovers are excluded.** A tub of sour cream bought for 2 tbsp is
+  already pantry stock, already counting down, and next week's list already
+  knows about it ([pantry-usage.md](pantry-usage.md#what-goes-in-the-pantry)).
+  There is nothing to rescue.
+- **In practice this selects meat and seafood**, because the leftovers rule
+  never tracks them: raw pork isn't shelf stock, so it is never "already
+  handled", and it is exactly the category where the package is largest
+  relative to the need. Lines that were skipped, that carry over by measure
+  (`per_amount`), or whose amounts don't convert are not bulk packs either.
+
+`GET .../shopping/handoffs/{handoffId}/bulk-packs` returns the handoff's packs,
+each with what it bought, what the week needs, the surplus and its percent,
+plus two flags and the suggestions below. Reading it changes nothing.
+
+**Two offers, and a member who takes neither loses nothing.**
+
+1. **Plan a second meal this week.** `recommendations.Service.LeftoverPicks`
+   narrows Autopilot's catalog to the household's *own* recipes that use the
+   ingredient and aren't already in the week, then ranks them for the week's
+   first open day with the ordinary ranker — so variety, cook-time balance and
+   weekday rules still apply, and whatever Autopilot has learned about this
+   household a leftover suggestion learns too. It is not a new recommender.
+   Accepting a pick is an ordinary plan change through the plan-entry endpoint
+   ([api.md](api.md#plans)); nothing here writes the plan. A week with no
+   open day, or a household with no other recipe for the ingredient, simply
+   gets a pack with no suggestions, which is an ordinary outcome and not a
+   failure — a ranking error is logged and the pack still comes back, because
+   "you bought four pounds" is useful on its own.
+2. **Portion, seal and freeze it.** The app records the amount actually sealed
+   and the number of portions as a frozen pantry item
+   (`POST .../pantry/freezer`, [pantry-usage.md](pantry-usage.md#the-freezer)),
+   naming the handoff line it came from — which makes freezing the same line
+   twice a no-op.
+
+| Flag | Meaning |
+| --- | --- |
+| `freezable` | the line's category is one that freezes and comes back as food: meat and seafood, bakery, deli, frozen. **Produce and dairy are deliberately absent** — a frozen bag of spinach is a different product from the fresh bunch the recipe asked for, and telling someone to seal sour cream would be bad advice given confidently |
+| `frozen` | this line's remainder is already in the freezer (some in-stock frozen item names this handoff and line), so the offer is done |
+
+**A frozen line is never bought again.** A grocery line the freezer covers has
+the status `fromFreezer`, and the match leaves it out with the new exclusion
+reason `in_freezer`, shown as **"Grab from the freezer"** beside "In your
+pantry" and "Usually on hand". The Walmart hand-off and every other export
+build from the included lines, so a frozen-covered line is not in the cart
+link, not in a second send, and not in any future export — the whole point of
+sealing the remainder was to not buy another four-pound loin next month.
 
 ## Demand signal
 

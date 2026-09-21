@@ -179,8 +179,12 @@ func run() error {
 	skipsService := skips.NewService(skips.NewMongoStore(db.Database()), recipeService, logger)
 	planService := planning.NewService(planning.NewMongoStore(db.Database()), recipeService).
 		WithPantry(pantryService).WithSpecialties(substitutesService).WithSkips(skipsService).
-		WithEvents(behavior.events, logger).WithWeekStart(householdService)
+		WithEvents(behavior.events, logger).WithWeekStart(householdService).
+		WithFreezer(pantryService, householdService, notificationService)
 	householdService.WithWeekStartListener(planService)
+	// A frozen item needed by one of today's meals is a reminder derived on
+	// read, like the pantry's low-stock check and the weekly order reminder.
+	notificationService.AddRefresher(planService)
 	planHandler := planning.NewHandler(planning.HandlerOptions{
 		Service:    planService,
 		Authorizer: householdService,
@@ -272,6 +276,8 @@ func run() error {
 		Grocery:    planService,
 		Catalog:    recipeService,
 		Pantry:     pantryService,
+		Frozen:     pantryService,
+		Leftovers:  autopilotService,
 		Plans:      planService,
 		Households: householdService,
 		Notifier:   notificationService,

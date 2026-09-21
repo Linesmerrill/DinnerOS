@@ -3,8 +3,9 @@
 //
 // Reminders are derived when notifications are read, so a closed app would
 // never produce one. For every household the sweep runs the same refreshers a
-// notification read runs — the pantry's low-stock check and the grocery order
-// reminder — and then pushes each pending notification to the devices of the
+// notification read runs — the pantry's low-stock check, the thaw reminder for
+// today's frozen ingredients, and the grocery order reminder — and then pushes
+// each pending notification to the devices of the
 // members who haven't read it. A notification is claimed before it is sent,
 // so re-running (or two overlapping runs) never sends it twice.
 //
@@ -26,6 +27,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
+	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/logging"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb"
 	"github.com/Linesmerrill/DinnerOS/api/internal/push"
@@ -99,9 +101,9 @@ func newSender(cfg config.Config, logger *slog.Logger) (push.Sender, error) {
 }
 
 // newSweeper wires the refreshers exactly as cmd/server wires them for
-// notification reads: the pantry's low-stock check, then the order reminder.
-// Refresh uses only the stores, the recipe catalog, households, and the
-// notifier, so nothing request-scoped is needed.
+// notification reads: the pantry's low-stock check, the thaw reminder, then
+// the order reminder. Refresh uses only the stores, the recipe catalog,
+// households, and the notifier, so nothing request-scoped is needed.
 func newSweeper(db *mongodb.Client, sender push.Sender, logger *slog.Logger) *push.Sweeper {
 	database := db.Database()
 	notificationStore := notifications.NewMongoStore(database)
@@ -118,7 +120,14 @@ func newSweeper(db *mongodb.Client, sender push.Sender, logger *slog.Logger) *pu
 	shoppingService := shopping.NewService(shopping.ServiceOptions{
 		Store: shopping.NewMongoStore(database), Households: householdService, Notifier: notificationService, Logger: logger,
 	})
+	// The thaw reminder needs the week's plan, its recipes, and the freezer;
+	// it builds no grocery list, so the planner's pantry, specialty, and skip
+	// sources are deliberately absent.
+	planService := planning.NewService(planning.NewMongoStore(database), recipeService).
+		WithWeekStart(householdService).
+		WithFreezer(pantryService, householdService, notificationService)
 	notificationService.SetRefresher(pantryService)
+	notificationService.AddRefresher(planService)
 	notificationService.AddRefresher(shoppingService)
 	return push.NewSweeper(push.SweepOptions{
 		Households: householdStore,
@@ -127,7 +136,7 @@ func newSweeper(db *mongodb.Client, sender push.Sender, logger *slog.Logger) *pu
 		Tokens:     push.NewMongoStore(database),
 		// A reminder that waited out the night isn't pushed once the week was
 		// ordered or the item restocked.
-		Relevance: []push.Relevance{shoppingService, pantryService},
+		Relevance: []push.Relevance{shoppingService, pantryService, planService},
 		Sender:    sender,
 		Logger:    logger,
 	})

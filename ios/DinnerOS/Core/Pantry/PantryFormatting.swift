@@ -84,6 +84,22 @@ nonisolated enum PantryFormat {
         let unit = RecipeFormat.unitLabel(code, sourceUnit: code, plural: RecipeFormat.isPlural(item.quantityValue))
         return unit.isEmpty ? quantity : "\(quantity) \(unit)"
     }
+
+    /// How a freezer item's thaw estimate reads under its amount, for example
+    /// "4 portions · about 5 hours to thaw". The estimate is per portion, because that
+    /// is what somebody actually takes out of the freezer.
+    static func thawText(_ frozen: PantryFrozen) -> String {
+        let thaw = String(localized: "\(frozen.thaw.summary) to thaw")
+        guard frozen.portions > 1 else { return capitalizingFirst(thaw) }
+        return String(localized: "\(frozen.portions) portions") + " · " + thaw
+    }
+
+    /// Uppercases the first character only, so "about 5 hours" starts a line properly
+    /// without touching "PM" or a brand name further along.
+    private static func capitalizingFirst(_ text: String) -> String {
+        guard let first = text.first else { return text }
+        return String(first).uppercased() + text.dropFirst()
+    }
 }
 
 // MARK: - Grouping and filtering
