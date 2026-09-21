@@ -29,8 +29,12 @@ struct PairingsStoreTests {
 
     private let week = ISOWeek("2026-W38") ?? .current(in: .gmt, weekStartsOn: .mon)
 
+    /// "Now" is Wednesday, September 16, 2026 at noon UTC, a day inside `week`. Without a fixed
+    /// clock the plan store opens whichever week the run falls in, so the fixtures' 2026-W38
+    /// plan never reaches it and every expectation about its entries fails on some weekdays.
     private func makeHarness(
-        server: FakePairingsServer = FakePairingsServer(), planServer: FakePlanServer = FakePlanServer()
+        server: FakePairingsServer = FakePairingsServer(), planServer: FakePlanServer = FakePlanServer(),
+        now: String = "2026-09-16T12:00:00Z"
     ) async throws -> Harness {
         // One transport for both: pairings changes the plan, so the two have to agree.
         let transport = StubTransport { request in
@@ -41,7 +45,9 @@ struct PairingsStoreTests {
         let stored = StoredSession(tokens: Fixtures.tokens(), user: Fixtures.user)
         let session = AuthSession(api: AuthAPI(client: client), store: InMemoryTokenStore(session: stored))
         await session.restore()
-        let plans = PlanStore(session: session, api: PlansAPI(client: client), checks: InMemoryGroceryChecks())
+        let instant = try #require(JSONCoding.parseDate(now))
+        let plans = PlanStore(
+            session: session, api: PlansAPI(client: client), checks: InMemoryGroceryChecks(), now: { instant })
         await plans.activate(householdID: "household-1", timeZone: .gmt, weekStartsOn: .mon)
         let households = HouseholdStore.preview(
             session: session, phase: .ready, current: HouseholdPreviewData.detail)
