@@ -17,6 +17,7 @@ final class AppDependencies {
     let importReviews: ImportReviewStore
     let plans: PlanStore
     let pantry: PantryStore
+    let thaw: ThawStore
     let specialties: SpecialtyStore
     /// Ingredients the household leaves off its grocery list on purpose.
     let grocerySkips: GrocerySkipStore
@@ -64,6 +65,7 @@ final class AppDependencies {
             api: client.map { PantryAPI(client: $0) },
             ingredientsAPI: client.map { IngredientsAPI(client: $0) })
         self.pantry = pantry
+        thaw = ThawStore(session: session, api: client.map { PantryAPI(client: $0) })
         let notifications = NotificationStore(
             session: session, api: client.map { NotificationsAPI(client: $0) })
         self.notifications = notifications

@@ -67,6 +67,9 @@ type HouseholdResponse struct {
 	TimeZone        string `json:"timeZone"`
 	// OrderDay is null until the household picks a grocery order day.
 	OrderDay *string `json:"orderDay"`
+	// ThawReminderHour is the local hour thaw reminders go out, always set
+	// (DefaultThawReminderHour when the household never chose one).
+	ThawReminderHour int `json:"thawReminderHour"`
 	// WeekStartsOn is the first day of the household's week: "sun" for new
 	// households, "mon" for households that never chose.
 	WeekStartsOn string `json:"weekStartsOn"`
@@ -98,16 +101,17 @@ func NewHouseholdResponse(hh Household) HouseholdResponse {
 		kit = &MealKitJSON{WeeklyCents: hh.MealKit.WeeklyCents, Meals: hh.MealKit.Meals}
 	}
 	return HouseholdResponse{
-		MealKit:         kit,
-		ID:              hh.ID,
-		Name:            hh.Name,
-		DefaultServings: hh.DefaultServings,
-		TimeZone:        hh.TimeZone,
-		OrderDay:        orderDayOrNil(hh.OrderDay),
-		WeekStartsOn:    hh.FirstDay(),
-		CreatedBy:       hh.CreatedBy,
-		CreatedAt:       hh.CreatedAt.UTC(),
-		UpdatedAt:       hh.UpdatedAt.UTC(),
+		MealKit:          kit,
+		ID:               hh.ID,
+		Name:             hh.Name,
+		DefaultServings:  hh.DefaultServings,
+		TimeZone:         hh.TimeZone,
+		OrderDay:         orderDayOrNil(hh.OrderDay),
+		ThawReminderHour: hh.ThawHour(),
+		WeekStartsOn:     hh.FirstDay(),
+		CreatedBy:        hh.CreatedBy,
+		CreatedAt:        hh.CreatedAt.UTC(),
+		UpdatedAt:        hh.UpdatedAt.UTC(),
 	}
 }
 
@@ -188,6 +192,9 @@ type updateHouseholdRequest struct {
 	DefaultServings *int    `json:"defaultServings"`
 	// OrderDay set to "" clears the household's order day.
 	OrderDay *string `json:"orderDay"`
+	// ThawReminderHour set to null returns the household to the default
+	// hour; absent leaves it.
+	ThawReminderHour httpx.Optional[int] `json:"thawReminderHour"`
 	// WeekStartsOn changes the first day of the week, moving meals whose date
 	// now falls in another week into that week.
 	WeekStartsOn *string `json:"weekStartsOn"`
@@ -263,7 +270,8 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	in := UpdateInput{Name: req.Name, TimeZone: req.TimeZone, DefaultServings: req.DefaultServings, OrderDay: req.OrderDay, WeekStartsOn: req.WeekStartsOn, SetMealKit: req.MealKit.Set}
+	in := UpdateInput{Name: req.Name, TimeZone: req.TimeZone, DefaultServings: req.DefaultServings, OrderDay: req.OrderDay, WeekStartsOn: req.WeekStartsOn, SetMealKit: req.MealKit.Set,
+		SetThawReminderHour: req.ThawReminderHour.Set, ThawReminderHour: req.ThawReminderHour.Value}
 	if v := req.MealKit.Value; v != nil {
 		in.MealKit = &MealKit{WeeklyCents: v.WeeklyCents, Meals: v.Meals}
 	}

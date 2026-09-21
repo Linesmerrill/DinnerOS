@@ -12,6 +12,9 @@ struct ShopView: View {
     /// The cost card's sheet is held and presented here, not on the card: the card is a list
     /// section that comes and goes with the week's cost (decision 510).
     @State private var weekCostSheet: WeekCostSheet?
+    /// Presented from the screen root for the same reason the cost card's sheets are
+    /// (decision 510): the banner that opens it is a list section that comes and goes.
+    @State private var isShowingBulkPacks = false
 
     private var household: Household? {
         households.current?.household
@@ -43,10 +46,21 @@ struct ShopView: View {
             .sheet(item: $weekCostSheet) { sheet in
                 WeekCostSheetView(sheet: sheet)
             }
+            .sheet(isPresented: $isShowingBulkPacks) {
+                if let handoffID = shopping.bulkPacks?.handoffID {
+                    BulkPackSheet(packs: shopping.openBulkPacks, week: shopping.week, handoffID: handoffID)
+                }
+            }
             // A meal kit saved in Household changes every comparison. Watched here rather than
             // on the card, which isn't on screen for every week that has a cost to reload.
             .onChange(of: household?.mealKit) {
                 Task { await shopping.loadWeekCost() }
+            }
+            // The week's newest hand-off is what the packages were counted for, so the bulk
+            // packs follow it: a new send, or a confirmation, can change what's left over.
+            .onChange(of: shopping.weekHandoffs.first?.id, initial: true) { _, handoffID in
+                guard let handoffID else { return }
+                Task { await shopping.loadBulkPacks(handoffID: handoffID) }
             }
             .task(id: household?.weekScope) {
                 guard let household else { return }
@@ -81,7 +95,7 @@ struct ShopView: View {
             if shopping.isConfigured {
                 ShopWeekList(
                     choose: { choice = $0 }, openStoreSetup: { isEditingStore = true },
-                    openWeekCost: { weekCostSheet = $0 })
+                    openWeekCost: { weekCostSheet = $0 }, openBulkPacks: { isShowingBulkPacks = true })
             } else {
                 ShopSetupView()
             }
@@ -115,6 +129,7 @@ private struct ShopWeekList: View {
     let choose: (ProductChoice) -> Void
     let openStoreSetup: () -> Void
     let openWeekCost: (WeekCostSheet) -> Void
+    let openBulkPacks: () -> Void
 
     @Environment(ShoppingStore.self) private var shopping
     @Environment(PlanStore.self) private var plans
@@ -138,6 +153,9 @@ private struct ShopWeekList: View {
             // view, so marking the week ordered is offered at that moment and never assumed.
             if let reminder = shopping.orderReminder, reminder.remind || reminder.ordered {
                 OrderReminderBanner(reminder: reminder)
+            }
+            if shopping.canEdit, !shopping.openBulkPacks.isEmpty {
+                BulkPackBanner(packs: shopping.openBulkPacks, review: openBulkPacks)
             }
             if shopping.canConfirm, let handoff = shopping.openHandoff {
                 OpenHandoffBanner(handoff: handoff) {
@@ -723,6 +741,35 @@ private struct OrderReminderBanner: View {
                 errorMessage = ShopErrors.message(for: error, households: households)
             }
         }
+    }
+}
+
+/// "The smallest pack was bigger than this week needs." Opens the bulk-pack sheet.
+private struct BulkPackBanner: View {
+    let packs: [ShoppingBulkPack]
+    let review: () -> Void
+
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("More Than This Week Needs", systemImage: "arrow.up.bin")
+                    .font(.headline)
+                Text(summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Button("See What to Do", action: review)
+                    .buttonStyle(.bordered)
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private var summary: String {
+        guard let first = packs.first else { return "" }
+        if packs.count == 1 {
+            return first.surplusText + ". " + String(localized: "Cook it again, or freeze the rest.")
+        }
+        return String(localized: "\(packs.count) items came in packs bigger than this week needs.")
     }
 }
 

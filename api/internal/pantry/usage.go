@@ -37,6 +37,10 @@ const (
 	// CycleHouseMade: the household made a batch of a specialty ingredient
 	// (PurchaseHouseMade).
 	CycleHouseMade CycleSource = "house_made"
+	// CycleFrozen: a bulk pack's remainder was portioned, sealed and put in
+	// the freezer (freezer.go). Nothing was bought, so it is not a purchase
+	// source.
+	CycleFrozen CycleSource = "frozen"
 )
 
 // Usage limits and defaults.

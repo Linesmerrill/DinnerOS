@@ -87,11 +87,11 @@ nonisolated enum GroceryReminderPlan {
     /// has.
     ///
     /// A reminder is an instruction to buy something, and it carries no status of its own, so
-    /// an `inPantry` line would read as "buy this" even though the list says "in your pantry"
-    /// and the shared text says "(in pantry)". A `pantryHint` is only the recipe's guess that
-    /// it's a staple the household keeps, so it stays.
+    /// an `inPantry` or `fromFreezer` line would read as "buy this" even though the list says
+    /// otherwise. A `pantryHint` is only the recipe's guess that it's a staple the household
+    /// keeps, so it stays.
     private static func needsBuying(_ item: GroceryItem, checked: Set<String>) -> Bool {
-        item.status != .inPantry && !checked.contains(item.ingredientKey)
+        item.status.needsBuying && !checked.contains(item.ingredientKey)
     }
 
     private static func draft(for item: GroceryItem, aisle: String) -> GroceryReminderDraft {

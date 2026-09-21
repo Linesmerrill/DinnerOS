@@ -61,6 +61,12 @@ const (
 	// StatusPantryHint is flagged by the recipe source as a staple (salt, oil)
 	// but not in the household pantry. Shown as "probably have it".
 	StatusPantryHint Status = "pantryHint"
+	// StatusFromFreezer is covered by a frozen pantry item: a bulk pack an
+	// earlier week portioned and sealed (docs/pantry-usage.md#the-freezer).
+	// The item stays on the list, de-emphasized, so the household is told to
+	// grab it rather than having it silently disappear — and no export buys
+	// it again.
+	StatusFromFreezer Status = "fromFreezer"
 	// StatusSkipped is an ingredient the household chose not to buy. Items with
 	// this status are in List.SkippedItems, never in List.Items, so nothing
 	// asks anyone to buy them; they are reported rather than dropped so the
@@ -147,14 +153,24 @@ type OutPantry interface {
 	Out(ingredientKey string) bool
 }
 
+// FrozenPantry is a Pantry that also knows which ingredients the household
+// has in the freezer. Aggregate gives those lines StatusFromFreezer: still on
+// the list, but grabbed rather than bought.
+type FrozenPantry interface {
+	Pantry
+	Frozen(ingredientKey string) bool
+}
+
 // PantryStock is a household pantry snapshot. Keys match Line.IngredientKey.
 // OutOfStock holds everything the household marked low or out: both mean buy
-// it. Ingredients in neither set (unknown to the pantry) get the engine's
-// default status: pantryHint when every source flags them as staples,
+// it. InFreezer holds what is in stock in the freezer; those lines are neither
+// bought nor hidden. Ingredients in no set (unknown to the pantry) get the
+// engine's default status: pantryHint when every source flags them as staples,
 // otherwise toBuy.
 type PantryStock struct {
 	InStock    map[string]bool
 	OutOfStock map[string]bool
+	InFreezer  map[string]bool
 }
 
 // Has implements Pantry.
@@ -162,6 +178,9 @@ func (p PantryStock) Has(key string) bool { return p.InStock[key] }
 
 // Out implements OutPantry.
 func (p PantryStock) Out(key string) bool { return p.OutOfStock[key] }
+
+// Frozen implements FrozenPantry.
+func (p PantryStock) Frozen(key string) bool { return p.InFreezer[key] }
 
 // Skips reports the ingredients a household chose not to buy. It is consulted
 // after specialty ingredients are applied, so skipping an ingredient a store
@@ -226,6 +245,8 @@ func AggregateWith(selections []RecipeSelection, pantry Pantry, skips Skips) (Li
 	}
 	outPantry, _ := pantry.(OutPantry)
 	isOut := func(key string) bool { return outPantry != nil && outPantry.Out(key) }
+	frozenPantry, _ := pantry.(FrozenPantry)
+	isFrozen := func(key string) bool { return frozenPantry != nil && frozenPantry.Frozen(key) }
 	acc := map[string]*accumulator{}
 
 	for _, sel := range selections {
@@ -303,6 +324,10 @@ func AggregateWith(selections []RecipeSelection, pantry Pantry, skips Skips) (Li
 			item.Status, item.SkipScope = StatusSkipped, skipScope
 		case pantry.Has(a.key):
 			item.Status = StatusInPantry
+		// The freezer beats both the staple hint and buying it again, but
+		// not a fresh item already in the pantry: that one is nearer to hand.
+		case isFrozen(a.key):
+			item.Status = StatusFromFreezer
 		case a.allHinted && !isOut(a.key):
 			item.Status = StatusPantryHint
 		default:

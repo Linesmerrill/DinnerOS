@@ -55,6 +55,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(edit).Patch(plans+"/{week}/entries/{entryId}", h.updateEntry)
 		r.With(edit).Delete(plans+"/{week}/entries/{entryId}", h.deleteEntry)
 		r.With(edit).Put(plans+"/{week}/status", h.setStatus)
+		r.With(view).Get("/households/{householdId}/thaw", h.thawDue)
 	})
 }
 

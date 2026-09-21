@@ -44,6 +44,10 @@ const (
 	// TypeShoppingOrderDue: the household's order day has arrived and nobody
 	// has marked this week's groceries ordered.
 	TypeShoppingOrderDue Type = "shopping.order_due"
+	// TypePantryThaw: a frozen pantry item is needed for one of today's
+	// meals and should move to the fridge
+	// (docs/pantry-usage.md#thaw-reminders).
+	TypePantryThaw Type = "pantry.thaw"
 )
 
 // SubjectKind is the kind of record a notification points at.

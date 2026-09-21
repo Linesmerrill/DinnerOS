@@ -29,6 +29,10 @@ const UnresolvedKeyPrefix = "name:"
 // toBuy even when the recipe source flags them as staples: "running low" means
 // buy more, and a member's status always beats the source's staple hint.
 // Quantities are not compared with what the recipes need.
+//
+// An in-stock item in the freezer goes to InFreezer instead, so its line is
+// fromFreezer: still on the list, so somebody remembers to take it out, but
+// not bought again (freezer.go).
 func (s *Service) GroceryPantry(ctx context.Context, householdID string) (grocery.PantryStock, error) {
 	if householdID == "" {
 		return grocery.PantryStock{}, errHouseholdRequired
@@ -58,12 +62,16 @@ func (s *Service) GroceryPantry(ctx context.Context, householdID string) (grocer
 		}
 	}
 
-	stock := grocery.PantryStock{InStock: map[string]bool{}, OutOfStock: map[string]bool{}}
+	stock := grocery.PantryStock{InStock: map[string]bool{}, OutOfStock: map[string]bool{}, InFreezer: map[string]bool{}}
 	for _, item := range items {
 		var set map[string]bool
 		switch item.Status {
 		case StatusInStock:
-			set = stock.InStock
+			if item.Storage == StorageFreezer {
+				set = stock.InFreezer
+			} else {
+				set = stock.InStock
+			}
 		case StatusLow, StatusOut:
 			set = stock.OutOfStock
 		default:

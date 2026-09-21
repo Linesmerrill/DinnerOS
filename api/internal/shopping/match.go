@@ -171,6 +171,8 @@ func buildProposal(p providers.GroceryProvider, settings Settings, g planning.Gr
 				reason = ExcludedOrdered
 			case selected == nil && item.Status == grocery.StatusInPantry:
 				reason = ExcludedInPantry
+			case selected == nil && item.Status == grocery.StatusFromFreezer:
+				reason = ExcludedInFreezer
 			case selected == nil && item.Status == grocery.StatusPantryHint:
 				reason = ExcludedPantryHint
 			case !hasPref:

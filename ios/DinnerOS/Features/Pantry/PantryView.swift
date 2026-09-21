@@ -7,6 +7,7 @@ import SwiftUI
 /// change and answers `403` if a hidden rule applies.
 struct PantryView: View {
     @Environment(PantryStore.self) private var pantry
+    @Environment(ThawStore.self) private var thaw
     @Environment(HouseholdStore.self) private var households
     @Environment(AuthSession.self) private var session
 
@@ -64,6 +65,7 @@ struct PantryView: View {
                 endSelection()
                 guard let householdID else { return }
                 await pantry.activate(householdID: householdID)
+                await thaw.activate(householdID: householdID)
             }
             .onChange(of: canEdit) { _, canEdit in
                 if !canEdit {
@@ -127,6 +129,9 @@ struct PantryView: View {
             if let refreshError = pantry.refreshError {
                 FormErrorLabel(message: refreshError)
             }
+            // Above the pantry itself: it is today's errand, and it has a deadline.
+            ThawReminderSection(items: thaw.items, dismiss: thaw.dismiss)
+                .selectionDisabled()
             // A list row, not a top safe-area inset: an inset hides the large navigation title.
             if !pantry.items.isEmpty {
                 statusPicker
@@ -151,6 +156,7 @@ struct PantryView: View {
         }
         .refreshable {
             await pantry.refresh()
+            await thaw.load()
         }
         .disabled(isWorking)
         .overlay {
@@ -416,5 +422,6 @@ enum PantryPreviewData {
     .environment(session)
     .environment(HouseholdPreviewData.store(session: session))
     .environment(PantryStore.preview(session: session))
+    .environment(ThawStore.preview(session: session, due: nil))
     .environment(NotificationStore.preview(session: session))
 }

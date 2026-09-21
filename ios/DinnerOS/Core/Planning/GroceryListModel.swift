@@ -619,6 +619,7 @@ nonisolated enum GroceryListText {
         case .pantryHint: text += " " + String(localized: "(pantry staple)")
         case .inPantry where item.isHouseMade: text += " " + String(localized: "(in pantry, house-made)")
         case .inPantry: text += " " + String(localized: "(in pantry)")
+        case .fromFreezer: text += " " + String(localized: "(grab from the freezer)")
         default: break
         }
         for via in item.via {

@@ -15,6 +15,8 @@ struct HouseholdSettingsForm: View {
     /// The API's weekday code, or "" for no reminder.
     @State private var orderDay: String
     @State private var weekStartsOn: PlanDay
+    /// The local hour thaw reminders go out.
+    @State private var thawReminderHour: Int
     /// What a week of meal kits cost, as typed; empty turns the comparison off.
     @State private var mealKitAmount: String
     @State private var mealKitMeals: Int
@@ -30,6 +32,7 @@ struct HouseholdSettingsForm: View {
         _defaultServings = State(initialValue: household.defaultServings)
         _orderDay = State(initialValue: household.orderDay ?? "")
         _weekStartsOn = State(initialValue: household.weekStartsOn)
+        _thawReminderHour = State(initialValue: household.thawReminderHour)
     }
 
     private var trimmedName: String {
@@ -46,7 +49,8 @@ struct HouseholdSettingsForm: View {
             // "" clears the order day; nil would leave it alone.
             orderDay: orderDay == (household.orderDay ?? "") ? nil : orderDay,
             mealKit: mealKitChange ?? .keep,
-            weekStartsOn: weekStartsOn == household.weekStartsOn ? nil : weekStartsOn)
+            weekStartsOn: weekStartsOn == household.weekStartsOn ? nil : weekStartsOn,
+            thawReminderHour: thawReminderHour == household.thawReminderHour ? nil : thawReminderHour)
     }
 
     /// The meal kit comparison as the form has it; `nil` while the amount isn't valid.
@@ -95,6 +99,19 @@ struct HouseholdSettingsForm: View {
             } footer: {
                 Text(
                     "Pick the day you usually order. From that day, Shop reminds the household until someone marks the week ordered, and phones that allow notifications get one that morning. Next week starts fresh."
+                )
+            }
+            Section {
+                Picker("Reminder Time", selection: $thawReminderHour) {
+                    ForEach(Household.thawReminderHours, id: \.self) { hour in
+                        Text(Household.thawHourText(hour)).tag(hour)
+                    }
+                }
+            } header: {
+                Text("Thaw Reminders")
+            } footer: {
+                Text(
+                    "On the day a frozen ingredient is needed, the household gets a reminder to move it to the fridge, with roughly how long it takes to thaw. Pick the time of day that suits your morning."
                 )
             }
             Section {

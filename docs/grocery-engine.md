@@ -31,8 +31,9 @@ The implemented engine differs from the pipeline below in two ways:
   contributed: the largest unit in which the total is at least 1, otherwise the
   smallest contributing unit. The choice never depends on input order.
 - Each item has a status: `inPantry` (in stock in the household pantry),
-  `pantryHint` (every source flagged it as a staple, and the pantry doesn't
-  record it as out), or `toBuy`. See [Pantry](#pantry).
+  `fromFreezer` (in stock in the household freezer), `pantryHint` (every source
+  flagged it as a staple, and the pantry doesn't record it as out), or `toBuy`.
+  See [Pantry](#pantry).
 
 This is the heart of DinnerOS's usefulness. Ingredient **strings are not the
 grocery system**. Every recipe line keeps its raw text *and* a normalized,
@@ -118,13 +119,21 @@ that `Aggregate` takes:
 
 | Pantry item | In `PantryStock` | Grocery status of its lines |
 | --- | --- | --- |
-| `in_stock` | `InStock` | `inPantry` |
+| `in_stock`, kept in the pantry | `InStock` | `inPantry` |
+| `in_stock`, kept in the freezer (`storage: freezer`) | `InFreezer` | `fromFreezer` |
 | `low` | `OutOfStock` | `toBuy`, even if every recipe flags it as a staple: running low means buy more |
 | `out` | `OutOfStock` | `toBuy`, even if every recipe flags it as a staple |
 | not in the pantry | neither | `pantryHint` if every recipe flags it as a staple, otherwise `toBuy` |
 
 - `Aggregate` reads out-of-stock keys through the optional `grocery.OutPantry`
-  interface, so a plain `PantrySet` still works.
+  interface, and frozen keys through `grocery.FrozenPantry`, so a plain
+  `PantrySet` still works.
+- **`fromFreezer` stays on the list.** An `inPantry` line disappears, which is
+  right for a tub of sour cream and wrong for four pounds of pork that somebody
+  has to take out in time. A `fromFreezer` line is shown, de-emphasized ("Grab
+  from the freezer"), and never bought again by an export. It beats the staple
+  hint and `toBuy`, but loses to an `inPantry` item (nearer to hand) and to a
+  skip. See [pantry-usage.md](pantry-usage.md#the-freezer).
 - `isStaple` doesn't change the status. It marks always-have items for the UI
   and for the default staples (`POST .../pantry/staples/defaults`).
 - **Keys.** An item is registered under its catalog ingredient ID and under

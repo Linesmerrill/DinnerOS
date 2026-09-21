@@ -62,6 +62,8 @@ type householdDoc struct {
 	TimeZone        string        `bson:"timeZone"`
 	// OrderDay is absent for a household that never set one.
 	OrderDay string `bson:"orderDay,omitempty"`
+	// ThawReminderHour is absent for a household on the default hour.
+	ThawReminderHour *int `bson:"thawReminderHour,omitempty"`
 	// WeekStartsOn is absent for a household created before the setting
 	// existed, whose weeks start on Monday.
 	WeekStartsOn string `bson:"weekStartsOn,omitempty"`
@@ -85,16 +87,17 @@ func (d householdDoc) toHousehold() Household {
 		kit = &MealKit{WeeklyCents: d.MealKit.WeeklyCents, Meals: d.MealKit.Meals}
 	}
 	return Household{
-		MealKit:         kit,
-		ID:              d.ID.Hex(),
-		Name:            d.Name,
-		DefaultServings: d.DefaultServings,
-		TimeZone:        d.TimeZone,
-		OrderDay:        d.OrderDay,
-		WeekStartsOn:    d.WeekStartsOn,
-		CreatedBy:       d.CreatedBy.Hex(),
-		CreatedAt:       d.CreatedAt.UTC(),
-		UpdatedAt:       d.UpdatedAt.UTC(),
+		MealKit:          kit,
+		ID:               d.ID.Hex(),
+		Name:             d.Name,
+		DefaultServings:  d.DefaultServings,
+		TimeZone:         d.TimeZone,
+		OrderDay:         d.OrderDay,
+		ThawReminderHour: d.ThawReminderHour,
+		WeekStartsOn:     d.WeekStartsOn,
+		CreatedBy:        d.CreatedBy.Hex(),
+		CreatedAt:        d.CreatedAt.UTC(),
+		UpdatedAt:        d.UpdatedAt.UTC(),
 	}
 }
 
@@ -228,6 +231,7 @@ func (s *MongoStore) UpdateHousehold(ctx context.Context, id string, patch House
 		return Household{}, ErrNotFound
 	}
 	set := bson.D{{Key: "updatedAt", Value: at}}
+	unset := bson.D{}
 	if patch.Name != nil {
 		set = append(set, bson.E{Key: "name", Value: *patch.Name})
 	}
@@ -237,6 +241,13 @@ func (s *MongoStore) UpdateHousehold(ctx context.Context, id string, patch House
 	if patch.DefaultServings != nil {
 		set = append(set, bson.E{Key: "defaultServings", Value: *patch.DefaultServings})
 	}
+	if patch.SetThawReminderHour {
+		if patch.ThawReminderHour != nil {
+			set = append(set, bson.E{Key: "thawReminderHour", Value: *patch.ThawReminderHour})
+		} else {
+			unset = append(unset, bson.E{Key: "thawReminderHour", Value: ""})
+		}
+	}
 	if patch.OrderDay != nil {
 		set = append(set, bson.E{Key: "orderDay", Value: *patch.OrderDay})
 	}
@@ -244,12 +255,16 @@ func (s *MongoStore) UpdateHousehold(ctx context.Context, id string, patch House
 		set = append(set, bson.E{Key: "weekStartsOn", Value: *patch.WeekStartsOn})
 	}
 	update := bson.D{}
-	if patch.SetMealKit && patch.MealKit != nil {
-		set = append(set, bson.E{Key: "mealKit", Value: mealKitDoc{WeeklyCents: patch.MealKit.WeeklyCents, Meals: patch.MealKit.Meals}})
+	if patch.SetMealKit {
+		if patch.MealKit != nil {
+			set = append(set, bson.E{Key: "mealKit", Value: mealKitDoc{WeeklyCents: patch.MealKit.WeeklyCents, Meals: patch.MealKit.Meals}})
+		} else {
+			unset = append(unset, bson.E{Key: "mealKit", Value: ""})
+		}
 	}
 	update = append(update, bson.E{Key: "$set", Value: set})
-	if patch.SetMealKit && patch.MealKit == nil {
-		update = append(update, bson.E{Key: "$unset", Value: bson.D{{Key: "mealKit", Value: ""}}})
+	if len(unset) > 0 {
+		update = append(update, bson.E{Key: "$unset", Value: unset})
 	}
 	var doc householdDoc
 	err = s.households.FindOneAndUpdate(ctx,

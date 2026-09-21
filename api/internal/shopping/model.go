@@ -163,6 +163,9 @@ const (
 	// ExcludedPantryHint: recipes flag it as a staple the household probably
 	// has, and the member didn't select it.
 	ExcludedPantryHint ExclusionReason = "pantry_hint"
+	// ExcludedInFreezer: a frozen pantry item covers it (grocery status
+	// fromFreezer), so the week grabs it instead of buying it again.
+	ExcludedInFreezer ExclusionReason = "in_freezer"
 	// ExcludedHouseMade: a house-made specialty batch in the pantry; it
 	// isn't bought.
 	ExcludedHouseMade ExclusionReason = "house_made"

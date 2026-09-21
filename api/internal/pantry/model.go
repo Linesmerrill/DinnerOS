@@ -62,6 +62,33 @@ func (s Status) Valid() bool {
 	return false
 }
 
+// Storage is where in the house an item is kept.
+type Storage string
+
+// Storages. The empty value means StoragePantry: every item written before
+// the freezer existed is on a shelf.
+const (
+	StoragePantry  Storage = "pantry"
+	StorageFreezer Storage = "freezer"
+)
+
+// Valid reports whether s is a known storage.
+func (s Storage) Valid() bool {
+	switch s {
+	case StoragePantry, StorageFreezer:
+		return true
+	}
+	return false
+}
+
+// Or returns s, or StoragePantry when it is empty.
+func (s Storage) Or() Storage {
+	if s == "" {
+		return StoragePantry
+	}
+	return s
+}
+
 // Limits.
 const (
 	// MaxItems bounds a household's pantry so lists can stay unpaginated.
@@ -98,6 +125,22 @@ type Item struct {
 	// ExpiresOn is a calendar date (DateLayout) or empty.
 	ExpiresOn string
 	Note      string
+
+	// Storage is where the item is kept; empty means StoragePantry. A
+	// freezer item covers a grocery line without being bought again
+	// (freezer.go, docs/pantry-usage.md#the-freezer).
+	Storage Storage
+	// FrozenOn is the calendar date (DateLayout) the item went in the
+	// freezer, or empty.
+	FrozenOn string
+	// Portions is how many sealed portions the frozen amount was split
+	// into, or 0 when nobody said. It decides the thaw estimate's weight:
+	// one portion is thawed, not the whole bag.
+	Portions int
+	// FrozenFrom is the handoff line whose bulk pack was sealed, as
+	// "<handoffId>:<lineId>", or empty. Freezing the same line twice is a
+	// no-op, so a retried request never doubles the freezer.
+	FrozenFrom string
 
 	// StatusSource says who set Status: a person (the default for items
 	// written before usage tracking) or the usage estimate.
@@ -193,6 +236,9 @@ type ListQuery struct {
 	// keys containing its normalized form. Literal text, not a pattern.
 	Search string
 	Staple *bool
+	// Storage, when set, keeps only items kept there. "pantry" also matches
+	// items stored before the freezer existed, whose storage is empty.
+	Storage string
 }
 
 // ListFilter is a validated ListQuery as stores receive it.
@@ -200,6 +246,7 @@ type ListFilter struct {
 	Status   Status
 	Category string
 	Staple   *bool
+	Storage  Storage
 	// NamePattern, when set, is a regular expression (metacharacters escaped)
 	// matched case-insensitively against DisplayName. KeyPattern, when set, is
 	// matched case-sensitively against Key. An item matches if either does.
@@ -221,6 +268,12 @@ func (q ListQuery) filter() (ListFilter, error) {
 			return ListFilter{}, err
 		}
 		f.Category = category
+	}
+	if st := strings.TrimSpace(q.Storage); st != "" {
+		f.Storage = Storage(st)
+		if !f.Storage.Valid() {
+			return ListFilter{}, invalid("storage must be pantry or freezer")
+		}
 	}
 	search := strings.TrimSpace(q.Search)
 	if utf8.RuneCountInString(search) > maxSearchLength {

@@ -64,13 +64,17 @@ nonisolated struct PantryItem: Decodable, Hashable, Sendable, Identifiable {
     let unitSize: PantryUnitSize?
     /// What's estimated to be left; `nil` when no amount is recorded.
     let estimate: PantryEstimate?
+    /// Where the item is kept. Responses from before the freezer read as `pantry`.
+    let storage: PantryStorage
+    /// Set only for a freezer item: when it was sealed, and how long a portion takes to thaw.
+    let frozen: PantryFrozen?
 
     init(
         id: String, householdID: String, ingredientID: String?, key: String, displayName: String, category: String,
         quantity: String?, quantityValue: Double?, unit: String?, status: PantryStatus, isStaple: Bool,
         expiresOn: String?, note: String, updatedBy: String, createdAt: Date, updatedAt: Date,
         statusSource: PantryStatusSource = .person, lowThresholdPercent: Int? = nil, unitSize: PantryUnitSize? = nil,
-        estimate: PantryEstimate? = nil
+        estimate: PantryEstimate? = nil, storage: PantryStorage = .pantry, frozen: PantryFrozen? = nil
     ) {
         self.id = id
         self.householdID = householdID
@@ -92,6 +96,8 @@ nonisolated struct PantryItem: Decodable, Hashable, Sendable, Identifiable {
         self.lowThresholdPercent = lowThresholdPercent
         self.unitSize = unitSize
         self.estimate = estimate
+        self.storage = storage
+        self.frozen = frozen
     }
 
     /// The usage estimate, not a person, marked the item low.
@@ -99,12 +105,17 @@ nonisolated struct PantryItem: Decodable, Hashable, Sendable, Identifiable {
         status == .low && statusSource == .estimate
     }
 
+    /// In the freezer, portioned and sealed.
+    var isFrozen: Bool {
+        storage == .freezer
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id
         case householdID = "householdId"
         case ingredientID = "ingredientId"
         case key, displayName, category, quantity, quantityValue, unit, status, isStaple, expiresOn, note, updatedBy,
-            createdAt, updatedAt, statusSource, lowThresholdPercent, unitSize, estimate
+            createdAt, updatedAt, statusSource, lowThresholdPercent, unitSize, estimate, storage, frozen
     }
 
     /// The usage fields are additive, so they're read leniently: a response without them, or
@@ -131,7 +142,9 @@ nonisolated struct PantryItem: Decodable, Hashable, Sendable, Identifiable {
             statusSource: (try? container.decodeIfPresent(PantryStatusSource.self, forKey: .statusSource)) ?? .person,
             lowThresholdPercent: try? container.decodeIfPresent(Int.self, forKey: .lowThresholdPercent),
             unitSize: try? container.decodeIfPresent(PantryUnitSize.self, forKey: .unitSize),
-            estimate: try? container.decodeIfPresent(PantryEstimate.self, forKey: .estimate))
+            estimate: try? container.decodeIfPresent(PantryEstimate.self, forKey: .estimate),
+            storage: (try? container.decodeIfPresent(PantryStorage.self, forKey: .storage)) ?? .pantry,
+            frozen: (try? container.decodeIfPresent(PantryFrozen.self, forKey: .frozen)) ?? nil)
     }
 }
 

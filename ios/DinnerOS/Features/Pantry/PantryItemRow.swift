@@ -14,6 +14,9 @@ struct PantryItemRow: View {
                     if item.isStaple {
                         StapleBadge()
                     }
+                    if item.isFrozen {
+                        FrozenBadge()
+                    }
                 }
                 if let amount = PantryFormat.amount(item) {
                     Text(amount)
@@ -22,6 +25,13 @@ struct PantryItemRow: View {
                 }
                 if let estimate = item.estimate {
                     PantryEstimateLabel(estimate: estimate)
+                }
+                if let frozen = item.frozen {
+                    // The thaw estimate is per portion, which is the number that
+                    // decides when somebody has to go to the freezer.
+                    Text(PantryFormat.thawText(frozen))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 if let expiry = PantryExpiry(expiresOn: item.expiresOn) {
                     Label(expiry.text(), systemImage: expiry.isExpired ? "exclamationmark.circle" : "calendar")
@@ -98,5 +108,18 @@ private struct StapleBadge: View {
 #Preview {
     List(PantryPreviewData.items) { item in
         PantryItemRow(item: item)
+    }
+}
+
+/// Marks an item kept in the freezer.
+struct FrozenBadge: View {
+    var body: some View {
+        Label("Freezer", systemImage: "snowflake")
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .foregroundStyle(.tint)
+            .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+            .accessibilityLabel(Text("In the freezer"))
     }
 }

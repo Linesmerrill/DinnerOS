@@ -22,11 +22,12 @@ const (
 	userBob    = "66e5a1f2c3b4a5d6e7f83003" // plans in hhBob
 	userCat    = "66e5a1f2c3b4a5d6e7f83004" // no household
 
-	recipeTacos = "66e5a1f2c3b4a5d6e7f81001"
-	recipeSoup  = "66e5a1f2c3b4a5d6e7f81002"
-	recipeSalad = "66e5a1f2c3b4a5d6e7f81003"
-	recipeBobs  = "66e5a1f2c3b4a5d6e7f81004"
-	recipeBread = "66e5a1f2c3b4a5d6e7f81005" // a pairing add-on, not a meal
+	recipeTacos   = "66e5a1f2c3b4a5d6e7f81001"
+	recipeSoup    = "66e5a1f2c3b4a5d6e7f81002"
+	recipeSalad   = "66e5a1f2c3b4a5d6e7f81003"
+	recipeBobs    = "66e5a1f2c3b4a5d6e7f81004"
+	recipeBread   = "66e5a1f2c3b4a5d6e7f81005" // a pairing add-on, not a meal
+	recipeChicken = "66e5a1f2c3b4a5d6e7f81006" // uses a freezer ingredient
 
 	ingOnion      = "66e5a1f2c3b4a5d6e7f82001"
 	ingGarlic     = "66e5a1f2c3b4a5d6e7f82002"
@@ -57,6 +58,18 @@ func tacosRecipe() recipes.Recipe {
 			ingredientLine(ingOnion, "Yellow Onion", "produce", false, amt(2, "1/2", "count"), amt(4, "1", "count")),
 			ingredientLine(ingGarlic, "Garlic", "produce", false, amt(2, "2", "clove"), amt(4, "4", "clove")),
 			ingredientLine(ingSourCream, "Sour Cream", "dairy-eggs", false, amt(2, "2", "tbsp"), amt(4, "4", "tbsp")),
+			ingredientLine(ingSalt, "Salt", "spices", true, amt(2, "", ""), amt(4, "", "")),
+		},
+	}
+}
+
+// newChickenRecipe is a meal built around an ingredient the household keeps
+// in the freezer, for the thaw reminder.
+func newChickenRecipe() recipes.Recipe {
+	return recipes.Recipe{
+		ID: recipeChicken, HouseholdID: hhAda, Name: "Roast Chicken Thighs", Servings: []int{2, 4},
+		Ingredients: []recipes.RecipeIngredient{
+			ingredientLine(ingChicken, "Chicken Thighs", "meat-seafood", false, amt(2, "16", "oz"), amt(4, "32", "oz")),
 			ingredientLine(ingSalt, "Salt", "spices", true, amt(2, "", ""), amt(4, "", "")),
 		},
 	}

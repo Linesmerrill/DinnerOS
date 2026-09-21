@@ -97,9 +97,13 @@ nonisolated struct Household: Decodable, Equatable, Sendable, Identifiable {
     /// The day the household's weeks start on. Week keys stay ISO weeks; this decides which
     /// seven dates a key covers (`ISOWeek.startDate(weekStartsOn:)`).
     var weekStartsOn: PlanDay = PlanDay.isoWeekStart
+    /// The local hour thaw reminders go out (0–23). Always set; a household that never
+    /// chose one reads as `Household.defaultThawReminderHour`.
+    var thawReminderHour: Int = Household.defaultThawReminderHour
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, defaultServings, timeZone, orderDay, createdBy, createdAt, updatedAt, mealKit, weekStartsOn
+        case id, name, defaultServings, timeZone, orderDay, createdBy, createdAt, updatedAt, mealKit, weekStartsOn,
+            thawReminderHour
     }
 }
 
@@ -118,7 +122,30 @@ nonisolated extension Household {
             createdAt: try container.decode(Date.self, forKey: .createdAt),
             updatedAt: try container.decode(Date.self, forKey: .updatedAt),
             mealKit: try container.decodeIfPresent(MealKitBaseline.self, forKey: .mealKit),
-            weekStartsOn: container.decodeLenient(PlanDay.self, forKey: .weekStartsOn) ?? PlanDay.isoWeekStart)
+            weekStartsOn: container.decodeLenient(PlanDay.self, forKey: .weekStartsOn) ?? PlanDay.isoWeekStart,
+            thawReminderHour: (try? container.decodeIfPresent(Int.self, forKey: .thawReminderHour))
+                ?? Household.defaultThawReminderHour)
+    }
+
+    /// The hour thaw reminders go out for a household that hasn't chosen one, matching
+    /// `households.DefaultThawReminderHour` on the server.
+    static let defaultThawReminderHour = 6
+
+    /// The hours the picker offers, and the text for each: moving something to the fridge
+    /// is a morning errand, so the list runs across the whole day but reads as a clock.
+    static let thawReminderHours = Array(0...23)
+
+    /// `5` as "5:00 AM", in the reader's own locale.
+    static func thawHourText(_ hour: Int) -> String {
+        var components = DateComponents()
+        components.hour = hour
+        components.minute = 0
+        let calendar = Calendar(identifier: .gregorian)
+        guard let date = calendar.date(from: components) else { return "\(hour):00" }
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter.string(from: date)
     }
 }
 
@@ -245,14 +272,16 @@ nonisolated struct HouseholdChanges: Encodable, Equatable, Sendable {
     /// The day weeks start on. The server moves meals whose dates now fall in a neighbouring
     /// week into that week; `nil` leaves it alone.
     var weekStartsOn: PlanDay? = nil
+    /// The local hour thaw reminders go out (0–23); `nil` leaves it alone.
+    var thawReminderHour: Int? = nil
 
     var isEmpty: Bool {
         name == nil && timeZone == nil && defaultServings == nil && orderDay == nil && mealKit == .keep
-            && weekStartsOn == nil
+            && weekStartsOn == nil && thawReminderHour == nil
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, timeZone, defaultServings, orderDay, mealKit, weekStartsOn
+        case name, timeZone, defaultServings, orderDay, mealKit, weekStartsOn, thawReminderHour
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -263,6 +292,7 @@ nonisolated struct HouseholdChanges: Encodable, Equatable, Sendable {
         try container.encodeIfPresent(orderDay, forKey: .orderDay)
         try container.encodeChange(mealKit, forKey: .mealKit)
         try container.encodeIfPresent(weekStartsOn, forKey: .weekStartsOn)
+        try container.encodeIfPresent(thawReminderHour, forKey: .thawReminderHour)
     }
 }
 

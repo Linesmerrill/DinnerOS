@@ -518,7 +518,10 @@ paths:
           $ref: "#/components/responses/NotFound"
     patch:
       summary: Update household settings
-      description: Partial update; at least one field is required. Requires `household.update`.
+      description: |
+        Partial update of `name`, `timeZone`, `defaultServings`, `orderDay`,
+        `thawReminderHour`, `weekStartsOn`, and `mealKit`; at least one field
+        is required. Requires `household.update`.
       operationId: updateHousehold
       tags: [households]
       security:
@@ -1450,9 +1453,9 @@ paths:
         recipe's authored amounts for the entry's serving size (never scaled).
         Requires `household.view`. Computed on every request, with the
         household pantry deciding statuses (`pantryApplied: true`): in-stock
-        items are `inPantry`, items marked low or out are `toBuy`, and the rest are
-        `pantryHint` when every recipe marks them as staples, otherwise
-        `toBuy`. Amounts whose units can't be combined stay separate.
+        items are `inPantry`, in-stock freezer items are `fromFreezer`, items
+        marked low or out are `toBuy`, and the rest are `pantryHint` when
+        every recipe marks them as staples, otherwise `toBuy`. Amounts whose units can't be combined stay separate.
 
         Specialty ingredients are handled as the household chose first
         (`specialtiesApplied: true`, docs/specialty-ingredients.md): a store
@@ -1474,6 +1477,36 @@ paths:
                 $ref: "#/components/schemas/GroceryList"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/thaw:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: What to thaw today
+      description: |
+        The frozen pantry items today's planned meals need, with the fridge
+        thaw estimate for one portion and the local time to move each one out
+        of the freezer so it is ready at dinner. `date` is today in the
+        household's time zone and `reminderHour` is the hour the household's
+        thaw reminders go out (`thawReminderHour`). An item whose `moveBy`
+        has already passed comes back with `overnight: true`, so the honest
+        advice is "move it now". Requires `household.view`.
+      operationId: getThawDue
+      tags: [plans]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: What to move to the fridge today.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThawDue"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -1652,6 +1685,13 @@ paths:
           description: "`true` for staples only, `false` for the rest."
           schema:
             type: boolean
+        - name: storage
+          in: query
+          description: |
+            Where the item is kept. `pantry` also matches every item stored
+            before the freezer existed.
+          schema:
+            $ref: "#/components/schemas/PantryStorage"
         - name: q
           in: query
           description: |
@@ -1813,6 +1853,58 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/pantry/freezer:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    post:
+      summary: Freeze a bulk pack's remainder
+      description: |
+        Records what a member sealed and put in the freezer. The ingredient's
+        pantry item (added when the pantry doesn't have it yet) is stored with
+        `storage: freezer`, the sealed amount, and how many portions it was
+        split into, and a usage cycle starts from it so cooked meals count it
+        down like any other pantry amount. The response carries the fridge
+        thaw estimate for one portion, so the app can say "about 4 hours"
+        without a second request. Requires `pantry.edit`.
+
+        `quantity` is the real remainder ("16 oz"), not the package size.
+        With `source`, freezing is idempotent per handoff line: sending the
+        same line again returns 200 with `alreadyFrozen: true` and changes
+        nothing. Without `source` it is an ordinary write, so a member can
+        freeze something the app never bought.
+      operationId: freezePantryItem
+      tags: [pantry]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FreezePantryItemRequest"
+      responses:
+        "201":
+          description: The ingredient wasn't in the pantry, so a freezer item was added.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FreezePantryItemResponse"
+        "200":
+          description: Merged into the existing item for this ingredient, or this handoff line was already frozen.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FreezePantryItemResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/PantryConflict"
   /api/v1/households/{householdId}/pantry/staples/defaults:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -2769,6 +2861,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ShoppingHandoff"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/shopping/handoffs/{handoffId}/bulk-packs:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/ShoppingHandoffID"
+    get:
+      summary: List the handoff's bulk packs
+      description: |
+        The handoff's lines whose packages hold far more than the week needs:
+        a line is a bulk pack when at least 50% of what it bought is left
+        over. Each one carries what the week uses of what was bought, whether
+        the remainder is worth sealing (`freezable`) and whether it already
+        is (`frozen`), and the recipes Autopilot suggests planning on the
+        week's still-open days so the surplus is cooked rather than stored.
+        An empty `packs` means the week's packages matched what it needs.
+        Requires `household.view`.
+      operationId: listShoppingBulkPacks
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The handoff's bulk packs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShoppingBulkPackList"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -5118,7 +5242,7 @@ components:
         - shopping.edit
     Household:
       type: object
-      required: [id, name, defaultServings, timeZone, orderDay, weekStartsOn, mealKit, createdBy, createdAt, updatedAt]
+      required: [id, name, defaultServings, timeZone, orderDay, thawReminderHour, weekStartsOn, mealKit, createdBy, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -5141,6 +5265,13 @@ components:
           enum: [mon, tue, wed, thu, fri, sat, sun, null]
           description: The weekday the household means to place its grocery order; null until someone picks one, which leaves order reminders off.
           example: thu
+        thawReminderHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          default: 6
+          description: The local hour the household's thaw reminders go out. Always set; 6 for a household that never chose one.
+          example: 6
         weekStartsOn:
           $ref: "#/components/schemas/WeekStartDay"
         mealKit:
@@ -5216,6 +5347,45 @@ components:
           default: 2
         weekStartsOn:
           $ref: "#/components/schemas/WeekStartDay"
+    UpdateHouseholdRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: Only the fields sent are changed.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Leading and trailing whitespace is trimmed.
+          example: The Lines
+        timeZone:
+          type: string
+          description: IANA time zone name (not an offset, not "Local").
+          example: America/Denver
+        defaultServings:
+          type: integer
+          minimum: 1
+          maximum: 12
+          example: 2
+        orderDay:
+          type: string
+          enum: [mon, tue, wed, thu, fri, sat, sun, ""]
+          description: The weekday the household means to place its grocery order; `""` clears it, which leaves order reminders off.
+          example: thu
+        thawReminderHour:
+          type: [integer, "null"]
+          minimum: 0
+          maximum: 23
+          description: The local hour thaw reminders go out; null returns the household to the default hour of 6.
+          example: 7
+        weekStartsOn:
+          $ref: "#/components/schemas/WeekStartDay"
+        mealKit:
+          description: The meal kit baseline to compare weekly grocery cost with; null clears it.
+          oneOf:
+            - $ref: "#/components/schemas/MealKit"
+            - type: "null"
     WeekStartDay:
       type: string
       enum: [sun, mon, tue, wed, thu, fri, sat]
@@ -5998,13 +6168,17 @@ components:
           description: At least one recipe gave no amount ("salt to taste").
         status:
           type: string
-          enum: [toBuy, inPantry, pantryHint, skipped]
+          enum: [toBuy, inPantry, pantryHint, fromFreezer, skipped]
           description: |
             `inPantry`: in stock in the household pantry. `toBuy`: not at home,
             including anything the pantry marks as low or out. `pantryHint`:
-            every recipe marks it as a staple and the pantry doesn't list it. `skipped`: the household chose
-            not to buy it, and the item is in `skippedItems` rather than in
-            `categories`.
+            every recipe marks it as a staple and the pantry doesn't list it.
+            `fromFreezer`: a frozen pantry item covers it. The line stays on
+            the list, de-emphasized and with a "Grab from the freezer" note,
+            so the household is told to fetch it rather than having it
+            silently disappear, and no handoff buys it again. `skipped`: the
+            household chose not to buy it, and the item is in `skippedItems`
+            rather than in `categories`.
         recipes:
           type: array
           items:
@@ -6088,6 +6262,61 @@ components:
           description: |
             `recipeUnavailable`: the recipe is no longer in the household.
             `servingsUnavailable`: the recipe no longer offers the entry's serving size.
+    ThawDue:
+      type: object
+      required: [date, reminderHour, items]
+      properties:
+        date:
+          type: string
+          format: date
+          description: Today in the household's time zone.
+          example: 2026-09-21
+        reminderHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          description: The household's `thawReminderHour`.
+          example: 6
+        items:
+          type: array
+          description: Never null; empty means nothing frozen is needed today.
+          items:
+            $ref: "#/components/schemas/ThawDueItem"
+    ThawDueItem:
+      type: object
+      required: [itemId, name, recipes, hours, measured, moveBy, overnight, summary]
+      properties:
+        itemId:
+          type: string
+          description: The frozen pantry item.
+        name:
+          type: string
+          example: Chicken Thighs
+        recipes:
+          type: array
+          description: The meals planned today that need it, by name. Never null.
+          items:
+            type: string
+          example: [Sheet Pan Chicken and Peppers]
+        hours:
+          type: integer
+          minimum: 2
+          maximum: 48
+          description: The fridge thaw estimate for one portion.
+          example: 5
+        measured:
+          type: boolean
+          description: False when `hours` is the category default rather than a weight calculation.
+        moveBy:
+          type: string
+          description: The local time to move it to the fridge, as `HH:MM`.
+          example: "13:00"
+        overnight:
+          type: boolean
+          description: True when `moveBy` has already passed today, so the honest advice is "move it now".
+        summary:
+          type: string
+          example: about 5 hours
     GroceryCategoryName:
       type: string
       enum: [produce, meat-seafood, dairy-eggs, bakery, deli, pantry, spices, condiments, frozen, beverages, other]
@@ -6097,9 +6326,18 @@ components:
       description: |
         `in_stock`: grocery lists show the ingredient as `inPantry`. `low`
         and `out`: always `toBuy`, even for a staple.
+    PantryStorage:
+      type: string
+      enum: [pantry, freezer]
+      description: |
+        Where the item is kept. `pantry` is the shelf, and is also what every
+        item stored before the freezer existed reads as. `freezer`: sealed
+        stock that has to be thawed before it is cooked
+        (docs/pantry-usage.md#the-freezer).
+      example: freezer
     PantryItem:
       type: object
-      required: [id, householdId, ingredientId, key, displayName, category, quantity, quantityValue, unit, status, isStaple, expiresOn, note, statusSource, lowThresholdPercent, unitSize, estimate, updatedBy, createdAt, updatedAt]
+      required: [id, householdId, ingredientId, key, displayName, category, quantity, quantityValue, unit, status, isStaple, expiresOn, note, storage, frozen, statusSource, lowThresholdPercent, unitSize, estimate, updatedBy, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -6139,6 +6377,13 @@ components:
           format: date
         note:
           type: string
+        storage:
+          $ref: "#/components/schemas/PantryStorage"
+        frozen:
+          description: How the item was sealed and how long it takes to thaw; null for a shelf item.
+          oneOf:
+            - $ref: "#/components/schemas/PantryFrozen"
+            - type: "null"
         statusSource:
           $ref: "#/components/schemas/PantryStatusSource"
         lowThresholdPercent:
@@ -6164,6 +6409,46 @@ components:
         updatedAt:
           type: string
           format: date-time
+    PantryFrozen:
+      type: object
+      description: A freezer item, with when it went in, how it was portioned, and the thaw estimate for one portion.
+      required: [frozenOn, portions, thaw]
+      properties:
+        frozenOn:
+          type: [string, "null"]
+          format: date
+          description: The day it was sealed; null for an item frozen before the date was recorded.
+          example: 2026-09-17
+        portions:
+          type: integer
+          minimum: 1
+          description: How many sealed portions the amount was split into.
+          example: 2
+        thaw:
+          $ref: "#/components/schemas/PantryThaw"
+    PantryThaw:
+      type: object
+      description: |
+        How long one portion takes to thaw in the fridge: about 5 hours per
+        pound of frozen protein, 2 for bread, deli and dairy, rounded to whole
+        hours and kept between 2 and 48.
+      required: [hours, measured, portionOunces, summary]
+      properties:
+        hours:
+          type: integer
+          minimum: 2
+          maximum: 48
+          example: 5
+        measured:
+          type: boolean
+          description: False when the amount isn't a weight and `hours` is the 8-hour default rather than a calculation.
+        portionOunces:
+          type: [number, "null"]
+          description: The weight of one portion the estimate used; null when unmeasured.
+          example: 16
+        summary:
+          type: string
+          example: about 5 hours
     PantryItemListResponse:
       type: object
       required: [items]
@@ -6234,6 +6519,67 @@ components:
           minimum: 1
           maximum: 100
           description: The item's own low-stock threshold; null returns it to the household's.
+    FreezePantryItemRequest:
+      type: object
+      description: Either `ingredientId` or `name` is required.
+      required: [quantity, unit]
+      properties:
+        ingredientId:
+          type: string
+          description: A catalog ingredient ID from GET /api/v1/ingredients.
+        name:
+          type: string
+          maxLength: 100
+          description: Display name. Defaults to the catalog name when `ingredientId` is given.
+          example: Chicken Thighs
+        quantity:
+          type: string
+          maxLength: 32
+          description: The amount actually sealed, such as `2`, `0.5`, or `1 1/2`. The real remainder, not the package size.
+          example: "32"
+        unit:
+          type: string
+          description: DinnerOS unit code for `quantity` (docs/grocery-engine.md#units).
+          example: oz
+        portions:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 1
+          description: How many sealed portions it was split into; one portion at a time is what the thaw estimate weighs.
+          example: 2
+        note:
+          type: string
+          maxLength: 500
+          example: Two flat bags, labelled
+        source:
+          description: |
+            The handoff line the remainder came from. Sending it makes the
+            freeze idempotent: the same line twice changes nothing.
+          type: object
+          required: [provider, handoffId, lineId]
+          properties:
+            provider:
+              type: string
+              example: walmart
+            handoffId:
+              type: string
+              example: 66e5a1f2c3b4a5d6e7f81204
+            lineId:
+              type: string
+              description: The line's ID within the handoff.
+              example: l3
+    FreezePantryItemResponse:
+      type: object
+      required: [item, alreadyFrozen, thaw]
+      properties:
+        item:
+          $ref: "#/components/schemas/PantryItem"
+        alreadyFrozen:
+          type: boolean
+          description: True when this handoff line had been sealed before and nothing changed.
+        thaw:
+          $ref: "#/components/schemas/PantryThaw"
     BulkPantryStatusRequest:
       type: object
       required: [items]
@@ -9527,8 +9873,11 @@ components:
         unquantified:
           type: boolean
         groceryStatus:
+          # `fromFreezer` appears only when a member deliberately selected that line:
+          # a hand-off built from the week's list leaves frozen-covered lines out
+          # (exclusion reason `in_freezer`).
           type: string
-          enum: [toBuy, inPantry, pantryHint]
+          enum: [toBuy, inPantry, pantryHint, fromFreezer]
         product:
           type: object
           required: [productId, displayName, productUrl, packageSize]
@@ -9711,10 +10060,11 @@ components:
           type: boolean
         groceryStatus:
           type: [string, "null"]
-          enum: [toBuy, inPantry, pantryHint, null]
+          enum: [toBuy, inPantry, pantryHint, fromFreezer, null]
         reason:
           type: string
-          enum: [in_pantry, pantry_hint, house_made, checked_off, excluded, not_selected, no_product, not_on_list, ordered]
+          enum: [in_pantry, pantry_hint, in_freezer, house_made, checked_off, excluded, not_selected, no_product, not_on_list, ordered]
+          description: "`in_freezer`: a frozen pantry item covers it (grocery status `fromFreezer`), so the week grabs it instead of buying it again; its `text` is \"Grab from the freezer\"."
         text:
           type: string
           example: Choose a Walmart product
@@ -9942,6 +10292,129 @@ components:
               usage:
                 type: string
                 enum: [measured, whole_package, unknown]
+    ShoppingBulkPackList:
+      type: object
+      required: [week, provider, handoffId, packs]
+      properties:
+        week:
+          $ref: "#/components/schemas/IsoWeek"
+        provider:
+          type: string
+          example: walmart
+        handoffId:
+          type: string
+          example: 66e5a1f2c3b4a5d6e7f81204
+        packs:
+          type: array
+          description: Never null; empty means the week's packages matched what it needs.
+          items:
+            $ref: "#/components/schemas/ShoppingBulkPack"
+    ShoppingBulkPack:
+      type: object
+      description: One handoff line whose packages hold far more than the week needs.
+      required: [lineId, ingredientKey, ingredientId, name, category, productId, productName, packages, unit, bought, boughtValue, needed, neededValue, surplus, surplusValue, surplusPercent, surplusText, freezable, frozen, suggestions]
+      properties:
+        lineId:
+          type: string
+          description: The line's ID within the handoff.
+          example: l3
+        ingredientKey:
+          type: string
+        ingredientId:
+          type: [string, "null"]
+        name:
+          type: string
+          example: Chicken Thighs
+        category:
+          $ref: "#/components/schemas/GroceryCategoryName"
+        productId:
+          type: string
+          example: "983412770"
+        productName:
+          type: string
+          example: Northfield Farms Boneless Chicken Thighs, 48 oz
+        packages:
+          type: integer
+          minimum: 1
+          description: Packages the handoff buys.
+          example: 1
+        unit:
+          type: string
+          description: The package size's unit; `bought`, `needed`, and `surplus` are in it.
+          example: oz
+        bought:
+          type: string
+          description: Exact amount as "n" or "n/d".
+          example: "48"
+        boughtValue:
+          type: number
+          description: The same amount as a number, for display only.
+          example: 48
+        needed:
+          type: string
+          example: "16"
+        neededValue:
+          type: number
+          example: 16
+        surplus:
+          type: string
+          description: What the week leaves unused, `bought` less `needed`.
+          example: "32"
+        surplusValue:
+          type: number
+          example: 32
+        surplusPercent:
+          type: integer
+          minimum: 50
+          maximum: 100
+          description: Surplus over bought as a whole percent. A line is a bulk pack at 50 or more.
+          example: 66
+        surplusText:
+          type: string
+          description: The comparison ready to show.
+          example: This week uses 16 oz of 48 oz
+        freezable:
+          type: boolean
+          description: The category freezes well, so sealing the remainder is worth offering.
+        frozen:
+          type: boolean
+          description: The remainder is already in the freezer (POST .../pantry/freezer).
+        suggestions:
+          type: array
+          description: Second meals to plan this week that use the surplus, best first. Never null.
+          items:
+            $ref: "#/components/schemas/ShoppingBulkPackSuggestion"
+    ShoppingBulkPackSuggestion:
+      type: object
+      description: A recipe Autopilot suggests planning later in the same week.
+      required: [recipeId, recipeName, imageUrl, day, servings, cookMinutes, reasons]
+      properties:
+        recipeId:
+          type: string
+        recipeName:
+          type: string
+          example: Chicken Thighs with Lemon and Olives
+        imageUrl:
+          type: [string, "null"]
+        day:
+          type: string
+          enum: [mon, tue, wed, thu, fri, sat, sun]
+          description: The week's open day the pick was ranked for.
+          example: thu
+        servings:
+          type: integer
+          minimum: 1
+          example: 2
+        cookMinutes:
+          type: [integer, "null"]
+          description: Null when the recipe doesn't say.
+          example: 35
+        reasons:
+          type: array
+          description: Why it was picked, in the words the app shows.
+          items:
+            type: string
+          example: [Uses the chicken you already bought, Thursday is still open]
     ShoppingSavings:
       type: object
       required: [weeks, totalSavedCents, weeksCounted, mealKit]

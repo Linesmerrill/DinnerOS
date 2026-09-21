@@ -19,6 +19,7 @@ struct DinnerOSApp: App {
                 .environment(dependencies.importReviews)
                 .environment(dependencies.plans)
                 .environment(dependencies.pantry)
+                .environment(dependencies.thaw)
                 .environment(dependencies.specialties)
                 .environment(dependencies.grocerySkips)
                 .environment(dependencies.autopilot)
