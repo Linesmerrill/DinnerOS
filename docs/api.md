@@ -182,6 +182,8 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/slots/{slotId}/swap` `{version}` → proposal | `plan.edit` | 10 | ✅ |
 | POST | `/api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/accept` `{version, excludeSlotIds?}` → `{proposal, plan, added, skipped}` | `plan.edit` | 10 | ✅ |
 | POST | `/api/v1/households/{householdId}/autopilot/weeks/{week}/proposal/reject` `{version}` → proposal | `plan.edit` | 10 | ✅ |
+| GET | `/api/v1/households/{householdId}/autopilot/weeks/{week}/entries/{entryId}/alternatives` `?limit&seen` → `{entryId, week, day, recipe, servings, alternatives, messages}` | `plan.edit` | 11 | ✅ |
+| POST | `/api/v1/households/{householdId}/autopilot/weeks/{week}/entries/{entryId}/swap` `{recipeId}` → `{plan, entry, previousRecipe}` | `plan.edit` | 11 | ✅ |
 | GET | `/api/v1/households/{householdId}/autopilot/learning` → `{modelVersion, interactions, adjustments, resetAt, resetBy}` | `household.view` | 11 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/autopilot/learning` → learning (empty) | `plan.edit` | 11 | ✅ |
 | GET | `/api/v1/shopping/providers` → `{items: [{key, name, affiliateTracked, capabilities}]}` | bearer | 8a | ✅ |

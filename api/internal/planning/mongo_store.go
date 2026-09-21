@@ -369,6 +369,27 @@ func (s *MongoStore) UpdateEntry(ctx context.Context, householdID string, w Week
 	if c.Customizations != nil {
 		setOrUnset("customizations", customizationDocs(*c.Customizations), len(*c.Customizations) == 0)
 	}
+	if c.Recipe != nil {
+		rid, err := mongodb.ParseID(c.Recipe.ID)
+		if err != nil {
+			return Plan{}, ErrRecipeNotFound
+		}
+		set = append(set,
+			bson.E{Key: "entries.$.recipeId", Value: rid},
+			bson.E{Key: "entries.$.recipeName", Value: c.Recipe.Name},
+		)
+		// Origin and the rest are stored only when they aren't the default,
+		// as an added entry stores them.
+		setOrUnset("origin", string(c.Recipe.Origin), c.Recipe.Origin == "" || c.Recipe.Origin == OriginManual)
+		setOrUnset("recipeImageUrl", c.Recipe.ImageURL, c.Recipe.ImageURL == "")
+		setOrUnset("recipeIsAddon", c.Recipe.IsAddon, !c.Recipe.IsAddon)
+		setOrUnset("proposalId", c.Recipe.ProposalID, c.Recipe.ProposalID == "")
+		// The old recipe's customized ingredient lines don't exist on the new
+		// recipe, so the swap drops them.
+		if c.Customizations == nil {
+			unset = append(unset, bson.E{Key: "entries.$.customizations", Value: ""})
+		}
+	}
 	update := bson.D{{Key: "$set", Value: set}}
 	if len(unset) > 0 {
 		update = append(update, bson.E{Key: "$unset", Value: unset})

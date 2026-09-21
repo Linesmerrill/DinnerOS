@@ -487,6 +487,92 @@ rejected        accepted ──▶ draft plan gains entries (origin autopilot, p
 - Accepted entries are ordinary plan entries: members edit or remove them as
   usual, and generating again treats them like manual entries.
 
+## Try something similar
+
+A proposal's swap replaces a *suggestion*. **Try Something Similar** replaces
+a meal already on the plan — "that doesn't sound good, let's try something
+else" — from the meal's own long-press menu on the Menu tab, in Your Meals
+and in By Day.
+
+```text
+planned meal ──▶ GET .../weeks/{week}/entries/{entryId}/alternatives
+                   │  RankMeals for the meal's day, the rest of the week fixed
+                   │  (restrictions, never-include, day cap, variety, cook-time mix)
+                   ▼
+                 re-rank by similarity to the meal being replaced
+                   ▼
+                 3 candidates, each with its reasons ("Also Thai · 30 min")
+                   │  "show me others" → the same call with seen=…
+                   ▼
+                 POST .../weeks/{week}/entries/{entryId}/swap {recipeId}
+                   ▼
+                 the entry keeps its ID, day, and note; the grocery list follows
+```
+
+**Candidates are not a second recommender.** The same `RankMeals` call a
+proposal swap makes ranks the day, with the entry itself left out (so its day
+is open and its own cuisine no longer counts against variety) and every other
+meal in the week fixed. Everything hard — diets, allergens, excluded
+ingredients, cuisines, proteins, tags, never-again meals, the day's time cap —
+is enforced there, once. Excluded outright: the meal itself, everything else
+planned that week, every meal swapped away from that week (`meal.swapped`
+`previousRecipeId`), and whatever the member has already been shown (`seen`).
+
+**Similarity** is a weighted sum over the recipe attributes Autopilot already
+derives (`AttributesOf`), each facet scored 0–1:
+
+| Facet | Weight | Score |
+| --- | --- | --- |
+| Protein | 0.30 | how much the protein sets overlap (Jaccard) |
+| Cuisine | 0.25 | 1 for a shared cuisine, 0.5 for a shared region ("italian" and "greek" are both southern european) |
+| Meal category | 0.20 | 1 for a shared category (two pastas, two curries) |
+| Tags | 0.15 | how much the tag sets overlap (Jaccard) |
+| Cook time | 0.10 | 1 for the same band, then falling with the minutes apart (0 at 45 minutes) |
+
+A facet **neither** recipe describes is unknown rather than different and
+scores 0.5, so a thin library isn't punished for missing data; a facet only
+one side has is a miss. The offer is ordered by `0.65 × similarity + 0.35 ×
+fit`, where fit is the candidate's position in the provider's own ranking
+(its score is unbounded, its rank isn't). A candidate at 0.35 or more reads
+as "similar"; when none reaches that, the best fits for the day are offered
+with the `no_similar` message rather than nothing. `seen_all` means the
+member has been shown everything that fits; `no_alternatives` means the
+library has nothing else for that day.
+
+Reasons come from the facets that matched, at most three ("Also Thai", "Also
+chicken", "30 min"), followed by the provider's own top reason for the day.
+
+**What a swap keeps:** the entry and its ID, the day, the note, and the
+servings (the nearest authored size when the new recipe isn't made in the
+entry's). The rest of the week is untouched. The old recipe's protein
+customizations are dropped — they name ingredient lines the new recipe
+doesn't have. The grocery list is derived from the plan on every read, so it
+follows with no invalidation.
+
+**Refusals:**
+
+| Case | What happens |
+| --- | --- |
+| Finalized week | `409 plan_finalized`, for both the offer and the swap. The grocery list is already out and the household may have shopped; reopening the week to draft is a deliberate act, and the app offers that instead of silently changing what was ordered. |
+| Meal already cooked | `409 meal_cooked`. Swapping would rewrite what the household actually did; remove the entry instead. |
+| Add-on entry | `400`: an add-on goes with its meal, not on its own. |
+| Unscheduled meal | `400`: alternatives are ranked for a day, so give the meal one first. |
+| Without `plan.edit` | `403`, like every other plan change. The iOS menu hides the action. |
+
+**Learning.** Applying a swap records `meal.swapped` (the dropped meal as
+`previousRecipeId`, with `entryId` and no proposal) and `recipe.planned` with
+origin `autopilot`. Learning already reads those as `swappedOut` for the meal
+that was dropped and `accepted` for the one chosen, so "not this one" teaches
+the same thing whether it's said to a suggestion or to the plan.
+
+**Only the household's own library.** Candidates come from the household's
+catalog, never straight from the global recipe catalog: a plan entry must
+point at a recipe the household owns, and adding one from the catalog is a
+copy (`AddFromCatalog`) with its own ID, which changes the library rather than
+just this week. Browsing the catalog is a separate, deliberate flow (**Try
+Something Else** on the Menu tab), and a catalog recipe added there becomes an
+ordinary library recipe that the next ask for alternatives can offer.
+
 ## Add-on pairings
 
 Households pair things with dinner: garlic bread with pasta, crackers with
@@ -660,7 +746,7 @@ Autopilot types are server-observed; clients can't send them.
 | Type | When | Payload |
 | --- | --- | --- |
 | `week.generated` | a proposal is generated | `{proposalId, modelVersion, attempt, requested, planned, unfilled, candidates, coldStart?, replacedProposalId?}` |
-| `meal.swapped` | a slot's meal is swapped (`recipeId` = new meal) | `{proposalId, slotId, day, date, previousRecipeId, modelVersion, swapNumber}` |
+| `meal.swapped` | a slot's meal is swapped, or a planned meal is swapped for something similar (`recipeId` = new meal) | `{proposalId, slotId, day, date, previousRecipeId, modelVersion, swapNumber}`; a planned meal's swap carries `entryId` and no `proposalId` |
 | `week.accepted` | a proposal is accepted | `{proposalId, modelVersion, planned, added, excluded, skipped, swaps}` |
 | `meal.rejected` | a meal was left out when accepting (`recipeId`) | `{proposalId, slotId, day, date, modelVersion}` |
 | `week.rejected` | dismissed, or replaced by generating again | `{proposalId, modelVersion, planned, swaps, reason}` |

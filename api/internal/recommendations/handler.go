@@ -67,6 +67,8 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(edit).Post(base+"/weeks/{week}/proposal/slots/{slotId}/swap", h.swap)
 		r.With(edit).Post(base+"/weeks/{week}/proposal/accept", h.accept)
 		r.With(edit).Post(base+"/weeks/{week}/proposal/reject", h.reject)
+		r.With(edit).Get(base+"/weeks/{week}/entries/{entryId}/alternatives", h.alternatives)
+		r.With(edit).Post(base+"/weeks/{week}/entries/{entryId}/swap", h.swapEntry)
 		r.With(view).Get(base+"/learning", h.getLearning)
 		r.With(edit).Delete(base+"/learning", h.resetLearning)
 		h.mountPairings(r, view, edit)
@@ -971,6 +973,113 @@ func (h *Handler) accept(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
+// AlternativeJSON is one replacement offered for a planned meal.
+type AlternativeJSON struct {
+	Recipe      ProposalRecipeJSON `json:"recipe"`
+	Servings    int                `json:"servings"`
+	CookMinutes *int               `json:"cookMinutes"`
+	TimeBand    string             `json:"timeBand,omitempty"`
+	// Similarity is 0–1: how much the meal resembles the one being replaced.
+	Similarity float64 `json:"similarity"`
+	Score      float64 `json:"score"`
+	// Reasons explain the pick ("Also Thai", "30 min"), for joining with " · ".
+	Reasons []TextJSON `json:"reasons"`
+}
+
+// AlternativesResponse is what a planned meal could be swapped for.
+type AlternativesResponse struct {
+	EntryID      string             `json:"entryId"`
+	Week         string             `json:"week"`
+	Day          string             `json:"day,omitempty"`
+	Recipe       ProposalRecipeJSON `json:"recipe"`
+	Servings     int                `json:"servings"`
+	Alternatives []AlternativeJSON  `json:"alternatives"`
+	Messages     []TextJSON         `json:"messages"`
+	ModelVersion string             `json:"modelVersion,omitempty"`
+}
+
+// SwapEntryRequest chooses the replacement.
+type SwapEntryRequest struct {
+	RecipeID string `json:"recipeId"`
+}
+
+// SwapEntryResponse is the week after a planned meal was replaced.
+type SwapEntryResponse struct {
+	Plan planning.PlanResponse `json:"plan"`
+	// Entry is the swapped entry, with its new recipe; PreviousRecipe is the
+	// meal it replaced.
+	Entry          planning.EntryResponse `json:"entry"`
+	PreviousRecipe ProposalRecipeJSON     `json:"previousRecipe"`
+}
+
+func (h *Handler) alternatives(w http.ResponseWriter, r *http.Request) {
+	opts := AlternativeOptions{}
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil {
+			validationFailed(w, r, "limit must be a number")
+			return
+		}
+		opts.Limit = n
+	}
+	for _, raw := range r.URL.Query()["seen"] {
+		for _, id := range strings.Split(raw, ",") {
+			if id = strings.TrimSpace(id); id != "" {
+				opts.Seen = append(opts.Seen, id)
+			}
+		}
+	}
+	res, err := h.opts.Service.Alternatives(r.Context(), actor(r).HouseholdID, chi.URLParam(r, "week"), chi.URLParam(r, "entryId"), opts)
+	if err != nil {
+		h.writeError(w, r, "list meal alternatives failed", err)
+		return
+	}
+	resp := AlternativesResponse{
+		EntryID: res.EntryID, Week: res.Week, Day: res.Day, Servings: res.Servings,
+		Recipe:       ProposalRecipeJSON{ID: res.RecipeID, Name: res.RecipeName},
+		Alternatives: make([]AlternativeJSON, 0, len(res.Alternatives)),
+		Messages:     make([]TextJSON, 0, len(res.Messages)),
+		ModelVersion: res.ModelVersion,
+	}
+	for _, a := range res.Alternatives {
+		alt := AlternativeJSON{
+			Recipe:   ProposalRecipeJSON{ID: a.RecipeID, Name: a.RecipeName, ImageURL: a.RecipeImageURL},
+			Servings: a.Servings, TimeBand: a.TimeBand, Similarity: a.Similarity, Score: a.Score,
+			Reasons: make([]TextJSON, 0, len(a.Reasons)),
+		}
+		if a.CookMinutes > 0 {
+			minutes := a.CookMinutes
+			alt.CookMinutes = &minutes
+		}
+		for _, reason := range a.Reasons {
+			alt.Reasons = append(alt.Reasons, TextJSON(reason))
+		}
+		resp.Alternatives = append(resp.Alternatives, alt)
+	}
+	for _, m := range res.Messages {
+		resp.Messages = append(resp.Messages, TextJSON(m))
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) swapEntry(w http.ResponseWriter, r *http.Request) {
+	var req SwapEntryRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	m := actor(r)
+	res, err := h.opts.Service.SwapEntry(r.Context(), m.HouseholdID, m.UserID, chi.URLParam(r, "week"), chi.URLParam(r, "entryId"), req.RecipeID)
+	if err != nil {
+		h.writeError(w, r, "swap planned meal failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, SwapEntryResponse{
+		Plan:           planning.NewPlanResponse(res.Plan),
+		Entry:          planning.NewEntryResponse(res.Plan, res.Entry),
+		PreviousRecipe: ProposalRecipeJSON{ID: res.Previous.RecipeID, Name: res.Previous.RecipeName, ImageURL: res.Previous.RecipeImageURL},
+	})
+}
+
 func (h *Handler) reject(w http.ResponseWriter, r *http.Request) {
 	var req versionRequest
 	if !httpx.DecodeJSON(w, r, &req) {
@@ -1028,6 +1137,8 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 		httpx.WriteError(w, r, http.StatusConflict, "proposal_changed", "the proposal changed; reload it and try again")
 	case errors.Is(err, ErrProposalNotPending):
 		httpx.WriteError(w, r, http.StatusConflict, "proposal_not_pending", "the proposal was already accepted or rejected")
+	case errors.Is(err, ErrMealCooked):
+		httpx.WriteError(w, r, http.StatusConflict, "meal_cooked", "you've already cooked this meal; remove it instead")
 	case errors.Is(err, ErrNoAlternative):
 		httpx.WriteError(w, r, http.StatusConflict, "no_alternative", publicMessage(err))
 	case errors.Is(err, ErrNothingToAccept):

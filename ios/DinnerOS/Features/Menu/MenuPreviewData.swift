@@ -208,6 +208,7 @@ struct MenuPreviewEnvironment: ViewModifier {
             .environment(menuStore)
             .environment(MealPlanner(plans: plans, library: library, households: households))
             .environment(PairingsStore.preview(session: session, plans: plans, pairings: pairings))
+            .environment(MealSwapStore.preview(session: session, households: households))
             .environment(AutopilotPreviewData.store(session: session, withProposal: withProposal))
             .environment(EventReporter.preview(session: session))
             .environment(PantryPreviewData.store(session: session))
