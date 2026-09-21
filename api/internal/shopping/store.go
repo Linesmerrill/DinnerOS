@@ -99,6 +99,12 @@ type Store interface {
 	// UnmarkWeekOrdered removes the week's marker, or returns ErrNotFound.
 	UnmarkWeekOrdered(ctx context.Context, householdID, week string) error
 
+	// ListPrepCardStates returns the week's stored prep answers.
+	ListPrepCardStates(ctx context.Context, householdID, week string) ([]PrepCardState, error)
+	// PutPrepCardState creates or replaces one prep card's answer, keyed by
+	// (householdId, week, cardId).
+	PutPrepCardState(ctx context.Context, st PrepCardState) error
+
 	// ListStoreRequests returns the household's store requests, newest first.
 	ListStoreRequests(ctx context.Context, householdID string) ([]StoreRequest, error)
 	// GetStoreRequestByKey returns the household's request for one store.

@@ -277,6 +277,7 @@ func run() error {
 		Catalog:    recipeService,
 		Pantry:     pantryService,
 		Frozen:     pantryService,
+		Freezer:    pantryService,
 		Leftovers:  autopilotService,
 		Plans:      planService,
 		Households: householdService,

@@ -3219,6 +3219,115 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/prep/weeks/{week}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+    get:
+      summary: The week's prep session
+      description: |
+        The guided "you just got the groceries" checklist: one card for every
+        bulk pack the week's hand-offs bought, with what this week's meals
+        need (and which meals, by name and day), what is left over, how many
+        portions to cut the rest into and how long one of those portions
+        takes to thaw. Only each card's answer is stored; the cards
+        themselves are derived on read from the hand-offs and the plan, so a
+        session is resumable and a household that never opens it loses
+        nothing. `state` is `nothing_to_prep` when the week bought nothing
+        oversized, which is an ordinary outcome and not an error. Requires
+        `household.view`.
+      operationId: getPrepSession
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The week's prep checklist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrepSession"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/prep/weeks/{week}/cards/{cardId}/done:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+      - $ref: "#/components/parameters/PrepCardID"
+    post:
+      summary: Finish a prep card
+      description: |
+        Does the card's bookkeeping. The amount this week's meals need is
+        simply not frozen, so it stays in the fridge for them; the surplus is
+        sealed as a frozen pantry item with the chosen portion count, through
+        the same write as `POST .../pantry/freezer` and with the same
+        idempotency - the hand-off line is named, so finishing the same card
+        twice seals nothing twice. A card redone after it froze something
+        keeps the count that is actually in the freezer. `portions` overrides
+        the suggestion; omit it to take the suggested count. Requires
+        `pantry.edit`.
+      operationId: completePrepCard
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompletePrepCardRequest"
+      responses:
+        "200":
+          description: The card and the session around it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrepCardResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/prep/weeks/{week}/cards/{cardId}/skip:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+      - $ref: "#/components/parameters/PrepCardID"
+    post:
+      summary: Skip a prep card
+      description: |
+        Records "not this one". Nothing is written to the pantry, and the
+        card stays in the list so it can still be finished later - a
+        household that skipped the session on Sunday finds it where it left
+        it on Wednesday. Requires `pantry.edit`.
+      operationId: skipPrepCard
+      tags: [shopping]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The card and the session around it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrepCardResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/shopping/catalog:
     get:
       summary: The store catalog
@@ -4492,6 +4601,14 @@ components:
       schema:
         type: string
         example: 66e5a1f2c3b4a5d6e7f80b01
+    PrepCardID:
+      name: cardId
+      in: path
+      required: true
+      description: The card's ID, "<handoffId>:<lineId>".
+      schema:
+        type: string
+        example: 66e5a1f2c3b4a5d6e7f80b01:l3
     StoreRequestID:
       name: requestId
       in: path
@@ -10614,6 +10731,260 @@ components:
           items:
             type: string
           example: [Uses the chicken you already bought, Thursday is still open]
+    PrepSession:
+      type: object
+      description: A week's prep checklist (docs/shopping-providers.md#the-prep-plan).
+      required: [week, state, headline, pending, done, skipped, updatedAt, cards]
+      properties:
+        week:
+          $ref: "#/components/schemas/IsoWeek"
+        state:
+          type: string
+          enum: [nothing_to_prep, ready, finished]
+          description: nothing_to_prep when the week bought nothing oversized, which is an ordinary outcome.
+        headline:
+          type: string
+          description: Ready to show, including when there is nothing to do.
+          example: One thing to put away.
+        pending:
+          type: integer
+        done:
+          type: integer
+        skipped:
+          type: integer
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+          description: When a card was last answered; null for a session nobody has touched.
+        cards:
+          type: array
+          description: Never null; empty means nothing needed prepping.
+          items:
+            $ref: "#/components/schemas/PrepCard"
+    PrepCard:
+      type: object
+      description: One thing to prep, today always a bulk pack.
+      required:
+        [id, kind, handoffId, lineId, status, ingredientKey, ingredientId, name, category,
+         productName, unit, bought, boughtValue, needed, neededValue, surplus, surplusValue,
+         surplusPercent, surplusText, freezable, frozen, instruction, reminder, reminderText,
+         meals, portions, frozenItemId, frozenPortions, answeredBy, answeredAt, suggestions]
+      properties:
+        id:
+          type: string
+          description: The card's ID, "<handoffId>:<lineId>" - the same reference the freezer records.
+          example: 66e5a1f2c3b4a5d6e7f80b01:l3
+        kind:
+          type: string
+          enum: [bulk_pack]
+        handoffId:
+          type: string
+        lineId:
+          type: string
+        status:
+          type: string
+          enum: [pending, done, skipped]
+        ingredientKey:
+          type: string
+        ingredientId:
+          type: [string, "null"]
+        name:
+          type: string
+          example: Pork Loin
+        category:
+          $ref: "#/components/schemas/GroceryCategoryName"
+        productName:
+          type: string
+        unit:
+          type: string
+          example: oz
+        bought:
+          type: string
+          example: "64"
+        boughtValue:
+          type: number
+        needed:
+          type: string
+          example: "10"
+        neededValue:
+          type: number
+        surplus:
+          type: string
+          example: "54"
+        surplusValue:
+          type: number
+        surplusPercent:
+          type: integer
+        surplusText:
+          type: string
+          example: This week uses 10 oz of 64 oz
+        freezable:
+          type: boolean
+        frozen:
+          type: boolean
+        instruction:
+          type: string
+          description: The card's one line of guidance, ready to show.
+          example: Keep 10 oz out for Thursday's Tuscan Pork, then cut the rest into 5 portions of about 10.8 oz and freeze them.
+        reminder:
+          type: string
+          enum: [none, thaw, list]
+          description: |
+            Which reminder the app may promise. `thaw`: a planned meal that
+            needs it is still ahead, so the hourly sweep will remind the
+            household that morning. `list`: nothing is planned for it yet, so
+            the freezer keeps it on the list and the thaw reminder starts the
+            day a meal is. `none`: nothing is being frozen, so nothing is
+            promised. There is no value for "we'll remember".
+        reminderText:
+          type: string
+          description: Empty for `none`.
+        meals:
+          type: array
+          description: The planned meals the reserved amount is for, in day order. Never null.
+          items:
+            $ref: "#/components/schemas/PrepMeal"
+        portions:
+          oneOf:
+            - $ref: "#/components/schemas/PrepPortionPlan"
+            - type: "null"
+          description: Null for a card with nothing to freeze.
+        frozenItemId:
+          type: [string, "null"]
+        frozenPortions:
+          type: integer
+          description: The portion count actually recorded, or 0.
+        answeredBy:
+          type: [string, "null"]
+        answeredAt:
+          type: [string, "null"]
+          format: date-time
+        suggestions:
+          type: array
+          description: Second meals to plan this week that use the surplus, best first. Never null.
+          items:
+            $ref: "#/components/schemas/ShoppingBulkPackSuggestion"
+    PrepMeal:
+      type: object
+      required: [recipeId, recipeName, day, date, past]
+      properties:
+        recipeId:
+          type: string
+        recipeName:
+          type: string
+          example: Tuscan Pork
+        day:
+          type: [string, "null"]
+          enum: [mon, tue, wed, thu, fri, sat, sun, null]
+          description: Null for a meal planned this week with no day yet.
+        date:
+          type: [string, "null"]
+          format: date
+        past:
+          type: boolean
+          description: The meal's date has already gone by in the household's time zone.
+    PrepPortionPlan:
+      type: object
+      description: |
+        The card's portioning advice. One portion is one meal's worth: the
+        week's need for the ingredient divided by the meals that need it,
+        with the surplus measured in those and rounded to the nearest whole
+        one. The thaw estimate always follows the chosen count.
+      required:
+        [unit, reserved, reservedValue, reservedText, surplus, surplusValue, meals,
+         typicalMeal, typicalMealValue, typicalMealText, basis, portions, portionSize,
+         portionSizeValue, portionSizeText, thaw, options]
+      properties:
+        unit:
+          type: string
+          example: oz
+        reserved:
+          type: string
+          description: What this week's meals need, and what therefore stays out of the freezer.
+          example: "10"
+        reservedValue:
+          type: number
+        reservedText:
+          type: string
+          example: 10 oz
+        surplus:
+          type: string
+          example: "54"
+        surplusValue:
+          type: number
+        meals:
+          type: integer
+          description: How many planned meals the reserve is for.
+        typicalMeal:
+          type: string
+          description: One meal's worth of this ingredient, the number the count comes from.
+          example: "10"
+        typicalMealValue:
+          type: number
+        typicalMealText:
+          type: string
+          example: 10 oz
+        basis:
+          type: string
+          enum: [meal, week]
+          description: |
+            `meal`: the week's own meals said how much a dinner takes.
+            `week`: the line records no recipes, so the week's whole need
+            stands in for one meal.
+        portions:
+          type: integer
+          minimum: 1
+        portionSize:
+          type: string
+          example: 54/5
+        portionSizeValue:
+          type: number
+          example: 10.8
+        portionSizeText:
+          type: string
+          example: 10.8 oz
+        thaw:
+          $ref: "#/components/schemas/PantryThaw"
+        options:
+          type: array
+          description: |
+            The counts the app offers, 1..12, each with its own size and thaw
+            estimate, so a stepper can never show a thaw time that belongs to
+            another count. Never null.
+          items:
+            $ref: "#/components/schemas/PrepPortionOption"
+    PrepPortionOption:
+      type: object
+      required: [portions, size, sizeValue, sizeText, thaw]
+      properties:
+        portions:
+          type: integer
+          minimum: 1
+        size:
+          type: string
+        sizeValue:
+          type: number
+        sizeText:
+          type: string
+        thaw:
+          $ref: "#/components/schemas/PantryThaw"
+    PrepCardResult:
+      type: object
+      required: [card, session]
+      properties:
+        card:
+          $ref: "#/components/schemas/PrepCard"
+        session:
+          $ref: "#/components/schemas/PrepSession"
+    CompletePrepCardRequest:
+      type: object
+      properties:
+        portions:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Overrides the suggested count. Omit it to take the suggestion.
+          example: 4
     ShoppingSavings:
       type: object
       required: [weeks, totalSavedCents, weeksCounted, mealKit]

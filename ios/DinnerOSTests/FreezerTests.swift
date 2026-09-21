@@ -3,9 +3,9 @@ import Testing
 
 @testable import DinnerOS
 
-/// The freezer as the app reads it: a pantry item's storage and thaw estimate, the grocery
-/// status that keeps a frozen line visible, and the bulk-pack responses behind the Shop
-/// sheet.
+/// The freezer as the app reads it: a pantry item's storage and thaw estimate, and the
+/// grocery status that keeps a frozen line visible. The prep checklist that fills the
+/// freezer has its own tests (`PrepSessionTests`).
 struct FreezerTests {
     private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
         try JSONCoding.makeDecoder().decode(type, from: Data(json.utf8))
@@ -92,28 +92,7 @@ struct FreezerTests {
         #expect(unreadable.moveByText == "nonsense")
     }
 
-    // MARK: - Bulk packs
-
-    @Test func bulkPacksDecodeWithTheirSuggestions() throws {
-        let list = try decode(ShoppingBulkPackList.self, Self.bulkPacksJSON)
-        #expect(list.handoffID == "66e5a1f2c3b4a5d6e7f89001")
-        #expect(list.packs.count == 2)
-        let pork = try #require(list.packs.first)
-        #expect(pork.surplus == "54")
-        #expect(pork.surplusPercent == 84)
-        #expect(pork.freezable)
-        #expect(!pork.frozen)
-        #expect(pork.suggestions.map(\.recipeName) == ["Pork Fried Rice"])
-        #expect(pork.suggestions.first?.day == "sat")
-    }
-
-    @Test func packsAlreadySealedAreNotAskedAboutAgain() throws {
-        let list = try decode(ShoppingBulkPackList.self, Self.bulkPacksJSON)
-        #expect(list.packs.count == 2)
-        // The second pack's remainder is already in the freezer, so the sheet has nothing
-        // left to offer for it.
-        #expect(list.open.map(\.name) == ["Pork Loin"])
-    }
+    // MARK: - Grocery lines
 
     @Test func anExclusionCanSayTheFreezerCoversIt() throws {
         let line = try decode(ShoppingExcludedLine.self, Self.excludedFrozenJSON)
@@ -141,25 +120,6 @@ struct FreezerTests {
          "items":[{"itemId":"66e5a1f2c3b4a5d6e7f84001","name":"Pork Loin","recipes":["Sheet-Pan Pork"],
                    "hours":5,"measured":true,"moveBy":"13:00","overnight":false,
                    "summary":"Pork Loin is for Sheet-Pan Pork tonight. This usually takes about 5 hours in the fridge."}]}
-        """#
-
-    private static let bulkPacksJSON = #"""
-        {"week":"2026-W38","provider":"walmart","handoffId":"66e5a1f2c3b4a5d6e7f89001",
-         "packs":[
-           {"lineId":"l1","ingredientKey":"name:pork loin","ingredientId":null,"name":"Pork Loin",
-            "category":"meat-seafood","productId":"100000001","productName":"Valley Ridge Pork Loin",
-            "packages":1,"unit":"oz","bought":"64","boughtValue":64,"needed":"10","neededValue":10,
-            "surplus":"54","surplusValue":54,"surplusPercent":84,
-            "surplusText":"This week uses 10 oz of 64 oz","freezable":true,"frozen":false,
-            "suggestions":[{"recipeId":"66e5a1f2c3b4a5d6e7f81006","recipeName":"Pork Fried Rice",
-                            "imageUrl":null,"day":"sat","servings":2,"cookMinutes":25,
-                            "reasons":["Uses what you already bought"]}]},
-           {"lineId":"l2","ingredientKey":"name:ground beef","ingredientId":null,"name":"Ground Beef",
-            "category":"meat-seafood","productId":"100000002","productName":"Valley Ridge Ground Beef",
-            "packages":1,"unit":"oz","bought":"80","boughtValue":80,"needed":"20","neededValue":20,
-            "surplus":"60","surplusValue":60,"surplusPercent":75,
-            "surplusText":"This week uses 20 oz of 80 oz","freezable":true,"frozen":true,
-            "suggestions":[]}]}
         """#
 
     private static let excludedFrozenJSON = #"""

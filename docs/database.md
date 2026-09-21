@@ -366,6 +366,7 @@ Implemented in `internal/shopping` (Phase 8a, [shopping-providers.md](shopping-p
 | `shopping_store_requests` | householdId, key, name, note, requestedBy, requestedAt, updatedAt | **unique** `{householdId, key}`; `{householdId, requestedAt: -1}`; `{key}` |
 | `shopping_order_weeks` | householdId, week, orderedBy, orderedAt | **unique** `{householdId, week}` |
 | `shopping_week_spend` | householdId, week, orderTotalCents, updatedBy, updatedAt | **unique** `{householdId, week}` |
+| `shopping_prep_cards` | householdId, week, cardId (`<handoffId>:<lineId>`), status (`done`/`skipped`), portions, frozenItemId, answeredBy, answeredAt | **unique** `{householdId, week, cardId}` |
 
 - **Settings** are one document per household, replaced with an upsert.
 - **Store requests** are the grocers and delivery services a household asked
@@ -403,6 +404,14 @@ Implemented in `internal/shopping` (Phase 8a, [shopping-providers.md](shopping-p
   with a positional update that doesn't bump `revision` (it doesn't change
   the cart). Confirming a line the pantry doesn't track (`pantry:
   not_tracked`) leaves `purchaseId` absent.
+- **Prep cards** are the one stored fact about a prep session: what the
+  household answered ([the prep plan](shopping-providers.md#the-prep-plan)).
+  Which lines are bulk packs, what the week needs, and how many portions to
+  suggest are all derived on read from the hand-off and the plan, so there is
+  nothing here to drift out of step with either. The unique key is what makes
+  answering a card twice replace rather than duplicate, and a card with no
+  document is simply pending. A `done` card that froze something keeps the
+  frozen item and the count actually sealed; a `skipped` one has neither.
 - **Week spend** is the order total a member entered, one document per
   household and week, replaced with an upsert and deleted when cleared.
   Weekly cost and savings are computed on read from handoffs, purchases,

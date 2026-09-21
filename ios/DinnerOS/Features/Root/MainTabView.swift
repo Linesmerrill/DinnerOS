@@ -64,6 +64,9 @@ struct MainTabView: View {
             shopping.activate(
                 householdID: household.id, timeZone: household.planningTimeZone, weekStartsOn: household.weekStartsOn)
             await shopping.refreshOpenHandoff(presenting: false)
+            // The prep checklist is loaded here, not on the Shop tab, because the Pantry
+            // offers it too: putting the groceries away belongs to both screens.
+            await shopping.loadPrepSession()
         }
         // Hiding controls is a convenience; the API enforces both permissions.
         .onChange(of: households.access, initial: true) { _, access in

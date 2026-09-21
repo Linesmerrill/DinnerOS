@@ -90,13 +90,15 @@ final class ShoppingStore {
 
     /// The shown week's newest handoff with a line still pending, for the banner.
     private(set) var openHandoff: ShoppingHandoff?
-    /// The week's bulk packs, loaded on demand (docs/shopping-providers.md#bulk-packs).
-    private(set) var bulkPacks: ShoppingBulkPackList?
-    private(set) var isLoadingBulkPacks = false
+    /// The shown week's prep checklist (docs/shopping-providers.md#the-prep-plan). Loaded
+    /// whenever the week changes, so both Shop and Pantry can offer it.
+    private(set) var prepSession: PrepSession?
+    private(set) var isLoadingPrep = false
 
-    /// Packs still worth asking about: not already frozen, and not answered this session.
-    var openBulkPacks: [ShoppingBulkPack] {
-        (bulkPacks?.open ?? []).filter { !settledBulkPackIDs.contains($0.lineID) }
+    /// Cards still to answer, in order. Empty when the week needs no prepping, or when the
+    /// household has already been through it.
+    var openPrepCards: [PrepCard] {
+        (prepSession?.cards ?? []).filter { !$0.isAnswered }
     }
     /// The handoff "Did you order these?" asks about. The app shell presents it.
     private(set) var confirmationPrompt: ShoppingHandoff?
@@ -175,8 +177,7 @@ final class ShoppingStore {
     /// pantry and the unread count here.
     @ObservationIgnored var onPantryChanged: (@MainActor () async -> Void)?
 
-    @ObservationIgnored private var settledBulkPackIDs: Set<String> = []
-    @ObservationIgnored private var bulkPackGeneration = 0
+    @ObservationIgnored private var prepGeneration = 0
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let api: ShoppingAPI?
     @ObservationIgnored private let checks: any GroceryCheckStorage
@@ -598,32 +599,63 @@ final class ShoppingStore {
         }
     }
 
-    // MARK: - Bulk packs
+    // MARK: - Prep plan
 
-    /// Loads the handoff's bulk packs — lines whose packages hold far more than the week
-    /// needs — and keeps them for the sheet. A failure is quiet: the packs are an offer,
-    /// and an error about a missing offer helps nobody.
-    func loadBulkPacks(handoffID: String) async {
+    /// Loads the shown week's prep checklist. A failure is quiet: the checklist is an offer,
+    /// and an error about a missing offer helps nobody. An API without the endpoint simply
+    /// leaves `prepSession` nil, so nothing is shown.
+    func loadPrepSession() async {
         guard let api, let householdID else { return }
-        bulkPackGeneration += 1
-        let started = bulkPackGeneration
-        isLoadingBulkPacks = true
-        defer { if started == bulkPackGeneration { isLoadingBulkPacks = false } }
+        prepGeneration += 1
+        let started = prepGeneration
+        let week = week
+        isLoadingPrep = true
+        defer { if started == prepGeneration { isLoadingPrep = false } }
         do {
             let loaded = try await session.authorized { token in
-                try await api.bulkPacks(householdID: householdID, handoffID: handoffID, accessToken: token)
+                try await api.prepSession(householdID: householdID, week: week, accessToken: token)
             }
-            guard started == bulkPackGeneration else { return }
-            bulkPacks = loaded
+            guard started == prepGeneration, week == self.week else { return }
+            prepSession = loaded
         } catch is CancellationError {
         } catch {
-            Self.logger.notice("Bulk packs failed to load: \(Self.describe(error), privacy: .public)")
+            Self.logger.notice("Prep session failed to load: \(Self.describe(error), privacy: .public)")
         }
     }
 
-    /// Hides one pack for the rest of this session, after the member has answered it.
-    func settleBulkPack(_ pack: ShoppingBulkPack) {
-        settledBulkPackIDs.insert(pack.lineID)
+    /// Finishes a card: the week's need stays out of the freezer and the rest is sealed in
+    /// `portions`, or the suggested count when that is nil. The API is idempotent per
+    /// hand-off line, so a retry never seals twice.
+    @discardableResult
+    func completePrepCard(_ card: PrepCard, portions: Int?) async throws -> PrepCard {
+        let (api, householdID) = try requireHousehold()
+        let week = week
+        let result = try await session.authorized { token in
+            try await api.completePrepCard(
+                householdID: householdID, week: week, cardID: card.id, portions: portions, accessToken: token)
+        }
+        apply(result, for: week)
+        // Finishing a card writes a frozen pantry item, so the pantry and the bell follow.
+        await onPantryChanged?()
+        return result.card
+    }
+
+    /// "Not this one." Records nothing in the pantry and leaves the card in the list.
+    @discardableResult
+    func skipPrepCard(_ card: PrepCard) async throws -> PrepCard {
+        let (api, householdID) = try requireHousehold()
+        let week = week
+        let result = try await session.authorized { token in
+            try await api.skipPrepCard(householdID: householdID, week: week, cardID: card.id, accessToken: token)
+        }
+        apply(result, for: week)
+        return result.card
+    }
+
+    private func apply(_ result: PrepCardResult, for week: ISOWeek) {
+        guard week == self.week else { return }
+        prepGeneration += 1
+        prepSession = result.session
     }
 
     /// Asks about the open handoff now, from the banner.
@@ -1082,7 +1114,6 @@ final class ShoppingStore {
         householdID = nil
         userID = nil
         dismissedHandoffIDs = []
-        settledBulkPackIDs = []
         canEdit = false
         canConfirm = false
     }
@@ -1097,9 +1128,9 @@ final class ShoppingStore {
         proposal = nil
         refreshError = nil
         packageOverrides = [:]
-        bulkPackGeneration += 1
-        bulkPacks = nil
-        isLoadingBulkPacks = false
+        prepGeneration += 1
+        prepSession = nil
+        isLoadingPrep = false
         isCreatingHandoff = false
         linkProgress = nil
         linkError = nil
