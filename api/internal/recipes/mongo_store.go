@@ -48,6 +48,13 @@ func Indexes() []mongodb.IndexSet {
 				listIndex("householdId_name", bson.D{{Key: "householdId", Value: 1}, {Key: "name", Value: 1}, {Key: "_id", Value: 1}}),
 				listIndex("householdId_recent", bson.D{{Key: "householdId", Value: 1}, {Key: "lastOrderedWeek", Value: -1}, {Key: "name", Value: 1}, {Key: "_id", Value: 1}}),
 				listIndex("householdId_popular", bson.D{{Key: "householdId", Value: 1}, {Key: "timesOrdered", Value: -1}, {Key: "name", Value: 1}, {Key: "_id", Value: 1}}),
+				{
+					// Marks a page of catalog results as already in the
+					// library, and finds the recipes a backfill still has to
+					// give a catalogKey.
+					Keys:    bson.D{{Key: "householdId", Value: 1}, {Key: "catalogKey", Value: 1}},
+					Options: options.Index().SetName("householdId_catalogKey"),
+				},
 				listIndex("householdId_tags", bson.D{{Key: "householdId", Value: 1}, {Key: "tags", Value: 1}}),
 				listIndex("householdId_cuisines", bson.D{{Key: "householdId", Value: 1}, {Key: "cuisines", Value: 1}}),
 			},
@@ -132,6 +139,8 @@ type recipeDoc struct {
 	OrderWeeks      []string              `bson:"orderWeeks,omitempty"`
 	TimesOrdered    int                   `bson:"timesOrdered"`
 	LastOrderedWeek string                `bson:"lastOrderedWeek"` // "" when never ordered, so it sorts last
+	SharedToCatalog bool                  `bson:"sharedToCatalog,omitempty"`
+	CatalogKey      string                `bson:"catalogKey,omitempty"`
 	CreatedAt       time.Time             `bson:"createdAt"`
 	UpdatedAt       time.Time             `bson:"updatedAt"`
 }
@@ -205,6 +214,7 @@ func newRecipeDoc(r Recipe, householdID, id bson.ObjectID) (recipeDoc, error) {
 		Servings: r.Servings, PrepMinutes: r.PrepMinutes, TotalMinutes: r.TotalMinutes, Difficulty: r.Difficulty,
 		Cuisines: r.Cuisines, Tags: r.Tags, Utensils: r.Utensils, Allergens: r.Allergens,
 		OrderWeeks: r.OrderWeeks, TimesOrdered: r.TimesOrdered, LastOrderedWeek: r.LastOrderedWeek,
+		SharedToCatalog: r.SharedToCatalog, CatalogKey: CatalogKey(r),
 		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}
 	for _, n := range r.Nutrition {
@@ -240,6 +250,7 @@ func (d recipeDoc) toRecipe() Recipe {
 		Servings: nilIfEmpty(d.Servings), PrepMinutes: d.PrepMinutes, TotalMinutes: d.TotalMinutes, Difficulty: d.Difficulty,
 		Cuisines: nilIfEmpty(d.Cuisines), Tags: nilIfEmpty(d.Tags), Utensils: nilIfEmpty(d.Utensils), Allergens: nilIfEmpty(d.Allergens),
 		OrderWeeks: nilIfEmpty(d.OrderWeeks), TimesOrdered: d.TimesOrdered, LastOrderedWeek: d.LastOrderedWeek,
+		SharedToCatalog: d.SharedToCatalog, CatalogKey: d.CatalogKey,
 		CreatedAt: d.CreatedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
 	}
 	for _, n := range d.Nutrition {
@@ -588,6 +599,68 @@ func (s *MongoStore) ExistingRecipeIDs(ctx context.Context, householdID string, 
 		out = append(out, d.ID.Hex())
 	}
 	return out, nil
+}
+
+// LibraryCatalogKeys implements Store with one indexed lookup on
+// {householdId, catalogKey} that reads only IDs and keys.
+func (s *MongoStore) LibraryCatalogKeys(ctx context.Context, householdID string, keys []string) (map[string]string, error) {
+	hid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return nil, nil
+	}
+	wanted := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if k != "" && !slices.Contains(wanted, k) {
+			wanted = append(wanted, k)
+		}
+	}
+	if len(wanted) == 0 {
+		return nil, nil
+	}
+	cur, err := s.recipes.Find(ctx,
+		bson.D{{Key: "householdId", Value: hid}, {Key: "catalogKey", Value: bson.D{{Key: "$in", Value: wanted}}}},
+		options.Find().SetProjection(bson.D{{Key: "_id", Value: 1}, {Key: "catalogKey", Value: 1}}))
+	if err != nil {
+		return nil, translate(err)
+	}
+	var docs []struct {
+		ID         bson.ObjectID `bson:"_id"`
+		CatalogKey string        `bson:"catalogKey"`
+	}
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	out := make(map[string]string, len(docs))
+	for _, d := range docs {
+		// A household can hold two recipes with the same identity only if one
+		// predates catalogKey; the lowest ID wins so the answer is stable.
+		if prev, ok := out[d.CatalogKey]; !ok || d.ID.Hex() < prev {
+			out[d.CatalogKey] = d.ID.Hex()
+		}
+	}
+	return out, nil
+}
+
+// SetRecipeShared implements Store.
+func (s *MongoStore) SetRecipeShared(ctx context.Context, householdID, id string, shared bool, now time.Time) (Recipe, error) {
+	hid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return Recipe{}, ErrNotFound
+	}
+	oid, err := mongodb.ParseID(id)
+	if err != nil {
+		return Recipe{}, ErrNotFound
+	}
+	var doc recipeDoc
+	err = s.recipes.FindOneAndUpdate(ctx,
+		bson.D{{Key: "_id", Value: oid}, {Key: "householdId", Value: hid}},
+		bson.D{{Key: "$set", Value: bson.D{{Key: "sharedToCatalog", Value: shared}, {Key: "updatedAt", Value: now}}}},
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	).Decode(&doc)
+	if err != nil {
+		return Recipe{}, translate(err)
+	}
+	return doc.toRecipe(), nil
 }
 
 // FindIngredientUse implements Store with one aggregation that returns only

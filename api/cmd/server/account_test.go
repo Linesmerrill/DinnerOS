@@ -12,6 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
+	"github.com/Linesmerrill/DinnerOS/api/internal/catalog"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
@@ -55,6 +56,7 @@ var accountDeletionKinds = map[string]collectionKind{
 	recipes.RecipesCollection:              householdData,
 	recipes.ImportReviewsCollection:        householdData,
 	recipes.IngredientsCollection:          global,
+	catalog.RecipesCollection:              global,
 	planning.PlansCollection:               householdData,
 	pantry.ItemsCollection:                 householdData,
 	pantry.PurchasesCollection:             householdData,

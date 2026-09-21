@@ -9,6 +9,7 @@ import (
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/account"
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
+	"github.com/Linesmerrill/DinnerOS/api/internal/catalog"
 	"github.com/Linesmerrill/DinnerOS/api/internal/customize"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/menu"
@@ -30,6 +31,7 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(r chi.Router) {
 		recipes.NewHandler(recipes.HandlerOptions{}).Mount(r)
+		catalog.NewHandler(catalog.HandlerOptions{}).Mount(r)
 		planning.NewHandler(planning.HandlerOptions{}).Mount(r)
 		customize.NewHandler(customize.HandlerOptions{}).Mount(r)
 		pantry.NewHandler(pantry.HandlerOptions{}).Mount(r)
@@ -54,6 +56,13 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 	}
 	for _, want := range []string{
 		"GET /api/v1/households/{householdId}/recipes/{recipeId}",
+		"POST /api/v1/households/{householdId}/recipes",
+		"POST /api/v1/households/{householdId}/recipes/parse",
+		"PUT /api/v1/households/{householdId}/recipes/{recipeId}/sharing",
+		"GET /api/v1/households/{householdId}/discover",
+		"GET /api/v1/households/{householdId}/catalog/recipes",
+		"GET /api/v1/households/{householdId}/catalog/recipes/{catalogRecipeId}",
+		"POST /api/v1/households/{householdId}/catalog/recipes/{catalogRecipeId}/add",
 		"PUT /api/v1/households/{householdId}/recipes/{recipeId}/rating",
 		"DELETE /api/v1/households/{householdId}/recipes/{recipeId}/rating",
 		"GET /api/v1/households/{householdId}/recipes/{recipeId}/ratings",

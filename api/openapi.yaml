@@ -27,6 +27,10 @@ tags:
     description: Inviting people to a household by email, link, or code.
   - name: recipes
     description: A household's recipes and recipe import (docs/import-format.md).
+  - name: catalog
+    description: |
+      The global recipe catalog shared by every household: discovery, search,
+      and adding an entry to a household's own library (docs/api.md#catalog).
   - name: plans
     description: |
       Week plans (ISO weeks such as `2026-W38`) and each week's grocery list.
@@ -835,6 +839,330 @@ paths:
                 $ref: "#/components/schemas/RecipeListResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      summary: Create a recipe from a reviewed draft
+      description: |
+        Saves a draft a member typed, pasted, or had read from a web page
+        (`POST .../recipes/parse`) as one of the household's own recipes.
+        Requires `recipes.edit`.
+
+        The recipe is private to the household. Its source is `manual` when it
+        was typed and `user` when it came from a page; neither is a public
+        source, so it never enters the global catalog unless the household
+        shares it explicitly.
+      operationId: createRecipe
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecipeDraft"
+      responses:
+        "201":
+          description: The stored recipe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recipe"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/recipes/parse:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    post:
+      summary: Parse pasted text or a link into a recipe draft
+      description: |
+        Reads a recipe a member pasted, or fetches and reads a recipe page, and
+        returns a draft for review. Requires `recipes.edit`. **Nothing is
+        stored:** the member edits the draft and sends it back to
+        `POST .../recipes`.
+
+        Exactly one of `text` and `url` is given. A URL is fetched by the
+        server, never by the client: only `http`/`https` public addresses are
+        followed, redirects are bounded, and the page is read as data — it is
+        never executed or treated as instructions. `warnings` says what the
+        parser could not read; they are advice, and the save ignores them.
+      operationId: parseRecipe
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParseRecipeRequest"
+      responses:
+        "200":
+          description: A draft to review.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecipeDraft"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "422":
+          description: |
+            The page could not be fetched or held no readable recipe. The
+            message never repeats anything the page said.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/households/{householdId}/recipes/{recipeId}/sharing:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/RecipeID"
+    put:
+      summary: Share a recipe with the global catalog, or stop
+      description: |
+        The household's opt-in for putting one of its own recipes in the global
+        recipe catalog. Requires `recipes.edit`. It is off until a member turns
+        it on, and it has no effect on a recipe from a public source, which is
+        in the catalog anyway.
+
+        Turning it on publishes the recipe's content — never its ratings,
+        notes, or order history. Turning it off stops future publishing but
+        does not retract the catalog entry, because other households may have
+        copied it into their libraries already.
+      operationId: setRecipeSharing
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecipeSharingRequest"
+      responses:
+        "200":
+          description: The recipe's catalog state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecipeSharing"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/discover:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: Browse catalog recipes the household doesn't have
+      description: |
+        "Try something else": recipes from the global catalog, **excluding**
+        the household's own library, ordered by how well they suit the
+        household. Requires `household.view`.
+
+        Ranking reuses the household's Autopilot taste profile: its
+        restrictions filter, its likes and dislikes score, and `reasons`
+        explains the result. A household with no profile gets a deterministic
+        alphabetical order. For the next page, send `nextCursor` as `cursor`
+        with the same filters.
+      operationId: discoverRecipes
+      tags: [catalog]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cuisine
+          in: query
+          description: Cuisine to match, case-insensitive.
+          schema:
+            type: string
+            maxLength: 100
+        - name: tag
+          in: query
+          description: Tag to match, case-insensitive.
+          schema:
+            type: string
+            maxLength: 100
+        - name: ingredient
+          in: query
+          description: An ingredient the recipe must use, matched on its normalized name.
+          schema:
+            type: string
+            maxLength: 100
+        - name: limit
+          in: query
+          description: Page size. Values above 100 are treated as 100.
+          schema:
+            type: integer
+            minimum: 1
+            default: 24
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of catalog recipes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/catalog/recipes:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: Search the global recipe catalog
+      description: |
+        Searches the whole catalog by name, headline, ingredient, cuisine, and
+        tag. Requires `household.view`. Unlike discovery, it does **not** hide
+        the household's own recipes: those come back with `inLibrary` true and
+        `libraryRecipeId` set.
+
+        With `q` the order is relevance (a MongoDB text index, weighted name >
+        headline > ingredient > cuisine/tag); without it, alphabetical. Paging
+        is by offset, so deep pages are capped.
+      operationId: searchCatalog
+      tags: [catalog]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          description: Free text. Literal words, not a pattern.
+          schema:
+            type: string
+            maxLength: 100
+        - name: cuisine
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+        - name: tag
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+        - name: ingredient
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+        - name: limit
+          in: query
+          description: Page size. Values above 100 are treated as 100.
+          schema:
+            type: integer
+            minimum: 1
+            default: 24
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of catalog recipes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/catalog/recipes/{catalogRecipeId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/CatalogRecipeID"
+    get:
+      summary: Get a catalog recipe
+      description: |
+        One entry of the global catalog, marked against this household's
+        library. Requires `household.view`. It carries recipe content only: no
+        rating, no order history, and no notes, because the entry belongs to no
+        household.
+      operationId: getCatalogRecipe
+      tags: [catalog]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The catalog recipe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogRecipe"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/catalog/recipes/{catalogRecipeId}/add:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/CatalogRecipeID"
+    post:
+      summary: Add a catalog recipe to the household's library
+      description: |
+        Copies the catalog entry into the household's own recipes. Requires
+        `recipes.edit`.
+
+        It is a copy, not a reference: from here on the household owns it and
+        may plan, cook, rate, and edit it, and a later change to the catalog
+        entry leaves it alone. It is idempotent — a household that already has
+        this recipe, however it got it, gets its existing one back untouched
+        and `created` is false.
+      operationId: addCatalogRecipe
+      tags: [catalog]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The household already had this recipe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddToLibraryResponse"
+        "201":
+          description: The recipe was copied into the library.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddToLibraryResponse"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -4596,6 +4924,13 @@ components:
       schema:
         type: string
         example: 66e5a1f2c3b4a5d6e7f80914
+    CatalogRecipeID:
+      name: catalogRecipeId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: 66e5a1f2c3b4a5d6e7f80c01
     RecipeID:
       name: recipeId
       in: path
@@ -5093,6 +5428,16 @@ components:
           type: integer
         lastOrderedWeek:
           type: string
+        sharedToCatalog:
+          type: boolean
+          description: |
+            The household's opt-in for putting this recipe in the global
+            catalog. False by default; see `PUT .../recipes/{recipeId}/sharing`.
+        inCatalog:
+          type: boolean
+          description: |
+            Whether the recipe is in the global catalog, which is also true for
+            a recipe from a public source (HelloFresh and similar).
         createdAt:
           type: string
           format: date-time
@@ -5106,6 +5451,274 @@ components:
           oneOf:
             - $ref: "#/components/schemas/Rating"
             - type: "null"
+    CatalogSummary:
+      type: object
+      description: |
+        A recipe in the global catalog. It carries no rating, order history, or
+        note: the entry belongs to no household.
+      required:
+        [id, catalogKey, source, name, isAddon, cuisines, tags, inLibrary, reasons, calories, proteinGrams, timeBand]
+      properties:
+        id:
+          type: string
+          example: 66e5a1f2c3b4a5d6e7f80c01
+        catalogKey:
+          type: string
+          description: |
+            The catalog's identity for this recipe: `<source>:<sourceRecipeId>`,
+            or `fp:<hash>` of the name and ingredient set when the source gave
+            no identifier. Two households' copies of one meal-kit recipe share
+            it.
+          example: hellofresh:6543
+        source:
+          type: string
+          example: hellofresh
+        name:
+          type: string
+        headline:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+        isAddon:
+          type: boolean
+        totalMinutes:
+          type: integer
+        cookMinutes:
+          type: integer
+          description: max(prepMinutes, totalMinutes); omitted when unknown.
+        timeBand:
+          type: string
+          nullable: true
+          enum: [quick, medium, long, null]
+        calories:
+          type: integer
+          nullable: true
+        proteinGrams:
+          type: integer
+          nullable: true
+        cuisines:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        inLibrary:
+          type: boolean
+          description: Whether the household already has this recipe.
+        libraryRecipeId:
+          type: string
+          description: The household's own copy, when it has one.
+        reasons:
+          type: array
+          description: Why discovery ranked it here. Empty for search.
+          items:
+            type: string
+          example: ["You like Thai"]
+    CatalogListResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CatalogSummary"
+        nextCursor:
+          type: string
+        total:
+          type: integer
+          description: How many entries matched, capped at the paging limit.
+    CatalogRecipe:
+      allOf:
+        - $ref: "#/components/schemas/CatalogSummary"
+        - type: object
+          required: [servings, utensils, allergens, nutritionPerServing, ingredients, steps]
+          properties:
+            description:
+              type: string
+            sourceUrl:
+              type: string
+              format: uri
+            servings:
+              type: array
+              items:
+                type: integer
+            prepMinutes:
+              type: integer
+            difficulty:
+              type: integer
+            utensils:
+              type: array
+              items:
+                type: string
+            allergens:
+              type: array
+              items:
+                type: string
+            nutritionPerServing:
+              type: array
+              items:
+                type: object
+                required: [name, amount, unit]
+                properties:
+                  name:
+                    type: string
+                  amount:
+                    type: number
+                  unit:
+                    type: string
+            ingredients:
+              type: array
+              items:
+                $ref: "#/components/schemas/CatalogRecipeIngredient"
+            steps:
+              type: array
+              items:
+                type: object
+                required: [index, text]
+                properties:
+                  index:
+                    type: integer
+                  text:
+                    type: string
+                  imageUrl:
+                    type: string
+    CatalogRecipeIngredient:
+      type: object
+      description: |
+        An ingredient line on a catalog recipe. Unlike a household recipe's
+        line it carries no grocery category or image: those are read from the
+        global ingredient catalog once the recipe is in a library.
+      required: [ingredientId, name, pantryStaple, amounts]
+      properties:
+        ingredientId:
+          type: string
+        name:
+          type: string
+        pantryStaple:
+          type: boolean
+        amounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/IngredientAmount"
+    AddToLibraryResponse:
+      type: object
+      required: [recipeId, created]
+      properties:
+        recipeId:
+          type: string
+          description: The household's own copy.
+        created:
+          type: boolean
+          description: False when the household already had it, which is not an error.
+    ParseRecipeRequest:
+      type: object
+      description: Exactly one of `text` and `url` is given.
+      properties:
+        text:
+          type: string
+          maxLength: 65536
+        url:
+          type: string
+          format: uri
+    RecipeDraft:
+      type: object
+      description: |
+        A recipe parsed from pasted text or a web page, before anyone saves it,
+        and the body that saves it. A draft is never stored: a person reviews
+        it between the two calls.
+      required: [name, servings, cuisines, tags, ingredients, steps, warnings, fromUrl]
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        headline:
+          type: string
+        description:
+          type: string
+        sourceUrl:
+          type: string
+          description: Dropped unless it is an ordinary public web address.
+        imageUrl:
+          type: string
+          description: Dropped unless it is an ordinary public web address.
+        servings:
+          type: integer
+          minimum: 0
+          maximum: 12
+          description: What the amounts are for; 0 means the source didn't say.
+        prepMinutes:
+          type: integer
+        totalMinutes:
+          type: integer
+        cuisines:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        ingredients:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/RecipeDraftIngredient"
+        steps:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+        warnings:
+          type: array
+          description: What the parser could not read. Advice, not errors; the save ignores them.
+          items:
+            type: string
+        fromUrl:
+          type: boolean
+          description: |
+            True when the draft came from a web page. Sent back unchanged; it
+            decides only whether the saved recipe's source is `user` or
+            `manual`.
+    RecipeDraftIngredient:
+      type: object
+      required: [name, pantryStaple]
+      properties:
+        name:
+          type: string
+        quantity:
+          type: string
+          description: The amount as text (`"1 1/2"`), absent when the line gave none.
+        unit:
+          type: string
+          description: A DinnerOS unit code. Absent when counted or unrecognized.
+        rawText:
+          type: string
+          description: The original line, kept so nothing the parser misread is lost.
+        pantryStaple:
+          type: boolean
+    RecipeSharingRequest:
+      type: object
+      required: [sharedToCatalog]
+      properties:
+        sharedToCatalog:
+          type: boolean
+    RecipeSharing:
+      type: object
+      required: [recipeId, sharedToCatalog, inCatalog]
+      properties:
+        recipeId:
+          type: string
+        sharedToCatalog:
+          type: boolean
+          description: The household's opt-in. False by default.
+        inCatalog:
+          type: boolean
+          description: |
+            Whether the recipe is in the global catalog, which is also true for
+            a recipe from a public source.
     RecipeIngredient:
       type: object
       required: [ingredientId, name, category, pantryStaple, amounts]

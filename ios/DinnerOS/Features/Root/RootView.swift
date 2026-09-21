@@ -8,6 +8,7 @@ struct RootView: View {
     @Environment(ImportReviewStore.self) private var importReviews
     /// Optional so previews needn't supply one.
     @Environment(MealKitImportStore.self) private var mealKitImport: MealKitImportStore?
+    @Environment(DiscoverStore.self) private var discover
     @Environment(PlanStore.self) private var plans
     @Environment(PantryStore.self) private var pantry
     @Environment(ThawStore.self) private var thaw
@@ -40,6 +41,7 @@ struct RootView: View {
                     recipes.reset()
                     importReviews.reset()
                     mealKitImport?.reset()
+                    discover.reset()
                     plans.reset()
                     pantry.reset()
                     thaw.reset()

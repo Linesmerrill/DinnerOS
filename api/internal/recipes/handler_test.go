@@ -57,9 +57,9 @@ func (f fakeAuthorizer) Authorize(_ context.Context, householdID, userID string,
 }
 
 var testAuthorizer = fakeAuthorizer{
-	hhAda + "/" + userAda:    {households.PermHouseholdView, households.PermRecipesImport},
+	hhAda + "/" + userAda:    {households.PermHouseholdView, households.PermRecipesImport, households.PermRecipesEdit},
 	hhAda + "/" + userViewer: {households.PermHouseholdView},
-	hhBob + "/" + userBob:    {households.PermHouseholdView, households.PermRecipesImport},
+	hhBob + "/" + userBob:    {households.PermHouseholdView, households.PermRecipesImport, households.PermRecipesEdit},
 }
 
 // testGlobalBodyLimit stands in for HTTP_MAX_BODY_BYTES; imports must be able

@@ -69,8 +69,16 @@ type Recipe struct {
 	OrderWeeks      []string
 	TimesOrdered    int
 	LastOrderedWeek string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	// SharedToCatalog is the household's opt-in for a recipe from a private
+	// source. It is false by default and has no effect on recipes from a
+	// public source, which are publishable anyway (identity.go).
+	SharedToCatalog bool
+	// CatalogKey is the recipe's identity in the global catalog. The store
+	// derives it from the recipe on every write (CatalogKey); it is never
+	// taken from a caller.
+	CatalogKey string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // CookMinutes is the recipe's effective cook time (see CookMinutes).

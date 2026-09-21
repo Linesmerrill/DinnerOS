@@ -20,6 +20,8 @@ struct MenuView: View {
     @State private var mode: MenuMode = .menu
     @State private var autopilotFlow = WeekAutopilotFlow()
     @State private var isAddingRecipes = false
+    /// The "Add a Recipe" sheet: paste text or a link, review, save.
+    @State private var isAddingOwnRecipe = false
     @State private var actionError: String?
 
     /// Whether the week strip is showing its pills, and where the menu is scrolled to.
@@ -46,6 +48,11 @@ struct MenuView: View {
 
     private var canEdit: Bool {
         households.access?.can(.planEdit) == true
+    }
+
+    /// Typing or pasting a recipe writes to the library, not the plan.
+    private var canAddOwnRecipe: Bool {
+        households.access?.can(.recipesEdit) == true
     }
 
     private var canAddMeals: Bool {
@@ -84,6 +91,15 @@ struct MenuView: View {
             }
             .navigationDestination(for: PastWeeksRoute.self) { _ in
                 PastWeeksView()
+            }
+            .navigationDestination(for: DiscoverRoute.self) { _ in
+                DiscoverView()
+            }
+            .navigationDestination(for: CatalogRecipeRoute.self) { route in
+                CatalogRecipeDetailView(route: route)
+            }
+            .sheet(isPresented: $isAddingOwnRecipe) {
+                AddRecipeView()
             }
             // Also when the week start day changes: the server moved meals between weeks.
             .task(id: household?.weekScope) {
@@ -286,6 +302,16 @@ struct MenuView: View {
                 }
             }
             WeekAutopilotMenuItems(flow: autopilotFlow, canEdit: canEdit)
+            Section {
+                NavigationLink(value: DiscoverRoute()) {
+                    Label("Try Something Else", systemImage: "sparkles")
+                }
+                if canAddOwnRecipe {
+                    Button("Add a Recipe", systemImage: "square.and.pencil") {
+                        isAddingOwnRecipe = true
+                    }
+                }
+            }
             Section {
                 NavigationLink(value: PastWeeksRoute()) {
                     Label("Past Weeks", systemImage: "clock.arrow.circlepath")

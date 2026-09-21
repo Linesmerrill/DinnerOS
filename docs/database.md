@@ -87,7 +87,7 @@ Implemented in Phase 4 (`internal/recipes`; categories and units from `internal/
 
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `recipes` | householdId, source, sourceRecipeId, sourceAliases[], sourceUrl, name, headline, description, imageUrl, isAddon, servings[], prepMinutes, totalMinutes, difficulty, cuisines[], tags[], utensils[], allergens[], nutritionPerServing[], ingredients[] (ingredientId, name, pantryStaple, amounts[]: servings, quantity, quantityValue, unit, sourceUnit, rawText), steps[], orderWeeks[], timesOrdered, lastOrderedWeek, createdAt, updatedAt | **unique** `{householdId, source, sourceRecipeId}`; `{householdId, source, sourceAliases}`; with collation `en`/strength 2: `{householdId, name, _id}`, `{householdId, lastOrderedWeek: -1, name, _id}`, `{householdId, timesOrdered: -1, name, _id}`, `{householdId, tags}`, `{householdId, cuisines}` |
+| `recipes` | householdId, source, sourceRecipeId, sourceAliases[], sourceUrl, name, headline, description, imageUrl, isAddon, servings[], prepMinutes, totalMinutes, difficulty, cuisines[], tags[], utensils[], allergens[], nutritionPerServing[], ingredients[] (ingredientId, name, pantryStaple, amounts[]: servings, quantity, quantityValue, unit, sourceUnit, rawText), steps[], orderWeeks[], timesOrdered, lastOrderedWeek, sharedToCatalog, catalogKey, createdAt, updatedAt | **unique** `{householdId, source, sourceRecipeId}`; `{householdId, source, sourceAliases}`; `{householdId, catalogKey}`; with collation `en`/strength 2: `{householdId, name, _id}`, `{householdId, lastOrderedWeek: -1, name, _id}`, `{householdId, timesOrdered: -1, name, _id}`, `{householdId, tags}`, `{householdId, cuisines}` |
 | `ingredients` | key, name, category, categoryConfident, sourceRefs[] (source, sourceIngredientId), imageUrl, createdAt, updatedAt | **unique** `{key}`; `{sourceRefs.source, sourceRefs.sourceIngredientId}`; `{categoryConfident, key}` |
 | `import_reviews` | householdId, key, source, sourceRecipeId, recipeName, field, value, reason, status (`open`), createdAt, updatedAt | **unique** `{householdId, key}`; `{householdId, status, createdAt}` |
 
@@ -113,6 +113,12 @@ descriptions. It stores nothing and needs no collection or index of its own
 A recipe's ingredient lines and steps are small and bounded, so they are
 embedded. Embedded ingredient lines *reference* catalog `ingredients` by ID; the
 category is read from the catalog, not copied onto the recipe.
+
+`catalogKey` is the recipe's identity in the global recipe catalog
+(`recipe_catalog`, below). The store derives it on every write and never takes
+it from a caller, so re-saving a recipe unchanged is how a backfill fills it in
+(`cmd/publishcatalog`). `sharedToCatalog` is the household's opt-in for
+publishing a recipe of its own; it is absent until a member turns it on.
 
 - **Exact quantities.** `quantity` is a reduced fraction string (`"3/4"`, `"2"`)
   and is authoritative. `quantityValue` is the same amount as a double, for
@@ -151,8 +157,57 @@ category is read from the catalog, not copied onto the recipe.
   `$setOnInsert`, so an item's status is never reset. No endpoint reads them yet.
 
 Ownership: recipes imported from our personal history belong to a household
-(`householdId`). A future shared or partner catalog will use an explicit
-`catalogId` rather than overloading `householdId`.
+(`householdId`). The global catalog does not overload `householdId`; it is a
+separate collection with no household in it at all.
+
+### Global recipe catalog
+
+Implemented in Phase 4a (`internal/catalog`; see
+[architecture.md](architecture.md#decision-log) #520–#523).
+
+| Collection | Key fields | Indexes |
+| --- | --- | --- |
+| `recipe_catalog` | catalogKey, contentHash, source, sourceRecipeId, sourceUrl, name, nameKey, headline, description, imageUrl, isAddon, servings[], prepMinutes, totalMinutes, difficulty, cuisines[], tags[], utensils[], allergens[], nutritionPerServing[], ingredients[] (ingredientId, name, pantryStaple, amounts[]), steps[], ingredientNames[], ingredientKeys[], cuisineKeys[], tagKeys[], firstPublishedAt, updatedAt | **unique** `{catalogKey}`; **text** `{name, headline, ingredientNames, cuisines, tags}` (weights 10/4/3/2/2, name `catalog_text`); `{nameKey, _id}`; `{cuisineKeys}`; `{tagKeys}`; `{ingredientKeys}` |
+
+- **There is no `householdId` here, and no `orderWeeks`, `timesOrdered`,
+  `lastOrderedWeek`, `sharedToCatalog`, rating, or note.** The document type
+  in `internal/catalog` is spelled out field by field rather than shared with
+  `internal/recipes`, so a later change to a household recipe cannot carry
+  household data into a collection every household reads. An integration test
+  asserts a stored document has none of those fields.
+- **`catalogKey` is the identity of "the same recipe"**:
+  `<source>:<sourceRecipeId>` when the source has its own identifier, and
+  otherwise `fp:<sha256 prefix>` of the normalized name plus the sorted,
+  de-duplicated normalized ingredient names. Amounts, servings, and steps are
+  left out of the fingerprint, so a household that halved the quantities still
+  matches. The unique index is what collapses two households' copies of one
+  HelloFresh meal into one entry.
+- **Publishing is an upsert on `catalogKey`** whose update is an aggregation
+  pipeline, so `firstPublishedAt` survives and `updatedAt` only moves when
+  `contentHash` changed. Re-publishing unchanged content writes nothing, which
+  makes an import's publish step free on a re-run.
+- **No collation anywhere.** A `$text` query cannot use one, and the same
+  listing has to work with and without a search term, so the catalog stores
+  folded copies of what it filters and sorts on (`nameKey`, `cuisineKeys`,
+  `tagKeys`, `ingredientKeys`) and compares them exactly. One ordering, one set
+  of indexes, and no rule about which query may use which.
+- **Why a Mongo text index and not something else.** Search has to cover name,
+  ingredient, and cuisine/tag in one query, rank the results, and stem
+  ("tomatoes" finding "tomato"). A text index does all three inside the
+  database we already run, with no extra service and nothing to keep in sync;
+  Atlas Search is not on the free tier and would be an external dependency for
+  a catalog of a few thousand entries. The cost is Mongo's one-text-index-per-
+  collection rule and no collation on it, which the folded fields work around.
+  `ingredientNames` is denormalized onto the document purely so the text index
+  can weight an ingredient match below a name match.
+- **Paging.** Search pages by offset (capped at 1000) because relevance order
+  is not a stable key to page from. Discovery reads a bounded prefix of the
+  catalog (2000 entries), ranks it in memory against the household's Autopilot
+  profile, and pages by offset over that deterministic order. Past a few
+  thousand entries, discovery becomes a stored, periodically recomputed
+  ranking instead.
+- **Account deletion never touches this collection** (`global` in
+  `cmd/server/account_test.go`), because nothing in it belongs to a household.
 
 ### Week plans
 

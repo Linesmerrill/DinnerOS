@@ -117,6 +117,13 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | DELETE | `/api/v1/households/{householdId}/meal-kit/{source}/link` → `204` (deletes the stored tokens and cancels every run) | `recipes.import` | — | ✅ |
 | POST | `/api/v1/households/{householdId}/meal-kit/{source}/imports` → `202` job | `recipes.import` | — | ✅ |
 | GET | `/api/v1/households/{householdId}/meal-kit/{source}/imports` → `{items}`, newest first | `recipes.import` | — | ✅ |
+| POST | `/api/v1/households/{householdId}/recipes/parse` `{text}` or `{url}` → recipe draft (nothing is stored) | `recipes.edit` | 4a | ✅ |
+| POST | `/api/v1/households/{householdId}/recipes` reviewed draft → `201` recipe (private to the household) | `recipes.edit` | 4a | ✅ |
+| PUT | `/api/v1/households/{householdId}/recipes/{recipeId}/sharing` `{sharedToCatalog}` → `{recipeId, sharedToCatalog, inCatalog}` | `recipes.edit` | 4a | ✅ |
+| GET | `/api/v1/households/{householdId}/discover` `?cuisine&tag&ingredient&limit&cursor` → `{items, nextCursor, total}`, excluding the household's own recipes | `household.view` | 4a | ✅ |
+| GET | `/api/v1/households/{householdId}/catalog/recipes` `?q&cuisine&tag&ingredient&limit&cursor` → `{items, nextCursor, total}`, the household's own marked `inLibrary` | `household.view` | 4a | ✅ |
+| GET | `/api/v1/households/{householdId}/catalog/recipes/{catalogRecipeId}` → catalog recipe | `household.view` | 4a | ✅ |
+| POST | `/api/v1/households/{householdId}/catalog/recipes/{catalogRecipeId}/add` → `201 {recipeId, created}` (`200` when it was already there) | `recipes.edit` | 4a | ✅ |
 | GET | `/api/v1/households/{householdId}/plans` `?from&to` → `{items: [{week, startDate, status, entryCount, updatedAt}]}` | `household.view` | 6 | ✅ |
 | GET | `/api/v1/households/{householdId}/plans/{week}` → plan (an empty draft if unplanned) | `household.view` | 6 | ✅ |
 | POST | `/api/v1/households/{householdId}/plans/{week}/entries` `{recipeId, day?, servings, note?}` → `201 {entry, plan}` | `plan.edit` | 6 | ✅ |
@@ -534,6 +541,113 @@ The worker is polite by policy, not by accident: one request at a time, at
 least 2.5 s apart with jitter, retries with backoff on 429 and 5xx, a hard stop
 on 403, an honest `User-Agent`, and a real per-run cap
 ([meal-kit-import.md](meal-kit-import.md#being-a-good-citizen)).
+### Add a recipe by hand
+
+Two calls, with a person in between.
+
+`POST /api/v1/households/{householdId}/recipes/parse` takes `{"text": "…"}` or
+`{"url": "…"}` and returns a **draft**: a flat, forgiving shape with one amount
+per ingredient, plain-text steps, and `warnings` saying what it could not read.
+It stores nothing. The member edits the draft and sends it to
+`POST /api/v1/households/{householdId}/recipes`, which saves it as one of the
+household's recipes and returns the recipe.
+
+Both require `recipes.edit`.
+
+- **Text** is split on `Ingredients` / `Steps`-style headings, then line by
+  line: a leading amount (`1 1/2`, `½`, `0.5`), a unit word it recognizes, and
+  the rest as the name, with the original line kept in `rawText`. Anything it
+  cannot place becomes a warning rather than an error, because the next step is
+  a person fixing it.
+- **A URL is fetched by the server**, never by the client, and only if it is an
+  ordinary public `http(s)` address: no credentials in the URL, no loopback,
+  private, link-local, or carrier-grade-NAT address (checked on the resolved IP
+  at dial time, so a name that resolves into one is refused too), at most 3
+  redirects, 2 MB, and 8 seconds. The page is scanned for a schema.org `Recipe`
+  in a JSON-LD block; a page without one answers `422 fetch_failed` with "copy
+  the text and paste it instead". Error messages never repeat anything the page
+  said.
+- **The page is data.** Nothing in it selects a code path, and the recipe lands
+  in the household's library, never in the global catalog.
+- The saved recipe's `source` is `manual` (typed) or `user` (from a page).
+  Drafts run through the same importer as a file import, so they get the same
+  validation, unit codes, and ingredient-catalog resolution.
+
+### Sharing a recipe with the catalog
+
+`PUT /api/v1/households/{householdId}/recipes/{recipeId}/sharing`
+`{"sharedToCatalog": true|false}` (`recipes.edit`) is the household's opt-in for
+putting one of its *own* recipes in the global catalog. It is off by default and
+has no effect on a recipe from a public source, which is in the catalog anyway;
+`inCatalog` in the response (and on the recipe) says which is true.
+
+Sharing publishes the recipe's content. It never publishes ratings, notes, or
+order history — the catalog has nowhere to put them. Un-sharing stops future
+publishing but does not retract the entry, because other households may have
+copied it into their libraries already.
+
+## Catalog
+
+The **global recipe catalog** is one entry per distinct recipe, shared by every
+household. It holds recipe content and nothing else: no household, no order
+history, no ratings, no notes ([database.md](database.md#global-recipe-catalog),
+[architecture.md](architecture.md#decision-log) #520–#523).
+
+Entries arrive from imports of a known public source (HelloFresh and similar
+meal-kit services) and from recipes a household explicitly shared. Two
+households' copies of one meal-kit recipe collapse into one entry, keyed by
+`catalogKey`: `<source>:<sourceRecipeId>`, or a fingerprint of the name and
+ingredient set when the source has no identifier of its own.
+
+The routes are household-scoped even though the data is global, because the
+only useful way to read a catalog is marked against a library.
+
+### Try something else
+
+`GET /api/v1/households/{householdId}/discover` (`household.view`) returns
+catalog recipes the household does **not** already have, ordered by how well
+they suit it. `?cuisine`, `?tag`, and `?ingredient` narrow it; `?limit`
+(default 24, max 100) and `?cursor` page it, and `total` is how many matched.
+
+Ranking reuses the household's Autopilot taste profile rather than inventing a
+second recommender: restrictions (allergens, diets, excluded ingredients,
+cuisines, proteins, tags, no-spicy) filter the set, likes and dislikes score it,
+and `reasons` puts the top few into words ("You like Thai"). A household with no
+profile — a new one, or one that has never opened Autopilot — gets every score
+at 0, which is a deterministic alphabetical page rather than nothing.
+
+Results here always have `inLibrary: false`; that is what the screen is for.
+
+### Search the catalog
+
+`GET /api/v1/households/{householdId}/catalog/recipes` (`household.view`)
+searches the whole catalog by name, headline, ingredient, cuisine, and tag.
+Unlike discovery it does **not** hide the household's own recipes: those come
+back with `inLibrary: true` and `libraryRecipeId`, because "you already have
+this" is an answer.
+
+`?q` is free text (literal words, not a pattern) and orders by relevance;
+without it the order is alphabetical. `?cuisine`, `?tag`, and `?ingredient`
+narrow exactly and case-insensitively. Paging is by offset and capped, because
+relevance order is not a stable key to page from.
+
+`GET /api/v1/households/{householdId}/catalog/recipes/{catalogRecipeId}`
+returns one entry in full, marked the same way. Its ingredient lines carry no
+grocery category: that is read from the ingredient catalog once the recipe is in
+a library.
+
+### Add to the library
+
+`POST /api/v1/households/{householdId}/catalog/recipes/{catalogRecipeId}/add`
+(`recipes.edit`) copies the entry into the household's own recipes and returns
+`{recipeId, created}` — `201` when it created the copy, `200` when the household
+already had it.
+
+It is a **copy**, not a reference. From then on the household owns the recipe:
+it plans, cooks, rates, and edits its own document, and a later change to the
+catalog entry leaves it alone. It is idempotent, and "already had it" includes a
+recipe the household imported itself before the catalog existed, because both
+resolve to the same `catalogKey`.
 
 ## Plans
 
