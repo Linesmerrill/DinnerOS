@@ -208,6 +208,9 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | DELETE | `/api/v1/households/{householdId}/shopping/requests/{requestId}` → `204` | `household.view` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/weeks/{week}/order` → `{week, orderDay, dueOn, due, remind, ordered, orderedBy, orderedAt}` | `household.view` | 8a | ✅ |
 | PUT | `/api/v1/households/{householdId}/shopping/weeks/{week}/order` `{ordered}` → order reminder | `shopping.edit` | 8a | ✅ |
+| GET | `/api/v1/households/{householdId}/prep/weeks/{week}` → `{week, state, headline, pending, done, skipped, updatedAt, cards}` | `household.view` | 8a | ✅ |
+| POST | `/api/v1/households/{householdId}/prep/weeks/{week}/cards/{cardId}/done` `{portions?}` → `{card, session}` | `pantry.edit` | 8a | ✅ |
+| POST | `/api/v1/households/{householdId}/prep/weeks/{week}/cards/{cardId}/skip` → `{card, session}` | `pantry.edit` | 8a | ✅ |
 | … | saved grocery lists, product search, other providers | | 8 | planned |
 
 Household-scoped routes return `404 not_found` to anyone who isn't a member,
@@ -2081,6 +2084,92 @@ back and the reminder returns.
   because a mis-tap must not leave a household un-remindable for the week.
 - Marking is idempotent and keeps the first member and time. It also marks the
   caller's copy of the `shopping.order_due` notification read.
+
+### The prep plan
+
+The guided "you just got the groceries" checklist: one card per bulk pack the
+week bought, with what to keep out, how many portions to cut the rest into, and
+what finishing the card records
+([shopping-providers.md](shopping-providers.md#the-prep-plan)).
+
+`GET .../prep/weeks/{week}` (`household.view`):
+
+```json
+{
+  "week": "2026-W38", "state": "ready", "headline": "One thing to put away.",
+  "pending": 1, "done": 0, "skipped": 0, "updatedAt": null,
+  "cards": [{
+    "id": "66e5a1f2c3b4a5d6e7f89001:l2", "kind": "bulk_pack",
+    "handoffId": "66e5a1f2c3b4a5d6e7f89001", "lineId": "l2", "status": "pending",
+    "ingredientKey": "name:pork loin", "ingredientId": null, "name": "Pork Loin",
+    "category": "meat-seafood", "productName": "Valley Ridge Pork Loin", "unit": "oz",
+    "bought": "64", "boughtValue": 64, "needed": "10", "neededValue": 10,
+    "surplus": "54", "surplusValue": 54, "surplusPercent": 84,
+    "surplusText": "This week uses 10 oz of 64 oz",
+    "freezable": true, "frozen": false,
+    "instruction": "Keep 10 oz out for Thursday's Tuscan Pork, then cut the rest into 5 portions of about 10.8 oz and freeze them.",
+    "reminder": "thaw",
+    "reminderText": "We'll remind you the morning of any day a planned meal needs it — one portion takes about 3 hours in the fridge. Thursday is the next one.",
+    "meals": [{"recipeId": "…", "recipeName": "Tuscan Pork", "day": "thu", "date": "2026-09-17", "past": false}],
+    "portions": {
+      "unit": "oz", "reserved": "10", "reservedValue": 10, "reservedText": "10 oz",
+      "surplus": "54", "surplusValue": 54, "meals": 1,
+      "typicalMeal": "10", "typicalMealValue": 10, "typicalMealText": "10 oz", "basis": "meal",
+      "portions": 5, "portionSize": "54/5", "portionSizeValue": 10.8, "portionSizeText": "10.8 oz",
+      "thaw": {"hours": 3, "measured": true, "portionOunces": 10.8, "summary": "about 3 hours"},
+      "options": [{"portions": 1, "size": "54", "sizeValue": 54, "sizeText": "54 oz",
+                   "thaw": {"hours": 17, "measured": true, "portionOunces": 54, "summary": "about 17 hours"}}]
+    },
+    "frozenItemId": null, "frozenPortions": 0, "answeredBy": null, "answeredAt": null,
+    "suggestions": []
+  }]
+}
+```
+
+- **Only each card's answer is stored.** The cards themselves are derived on
+  read from the week's hand-offs and its plan, like the order reminder and the
+  thaw reminder before them, so a household that never opens the session loses
+  nothing and one that comes back on Wednesday sees the same cards.
+- **`state`** is `nothing_to_prep` (the week bought nothing oversized — an
+  ordinary outcome, and `headline` says so), `ready`, or `finished`.
+- **`id` is `"<handoffId>:<lineId>"`**, the same reference the freezer records
+  as its source, which is what makes finishing a card twice a no-op.
+- **`meals`** names the planned meals the reserved amount is for, in day order.
+  `past` is true when the meal's date has already gone by in the household's
+  time zone, so mid-week copy doesn't promise a Thursday that has been.
+- **`portions`** is the advice, and is `null` for a card with nothing to
+  freeze. `basis` says where one portion's size came from: `meal` (the week's
+  own meals) or `week` (the line records no recipes, so the week's whole need
+  stands in for one meal). Every entry in `options` carries its own `size` and
+  `thaw`, so a stepper never shows a thaw time that belongs to another count.
+- **`reminder`** is the only promise the copy may make: `thaw` (a planned meal
+  that needs it is still ahead, so the hourly sweep will remind that morning),
+  `list` (nothing is planned for it yet; the freezer keeps it on the list, and
+  the reminder starts the day a meal is planned), or `none` (nothing is being
+  frozen). There is no value for "we'll remember".
+
+`POST .../prep/weeks/{week}/cards/{cardId}/done` with an optional
+`{"portions": 4}` (`pantry.edit`) does the bookkeeping and returns
+`{card, session}`:
+
+- the amount this week's meals need is simply **not frozen**, so it stays in
+  the fridge for them;
+- the surplus is sealed as a frozen pantry item with the chosen count, through
+  the same write as `POST .../pantry/freezer`
+  ([pantry-usage.md](pantry-usage.md#the-freezer)) and with the same
+  idempotency: the hand-off line is named, so doing the card twice seals
+  nothing twice;
+- a card redone after it froze something keeps the count that is actually in
+  the freezer, and `frozenPortions` says what that is.
+
+`POST .../prep/weeks/{week}/cards/{cardId}/skip` (`pantry.edit`) records "not
+this one". Nothing is written to the pantry, and the card stays in the list so
+it can still be finished later.
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `validation_failed` | An invalid week; a `cardId` that isn't a hand-off and a line; `portions` outside 1–100 |
+| 404 | `not_found` | No card with that ID in the week's session |
 
 ### Request a store
 

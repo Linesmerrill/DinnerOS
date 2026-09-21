@@ -10,6 +10,9 @@ struct PantryView: View {
     @Environment(ThawStore.self) private var thaw
     @Environment(HouseholdStore.self) private var households
     @Environment(AuthSession.self) private var session
+    /// Optional so previews needn't supply one. The prep checklist belongs to the Shop tab's
+    /// store, but putting the groceries away is a pantry errand too.
+    @Environment(ShoppingStore.self) private var shopping: ShoppingStore?
 
     @State private var searchText = ""
     @State private var statusFilter: PantryStatusFilter = .all
@@ -25,6 +28,7 @@ struct PantryView: View {
         case edit(PantryItem)
         case lowStockSettings
         case specialties
+        case prep
 
         var id: String {
             switch self {
@@ -32,6 +36,7 @@ struct PantryView: View {
             case .edit(let item): "edit-\(item.id)"
             case .lowStockSettings: "low-stock-settings"
             case .specialties: "specialties"
+            case .prep: "prep"
             }
         }
     }
@@ -79,6 +84,7 @@ struct PantryView: View {
                 case .edit(let item): PantryEditSheet(item: item)
                 case .lowStockSettings: PantryThresholdSheet()
                 case .specialties: SpecialtyIngredientsSheet()
+                case .prep: PrepSessionSheet()
                 }
             }
             .alert(
@@ -132,6 +138,12 @@ struct PantryView: View {
             // Above the pantry itself: it is today's errand, and it has a deadline.
             ThawReminderSection(items: thaw.items, dismiss: thaw.dismiss)
                 .selectionDisabled()
+            // The week's bulk packs are not in the pantry yet, which is exactly why the offer
+            // to put them away belongs here as well as on the Shop tab.
+            if canEdit, let prep = shopping?.prepSession, prep.hasWork {
+                PrepSessionBanner(session: prep) { sheet = .prep }
+                    .selectionDisabled()
+            }
             // A list row, not a top safe-area inset: an inset hides the large navigation title.
             if !pantry.items.isEmpty {
                 statusPicker

@@ -308,7 +308,10 @@ others.
 
 Where the remainder comes from in the first place — which lines are bulk packs,
 and the choice between freezing one and planning a second meal with it — is in
-[shopping-providers.md](shopping-providers.md#bulk-packs).
+[shopping-providers.md](shopping-providers.md#bulk-packs). **How many portions
+to split it into** is the prep plan's question, not this one's: the week's own
+meals decide the size, and the count decides the thaw estimate below
+([the prep plan](shopping-providers.md#the-prep-plan)).
 
 ## Thaw reminders
 

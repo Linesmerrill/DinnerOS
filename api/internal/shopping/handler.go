@@ -86,6 +86,10 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(view).Get(base+"/requests", h.listStoreRequests)
 		r.With(view).Post(base+"/requests", h.requestStore)
 		r.With(view).Delete(base+"/requests/{requestId}", h.deleteStoreRequest)
+		const prep = "/households/{householdId}/prep/weeks/{week}"
+		r.With(view).Get(prep, h.prepSession)
+		r.With(pantryEdit).Post(prep+"/cards/{cardId}/done", h.completePrepCard)
+		r.With(pantryEdit).Post(prep+"/cards/{cardId}/skip", h.skipPrepCard)
 		r.With(view).Get(base+"/weeks/{week}/order", h.getOrderReminder)
 		r.With(edit).Put(base+"/weeks/{week}/order", h.setWeekOrdered)
 		r.With(view).Get(base+"/{provider}/preferences", h.listPreferences)

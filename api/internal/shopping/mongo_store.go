@@ -94,6 +94,15 @@ func Indexes() []mongodb.IndexSet {
 				Options: options.Index().SetUnique(true).SetName("householdId_week_unique"),
 			}},
 		},
+		{
+			Collection: PrepCardsCollection,
+			Indexes: []mongo.IndexModel{{
+				// One answer per card, which is also what makes answering
+				// the same card twice replace rather than duplicate.
+				Keys:    bson.D{{Key: "householdId", Value: 1}, {Key: "week", Value: 1}, {Key: "cardId", Value: 1}},
+				Options: options.Index().SetUnique(true).SetName("householdId_week_cardId_unique"),
+			}},
+		},
 		weekSpendIndexes(),
 	}
 }
@@ -106,6 +115,7 @@ type MongoStore struct {
 	storeRequests *mongo.Collection
 	orderWeeks    *mongo.Collection
 	weekSpend     *mongo.Collection
+	prepCards     *mongo.Collection
 }
 
 var _ Store = (*MongoStore)(nil)
@@ -118,6 +128,7 @@ func NewMongoStore(db *mongo.Database) *MongoStore {
 		handoffs:      db.Collection(HandoffsCollection),
 		storeRequests: db.Collection(StoreRequestsCollection),
 		orderWeeks:    db.Collection(OrderWeeksCollection),
+		prepCards:     db.Collection(PrepCardsCollection),
 		weekSpend:     db.Collection(WeekSpendCollection),
 	}
 }

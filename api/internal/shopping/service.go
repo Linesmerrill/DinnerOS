@@ -62,6 +62,9 @@ type ServiceOptions struct {
 	// Leftovers, when set, ranks second meals for a bulk pack's surplus.
 	// Without it a bulk pack comes back with no suggestions.
 	Leftovers LeftoverPlanner
+	// Freezer, when set, seals a prep card's surplus (prep.go). Without it a
+	// card is still shown and answerable and simply records nothing.
+	Freezer Freezer
 	// Plans, when set, counts a week's meals for its cost per meal.
 	Plans Planner
 	// Households, when set, reads the household's order day and time zone for
@@ -87,6 +90,7 @@ type Service struct {
 	catalog    Catalog
 	pantry     Pantry
 	frozen     FrozenStockReader
+	freezer    Freezer
 	leftovers  LeftoverPlanner
 	plans      Planner
 	households HouseholdSource
@@ -104,7 +108,7 @@ func NewService(o ServiceOptions) *Service {
 	}
 	return &Service{
 		store: o.Store, providers: o.Providers, grocery: o.Grocery, catalog: o.Catalog, pantry: o.Pantry,
-		frozen: o.Frozen, leftovers: o.Leftovers, plans: o.Plans,
+		frozen: o.Frozen, freezer: o.Freezer, leftovers: o.Leftovers, plans: o.Plans,
 		households: o.Households, notifier: o.Notifier, events: o.Events, logger: logger, now: time.Now,
 	}
 }

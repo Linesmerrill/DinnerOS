@@ -143,15 +143,6 @@ nonisolated struct ShoppingAPI: Sendable {
             APIRequest.get(Self.path(householdID) + "/handoffs/\(handoffID)").authorized(with: accessToken))
     }
 
-    /// The handoff's bulk packs: lines whose packages hold far more than the week needs,
-    /// each with the recipes Autopilot would plan for the rest and whether the remainder
-    /// is already in the freezer.
-    func bulkPacks(householdID: String, handoffID: String, accessToken: String) async throws -> ShoppingBulkPackList {
-        try await client.send(
-            APIRequest.get(Self.path(householdID) + "/handoffs/\(handoffID)/bulk-packs")
-                .authorized(with: accessToken))
-    }
-
     /// Records what a member says was ordered. Idempotent per line.
     func confirm(
         householdID: String, handoffID: String, request: ConfirmShoppingOrderRequest, accessToken: String
@@ -217,8 +208,39 @@ nonisolated struct ShoppingAPI: Sendable {
         return try await client.send(request.authorized(with: accessToken))
     }
 
+    /// The week's prep session: one card per bulk pack, with the portioning advice and each
+    /// card's answer (docs/shopping-providers.md#the-prep-plan).
+    func prepSession(householdID: String, week: ISOWeek, accessToken: String) async throws -> PrepSession {
+        try await client.send(APIRequest.get(Self.prepPath(householdID, week)).authorized(with: accessToken))
+    }
+
+    /// Finishes a card: the week's need stays out of the freezer and the surplus is sealed in
+    /// `portions`. Idempotent per hand-off line, like the freeze endpoint. Needs `pantry.edit`.
+    func completePrepCard(
+        householdID: String, week: ISOWeek, cardID: String, portions: Int?, accessToken: String
+    ) async throws -> PrepCardResult {
+        let path = Self.prepPath(householdID, week) + "/cards/" + APIRequest.encodePathSegment(cardID) + "/done"
+        return try await client.send(
+            try APIRequest.post(path, body: CompletePrepCardRequest(portions: portions))
+                .withPercentEncodedPath().authorized(with: accessToken))
+    }
+
+    /// "Not this one." Records nothing in the pantry and leaves the card in the list.
+    func skipPrepCard(householdID: String, week: ISOWeek, cardID: String, accessToken: String) async throws
+        -> PrepCardResult
+    {
+        let path = Self.prepPath(householdID, week) + "/cards/" + APIRequest.encodePathSegment(cardID) + "/skip"
+        return try await client.send(
+            try APIRequest.post(path, body: CompletePrepCardRequest(portions: nil))
+                .withPercentEncodedPath().authorized(with: accessToken))
+    }
+
     static func path(_ householdID: String) -> String {
         "/api/v1/households/\(householdID)/shopping"
+    }
+
+    private static func prepPath(_ householdID: String, _ week: ISOWeek) -> String {
+        "/api/v1/households/\(householdID)/prep/weeks/\(week.description)"
     }
 
     private static func weekPath(_ householdID: String, _ week: ISOWeek, _ provider: String) -> String {

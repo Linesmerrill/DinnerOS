@@ -765,6 +765,116 @@ build from the included lines, so a frozen-covered line is not in the cart
 link, not in a second send, and not in any future export — the whole point of
 sealing the remainder was to not buy another four-pound loin next month.
 
+## The prep plan
+
+Bulk packs say "you bought four pounds and the week needs ten ounces". The
+freezer records a remainder. What was missing is the half hour between them:
+Sunday at the counter with a 4 lb pork loin and a knife, deciding how many
+pieces to cut it into.
+
+The prep plan (`shopping/prep.go`) is that half hour as a checklist. It is
+reachable once the order arrives, from the Shop tab and from the Pantry, and
+it walks one card at a time through every bulk pack the week's hand-offs
+bought.
+
+### One card
+
+| The card says | Where it comes from |
+| --- | --- |
+| What the week's meals need, and which meals by name and day | The hand-off line's measured need, joined with the week's plan for each recipe's day |
+| What is left over | The pack's surplus, the same number the bulk pack reports |
+| How many portions to cut the rest into, and how big each is | The heuristic below, with a stepper to change it |
+| How long **one of those portions** takes to thaw | `pantry.ThawFor` on the sealed remainder at the chosen count |
+| Whether a second meal this week would use it instead | The bulk pack's Autopilot suggestions, planned through the ordinary plan endpoint |
+
+Each card has **Done** and **Skip**, and a skipped card stays in the list so
+it can be done later. A remainder that is already in the freezer — sealed from
+another member's phone, or before the session existed — counts as done, because
+asking a household to put away something already in the drawer is exactly what
+a checklist must not do.
+
+### The portion-size heuristic
+
+**One portion is one meal's worth.** The household's own recipes already say
+how much of an ingredient a dinner takes: it is the week's need for the line
+divided by the planned meals that need it. The suggested count is then the
+surplus measured in those dinners, rounded to the nearest whole one, and the
+per-portion size is the surplus divided by that count.
+
+```text
+typical meal = needed ÷ meals that need it
+portions     = round(surplus ÷ typical meal), clamped to [1, MaxPrepPortions = 12]
+portion size = surplus ÷ portions
+```
+
+- **The numbers are the household's, not a table.** A four-pound loin bought
+  for a ten-ounce Thursday becomes five portions of about 10.8 oz because a
+  Thursday in this house is ten ounces. There is no "a portion of pork is
+  X oz" anywhere; a household that cooks for six gets bigger portions without
+  telling anyone anything.
+- **`basis` says which way it was worked out.** `meal` is the case above.
+  `week` is the fallback for a line that records no recipes (an extra someone
+  typed, or a hand-off stored before recipes were kept): the week's whole need
+  stands in for one meal, and the app says so rather than pretending to know
+  more.
+- **Twelve is the cap** on what the card suggests and offers. It is well past
+  any sensible number of dinners from one pack, and a member who really wants
+  more can freeze by hand up to `pantry.MaxPortions`.
+- **The thaw estimate follows the count, always.** Each offered count carries
+  its own size and its own estimate, computed by describing the remainder to
+  `pantry.ThawFor` exactly as the freezer would store it. That is the rough
+  edge this fixes: the old **Freeze the Rest** button recorded the whole
+  surplus as a single portion, so a 54 oz remainder was quoted at about
+  seventeen hours instead of the three a portion actually takes
+  ([pantry-usage.md](pantry-usage.md#how-long-it-takes)).
+
+### Finishing a card
+
+The reserved amount is **simply not frozen** — that is the whole of "keep
+10 oz out for Thursday". The surplus is sealed through
+`pantry.Service.Freeze`, so the record, the usage cycle, the thaw estimate and
+the idempotency are all the existing ones: the card names its hand-off line,
+and sealing the same line twice changes nothing. A card redone after it froze
+something keeps the count that is in the freezer, because the bags in the
+drawer are the truth.
+
+### What it may promise
+
+The copy names a reminder only where one exists, and the only reminder there
+is is the thaw sweep ([pantry-usage.md](pantry-usage.md#thaw-reminders)).
+
+| `reminder` | When | What the card says |
+| --- | --- | --- |
+| `thaw` | A planned meal that needs it is still ahead | "We'll remind you the morning of any day a planned meal needs it — one portion takes about 3 hours in the fridge. Thursday is the next one." |
+| `list` | Nothing is planned for it yet | "Next time a meal needs it, your list will say 'Grab from the freezer' and we'll remind you that morning to move a portion over." |
+| `none` | Nothing is being frozen | Nothing |
+
+There is deliberately no value for "we'll remember". A household that plans
+nothing gets the second sentence, which is true — the freezer keeps the line
+on the list as `fromFreezer`, and the reminder starts the day a meal is
+planned for it.
+
+### Nothing to prep, and coming back late
+
+- **A week that bought nothing oversized** still has a session. Its `state` is
+  `nothing_to_prep` and its headline says so, because an empty checklist is a
+  good outcome and not a blank screen.
+- **A household that skipped it and comes back on Wednesday** finds its cards
+  where it left them: the answers are stored, everything else is derived, and
+  the amounts are unchanged. What does change is the copy — a meal whose date
+  has gone by is marked `past`, so the card stops naming a Thursday that has
+  been, and the reminder falls back from `thaw` to `list` when nothing is left
+  ahead. Nothing guesses whether the fresh portion was cooked; the card keeps
+  reserving the week's need, because only the household knows.
+
+### What is not a prep card
+
+Only bulk packs are cards today. The card's `kind` exists so that washing
+herbs or making a house-made batch could join the same checklist later, but
+neither is added here: a herb card would need a rule about which produce lines
+are herbs, and a batch card would need to decide what the week's specialty
+choices mean, and both are their own feature rather than a cheap extra.
+
 ## Demand signal
 
 Phase 8a ships one provider, so the Shop tab's honest answer to "can I use my
