@@ -325,6 +325,14 @@ func (s *eventStore) List(_ context.Context, q events.Query) ([]events.Event, er
 	return out, nil
 }
 
+// add records an event directly, as another part of the app would have.
+func (s *eventStore) add(e events.Event) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e.ID = fmt.Sprintf("%024x", len(s.list)+1)
+	s.list = append(s.list, e)
+}
+
 func (s *eventStore) ofType(t events.Type) []events.Event {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -405,6 +413,31 @@ func (f *fakePlanner) AddEntries(_ context.Context, householdID, userID, week st
 	}
 	f.plans[key] = p
 	return p, added, nil
+}
+
+func (f *fakePlanner) ReplaceEntryRecipe(_ context.Context, householdID, week, entryID, recipeID string, origin planning.Origin) (planning.Plan, planning.Entry, planning.Entry, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := householdID + "/" + week
+	p, ok := f.plans[key]
+	if !ok {
+		return planning.Plan{}, planning.Entry{}, planning.Entry{}, planning.ErrNotFound
+	}
+	if p.Status == planning.StatusFinalized {
+		return planning.Plan{}, planning.Entry{}, planning.Entry{}, planning.ErrFinalized
+	}
+	p.Entries = slices.Clone(p.Entries)
+	for i, e := range p.Entries {
+		if e.ID != entryID {
+			continue
+		}
+		next := e
+		next.RecipeID, next.Origin, next.ProposalID, next.Customizations = recipeID, origin, "", nil
+		p.Entries[i] = next
+		f.plans[key] = p
+		return p, e, next, nil
+	}
+	return planning.Plan{}, planning.Entry{}, planning.Entry{}, planning.ErrNotFound
 }
 
 func (f *fakePlanner) set(p planning.Plan) {

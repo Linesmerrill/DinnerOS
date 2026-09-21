@@ -137,6 +137,23 @@ type EntryChanges struct {
 	// Customizations replaces the entry's customizations; an empty slice
 	// removes them.
 	Customizations *[]Customization
+	// Recipe replaces the entry's recipe in place, keeping the entry's ID,
+	// day, and note (Service.ReplaceEntryRecipe). Customizations name the old
+	// recipe's ingredient lines, so the store clears them with the swap.
+	Recipe *EntryRecipe
+}
+
+// EntryRecipe is the recipe snapshot an entry carries, as EntryChanges.Recipe
+// replaces it.
+type EntryRecipe struct {
+	ID       string
+	Name     string
+	ImageURL string
+	IsAddon  bool
+	// Origin and ProposalID replace the entry's own: a meal swapped in comes
+	// from somewhere new and belongs to no proposal.
+	Origin     Origin
+	ProposalID string
 }
 
 // Summary describes one week in a range.

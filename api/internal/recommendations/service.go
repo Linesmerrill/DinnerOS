@@ -45,6 +45,9 @@ type Planner interface {
 	Get(ctx context.Context, householdID, week string) (planning.Plan, error)
 	ListPlans(ctx context.Context, householdID, from, to string) ([]planning.Plan, error)
 	AddEntries(ctx context.Context, householdID, userID, week string, in []planning.NewEntry) (planning.Plan, []planning.Entry, error)
+	// ReplaceEntryRecipe swaps one planned meal's recipe in place, returning
+	// the plan, the entry as it was, and the entry as it is now.
+	ReplaceEntryRecipe(ctx context.Context, householdID, week, entryID, recipeID string, origin planning.Origin) (planning.Plan, planning.Entry, planning.Entry, error)
 }
 
 // PantryReader lists pantry items. *pantry.Service implements it.

@@ -216,6 +216,7 @@ struct MealCard: View {
     @Environment(EventReporter.self) private var events
     @Environment(PantryStore.self) private var pantry
     @Environment(NotificationStore.self) private var notifications
+    @Environment(MealSwapStore.self) private var swaps
 
     private var outcome: EventReporter.EntryOutcome? { events.outcomes[entry.id] }
 
@@ -390,6 +391,11 @@ struct MealCard: View {
         }
         if isEditable {
             Section {
+                if swaps.canSwap(entry, isDraft: plans.isDraft, isCooked: outcome == .cooked) {
+                    Button("Try Something Similar", systemImage: "arrow.triangle.2.circlepath") {
+                        swaps.start(entry, week: plans.week)
+                    }
+                }
                 Menu("Move To…", systemImage: "arrow.up.and.down.text.horizontal") {
                     ForEach(PlanDay.week(startingOn: plans.weekStartsOn)) { day in
                         Button(day.name()) {

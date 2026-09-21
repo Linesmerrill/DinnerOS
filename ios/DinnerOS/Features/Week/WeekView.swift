@@ -14,6 +14,7 @@ struct WeekView: View {
     @Environment(PantryStore.self) private var pantry
     @Environment(NotificationStore.self) private var notifications
     @Environment(AutopilotStore.self) private var autopilot
+    @Environment(MealSwapStore.self) private var swaps
 
     @State private var editingEntry: PlanEntry?
     @State private var isAddingRecipes = false
@@ -215,6 +216,11 @@ struct WeekView: View {
             }
             if canEditEntries {
                 Section {
+                    if swaps.canSwap(entry, isDraft: plans.isDraft, isCooked: outcome == .cooked) {
+                        Button("Try Something Similar", systemImage: "arrow.triangle.2.circlepath") {
+                            swaps.start(entry, week: plans.week)
+                        }
+                    }
                     Menu("Move To…", systemImage: "arrow.up.and.down.text.horizontal") {
                         ForEach(PlanDay.week(startingOn: plans.weekStartsOn)) { day in
                             Button(day.name()) {

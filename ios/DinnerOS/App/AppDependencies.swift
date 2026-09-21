@@ -34,6 +34,8 @@ final class AppDependencies {
     let menu: MenuStore
     let planner: MealPlanner
     let pairings: PairingsStore
+    /// "Try Something Similar": re-picking one planned meal.
+    let mealSwaps: MealSwapStore
     /// Calendar and weather context for Autopilot, derived on this device.
     let deviceContext: AutopilotDeviceContext
     /// Destinations App Intents open.
@@ -132,6 +134,17 @@ final class AppDependencies {
         }
         pairings.profileDidChange = { [autopilot] profile in
             autopilot.present(profile)
+        }
+        // Swapping a planned meal for a similar one returns the whole plan, so the week and
+        // its grocery list follow without a reload, and the Menu's cards and badges refresh.
+        let mealSwaps = MealSwapStore(
+            session: session, api: client.map { AutopilotAPI(client: $0) }, households: households)
+        self.mealSwaps = mealSwaps
+        mealSwaps.planDidChange = { [plans, menu] plan in
+            plans.present(plan)
+            if let week = ISOWeek(plan.week) {
+                Task { await menu.reloadWeek(week) }
+            }
         }
         let shopping = ShoppingStore(
             session: session, api: client.map { ShoppingAPI(client: $0) }, checks: groceryChecks,

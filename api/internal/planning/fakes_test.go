@@ -308,6 +308,14 @@ func (m *memoryStore) UpdateEntry(_ context.Context, householdID string, w Week,
 				p.Entries[i].Customizations = nil
 			}
 		}
+		if c.Recipe != nil {
+			e := &p.Entries[i]
+			e.RecipeID, e.RecipeName, e.RecipeImageURL = c.Recipe.ID, c.Recipe.Name, c.Recipe.ImageURL
+			e.RecipeIsAddon, e.Origin, e.ProposalID = c.Recipe.IsAddon, c.Recipe.Origin, c.Recipe.ProposalID
+			if c.Customizations == nil {
+				e.Customizations = nil
+			}
+		}
 	})
 }
 

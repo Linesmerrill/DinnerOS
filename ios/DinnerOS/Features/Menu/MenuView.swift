@@ -13,6 +13,7 @@ struct MenuView: View {
     @Environment(AutopilotStore.self) private var autopilot
     @Environment(MealPlanner.self) private var planner
     @Environment(PairingsStore.self) private var pairings
+    @Environment(MealSwapStore.self) private var swaps
     @Environment(\.appConfiguration) private var configuration
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
@@ -151,6 +152,16 @@ struct MenuView: View {
             } message: {
                 Text(planner.errorMessage ?? "")
             }
+            // "Try Something Similar" is offered from a meal's long-press menu in both Your
+            // Meals and By Day, so the sheet belongs to the screen that holds both.
+            .sheet(item: swapTarget) { target in
+                MealSwapSheet(target: target)
+            }
+            .alert("Couldn't Swap That Meal", isPresented: swapError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(swaps.errorMessage ?? "")
+            }
             .modifier(WeekAutopilotModifier(flow: autopilotFlow, canEdit: canEdit))
     }
 
@@ -249,6 +260,24 @@ struct MenuView: View {
                 undo: { Task { await planner.undo() } },
                 dismiss: { planner.dismissToast(toast.id) })
         }
+    }
+
+    /// The meal being re-picked, which presents the sheet. Dismissing it clears the store, so
+    /// a swipe down leaves nothing half-open.
+    private var swapTarget: Binding<MealSwapStore.Target?> {
+        Binding(
+            get: { swaps.target },
+            set: { target in
+                if target == nil { swaps.cancel() }
+            })
+    }
+
+    private var swapError: Binding<Bool> {
+        Binding(
+            get: { swaps.errorMessage != nil },
+            set: { presented in
+                if !presented { swaps.errorMessage = nil }
+            })
     }
 
     private var plannerError: Binding<Bool> {

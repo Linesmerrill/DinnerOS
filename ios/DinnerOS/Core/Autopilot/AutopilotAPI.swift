@@ -139,6 +139,35 @@ nonisolated struct AutopilotAPI: Sendable {
         return try await client.send(request.authorized(with: accessToken))
     }
 
+    // MARK: Try something similar
+
+    /// Meals like the planned one, for "Try Something Similar". `seen` are the recipes already
+    /// offered, so asking again shows different ones. Needs `plan.edit`.
+    func mealAlternatives(
+        householdID: String, week: ISOWeek, entryID: String, limit: Int? = nil, seen: [String] = [],
+        accessToken: String
+    ) async throws -> MealAlternatives {
+        let path =
+            Self.weekPath(householdID, week, "/entries/") + APIRequest.encodePathSegment(entryID) + "/alternatives"
+        var request = APIRequest.get(path).withPercentEncodedPath()
+        if let limit {
+            request.queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+        }
+        if !seen.isEmpty {
+            request.queryItems.append(URLQueryItem(name: "seen", value: seen.joined(separator: ",")))
+        }
+        return try await client.send(request.authorized(with: accessToken))
+    }
+
+    /// Replaces the planned meal's recipe, keeping its day, note, and servings. Needs `plan.edit`.
+    func swapPlannedMeal(
+        householdID: String, week: ISOWeek, entryID: String, recipeID: String, accessToken: String
+    ) async throws -> PlannedMealSwapResult {
+        let path = Self.weekPath(householdID, week, "/entries/") + APIRequest.encodePathSegment(entryID) + "/swap"
+        let request = try APIRequest.post(path, body: PlannedMealSwapRequest(recipeID: recipeID))
+        return try await client.send(request.withPercentEncodedPath().authorized(with: accessToken))
+    }
+
     // MARK: Pairings
 
     /// The week's pairings: one entry per planned main meal, plus the accepted grocery items

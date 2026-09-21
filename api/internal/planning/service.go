@@ -465,6 +465,90 @@ func (s *Service) UpdateEntry(ctx context.Context, householdID, week, entryID st
 	})
 }
 
+// ReplaceEntryRecipe swaps one entry's recipe in place, keeping the entry's
+// ID, day, and note, so the week and its grocery list change in one atomic
+// update rather than a remove and an add. Servings stay the entry's own when
+// the new recipe is authored in that size, and otherwise become the nearest
+// size it has. Customizations name the old recipe's ingredient lines, so they
+// are dropped.
+//
+// It records nothing: the caller knows why the meal changed (Autopilot's
+// "try something similar" records meal.swapped and recipe.planned) and
+// records that itself. A finalized plan fails with ErrFinalized.
+func (s *Service) ReplaceEntryRecipe(ctx context.Context, householdID, week, entryID, recipeID string, origin Origin) (Plan, Entry, Entry, error) {
+	w, err := s.parse(householdID, week)
+	if err != nil {
+		return Plan{}, Entry{}, Entry{}, err
+	}
+	if strings.TrimSpace(recipeID) == "" {
+		return Plan{}, Entry{}, Entry{}, fmt.Errorf("%w: recipeId is required", ErrInvalidEntry)
+	}
+	if origin, err = parseOrigin(origin); err != nil {
+		return Plan{}, Entry{}, Entry{}, err
+	}
+	current, err := s.store.GetPlan(ctx, householdID, w)
+	if err != nil {
+		return Plan{}, Entry{}, Entry{}, err
+	}
+	previous, ok := current.entry(entryID)
+	if !ok {
+		return Plan{}, Entry{}, Entry{}, ErrNotFound
+	}
+	if current.Status == StatusFinalized {
+		return Plan{}, Entry{}, Entry{}, ErrFinalized
+	}
+	if previous.RecipeID == recipeID {
+		return Plan{}, Entry{}, Entry{}, fmt.Errorf("%w: the entry already has that recipe", ErrInvalidEntry)
+	}
+	recipe, err := s.recipe(ctx, householdID, recipeID)
+	if err != nil {
+		return Plan{}, Entry{}, Entry{}, err
+	}
+	servings := nearestServings(recipe, previous.Servings)
+	if err := checkServings(recipe, servings); err != nil {
+		return Plan{}, Entry{}, Entry{}, err
+	}
+	changes := EntryChanges{
+		Servings: &servings,
+		Recipe: &EntryRecipe{
+			ID: recipe.ID, Name: recipe.Name, ImageURL: recipe.ImageURL, IsAddon: recipe.IsAddon, Origin: origin,
+		},
+	}
+	p, err := s.written(ctx, householdID, func() (Plan, error) {
+		return s.store.UpdateEntry(ctx, householdID, w, entryID, changes, s.now().UTC())
+	})
+	if err != nil {
+		return Plan{}, Entry{}, Entry{}, err
+	}
+	next, ok := p.entry(entryID)
+	if !ok {
+		return Plan{}, Entry{}, Entry{}, ErrNotFound
+	}
+	return p, previous, next, nil
+}
+
+// nearestServings is want when the recipe is authored in that size, and
+// otherwise the size closest to it (the smaller one on a tie).
+func nearestServings(r recipes.Recipe, want int) int {
+	best := 0
+	for _, size := range r.Servings {
+		switch {
+		case size == want:
+			return want
+		case best == 0, abs(size-want) < abs(best-want), abs(size-want) == abs(best-want) && size < best:
+			best = size
+		}
+	}
+	return best
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
 // DeleteEntry removes an entry from the week. userID is the member removing
 // it, recorded on the recipe.unplanned event.
 func (s *Service) DeleteEntry(ctx context.Context, householdID, userID, week, entryID string) (Plan, error) {

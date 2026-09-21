@@ -4670,6 +4670,112 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/AutopilotConflict"
+  /api/v1/households/{householdId}/autopilot/weeks/{week}/entries/{entryId}/alternatives:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+      - $ref: "#/components/parameters/EntryID"
+    get:
+      summary: Meals like this planned one ("try something similar")
+      description: |
+        Requires `plan.edit`. Offers replacements for one planned meal that
+        resemble it — protein, cuisine, meal category, tags, and cook time
+        (docs/autopilot.md#try-something-similar) — ranked by the same
+        provider call an Autopilot swap makes, so the household's
+        restrictions, never-include rules, the day's time cap, and the rest
+        of the week are honored. Meals already in the week, meals swapped
+        away from it, and anything in `seen` are never offered.
+
+        When nothing in the library is much like the meal, the best fits for
+        the day are returned with the `no_similar` message; when nothing is
+        left at all, `alternatives` is empty with `no_alternatives` or
+        `seen_all`. 400 for an add-on or an unscheduled meal. 404 when the
+        week has no such entry. 409 `plan_finalized` or `meal_cooked`.
+      operationId: listMealAlternatives
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: How many alternatives to return (default 3).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 8
+        - name: seen
+          in: query
+          description: |
+            Recipes already offered for this meal, so "show me something
+            different" returns others. Repeatable, or comma-separated; at
+            most 40.
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        "200":
+          description: Replacements for the meal, most like it first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MealAlternatives"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/AutopilotConflict"
+  /api/v1/households/{householdId}/autopilot/weeks/{week}/entries/{entryId}/swap:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/Week"
+      - $ref: "#/components/parameters/EntryID"
+    post:
+      summary: Swap a planned meal for another
+      description: |
+        Requires `plan.edit`. Replaces the planned meal's recipe in place,
+        keeping the entry, its day, and its note; servings stay the entry's
+        own, or become the nearest size the new recipe is authored in. The
+        week's grocery list is derived from the plan, so it follows.
+
+        Records `meal.swapped` (the replaced meal as `previousRecipeId`) and
+        `recipe.planned` with origin `autopilot`, so Autopilot learns "not
+        this one" about the meal that was dropped. 400 when `recipeId` is
+        missing, already planned this week, or the meal is an add-on or
+        unscheduled. 404 when the week has no such entry or the recipe isn't
+        the household's. 409 `plan_finalized` or `meal_cooked`.
+      operationId: swapPlannedMeal
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlannedMealSwapRequest"
+      responses:
+        "200":
+          description: The week after the swap.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlannedMealSwapResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/AutopilotConflict"
   /api/v1/households/{householdId}/autopilot/weeks/{week}/pairings:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -10014,6 +10120,111 @@ components:
           description: Chosen pairings that weren't added.
           items:
             $ref: "#/components/schemas/AutopilotSkippedPairing"
+    MealAlternative:
+      type: object
+      required: [recipe, servings, cookMinutes, similarity, score, reasons]
+      properties:
+        recipe:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            imageUrl:
+              type: string
+              format: uri
+        servings:
+          type: integer
+          minimum: 1
+          description: "What the meal would be cooked in: the entry's servings, or the nearest size the recipe is authored in."
+        cookMinutes:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: Null when the recipe doesn't say.
+        timeBand:
+          $ref: "#/components/schemas/AutopilotTimeBand"
+        similarity:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: How much the meal resembles the one being replaced; 0.35 and above reads as "similar".
+          example: 0.72
+        score:
+          type: number
+          description: The provider's fit for the day, as on a proposal slot.
+        reasons:
+          type: array
+          description: 'Why this one, most important first ("Also Thai", "30 min"). Join with " · ".'
+          items:
+            $ref: "#/components/schemas/AutopilotText"
+    MealAlternatives:
+      type: object
+      required: [entryId, week, day, recipe, servings, alternatives, messages]
+      properties:
+        entryId:
+          type: string
+        week:
+          $ref: "#/components/schemas/IsoWeek"
+        day:
+          $ref: "#/components/schemas/AutopilotDay"
+        recipe:
+          type: object
+          description: The meal being replaced.
+          required: [id, name]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            imageUrl:
+              type: string
+              format: uri
+        servings:
+          type: integer
+          description: The planned meal's servings, which a swap keeps.
+        alternatives:
+          type: array
+          description: Most like the planned meal first. Empty when nothing else fits the day.
+          items:
+            $ref: "#/components/schemas/MealAlternative"
+        messages:
+          type: array
+          description: "Notes about the offer: `no_similar`, `no_alternatives`, or `seen_all`."
+          items:
+            $ref: "#/components/schemas/AutopilotText"
+        modelVersion:
+          type: string
+          example: baseline-2026.7
+    PlannedMealSwapRequest:
+      type: object
+      required: [recipeId]
+      properties:
+        recipeId:
+          type: string
+          description: The replacement, one of the alternatives' recipes.
+    PlannedMealSwapResult:
+      type: object
+      required: [plan, entry, previousRecipe]
+      properties:
+        plan:
+          $ref: "#/components/schemas/Plan"
+        entry:
+          $ref: "#/components/schemas/PlanEntry"
+        previousRecipe:
+          type: object
+          description: The meal that was replaced.
+          required: [id, name]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            imageUrl:
+              type: string
+              format: uri
     AutopilotMethod:
       type: object
       required: [method, label, suits, source, heuristicSuits]
@@ -12185,6 +12396,7 @@ components:
         `no_alternative`: no other recipe fits the slot's day (swap); the message says why.
         `nothing_to_accept`: every meal is excluded, or its day or recipe is already planned.
         `proposal_stale`: a recipe in the proposal was removed or lost the serving size; generate the week again.
+        `meal_cooked`: the planned meal has already been cooked, so it can't be swapped for something similar.
       content:
         application/json:
           schema:

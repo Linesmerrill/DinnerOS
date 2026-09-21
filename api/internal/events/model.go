@@ -310,8 +310,12 @@ type WeekRejected struct {
 // MealSwapped is the payload of meal.swapped. Event.RecipeID is the recipe
 // swapped in; PreviousRecipeID the one swapped out.
 type MealSwapped struct {
-	ProposalID       string `json:"proposalId" bson:"proposalId"`
-	SlotID           string `json:"slotId" bson:"slotId"`
+	ProposalID string `json:"proposalId" bson:"proposalId"`
+	SlotID     string `json:"slotId" bson:"slotId"`
+	// EntryID is set when a planned meal was swapped ("try something
+	// similar"), rather than a slot of a pending proposal; ProposalID is
+	// then empty.
+	EntryID          string `json:"entryId,omitempty" bson:"entryId,omitempty"`
 	Day              string `json:"day" bson:"day"`
 	Date             string `json:"date,omitempty" bson:"date,omitempty"`
 	PreviousRecipeID string `json:"previousRecipeId" bson:"previousRecipeId"`
@@ -609,8 +613,18 @@ func (p WeekRejected) validate() error {
 }
 
 func (p MealSwapped) validate() error {
-	return errors.Join(validProposal(p.ProposalID, p.ModelVersion), validID("slotId", p.SlotID, true),
-		validID("previousRecipeId", p.PreviousRecipeID, true), requiredDay(p.Day), validDate(p.Date), nonNegative(p.SwapNumber))
+	errs := []error{
+		validID("slotId", p.SlotID, true), validID("previousRecipeId", p.PreviousRecipeID, true),
+		requiredDay(p.Day), validDate(p.Date), nonNegative(p.SwapNumber), validID("entryId", p.EntryID, false),
+	}
+	// A planned meal swapped for something similar has an entry rather than a
+	// pending proposal, and a model version only when the week was generated.
+	if p.EntryID == "" {
+		errs = append(errs, validProposal(p.ProposalID, p.ModelVersion))
+	} else {
+		errs = append(errs, validID("proposalId", p.ProposalID, false), validID("modelVersion", p.ModelVersion, false))
+	}
+	return errors.Join(errs...)
 }
 
 func (p MealRejected) validate() error {
