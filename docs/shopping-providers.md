@@ -34,6 +34,10 @@ possible, and record what was bought in the pantry.
 - **No scraping, no browser automation, no signed-in session replay** for any
   provider. The HelloFresh importer's approach (capturing our own signed-in
   pages) is not acceptable here: Walmart's and Instacart's terms forbid it.
+- **AnyList has no API, no URL scheme, and no share extension for items.** Its
+  two documented import paths are both bulk: paste one item per line into the
+  Add Item field, or let it pull from a Reminders list it created itself.
+  DinnerOS uses the paste ([Exporting to a list app](#exporting-to-a-list-app-anylist)).
 - **Walmart can ship before any approval arrives.** Phase 8a builds the cart
   link from products the household saved by pasting a Walmart product link.
   Search and availability (8b) are added once walmart.io keys exist.
@@ -48,6 +52,7 @@ possible, and record what was bought in the pantry.
 | **Amazon Fresh / Whole Foods** | Creators API (replaced PA-API 5, which was retired 2026-05-15) needs Associates eligibility; nothing grocery-specific | Legacy "Add to Cart form" docs now redirect to the deprecation notice; untested for Fresh | ❌ | ❌ | Associates account with qualifying sales | Not now |
 | **Target / Shipt** | ❌ not public | Target "commerce partners" basket transfer is partner-only (`target/cartster` sample archived 2024-07-16) | ❌ | ❌ | Business relationship | No |
 | **Albertsons / Safeway** | ❌ (public APIs are retail-media only) | Through Instacart | ❌ | ❌ | — | Via Instacart |
+| **AnyList** (member's own app) | ❌ not public | ✅ documented bulk paste: one item per line | ❌ | ❌ | None needed | **Shipped** (in-person shoppers) |
 | **Manual** (built in) | Catalog only | Plain-text export (exists today) | — | Member check-off (exists today) | — | Always on |
 
 ## Walmart in detail
@@ -627,6 +632,79 @@ reminder for the week once that day arrives — until someone says they ordered.
   in Shop. If anyone marks the week ordered before the push goes out (it waits
   out the night), nobody gets it.
 
+## Exporting to a list app (AnyList)
+
+Not everyone orders online. A member who shops in person keeps the week's list
+in their own grocery app, and AnyList is the first one DinnerOS hands off to,
+alongside Apple Reminders.
+
+**What AnyList actually supports.** Researched 2026-09-21 against AnyList's own
+help site; sources at the end of this document.
+
+- **No public API.** AnyList publishes no developer documentation, no API keys,
+  and no partner program. The `anylist` npm package and the Home Assistant
+  add-on built on it are third-party reverse engineering of the private sync
+  protocol, which needs the member's AnyList password. That is out of the
+  question here: it is unsupported, it breaks whenever AnyList ships, and it
+  would mean DinnerOS holding another service's credentials.
+- **No documented URL scheme and no `x-callback-url`.** AnyList's help site
+  documents none, and the only public discussion of one is a 2016 user request
+  on the OmniFocus forum that was never answered. Opening `anylist://` on a
+  guess would take the member out of DinnerOS with no way to tell whether
+  anything arrived, so DinnerOS does not do it.
+- **The share sheet takes recipes, not items.** The "AnyList Recipe Import"
+  extension imports a *recipe* from a web page or app. There is no share
+  extension for list items.
+- **Two documented item-import paths, both bulk:**
+  - **Copy and paste.** Items separated by line breaks, one per line, pasted
+    into the Add Item field: "tap the Add Item text field, tap on the
+    pasteboard button, tap on Paste, and tap on Done". AnyList then files each
+    line under its own category automatically. This is a first-class,
+    documented feature, it takes the whole list in one action, and the text
+    the member pastes is the text DinnerOS wrote.
+  - **Reminders App Import.** The member turns it on in AnyList's Settings and
+    picks which AnyList lists to sync; AnyList creates a matching list in
+    Apple Reminders, and imports (and then deletes) anything found there the
+    next time it opens. AnyList's own help calls this "an advanced feature"
+    and steers people to Shortcuts instead.
+
+**What DinnerOS implements: the paste.** "Send to AnyList" copies the week's
+unbought lines and tells the member where to paste them.
+
+- **Why not the Reminders route,** given DinnerOS already writes to Reminders:
+  the two ends don't meet. AnyList imports only from a Reminders list *it*
+  created and named after one of *its* lists; the DinnerOS export creates a
+  list named for the app and the week (`DinnerOS · Sep 14 – 20`), which AnyList
+  never looks at. Making it work would mean writing into a list DinnerOS did
+  not create, whose name only the member knows, and whose contents AnyList
+  deletes behind us — three ways for a week's list to vanish silently. A member
+  who has already set up Reminders App Import can still get there by hand, and
+  the explainer does not pretend otherwise.
+- **The same rules as the Reminders export.** The lines come from
+  `GroceryReminderPlan.drafts`, so checked-off lines and anything the pantry
+  already has are left out, and the aisle order is the server's, unchanged.
+- **Quantities survive**, because each line is the grocery list's own amount in
+  front of its own name — `1 ½ + 8 oz Yellow Onion` — the same string the
+  Reminders export uses as a reminder title.
+- **No aisle headers.** Every pasted line becomes an item in AnyList, so a
+  `Produce` header would arrive as something to buy. AnyList categorizes the
+  items itself, and the aisle *order* still survives in the line order. A list
+  app that keeps our aisles instead would get the headers; that is one flag on
+  the target (`sortsIntoItsOwnAisles`), not a second code path.
+- **An explainer first, once per app per device.** Tapping "Send to AnyList"
+  the first time shows what will be copied, how many items, where to paste it,
+  and the first few lines — *before* the clipboard is touched, because taking
+  over someone's clipboard is not something to do and then explain. Seen state
+  is per target (`groceryExport.listAppExplained.<id>`), so Reminders and
+  AnyList each explain themselves once, and a future target does too.
+
+**Adding another list app** is one `GroceryListApp` value in
+`ios/DinnerOS/Core/Planning/GroceryListAppExport.swift`: an id, a name, an SF
+Symbol, whether it sorts into its own aisles, and its paste steps. The button,
+the explainer, the confirmation, and the seen-state key all read from it. That
+is as far as the abstraction goes on purpose — until a second app turns up that
+needs something other than a paste, there is nothing to generalize.
+
 ## Demand signal
 
 Phase 8a ships one provider, so the Shop tab's honest answer to "can I use my
@@ -821,6 +899,16 @@ Kroger
 - Location API: https://developer.kroger.com/reference/api/location-api-public
 - OAuth2 guide: https://developer.kroger.com/documentation/partner/guides/guides-oauth
 - Cart request shape (third-party Go client): https://pkg.go.dev/github.com/densestvoid/krogerrecipeshopper/kroger
+
+AnyList (accessed 2026-09-21)
+
+- Copy and paste a list of items: https://help.anylist.com/articles/paste-items/
+- Adding items (every documented way): https://help.anylist.com/topics/lists/adding-items/
+- Reminders app import: https://help.anylist.com/articles/reminders-import/
+- Recipe import share extension (recipes only): https://help.anylist.com/articles/recipe-extension/
+- Using AnyList with Siri: https://help.anylist.com/articles/siri/
+- Unofficial reverse-engineered client (not used): https://github.com/codetheweb/anylist
+- 2016 request for a URL scheme, unanswered: https://discourse.omnigroup.com/t/link-to-shopping-list-in-anylisy/28251
 
 Others
 

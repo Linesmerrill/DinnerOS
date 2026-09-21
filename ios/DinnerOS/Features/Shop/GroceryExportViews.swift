@@ -4,11 +4,12 @@ import SwiftUI
     import UIKit
 #endif
 
-/// Drives "Add to Reminders", Share, and Copy for one week's grocery list.
+/// Drives "Add to Reminders", "Send to AnyList", Share, and Copy for one week's grocery list.
 ///
 /// A last resort, so it stays quiet: every action reports one short line and nothing blocks
-/// the list. The text comes from `GroceryListText`, the same formatter the Grocery List
-/// screen's Share button uses, so all three actions produce identical text.
+/// the list. Share and Copy use `GroceryListText`, the same formatter the Grocery List screen's
+/// Share button uses, so all three produce identical text. Reminders and the list apps use
+/// `GroceryReminderPlan.drafts`, so they leave out the same lines in the same order.
 @MainActor
 @Observable
 final class GroceryExportController {
@@ -37,8 +38,33 @@ final class GroceryExportController {
         static let previewCount = 4
     }
 
+    /// What "Send to <app>" is about to put on the clipboard, shown once per device per app
+    /// before anything is copied.
+    struct ListAppHandoff: Identifiable, Equatable {
+        let app: GroceryListApp
+        /// The lines still to buy, the same drafts the Reminders export would write.
+        let drafts: [GroceryReminderDraft]
+
+        var id: String { app.id }
+
+        /// Exactly what goes on the clipboard.
+        var text: String { GroceryListAppPlan.text(for: drafts, app: app) }
+        /// The first few items, as they'll paste.
+        var preview: [String] { Array(GroceryListAppPlan.lines(for: drafts, app: app).prefix(Self.previewCount)) }
+        /// How many items aren't in the preview.
+        var moreCount: Int { max(drafts.count - Self.previewCount, 0) }
+
+        static let previewCount = 4
+    }
+
     /// The `UserDefaults` key set once Reminders export has worked on this device.
     static let explainedKey = "groceryExport.remindersExplained"
+
+    /// The `UserDefaults` key set once `app`'s export has worked on this device. Per app, so
+    /// adding a second list app explains itself the first time rather than riding on AnyList's.
+    static func explainedKey(for app: GroceryListApp) -> String {
+        "groceryExport.listAppExplained.\(app.id)"
+    }
 
     /// For example "Added 14 items to Reminders".
     private(set) var message: String?
@@ -49,6 +75,8 @@ final class GroceryExportController {
     var existingList: ExistingList?
     /// The first-time explainer, while it's showing.
     var explainer: Explainer?
+    /// The first-time explainer for a list app, while it's showing.
+    var listAppExplainer: ListAppHandoff?
 
     @ObservationIgnored private let export: GroceryRemindersExport
     /// The `UserDefaults` suite, `nil` for standard. A name rather than the object, which isn't
@@ -68,6 +96,11 @@ final class GroceryExportController {
     /// Whether Reminders export has already worked on this device, so the explainer is skipped.
     var hasExplained: Bool {
         defaults.bool(forKey: Self.explainedKey)
+    }
+
+    /// Whether `app`'s export has already worked on this device.
+    func hasExplained(_ app: GroceryListApp) -> Bool {
+        defaults.bool(forKey: Self.explainedKey(for: app))
     }
 
     /// Sends the unchecked lines to a Reminders list named for the week. The first time on a
@@ -132,10 +165,50 @@ final class GroceryExportController {
 
     /// Puts the same text on the clipboard that Share sends.
     func copy(_ text: String) {
+        write(text)
+        report(message: String(localized: "Grocery list copied"))
+    }
+
+    /// Copies the week's unchecked lines in the shape `app` imports them. The first time on a
+    /// device it explains what will happen and where to paste, before the clipboard is touched.
+    ///
+    /// No app is launched: none of them documents a URL scheme that takes items, and opening
+    /// one on a guess would leave the member somewhere they didn't ask to be with no way to
+    /// tell whether the copy worked.
+    func send(list: GroceryList, checked: Set<String>, to app: GroceryListApp) {
+        let drafts = GroceryReminderPlan.drafts(for: list, checked: checked)
+        guard !drafts.isEmpty else {
+            report(error: String(localized: "Nothing to send: every item is checked off."))
+            return
+        }
+        let handoff = ListAppHandoff(app: app, drafts: drafts)
+        guard hasExplained(app) else {
+            listAppExplainer = handoff
+            return
+        }
+        finish(handoff)
+    }
+
+    /// The member tapped Copy Items in the list app's explainer.
+    func confirmListAppExplainer(_ pending: ListAppHandoff) {
+        listAppExplainer = nil
+        finish(pending)
+    }
+
+    private func finish(_ handoff: ListAppHandoff) {
+        write(handoff.text)
+        defaults.set(true, forKey: Self.explainedKey(for: handoff.app))
+        let count = handoff.drafts.count
+        report(
+            message: count == 1
+                ? String(localized: "Copied 1 item for \(handoff.app.name)")
+                : String(localized: "Copied \(count) items for \(handoff.app.name)"))
+    }
+
+    private func write(_ text: String) {
         #if canImport(UIKit)
             UIPasteboard.general.string = text
         #endif
-        report(message: String(localized: "Grocery list copied"))
     }
 
     func dismissMessage() {
@@ -203,6 +276,16 @@ struct GroceryExportActions: View {
         }
         .disabled(model.list == nil || controller.isWorking)
 
+        ForEach(GroceryListApp.all) { app in
+            Button {
+                guard let list = model.list else { return }
+                controller.send(list: list, checked: model.checked, to: app)
+            } label: {
+                Label("Send to \(app.name)", systemImage: app.systemImage)
+            }
+            .disabled(model.list == nil || controller.isWorking)
+        }
+
         if let text {
             if includesShare {
                 ShareLink(
@@ -244,7 +327,9 @@ struct GroceryExportSection: View {
         } header: {
             Text("Export the List")
         } footer: {
-            Text("A fallback when you're not ordering online: take the list to Reminders, Messages, or Notes.")
+            Text(
+                "A fallback when you're not ordering online: take the list to Reminders, AnyList, Messages, or Notes."
+            )
         }
     }
 }
@@ -264,6 +349,15 @@ struct GroceryExportPrompts: ViewModifier {
             ) { pending in
                 RemindersExplainerSheet(explainer: pending) {
                     Task { await controller.confirmExplainer(pending) }
+                }
+            }
+            .sheet(
+                item: Binding(
+                    get: { controller.listAppExplainer },
+                    set: { controller.listAppExplainer = $0 })
+            ) { pending in
+                ListAppExplainerSheet(handoff: pending) {
+                    controller.confirmListAppExplainer(pending)
                 }
             }
             .alert(
@@ -367,6 +461,67 @@ private struct RemindersExplainerSheet: View {
                     confirm()
                 } label: {
                     Text("Add to Reminders")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding()
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+}
+
+/// Shown the first time "Send to <app>" is tapped on a device: what lands on the clipboard,
+/// where to paste it, and the first few lines as they'll arrive.
+///
+/// It runs before the copy, not after, so the member's clipboard isn't taken over by something
+/// they hadn't agreed to yet.
+private struct ListAppExplainerSheet: View {
+    let handoff: GroceryExportController.ListAppHandoff
+    let confirm: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    private var count: Int { handoff.drafts.count }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text(
+                        "Copies the \(count) items you still need, one per line with their amounts. Nothing leaves your phone, and \(handoff.app.name) isn't opened for you."
+                    )
+                    .padding(.vertical, 2)
+                    Text(handoff.app.pasteSteps)
+                        .padding(.vertical, 2)
+                }
+                Section {
+                    ForEach(Array(handoff.preview.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                    }
+                    if handoff.moreCount > 0 {
+                        Text("and \(handoff.moreCount) more")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Preview")
+                }
+            }
+            .navigationTitle("Send to \(handoff.app.name)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                Button {
+                    dismiss()
+                    confirm()
+                } label: {
+                    Text("Copy Items")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
