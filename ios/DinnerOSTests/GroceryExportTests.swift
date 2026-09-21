@@ -276,6 +276,144 @@ struct GroceryExportTests {
         #expect(drafts.map(\.notes) == ["Produce", "Produce", "Bakery", "Pantry"])
     }
 
+    // MARK: Sending to a list app
+
+    /// A stand-in for a list app that keeps DinnerOS's aisles instead of sorting its own, so
+    /// the header branch is covered without inventing a second real vendor.
+    private let aisleKeepingApp = GroceryListApp(
+        id: "test-aisles", name: "Test List", systemImage: "list.bullet",
+        sortsIntoItsOwnAisles: false, pasteSteps: "Paste it.")
+
+    @Test func anyListGetsOneItemPerLineWithAmountsAndNoAisleHeaders() throws {
+        let drafts = GroceryReminderPlan.drafts(for: try list(), checked: [])
+
+        let text = GroceryListAppPlan.text(for: drafts, app: .anyList)
+
+        // Headers are left out: AnyList turns every pasted line into an item, so "Produce"
+        // would arrive as something to buy. The aisle order still survives in the line order.
+        #expect(
+            text == """
+                1 ½ + 8 oz Yellow Onion
+                Salt
+                """)
+        #expect(!text.hasSuffix("\n"))
+    }
+
+    @Test func anAppThatKeepsOurAislesGetsAHeaderBeforeEachRun() throws {
+        let drafts = GroceryReminderPlan.drafts(for: try list(), checked: [])
+
+        let lines = GroceryListAppPlan.lines(for: drafts, app: aisleKeepingApp)
+
+        #expect(lines == ["Produce", "1 ½ + 8 oz Yellow Onion", "Spices", "Salt"])
+    }
+
+    @Test func aisleHeadersAreNotRepeatedWithinOneAisle() throws {
+        let json = #"""
+            {"week": "2026-W38", "status": "draft", "pantryApplied": true,
+             "categories": [
+               {"category": "produce", "items": [
+                 {"ingredientKey": "i-zucchini", "name": "Zucchini", "amounts": [], "quantityText": "",
+                  "unquantified": true, "status": "toBuy", "recipes": []},
+                 {"ingredientKey": "i-leek", "name": "Leek", "amounts": [], "quantityText": "",
+                  "unquantified": true, "status": "toBuy", "recipes": []}]}
+             ],
+             "skipped": [], "skippedItems": []}
+            """#
+        let list = try JSONCoding.makeDecoder().decode(GroceryList.self, from: Data(json.utf8))
+        let drafts = GroceryReminderPlan.drafts(for: list, checked: [])
+
+        #expect(GroceryListAppPlan.lines(for: drafts, app: aisleKeepingApp) == ["Produce", "Zucchini", "Leek"])
+    }
+
+    @Test func aListAppLeavesOutTheSameLinesTheRemindersExportDoes() throws {
+        // Checked off, and already in the pantry: neither is something to buy, so neither is
+        // pasted — the same rule `GroceryReminderPlan.drafts` applies.
+        let drafts = GroceryReminderPlan.drafts(for: try list(), checked: ["i-salt"])
+
+        let text = GroceryListAppPlan.text(for: drafts, app: .anyList)
+
+        #expect(text == "1 ½ + 8 oz Yellow Onion")
+        #expect(!text.contains("Salt"))
+        #expect(!text.contains("Black Pepper"))
+    }
+
+    @Test func everythingCheckedOffIsNothingToSend() throws {
+        let controller = GroceryExportController(
+            remindersStore: FakeRemindersStore(), defaultsSuite: freshDefaults())
+
+        controller.send(list: try list(), checked: ["i-onion", "i-salt", "i-pepper"], to: .anyList)
+
+        #expect(controller.listAppExplainer == nil)
+        #expect(controller.message == nil)
+        #expect(controller.errorMessage != nil)
+    }
+
+    @Test func theListAppExplainerShowsBeforeTheFirstCopyOnly() throws {
+        let controller = GroceryExportController(
+            remindersStore: FakeRemindersStore(), defaultsSuite: freshDefaults())
+
+        controller.send(list: try list(), checked: [], to: .anyList)
+
+        // Nothing is copied and nothing is reported until the member agrees.
+        let handoff = try #require(controller.listAppExplainer)
+        #expect(handoff.app == .anyList)
+        #expect(handoff.preview == ["1 ½ + 8 oz Yellow Onion", "Salt"])
+        #expect(handoff.moreCount == 0)
+        #expect(handoff.text == "1 ½ + 8 oz Yellow Onion\nSalt")
+        #expect(controller.message == nil)
+        #expect(!controller.hasExplained(.anyList))
+
+        controller.confirmListAppExplainer(handoff)
+
+        #expect(controller.listAppExplainer == nil)
+        #expect(controller.hasExplained(.anyList))
+        #expect(controller.message == "Copied 2 items for AnyList")
+
+        // Later taps copy straight away.
+        controller.send(list: try list(), checked: ["i-salt"], to: .anyList)
+        #expect(controller.listAppExplainer == nil)
+        #expect(controller.message == "Copied 1 item for AnyList")
+    }
+
+    @Test func cancellingTheListAppExplainerDoesntCountAsSeen() throws {
+        let controller = GroceryExportController(
+            remindersStore: FakeRemindersStore(), defaultsSuite: freshDefaults())
+
+        controller.send(list: try list(), checked: [], to: .anyList)
+        controller.listAppExplainer = nil
+        controller.send(list: try list(), checked: [], to: .anyList)
+
+        #expect(controller.listAppExplainer != nil)
+        #expect(!controller.hasExplained(.anyList))
+        #expect(controller.message == nil)
+    }
+
+    @Test func eachListAppIsExplainedOnItsOwn() throws {
+        let controller = GroceryExportController(
+            remindersStore: FakeRemindersStore(), defaultsSuite: freshDefaults())
+
+        controller.send(list: try list(), checked: [], to: .anyList)
+        controller.confirmListAppExplainer(try #require(controller.listAppExplainer))
+
+        // A second app doesn't inherit the first one's "already explained": its paste steps
+        // are different, so the member hasn't been told them yet.
+        #expect(controller.hasExplained(.anyList))
+        #expect(!controller.hasExplained(aisleKeepingApp))
+        #expect(GroceryExportController.explainedKey(for: .anyList) == "groceryExport.listAppExplained.anylist")
+    }
+
+    @Test func remindersAndListAppExplainersAreSeparate() throws {
+        let controller = GroceryExportController(
+            remindersStore: FakeRemindersStore(), defaultsSuite: freshDefaults())
+
+        controller.send(list: try list(), checked: [], to: .anyList)
+        controller.confirmListAppExplainer(try #require(controller.listAppExplainer))
+
+        // Reminders asks for a system permission and writes to the member's database; copying
+        // does neither, so agreeing to one says nothing about the other.
+        #expect(!controller.hasExplained)
+    }
+
     // MARK: Share and copy text
 
     @Test func shareAndCopyTextIsExactlyTheGroceryListFormatterOutput() throws {
