@@ -234,9 +234,11 @@ func run() error {
 		Tokens:     tokens,
 		Logger:     logger,
 	})
-	// Recipe summaries label cook times with the household's Autopilot bands.
+	// Recipe summaries label cook times with the household's Autopilot bands,
+	// and cooking instructions read with the household's specialty choices.
 	recipeHandler := recipes.NewHandler(recipes.HandlerOptions{
 		Service:        recipeService,
+		Specialties:    substitutesService,
 		Ratings:        behavior.ratings,
 		Events:         behavior.events,
 		TimeBands:      autopilotService,

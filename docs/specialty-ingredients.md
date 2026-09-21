@@ -196,6 +196,38 @@ Every house-made specialty the week uses is also in the response's
 
 A failure to load choices fails the list, like the pantry (decision 58).
 
+## Cooking instructions
+
+A grocery list that says "tomato paste" and a recipe step that still says
+"Tex-Mex Paste" contradict each other in the one place it matters: the screen
+someone reads with a pan in hand. `GET .../recipes/{recipeId}/instructions`
+([api.md](api.md#cooking-instructions)) renders the steps with the household's
+choice applied.
+
+**Rendered at read time, never stored.** The instructions are built from the
+recipe as imported plus the choices resolved at that moment, through the same
+`GrocerySpecialties` the week's list uses, so the list and the steps can't
+disagree. Changing a choice — or the strategy — changes every recipe's steps
+on the next read, with no rewrite of stored recipes and nothing to migrate
+(decision 511). The recipe's own wording is always still there as
+`originalText`.
+
+| Choice | What the step says |
+| --- | --- |
+| none | Unchanged. The step reads as the card wrote it, and the specialty ingredient is listed in `unchosenSpecialties` so the app can offer the choice |
+| `as_is` | Unchanged, and not reported: the household buys the thing itself |
+| store alternative, one ingredient | The name and the amount are swapped: "Stir in **2 tsp tomato paste**". The amount is the line's amount converted to the option's `per` (through `unitSizes` for packets) times the option's own amount |
+| store alternative, several ingredients | The card's name stays, and the step gets a note: "Instead of 1 tbsp Tex-Mex Paste, use 2 tsp Tomato Paste, ½ tsp Chili Powder, and ¼ tsp Ground Cumin." Swapping one word can't say that the method changed |
+| store alternative, amount that doesn't convert | Same as above: the note lists the ingredients without amounts rather than inventing one |
+| house-made batch | The name stays, the amount becomes the jar's: "1 packet" becomes "1 tbsp", with a note saying it comes from the house-made batch. Without an exact conversion the recipe's own amount stays |
+
+A mention is marked `spicy` when the ingredient — or the substitute that
+replaced it — brings heat. Heat isn't a grocery category (chili flakes and
+cinnamon are both `spices`), so it is a second classification of catalog names
+next to `Categorize`: `ingredients.Spicy`, written as ordered phrase rules
+with the exceptions first, so "Sweet Thai Chili Sauce" and "Bell Pepper" stay
+mild.
+
 ## Batches and pantry cycles
 
 `POST .../specialty-ingredients/{specialtyId}/batches` calls
@@ -272,6 +304,7 @@ sizes. The learned rate, low threshold, and notifications then work unchanged.
 | Options | Setup → an ingredient (`SpecialtyDetailView`) | Every option with `summary`, notes, and ingredients, headed "Replaces 1 tbsp Tex-Mex Paste" for a store alternative. Batches add numbered steps, **Makes** (`yield.text`), and **Keeps** (`shelfLifeDays`). **Use This Option**, **Keep as Is**, and **Clear Choice**. |
 | Customize | An option → **Customize…** (`SpecialtyOptionEditor`, `SpecialtyOptionDraft`) | Edits a copy: name, notes, "replaces" amount or yield and shelf life, ingredients, and steps. **Save & Use** posts it with `basedOnOptionId` and chooses it. Household options also show **Edit…** and **Delete…**. Amounts are parsed like pantry amounts ("1 1/2" → `"3/2"`). |
 | Made a batch | Detail → **Made a Batch** (`SpecialtyBatchSheet`); grocery list → **Made It** | 1–10 batches with one `clientPurchaseId` per sheet (or per list batch until it's recorded). The returned `item` replaces the pantry item, and open grocery lists reload. |
+| Cooking steps | A recipe → **Cooking Steps** (`CookingStepsSection`, `InstructionStepRow`, `RecipeInstructionsViews`) | The steps as rendered for the serving size on screen: every listed ingredient bold with its amount, spicy ones bold and red with a flame (never colour alone), substitution notes under the step, and **Your Substitutes** at the end with a **Choose** button for anything unchosen. A server without the endpoint, or a failed load, leaves the recipe's own steps on screen. |
 | Grocery list | Week → Grocery List (`GroceryListView`, `GroceryListLayout`, `GrocerySpecialtyViews`) | Each `via[].text` under its item. An unchosen line shows `specialtyDetail.text` and **Choose**, a sheet with `suggestedOptions`, **Keep as Is**, and **See All Options**; a notice at the top opens setup. **Make This Week** lists `make` batches with their recipes, why they're needed, and **Made It**, with the ingredients bought only for that batch under it. **Already Made** lists `inPantry` batches. House-made lines read "In pantry (house-made)" and don't ask "Add to pantry?". Shared text includes the batches and `via` lines. |
 
 Choosing from a grocery list closes the picker at once and saves in the
@@ -298,6 +331,11 @@ sign-out and when the household changes. Decisions 139–144 in
 - **Changing the strategy changes past weeks' lists too.** Lists are built on
   request, so reopening last week's list after a change shows the new
   resolution. Only an explicit choice pins an ingredient.
+- **Instructions match names, they don't understand sentences.** Only the
+  recipe's own ingredient names (with plural, singular, and alias forms) are
+  found in step text. A step that calls something by a name the recipe doesn't
+  list is left alone, and an amount inserted in front of a name that the
+  sentence qualifies ("the cooked rice") can read a little oddly.
 - **Store alternatives don't deduct** their ingredients from the pantry when
   cooked; only a batch (or an item with the specialty's own name) does.
 - **One pantry unit size** per batch item. Other packet units convert only

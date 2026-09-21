@@ -761,7 +761,7 @@ func (s *Service) GrocerySpecialties(ctx context.Context, householdID string, li
 }
 
 func (s *Service) grocerySpecialty(sp Specialty, householdOptions []Option, resolutions map[string]Resolution, catalog map[string]recipes.Ingredient, levels map[string]pantry.StockLevel) *grocery.Specialty {
-	gs := &grocery.Specialty{ID: sp.ID, Key: sp.Key, Name: sp.Name, UnitSizes: groceryUnitSizes(sp.UnitSizes)}
+	gs := &grocery.Specialty{ID: sp.ID, Key: sp.Key, Name: sp.Name, Aliases: slices.Clone(sp.Aliases), UnitSizes: groceryUnitSizes(sp.UnitSizes)}
 	for _, o := range append(slices.Clone(sp.Options), householdOptions...) {
 		if o.SpecialtyID == sp.ID {
 			gs.Suggestions = append(gs.Suggestions, grocery.OptionRef{ID: o.ID, Type: grocery.ChoiceType(o.Type), Name: o.Name, IsDefault: o.ID == sp.DefaultOptionID})

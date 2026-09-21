@@ -341,6 +341,106 @@ The detail carries the same `cookMinutes`, `timeBand`, `calories`, and
 }
 ```
 
+### Cooking instructions
+
+`GET /api/v1/households/{householdId}/recipes/{recipeId}/instructions?servings=4`
+returns the steps as a member reads them while cooking. Requires
+`household.view`.
+
+Two things happen that the plain recipe doesn't do:
+
+- **Ingredients are marked with their amounts.** Every ingredient the recipe
+  lists is found in the step text and returned as an `ingredient` segment
+  carrying the amount for `servings` — "Add **1 tbsp gochujang**". `spicy` is
+  the catalog's heat signal (`ingredients.Spicy`), so a client can make heat
+  obvious; it must pair any colour with something else, because colour alone
+  isn't a signal.
+- **Specialty ingredients read as the household's choice**
+  ([specialty-ingredients.md](specialty-ingredients.md#cooking-instructions)).
+  A store alternative with one ingredient swaps the name and converts the
+  amount; anything that changes the method — several ingredients, or an amount
+  that doesn't convert — keeps the card's name and adds a `note` that spells
+  the swap out. A house-made batch converts the packet into the jar's unit and
+  says so. An ingredient nobody has chosen for is left alone and listed in
+  `unchosenSpecialties`.
+
+Nothing is stored. The steps are rendered on each read from the recipe as
+imported plus the household's current choices, so changing a choice changes
+every recipe's instructions with no migration (decision 511).
+
+**Segments, not offsets.** Joining every segment's `text` in order gives the
+step's `text` exactly, so no client needs character offsets or an encoding
+rule (decision 512). `originalText` is present only when a substitution
+changed the wording.
+
+`servings` must be one of the recipe's `servings`: amounts are never scaled
+from another serving size, the same rule the grocery list follows. Without the
+parameter, the smallest size is used.
+
+```json
+{
+  "recipeId": "66e5a1f2c3b4a5d6e7f80915",
+  "recipeName": "Smoky Pork Tacos",
+  "servings": 4,
+  "servingOptions": [2, 4],
+  "specialtiesApplied": true,
+  "steps": [
+    {
+      "index": 1,
+      "text": "Whisk 2 tbsp gochujang into 2 tbsp Tex-Mex Paste, then simmer.",
+      "originalText": "Whisk the gochujang into the Tex-Mex Paste, then simmer.",
+      "segments": [
+        { "kind": "text", "text": "Whisk " },
+        {
+          "kind": "ingredient", "text": "2 tbsp gochujang", "ingredientId": "66e5…a10",
+          "name": "Gochujang",
+          "amount": { "quantity": "2", "quantityValue": 2, "unit": "tbsp", "text": "2 tbsp" },
+          "spicy": true
+        },
+        { "kind": "text", "text": " into " },
+        {
+          "kind": "ingredient", "text": "2 tbsp Tex-Mex Paste", "name": "Tex-Mex Paste",
+          "amount": { "quantity": "2", "quantityValue": 2, "unit": "tbsp", "text": "2 tbsp" },
+          "substituted": true, "specialtyId": "tex-mex-paste", "specialtyName": "Tex-Mex Paste"
+        },
+        { "kind": "text", "text": ", then simmer." }
+      ],
+      "notes": [
+        {
+          "kind": "substitution",
+          "specialtyId": "tex-mex-paste",
+          "text": "Instead of 2 tbsp Tex-Mex Paste, use 4 tsp Tomato Paste, 1 tsp Chili Powder, and ½ tsp Ground Cumin."
+        }
+      ]
+    }
+  ],
+  "substitutions": [
+    {
+      "specialtyId": "tex-mex-paste", "specialtyKey": "tex mex paste", "specialtyName": "Tex-Mex Paste",
+      "optionId": "tex-mex-paste.store", "optionName": "Chipotle tomato base",
+      "type": "store_alternative", "source": "strategy",
+      "text": "Tex-Mex Paste → 4 tsp Tomato Paste, 1 tsp Chili Powder, and ½ tsp Ground Cumin"
+    }
+  ],
+  "unchosenSpecialties": [{ "id": "ponzu-sauce", "key": "ponzu sauce", "name": "Ponzu Sauce" }]
+}
+```
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `validation_failed` | `servings` is not one of the recipe's serving sizes |
+| 404 | `not_found` | Not a member of the household, or no such recipe in it |
+| 500 | `internal` | The household's specialty choices could not be read. A step that names an ingredient the household replaced is worse than an error, so the request fails rather than rendering the card's own words (decision 58) |
+
+**What is matched.** Only the recipe's own ingredient names, their singular and
+plural forms, the name without a parenthesis or a trailing clause, and a
+specialty ingredient's aliases ("Sichuan Paste" for "Szechuan Paste"). A step
+that names something the recipe doesn't list is left as plain text. An
+ingredient named twice in one step is marked both times and carries its amount
+on the first mention only. An article ("the") or an amount the step already
+wrote in front of a name is replaced by the amount for `servings`, so the step
+never says two different amounts for the same thing.
+
 ### Import
 
 `POST /api/v1/households/{householdId}/recipes/import` takes an import file
