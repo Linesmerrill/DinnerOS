@@ -238,7 +238,7 @@ These were **measured against a signed-in HelloFresh session**, not guessed.
 
 | Unknown | What this build does | How it fails if wrong |
 | --- | --- | --- |
-| The `/gw/api/plans?includeCanceled=false` response shape | Prefers the `hf_plan_id` cookie when it is there; otherwise accepts `{items:[…]}`, `{plans:[…]}` or a bare array and takes the first `id`/`subscriptionId` | The sheet says "…can't read", with no **Try Again** |
+| The `/gw/api/plans?includeCanceled=false` response shape | **Measured 2026-09-21:** a bare array of plans, whose `legacySubscriptionId` (a number, e.g. `16908749`) is the id the order history wants. A plan's own `id`, and the `hf_plan_id` cookie, are the customer plan's UUID — `past-deliveries` answers **403** to those, which is what made the first live attempt fail. The script accepts `{items:[…]}`, `{plans:[…]}` or a bare array, and takes the first numeric `legacySubscriptionId`/`subscriptionId` | The sheet says "…can't read", with no **Try Again** |
 | How the history paging terminates | Starts at the current ISO week and steps `from` to the week before the earliest week each page returned; stops on an empty page, on no progress, or after 40 pages | Too few weeks imported, or the 40-page cap; never a loop |
 | Whether `apiV2Auth` is `HttpOnly` | Reads it from `WKHTTPCookieStore`, which sees `HttpOnly` cookies, rather than `document.cookie`, which does not | n/a — this is the working-either-way choice |
 | `country`/`locale` outside the US | Hard-coded `US`/`en-US` (`MealKitService`) | An empty or wrong-region history for a non-US household |

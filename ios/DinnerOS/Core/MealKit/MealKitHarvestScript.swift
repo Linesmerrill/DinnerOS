@@ -78,16 +78,28 @@ nonisolated enum MealKitHarvestScript {
             return monday;
         }
 
+        // past-deliveries wants the *numeric* subscription id, which the plans endpoint
+        // calls legacySubscriptionId. A plan's own `id` (and the hf_plan_id cookie) is the
+        // customer plan's UUID, and that answers 403 — measured, not assumed.
+        function subscriptionIDOf(plan) {
+            if (!plan) { return ""; }
+            for (const value of [plan.legacySubscriptionId, plan.subscriptionId]) {
+                const text = typeof value === "number" ? String(value) : value;
+                if (typeof text === "string" && /^\\d+$/.test(text)) { return text; }
+            }
+            return "";
+        }
+
         async function findSubscription() {
-            if (subscription) { return subscription; }
+            if (/^\\d+$/.test(String(subscription || ""))) { return String(subscription); }
             const plans = await getJSON(origin + "/gw/api/plans?includeCanceled=false");
             const list = Array.isArray(plans) ? plans
                 : (plans && Array.isArray(plans.items)) ? plans.items
                 : (plans && Array.isArray(plans.plans)) ? plans.plans
                 : [];
             for (const plan of list) {
-                const id = plan && (plan.subscriptionId || plan.id);
-                if (typeof id === "string" && id.length > 0) { return id; }
+                const id = subscriptionIDOf(plan);
+                if (id) { return id; }
             }
             const none = new Error("no subscription");
             none.code = "unreadable";

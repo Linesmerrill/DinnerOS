@@ -28,11 +28,13 @@ nonisolated enum MealKitService: String, CaseIterable, Sendable {
         }
     }
 
-    /// The cookie that already names the account's subscription, when there is one. It saves the
-    /// harvest a request; without it the plan is read from the account's own plans endpoint.
-    var planCookieName: String {
+    /// A cookie that already names the account's subscription, when one exists. It saves the
+    /// harvest a request; without it the subscription is read from the account's own plans
+    /// endpoint. HelloFresh has none: `hf_plan_id` holds the customer plan's UUID, and the
+    /// order history answers 403 to anything but the numeric `legacySubscriptionId`.
+    var planCookieName: String? {
         switch self {
-        case .helloFresh: "hf_plan_id"
+        case .helloFresh: nil
         }
     }
 

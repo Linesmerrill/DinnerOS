@@ -308,7 +308,8 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
     /// The account's subscription id, when the site already put it in a cookie. It saves the
     /// harvest one request; the script reads the plans endpoint when it is missing.
     private func currentPlanID() async -> String? {
-        await cookie(named: service.planCookieName)
+        guard let name = service.planCookieName else { return nil }
+        return await cookie(named: name)
     }
 
     private func cookie(named name: String) async -> String? {
