@@ -9,6 +9,8 @@ struct HouseholdView: View {
     @Environment(AuthSession.self) private var session
     @Environment(HouseholdStore.self) private var households
     @Environment(ImportReviewStore.self) private var importReviews
+    /// Optional so previews needn't supply one.
+    @Environment(MealKitImportStore.self) private var mealKit: MealKitImportStore?
     @Environment(\.appConfiguration) private var configuration
     @Environment(PushNotificationStore.self) private var push: PushNotificationStore?
     @Environment(\.openURL) private var openURL
@@ -70,6 +72,11 @@ struct HouseholdView: View {
                 }
                 // Import bookkeeping, so it follows `recipes.import` rather than `household.view`,
                 // and hides entirely against an API without the route.
+                // Both follow `recipes.import` rather than `household.view`, and hide
+                // entirely against an API that doesn't have the route.
+                if detail.access.can(.recipesImport), let mealKit, mealKit.isAvailable {
+                    mealKitImportSection(mealKit)
+                }
                 if detail.access.can(.recipesImport), importReviews.isAvailable {
                     importReviewSection
                 }
@@ -128,7 +135,9 @@ struct HouseholdView: View {
                 households.access?.can(.recipesImport) == true
             else { return }
             importReviews.activate(householdID: householdID)
+            mealKit?.activate(householdID: householdID)
             await importReviews.load()
+            await mealKit?.load()
         }
         .refreshable {
             await households.load()
@@ -203,6 +212,32 @@ struct HouseholdView: View {
                 Text("Your role can't see the member list.")
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    /// Importing the household's own meal-kit order history, and what came of the last run
+    /// (docs/meal-kit-import.md). The row says what is happening rather than only naming the
+    /// screen, because an import someone started days ago is exactly what they come here for.
+    private func mealKitImportSection(_ mealKit: MealKitImportStore) -> some View {
+        let summary = MealKitFormatting.summary(for: mealKit.job, service: mealKit.service)
+        return Section {
+            NavigationLink {
+                MealKitImportStatusView()
+            } label: {
+                if mealKit.link == nil && mealKit.job == nil {
+                    Label("Import \(mealKit.service.displayName) Recipes", systemImage: "shippingbox")
+                } else {
+                    MealKitStatusRow(summary: summary, job: mealKit.job)
+                }
+            }
+        } header: {
+            Text("Recipe Import")
+        } footer: {
+            Text(
+                mealKit.isEnabled
+                    ? "Bring in the recipes you ordered. Only the sign-in session is stored, encrypted — never your password."
+                    : "Recipe import isn't switched on for this server."
+            )
         }
     }
 

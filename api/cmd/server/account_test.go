@@ -15,6 +15,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/mealkit"
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
@@ -78,6 +79,12 @@ var accountDeletionKinds = map[string]collectionKind{
 	recommendations.ProposalsCollection:    householdData,
 	recommendations.OverridesCollection:    householdData,
 	recommendations.WeekPairingsCollection: householdData,
+	// A meal-kit link holds the member's own encrypted tokens, so it goes
+	// with them as well as with an emptied household.
+	mealkit.LinkCollection: userRatings,
+	// Import runs are household history. A run whose link went with a
+	// deleted account finds no tokens and stops itself.
+	mealkit.JobCollection: householdData,
 }
 
 // seedDoc fills every plain indexed field with a unique value, so documents

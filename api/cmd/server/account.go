@@ -10,6 +10,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/mealkit"
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
@@ -32,6 +33,7 @@ func newAccountService(db *mongo.Database, householdService *households.Service,
 	eventStore := events.NewMongoStore(db)
 	ratingStore := ratings.NewMongoStore(db)
 	notificationStore := notifications.NewMongoStore(db)
+	mealKitStore := mealkit.NewMongoStore(db)
 	return account.NewService(account.Options{
 		Households: householdService,
 		HouseholdData: []account.HouseholdPurger{
@@ -46,6 +48,7 @@ func newAccountService(db *mongo.Database, householdService *households.Service,
 			ratingStore,
 			eventStore,
 			recommendations.NewMongoStore(db),
+			mealKitStore,
 		},
 		UserData: []account.UserPurger{
 			ratingStore,
@@ -53,6 +56,8 @@ func newAccountService(db *mongo.Database, householdService *households.Service,
 			pantryStore,
 			notificationStore,
 			push.NewMongoStore(db),
+			mealKitStore, // the member's encrypted meal-kit tokens go with them
+
 			auth.NewMongoSessionStore(db),
 			users.NewMongoStore(db), // last: deletes the user record
 		},

@@ -167,6 +167,54 @@ so one deployment serves both kinds of build. Local development needs no APNs
 setup: without the variables the sweep is a logged no-op, and the simulator
 can't receive remote pushes anyway.
 
+### Meal-kit recipe import
+
+New households can import the recipes they actually ordered from their meal-kit
+service instead of starting empty ([meal-kit-import.md](meal-kit-import.md)).
+The member links the account in the app; a worker binary in the same container
+image, `/importmealkit`, does the fetching on **Heroku Scheduler**. The web dyno
+only signs in once and queues the job.
+
+The feature is **off** unless `MEAL_KIT_IMPORT_ENABLED=true`, and turning it on
+without `RECIPE_IMPORT_ENCRYPTION_KEY` stops the API and the worker at startup
+with a message naming the variable. That is deliberate: the feature stores a
+member's meal-kit session tokens, and those are only ever stored encrypted.
+
+1. Generate the key locally and set it. Store it in a password manager too:
+   rotating it makes every stored link undecryptable, so every member has to
+   sign in to their meal kit again.
+
+   ```bash
+   heroku config:set -a dinneros-api MEAL_KIT_IMPORT_ENABLED=true RECIPE_IMPORT_ENCRYPTION_KEY="$(openssl rand -base64 48)"
+   ```
+
+2. Add the worker to the scheduler:
+
+   ```bash
+   heroku addons:open scheduler -a dinneros-api
+   ```
+
+   **Add Job** → **Every 10 minutes** → command `/importmealkit` → dyno size
+   **Eco**. Ten minutes is enough: an import is a background chore, a run is
+   capped at 40 recipe pages per household, and a long order history is meant
+   to spread across runs rather than hammer HelloFresh. Overlapping runs are
+   safe — a job is claimed with one atomic find-and-modify under a lease.
+
+3. Check a run by hand, then its log line:
+
+   ```bash
+   heroku run /importmealkit -a dinneros-api
+   ```
+
+   It ends with `meal-kit import run finished` and counts (`claimed`,
+   `succeeded`, `paused`, `requeued`, `dead`, `gone`, `recipes`,
+   `recipeFailures`). With the feature off it logs that and exits 0.
+
+Optional: `MEAL_KIT_RECIPES_PER_RUN` lowers the per-run cap, and
+`MEAL_KIT_HELLOFRESH_BASE_URL` points the client at a stub for testing.
+[meal-kit-import.md](meal-kit-import.md#when-a-run-goes-wrong) has the runbook
+for a run that goes wrong.
+
 ### Starter recipe library
 
 New households get a copy of one household's recipes so friends and family
@@ -348,6 +396,10 @@ vars or GitHub Secrets.
 | `APP_URL_SCHEME` | Phase 3 | Optional, default `dinneros`. Must match `APP_URL_SCHEME` in `ios/Config/Shared.xcconfig`; the `/invite` page's **Open** button uses it. |
 | `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_AUTH_KEY` | push | ✅ Set. developer.apple.com → Certificates, Identifiers & Profiles → **Keys** → a key with **Apple Push Notifications service (APNs)** enabled (one key serves sandbox and production). `APNS_KEY_ID` is its 10-character key ID, `APNS_TEAM_ID` is `6VTPDG2HNK`, and `APNS_AUTH_KEY` is the **entire** downloaded `AuthKey_XXXX.p8`, BEGIN and END lines included (literal `\n` escapes are accepted too). Apple allows downloading it once; store it only here. Set all three or none: none makes push a logged no-op, a partial or unparseable set stops the API and the sweep at startup. Read only by `/sendreminders`. See [Push notifications](#push-notifications). |
 | `APNS_TOPIC` | push | Optional; defaults to `APPLE_BUNDLE_ID` (`com.linesmerrill.dinneros`). |
+| `MEAL_KIT_IMPORT_ENABLED` | meal-kit import | Your choice, default `false`. `true` turns on asynchronous recipe import from a member's meal-kit account. Not a secret. See [Meal-kit recipe import](#meal-kit-recipe-import). |
+| `RECIPE_IMPORT_ENCRYPTION_KEY` | meal-kit import | **Required when `MEAL_KIT_IMPORT_ENABLED=true`; a missing or too-short value stops the API and the worker at startup.** Generate locally: `openssl rand -base64 48`. It wraps the per-link data keys that encrypt members' meal-kit session and refresh tokens, so it is as sensitive as `AUTH_TOKEN_SIGNING_KEY`: store it only in Heroku config and a password manager, never in the repository. Rotating it makes every stored link undecryptable and every member has to sign in to their meal kit again. |
+| `MEAL_KIT_RECIPES_PER_RUN` | optional | Recipe pages one worker run fetches per household (default 40). Lower is more polite to the meal-kit service; the rest waits for the next scheduled run. Not a secret. |
+| `MEAL_KIT_HELLOFRESH_BASE_URL` | optional | Overrides the HelloFresh account API origin (https only), for testing against a stub. Empty uses HelloFresh. Not a secret. |
 | `STARTER_RECIPES_HOUSEHOLD_ID` | optional | The 24-character hex ID of the household whose recipes every new household receives as a starter library. Empty (the default) disables it; a malformed value stops the API at startup. Not a secret. See [Starter recipe library](#starter-recipe-library). |
 | `OPENAI_API_KEY` | future | platform.openai.com → API keys (backend only) |
 
