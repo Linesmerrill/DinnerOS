@@ -6,8 +6,12 @@ struct AllMealsSection: View {
     let list: MenuRecipeList
     var title: String? = String(localized: "All Meals")
     var canAdd = true
+    /// Opens the "add a recipe by hand" sheet. Nil where the screen has no sheet to open,
+    /// which only drops the shortcut: the empty state still points somewhere.
+    var onAddOwnRecipe: (() -> Void)?
 
     @Environment(MenuStore.self) private var menu
+    @Environment(HouseholdStore.self) private var households
 
     @State private var isSearching = false
     @State private var searchText = ""
@@ -20,6 +24,8 @@ struct AllMealsSection: View {
     }
 
     private var photoURLs: [URL?] { list.items.map(\.recipe.imageURL) }
+
+    private var canEditRecipes: Bool { households.access?.can(.recipesEdit) == true }
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
@@ -131,9 +137,22 @@ struct AllMealsSection: View {
             ContentUnavailableView {
                 Label("No Recipes Yet", systemImage: "book.closed")
             } description: {
-                Text(
-                    "Recipes arrive when an order history is imported into this household. After an import finishes, pull down to refresh."
-                )
+                Text("Import the recipes you've ordered, browse the catalog, or type one in yourself.")
+            } actions: {
+                if canEditRecipes {
+                    NavigationLink(value: DiscoverRoute()) {
+                        Label("Browse Recipes", systemImage: "sparkle.magnifyingglass")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    if let onAddOwnRecipe {
+                        Button("Add a Recipe", systemImage: "square.and.pencil", action: onAddOwnRecipe)
+                    }
+                }
+                // Importing an order history is set up per household, in Household
+                // settings, so this points there rather than pretending to start it.
+                Text("Household → Recipe Import brings in a meal-kit order history.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
     }

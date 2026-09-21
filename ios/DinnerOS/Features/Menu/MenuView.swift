@@ -179,8 +179,10 @@ struct MenuView: View {
                     PairingSuggestionsSection()
                     sections
                     if menu.selectedTiming != .past {
-                        AllMealsSection(list: menu.allMeals, canAdd: canAddMeals)
-                            .id(Self.allMealsAnchor)
+                        AllMealsSection(list: menu.allMeals, canAdd: canAddMeals) {
+                            isAddingOwnRecipe = true
+                        }
+                        .id(Self.allMealsAnchor)
                     }
                 }
                 .padding(.top, 12)
