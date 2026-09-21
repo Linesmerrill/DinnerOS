@@ -46,6 +46,9 @@ type HandlerOptions struct {
 	// TimeBands, when set, supplies the household's Autopilot cook-time bands
 	// for timeBand. Without it, or when it fails, the default bands apply.
 	TimeBands TimeBandReader
+	// Fetcher reads a recipe page for manual entry by URL. The default is a
+	// WebFetcher with every guard on (manual_web.go); tests replace it.
+	Fetcher *WebFetcher
 }
 
 // RatingReader loads rating aggregates for recipes. *ratings.Service
@@ -86,6 +89,12 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Get("/ingredients", h.searchIngredients)
 		view := households.RequirePermission(h.opts.Authorizer, households.PermHouseholdView, h.logger)
 		r.With(view).Get("/households/{householdId}/recipes", h.list)
+		// Manual entry: parse (nothing is stored), then create the reviewed
+		// draft. Both are static paths, which win over /{recipeId} in chi.
+		edit := households.RequirePermission(h.opts.Authorizer, households.PermRecipesEdit, h.logger)
+		r.With(edit).Post("/households/{householdId}/recipes/parse", h.parseRecipe)
+		r.With(edit).Post("/households/{householdId}/recipes", h.createRecipe)
+		r.With(edit).Put("/households/{householdId}/recipes/{recipeId}/sharing", h.setSharing)
 		r.With(view).Get("/households/{householdId}/recipes/{recipeId}", h.get)
 		imports := households.RequirePermission(h.opts.Authorizer, households.PermRecipesImport, h.logger)
 		// Review items are import bookkeeping, so whoever may import may read
@@ -189,8 +198,13 @@ type RecipeResponse struct {
 	OrderWeeks      []string                   `json:"orderWeeks"`
 	TimesOrdered    int                        `json:"timesOrdered"`
 	LastOrderedWeek string                     `json:"lastOrderedWeek,omitempty"`
-	CreatedAt       time.Time                  `json:"createdAt"`
-	UpdatedAt       time.Time                  `json:"updatedAt"`
+	// SharedToCatalog is the household's opt-in for putting this recipe in the
+	// global catalog; InCatalog is whether it is in fact there, which is also
+	// true for a recipe from a public source.
+	SharedToCatalog bool      `json:"sharedToCatalog"`
+	InCatalog       bool      `json:"inCatalog"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
 	// HouseholdRating aggregates every member's rating; MyRating is the
 	// caller's own, or null.
 	HouseholdRating ratings.HouseholdRatingResponse `json:"householdRating"`
@@ -233,6 +247,18 @@ type AmountResponse struct {
 	RawText       string   `json:"rawText"`
 }
 
+// NewAmountResponse returns the wire form of an ingredient amount. Other
+// modules that render recipe content (the global catalog) use it so an amount
+// reads the same everywhere.
+func NewAmountResponse(a Amount) AmountResponse {
+	ar := AmountResponse{Servings: a.Servings, Unit: a.Unit, SourceUnit: a.SourceUnit, RawText: a.RawText}
+	if q, ok := a.ExactQuantity(); ok {
+		exact, value := a.Quantity, q.Float64()
+		ar.Quantity, ar.QuantityValue = &exact, &value
+	}
+	return ar
+}
+
 // ImportResultResponse is returned by POST /households/{householdId}/recipes/import.
 type ImportResultResponse struct {
 	Created            int                   `json:"created"`
@@ -271,6 +297,7 @@ func newRecipeResponse(r Recipe, bands autopilot.TimeBands) RecipeResponse {
 		Ingredients: make([]RecipeIngredientResponse, 0, len(r.Ingredients)),
 		Steps:       make([]StepResponse, 0, len(r.Steps)),
 		OrderWeeks:  orEmpty(r.OrderWeeks), TimesOrdered: r.TimesOrdered, LastOrderedWeek: r.LastOrderedWeek,
+		SharedToCatalog: r.SharedToCatalog, InCatalog: Publishable(r),
 		CreatedAt: r.CreatedAt.UTC(), UpdatedAt: r.UpdatedAt.UTC(),
 	}
 	for _, n := range r.Nutrition {
@@ -285,12 +312,7 @@ func newRecipeResponse(r Recipe, bands autopilot.TimeBands) RecipeResponse {
 			Amounts: make([]AmountResponse, 0, len(line.Amounts)),
 		}
 		for _, a := range line.Amounts {
-			ar := AmountResponse{Servings: a.Servings, Unit: a.Unit, SourceUnit: a.SourceUnit, RawText: a.RawText}
-			if q, ok := a.ExactQuantity(); ok {
-				exact, value := a.Quantity, q.Float64()
-				ar.Quantity, ar.QuantityValue = &exact, &value
-			}
-			lr.Amounts = append(lr.Amounts, ar)
+			lr.Amounts = append(lr.Amounts, NewAmountResponse(a))
 		}
 		resp.Ingredients = append(resp.Ingredients, lr)
 	}

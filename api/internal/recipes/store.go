@@ -42,6 +42,13 @@ type Store interface {
 	// whose ID sorts after afterID (from the first when afterID is empty),
 	// ordered by ID, for paging through a whole household.
 	ListRecipesAfter(ctx context.Context, householdID, afterID string, limit int) ([]Recipe, error)
+	// LibraryCatalogKeys returns, for each of keys the household already has a
+	// recipe for, that recipe's ID. Keys the household does not have are
+	// absent from the map.
+	LibraryCatalogKeys(ctx context.Context, householdID string, keys []string) (map[string]string, error)
+	// SetRecipeShared sets a recipe's catalog opt-in and UpdatedAt. It returns
+	// the stored recipe as it now is.
+	SetRecipeShared(ctx context.Context, householdID, id string, shared bool, now time.Time) (Recipe, error)
 	// ExistingRecipeIDs returns those of ids that are the household's
 	// recipes, in any order. Malformed IDs are skipped.
 	ExistingRecipeIDs(ctx context.Context, householdID string, ids []string) ([]string, error)

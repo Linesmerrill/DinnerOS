@@ -22,6 +22,7 @@ Autopilot's first customer.
 | 2 | Authentication (Sign in with Apple, Google) — API and iOS | ✅ Done |
 | 3 | Households, roles, and invitations (Resend email) — API and iOS | ✅ Done |
 | 4 | Recipes, ingredient catalog, units, recipe import — API and iOS library | ✅ Done |
+| 4a | Global recipe catalog and discovery: one shared entry per recipe (public sources automatically, a household's own only if it opts in), "Try Something Else" browsing, catalog search, and manual recipe entry by paste or link — API and iOS | ✅ Done; existing households need `cmd/publishcatalog` |
 | 5 | HelloFresh historical importer (full order history, exact delivered variants from account captures and recipe cards) | ✅ Done; 40 older variants can't be recovered and keep the canonical recipe |
 | 6 | Weekly planner and week grocery list, including skip-once / never-buy ingredients | ✅ Done (API and iOS) |
 | 7 | Pantry and grocery engine, specialty ingredient substitutes, low-stock alerts | ✅ Done; saved lists pending |
@@ -38,6 +39,7 @@ Autopilot's first customer.
 DinnerOS/
 ├── api/                    Go modular-monolith API (chi, slog, MongoDB)
 │   ├── cmd/server/         HTTP server entry point
+│   ├── cmd/publishcatalog/ Backfill a household into the global recipe catalog
 │   ├── internal/           Domain packages + HTTP wiring (not importable externally)
 │   ├── pkg/                Reusable, domain-free packages (empty until needed)
 │   ├── migrations/         Index/data migration conventions

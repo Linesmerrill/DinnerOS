@@ -306,6 +306,22 @@ final class RecipeLibrary {
         change(&items[index])
     }
 
+    // MARK: - Manual entry
+
+    /// A store for one "Add a Recipe" sheet, sharing this library's session and
+    /// API client. A draft belongs to the sheet the member opened, so it is
+    /// created per screen rather than held here.
+    func makeDraftStore(householdID: String) -> RecipeDraftStore {
+        RecipeDraftStore(session: session, api: api, householdID: householdID)
+    }
+
+    /// Shows a recipe the member just added, so the library reflects it without
+    /// a round trip. The list reloads on its next refresh either way.
+    func recipeWasAdded() async {
+        guard phase == .loaded else { return }
+        await refresh()
+    }
+
     // MARK: - Reset
 
     /// Forgets everything, for sign-out.

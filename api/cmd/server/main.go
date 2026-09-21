@@ -19,6 +19,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/applinks"
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot/baseline"
+	"github.com/Linesmerrill/DinnerOS/api/internal/catalog"
 	"github.com/Linesmerrill/DinnerOS/api/internal/config"
 	"github.com/Linesmerrill/DinnerOS/api/internal/customize"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
@@ -129,7 +130,12 @@ func run() error {
 	}
 
 	authHandler := newAuthHandler(cfg, userService, tokens, logger)
-	recipeService := recipes.NewService(recipes.NewMongoStore(db.Database()))
+	// The global recipe catalog is a separate collection with no household in
+	// it. Recipes flow one way: an import publishes public-source recipes
+	// into it, and a household copies an entry into its own library.
+	catalogService := catalog.NewService(catalog.ServiceOptions{Store: catalog.NewMongoStore(db.Database())})
+	recipeService := recipes.NewService(recipes.NewMongoStore(db.Database())).WithCatalog(catalogService)
+	catalogService.SetLibrary(recipeService)
 	// New households get a copy of STARTER_RECIPES_HOUSEHOLD_ID's recipes in
 	// the background, so friends who sign up don't start with an empty menu.
 	starter := recipes.NewStarter(recipes.StarterOptions{
@@ -209,6 +215,15 @@ func run() error {
 	// Grocery items accepted as Autopilot pairings join the week's list (and
 	// so the shopping handoff).
 	planService.WithExtras(autopilotService)
+	// "Try something else" ranks the catalog with the same taste profile
+	// Autopilot plans a week from, rather than a second recommender.
+	catalogService.SetTaste(autopilotService)
+	catalogHandler := catalog.NewHandler(catalog.HandlerOptions{
+		Service:    catalogService,
+		Authorizer: householdService,
+		Tokens:     tokens,
+		Logger:     logger,
+	})
 	autopilotHandler := recommendations.NewHandler(recommendations.HandlerOptions{
 		Service:    autopilotService,
 		Authorizer: householdService,
@@ -342,6 +357,7 @@ func run() error {
 				householdHandler.Mount(r)
 				invitationHandler.Mount(r)
 				recipeHandler.Mount(r)
+				catalogHandler.Mount(r)
 				planHandler.Mount(r)
 				skipHandler.Mount(r)
 				customizeHandler.Mount(r)
@@ -401,6 +417,7 @@ func indexSets() []mongodb.IndexSet {
 		households.Indexes(),
 		invitations.Indexes(),
 		recipes.Indexes(),
+		catalog.Indexes(),
 		planning.Indexes(),
 		pantry.Indexes(),
 		notifications.Indexes(),

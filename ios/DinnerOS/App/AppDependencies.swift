@@ -15,6 +15,8 @@ final class AppDependencies {
     let recipes: RecipeLibrary
     /// Import bookkeeping: what the importer couldn't map. Read only by the Household tab.
     let importReviews: ImportReviewStore
+    /// The global recipe catalog: "Try Something Else" and catalog search.
+    let discover: DiscoverStore
     let plans: PlanStore
     let pantry: PantryStore
     let specialties: SpecialtyStore
@@ -52,6 +54,12 @@ final class AppDependencies {
             inviteLinkHost: configuration.appLinkDomain)
         recipes = RecipeLibrary(session: session, api: client.map { RecipesAPI(client: $0) })
         importReviews = ImportReviewStore(session: session, api: client.map { RecipesAPI(client: $0) })
+        discover = DiscoverStore(session: session, api: client.map { CatalogAPI(client: $0) })
+        // A recipe added from the catalog is the household's from then on, so
+        // the library refreshes rather than guessing at the new row.
+        discover.recipeWasAdded = { [recipes] _ in
+            await recipes.recipeWasAdded()
+        }
         // Grocery lists and the Shop tab share check-offs: confirming an order checks lines off.
         let groceryChecks = UserDefaultsGroceryChecks()
         let plans = PlanStore(session: session, api: client.map { PlansAPI(client: $0) }, checks: groceryChecks)

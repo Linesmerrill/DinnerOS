@@ -129,6 +129,7 @@ func (m *memoryStore) SaveRecipes(_ context.Context, householdID string, list []
 	for _, r := range list {
 		r = cloneRecipe(r)
 		r.HouseholdID = householdID
+		r.CatalogKey = CatalogKey(r) // derived on write, as MongoStore does
 		if r.ID == "" {
 			for _, e := range m.recipes {
 				if e.HouseholdID == householdID && e.Source == r.Source && e.SourceRecipeID == r.SourceRecipeID {
@@ -182,6 +183,37 @@ func (m *memoryStore) ExistingRecipeIDs(_ context.Context, householdID string, i
 		}
 	}
 	return out, nil
+}
+
+func (m *memoryStore) LibraryCatalogKeys(_ context.Context, householdID string, keys []string) (map[string]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out map[string]string
+	for _, r := range m.recipes {
+		if r.HouseholdID != householdID || r.CatalogKey == "" || !slices.Contains(keys, r.CatalogKey) {
+			continue
+		}
+		if out == nil {
+			out = map[string]string{}
+		}
+		if prev, ok := out[r.CatalogKey]; !ok || r.ID < prev {
+			out[r.CatalogKey] = r.ID
+		}
+	}
+	return out, nil
+}
+
+func (m *memoryStore) SetRecipeShared(_ context.Context, householdID, id string, shared bool, now time.Time) (Recipe, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.recipes {
+		if m.recipes[i].ID == id && m.recipes[i].HouseholdID == householdID {
+			m.recipes[i].SharedToCatalog = shared
+			m.recipes[i].UpdatedAt = now
+			return cloneRecipe(m.recipes[i]), nil
+		}
+	}
+	return Recipe{}, ErrNotFound
 }
 
 func (m *memoryStore) FindIngredientUse(_ context.Context, householdID string, ingredientIDs []string) ([]IngredientUse, error) {

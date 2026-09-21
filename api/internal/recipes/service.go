@@ -19,6 +19,9 @@ import (
 type Service struct {
 	store Store
 	now   func() time.Time
+	// catalog publishes public-source recipes into the global recipe catalog
+	// (sharing.go). It is nil until WithCatalog wires one.
+	catalog CatalogPublisher
 }
 
 // NewService returns a Service backed by store.
@@ -34,6 +37,9 @@ type ImportResult struct {
 	Unchanged int
 	// IngredientsCreated counts new catalog ingredients.
 	IngredientsCreated int
+	// CatalogPublished counts recipes written to the global recipe catalog.
+	// It is 0 when no publisher is wired or nothing was publishable.
+	CatalogPublished int
 	// ReviewItems counts distinct review items in the file. Items recorded by
 	// an earlier import are not duplicated.
 	ReviewItems int
@@ -244,6 +250,12 @@ func (s *Service) Import(ctx context.Context, householdID string, file ImportFil
 		if err := s.store.SaveRecipes(ctx, householdID, writes); err != nil {
 			return ImportResult{}, fmt.Errorf("save recipes: %w", err)
 		}
+		// Public-source recipes reach the global catalog as they are imported,
+		// so every household's import improves the catalog for the next one
+		// (identity.go, docs/architecture.md#decision-log #520).
+		if res.CatalogPublished, err = s.PublishToCatalog(ctx, writes); err != nil {
+			return ImportResult{}, err
+		}
 	}
 
 	// 5. Keep review items so they can be surfaced later.
@@ -325,6 +337,10 @@ func matchStored(stored []Recipe, canonical string, ids []string) (*Recipe, stor
 func mergeStored(r, stored Recipe, released []ImportRecipe) Recipe {
 	r.ID, r.HouseholdID = stored.ID, stored.HouseholdID
 	r.CreatedAt, r.UpdatedAt = stored.CreatedAt, stored.UpdatedAt
+	// A file never carries either: sharing is the household's own decision,
+	// and the key is derived by the store on write. Carrying them over keeps
+	// a re-import of the same file "unchanged" rather than a rewrite.
+	r.SharedToCatalog, r.CatalogKey = stored.SharedToCatalog, stored.CatalogKey
 	aliases, weeks := releaseIDs(
 		slices.Concat(stored.SourceAliases, r.SourceAliases, []string{stored.SourceRecipeID}),
 		slices.Concat(stored.OrderWeeks, r.OrderWeeks), r.OrderWeeks, released)
