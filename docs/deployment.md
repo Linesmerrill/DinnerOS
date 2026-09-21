@@ -171,22 +171,23 @@ can't receive remote pushes anyway.
 
 New households can import the recipes they actually ordered from their meal-kit
 service instead of starting empty ([meal-kit-import.md](meal-kit-import.md)).
-The member signs in on the meal kit's own site in a web view in the app, which
-hands the API the session that login produced; a worker binary in the same
-container image, `/importmealkit`, does the fetching on **Heroku Scheduler**.
-The web dyno only seals the tokens and queues the job.
+The member signs in on the meal kit's own site in a web view in the app, where
+their order history is also read; the app hands the API that list and a worker
+binary in the same container image, `/importmealkit`, fetches the **public**
+recipe pages it names on **Heroku Scheduler**.
 
-The feature is **off** unless `MEAL_KIT_IMPORT_ENABLED=true`, and turning it on
-without `RECIPE_IMPORT_ENCRYPTION_KEY` stops the API and the worker at startup
-with a message naming the variable. That is deliberate: the feature stores a
-member's meal-kit session tokens, and those are only ever stored encrypted.
+The feature is **off** unless `MEAL_KIT_IMPORT_ENABLED=true`, and that is its
+entire configuration. There is no key, because **nothing about a member's
+meal-kit account is stored**: no password, no session token, no cookie. If this
+deployment still has `RECIPE_IMPORT_ENCRYPTION_KEY` set from the earlier
+design, it is ignored and can be removed whenever convenient
+(`heroku config:unset -a dinneros-api RECIPE_IMPORT_ENCRYPTION_KEY`), along
+with the now-unused `meal_kit_links` collection.
 
-1. Generate the key locally and set it. Store it in a password manager too:
-   rotating it makes every stored link undecryptable, so every member has to
-   sign in to their meal kit again.
+1. Turn it on. There is nothing else to set:
 
    ```bash
-   heroku config:set -a dinneros-api MEAL_KIT_IMPORT_ENABLED=true RECIPE_IMPORT_ENCRYPTION_KEY="$(openssl rand -base64 48)"
+   heroku config:set -a dinneros-api MEAL_KIT_IMPORT_ENABLED=true
    ```
 
 2. Add the worker to the scheduler:
@@ -397,8 +398,7 @@ vars or GitHub Secrets.
 | `APP_URL_SCHEME` | Phase 3 | Optional, default `dinneros`. Must match `APP_URL_SCHEME` in `ios/Config/Shared.xcconfig`; the `/invite` page's **Open** button uses it. |
 | `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_AUTH_KEY` | push | ✅ Set. developer.apple.com → Certificates, Identifiers & Profiles → **Keys** → a key with **Apple Push Notifications service (APNs)** enabled (one key serves sandbox and production). `APNS_KEY_ID` is its 10-character key ID, `APNS_TEAM_ID` is `6VTPDG2HNK`, and `APNS_AUTH_KEY` is the **entire** downloaded `AuthKey_XXXX.p8`, BEGIN and END lines included (literal `\n` escapes are accepted too). Apple allows downloading it once; store it only here. Set all three or none: none makes push a logged no-op, a partial or unparseable set stops the API and the sweep at startup. Read only by `/sendreminders`. See [Push notifications](#push-notifications). |
 | `APNS_TOPIC` | push | Optional; defaults to `APPLE_BUNDLE_ID` (`com.linesmerrill.dinneros`). |
-| `MEAL_KIT_IMPORT_ENABLED` | meal-kit import | Your choice, default `false`. `true` turns on asynchronous recipe import from a member's meal-kit account. Not a secret. See [Meal-kit recipe import](#meal-kit-recipe-import). |
-| `RECIPE_IMPORT_ENCRYPTION_KEY` | meal-kit import | **Required when `MEAL_KIT_IMPORT_ENABLED=true`; a missing or too-short value stops the API and the worker at startup.** Generate locally: `openssl rand -base64 48`. It wraps the per-link data keys that encrypt members' meal-kit session and refresh tokens, so it is as sensitive as `AUTH_TOKEN_SIGNING_KEY`: store it only in Heroku config and a password manager, never in the repository. Rotating it makes every stored link undecryptable and every member has to sign in to their meal kit again. |
+| `MEAL_KIT_IMPORT_ENABLED` | meal-kit import | Your choice, default `false`. `true` turns on asynchronous recipe import of a household's own meal-kit order history. Not a secret, and it needs no companion secret: nothing about the meal-kit account is stored. See [Meal-kit recipe import](#meal-kit-recipe-import). |
 | `MEAL_KIT_RECIPES_PER_RUN` | optional | Recipe pages one worker run fetches per household (default 40). Lower is more polite to the meal-kit service; the rest waits for the next scheduled run. Not a secret. |
 | `MEAL_KIT_HELLOFRESH_BASE_URL` | optional | Overrides the HelloFresh account API origin (https only), for testing against a stub. Empty uses HelloFresh. Not a secret. |
 | `STARTER_RECIPES_HOUSEHOLD_ID` | optional | The 24-character hex ID of the household whose recipes every new household receives as a starter library. Empty (the default) disables it; a malformed value stops the API at startup. Not a secret. See [Starter recipe library](#starter-recipe-library). |

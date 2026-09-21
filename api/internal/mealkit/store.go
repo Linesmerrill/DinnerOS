@@ -5,29 +5,14 @@ import (
 	"time"
 )
 
-// Store persists meal-kit account links and the import job queue.
+// Store persists the import job queue.
 //
-// Link methods are scoped by householdID; implementations filter on it and
-// never trust a HouseholdID field on the value passed in. Missing records are
-// ErrNotFound. Slices in returned values are nil rather than empty.
+// There is nothing else to persist: no account link, no token, no cookie. Job
+// methods are scoped by householdID where a household could otherwise read
+// another's; implementations filter on it and never trust a HouseholdID field
+// on the value passed in. Missing records are ErrNotFound. Slices in returned
+// values are nil rather than empty.
 type Store interface {
-	// UpsertLink stores l as the household's link for l.Source, replacing an
-	// existing one (and its encrypted tokens) and keeping its CreatedAt. It
-	// returns the stored link.
-	UpsertLink(ctx context.Context, l Link) (Link, error)
-	// GetLink returns the household's link for source, or ErrNotFound.
-	GetLink(ctx context.Context, householdID, source string) (Link, error)
-	// GetLinkByID returns one link by its own ID, or ErrNotFound.
-	GetLinkByID(ctx context.Context, id string) (Link, error)
-	// SetLinkStatus records a new status, and ExpiresAt when non-zero.
-	SetLinkStatus(ctx context.Context, id string, status LinkStatus, at time.Time) error
-	// SaveLinkTokens replaces a link's encrypted tokens after a refresh and
-	// marks it LinkActive.
-	SaveLinkTokens(ctx context.Context, id string, secret Envelope, expiresAt, at time.Time) error
-	// DeleteLink removes the household's link for source, tokens and all.
-	// Deleting a link that does not exist is not an error.
-	DeleteLink(ctx context.Context, householdID, source string) error
-
 	// InsertJob stores j, assigning its ID.
 	InsertJob(ctx context.Context, j Job) (Job, error)
 	// GetJob returns one of the household's jobs.
@@ -35,8 +20,8 @@ type Store interface {
 	// LatestJob returns the household's newest job for source, or
 	// ErrNotFound.
 	LatestJob(ctx context.Context, householdID, source string) (Job, error)
-	// ActiveJob returns the household's queued, running, or paused job for
-	// source, or ErrNotFound. At most one exists at a time.
+	// ActiveJob returns the household's queued or running job for source, or
+	// ErrNotFound. At most one exists at a time.
 	ActiveJob(ctx context.Context, householdID, source string) (Job, error)
 	// ListJobs returns the household's jobs, newest first, at most limit.
 	ListJobs(ctx context.Context, householdID string, limit int) ([]Job, error)
@@ -56,9 +41,8 @@ type Store interface {
 	// SaveCheckpoint stores progress for a job still claimed by owner, so a
 	// restart resumes instead of re-fetching. ErrJobGone when it is not.
 	SaveCheckpoint(ctx context.Context, id, owner string, c Checkpoint, at time.Time) error
-	// FinishJob moves a claimed job to a terminal status (or to
-	// JobPausedAuth) and releases the lease. ErrJobGone when the job is no
-	// longer claimed by owner.
+	// FinishJob moves a claimed job to a terminal status and releases the
+	// lease. ErrJobGone when the job is no longer claimed by owner.
 	FinishJob(ctx context.Context, id, owner string, status JobStatus, checkpoint Checkpoint, jobErr *JobError, at time.Time) error
 	// RequeueJob returns a claimed job to the queue, available at
 	// availableAt. countAttempt is false when the run stopped on its own
@@ -66,11 +50,8 @@ type Store interface {
 	// dead-letter itself. ErrJobGone when the job is no longer claimed.
 	RequeueJob(ctx context.Context, id, owner string, availableAt time.Time, countAttempt bool, jobErr *JobError, at time.Time) error
 	// CancelJobs moves every non-terminal job of the household's source to
-	// JobCanceled and returns how many were canceled. Unlinking calls it, so
-	// a running worker's next conditional write fails with ErrJobGone and it
-	// stops without touching the library again.
+	// JobCanceled and returns how many were canceled. Stopping an import
+	// calls it, so a running worker's next conditional write fails with
+	// ErrJobGone and it stops without touching the library again.
 	CancelJobs(ctx context.Context, householdID, source, reason string, at time.Time) (int, error)
-	// ResumePausedJobs makes the household's paused-for-auth jobs runnable
-	// again after a re-link, and returns how many.
-	ResumePausedJobs(ctx context.Context, householdID, source string, at time.Time) (int, error)
 }

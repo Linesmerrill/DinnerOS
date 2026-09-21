@@ -104,24 +104,22 @@ type Config struct {
 }
 
 // MealKitImport holds the settings for meal-kit recipe import. The feature is
-// off unless MEAL_KIT_IMPORT_ENABLED is true, and turning it on without
-// RECIPE_IMPORT_ENCRYPTION_KEY stops the process at startup: a member's
-// session tokens are never stored unencrypted, not even by accident.
+// off unless MEAL_KIT_IMPORT_ENABLED is true.
+//
+// There is no key here any more, and no secret of any kind: the import stores
+// nothing about a member's meal-kit account, so there is nothing to encrypt.
 type MealKitImport struct {
 	Enabled bool
-	// EncryptionKey wraps the per-link data keys that protect stored session
-	// tokens (envelope encryption). Never log it.
-	EncryptionKey []byte
-	// HelloFreshBaseURL overrides the HelloFresh account API origin. Empty
-	// uses the package default.
+	// HelloFreshBaseURL overrides the origin HelloFresh recipe pages are read
+	// from. Empty uses the package default.
 	HelloFreshBaseURL string
 	// RecipesPerRun caps how many recipe pages one worker run fetches. 0
 	// uses the package default.
 	RecipesPerRun int
 }
 
-// Active reports whether meal-kit import is both enabled and usable.
-func (m MealKitImport) Active() bool { return m.Enabled && len(m.EncryptionKey) > 0 }
+// Active reports whether meal-kit import is enabled.
+func (m MealKitImport) Active() bool { return m.Enabled }
 
 // APNs holds the token-based APNs credentials (docs/deployment.md#push-notifications).
 // The one key signs for both the sandbox and production gateways.
@@ -336,10 +334,7 @@ func loadAPNs(cfg *Config, get func(key, fallback string) string) []error {
 	return nil
 }
 
-// loadMealKitImport reads the meal-kit import settings. The failure when the
-// feature is on without a key is deliberately loud: it is the one setting
-// that decides whether a member's session tokens can be stored at all. Error
-// messages never include the key.
+// loadMealKitImport reads the meal-kit import settings.
 func loadMealKitImport(cfg *Config, get func(key, fallback string) string, getenv func(string) string) []error {
 	enabled, err := strconv.ParseBool(get("MEAL_KIT_IMPORT_ENABLED", "false"))
 	if err != nil {
@@ -351,18 +346,6 @@ func loadMealKitImport(cfg *Config, get func(key, fallback string) string, geten
 	}
 
 	var errs []error
-	raw := get("RECIPE_IMPORT_ENCRYPTION_KEY", "")
-	switch {
-	case raw == "" && enabled:
-		errs = append(errs, errors.New("RECIPE_IMPORT_ENCRYPTION_KEY is required when MEAL_KIT_IMPORT_ENABLED=true; generate one with `openssl rand -base64 48`"))
-	case raw != "":
-		key, keyErr := mealkitKey(raw)
-		if keyErr != nil {
-			errs = append(errs, keyErr)
-		}
-		cfg.MealKitImport.EncryptionKey = key
-	}
-
 	if v := strings.TrimSpace(getenv("MEAL_KIT_RECIPES_PER_RUN")); v != "" {
 		n, convErr := strconv.Atoi(v)
 		if convErr != nil || n <= 0 || n > 500 {
@@ -377,26 +360,6 @@ func loadMealKitImport(cfg *Config, get func(key, fallback string) string, geten
 		}
 	}
 	return errs
-}
-
-// MinImportKeyBytes is the shortest accepted RECIPE_IMPORT_ENCRYPTION_KEY.
-// It matches mealkit.MinKeyBytes; config does not import mealkit, because
-// that package depends on recipes and config must stay dependency-free.
-const MinImportKeyBytes = 32
-
-// mealkitKey decodes RECIPE_IMPORT_ENCRYPTION_KEY the way the auth signing
-// key is decoded: base64 in any of its forms, else the raw bytes. The error
-// never includes the value.
-func mealkitKey(raw string) ([]byte, error) {
-	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
-		if key, err := enc.DecodeString(raw); err == nil && len(key) >= MinImportKeyBytes {
-			return key, nil
-		}
-	}
-	if len(raw) >= MinImportKeyBytes {
-		return []byte(raw), nil
-	}
-	return nil, fmt.Errorf("RECIPE_IMPORT_ENCRYPTION_KEY must decode to at least %d bytes; generate one with `openssl rand -base64 48`", MinImportKeyBytes)
 }
 
 // ParseAPNsKey parses the contents of an APNs .p8 file: a PKCS #8 P-256

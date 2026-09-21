@@ -224,7 +224,7 @@ struct HouseholdView: View {
             NavigationLink {
                 MealKitImportStatusView()
             } label: {
-                if mealKit.link == nil && mealKit.job == nil {
+                if mealKit.job == nil {
                     Label("Import \(mealKit.service.displayName) Recipes", systemImage: "shippingbox")
                 } else {
                     MealKitStatusRow(summary: summary, job: mealKit.job)

@@ -357,7 +357,7 @@ func run() error {
 		return err
 	}
 	if !mealKitService.Enabled() {
-		logger.Info("meal-kit recipe import is off; set MEAL_KIT_IMPORT_ENABLED=true and RECIPE_IMPORT_ENCRYPTION_KEY to enable it")
+		logger.Info("meal-kit recipe import is off; set MEAL_KIT_IMPORT_ENABLED=true to enable it")
 	}
 	mealKitHandler := mealkit.NewHandler(mealkit.HandlerOptions{
 		Service:    mealKitService,
@@ -540,11 +540,7 @@ func newMealKitService(cfg config.Config, db *mongo.Database, notifier *notifica
 		Logger:   logger,
 	}
 	if cfg.MealKitImport.Active() {
-		cipher, err := mealkit.NewCipher(cfg.MealKitImport.EncryptionKey)
-		if err != nil {
-			return nil, err
-		}
-		opts.Cipher = cipher
+		opts.Enabled = true
 		opts.Sources = mealkitsources.All(mealkitsources.Options{
 			HelloFreshBaseURL: cfg.MealKitImport.HelloFreshBaseURL, Logger: logger,
 		})

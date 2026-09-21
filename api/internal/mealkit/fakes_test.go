@@ -22,27 +22,15 @@ const (
 	userBob = "66e5a1f2c3b4a5d6e7f80a22"
 )
 
-// testKey is test key material, not a secret: it never protects anything real.
-var testKey = []byte("0123456789abcdef0123456789abcdef")
-
-func testCipher(t interface{ Fatalf(string, ...any) }) *Cipher {
-	c, err := NewCipher(testKey)
-	if err != nil {
-		t.Fatalf("NewCipher() error = %v", err)
-	}
-	return c
-}
-
 // --- Store --------------------------------------------------------------------
 
 // memoryStore is an in-memory Store following the MongoStore contract,
 // including the atomic claim: every mutation holds the same lock, which is
 // what MongoDB's single-document find-and-modify gives us in production.
 type memoryStore struct {
-	mu    sync.Mutex
-	links []Link
-	jobs  []Job
-	seq   int
+	mu   sync.Mutex
+	jobs []Job
+	seq  int
 }
 
 var _ Store = (*memoryStore)(nil)
@@ -50,80 +38,6 @@ var _ Store = (*memoryStore)(nil)
 func (m *memoryStore) nextID(prefix string) string {
 	m.seq++
 	return fmt.Sprintf("%s%019d", prefix, m.seq)
-}
-
-func (m *memoryStore) UpsertLink(_ context.Context, l Link) (Link, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for i, existing := range m.links {
-		if existing.HouseholdID == l.HouseholdID && existing.Source == l.Source {
-			l.ID, l.CreatedAt = existing.ID, existing.CreatedAt
-			m.links[i] = l
-			return l, nil
-		}
-	}
-	l.ID = m.nextID("link")
-	m.links = append(m.links, l)
-	return l, nil
-}
-
-func (m *memoryStore) GetLink(_ context.Context, householdID, source string) (Link, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, l := range m.links {
-		if l.HouseholdID == householdID && l.Source == source {
-			return l, nil
-		}
-	}
-	return Link{}, ErrNotFound
-}
-
-func (m *memoryStore) GetLinkByID(_ context.Context, id string) (Link, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, l := range m.links {
-		if l.ID == id {
-			return l, nil
-		}
-	}
-	return Link{}, ErrNotFound
-}
-
-func (m *memoryStore) SetLinkStatus(_ context.Context, id string, status LinkStatus, at time.Time) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for i, l := range m.links {
-		if l.ID == id {
-			m.links[i].Status = status
-			m.links[i].UpdatedAt = at
-			return nil
-		}
-	}
-	return ErrNotFound
-}
-
-func (m *memoryStore) SaveLinkTokens(_ context.Context, id string, secret Envelope, expiresAt, at time.Time) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for i, l := range m.links {
-		if l.ID == id {
-			m.links[i].Secret = secret
-			m.links[i].ExpiresAt = expiresAt
-			m.links[i].Status = LinkActive
-			m.links[i].UpdatedAt = at
-			return nil
-		}
-	}
-	return ErrNotFound
-}
-
-func (m *memoryStore) DeleteLink(_ context.Context, householdID, source string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.links = slices.DeleteFunc(m.links, func(l Link) bool {
-		return l.HouseholdID == householdID && l.Source == source
-	})
-	return nil
 }
 
 func (m *memoryStore) InsertJob(_ context.Context, j Job) (Job, error) {
@@ -297,40 +211,19 @@ func (m *memoryStore) CancelJobs(_ context.Context, householdID, source, reason 
 	return n, nil
 }
 
-func (m *memoryStore) ResumePausedJobs(_ context.Context, householdID, source string, at time.Time) (int, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	n := 0
-	for i, j := range m.jobs {
-		if j.HouseholdID == householdID && j.Source == source && j.Status == JobPausedAuth {
-			m.jobs[i].Status = JobQueued
-			m.jobs[i].AvailableAt = at
-			n++
-		}
-	}
-	return n, nil
-}
-
 // --- Source -------------------------------------------------------------------
 
 // fakeSource is a scripted meal-kit service.
 type fakeSource struct {
 	mu sync.Mutex
 
-	orders []OrderedRecipe
-	// ordersErr is returned by OrderHistory, once, then cleared.
-	ordersErr error
 	// recipeErr maps a source recipe ID to the error to return for it.
 	recipeErr map[string]error
-	// validToken, when set, is the only access token accepted; anything else
-	// is ErrAuthExpired.
-	validToken string
-	// refreshed is the token Refresh hands back. Empty means Refresh fails.
-	refreshed string
+	// rejectID, when set, is the one id NormalizeOrder refuses.
+	rejectID string
 
-	fetched   []string
-	refreshes int
-	// beforeRecipe runs before each Recipe call, for racing an unlink in.
+	fetched []string
+	// beforeRecipe runs before each Recipe call, for racing a stop in.
 	beforeRecipe func(o OrderedRecipe)
 }
 
@@ -338,46 +231,26 @@ var _ Source = (*fakeSource)(nil)
 
 func (f *fakeSource) Name() string { return SourceHelloFresh }
 
-func (f *fakeSource) Refresh(_ context.Context, _ Tokens) (Tokens, error) {
+// NormalizeOrder keeps anything with an id, which is enough for the queue's
+// tests; the real allow-list is the HelloFresh client's own.
+func (f *fakeSource) NormalizeOrder(o OrderedRecipe) (OrderedRecipe, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.refreshes++
-	if f.refreshed == "" {
-		return Tokens{}, ErrAuthExpired
+	if o.SourceRecipeID == "" || (f.rejectID != "" && o.SourceRecipeID == f.rejectID) {
+		return OrderedRecipe{}, false
 	}
-	f.validToken = f.refreshed
-	return Tokens{AccessToken: f.refreshed, RefreshToken: "refresh", ExpiresAt: time.Now().Add(time.Hour)}, nil
+	if o.URL == "" {
+		o.URL = "https://example.test/recipes/" + o.SourceRecipeID
+	}
+	return o, true
 }
 
-func (f *fakeSource) check(t Tokens) error {
-	if f.validToken != "" && t.AccessToken != f.validToken {
-		return ErrAuthExpired
-	}
-	return nil
-}
-
-func (f *fakeSource) OrderHistory(_ context.Context, t Tokens) ([]OrderedRecipe, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if err := f.check(t); err != nil {
-		return nil, err
-	}
-	if err := f.ordersErr; err != nil {
-		f.ordersErr = nil
-		return nil, err
-	}
-	return slices.Clone(f.orders), nil
-}
-
-func (f *fakeSource) Recipe(_ context.Context, t Tokens, o OrderedRecipe) (recipes.ImportRecipe, []recipes.ImportReviewItem, error) {
+func (f *fakeSource) Recipe(_ context.Context, o OrderedRecipe) (recipes.ImportRecipe, []recipes.ImportReviewItem, error) {
 	if f.beforeRecipe != nil {
 		f.beforeRecipe(o)
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if err := f.check(t); err != nil {
-		return recipes.ImportRecipe{}, nil, err
-	}
 	if err, ok := f.recipeErr[o.SourceRecipeID]; ok {
 		return recipes.ImportRecipe{}, nil, err
 	}

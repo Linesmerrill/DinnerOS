@@ -7,20 +7,13 @@ import Testing
 /// that is running, finished, expired or not this member's to start, and what dismissing it
 /// remembers.
 struct FirstRunRecipesTests {
-    private let link = MealKitLink(
-        status: "active", accountLabel: "HelloFresh account", linkedAt: .distantPast, updatedAt: .distantPast)
-    private let expiredLink = MealKitLink(
-        status: "needs_reauth", accountLabel: "HelloFresh account", linkedAt: .distantPast,
-        updatedAt: .distantPast)
-
     /// An empty library, a member who may import, and a server that can.
     private func emptyLibrary(
-        canImport: Bool = true, importEnabled: Bool = true, link: MealKitLink? = nil,
-        job: MealKitImportJob? = nil
+        canImport: Bool = true, importEnabled: Bool = true, job: MealKitImportJob? = nil
     ) -> FirstRunRecipes.Input {
         FirstRunRecipes.Input(
             libraryLoaded: true, hasRecipes: false, isFiltered: false, isDismissed: false,
-            canImport: canImport, importEnabled: importEnabled, link: link, job: job)
+            canImport: canImport, importEnabled: importEnabled, job: job)
     }
 
     @Test func aHouseholdWithRecipesNeverSeesIt() {
@@ -33,7 +26,7 @@ struct FirstRunRecipesTests {
     /// Recipes win over every other reason to show it, including a finished import that is
     /// still sitting in the status.
     @Test func recipesHideItEvenMidImport() {
-        var input = emptyLibrary(link: link, job: MealKitImportJob(id: "job-1", status: "running"))
+        var input = emptyLibrary(job: MealKitImportJob(id: "job-1", status: "running"))
         input.hasRecipes = true
 
         #expect(FirstRunRecipes.state(for: input) == .hidden)
@@ -61,12 +54,10 @@ struct FirstRunRecipesTests {
         #expect(FirstRunRecipes.state(for: input) == .hidden)
     }
 
-    @Test func nothingLinkedOffersTheImport() {
+    /// Nothing about the account is stored (#533), so with no run in the status the
+    /// sign-in is the only thing to offer.
+    @Test func nothingImportedYetOffersTheSignIn() {
         #expect(FirstRunRecipes.state(for: emptyLibrary()) == .offer)
-    }
-
-    @Test func aLinkedAccountThatNeverRanOffersToRunNow() {
-        #expect(FirstRunRecipes.state(for: emptyLibrary(link: link)) == .linked)
     }
 
     @Test func aRunInFlightShowsItsProgress() {
@@ -74,8 +65,8 @@ struct FirstRunRecipesTests {
         let running = MealKitImportJob(
             id: "job-1", status: "running", phase: "recipes", recipesFound: 48, recipesDone: 12)
 
-        #expect(FirstRunRecipes.state(for: emptyLibrary(link: link, job: queued)) == .importing(queued))
-        #expect(FirstRunRecipes.state(for: emptyLibrary(link: link, job: running)) == .importing(running))
+        #expect(FirstRunRecipes.state(for: emptyLibrary(job: queued)) == .importing(queued))
+        #expect(FirstRunRecipes.state(for: emptyLibrary(job: running)) == .importing(running))
         #expect(running.progress == 0.25)
     }
 
@@ -84,24 +75,8 @@ struct FirstRunRecipesTests {
         let running = MealKitImportJob(id: "job-1", status: "running", recipesFound: 10, recipesDone: 1)
         let detail = MealKitFormatting.summary(for: running, service: .helloFresh).detail
 
-        #expect(FirstRunRecipes.state(for: emptyLibrary(link: link, job: running)) == .importing(running))
+        #expect(FirstRunRecipes.state(for: emptyLibrary(job: running)) == .importing(running))
         #expect(detail == "1 of 10 recipes")
-    }
-
-    @Test func anExpiredSessionAsksForAnotherSignIn() {
-        let paused = MealKitImportJob(
-            id: "job-1", status: "paused_auth",
-            lastError: MealKitImportError(code: "auth_expired", message: "Your session expired.", at: .distantPast))
-
-        #expect(
-            FirstRunRecipes.state(for: emptyLibrary(link: expiredLink, job: paused))
-                == .needsSignIn(detail: "Your session expired."))
-        // And before any run: the link itself says the session is gone.
-        guard case .needsSignIn(let detail) = FirstRunRecipes.state(for: emptyLibrary(link: expiredLink)) else {
-            Issue.record("an expired link should ask for a sign-in")
-            return
-        }
-        #expect(detail.contains("expired"))
     }
 
     @Test func aStoppedRunSaysWhyAndOffersARetry() {
@@ -110,7 +85,7 @@ struct FirstRunRecipesTests {
             lastError: MealKitImportError(code: "parse", message: "The page didn't look like a recipe.", at: .now))
 
         #expect(
-            FirstRunRecipes.state(for: emptyLibrary(link: link, job: dead))
+            FirstRunRecipes.state(for: emptyLibrary(job: dead))
                 == .stopped(detail: "The page didn't look like a recipe."))
     }
 
@@ -118,7 +93,7 @@ struct FirstRunRecipesTests {
     @Test func aStoppedRunWithoutAMessageStillExplainsItself() {
         let dead = MealKitImportJob(id: "job-1", status: "dead")
 
-        guard case .stopped(let detail) = FirstRunRecipes.state(for: emptyLibrary(link: link, job: dead)) else {
+        guard case .stopped(let detail) = FirstRunRecipes.state(for: emptyLibrary(job: dead)) else {
             Issue.record("a dead job should show as stopped")
             return
         }
@@ -130,7 +105,7 @@ struct FirstRunRecipesTests {
             id: "job-1", status: "succeeded", phase: "done", recipesFound: 12, recipesDone: 12,
             imported: 10, updated: 1, unchanged: 1)
 
-        #expect(FirstRunRecipes.state(for: emptyLibrary(link: link, job: finished)) == .imported(count: 11))
+        #expect(FirstRunRecipes.state(for: emptyLibrary(job: finished)) == .imported(count: 11))
     }
 
     /// Nothing found is its own state: offering "1 recipe added" for a run that added none
@@ -138,16 +113,15 @@ struct FirstRunRecipesTests {
     @Test func aFinishedRunThatFoundNothingSaysSo() {
         let empty = MealKitImportJob(id: "job-1", status: "succeeded", phase: "done", unchanged: 3)
 
-        #expect(FirstRunRecipes.state(for: emptyLibrary(link: link, job: empty)) == .foundNothing)
+        #expect(FirstRunRecipes.state(for: emptyLibrary(job: empty)) == .foundNothing)
     }
 
-    @Test func anUnlinkedRunFallsBackToTheLinkItself() {
+    /// A canceled run leaves nothing behind — nothing about the account is stored (#533) —
+    /// so the surface is back to offering the sign-in.
+    @Test func aCanceledRunGoesBackToTheOffer() {
         let canceled = MealKitImportJob(id: "job-1", status: "canceled")
 
-        #expect(FirstRunRecipes.state(for: emptyLibrary(link: link, job: canceled)) == .linked)
-        #expect(
-            FirstRunRecipes.state(for: emptyLibrary(link: expiredLink, job: canceled))
-                == .needsSignIn(detail: "Your meal-kit sign-in expired. Sign in again to carry on importing."))
+        #expect(FirstRunRecipes.state(for: emptyLibrary(job: canceled)) == .offer)
     }
 
     @Test func aMemberWithoutTheImportPermissionIsOfferedTheCatalogInstead() {

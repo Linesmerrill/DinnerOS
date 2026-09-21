@@ -2,8 +2,12 @@ import Foundation
 import Observation
 import os
 
-/// The current household's meal-kit import: whether an account is linked and how the newest
-/// run is going (`docs/meal-kit-import.md`).
+/// The current household's meal-kit import: whether the server offers it, and how the newest run
+/// is going (`docs/meal-kit-import.md`).
+///
+/// There is no linked account to track. A member signs in on the meal kit's own site when they
+/// want to import, their order history is read there, and the list of recipes is what this store
+/// sends.
 ///
 /// Main-actor state that lives as long as the app, like `ImportReviewStore`. The work happens
 /// on the server, so this only reads — and polls while a run is in flight, because there is
@@ -26,7 +30,7 @@ final class MealKitImportStore {
     /// Cleared by a `404`: this API doesn't have meal-kit import, so the screen hides
     /// instead of showing an error for something that isn't built.
     private(set) var isAvailable = true
-    /// Set while linking, unlinking, or starting a run.
+    /// Set while starting or stopping a run.
     private(set) var isWorking = false
 
     /// How often the status is re-read while a run is in flight. Slow on purpose: the work
@@ -67,9 +71,7 @@ final class MealKitImportStore {
 
     /// The newest run, when there is one.
     var job: MealKitImportJob? { status.latestJob }
-    /// The linked account, when there is one.
-    var link: MealKitLink? { status.link }
-    /// Whether the server can accept a meal-kit sign-in at all.
+    /// Whether the server offers meal-kit import at all.
     var isEnabled: Bool { isAvailable && status.enabled }
     /// Whether a run is going to make progress on its own.
     var isImporting: Bool { status.isWorking }
@@ -109,49 +111,34 @@ final class MealKitImportStore {
         }
     }
 
-    /// Links the meal-kit account with the session the member's own sign-in produced, and queues
-    /// an import.
+    /// Queues a run for the order history the member's own browser session just read.
     ///
-    /// `webSession` goes straight into the API call and is never stored on this device. Throws so
-    /// the sign-in screen can show the failure.
-    func link(webSession: MealKitWebSession, startImport: Bool = true) async throws {
-        guard let api, let householdID else { return }
-        isWorking = true
-        defer { isWorking = false }
-        let started = scope
-        let result = try await session.authorized { token in
-            try await api.link(
-                householdID: householdID, service: service, session: webSession,
-                startImport: startImport, accessToken: token)
-        }
-        guard started == scope else { return }
-        status = result
-        isAvailable = true
-        refreshError = nil
-        phase = .loaded
-    }
-
-    /// Queues another run against the account that is already linked.
-    func startImport() async throws {
+    /// The harvest is recipe ids, page URLs and weeks — there is no credential in it to keep, and
+    /// nothing is written to this device. Throws so the sign-in screen can show the failure.
+    func startImport(harvest: MealKitHarvest) async throws {
         guard let api, let householdID else { return }
         isWorking = true
         defer { isWorking = false }
         let started = scope
         let job = try await session.authorized { token in
-            try await api.startImport(householdID: householdID, service: service, accessToken: token)
+            try await api.startImport(
+                householdID: householdID, service: service, harvest: harvest, accessToken: token)
         }
         guard started == scope else { return }
-        status = MealKitStatus(enabled: status.enabled, link: status.link, latestJob: job)
+        status = MealKitStatus(enabled: status.enabled, latestJob: job)
+        isAvailable = true
+        refreshError = nil
+        phase = .loaded
     }
 
-    /// Deletes the stored tokens and stops every run.
-    func unlink() async throws {
+    /// Stops every run in flight. Recipes already imported stay in the library.
+    func stopImports() async throws {
         guard let api, let householdID else { return }
         isWorking = true
         defer { isWorking = false }
         let started = scope
         try await session.authorized { token in
-            try await api.unlink(householdID: householdID, service: service, accessToken: token)
+            try await api.stopImports(householdID: householdID, service: service, accessToken: token)
         }
         guard started == scope else { return }
         // The server cancelled the runs; read back rather than guessing what it did.

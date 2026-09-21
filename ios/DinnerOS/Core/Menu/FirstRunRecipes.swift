@@ -26,7 +26,6 @@ nonisolated enum FirstRunRecipes {
         var canImport = false
         /// The server can accept a meal-kit sign-in at all (`MealKitImportStore.isEnabled`).
         var importEnabled = false
-        var link: MealKitLink?
         var job: MealKitImportJob?
     }
 
@@ -43,11 +42,11 @@ nonisolated enum FirstRunRecipes {
     enum State: Equatable, Sendable {
         /// Nothing to show.
         case hidden
-        /// Nothing linked yet: the sign-in is the main action.
+        /// Nothing imported yet: the sign-in is the main action.
         case offer
         /// A run is queued or going — anyone's in this household, not only this member's.
         case importing(MealKitImportJob)
-        /// The stored meal-kit session expired; signing in again is the fix.
+        /// The last run couldn't read the account; signing in again is the fix.
         case needsSignIn(detail: String)
         /// A run gave up.
         case stopped(detail: String)
@@ -55,8 +54,6 @@ nonisolated enum FirstRunRecipes {
         case imported(count: Int)
         /// A run finished having found nothing to import.
         case foundNothing
-        /// An account is linked but no run is in flight and none has added anything.
-        case linked
         /// The import isn't this member's to start.
         case unavailable(Unavailable)
     }
@@ -71,21 +68,19 @@ nonisolated enum FirstRunRecipes {
         }
         guard input.canImport else { return .unavailable(.noPermission) }
         guard input.importEnabled else { return .unavailable(.notOnThisServer) }
-        guard let link = input.link else { return .offer }
-        guard let job = input.job else {
-            return link.needsSignIn ? .needsSignIn(detail: expiredDetail) : .linked
-        }
+        // Nothing is stored about the meal-kit account any more (#533): the only
+        // history is the last run, and without one there is nothing to offer but the
+        // sign-in itself.
+        guard let job = input.job else { return .offer }
         switch job.state {
         case .queued, .running:
             return .importing(job)
-        case .needsSignIn:
-            return .needsSignIn(detail: job.lastError?.message ?? expiredDetail)
         case .failed:
             return .stopped(detail: job.lastError?.message ?? stoppedDetail)
         case .finished:
             return job.recipesAdded > 0 ? .imported(count: job.recipesAdded) : .foundNothing
         case .canceled:
-            return link.needsSignIn ? .needsSignIn(detail: expiredDetail) : .linked
+            return .offer
         }
     }
 

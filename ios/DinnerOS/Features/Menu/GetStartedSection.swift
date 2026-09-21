@@ -24,7 +24,6 @@ struct GetStartedSection: View {
     @State private var isDismissed = false
     @State private var isSigningIn = false
     @State private var isAddingOwnRecipe = false
-    @State private var isWorking = false
     @State private var actionError: String?
 
     private var householdID: String? { households.current?.household.id }
@@ -38,7 +37,7 @@ struct GetStartedSection: View {
         FirstRunRecipes.Input(
             libraryLoaded: library.phase == .loaded, hasRecipes: !library.items.isEmpty,
             isFiltered: library.filters.isNarrowed, isDismissed: isDismissed, canImport: canImport,
-            importEnabled: mealKit?.isEnabled == true, link: mealKit?.link, job: mealKit?.job)
+            importEnabled: mealKit?.isEnabled == true, job: mealKit?.job)
     }
 
     private var state: FirstRunRecipes.State { FirstRunRecipes.state(for: input) }
@@ -73,7 +72,7 @@ struct GetStartedSection: View {
             Task { await library.refresh() }
         }
         .sheet(isPresented: $isSigningIn) {
-            NavigationStack { MealKitSignInFlow() }
+            NavigationStack { MealKitImportFlow() }
         }
         .sheet(isPresented: $isAddingOwnRecipe) {
             AddRecipeView()
@@ -140,13 +139,6 @@ struct GetStartedSection: View {
                 ),
                 button: String(localized: "Import from \(service.displayName)"),
                 action: { isSigningIn = true })
-        case .linked:
-            importOffer(
-                title: String(localized: "Import your \(service.displayName) recipes"),
-                detail: String(
-                    localized: "Your \(service.displayName) account is connected. Nothing has been imported yet."),
-                button: String(localized: "Import Now"),
-                action: { start() })
         case .importing(let job):
             importing(job)
         case .needsSignIn(let detail):
@@ -158,7 +150,7 @@ struct GetStartedSection: View {
             importOffer(
                 title: String(localized: "The import stopped"), detail: detail,
                 button: String(localized: "Try Again"), symbol: "exclamationmark.triangle",
-                action: { start() })
+                action: { isSigningIn = true })
         case .foundNothing:
             importOffer(
                 title: String(localized: "Nothing to import"),
@@ -167,7 +159,7 @@ struct GetStartedSection: View {
                         "We didn't find any recipes on your \(service.displayName) order history. You can try again, or start from the catalog below."
                 ),
                 button: String(localized: "Try Again"), symbol: "tray",
-                action: { start() })
+                action: { isSigningIn = true })
         case .imported(let count):
             imported(count: count)
         case .unavailable(let reason):
@@ -183,7 +175,7 @@ struct GetStartedSection: View {
             blurb(title: title, detail: detail, symbol: symbol)
             Button(button, action: action)
                 .buttonStyle(.borderedProminent)
-                .disabled(isWorking || mealKit?.isWorking == true)
+                .disabled(mealKit?.isWorking == true)
             Text(MealKitFormatting.credentialExplanation(for: service))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -278,21 +270,6 @@ struct GetStartedSection: View {
         dismissals.dismiss(userID: userID, householdID: householdID)
     }
 
-    private func start() {
-        guard let mealKit else { return }
-        actionError = nil
-        isWorking = true
-        Task {
-            defer { isWorking = false }
-            do {
-                try await mealKit.startImport()
-            } catch is CancellationError {
-            } catch {
-                actionError = HouseholdStore.message(for: error)
-            }
-        }
-    }
-
     /// The member and household a dismissal belongs to.
     private struct DismissalKey: Equatable {
         let userID: String?
@@ -332,9 +309,6 @@ private func getStartedPreview(status: MealKitStatus, canImport: Bool = true) ->
     .environment(MealKitImportStore.preview(session: session, status: status))
 }
 
-private let previewLink = MealKitLink(
-    status: "active", accountLabel: "HelloFresh account", linkedAt: .now, updatedAt: .now)
-
 #Preview("Nothing linked") {
     getStartedPreview(status: MealKitStatus(enabled: true))
 }
@@ -342,7 +316,7 @@ private let previewLink = MealKitLink(
 #Preview("Importing") {
     getStartedPreview(
         status: MealKitStatus(
-            enabled: true, link: previewLink,
+            enabled: true,
             latestJob: MealKitImportJob(
                 id: "job-1", status: "running", phase: "recipes", recipesFound: 48, recipesDone: 12)))
 }
@@ -350,7 +324,7 @@ private let previewLink = MealKitLink(
 #Preview("Found nothing") {
     getStartedPreview(
         status: MealKitStatus(
-            enabled: true, link: previewLink,
+            enabled: true,
             latestJob: MealKitImportJob(id: "job-1", status: "succeeded", phase: "done")))
 }
 

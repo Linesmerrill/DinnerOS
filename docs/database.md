@@ -402,19 +402,21 @@ the push sweep).
 ### Meal-kit import
 
 Implemented in `internal/mealkit` ([meal-kit-import.md](meal-kit-import.md)).
-These two collections are the only new state: imported recipes land in
-`recipes` through the ordinary import pipeline, never by a second path.
+One collection is the only new state: imported recipes land in `recipes`
+through the ordinary import pipeline, never by a second path.
 
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `meal_kit_links` | householdId, userId, source (`hellofresh`), status (`active`/`needs_reauth`), accountLabel, secret{keyId, key, ciphertext}, expiresAt, createdAt, updatedAt, lastUsedAt | **unique** `{householdId, source}`; `{userId}` |
-| `meal_kit_jobs` | householdId, userId, linkId, source, status (`queued`/`running`/`paused_auth`/`succeeded`/`dead`/`canceled`), attempts, maxAttempts, availableAt, leaseOwner, leaseExpiresAt, checkpoint{phase, orders[], done[], failures[], imported, updated, unchanged, reviewItems}, lastError{code, message, at}, createdAt, updatedAt, startedAt, finishedAt | `{householdId, _id: -1}`; `{status, availableAt}` |
+| `meal_kit_jobs` | householdId, userId, source, status (`queued`/`running`/`succeeded`/`dead`/`canceled`), attempts, maxAttempts, availableAt, leaseOwner, leaseExpiresAt, checkpoint{phase, orders[], done[], failures[], imported, updated, unchanged, reviewItems}, lastError{code, message, at}, createdAt, updatedAt, startedAt, finishedAt | `{householdId, _id: -1}`; `{status, availableAt}` |
 
-- **The link never holds a password**, and `secret` is envelope-encrypted: a
-  random per-link data key sealed with `RECIPE_IMPORT_ENCRYPTION_KEY`, and the
-  tokens sealed with that data key. Without the config var the document is
-  useless, which is why it is safe in MongoDB. `keyId` is a hash prefix of the
-  key-encryption key, so a rotation can tell which links still need re-wrapping.
+- **Nothing about the meal-kit account is stored.** There is no password, no
+  session token, no cookie, no email address, and no collection to hold one:
+  the member signs in on the meal kit's own site in a web view, their order
+  history is read there, and what is stored is `checkpoint.orders` — recipe
+  ids, public page URLs and delivery weeks. `meal_kit_links` existed for
+  encrypted session tokens in an earlier design and is gone; a deployment that
+  still has it can drop it
+  ([meal-kit-import.md](meal-kit-import.md#when-a-run-goes-wrong)).
 - **The queue.** A worker claims with one `findOneAndUpdate` matching either a
   `queued` job whose `availableAt` has passed or a `running` job whose
   `leaseExpiresAt` has passed, sorted by `availableAt`, setting the lease and

@@ -57,11 +57,13 @@ tags:
   - name: meal-kit-import
     description: |
       Importing a household's own meal-kit order history (HelloFresh) into
-      their recipe library, asynchronously (docs/meal-kit-import.md). A member
-      links the account once; a backend worker fetches only the recipes that
-      account ordered and puts them through the ordinary recipe import
-      pipeline. Only session and refresh tokens are stored, encrypted at rest;
-      the password is never stored.
+      their recipe library, asynchronously (docs/meal-kit-import.md). The
+      member signs in on the meal kit's own site in a web view in the app and
+      their order history is read there, in their own session; the app posts
+      that list here and a backend worker fetches the **public** recipe pages
+      it names. **Nothing about the meal-kit account is stored** — no password,
+      no session token, no cookie, no profile — and there is no field on this
+      API to put one in.
   - name: ingredients
     description: The global ingredient catalog.
   - name: ratings
@@ -1346,97 +1348,26 @@ paths:
       - $ref: "#/components/parameters/HouseholdID"
       - $ref: "#/components/parameters/MealKitSource"
     get:
-      summary: Meal-kit link and latest import
+      summary: Latest meal-kit import
       description: |
-        Whether the household has linked a meal-kit account and how its newest
-        import run is going. Requires `recipes.import`.
+        How the household's newest import run is going. Requires
+        `recipes.import`.
 
-        `enabled` is false when the server has no `RECIPE_IMPORT_ENCRYPTION_KEY`,
+        `enabled` is false when the server has `MEAL_KIT_IMPORT_ENABLED` off,
         so the app offers adding recipes by hand instead of a sign-in it cannot
-        honour. No email address or token is ever returned.
+        honour. There is no linked account to report: nothing about one is
+        stored.
       operationId: getMealKitStatus
       tags: [meal-kit-import]
       security:
         - bearerAuth: []
       responses:
         "200":
-          description: The link and the newest run.
+          description: The newest run.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/MealKitStatus"
-        "401":
-          $ref: "#/components/responses/Unauthenticated"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-  /api/v1/households/{householdId}/meal-kit/{source}/link:
-    parameters:
-      - $ref: "#/components/parameters/HouseholdID"
-      - $ref: "#/components/parameters/MealKitSource"
-    put:
-      summary: Link a meal-kit account
-      description: |
-        Stores the session the member's own sign-in on the meal kit's website
-        produced, envelope-encrypted with `RECIPE_IMPORT_ENCRYPTION_KEY`.
-        **No password is involved: the member signs in on HelloFresh's own
-        page in a web view, and neither this API nor the app ever sees their
-        password.** Nothing in the body is logged or echoed back. Requires
-        `recipes.import`.
-
-        Linking again replaces the stored tokens and resumes a run that paused
-        waiting for a new sign-in. With `startImport` (the default) it also
-        queues a run; a run that is already queued, running, or paused is
-        returned instead of a second one.
-
-        Returns 503 `import_disabled` when the server has no encryption key.
-      operationId: linkMealKitAccount
-      tags: [meal-kit-import]
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/MealKitLinkRequest"
-      responses:
-        "200":
-          description: The stored link and the queued run.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MealKitStatus"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthenticated"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "503":
-          description: "`import_disabled`: meal-kit import is not enabled on this server."
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-    delete:
-      summary: Unlink the meal-kit account
-      description: |
-        Deletes the stored tokens and cancels every queued, running, or paused
-        import for that service immediately. A worker mid-run finds its job
-        canceled at its next write and stops without touching the library.
-        Requires `recipes.import`. Unlinking when nothing is linked is not an
-        error.
-      operationId: unlinkMealKitAccount
-      tags: [meal-kit-import]
-      security:
-        - bearerAuth: []
-      responses:
-        "204":
-          description: Unlinked.
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -1450,15 +1381,30 @@ paths:
     post:
       summary: Start an import run
       description: |
-        Queues an import of the linked account's order history. The response is
-        immediate; the work happens in a scheduled worker, so the app can be
-        closed. Requires `recipes.import`.
+        Queues an import of the order history in the body, which the app read
+        in the member's own browser session. The response is immediate; the
+        work happens in a scheduled worker, so the app can be closed. Requires
+        `recipes.import`.
 
-        A run that is already queued, running, or paused is returned as is.
+        Every entry is checked against the source's own allow-list: an id that
+        is not one of the service's recipe ids is dropped, and a URL that does
+        not point at the service's own recipe pages is rebuilt from the id
+        rather than followed. A body with nothing usable in it is a `400`.
+
+        A run that is already queued or running is returned as is, so a member
+        tapping twice never doubles the work. Running it again later is safe:
+        recipes already in the library come back as unchanged or updated, never
+        as duplicates.
       operationId: startMealKitImport
       tags: [meal-kit-import]
       security:
         - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MealKitStartImportRequest"
       responses:
         "202":
           description: The queued run.
@@ -1472,18 +1418,33 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
-        "409":
-          description: "`not_linked`: link a meal-kit account first."
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: "`import_disabled`: meal-kit import is not enabled on this server."
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Stop the imports in flight
+      description: |
+        Cancels every queued or running import for that service. A worker
+        mid-run finds its job canceled at its next write and stops without
+        touching the library again. Recipes already imported stay in the
+        library. Requires `recipes.import`. Stopping when nothing is running is
+        not an error.
+      operationId: stopMealKitImports
+      tags: [meal-kit-import]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Stopped.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
     get:
       summary: List import runs
       description: |
@@ -6171,65 +6132,55 @@ components:
           items:
             type: object
             description: ReviewItem (docs/import-format.md).
-    MealKitLinkRequest:
+    MealKitOrderedRecipe:
       type: object
-      required: [accessToken]
+      required: [sourceRecipeId]
+      description: |
+        One recipe of the harvested order history. Every field is untrusted
+        input: it was read from the meal kit's own pages in a web view.
       properties:
-        accessToken:
+        sourceRecipeId:
           type: string
-          format: password
           description: |
-            The meal-kit session token the member's own sign-in produced, read
-            from the service's session cookie in the web view. Stored
-            encrypted; never logged or returned.
-        refreshToken:
+            The meal kit's id for the recipe. An id that is not one of the
+            service's own is dropped.
+          example: 6512aa11bb22cc33dd44ee55
+        name:
           type: string
-          format: password
-          description: |
-            The refresh token from the same session, when there is one. A
-            session without one simply expires sooner and the member links
-            again.
-        expiresAt:
+          description: A label to show before the recipe page itself is read.
+        url:
           type: string
-          format: date-time
+          format: uri
           description: |
-            When the session stops working, when the client could work it out
-            from the sign-in. Omitted means "unknown".
-        startImport:
+            The public recipe page. Used only when it already points at the
+            service's own recipe pages; otherwise it is rebuilt from the id.
+        weeks:
+          type: array
+          items:
+            type: string
+            pattern: '^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$'
+          description: The ISO weeks it was delivered.
+          example: ["2026-W33", "2026-W38"]
+        isAddon:
           type: boolean
-          default: true
-          description: Queue an import run as soon as the account is linked.
+          description: A side or extra rather than a main meal.
       additionalProperties: false
-    MealKitLink:
+    MealKitStartImportRequest:
       type: object
-      required: [source, status, accountLabel, linkedAt, updatedAt, lastUsedAt]
+      required: [recipes]
+      description: |
+        The order history and nothing else. There is deliberately no field for
+        a token, a cookie, or an account: the sign-in stays in the app's web
+        view, and the server has nowhere to put one. A body carrying an unknown
+        field is a `400`.
       properties:
-        source:
-          type: string
-          enum: [hellofresh]
-        status:
-          type: string
-          enum: [active, needs_reauth]
-          description: |
-            `needs_reauth` means the stored session expired and the member has
-            to sign in again; the paused run resumes when they do.
-        accountLabel:
-          type: string
-          description: |
-            A display string such as "HelloFresh account". Deliberately not the
-            member's email address.
-          example: HelloFresh account
-        linkedAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-        lastUsedAt:
-          type: string
-          format: date-time
-          nullable: true
-          description: When a worker last used the stored tokens.
+        recipes:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items:
+            $ref: "#/components/schemas/MealKitOrderedRecipe"
+      additionalProperties: false
     MealKitImportFailure:
       type: object
       required: [sourceRecipeId, reason]
@@ -6249,7 +6200,7 @@ components:
       properties:
         code:
           type: string
-          enum: [auth_expired, parse, blocked, network, import, internal]
+          enum: [parse, blocked, network, import, internal]
         message:
           type: string
           description: |
@@ -6272,18 +6223,18 @@ components:
           enum: [hellofresh]
         status:
           type: string
-          enum: [queued, running, paused_auth, succeeded, dead, canceled]
+          enum: [queued, running, succeeded, dead, canceled]
           description: |
-            `paused_auth` waits for the member to sign in again. `dead` gave up:
-            either the attempt limit or something retrying cannot fix, such as
-            a source layout change. `canceled` means the account was unlinked.
+            `dead` gave up: either the attempt limit or something retrying
+            cannot fix, such as a source layout change. `canceled` means
+            someone stopped the import.
         phase:
           type: string
-          enum: [orders, recipes, import, done]
+          enum: [recipes, import, done]
           description: The resume point, so a restart re-fetches nothing.
         recipesFound:
           type: integer
-          description: Recipes on the account's order history, 0 before it is read.
+          description: How many recipes the submitted order history carried.
         recipesDone:
           type: integer
         imported:
@@ -6330,7 +6281,10 @@ components:
             $ref: "#/components/schemas/MealKitImportJob"
     MealKitStatus:
       type: object
-      required: [source, enabled, link, latestJob]
+      required: [source, enabled, latestJob]
+      description: |
+        There is no linked account to report: the server stores nothing about
+        one.
       properties:
         source:
           type: string
@@ -6338,12 +6292,8 @@ components:
         enabled:
           type: boolean
           description: |
-            False when the server has no import encryption key. The app then
+            False when the server has meal-kit import turned off. The app then
             offers adding recipes by hand instead.
-        link:
-          allOf:
-            - $ref: "#/components/schemas/MealKitLink"
-          nullable: true
         latestJob:
           allOf:
             - $ref: "#/components/schemas/MealKitImportJob"

@@ -3,24 +3,18 @@ package mealkit
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 )
 
 // Errors returned by stores, the service, and the worker.
 var (
 	ErrNotFound = errors.New("mealkit: not found")
-	// ErrNoLink means the household has no linked meal-kit account.
-	ErrNoLink = errors.New("mealkit: no linked account")
 	// ErrJobGone means a claimed job is no longer the caller's to write: it
-	// was canceled (an unlink) or its lease was taken over. The worker stops.
+	// was canceled or its lease was taken over. The worker stops.
 	ErrJobGone = errors.New("mealkit: job is no longer claimed by this worker")
-	// ErrDisabled means the feature is off (no encryption key configured).
+	// ErrDisabled means the feature is off (MEAL_KIT_IMPORT_ENABLED).
 	ErrDisabled = errors.New("mealkit: recipe import is not enabled")
-	// ErrAuthExpired means the stored tokens no longer work; the member has to
-	// sign in again. The job pauses rather than burning attempts.
-	ErrAuthExpired = errors.New("mealkit: the meal-kit session expired")
-	// ErrBlocked means the source refused us (HTTP 403). The run stops
+	// ErrBlocked means the source refused us (HTTP 401 or 403). The run stops
 	// immediately and never retries around an access control.
 	ErrBlocked = errors.New("mealkit: the meal-kit service refused the request")
 
@@ -59,61 +53,6 @@ const SourceHelloFresh = "hellofresh"
 // KnownSource reports whether s is a meal-kit service this build can import.
 func KnownSource(s string) bool { return s == SourceHelloFresh }
 
-// LinkStatus is the state of a member's meal-kit account link.
-type LinkStatus string
-
-// Link statuses.
-const (
-	// LinkActive: the stored tokens are believed good.
-	LinkActive LinkStatus = "active"
-	// LinkNeedsReauth: the tokens expired or were rejected. Jobs pause here
-	// until the member signs in again.
-	LinkNeedsReauth LinkStatus = "needs_reauth"
-)
-
-// Link is one household member's connection to a meal-kit account.
-//
-// Tokens are never in plaintext in this struct: Secret holds the envelope
-// ciphertext and travels only between the store and the Cipher.
-type Link struct {
-	ID          string
-	HouseholdID string
-	// UserID is the member who linked; only they (or an admin unlinking) act
-	// on it, and their account deletion removes it.
-	UserID string
-	Source string
-	Status LinkStatus
-	// AccountLabel is a non-identifying hint shown in the app, such as
-	// "HelloFresh account". It never holds the member's email address.
-	AccountLabel string
-	// Secret is the envelope-encrypted session and refresh tokens.
-	Secret Envelope
-	// ExpiresAt is when the session token stops working, as the source
-	// reported it. Zero when the source did not say.
-	ExpiresAt time.Time
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	// LastUsedAt is when a worker last read the tokens.
-	LastUsedAt time.Time
-}
-
-// Tokens are a meal-kit account's session credentials. They exist only in
-// memory: the Cipher encrypts them before they reach the store, and nothing
-// logs them. Tokens deliberately has no String or LogValue method that could
-// print a value.
-type Tokens struct {
-	AccessToken  string
-	RefreshToken string
-	ExpiresAt    time.Time
-}
-
-// Empty reports whether there is nothing worth storing.
-func (t Tokens) Empty() bool { return t.AccessToken == "" && t.RefreshToken == "" }
-
-// LogValue implements slog.LogValuer, so tokens passed to a logger by
-// accident print as "redacted" instead of as themselves.
-func (t Tokens) LogValue() slog.Value { return slog.StringValue("redacted") }
-
 // JobStatus is where an import job is in its lifecycle
 // (docs/meal-kit-import.md#job-lifecycle).
 type JobStatus string
@@ -126,9 +65,6 @@ const (
 	// JobRunning: a worker holds the lease. A worker that dies leaves the
 	// lease to expire, and the next run takes it over from the checkpoint.
 	JobRunning JobStatus = "running"
-	// JobPausedAuth: the tokens expired. It waits for the member to sign in
-	// again, which requeues it. Attempts are not spent here.
-	JobPausedAuth JobStatus = "paused_auth"
 	// JobSucceeded: the whole order history was imported. Some individual
 	// recipes may still have failed; Stats and Failures say which.
 	JobSucceeded JobStatus = "succeeded"
@@ -146,18 +82,18 @@ func (s JobStatus) Terminal() bool {
 
 // Active reports whether the job still counts as in flight for the member.
 func (s JobStatus) Active() bool {
-	return s == JobQueued || s == JobRunning || s == JobPausedAuth
+	return s == JobQueued || s == JobRunning
 }
 
 // Phase is how far a run got. It is the resume point: a restart re-enters at
 // the phase the checkpoint records instead of starting over.
 type Phase string
 
-// Phases, in order.
+// Phases, in order. A run starts at PhaseRecipes: the order history arrived
+// with the request that queued it, harvested in the member's own browser
+// session, so there is no reading-the-account phase on the server any more.
 const (
-	// PhaseOrders: reading the account's own order history.
-	PhaseOrders Phase = "orders"
-	// PhaseRecipes: fetching the recipes those orders contain.
+	// PhaseRecipes: fetching the public recipe pages the orders name.
 	PhaseRecipes Phase = "recipes"
 	// PhaseImport: handing the normalized recipes to the import pipeline.
 	PhaseImport Phase = "import"
@@ -183,7 +119,7 @@ const MaxFailuresKept = 100
 // already has.
 type Checkpoint struct {
 	Phase Phase
-	// Orders are the recipes the account ordered, discovered in PhaseOrders.
+	// Orders are the recipes the account ordered, as harvested by the app.
 	Orders []OrderedRecipe
 	// Done lists the source recipe IDs already fetched and handed to the
 	// import pipeline.
@@ -229,21 +165,19 @@ type JobError struct {
 
 // Error codes.
 const (
-	ErrCodeAuthExpired = "auth_expired"
-	ErrCodeParse       = "parse"
-	ErrCodeBlocked     = "blocked"
-	ErrCodeNetwork     = "network"
-	ErrCodeImport      = "import"
-	ErrCodeInternal    = "internal"
+	ErrCodeParse    = "parse"
+	ErrCodeBlocked  = "blocked"
+	ErrCodeNetwork  = "network"
+	ErrCodeImport   = "import"
+	ErrCodeInternal = "internal"
 )
 
 // Job is one import run for a household.
 type Job struct {
 	ID          string
 	HouseholdID string
-	// UserID is the member who started it: who gets asked to sign in again.
+	// UserID is the member who started it.
 	UserID string
-	LinkID string
 	Source string
 	Status JobStatus
 	// Attempts counts claims. MaxAttempts of them dead-letters the job.
@@ -272,19 +206,31 @@ func (j Job) RecipesDone() int { return len(j.Checkpoint.Done) }
 
 // OrderedRecipe is one recipe on the account's own order history: what the
 // household actually received, and the ISO weeks they received it.
+//
+// These arrive from a client, harvested in the member's own browser session,
+// so every field is untrusted input. Source.NormalizeOrder is what makes one
+// safe to act on, and the Source checks the URL again before it fetches it.
 type OrderedRecipe struct {
 	// SourceRecipeID is the meal kit's ID for the delivered recipe.
 	SourceRecipeID string
 	Name           string
-	// URL is the source page to fetch. The Source checks it against its own
-	// allow-list before requesting it, so a URL the account data carries can
-	// never send us somewhere else.
+	// URL is the public recipe page to fetch. The Source checks it against
+	// its own allow-list before requesting it, so a submitted URL can never
+	// send us somewhere else.
 	URL string
 	// Weeks are ISO weeks ("2026-W30") this recipe was delivered.
 	Weeks []string
 	// IsAddon marks sides and extras rather than a main meal.
 	IsAddon bool
 }
+
+// MaxOrderedRecipes caps how many recipes one submitted order history may
+// carry. A real HelloFresh history is a few hundred at most; the cap is what
+// stops a client turning one request into an unbounded amount of fetching.
+const MaxOrderedRecipes = 1000
+
+// MaxOrderWeeks caps the weeks recorded against a single recipe.
+const MaxOrderWeeks = 200
 
 // Defaults for the queue and the worker. Every one is overridable in
 // WorkerOptions; these are what production runs with.

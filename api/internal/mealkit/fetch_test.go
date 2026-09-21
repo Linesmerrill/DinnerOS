@@ -138,11 +138,11 @@ func TestFetcherRetries5xxAndGivesUpCleanly(t *testing.T) {
 	}
 }
 
-func TestFetcherStopsOn403AndPausesOn401(t *testing.T) {
-	for status, want := range map[int]error{
-		http.StatusForbidden:    ErrBlocked,
-		http.StatusUnauthorized: ErrAuthExpired,
-	} {
+// Nothing a Source fetches needs a session, so being turned away is a refusal
+// whichever status it comes as, and neither is retried.
+func TestFetcherStopsOnARefusal(t *testing.T) {
+	for _, status := range []int{http.StatusForbidden, http.StatusUnauthorized} {
+		want := ErrBlocked
 		var hits atomic.Int32
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			hits.Add(1)

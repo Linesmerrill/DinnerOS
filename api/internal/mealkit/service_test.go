@@ -12,204 +12,184 @@ func newTestService(t *testing.T, store *memoryStore, src *fakeSource) *Service 
 	t.Helper()
 	return NewService(ServiceOptions{
 		Store:   store,
-		Cipher:  testCipher(t),
+		Enabled: true,
 		Sources: map[string]Source{SourceHelloFresh: src},
 	})
 }
 
-func TestLinkStoresOnlyEncryptedTokensAndQueuesAnImport(t *testing.T) {
+func harvested() []OrderedRecipe {
+	return []OrderedRecipe{
+		{SourceRecipeID: "recipe-1", Name: "Sheet Pan Chicken", Weeks: []string{"2026-W38"}},
+		{SourceRecipeID: "recipe-2", Name: "Garlic Bread", IsAddon: true},
+	}
+}
+
+func TestStartImportQueuesTheHarvestedHistoryAndStoresNoCredential(t *testing.T) {
 	store := &memoryStore{}
 	svc := newTestService(t, store, &fakeSource{})
 
-	status, err := svc.Link(context.Background(), LinkRequest{
-		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
-		Tokens: Tokens{
-			AccessToken: "access-value", RefreshToken: "refresh-value",
-			ExpiresAt: time.Now().Add(time.Hour),
-		},
-		StartImport: true,
+	job, err := svc.StartImport(context.Background(), ImportRequest{
+		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh, Orders: harvested(),
 	})
 	if err != nil {
-		t.Fatalf("Link() error = %v", err)
+		t.Fatalf("StartImport() error = %v", err)
 	}
-	if status.Link == nil || status.Link.Status != LinkActive || status.Job == nil || status.Job.Status != JobQueued {
-		t.Fatalf("status = %+v", status)
+	if job.Status != JobQueued || job.RecipesFound() != 2 {
+		t.Fatalf("job = %+v", job)
 	}
-	if strings.Contains(status.Link.AccountLabel, "@") {
-		t.Errorf("the link label looks like an address: %q", status.Link.AccountLabel)
+	// The run starts at the recipes phase: the order history came with it, so
+	// there is no reading-the-account phase on the server any more.
+	if job.Checkpoint.Phase != PhaseRecipes {
+		t.Errorf("phase = %q, want %q", job.Checkpoint.Phase, PhaseRecipes)
 	}
-
-	stored, err := store.GetLink(context.Background(), hhAda, SourceHelloFresh)
-	if err != nil {
-		t.Fatalf("GetLink() error = %v", err)
-	}
-	// The tokens are only ever there encrypted.
-	for _, secret := range []string{"access-value", "refresh-value"} {
-		if containsBytes(stored.Secret.Ciphertext, secret) || containsBytes(stored.Secret.Key, secret) {
-			t.Errorf("%q is readable in the stored link", secret)
-		}
-	}
-	tokens, err := svc.Tokens(stored)
-	if err != nil || tokens.AccessToken != "access-value" {
-		t.Fatalf("Tokens() = %+v, %v", tokens, err)
+	if job.Checkpoint.Orders[0].Weeks[0] != "2026-W38" || !job.Checkpoint.Orders[1].IsAddon {
+		t.Errorf("orders = %+v", job.Checkpoint.Orders)
 	}
 }
 
-func containsBytes(b []byte, s string) bool {
-	return len(s) > 0 && len(b) > 0 && string(b) != "" && indexOf(b, s) >= 0
-}
+func TestStartImportPutsEverySubmittedEntryThroughTheSourcesDoor(t *testing.T) {
+	store := &memoryStore{}
+	src := &fakeSource{rejectID: "recipe-2"}
+	svc := newTestService(t, store, src)
 
-func indexOf(haystack []byte, needle string) int {
-	n := []byte(needle)
-	for i := 0; i+len(n) <= len(haystack); i++ {
-		if string(haystack[i:i+len(n)]) == needle {
-			return i
-		}
-	}
-	return -1
-}
-
-func TestLinkRejectsBadInputAndASessionThatIsNotOne(t *testing.T) {
-	svc := newTestService(t, &memoryStore{}, &fakeSource{})
-	base := LinkRequest{
+	job, err := svc.StartImport(context.Background(), ImportRequest{
 		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
-		Tokens: Tokens{AccessToken: "access-value"},
+		Orders: []OrderedRecipe{
+			{SourceRecipeID: "recipe-1", Weeks: []string{"2026-W38"}},
+			// Refused by the source: dropped, and the rest still imports.
+			{SourceRecipeID: "recipe-2"},
+			// The same recipe again, another week: merged, never duplicated.
+			{SourceRecipeID: "recipe-1", Weeks: []string{"2026-W33"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartImport() error = %v", err)
+	}
+	if len(job.Checkpoint.Orders) != 1 {
+		t.Fatalf("orders = %+v", job.Checkpoint.Orders)
+	}
+	if got := job.Checkpoint.Orders[0].Weeks; len(got) != 2 {
+		t.Errorf("weeks = %v, want both deliveries merged onto one recipe", got)
+	}
+}
+
+func TestStartImportRejectsAHistoryThatIsNotOne(t *testing.T) {
+	svc := newTestService(t, &memoryStore{}, &fakeSource{})
+	base := ImportRequest{HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh, Orders: harvested()}
+
+	tooMany := make([]OrderedRecipe, MaxOrderedRecipes+1)
+	for i := range tooMany {
+		tooMany[i] = OrderedRecipe{SourceRecipeID: "recipe-1"}
 	}
 
-	for name, mutate := range map[string]func(LinkRequest) LinkRequest{
-		"no household": func(r LinkRequest) LinkRequest { r.HouseholdID = ""; return r },
-		"bad source":   func(r LinkRequest) LinkRequest { r.Source = "blueapron"; return r },
-		"no session":   func(r LinkRequest) LinkRequest { r.Tokens = Tokens{}; return r },
-		"blank session": func(r LinkRequest) LinkRequest {
-			r.Tokens = Tokens{AccessToken: "   ", RefreshToken: "r"}
+	for name, mutate := range map[string]func(ImportRequest) ImportRequest{
+		"no household": func(r ImportRequest) ImportRequest { r.HouseholdID = ""; return r },
+		"bad source":   func(r ImportRequest) ImportRequest { r.Source = "blueapron"; return r },
+		"no recipes":   func(r ImportRequest) ImportRequest { r.Orders = nil; return r },
+		"nothing the source will take": func(r ImportRequest) ImportRequest {
+			r.Orders = []OrderedRecipe{{Name: "no id"}}
 			return r
 		},
+		"more than anyone ordered": func(r ImportRequest) ImportRequest { r.Orders = tooMany; return r },
 	} {
-		if _, err := svc.Link(context.Background(), mutate(base)); err == nil {
+		if _, err := svc.StartImport(context.Background(), mutate(base)); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
 	}
-
-	// A rejected session must not be quoted back at the caller.
-	_, err := svc.Link(context.Background(), LinkRequest{
-		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
-		Tokens: Tokens{RefreshToken: "refresh-value"},
-	})
-	var validation *ValidationError
-	if !errors.As(err, &validation) {
-		t.Fatalf("a session without an access token = %v, want a validation error", err)
-	}
-	if strings.Contains(validation.Message, "refresh-value") {
-		t.Errorf("the message quotes the token: %q", validation.Message)
-	}
 }
 
-func TestLinkIsDisabledWithoutAnEncryptionKey(t *testing.T) {
+func TestStartImportIsDisabledWhenTheFeatureIsOff(t *testing.T) {
 	svc := NewService(ServiceOptions{Store: &memoryStore{}, Sources: map[string]Source{SourceHelloFresh: &fakeSource{}}})
 	if svc.Enabled() {
-		t.Fatal("Enabled() is true without a cipher")
+		t.Fatal("Enabled() is true with the feature off")
 	}
-	_, err := svc.Link(context.Background(), LinkRequest{
-		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
-		Tokens: Tokens{AccessToken: "access-value"},
+	_, err := svc.StartImport(context.Background(), ImportRequest{
+		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh, Orders: harvested(),
 	})
 	if !errors.Is(err, ErrDisabled) {
-		t.Errorf("Link() = %v, want ErrDisabled", err)
-	}
-	if _, err := svc.StartImport(context.Background(), hhAda, userAda, SourceHelloFresh); !errors.Is(err, ErrDisabled) {
 		t.Errorf("StartImport() = %v, want ErrDisabled", err)
 	}
 }
 
-func TestStartImportNeedsALinkAndNeverDuplicatesARun(t *testing.T) {
+func TestStartImportNeverDuplicatesARunInFlight(t *testing.T) {
 	store := &memoryStore{}
 	svc := newTestService(t, store, &fakeSource{})
+	req := ImportRequest{HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh, Orders: harvested()}
 
-	if _, err := svc.StartImport(context.Background(), hhAda, userAda, SourceHelloFresh); !errors.Is(err, ErrNoLink) {
-		t.Fatalf("StartImport() without a link = %v, want ErrNoLink", err)
-	}
-
-	status, err := svc.Link(context.Background(), LinkRequest{
-		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
-		Tokens: Tokens{AccessToken: "access-value"}, StartImport: false,
-	})
-	if err != nil {
-		t.Fatalf("Link() error = %v", err)
-	}
-	if status.Job != nil {
-		t.Errorf("Link(StartImport: false) queued a job anyway")
-	}
-
-	first, err := svc.StartImport(context.Background(), hhAda, userAda, SourceHelloFresh)
+	first, err := svc.StartImport(context.Background(), req)
 	if err != nil {
 		t.Fatalf("StartImport() error = %v", err)
 	}
-	second, err := svc.StartImport(context.Background(), hhAda, userAda, SourceHelloFresh)
+	second, err := svc.StartImport(context.Background(), req)
 	if err != nil || second.ID != first.ID {
 		t.Fatalf("a second start made another job: %v %v", second.ID, err)
 	}
-}
 
-func TestLinkAgainResumesAJobThatPausedForSignIn(t *testing.T) {
-	store := &memoryStore{}
-	svc := newTestService(t, store, &fakeSource{})
-	if _, err := svc.Link(context.Background(), LinkRequest{
-		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
-		Tokens: Tokens{AccessToken: "access-value"}, StartImport: true,
-	}); err != nil {
-		t.Fatalf("Link() error = %v", err)
-	}
-	// The worker paused it waiting for a new sign-in.
-	store.jobs[0].Status = JobPausedAuth
-
-	status, err := svc.Link(context.Background(), LinkRequest{
-		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
-		Tokens: Tokens{AccessToken: "access-value"}, StartImport: true,
-	})
-	if err != nil {
-		t.Fatalf("re-link error = %v", err)
-	}
-	if len(store.jobs) != 1 {
-		t.Fatalf("re-linking made a second job: %d jobs", len(store.jobs))
-	}
-	if store.jobs[0].Status != JobQueued || status.Job == nil || status.Job.Status != JobQueued {
-		t.Errorf("job after re-link = %+v", store.jobs[0])
+	// Once the first run is over, importing again is a fresh run — which is
+	// how a re-sync works. Recipes already in the library come back from the
+	// pipeline as unchanged, never as duplicates.
+	store.jobs[0].Status = JobSucceeded
+	third, err := svc.StartImport(context.Background(), req)
+	if err != nil || third.ID == first.ID {
+		t.Fatalf("re-importing after a finished run = %v %v", third.ID, err)
 	}
 }
 
-func TestUnlinkDeletesTheTokensAndStopsEveryJob(t *testing.T) {
+func TestStoppingImportsCancelsEveryRun(t *testing.T) {
 	store := &memoryStore{}
 	svc := newTestService(t, store, &fakeSource{})
-	if _, err := svc.Link(context.Background(), LinkRequest{
-		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
-		Tokens: Tokens{AccessToken: "access-value"}, StartImport: true,
+	if _, err := svc.StartImport(context.Background(), ImportRequest{
+		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh, Orders: harvested(),
 	}); err != nil {
-		t.Fatalf("Link() error = %v", err)
+		t.Fatalf("StartImport() error = %v", err)
 	}
 
-	canceled, err := svc.Unlink(context.Background(), hhAda, SourceHelloFresh)
+	canceled, err := svc.StopImports(context.Background(), hhAda, SourceHelloFresh)
 	if err != nil || canceled != 1 {
-		t.Fatalf("Unlink() = %d, %v", canceled, err)
-	}
-	if _, err := store.GetLink(context.Background(), hhAda, SourceHelloFresh); !errors.Is(err, ErrNotFound) {
-		t.Errorf("the link survived the unlink: %v", err)
+		t.Fatalf("StopImports() = %d, %v", canceled, err)
 	}
 	if store.jobs[0].Status != JobCanceled {
-		t.Errorf("job after unlink = %q", store.jobs[0].Status)
+		t.Errorf("job after stopping = %q", store.jobs[0].Status)
 	}
-	// Unlinking again is not an error.
-	if _, err := svc.Unlink(context.Background(), hhAda, SourceHelloFresh); err != nil {
-		t.Errorf("second Unlink() error = %v", err)
+	// Stopping again is not an error.
+	if _, err := svc.StopImports(context.Background(), hhAda, SourceHelloFresh); err != nil {
+		t.Errorf("second StopImports() error = %v", err)
 	}
 }
 
-func TestStatusReportsNothingForAHouseholdThatNeverLinked(t *testing.T) {
+// The whole point of the redesign: there is nowhere in this package to put a
+// credential. This test fails if a field for one is ever added back.
+func TestNothingAboutTheAccountIsStored(t *testing.T) {
+	store := &memoryStore{}
+	svc := newTestService(t, store, &fakeSource{})
+	if _, err := svc.StartImport(context.Background(), ImportRequest{
+		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh, Orders: harvested(),
+	}); err != nil {
+		t.Fatalf("StartImport() error = %v", err)
+	}
+	for _, forbidden := range []string{"token", "secret", "cookie", "password", "email"} {
+		if strings.Contains(strings.ToLower(describeJob(store.jobs[0])), forbidden) {
+			t.Errorf("a stored job carries something called %q", forbidden)
+		}
+	}
+}
+
+func describeJob(j Job) string {
+	var b strings.Builder
+	b.WriteString(j.ID + j.HouseholdID + j.UserID + j.Source + string(j.Status))
+	for _, o := range j.Checkpoint.Orders {
+		b.WriteString(o.SourceRecipeID + o.Name + o.URL + strings.Join(o.Weeks, ""))
+	}
+	return b.String()
+}
+
+func TestStatusReportsNothingForAHouseholdThatNeverImported(t *testing.T) {
 	svc := newTestService(t, &memoryStore{}, &fakeSource{})
 	status, err := svc.Status(context.Background(), hhBob, SourceHelloFresh)
 	if err != nil {
 		t.Fatalf("Status() error = %v", err)
 	}
-	if status.Link != nil || status.Job != nil {
+	if status.Job != nil {
 		t.Errorf("status = %+v", status)
 	}
 }

@@ -7,12 +7,12 @@
 // the ordinary recipe import pipeline, checkpoints as it goes, and leaves the
 // rest for the next run. Two runs that overlap are safe: a job is claimed
 // exactly once, and a claimed job's writes are conditional on the lease, so a
-// run whose job was canceled (an unlink) or taken over stops without touching
-// the library.
+// run whose job was canceled (the member stopped it) or taken over stops
+// without touching the library.
 //
-// Without MEAL_KIT_IMPORT_ENABLED=true and RECIPE_IMPORT_ENCRYPTION_KEY it
-// logs that the feature is off and exits 0, so a scheduled job on a
-// deployment that hasn't enabled it is harmless.
+// Without MEAL_KIT_IMPORT_ENABLED=true it logs that the feature is off and
+// exits 0, so a scheduled job on a deployment that hasn't enabled it is
+// harmless.
 package main
 
 import (
@@ -57,7 +57,7 @@ func run() error {
 
 	if !cfg.MealKitImport.Active() {
 		logger.Info("meal-kit recipe import is off; nothing to do",
-			"enabled", cfg.MealKitImport.Enabled, "hasKey", len(cfg.MealKitImport.EncryptionKey) > 0)
+			"enabled", cfg.MealKitImport.Enabled)
 		return nil
 	}
 
@@ -89,20 +89,17 @@ func run() error {
 	report, err := worker.Run(ctx)
 	logger.Info("meal-kit import run finished",
 		"durationMs", time.Since(started).Milliseconds(),
-		"claimed", report.Claimed, "succeeded", report.Succeeded, "paused", report.Paused,
+		"claimed", report.Claimed, "succeeded", report.Succeeded,
 		"requeued", report.Requeued, "dead", report.Dead, "gone", report.Gone,
 		"recipes", report.Recipes, "recipeFailures", report.Failures)
 	return err
 }
 
-// newWorker wires the queue, the sources, the decryption key, and the seam
-// into the recipe library exactly as cmd/server wires the enqueue side.
+// newWorker wires the queue, the sources, and the seam into the recipe library
+// exactly as cmd/server wires the enqueue side. There is no key to load: this
+// worker reads public recipe pages and holds no credential.
 func newWorker(cfg config.Config, db *mongodb.Client, logger *slog.Logger) (*mealkit.Worker, error) {
 	database := db.Database()
-	cipher, err := mealkit.NewCipher(cfg.MealKitImport.EncryptionKey)
-	if err != nil {
-		return nil, err
-	}
 	store := mealkit.NewMongoStore(database)
 	srcs := mealkitsources.All(mealkitsources.Options{
 		HelloFreshBaseURL: cfg.MealKitImport.HelloFreshBaseURL, Logger: logger,
@@ -111,7 +108,8 @@ func newWorker(cfg config.Config, db *mongodb.Client, logger *slog.Logger) (*mea
 		Store: notifications.NewMongoStore(database), Logger: logger,
 	})
 	service := mealkit.NewService(mealkit.ServiceOptions{
-		Store: store, Cipher: cipher, Sources: srcs, Notifier: notifier, Logger: logger,
+		Store: store, Enabled: cfg.MealKitImport.Active(), Sources: srcs,
+		Notifier: notifier, Logger: logger,
 	})
 	return mealkit.NewWorker(mealkit.WorkerOptions{
 		Store:   store,

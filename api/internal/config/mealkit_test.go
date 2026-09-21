@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// validKey is test key material, not a secret.
-const validKey = "c29tZS12ZXJ5LWxvbmcta2V5LW1hdGVyaWFsLWZvci10ZXN0cy1vbmx5LXg="
-
 func loadWith(t *testing.T, extra map[string]string) (Config, error) {
 	t.Helper()
 	env := map[string]string{}
@@ -27,40 +24,46 @@ func TestMealKitImportIsOffByDefault(t *testing.T) {
 	}
 }
 
-func TestMealKitImportRefusesToStartWithoutItsEncryptionKey(t *testing.T) {
-	_, err := loadWith(t, map[string]string{"MEAL_KIT_IMPORT_ENABLED": "true"})
-	if err == nil {
-		t.Fatal("Load() accepted the feature with no encryption key")
-	}
-	if !strings.Contains(err.Error(), "RECIPE_IMPORT_ENCRYPTION_KEY is required") {
-		t.Errorf("error = %v; it should name the missing variable", err)
-	}
-}
-
-func TestMealKitImportLoadsItsKeyWithoutEverQuotingIt(t *testing.T) {
+// Turning the feature on needs nothing else. It used to need an encryption key
+// for the session tokens it stored; it stores nothing about a meal-kit account
+// any more, so there is no key, and no way to configure it wrongly.
+func TestMealKitImportTurnsOnWithNoSecretToConfigure(t *testing.T) {
 	cfg, err := loadWith(t, map[string]string{
-		"MEAL_KIT_IMPORT_ENABLED":      "true",
-		"RECIPE_IMPORT_ENCRYPTION_KEY": validKey,
-		"MEAL_KIT_RECIPES_PER_RUN":     "25",
+		"MEAL_KIT_IMPORT_ENABLED":  "true",
+		"MEAL_KIT_RECIPES_PER_RUN": "25",
 	})
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if !cfg.MealKitImport.Active() || len(cfg.MealKitImport.EncryptionKey) < MinImportKeyBytes {
-		t.Fatalf("meal-kit import = %+v", cfg.MealKitImport)
+	if !cfg.MealKitImport.Active() {
+		t.Fatalf("meal-kit import = %+v, want active", cfg.MealKitImport)
 	}
 	if cfg.MealKitImport.RecipesPerRun != 25 {
 		t.Errorf("recipesPerRun = %d", cfg.MealKitImport.RecipesPerRun)
 	}
-	// The key never reaches a log line.
-	if logged := cfg.LogValue().String(); strings.Contains(logged, validKey) {
-		t.Errorf("the logged config carries the encryption key: %s", logged)
+}
+
+// A key left behind in a deployment's config from the old design is ignored,
+// not a startup failure: removing a config var should not stop the dyno.
+func TestMealKitImportIgnoresAnOldEncryptionKey(t *testing.T) {
+	const leftover = "c29tZS12ZXJ5LWxvbmcta2V5LW1hdGVyaWFsLWZvci10ZXN0cy1vbmx5LXg="
+	cfg, err := loadWith(t, map[string]string{
+		"MEAL_KIT_IMPORT_ENABLED":      "true",
+		"RECIPE_IMPORT_ENCRYPTION_KEY": leftover,
+	})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.MealKitImport.Active() {
+		t.Errorf("meal-kit import = %+v", cfg.MealKitImport)
+	}
+	if logged := cfg.LogValue().String(); strings.Contains(logged, leftover) {
+		t.Errorf("the logged config carries the leftover key: %s", logged)
 	}
 }
 
 func TestMealKitImportRejectsBadSettings(t *testing.T) {
 	for name, env := range map[string]map[string]string{
-		"short key": {"MEAL_KIT_IMPORT_ENABLED": "true", "RECIPE_IMPORT_ENCRYPTION_KEY": "abc"},
 		"bad flag":  {"MEAL_KIT_IMPORT_ENABLED": "yes please"},
 		"bad cap":   {"MEAL_KIT_RECIPES_PER_RUN": "0"},
 		"huge cap":  {"MEAL_KIT_RECIPES_PER_RUN": "5000"},
@@ -68,8 +71,6 @@ func TestMealKitImportRejectsBadSettings(t *testing.T) {
 	} {
 		if _, err := loadWith(t, env); err == nil {
 			t.Errorf("%s was accepted", name)
-		} else if strings.Contains(err.Error(), "abc") && name == "short key" {
-			t.Errorf("%s quotes the key: %v", name, err)
 		}
 	}
 }

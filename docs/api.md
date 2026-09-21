@@ -112,10 +112,9 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/recipes/{recipeId}` → recipe | `household.view` | 4 | ✅ |
 | POST | `/api/v1/households/{householdId}/recipes/import` import file → `{created, updated, unchanged, ingredientsCreated, reviewItems, errors}` | `recipes.import` | 4 | ✅ |
 | GET | `/api/v1/households/{householdId}/recipes/import-reviews` `?status=open\|all&limit` → `{items}`, oldest first | `recipes.import` | 4 | ✅ |
-| GET | `/api/v1/households/{householdId}/meal-kit/{source}` → `{source, enabled, link, latestJob}` | `recipes.import` | — | ✅ |
-| PUT | `/api/v1/households/{householdId}/meal-kit/{source}/link` `{accessToken, refreshToken?, expiresAt?, startImport?}` → `{source, enabled, link, latestJob}` | `recipes.import` | — | ✅ |
-| DELETE | `/api/v1/households/{householdId}/meal-kit/{source}/link` → `204` (deletes the stored tokens and cancels every run) | `recipes.import` | — | ✅ |
-| POST | `/api/v1/households/{householdId}/meal-kit/{source}/imports` → `202` job | `recipes.import` | — | ✅ |
+| GET | `/api/v1/households/{householdId}/meal-kit/{source}` → `{source, enabled, latestJob}` | `recipes.import` | — | ✅ |
+| POST | `/api/v1/households/{householdId}/meal-kit/{source}/imports` `{recipes:[{sourceRecipeId, name?, url?, weeks?, isAddon?}]}` → `202` job | `recipes.import` | — | ✅ |
+| DELETE | `/api/v1/households/{householdId}/meal-kit/{source}/imports` → `204` (cancels every run in flight) | `recipes.import` | — | ✅ |
 | GET | `/api/v1/households/{householdId}/meal-kit/{source}/imports` → `{items}`, newest first | `recipes.import` | — | ✅ |
 | POST | `/api/v1/households/{householdId}/recipes/parse` `{text}` or `{url}` → recipe draft (nothing is stored) | `recipes.edit` | 4a | ✅ |
 | POST | `/api/v1/households/{householdId}/recipes` reviewed draft → `201` recipe (private to the household) | `recipes.edit` | 4a | ✅ |
@@ -515,33 +514,36 @@ Asynchronous import of a household's own meal-kit order history
 other value is 404.
 
 A member signs in on the meal kit's **own website**, in a web view in the app,
-and the app sends the session that login produced to `PUT .../link`. The API
-stores **only** those tokens, envelope-encrypted with
-`RECIPE_IMPORT_ENCRYPTION_KEY`, and queues a job. **No password is involved:
-neither this API nor the app ever sees one**, and nothing in the body is logged
-or returned. The app can be closed immediately: a scheduled worker
+and their order history is read **there, in their own session**. The app posts
+that list — recipe ids, public page URLs, delivery weeks — to
+`POST .../imports`, and the API queues a job for it. **Nothing about the
+meal-kit account is stored**: no password, no session token, no cookie, no
+profile, and no field on this API to put one in. The app can be closed
+immediately: a scheduled worker
 (`cmd/importmealkit`) fetches the recipes that account ordered and puts them
 through the same `recipes.Service.Import` a file import uses, so they arrive
 with the same validation, alias splitting, and review items.
 
-- `enabled: false` means the server has no import encryption key. The app
-  offers adding recipes by hand instead, and `PUT .../link` answers `503
+- `enabled: false` means the server has meal-kit import turned off. The app
+  offers adding recipes by hand instead, and `POST .../imports` answers `503
   import_disabled`.
-- `POST .../imports` answers `409 not_linked` with no linked account, and
-  returns the run that is already queued, running, or paused rather than a
-  second one.
-- `status` is `queued`, `running`, `paused_auth`, `succeeded`, `dead`, or
-  `canceled`. `paused_auth` waits for the member to sign in again, which
-  resumes the run where it stopped. `lastError.message` is written for a person
-  and never contains a token, a URL, or fetched page content.
+- `POST .../imports` returns the run that is already queued or running rather
+  than a second one, so tapping twice never doubles the work. Its body is
+  validated against the source's own allow-list: an id that is not one of the
+  service's is dropped and a URL off the service's recipe pages is rebuilt from
+  the id. A body with nothing usable in it, or with an unknown field in it
+  (such as a token), is a `400`.
+- `status` is `queued`, `running`, `succeeded`, `dead`, or `canceled`.
+  `lastError.message` is written for a person and never contains a URL or
+  fetched page content.
 - `failures[]` lists the recipes of the order history that did not make it,
   with a reason each. Things the importer could not map confidently are not
   failures: they are review items, read through
   [`/recipes/import-reviews`](#recipe-import).
-- `DELETE .../link` deletes the tokens and cancels every queued, running, or
-  paused run immediately. A worker mid-run stops at its next write.
-- No response carries the member's email address: `accountLabel` is a generic
-  display string such as "HelloFresh account".
+- `DELETE .../imports` cancels every queued or running run immediately. A
+  worker mid-run stops at its next write; recipes already imported stay.
+- No response carries anything about the meal-kit account, because nothing
+  about it is stored.
 
 The worker is polite by policy, not by accident: one request at a time, at
 least 2.5 s apart with jitter, retries with backoff on 429 and 5xx, a hard stop

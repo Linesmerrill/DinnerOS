@@ -21,27 +21,15 @@ func newMongoStore(t *testing.T) (*MongoStore, context.Context) {
 	return NewMongoStore(client.Database()), ctx
 }
 
-func seedLink(t *testing.T, s *MongoStore, ctx context.Context, householdID, userID string) Link {
-	t.Helper()
-	now := time.Now().UTC().Truncate(time.Millisecond)
-	link, err := s.UpsertLink(ctx, Link{
-		HouseholdID: householdID, UserID: userID, Source: SourceHelloFresh, Status: LinkActive,
-		AccountLabel: "HelloFresh account", Secret: Envelope{KeyID: "k1", Key: []byte("wrapped"), Ciphertext: []byte("sealed")},
-		ExpiresAt: now.Add(time.Hour), CreatedAt: now, UpdatedAt: now,
-	})
-	if err != nil {
-		t.Fatalf("UpsertLink() error = %v", err)
-	}
-	return link
-}
-
-func seedJob(t *testing.T, s *MongoStore, ctx context.Context, link Link, availableAt time.Time) Job {
+// seedJob inserts a queued run for householdID. There is nothing else to seed:
+// this package stores jobs and nothing else.
+func seedJob(t *testing.T, s *MongoStore, ctx context.Context, householdID, userID string, availableAt time.Time) Job {
 	t.Helper()
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	job, err := s.InsertJob(ctx, Job{
-		HouseholdID: link.HouseholdID, UserID: link.UserID, LinkID: link.ID, Source: link.Source,
+		HouseholdID: householdID, UserID: userID, Source: SourceHelloFresh,
 		Status: JobQueued, MaxAttempts: DefaultMaxAttempts, AvailableAt: availableAt,
-		Checkpoint: Checkpoint{Phase: PhaseOrders}, CreatedAt: now, UpdatedAt: now,
+		Checkpoint: Checkpoint{Phase: PhaseRecipes}, CreatedAt: now, UpdatedAt: now,
 	})
 	if err != nil {
 		t.Fatalf("InsertJob() error = %v", err)
@@ -49,67 +37,13 @@ func seedJob(t *testing.T, s *MongoStore, ctx context.Context, link Link, availa
 	return job
 }
 
-func TestIntegrationMongoLinkRoundTripsAndReplaces(t *testing.T) {
-	store, ctx := newMongoStore(t)
-	link := seedLink(t, store, ctx, hhAda, userAda)
-
-	got, err := store.GetLink(ctx, hhAda, SourceHelloFresh)
-	if err != nil {
-		t.Fatalf("GetLink() error = %v", err)
-	}
-	if got.ID != link.ID || string(got.Secret.Ciphertext) != "sealed" || got.Status != LinkActive {
-		t.Fatalf("link = %+v", got)
-	}
-	if _, err := store.GetLink(ctx, hhBob, SourceHelloFresh); !errors.Is(err, ErrNotFound) {
-		t.Errorf("another household's link = %v", err)
-	}
-
-	// Re-linking replaces the tokens and keeps the original CreatedAt.
-	now := time.Now().UTC().Truncate(time.Millisecond)
-	again, err := store.UpsertLink(ctx, Link{
-		HouseholdID: hhAda, UserID: userBob, Source: SourceHelloFresh, Status: LinkActive,
-		Secret: Envelope{KeyID: "k1", Ciphertext: []byte("sealed-2")}, CreatedAt: now, UpdatedAt: now,
-	})
-	if err != nil || again.ID != link.ID || !again.CreatedAt.Equal(link.CreatedAt) {
-		t.Fatalf("re-link = %+v, %v", again, err)
-	}
-	if string(again.Secret.Ciphertext) != "sealed-2" || !again.ExpiresAt.IsZero() {
-		t.Errorf("re-linked secret = %+v", again.Secret)
-	}
-
-	if err := store.SetLinkStatus(ctx, link.ID, LinkNeedsReauth, now); err != nil {
-		t.Fatalf("SetLinkStatus() error = %v", err)
-	}
-	if err := store.SaveLinkTokens(ctx, link.ID, Envelope{KeyID: "k1", Ciphertext: []byte("sealed-3")}, now.Add(time.Hour), now); err != nil {
-		t.Fatalf("SaveLinkTokens() error = %v", err)
-	}
-	got, _ = store.GetLink(ctx, hhAda, SourceHelloFresh)
-	if got.Status != LinkActive || string(got.Secret.Ciphertext) != "sealed-3" {
-		t.Errorf("after a refresh = %+v", got)
-	}
-
-	if err := store.DeleteLink(ctx, hhAda, SourceHelloFresh); err != nil {
-		t.Fatalf("DeleteLink() error = %v", err)
-	}
-	if _, err := store.GetLink(ctx, hhAda, SourceHelloFresh); !errors.Is(err, ErrNotFound) {
-		t.Errorf("the link survived deletion: %v", err)
-	}
-	// Deleting twice is fine.
-	if err := store.DeleteLink(ctx, hhAda, SourceHelloFresh); err != nil {
-		t.Errorf("second DeleteLink() error = %v", err)
-	}
-}
-
-// TestIntegrationClaimJobIsExactlyOnceUnderConcurrency is the property the
-// whole queue rests on: however many workers race, one job goes to one worker.
 func TestIntegrationClaimJobIsExactlyOnceUnderConcurrency(t *testing.T) {
 	store, ctx := newMongoStore(t)
-	link := seedLink(t, store, ctx, hhAda, userAda)
 
 	const jobs, workers = 8, 12
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	for range jobs {
-		seedJob(t, store, ctx, link, now.Add(-time.Minute))
+		seedJob(t, store, ctx, hhAda, userAda, now.Add(-time.Minute))
 	}
 
 	var (
@@ -165,11 +99,10 @@ func TestIntegrationClaimJobIsExactlyOnceUnderConcurrency(t *testing.T) {
 
 func TestIntegrationClaimRespectsBackoffAndTakesOverAnExpiredLease(t *testing.T) {
 	store, ctx := newMongoStore(t)
-	link := seedLink(t, store, ctx, hhAda, userAda)
 	now := time.Now().UTC().Truncate(time.Millisecond)
 
 	// A job backing off is not claimable until its time comes.
-	later := seedJob(t, store, ctx, link, now.Add(time.Hour))
+	later := seedJob(t, store, ctx, hhAda, userAda, now.Add(time.Hour))
 	if _, err := store.ClaimJob(ctx, "w1", now, now.Add(time.Minute)); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("a backing-off job was claimed: %v", err)
 	}
@@ -193,9 +126,8 @@ func TestIntegrationClaimRespectsBackoffAndTakesOverAnExpiredLease(t *testing.T)
 
 func TestIntegrationJobWritesAreConditionalOnTheLease(t *testing.T) {
 	store, ctx := newMongoStore(t)
-	link := seedLink(t, store, ctx, hhAda, userAda)
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	seedJob(t, store, ctx, link, now.Add(-time.Minute))
+	seedJob(t, store, ctx, hhAda, userAda, now.Add(-time.Minute))
 
 	job, err := store.ClaimJob(ctx, "w1", now, now.Add(time.Minute))
 	if err != nil {
@@ -251,11 +183,9 @@ func TestIntegrationJobWritesAreConditionalOnTheLease(t *testing.T) {
 
 func TestIntegrationJobLookupsAreScopedToTheHousehold(t *testing.T) {
 	store, ctx := newMongoStore(t)
-	ada := seedLink(t, store, ctx, hhAda, userAda)
-	bob := seedLink(t, store, ctx, hhBob, userBob)
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	adaJob := seedJob(t, store, ctx, ada, now)
-	seedJob(t, store, ctx, bob, now)
+	adaJob := seedJob(t, store, ctx, hhAda, userAda, now)
+	seedJob(t, store, ctx, hhBob, userBob, now)
 
 	if _, err := store.GetJob(ctx, hhBob, adaJob.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("another household read the job: %v", err)
@@ -268,43 +198,32 @@ func TestIntegrationJobLookupsAreScopedToTheHousehold(t *testing.T) {
 		t.Errorf("ListJobs() = %d jobs, %v", len(list), err)
 	}
 
-	// Paused jobs resume on a re-link, and only for their own household.
-	if err := store.FinishJob(ctx, adaJob.ID, "", JobPausedAuth, Checkpoint{}, nil, now); !errors.Is(err, ErrJobGone) {
+	// Only a claimed job can be finished, and the reason is stored with it.
+	if err := store.FinishJob(ctx, adaJob.ID, "", JobDead, Checkpoint{}, nil, now); !errors.Is(err, ErrJobGone) {
 		t.Errorf("an unclaimed job was finished: %v", err)
 	}
 	claimed, _ := store.ClaimJob(ctx, "w1", now, now.Add(time.Minute))
-	if err := store.FinishJob(ctx, claimed.ID, "w1", JobPausedAuth, Checkpoint{Phase: PhaseRecipes}, &JobError{Code: ErrCodeAuthExpired, Message: "sign in again", At: now}, now); err != nil {
+	if err := store.FinishJob(ctx, claimed.ID, "w1", JobDead, Checkpoint{Phase: PhaseRecipes}, &JobError{Code: ErrCodeBlocked, Message: "they refused us", At: now}, now); err != nil {
 		t.Fatalf("FinishJob() error = %v", err)
 	}
-	resumed, err := store.ResumePausedJobs(ctx, claimed.HouseholdID, SourceHelloFresh, now)
-	if err != nil || resumed != 1 {
-		t.Fatalf("ResumePausedJobs() = %d, %v", resumed, err)
-	}
 	stored, _ := store.GetJob(ctx, claimed.HouseholdID, claimed.ID)
-	if stored.Status != JobQueued || stored.LastError == nil || stored.LastError.Code != ErrCodeAuthExpired {
-		t.Errorf("resumed job = %+v", stored)
+	if stored.Status != JobDead || stored.LastError == nil || stored.LastError.Code != ErrCodeBlocked {
+		t.Errorf("finished job = %+v", stored)
 	}
 }
 
-func TestIntegrationPurgeRemovesLinksAndJobs(t *testing.T) {
+func TestIntegrationPurgeRemovesAHouseholdsJobs(t *testing.T) {
 	store, ctx := newMongoStore(t)
-	ada := seedLink(t, store, ctx, hhAda, userAda)
-	seedJob(t, store, ctx, ada, time.Now().UTC())
+	seedJob(t, store, ctx, hhAda, userAda, time.Now().UTC())
 
-	if err := store.PurgeUser(ctx, userAda); err != nil {
-		t.Fatalf("PurgeUser() error = %v", err)
-	}
-	if _, err := store.GetLink(ctx, hhAda, SourceHelloFresh); !errors.Is(err, ErrNotFound) {
-		t.Errorf("the user's tokens survived their account deletion: %v", err)
-	}
 	if err := store.PurgeHousehold(ctx, hhAda); err != nil {
 		t.Fatalf("PurgeHousehold() error = %v", err)
 	}
 	if jobs, _ := store.ListJobs(ctx, hhAda, 20); len(jobs) != 0 {
 		t.Errorf("jobs survived the purge: %+v", jobs)
 	}
-	// Both purges are idempotent and safe with a malformed ID.
-	if err := errors.Join(store.PurgeHousehold(ctx, hhAda), store.PurgeUser(ctx, "not-an-id")); err != nil {
+	// The purge is idempotent and safe with a malformed ID.
+	if err := errors.Join(store.PurgeHousehold(ctx, hhAda), store.PurgeHousehold(ctx, "not-an-id")); err != nil {
 		t.Errorf("repeat purge error = %v", err)
 	}
 }
