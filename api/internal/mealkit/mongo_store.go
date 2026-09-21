@@ -13,9 +13,16 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb"
 )
 
-// JobCollection holds the import job queue. It is the only collection this
-// package has: nothing about a meal-kit account is stored anywhere.
-const JobCollection = "meal_kit_jobs"
+// Collections this package owns. Neither holds anything about a meal-kit
+// account: one is the job queue, the other is two ISO weeks and a flag.
+const (
+	// JobCollection holds the import job queue.
+	JobCollection = "meal_kit_jobs"
+	// CursorCollection holds one document per household and source: how far
+	// back its harvests have read, and whether the history is finished
+	// (cursor.go).
+	CursorCollection = "meal_kit_cursors"
+)
 
 // Indexes returns the indexes MongoStore relies on.
 func Indexes() []mongodb.IndexSet {
@@ -37,19 +44,31 @@ func Indexes() []mongodb.IndexSet {
 				},
 			},
 		},
+		{
+			Collection: CursorCollection,
+			Indexes: []mongo.IndexModel{
+				{
+					// One cursor per household and source, enforced rather
+					// than assumed: two of them would silently lose history.
+					Keys:    bson.D{{Key: "householdId", Value: 1}, {Key: "source", Value: 1}},
+					Options: options.Index().SetName("householdId_source").SetUnique(true),
+				},
+			},
+		},
 	}
 }
 
 // MongoStore is the MongoDB implementation of Store.
 type MongoStore struct {
-	jobs *mongo.Collection
+	jobs    *mongo.Collection
+	cursors *mongo.Collection
 }
 
 var _ Store = (*MongoStore)(nil)
 
 // NewMongoStore returns a store using db.
 func NewMongoStore(db *mongo.Database) *MongoStore {
-	return &MongoStore{jobs: db.Collection(JobCollection)}
+	return &MongoStore{jobs: db.Collection(JobCollection), cursors: db.Collection(CursorCollection)}
 }
 
 // --- Documents ----------------------------------------------------------------
@@ -79,6 +98,26 @@ type checkpointDoc struct {
 	ReviewItems int                `bson:"reviewItems"`
 }
 
+// harvestDoc is where the walk that produced a job's order history stopped.
+type harvestDoc struct {
+	EarliestWeek string `bson:"earliestWeek,omitempty"`
+	LatestWeek   string `bson:"latestWeek,omitempty"`
+	Pages        int    `bson:"pages,omitempty"`
+	Weeks        int    `bson:"weeks,omitempty"`
+	Stopped      string `bson:"stopped,omitempty"`
+}
+
+// cursorDoc is how far a household's harvests have read one source.
+type cursorDoc struct {
+	HouseholdID  bson.ObjectID `bson:"householdId"`
+	Source       string        `bson:"source"`
+	EarliestWeek string        `bson:"earliestWeek,omitempty"`
+	LatestWeek   string        `bson:"latestWeek,omitempty"`
+	Complete     bool          `bson:"complete"`
+	BlockedAt    *time.Time    `bson:"blockedAt,omitempty"`
+	UpdatedAt    time.Time     `bson:"updatedAt"`
+}
+
 type jobErrorDoc struct {
 	Code    string    `bson:"code"`
 	Message string    `bson:"message"`
@@ -97,6 +136,7 @@ type jobDoc struct {
 	LeaseOwner     string        `bson:"leaseOwner,omitempty"`
 	LeaseExpiresAt *time.Time    `bson:"leaseExpiresAt,omitempty"`
 	Checkpoint     checkpointDoc `bson:"checkpoint"`
+	Harvest        harvestDoc    `bson:"harvest"`
 	LastError      *jobErrorDoc  `bson:"lastError,omitempty"`
 	CreatedAt      time.Time     `bson:"createdAt"`
 	UpdatedAt      time.Time     `bson:"updatedAt"`
@@ -110,7 +150,11 @@ func (d jobDoc) toJob() Job {
 		Source: d.Source, Status: JobStatus(d.Status), Attempts: d.Attempts, MaxAttempts: d.MaxAttempts,
 		AvailableAt: d.AvailableAt.UTC(), LeaseOwner: d.LeaseOwner,
 		Checkpoint: fromCheckpointDoc(d.Checkpoint),
-		CreatedAt:  d.CreatedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
+		Harvest: HarvestReport{
+			EarliestWeek: d.Harvest.EarliestWeek, LatestWeek: d.Harvest.LatestWeek,
+			Pages: d.Harvest.Pages, Weeks: d.Harvest.Weeks, Stopped: HarvestStop(d.Harvest.Stopped),
+		},
+		CreatedAt: d.CreatedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
 	}
 	if d.LeaseExpiresAt != nil {
 		j.LeaseExpiresAt = d.LeaseExpiresAt.UTC()
@@ -184,6 +228,10 @@ func (s *MongoStore) InsertJob(ctx context.Context, j Job) (Job, error) {
 		ID: bson.NewObjectID(), HouseholdID: hid, UserID: uid, Source: j.Source,
 		Status: string(j.Status), Attempts: j.Attempts, MaxAttempts: j.MaxAttempts,
 		AvailableAt: j.AvailableAt, Checkpoint: toCheckpointDoc(j.Checkpoint),
+		Harvest: harvestDoc{
+			EarliestWeek: j.Harvest.EarliestWeek, LatestWeek: j.Harvest.LatestWeek,
+			Pages: j.Harvest.Pages, Weeks: j.Harvest.Weeks, Stopped: string(j.Harvest.Stopped),
+		},
 		CreatedAt: j.CreatedAt, UpdatedAt: j.UpdatedAt,
 	}
 	if _, err := s.jobs.InsertOne(ctx, d); err != nil {
@@ -218,6 +266,23 @@ func (s *MongoStore) LatestJob(ctx context.Context, householdID, source string) 
 func (s *MongoStore) ActiveJob(ctx context.Context, householdID, source string) (Job, error) {
 	return s.findOneJob(ctx, householdID, source,
 		bson.E{Key: "status", Value: bson.D{{Key: "$in", Value: activeStatuses()}}})
+}
+
+// AnyActiveJob implements Store.
+func (s *MongoStore) AnyActiveJob(ctx context.Context, householdID string) (Job, error) {
+	hid, err := oid("household id", householdID)
+	if err != nil {
+		return Job{}, ErrNotFound
+	}
+	var d jobDoc
+	err = s.jobs.FindOne(ctx, bson.D{
+		{Key: "householdId", Value: hid},
+		{Key: "status", Value: bson.D{{Key: "$in", Value: activeStatuses()}}},
+	}, options.FindOne().SetSort(bson.D{{Key: "_id", Value: -1}})).Decode(&d)
+	if err != nil {
+		return Job{}, translate(err)
+	}
+	return d.toJob(), nil
 }
 
 func activeStatuses() []string {
@@ -410,7 +475,82 @@ func (s *MongoStore) CancelJobs(ctx context.Context, householdID, source, reason
 // one member. It used to hold their meal-kit tokens; it holds no credential at
 // all now, and an import run belongs to the household that asked for it.
 func (s *MongoStore) PurgeHousehold(ctx context.Context, householdID string) error {
-	return mongodb.DeleteByID(ctx, "householdId", householdID, s.jobs)
+	return mongodb.DeleteByID(ctx, "householdId", householdID, s.jobs, s.cursors)
+}
+
+// --- Cursors ------------------------------------------------------------------
+
+// GetCursor implements Store.
+func (s *MongoStore) GetCursor(ctx context.Context, householdID, source string) (Cursor, error) {
+	hid, err := oid("household id", householdID)
+	if err != nil {
+		return Cursor{}, ErrNotFound
+	}
+	var d cursorDoc
+	err = s.cursors.FindOne(ctx, cursorFilter(hid, source)).Decode(&d)
+	if err != nil {
+		return Cursor{}, translate(err)
+	}
+	return d.toCursor(), nil
+}
+
+func (d cursorDoc) toCursor() Cursor {
+	c := Cursor{
+		HouseholdID: d.HouseholdID.Hex(), Source: d.Source,
+		EarliestWeek: d.EarliestWeek, LatestWeek: d.LatestWeek,
+		Complete: d.Complete, UpdatedAt: d.UpdatedAt.UTC(),
+	}
+	if d.BlockedAt != nil {
+		c.BlockedAt = d.BlockedAt.UTC()
+	}
+	return c
+}
+
+// SaveCursor implements Store.
+func (s *MongoStore) SaveCursor(ctx context.Context, c Cursor) error {
+	hid, err := oid("household id", c.HouseholdID)
+	if err != nil {
+		return err
+	}
+	set := bson.D{
+		{Key: "earliestWeek", Value: c.EarliestWeek},
+		{Key: "latestWeek", Value: c.LatestWeek},
+		{Key: "complete", Value: c.Complete},
+		{Key: "updatedAt", Value: c.UpdatedAt},
+	}
+	// householdId and source come from the filter on insert, so they are not
+	// written again here.
+	var update bson.D
+	if c.BlockedAt.IsZero() {
+		// Queueing a run again is what clears a refusal: the cooldown has
+		// passed by then, or a person decided it had.
+		update = append(update, bson.E{Key: "$unset", Value: bson.D{{Key: "blockedAt", Value: ""}}})
+	} else {
+		set = append(set, bson.E{Key: "blockedAt", Value: c.BlockedAt})
+	}
+	update = append(update, bson.E{Key: "$set", Value: set})
+	return s.upsertCursor(ctx, hid, c.Source, update)
+}
+
+// MarkCursorBlocked implements Store.
+func (s *MongoStore) MarkCursorBlocked(ctx context.Context, householdID, source string, at time.Time) error {
+	hid, err := oid("household id", householdID)
+	if err != nil {
+		return err
+	}
+	return s.upsertCursor(ctx, hid, source, bson.D{
+		{Key: "$set", Value: bson.D{{Key: "blockedAt", Value: at}, {Key: "updatedAt", Value: at}}},
+		{Key: "$setOnInsert", Value: bson.D{{Key: "complete", Value: false}}},
+	})
+}
+
+func cursorFilter(hid bson.ObjectID, source string) bson.D {
+	return bson.D{{Key: "householdId", Value: hid}, {Key: "source", Value: source}}
+}
+
+func (s *MongoStore) upsertCursor(ctx context.Context, hid bson.ObjectID, source string, update bson.D) error {
+	_, err := s.cursors.UpdateOne(ctx, cursorFilter(hid, source), update, options.UpdateOne().SetUpsert(true))
+	return translate(err)
 }
 
 func oid(what, id string) (bson.ObjectID, error) {

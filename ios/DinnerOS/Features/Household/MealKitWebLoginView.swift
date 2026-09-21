@@ -24,14 +24,17 @@ struct MealKitWebLoginView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var model: MealKitWebLoginModel
 
+    /// - Parameter history: how far back the server has already read this household's orders.
+    ///   The walk resumes there instead of starting at today, which is the only way a history
+    ///   too long for one sitting ever finishes.
     init(
-        service: MealKitService, onHarvest: @escaping (MealKitHarvest) -> Void,
-        onCancel: @escaping () -> Void = {}
+        service: MealKitService, history: MealKitImportHistory? = nil,
+        onHarvest: @escaping (MealKitHarvest) -> Void, onCancel: @escaping () -> Void = {}
     ) {
         self.service = service
         self.onHarvest = onHarvest
         self.onCancel = onCancel
-        _model = State(initialValue: MealKitWebLoginModel(service: service))
+        _model = State(initialValue: MealKitWebLoginModel(service: service, history: history))
     }
 
     var body: some View {
@@ -39,6 +42,10 @@ struct MealKitWebLoginView: View {
             if case .unavailable(let message) = model.phase {
                 MealKitWebLoginMessage(
                     title: String(localized: "Sign-in unavailable"), message: message,
+                    retry: nil, cancel: cancel)
+            } else if case .upToDate(let message) = model.phase {
+                MealKitWebLoginMessage(
+                    title: String(localized: "Already up to date"), message: message,
                     retry: nil, cancel: cancel)
             } else {
                 webView
@@ -84,7 +91,7 @@ struct MealKitWebLoginView: View {
                 MealKitWebLoginMessage(
                     title: String(localized: "That didn't finish"), message: message,
                     retry: canRetry ? { model.retry() } : nil, cancel: cancel)
-            case .signingIn, .unavailable:
+            case .signingIn, .unavailable, .upToDate:
                 EmptyView()
             }
         }
@@ -110,6 +117,9 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
         case harvesting
         /// The history is in hand. It holds no credential.
         case done(MealKitHarvest)
+        /// The walk found nothing new: everything it reached is already in the library. Not a
+        /// failure — it is what a catch-up usually finds.
+        case upToDate(String)
         /// Something went wrong. `canRetry` is false when trying again cannot help.
         case failed(String, canRetry: Bool)
         /// We can't offer the sign-in at all.
@@ -122,6 +132,9 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
 
     let service: MealKitService
     let webView: WKWebView
+    /// How far back the server has already read this household's orders, and so where this walk
+    /// resumes. `nil` means nothing is known and it starts at today.
+    let history: MealKitImportHistory?
 
     /// How long to wait for the session cookie once the member has left the sign-in pages. Long
     /// enough for a slow redirect chain, short enough not to look stuck.
@@ -139,8 +152,9 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
 
     private static let logger = Logger(subsystem: "DinnerOS", category: "meal-kit-import")
 
-    init(service: MealKitService) {
+    init(service: MealKitService, history: MealKitImportHistory? = nil) {
         self.service = service
+        self.history = history
         let configuration = WKWebViewConfiguration()
         // A non-persistent store: whatever the login writes lives only as long as this view, and
         // never reaches the app's own cookie storage.
@@ -154,6 +168,10 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
     /// What the veil over the page says while it is up.
     var progressMessage: String {
         switch phase {
+        case .harvesting where MealKitHarvestPlan.isCatchUpOnly(history):
+            String(localized: "Checking your \(service.displayName) orders for anything new…")
+        case .harvesting where history?.moreToFetch == true:
+            String(localized: "Picking up where your last \(service.displayName) import stopped…")
         case .harvesting:
             String(localized: "Reading your \(service.displayName) order history…")
         default:
@@ -191,7 +209,7 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
     func watchForSession() async {
         while !Task.isCancelled {
             switch phase {
-            case .done, .harvesting:
+            case .done, .harvesting, .upToDate:
                 return
             default:
                 break
@@ -222,16 +240,9 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
         guard !harvesting else { return }
         harvesting = true
         phase = .harvesting
-        let arguments: [String: Any] = [
-            "token": session.accessToken,
-            "tokenType": session.tokenType,
-            "subscription": await currentPlanID() ?? "",
-            "country": service.country,
-            "locale": service.locale,
-            "maxPages": MealKitHarvestScript.maxPages,
-            "minIntervalMs": MealKitHarvestScript.minIntervalMilliseconds,
-            "maxRecipes": MealKitHarvestScript.maxRecipes,
-        ]
+        let arguments = MealKitHarvestScript.arguments(
+            session: session, service: service, subscription: await currentPlanID() ?? "",
+            history: history)
         do {
             let result = try await webView.callAsyncJavaScript(
                 MealKitHarvestScript.body, arguments: arguments, in: nil, contentWorld: .defaultClient)
@@ -239,10 +250,15 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
                 phase = failure(for: .unreadable)
                 return
             }
-            switch MealKitHarvestResult(json: json, service: service) {
+            switch MealKitHarvestResult(
+                json: json, service: service, catchingUp: MealKitHarvestPlan.isCatchUpOnly(history))
+            {
             case .harvested(let harvest):
                 Self.logger.info(
-                    "Meal-kit order history read: \(harvest.recipes.count, privacy: .public) recipes, \(harvest.weeks, privacy: .public) weeks"
+                    """
+                    Meal-kit order history read: \(harvest.recipes.count, privacy: .public) recipes, \
+                    \(harvest.weeks, privacy: .public) weeks, stopped \(harvest.stopped.rawValue, privacy: .public)
+                    """
                 )
                 phase = .done(harvest)
             case .failed(let reason):
@@ -274,6 +290,13 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
                         We couldn't find any past deliveries on that \(service.displayName) account. \
                         If you ordered under a different account, sign in with that one.
                         """), canRetry: true)
+        case .nothingNew:
+            .upToDate(
+                String(
+                    localized: """
+                        There's nothing new on your \(service.displayName) orders — everything you've \
+                        been delivered is already in your library.
+                        """))
         case .unreadable:
             .failed(
                 String(
@@ -361,7 +384,7 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
 
     private func reportNavigationFailure(_ error: any Error) {
         switch phase {
-        case .done, .harvesting:
+        case .done, .harvesting, .upToDate:
             return
         default:
             break

@@ -6165,14 +6165,65 @@ components:
           type: boolean
           description: A side or extra rather than a main meal.
       additionalProperties: false
+    MealKitHarvestReport:
+      type: object
+      description: |
+        Where the walk that read the order history stopped. A past-deliveries
+        page covers roughly four to five delivered weeks, and the app walks at
+        most 40 of them in one sitting, so a household with years of history
+        cannot be read in one go. The server remembers this report per
+        household and source, and the next harvest resumes from
+        `earliestWeek` instead of walking back from today again.
+
+        Every field is untrusted input; an unreadable one is a `400`, and an
+        absent report simply teaches the server nothing.
+      properties:
+        earliestWeek:
+          type: string
+          pattern: '^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$'
+          description: The oldest ISO week the walk reached.
+          example: 2023-W30
+        latestWeek:
+          type: string
+          pattern: '^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$'
+          description: |
+            The newest ISO week it saw. Absent when the walk could not reach
+            today's end of the history, so the server must not move its
+            ceiling on this pass.
+          example: 2026-W38
+        pages:
+          type: integer
+          minimum: 0
+          maximum: 500
+          description: How many past-deliveries pages it read.
+        weeks:
+          type: integer
+          minimum: 0
+          maximum: 2080
+          description: How many delivered weeks those pages carried.
+        stopped:
+          type: string
+          enum: [cap, empty, end, caught_up]
+          description: |
+            Why it stopped. `cap` means the walk hit its own page cap and
+            there is more history behind it; `empty` and `end` mean it reached
+            the start of the account's history, which completes the cursor;
+            `caught_up` means it reached weeks already imported, which a
+            catch-up pass for new deliveries does every time and which says
+            nothing about the oldest history.
+      additionalProperties: false
     MealKitStartImportRequest:
       type: object
       required: [recipes]
       description: |
-        The order history and nothing else. There is deliberately no field for
-        a token, a cookie, or an account: the sign-in stays in the app's web
-        view, and the server has nowhere to put one. A body carrying an unknown
-        field is a `400`.
+        The order history, where reading it stopped, and nothing else. There
+        is deliberately no field for a token, a cookie, or an account: the
+        sign-in stays in the app's web view, and the server has nowhere to put
+        one. A body carrying an unknown field is a `400`.
+
+        A **partial** harvest is posted exactly like a whole one. The recipes
+        it did reach belong in the library now, not after however many more
+        sign-ins the rest of the history takes.
       properties:
         recipes:
           type: array
@@ -6180,6 +6231,8 @@ components:
           maxItems: 1000
           items:
             $ref: "#/components/schemas/MealKitOrderedRecipe"
+        harvest:
+          $ref: "#/components/schemas/MealKitHarvestReport"
       additionalProperties: false
     MealKitImportFailure:
       type: object
@@ -6213,7 +6266,7 @@ components:
       type: object
       required:
         [id, source, status, phase, recipesFound, recipesDone, imported, updated,
-         unchanged, reviewItems, failures, attempts, maxAttempts, lastError,
+         unchanged, reviewItems, failures, harvest, attempts, maxAttempts, lastError,
          createdAt, updatedAt, finishedAt]
       properties:
         id:
@@ -6253,6 +6306,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MealKitImportFailure"
+        harvest:
+          allOf:
+            - $ref: "#/components/schemas/MealKitHarvestSummary"
+          description: |
+            Where the walk that produced this run's order history stopped.
         attempts:
           type: integer
         maxAttempts:
@@ -6271,6 +6329,68 @@ components:
           type: string
           format: date-time
           nullable: true
+    MealKitHarvestSummary:
+      type: object
+      required: [earliestWeek, latestWeek, pages, weeks, stopped, moreToFetch]
+      description: Where one walk of the order history stopped, read back.
+      properties:
+        earliestWeek:
+          type: string
+        latestWeek:
+          type: string
+        pages:
+          type: integer
+        weeks:
+          type: integer
+        stopped:
+          type: string
+          description: "`cap`, `empty`, `end`, `caught_up`, or empty when the app did not say."
+        moreToFetch:
+          type: boolean
+          description: |
+            True when the walk stopped on its own page cap, so history is known
+            to be left unread.
+    MealKitImportHistory:
+      type: object
+      required:
+        [earliestWeek, latestWeek, resumeFromWeek, complete, moreToFetch, blockedUntil]
+      description: |
+        How far back this household's order history has been read, and where
+        the next harvest resumes. It is the whole of what the server remembers
+        about a household's meal-kit account: two ISO weeks and a flag.
+
+        A **new delivery** is still picked up on a completed history: the app
+        walks back from today only as far as `latestWeek` and stops there,
+        which costs one page rather than four years of them.
+      properties:
+        earliestWeek:
+          type: string
+          description: The oldest delivered week any harvest has reached.
+        latestWeek:
+          type: string
+          description: |
+            The newest one seen. A catch-up pass walks back only to here.
+        resumeFromWeek:
+          type: string
+          description: |
+            The week the next harvest walks back from — the walk starts the
+            week *before* it — or empty for "start at today".
+        complete:
+          type: boolean
+          description: |
+            True once a harvest reached the start of the account's history. It
+            never goes back to false.
+        moreToFetch:
+          type: boolean
+          description: True when history is known to be left unread.
+        blockedUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            Set when the source refused us. A new import is refused with a
+            `400` until then rather than queued: being turned away is the one
+            failure this system does not argue with.
     MealKitImportJobList:
       type: object
       required: [items]
@@ -6281,7 +6401,7 @@ components:
             $ref: "#/components/schemas/MealKitImportJob"
     MealKitStatus:
       type: object
-      required: [source, enabled, latestJob]
+      required: [source, enabled, latestJob, history]
       description: |
         There is no linked account to report: the server stores nothing about
         one.
@@ -6298,6 +6418,8 @@ components:
           allOf:
             - $ref: "#/components/schemas/MealKitImportJob"
           nullable: true
+        history:
+          $ref: "#/components/schemas/MealKitImportHistory"
     ImportReviewListResponse:
       type: object
       required: [items]

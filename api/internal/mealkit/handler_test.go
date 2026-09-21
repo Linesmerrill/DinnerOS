@@ -174,3 +174,49 @@ func TestMealKitRoutesSayTheFeatureIsOffWhenItIs(t *testing.T) {
 		t.Errorf("import with the feature off = %d %s", rec.Code, rec.Body)
 	}
 }
+
+// A capped harvest is posted exactly like a whole one, and the status says
+// where to resume. The numbers are the measured ones: 40 pages, 160 weeks.
+func TestACappedHarvestIsQueuedAndTheStatusSaysWhereToResume(t *testing.T) {
+	f := newHandlerFixture(t, true)
+	capped := `{"recipes":[
+		{"sourceRecipeId":"recipe-1","name":"Sheet Pan Chicken","url":"https://example.test/recipes/recipe-1","weeks":["2026-W38"]}
+	],"harvest":{"earliestWeek":"2023-W30","latestWeek":"2026-W38","pages":40,"weeks":160,"stopped":"cap"}}`
+
+	rec := f.do(http.MethodPost, importsPath, capped, userAda)
+	var job JobResponse
+	if rec.Code != http.StatusAccepted || json.Unmarshal(rec.Body.Bytes(), &job) != nil {
+		t.Fatalf("start = %d %s", rec.Code, rec.Body)
+	}
+	if !job.Harvest.MoreToFetch || job.Harvest.Stopped != string(HarvestStopCap) || job.Harvest.Weeks != 160 {
+		t.Fatalf("job harvest = %+v", job.Harvest)
+	}
+
+	rec = f.do(http.MethodGet, statusPath, "", userAda)
+	var status StatusResponse
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &status) != nil {
+		t.Fatalf("status = %d %s", rec.Code, rec.Body)
+	}
+	if status.History.ResumeFromWeek != "2023-W30" || status.History.Complete || !status.History.MoreToFetch {
+		t.Fatalf("history = %+v", status.History)
+	}
+	if status.History.LatestWeek != "2026-W38" || status.History.BlockedUntil != nil {
+		t.Fatalf("history = %+v", status.History)
+	}
+}
+
+func TestAHarvestReportTheServerCannotReadIsRefused(t *testing.T) {
+	f := newHandlerFixture(t, true)
+	for name, body := range map[string]string{
+		"a week that is not one": `{"recipes":[{"sourceRecipeId":"recipe-1"}],"harvest":{"earliestWeek":"march"}}`,
+		"a stop we made up":      `{"recipes":[{"sourceRecipeId":"recipe-1"}],"harvest":{"stopped":"bored"}}`,
+		"a field we do not have": `{"recipes":[{"sourceRecipeId":"recipe-1"}],"harvest":{"cookie":"nope"}}`,
+	} {
+		if rec := f.do(http.MethodPost, importsPath, body, userAda); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s = %d %s", name, rec.Code, rec.Body)
+		}
+	}
+	if len(f.store.jobs) != 0 {
+		t.Errorf("a refused harvest queued %d jobs", len(f.store.jobs))
+	}
+}

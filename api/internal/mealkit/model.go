@@ -190,11 +190,15 @@ type Job struct {
 	LeaseOwner     string
 	LeaseExpiresAt time.Time
 	Checkpoint     Checkpoint
-	LastError      *JobError
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	StartedAt      time.Time
-	FinishedAt     time.Time
+	// Harvest is what the app reported about the walk that produced this
+	// job's order history: how far back it reached and why it stopped. It is
+	// what lets the member be told there is more history to fetch.
+	Harvest    HarvestReport
+	LastError  *JobError
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	StartedAt  time.Time
+	FinishedAt time.Time
 }
 
 // RecipesFound is how many recipes the account's orders contain, or 0 before

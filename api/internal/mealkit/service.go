@@ -77,12 +77,17 @@ func (s *Service) Source(name string) (Source, error) {
 	return src, nil
 }
 
-// Status is what the app shows: the household's newest import run, if any.
+// Status is what the app shows: the household's newest import run, if any,
+// and how far back its harvests have read.
 type Status struct {
 	Job *Job
+	// Cursor is where the next harvest should resume from. Its zero value
+	// means no harvest has ever run, which the app reads as "start at today".
+	Cursor Cursor
 }
 
-// Status returns the household's newest job for source.
+// Status returns the household's newest job for source and its harvest
+// cursor.
 func (s *Service) Status(ctx context.Context, householdID, source string) (Status, error) {
 	if householdID == "" {
 		return Status{}, errHouseholdRequired
@@ -99,7 +104,26 @@ func (s *Service) Status(ctx context.Context, householdID, source string) (Statu
 	default:
 		return Status{}, fmt.Errorf("get meal-kit job: %w", err)
 	}
+	cursor, err := s.cursor(ctx, householdID, source)
+	if err != nil {
+		return Status{}, err
+	}
+	out.Cursor = cursor
 	return out, nil
+}
+
+// cursor reads the household's harvest cursor, treating "never harvested" as
+// the zero cursor rather than an error.
+func (s *Service) cursor(ctx context.Context, householdID, source string) (Cursor, error) {
+	c, err := s.store.GetCursor(ctx, householdID, source)
+	switch {
+	case err == nil:
+		return c, nil
+	case errors.Is(err, ErrNotFound):
+		return Cursor{HouseholdID: householdID, Source: source}, nil
+	default:
+		return Cursor{}, fmt.Errorf("get meal-kit cursor: %w", err)
+	}
 }
 
 // ListJobs returns the household's import runs, newest first.
@@ -121,6 +145,11 @@ type ImportRequest struct {
 	UserID      string
 	Source      string
 	Orders      []OrderedRecipe
+	// Harvest is where the walk that produced Orders stopped: the oldest week
+	// it reached and why it stopped. It is how a history too long for one
+	// harvest is finished over several (cursor.go). An absent report is
+	// accepted and simply teaches the server nothing.
+	Harvest HarvestReport
 }
 
 // StartImport validates a harvested order history and queues a run for it.
@@ -128,11 +157,19 @@ type ImportRequest struct {
 // An import that is already queued or running is returned as is rather than
 // duplicated, so a member tapping twice never doubles the work — and the newly
 // harvested list is simply dropped, because the run already in flight is
-// reading the same account.
+// reading the same account. A run in flight on *another* source is refused
+// outright: one household is one polite conversation at a time.
+//
+// It also refuses to queue anything for BlockedCooldown after the source
+// turned us away. Being refused is the one failure that must not be argued
+// with, so it is surfaced to the member instead of retried.
 //
 // Running it again later is safe and is how a re-sync works: the recipes
 // pipeline matches on source and source recipe id, so recipes already in the
-// library come back as unchanged or updated, never as duplicates.
+// library come back as unchanged or updated, never as duplicates. What the
+// second run does *not* do is walk the whole history again: the harvest
+// cursor (cursor.go) tells the app where to resume, and this is where the
+// report of that walk is folded back in.
 func (s *Service) StartImport(ctx context.Context, req ImportRequest) (Job, error) {
 	if !s.Enabled() {
 		return Job{}, ErrDisabled
@@ -151,13 +188,53 @@ func (s *Service) StartImport(ctx context.Context, req ImportRequest) (Job, erro
 	if err != nil {
 		return Job{}, err
 	}
+	harvest, err := req.Harvest.Validate()
+	if err != nil {
+		return Job{}, err
+	}
 
 	if existing, err := s.store.ActiveJob(ctx, req.HouseholdID, req.Source); err == nil {
 		return existing, nil
 	} else if !errors.Is(err, ErrNotFound) {
 		return Job{}, fmt.Errorf("get active import job: %w", err)
 	}
-	return s.enqueue(ctx, req, orders)
+	if other, err := s.store.AnyActiveJob(ctx, req.HouseholdID); err == nil {
+		return Job{}, invalid("an import from %s is already running for this household; it has to finish first", other.Source)
+	} else if !errors.Is(err, ErrNotFound) {
+		return Job{}, fmt.Errorf("get active import job: %w", err)
+	}
+
+	cursor, err := s.cursor(ctx, req.HouseholdID, req.Source)
+	if err != nil {
+		return Job{}, err
+	}
+	now := s.now().UTC().Truncate(time.Millisecond)
+	if cursor.Blocked(now) {
+		return Job{}, invalid(
+			"%s asked us to stop, so we are leaving them alone for a few hours. Try again later.",
+			displayName(req.Source))
+	}
+	job, err := s.enqueue(ctx, req, orders, harvest, now)
+	if err != nil {
+		return Job{}, err
+	}
+	// The cursor moves only once the run is really queued, so a harvest that
+	// was refused never advances the floor and is not silently lost.
+	if err := s.store.SaveCursor(ctx, cursor.Merge(harvest, now)); err != nil {
+		// The recipes are queued; losing the cursor costs a re-walk next
+		// time, not a recipe. It is logged, not returned.
+		s.logger.ErrorContext(ctx, "saving the meal-kit harvest cursor failed",
+			"source", req.Source, "householdId", req.HouseholdID, "error", err)
+	}
+	return job, nil
+}
+
+// displayName is the service's name as a member would write it.
+func displayName(source string) string {
+	if source == SourceHelloFresh {
+		return "HelloFresh"
+	}
+	return "the meal-kit service"
 }
 
 // normalizeOrders puts every submitted entry through the source's own door and
@@ -205,19 +282,25 @@ func mergeWeeks(into, extra []string) []string {
 	return into
 }
 
-func (s *Service) enqueue(ctx context.Context, req ImportRequest, orders []OrderedRecipe) (Job, error) {
-	now := s.now().UTC().Truncate(time.Millisecond)
+func (s *Service) enqueue(
+	ctx context.Context, req ImportRequest, orders []OrderedRecipe, harvest HarvestReport, now time.Time,
+) (Job, error) {
 	job, err := s.store.InsertJob(ctx, Job{
 		HouseholdID: req.HouseholdID, UserID: strings.TrimSpace(req.UserID), Source: req.Source,
 		Status: JobQueued, MaxAttempts: s.attempts, AvailableAt: now,
 		Checkpoint: Checkpoint{Phase: PhaseRecipes, Orders: orders},
+		Harvest:    harvest,
 		CreatedAt:  now, UpdatedAt: now,
 	})
 	if err != nil {
 		return Job{}, fmt.Errorf("enqueue import job: %w", err)
 	}
+	// A partial harvest is queued exactly like a whole one: the recipes it
+	// did reach belong in the library now, not after however many more
+	// sign-ins the rest of the history takes.
 	s.logger.InfoContext(ctx, "meal-kit import queued",
-		"source", req.Source, "householdId", req.HouseholdID, "jobId", job.ID, "recipes", len(orders))
+		"source", req.Source, "householdId", req.HouseholdID, "jobId", job.ID, "recipes", len(orders),
+		"earliestWeek", harvest.EarliestWeek, "stopped", string(harvest.Stopped))
 	return job, nil
 }
 

@@ -28,9 +28,11 @@ const (
 // including the atomic claim: every mutation holds the same lock, which is
 // what MongoDB's single-document find-and-modify gives us in production.
 type memoryStore struct {
-	mu   sync.Mutex
-	jobs []Job
-	seq  int
+	mu sync.Mutex
+	// jobs is the queue; cursors is keyed by householdID + "/" + source.
+	jobs    []Job
+	cursors map[string]Cursor
+	seq     int
 }
 
 var _ Store = (*memoryStore)(nil)
@@ -80,6 +82,51 @@ func (m *memoryStore) ActiveJob(_ context.Context, householdID, source string) (
 		}
 	}
 	return Job{}, ErrNotFound
+}
+
+func (m *memoryStore) AnyActiveJob(_ context.Context, householdID string) (Job, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := len(m.jobs) - 1; i >= 0; i-- {
+		if m.jobs[i].HouseholdID == householdID && m.jobs[i].Status.Active() {
+			return m.jobs[i], nil
+		}
+	}
+	return Job{}, ErrNotFound
+}
+
+func cursorKey(householdID, source string) string { return householdID + "/" + source }
+
+func (m *memoryStore) GetCursor(_ context.Context, householdID, source string) (Cursor, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.cursors[cursorKey(householdID, source)]
+	if !ok {
+		return Cursor{}, ErrNotFound
+	}
+	return c, nil
+}
+
+func (m *memoryStore) SaveCursor(_ context.Context, c Cursor) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.cursors == nil {
+		m.cursors = map[string]Cursor{}
+	}
+	m.cursors[cursorKey(c.HouseholdID, c.Source)] = c
+	return nil
+}
+
+func (m *memoryStore) MarkCursorBlocked(_ context.Context, householdID, source string, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.cursors == nil {
+		m.cursors = map[string]Cursor{}
+	}
+	c := m.cursors[cursorKey(householdID, source)]
+	c.HouseholdID, c.Source, c.BlockedAt, c.UpdatedAt = householdID, source, at, at
+	m.cursors[cursorKey(householdID, source)] = c
+	return nil
 }
 
 func (m *memoryStore) ListJobs(_ context.Context, householdID string, limit int) ([]Job, error) {
@@ -276,6 +323,11 @@ type fakePublisher struct {
 	err   error
 	// reject names source recipe IDs the pipeline refuses.
 	reject map[string]string
+	// seen is every source recipe ID this publisher has already taken. The
+	// real pipeline matches on source and source recipe id, so importing the
+	// same recipe again is "unchanged", never a duplicate; this fake says the
+	// same thing.
+	seen map[string]bool
 }
 
 func (p *fakePublisher) Import(_ context.Context, _ string, file recipes.ImportFile) (recipes.ImportResult, error) {
@@ -293,6 +345,14 @@ func (p *fakePublisher) Import(_ context.Context, _ string, file recipes.ImportF
 			})
 			continue
 		}
+		if p.seen[r.SourceRecipeID] {
+			res.Unchanged++
+			continue
+		}
+		if p.seen == nil {
+			p.seen = map[string]bool{}
+		}
+		p.seen[r.SourceRecipeID] = true
 		res.Created++
 	}
 	res.ReviewItems = len(file.Review)

@@ -71,6 +71,11 @@ final class MealKitImportStore {
 
     /// The newest run, when there is one.
     var job: MealKitImportJob? { status.latestJob }
+    /// How far back this household's order history has been read. A sign-in hands it to the
+    /// harvest, which resumes there instead of walking back from today every time.
+    var history: MealKitImportHistory { status.history }
+    /// Whether the server knows there is order history still to fetch.
+    var moreHistoryToFetch: Bool { status.history.moreToFetch }
     /// Whether the server offers meal-kit import at all.
     var isEnabled: Bool { isAvailable && status.enabled }
     /// Whether a run is going to make progress on its own.
@@ -125,7 +130,9 @@ final class MealKitImportStore {
                 householdID: householdID, service: service, harvest: harvest, accessToken: token)
         }
         guard started == scope else { return }
-        status = MealKitStatus(enabled: status.enabled, latestJob: job)
+        // The cursor moved on the server with this run; it is re-read on the next load rather
+        // than guessed at here.
+        status = MealKitStatus(enabled: status.enabled, latestJob: job, history: status.history)
         isAvailable = true
         refreshError = nil
         phase = .loaded

@@ -25,9 +25,16 @@ nonisolated enum MealKitFormatting {
         case .queued:
             return Summary(
                 title: String(localized: "Import queued"),
-                detail: String(
-                    localized:
-                        "We'll fetch your \(service.displayName) recipes in the background. You can close the app."),
+                detail: job.recipesFound > 0
+                    ? String(
+                        localized: """
+                            \(job.recipesFound) recipes to fetch. We'll do it in the background, \
+                            a few at a time — you can close the app.
+                            """)
+                    : String(
+                        localized:
+                            "We'll fetch your \(service.displayName) recipes in the background. You can close the app."
+                    ),
                 symbol: "clock", needsAttention: false)
         case .running:
             return Summary(
@@ -53,13 +60,56 @@ nonisolated enum MealKitFormatting {
         }
     }
 
-    /// "12 of 48 recipes" once the order history has been read, and an honest
-    /// "Reading your order history" before it — no invented total, no fake bar.
+    /// "12 of 48 recipes · keeps going on our server, even if you close the app" once the order
+    /// history has been read, and an honest "Getting your recipes ready" before it — no invented
+    /// total, no fake bar.
+    ///
+    /// The second half is not decoration: the import really does span scheduled runs on the
+    /// server, and a member watching 12 of 740 crawl deserves to know that closing the app costs
+    /// them nothing.
     static func progressDetail(_ job: MealKitImportJob, service: MealKitService) -> String {
         guard job.recipesFound > 0 else {
             return String(localized: "Getting your \(service.displayName) recipes ready…")
         }
         return String(localized: "\(job.recipesDone) of \(job.recipesFound) recipes")
+            + " · " + String(localized: "it keeps going on our server, even if you close the app")
+    }
+
+    /// What to say about order history that has not been read yet, or nothing when there is
+    /// none left.
+    ///
+    /// It says what will happen next, and only what will: the rest of the history needs another
+    /// sign-in, because only the member's own browser session can read their orders. Nothing on
+    /// the server can fetch it for them while they sleep, so nothing here says it will.
+    static func moreHistoryNote(
+        for job: MealKitImportJob?, history: MealKitImportHistory?, service: MealKitService
+    ) -> String? {
+        let more = history?.moreToFetch == true || job?.moreHistoryToFetch == true
+        guard more else { return nil }
+        let reached = history?.earliestWeek ?? job?.harvest?.earliestWeek ?? ""
+        let since = monthAndYear(of: reached)
+        if let since {
+            return String(
+                localized: """
+                    We read your \(service.displayName) orders back to \(since) — there's more \
+                    before that. Import again when you like and we'll carry on from there.
+                    """)
+        }
+        return String(
+            localized: """
+                There's more of your \(service.displayName) order history to read. Import again \
+                when you like and we'll carry on where this stopped.
+                """)
+    }
+
+    /// "March 2024" for an ISO week such as `2024-W12`, or `nil` when it is not one.
+    static func monthAndYear(of week: String) -> String? {
+        guard let monday = MealKitHarvestPlan.mondayOf(week) else { return nil }
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .iso8601)
+        formatter.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        formatter.setLocalizedDateFormatFromTemplate("MMMMy")
+        return formatter.string(from: monday)
     }
 
     private static func finishedTitle(_ job: MealKitImportJob) -> String {

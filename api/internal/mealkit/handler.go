@@ -74,13 +74,32 @@ type OrderedRecipeBody struct {
 	IsAddon bool `json:"isAddon,omitempty"`
 }
 
+// HarvestReportBody is where the walk that read the order history stopped.
+//
+// It is how a history too long for one sitting is finished over several: the
+// server remembers the earliest week reached, and the next harvest resumes
+// there instead of walking back from today (docs/meal-kit-import.md).
+type HarvestReportBody struct {
+	// EarliestWeek is the oldest ISO week the walk reached.
+	EarliestWeek string `json:"earliestWeek,omitempty"`
+	// LatestWeek is the newest one it saw.
+	LatestWeek string `json:"latestWeek,omitempty"`
+	// Pages and Weeks are how much it walked.
+	Pages int `json:"pages,omitempty"`
+	Weeks int `json:"weeks,omitempty"`
+	// Stopped is why it stopped: cap, empty, end, or caught_up. Only `cap`
+	// means there is more history left to read.
+	Stopped string `json:"stopped,omitempty"`
+}
+
 // StartImportBody is the body of POST .../meal-kit/{source}/imports.
 //
-// It carries the order history and nothing else. There is deliberately no
-// field for a token, a cookie, or an account: the app must not send one, and
-// this server has nowhere to put one.
+// It carries the order history and where reading it stopped, and nothing
+// else. There is deliberately no field for a token, a cookie, or an account:
+// the app must not send one, and this server has nowhere to put one.
 type StartImportBody struct {
 	Recipes []OrderedRecipeBody `json:"recipes"`
+	Harvest *HarvestReportBody  `json:"harvest,omitempty"`
 }
 
 // FailedRecipeResponse is one recipe of the order history that did not make it.
@@ -95,6 +114,40 @@ type JobErrorResponse struct {
 	Code    string    `json:"code"`
 	Message string    `json:"message"`
 	At      time.Time `json:"at"`
+}
+
+// HarvestResponse is where a walk of the order history stopped, as the app
+// reads it back.
+type HarvestResponse struct {
+	EarliestWeek string `json:"earliestWeek"`
+	LatestWeek   string `json:"latestWeek"`
+	Pages        int    `json:"pages"`
+	Weeks        int    `json:"weeks"`
+	Stopped      string `json:"stopped"`
+	// MoreToFetch is true when this walk stopped on its own page cap, so
+	// history is known to be left unread.
+	MoreToFetch bool `json:"moreToFetch"`
+}
+
+// HistoryResponse is how far back this household's harvests have read, and
+// where the next one should resume.
+type HistoryResponse struct {
+	// EarliestWeek is the oldest delivered week any harvest has reached.
+	EarliestWeek string `json:"earliestWeek"`
+	// LatestWeek is the newest one seen; a catch-up pass walks back only to
+	// here, so a new delivery is picked up without re-reading years.
+	LatestWeek string `json:"latestWeek"`
+	// ResumeFromWeek is the week the next harvest should walk back from, or
+	// "" for "start at today".
+	ResumeFromWeek string `json:"resumeFromWeek"`
+	// Complete is true once a harvest reached the start of the account's
+	// history. It never goes back to false.
+	Complete bool `json:"complete"`
+	// MoreToFetch is true when history is known to be left unread.
+	MoreToFetch bool `json:"moreToFetch"`
+	// BlockedUntil is set when the source refused us and a new run will be
+	// refused until then.
+	BlockedUntil *time.Time `json:"blockedUntil"`
 }
 
 // JobResponse is one import run.
@@ -114,12 +167,15 @@ type JobResponse struct {
 	// are read through the recipes import-reviews route.
 	ReviewItems int                    `json:"reviewItems"`
 	Failures    []FailedRecipeResponse `json:"failures"`
-	Attempts    int                    `json:"attempts"`
-	MaxAttempts int                    `json:"maxAttempts"`
-	LastError   *JobErrorResponse      `json:"lastError"`
-	CreatedAt   time.Time              `json:"createdAt"`
-	UpdatedAt   time.Time              `json:"updatedAt"`
-	FinishedAt  *time.Time             `json:"finishedAt"`
+	// Harvest is where the walk that produced this run's order history
+	// stopped.
+	Harvest     HarvestResponse   `json:"harvest"`
+	Attempts    int               `json:"attempts"`
+	MaxAttempts int               `json:"maxAttempts"`
+	LastError   *JobErrorResponse `json:"lastError"`
+	CreatedAt   time.Time         `json:"createdAt"`
+	UpdatedAt   time.Time         `json:"updatedAt"`
+	FinishedAt  *time.Time        `json:"finishedAt"`
 }
 
 // StatusResponse is returned by GET .../meal-kit/{source}.
@@ -130,6 +186,9 @@ type StatusResponse struct {
 	Enabled bool `json:"enabled"`
 	// LatestJob is the newest run, or null when there has never been one.
 	LatestJob *JobResponse `json:"latestJob"`
+	// History is the harvest cursor: how far back this household's order
+	// history has been read, and where the next harvest resumes.
+	History HistoryResponse `json:"history"`
 }
 
 // JobListResponse is returned by GET .../meal-kit/{source}/imports.
@@ -144,6 +203,11 @@ func newJobResponse(j Job) *JobResponse {
 		Imported: j.Checkpoint.Imported, Updated: j.Checkpoint.Updated, Unchanged: j.Checkpoint.Unchanged,
 		ReviewItems: j.Checkpoint.ReviewItems, Failures: []FailedRecipeResponse{},
 		Attempts: j.Attempts, MaxAttempts: j.MaxAttempts,
+		Harvest: HarvestResponse{
+			EarliestWeek: j.Harvest.EarliestWeek, LatestWeek: j.Harvest.LatestWeek,
+			Pages: j.Harvest.Pages, Weeks: j.Harvest.Weeks, Stopped: string(j.Harvest.Stopped),
+			MoreToFetch: j.Harvest.Stopped.MoreToFetch(),
+		},
 		CreatedAt: j.CreatedAt, UpdatedAt: j.UpdatedAt,
 	}
 	for _, f := range j.Checkpoint.Failures {
@@ -177,7 +241,20 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 	if status.Job != nil {
 		resp.LatestJob = newJobResponse(*status.Job)
 	}
+	resp.History = newHistoryResponse(status.Cursor)
 	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+func newHistoryResponse(c Cursor) HistoryResponse {
+	out := HistoryResponse{
+		EarliestWeek: c.EarliestWeek, LatestWeek: c.LatestWeek,
+		ResumeFromWeek: c.ResumeFrom(), Complete: c.Complete, MoreToFetch: c.MoreToFetch(),
+	}
+	if !c.BlockedAt.IsZero() {
+		until := c.BlockedAt.Add(BlockedCooldown)
+		out.BlockedUntil = &until
+	}
+	return out
 }
 
 func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
@@ -192,8 +269,16 @@ func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
 	for _, in := range body.Recipes {
 		orders = append(orders, OrderedRecipe(in))
 	}
+	var harvest HarvestReport
+	if body.Harvest != nil {
+		harvest = HarvestReport{
+			EarliestWeek: body.Harvest.EarliestWeek, LatestWeek: body.Harvest.LatestWeek,
+			Pages: body.Harvest.Pages, Weeks: body.Harvest.Weeks,
+			Stopped: HarvestStop(body.Harvest.Stopped),
+		}
+	}
 	job, err := h.opts.Service.StartImport(r.Context(), ImportRequest{
-		HouseholdID: householdID, UserID: userID, Source: source, Orders: orders,
+		HouseholdID: householdID, UserID: userID, Source: source, Orders: orders, Harvest: harvest,
 	})
 	if err != nil {
 		h.writeError(w, r, "start meal-kit import failed", err)

@@ -181,3 +181,38 @@ func TestFetcherTreatsAnUnexpected4xxAsALayoutProblem(t *testing.T) {
 		t.Error("a 404 was treated as retryable")
 	}
 }
+
+// The politeness budget, in numbers rather than prose: this is the arithmetic
+// docs/meal-kit-import.md quotes for a measured 740-recipe history, and the
+// reason it takes hours instead of minutes.
+func TestThePolitenessBudgetSpreadsALongHistoryOverHours(t *testing.T) {
+	// One request at a time, 2.5 s apart plus up to 40% jitter: three seconds
+	// on average.
+	average := DefaultMinInterval + time.Duration(float64(DefaultMinInterval)*DefaultJitter/2)
+	if average < 2500*time.Millisecond || average > 4*time.Second {
+		t.Fatalf("the average interval is %v; the policy is a real one, not a token one", average)
+	}
+
+	// A run fetches at most DefaultRecipesPerRun pages, so its own fetching
+	// fits inside the worker's 6-minute run timeout and well inside the
+	// 8-minute lease. If a future build raises the cap, this fails.
+	perRun := time.Duration(DefaultRecipesPerRun) * average
+	if perRun > 6*time.Minute {
+		t.Errorf("a full run spends %v fetching, longer than the run timeout", perRun)
+	}
+	if perRun > DefaultLease {
+		t.Errorf("a full run spends %v fetching, longer than its lease %v", perRun, DefaultLease)
+	}
+
+	// The measured history: 740 recipes at 40 a run is 19 scheduled runs,
+	// which at the scheduler's ten minutes is about three hours.
+	const measured = 740
+	runs := (measured + DefaultRecipesPerRun - 1) / DefaultRecipesPerRun
+	if runs != 19 {
+		t.Errorf("a %d-recipe history needs %d runs; the docs say 19", measured, runs)
+	}
+	wall := time.Duration(runs) * 10 * time.Minute
+	if wall < 2*time.Hour || wall > 5*time.Hour {
+		t.Errorf("end to end is %v; the docs say roughly three hours", wall)
+	}
+}

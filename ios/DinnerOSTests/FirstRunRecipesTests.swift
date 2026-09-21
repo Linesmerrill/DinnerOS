@@ -76,7 +76,9 @@ struct FirstRunRecipesTests {
         let detail = MealKitFormatting.summary(for: running, service: .helloFresh).detail
 
         #expect(FirstRunRecipes.state(for: emptyLibrary(job: running)) == .importing(running))
-        #expect(detail == "1 of 10 recipes")
+        #expect(detail.hasPrefix("1 of 10 recipes"))
+        // …and that it keeps going without them, which is the point of showing it at all.
+        #expect(detail.lowercased().contains("server"))
     }
 
     @Test func aStoppedRunSaysWhyAndOffersARetry() {

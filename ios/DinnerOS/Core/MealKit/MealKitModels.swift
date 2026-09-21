@@ -104,6 +104,69 @@ nonisolated struct MealKitImportError: Decodable, Hashable, Sendable {
 
 }
 
+/// Where the walk that produced one run's order history stopped
+/// (`MealKitHarvestSummary` in `api/openapi.yaml`).
+nonisolated struct MealKitHarvestSummary: Decodable, Hashable, Sendable {
+    let earliestWeek: String
+    let latestWeek: String
+    let pages: Int
+    let weeks: Int
+    /// `cap`, `empty`, `end`, or `caught_up`.
+    let stopped: String
+    /// True when the walk stopped on its own page cap, so history is known to be left unread.
+    let moreToFetch: Bool
+
+    init(
+        earliestWeek: String = "", latestWeek: String = "", pages: Int = 0, weeks: Int = 0,
+        stopped: String = "", moreToFetch: Bool = false
+    ) {
+        self.earliestWeek = earliestWeek
+        self.latestWeek = latestWeek
+        self.pages = pages
+        self.weeks = weeks
+        self.stopped = stopped
+        self.moreToFetch = moreToFetch
+    }
+}
+
+/// How far back this household's order history has been read, and where the next harvest
+/// resumes (`MealKitImportHistory` in `api/openapi.yaml`).
+///
+/// It is the whole of what the server remembers about a household's meal-kit account: two ISO
+/// weeks and a flag. Not a token, not a cookie, not an email address.
+nonisolated struct MealKitImportHistory: Decodable, Hashable, Sendable {
+    /// The oldest delivered week any harvest has reached.
+    let earliestWeek: String
+    /// The newest one seen. A catch-up pass walks back only to here.
+    let latestWeek: String
+    /// The week the next harvest should walk back from, or empty for "start at today".
+    let resumeFromWeek: String
+    /// True once a harvest reached the start of the account's history.
+    let complete: Bool
+    /// True when history is known to be left unread.
+    let moreToFetch: Bool
+    /// Set when the service refused us and a new run will be refused until then.
+    let blockedUntil: Date?
+
+    init(
+        earliestWeek: String = "", latestWeek: String = "", resumeFromWeek: String = "",
+        complete: Bool = false, moreToFetch: Bool = false, blockedUntil: Date? = nil
+    ) {
+        self.earliestWeek = earliestWeek
+        self.latestWeek = latestWeek
+        self.resumeFromWeek = resumeFromWeek
+        self.complete = complete
+        self.moreToFetch = moreToFetch
+        self.blockedUntil = blockedUntil
+    }
+
+    /// Nothing has ever been read.
+    var isEmpty: Bool { earliestWeek.isEmpty && latestWeek.isEmpty }
+
+    /// The week a resumed walk starts below, or `nil` when there is nothing older to read.
+    var resumeWeek: String? { resumeFromWeek.isEmpty ? nil : resumeFromWeek }
+}
+
 /// One import run (`MealKitImportJob` in `api/openapi.yaml`).
 nonisolated struct MealKitImportJob: Decodable, Hashable, Sendable, Identifiable {
     let id: String
@@ -121,6 +184,9 @@ nonisolated struct MealKitImportJob: Decodable, Hashable, Sendable, Identifiable
     /// screen, not here.
     let reviewItems: Int
     let failures: [MealKitImportFailure]
+    /// Where the walk that produced this run's order history stopped. Absent from a server
+    /// older than the cursor, which reads as "it did not say".
+    let harvest: MealKitHarvestSummary?
     let attempts: Int
     let maxAttempts: Int
     let lastError: MealKitImportError?
@@ -131,7 +197,8 @@ nonisolated struct MealKitImportJob: Decodable, Hashable, Sendable, Identifiable
     init(
         id: String, status: String, phase: String = "orders", recipesFound: Int = 0, recipesDone: Int = 0,
         imported: Int = 0, updated: Int = 0, unchanged: Int = 0, reviewItems: Int = 0,
-        failures: [MealKitImportFailure] = [], attempts: Int = 0, maxAttempts: Int = 5,
+        failures: [MealKitImportFailure] = [], harvest: MealKitHarvestSummary? = nil,
+        attempts: Int = 0, maxAttempts: Int = 5,
         lastError: MealKitImportError? = nil, createdAt: Date = .distantPast,
         updatedAt: Date = .distantPast, finishedAt: Date? = nil
     ) {
@@ -145,6 +212,7 @@ nonisolated struct MealKitImportJob: Decodable, Hashable, Sendable, Identifiable
         self.unchanged = unchanged
         self.reviewItems = reviewItems
         self.failures = failures
+        self.harvest = harvest
         self.attempts = attempts
         self.maxAttempts = maxAttempts
         self.lastError = lastError
@@ -184,6 +252,9 @@ nonisolated struct MealKitImportJob: Decodable, Hashable, Sendable, Identifiable
     /// Recipes that reached the library, new or refreshed.
     var recipesAdded: Int { imported + updated }
 
+    /// Whether the walk that produced this run left history unread.
+    var moreHistoryToFetch: Bool { harvest?.moreToFetch ?? false }
+
     /// How far along, or `nil` before the order history has been read (there is no total to
     /// measure against yet, and a made-up bar would be a lie).
     var progress: Double? {
@@ -201,10 +272,32 @@ nonisolated struct MealKitStatus: Decodable, Hashable, Sendable {
     /// by hand rather than a sign-in it can't honour.
     let enabled: Bool
     let latestJob: MealKitImportJob?
+    /// How far back the household's order history has been read. The harvest resumes from here
+    /// rather than walking four years back from today every time.
+    let history: MealKitImportHistory
 
-    init(enabled: Bool, latestJob: MealKitImportJob? = nil) {
+    init(
+        enabled: Bool, latestJob: MealKitImportJob? = nil,
+        history: MealKitImportHistory = MealKitImportHistory()
+    ) {
         self.enabled = enabled
         self.latestJob = latestJob
+        self.history = history
+    }
+
+    /// A server from before the cursor existed sends no `history`, which reads as "nothing has
+    /// been harvested" — the safe direction: the harvest then starts at today, as it used to.
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            enabled: try c.decode(Bool.self, forKey: .enabled),
+            latestJob: try c.decodeIfPresent(MealKitImportJob.self, forKey: .latestJob),
+            history: try c.decodeIfPresent(MealKitImportHistory.self, forKey: .history)
+                ?? MealKitImportHistory())
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled, latestJob, history
     }
 
     /// Nothing to show.
@@ -225,8 +318,25 @@ nonisolated struct MealKitImportJobList: Decodable, Hashable, Sendable {
 /// an account: the sign-in stayed in the web view, and the server has nowhere to put one.
 nonisolated struct MealKitStartImportRequest: Encodable, Sendable {
     let recipes: [MealKitOrderedRecipe]
+    /// Where the walk stopped, so the server knows whether to resume next time and what to tell
+    /// the member. It is weeks and counts — there is nothing in it about the account.
+    let harvest: Report
 
     init(harvest: MealKitHarvest) {
         recipes = harvest.recipes
+        self.harvest = Report(
+            earliestWeek: harvest.earliestWeek, latestWeek: harvest.latestWeek,
+            pages: harvest.pages, weeks: harvest.weeks,
+            // A reason a newer script invented is left out rather than sent: the server refuses
+            // what it cannot read, and a harvest must not be lost over a label.
+            stopped: harvest.stopped == .unknown ? nil : harvest.stopped.rawValue)
+    }
+
+    struct Report: Encodable, Sendable {
+        let earliestWeek: String
+        let latestWeek: String
+        let pages: Int
+        let weeks: Int
+        let stopped: String?
     }
 }

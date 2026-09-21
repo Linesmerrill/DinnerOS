@@ -5,9 +5,11 @@ import (
 	"time"
 )
 
-// Store persists the import job queue.
+// Store persists the import job queue and the per-household harvest cursor.
 //
-// There is nothing else to persist: no account link, no token, no cookie. Job
+// There is nothing else to persist: no account link, no token, no cookie. The
+// cursor is two ISO weeks and a flag (cursor.go), which is what makes a long
+// order history resumable without keeping anything about the account. Job
 // methods are scoped by householdID where a household could otherwise read
 // another's; implementations filter on it and never trust a HouseholdID field
 // on the value passed in. Missing records are ErrNotFound. Slices in returned
@@ -23,6 +25,11 @@ type Store interface {
 	// ActiveJob returns the household's queued or running job for source, or
 	// ErrNotFound. At most one exists at a time.
 	ActiveJob(ctx context.Context, householdID, source string) (Job, error)
+	// AnyActiveJob returns the household's queued or running job on any
+	// source, or ErrNotFound. It is the single-flight check: one household is
+	// one polite conversation, so a second import is never started next to a
+	// first.
+	AnyActiveJob(ctx context.Context, householdID string) (Job, error)
 	// ListJobs returns the household's jobs, newest first, at most limit.
 	ListJobs(ctx context.Context, householdID string, limit int) ([]Job, error)
 
@@ -54,4 +61,15 @@ type Store interface {
 	// calls it, so a running worker's next conditional write fails with
 	// ErrJobGone and it stops without touching the library again.
 	CancelJobs(ctx context.Context, householdID, source, reason string, at time.Time) (int, error)
+
+	// GetCursor returns where this household's harvests of source have
+	// reached, or ErrNotFound when none has run.
+	GetCursor(ctx context.Context, householdID, source string) (Cursor, error)
+	// SaveCursor stores c, keyed by household and source. It is an upsert:
+	// the caller merges (Cursor.Merge) and writes the result.
+	SaveCursor(ctx context.Context, c Cursor) error
+	// MarkCursorBlocked records that the source refused us, so a new import
+	// is refused for BlockedCooldown instead of queued. It creates the cursor
+	// when there is none.
+	MarkCursorBlocked(ctx context.Context, householdID, source string, at time.Time) error
 }

@@ -104,6 +104,9 @@ struct MealKitImportFlow: View {
     var body: some View {
         MealKitWebLoginView(
             service: service,
+            // Where the server's cursor says this household's orders have been read to, so a
+            // history too long for one sitting resumes instead of starting at today again.
+            history: mealKit.history,
             onHarvest: { harvest in
                 self.harvest = harvest
                 Task { await queue(harvest) }
@@ -187,9 +190,21 @@ struct MealKitImportStatusView: View {
         }
     }
 
+    /// What to say about history that hasn't been read yet, when there is any.
+    private var moreHistoryNote: String? {
+        MealKitFormatting.moreHistoryNote(
+            for: mealKit.job, history: mealKit.history, service: service)
+    }
+
     private var statusSection: some View {
         Section {
             MealKitStatusRow(summary: summary, job: mealKit.job)
+            if let moreHistoryNote {
+                Label(moreHistoryNote, systemImage: "clock.arrow.circlepath")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 2)
+            }
             if let job = mealKit.job, job.reviewItems > 0 {
                 NavigationLink {
                     ImportReviewView()
@@ -234,7 +249,7 @@ struct MealKitImportStatusView: View {
                 Button("Stop Importing", role: .destructive) { isConfirmingStop = true }
                     .disabled(mealKit.isWorking)
             } else {
-                Button(mealKit.job == nil ? "Import from \(service.displayName)" : "Import Again") {
+                Button(importButtonTitle) {
                     isSigningIn = true
                 }
                 .disabled(mealKit.isWorking)
@@ -242,6 +257,13 @@ struct MealKitImportStatusView: View {
         } footer: {
             Text(MealKitFormatting.credentialExplanation(for: service))
         }
+    }
+
+    /// "Import Again" is the wrong promise when the last run left history behind: that run is
+    /// going to be *continued*, not repeated.
+    private var importButtonTitle: LocalizedStringKey {
+        if moreHistoryNote != nil { return "Fetch More History" }
+        return mealKit.job == nil ? "Import from \(service.displayName)" : "Import Again"
     }
 
     private func stop() async {

@@ -39,13 +39,16 @@ iPhone                                    API (web dyno)     MongoDB     Worker 
   │  WKWebView → hellofresh.com/login                   │                      │
   │  (their password, their site, their password manager)                      │
   │  ◀── apiV2Auth cookie (stays in the web view)       │                      │
+  │  GET .../meal-kit/hellofresh → history cursor ──────│ meal_kit_cursors     │
   │  in-page, in their session:                         │                      │
   │    /gw/api/plans → subscription id                  │                      │
-  │    /gw/my-deliveries/past-deliveries, week by week  │                      │
-  │  ◀── recipe ids + public URLs + weeks               │                      │
+  │    /gw/my-deliveries/past-deliveries, week by week, │                      │
+  │      resuming at the cursor's earliest week         │                      │
+  │  ◀── recipe ids + public URLs + weeks + where it stopped                   │
   │  [web view wiped]                                   │                      │
   │  POST .../meal-kit/hellofresh/imports               │                      │
-  │  {recipes:[…]} ──────────────────────── validate ──▶│ meal_kit_jobs        │
+  │  {recipes:[…], harvest:{…}} ─────────── validate ──▶│ meal_kit_jobs        │
+  │                                          cursor ───▶│ meal_kit_cursors     │
   │  ◀──── 202 {job}          (app can close)           │                      │
   │                                                     │◀── claim (findAndModify)
   │                                                     │    public recipe pages (rate limited)
@@ -202,7 +205,105 @@ recipes pipeline matches on `source` plus `sourceRecipeId`
 comes back as `unchanged` (or `updated` when its page changed), never as a
 second copy. `TestStartImportNeverDuplicatesARunInFlight` covers the other
 half: a second import while one is in flight returns the run already going
-rather than queueing a duplicate.
+rather than queueing a duplicate, and
+`TestASecondImportOfTheSameRecipesChangesNothing` covers the first: the second
+pass reports `unchanged`, imports nothing, and fails nothing.
+
+## Reading a long history, over several sittings
+
+**Measured, on 2026-09-21, against a real account:** one harvest returned
+**740 recipes across 160 delivered weeks in 40 pages**, and it stopped because
+it hit the app's 40-page cap — this household has about four years of history.
+A `past-deliveries` page covers roughly **four to five weeks**, so the walk
+steps back about a month per request and 40 pages reaches about three years.
+One sitting cannot finish four years, and the old build stopped at the cap
+*silently*.
+
+So the harvest says where it stopped, and the server remembers it.
+
+**The harvest reports.** `MealKitHarvest` now carries `earliestWeek`,
+`latestWeek` and `stopped`, and they are posted with the recipes
+(`MealKitHarvestReport` in [openapi.yaml](../api/openapi.yaml)). `stopped` is
+one of:
+
+| `stopped` | What it means | Effect on the cursor |
+| --- | --- | --- |
+| `cap` | The walk hit its own page cap. There is more history behind it. | Floor moves down; **not** complete |
+| `empty` | A page came back with no delivered weeks: the start of the account's history. | Complete |
+| `end` | The walk stopped moving backwards. Treated as the start of the history. | Complete |
+| `caught_up` | It reached weeks already imported. What a catch-up pass does every time. | Ceiling moves up; completeness unchanged |
+
+**The server remembers.** `meal_kit_cursors` holds one document per household
+and source (unique index on `{householdId, source}`): `earliestWeek`,
+`latestWeek`, `complete`, and `blockedAt`. That is the whole of it — two ISO
+weeks and two flags. There is still nothing about the meal-kit account
+anywhere, which is the promise at the top of this page and is why the cursor is
+weeks rather than, say, a page token of theirs.
+
+`Cursor.Merge` only ever gains ground: the floor moves down, the ceiling moves
+up, and `complete` is sticky, so a replayed or out-of-order report cannot lose
+history and **a completed history stays completed**.
+
+**The next harvest resumes.** `GET .../meal-kit/{source}` returns the cursor as
+`history`, and the app plans the walk from it
+(`MealKitHarvestPlan.segments(for:)`) as up to two segments:
+
+1. **Catch-up** — from today back to `latestWeek`, then stop. This is how a
+   *new* delivery is picked up. On a household whose history is finished it is
+   the whole plan, and it normally costs one page.
+2. **Resume** — starting the week *before* `earliestWeek`, walking back until
+   the history runs out or the page cap bites again. Only for a history that
+   is not complete.
+
+A household that has never imported gets one segment from today with no floor,
+which is exactly what the old build did.
+
+Two details that matter:
+
+- A segment **with a floor can never report the start of the history**. An
+  empty page near today means "nothing new", not "you never ordered", so it
+  reports `caught_up` and the cursor's `complete` is left alone.
+- If the *catch-up* segment runs out of pages, it never reached today's end of
+  the history, so the harvest reports **no** `latestWeek` and the server leaves
+  its ceiling where it was. The next pass walks that gap rather than skipping
+  it.
+
+**A partial harvest posts what it has.** The 1000-recipe cap on a submitted
+history is comfortably above the 740 measured, and the recipes a capped walk
+did reach belong in the library now — not after however many more sign-ins the
+rest of the history takes. A capped harvest is queued exactly like a whole one.
+
+**Only the member can fetch the rest.** The server cannot walk their order
+history; that happens in their own browser session, in the web view. So the
+app says there is more and that importing again continues from where it
+stopped — and nothing anywhere promises the server will finish it alone.
+
+### How long a 740-recipe history takes
+
+Server-side fetching is the slow half, deliberately:
+
+| | |
+| --- | --- |
+| Interval per recipe page | 2.5 s + up to 40% jitter ≈ **3 s** average |
+| Per run | 40 pages ≈ **2 minutes** of fetching (inside the 6-minute run timeout and the 8-minute lease) |
+| 740 recipes | 740 ÷ 40 = **19 scheduled runs** |
+| Scheduler interval | 10 minutes |
+| **End to end** | **about 3 hours** |
+
+`TestThePolitenessBudgetSpreadsALongHistoryOverHours` is that arithmetic, so
+raising the per-run cap or shortening the interval fails a test rather than
+quietly turning the importer into a crawler.
+
+Two harvests are needed for the measured history (40 pages reaches about three
+years; the rest is one more sitting), and the recipes from the first are
+importing while the member decides whether to do the second.
+
+**One household, one job.** `StartImport` returns the run already in flight for
+the same source and *refuses* a run on another source while one is going
+(`AnyActiveJob`). A job is claimed by exactly one worker
+(`TestIntegrationClaimJobIsExactlyOnceUnderConcurrency`) and every write is
+conditional on its lease, so "never two jobs for one household at once" holds
+across overlapping scheduled runs, not just within one.
 
 ## What is verified, and what is not
 
@@ -291,11 +392,15 @@ The policy lives in `mealkit.Fetcher` and is the same for every source:
 | User-Agent | `DinnerOS/1.0 (+https://api.tlps.dev; personal meal-kit order history import)` | Honest: who we are, why, and where to complain. No browser impersonation. |
 | Scope | Public recipe pages, and only the ones the household's own order history named | Only what the household ordered. |
 
+| Refusal cooldown | 6 hours, per household and source | A 403 is recorded on the cursor and `StartImport` refuses a new run until it passes, with a sentence saying why. Backing off hard beats letting a member re-queue 740 pages at a service that just turned us away. |
+
 The same politeness applies **in the app**, where the account reads happen:
 `MealKitHarvestScript` makes one request at a time, 500 ms apart, at most 40
-pages, and stops on an empty page or a walk that stops moving backwards. A
-member watching a spinner sets the interval; the cap is what stops a paging
-change becoming a crawl.
+pages **across all its segments**, and stops on an empty page or a walk that
+stops moving backwards. A member watching a spinner sets the interval; the cap
+is what stops a paging change becoming a crawl. Resuming from the cursor is
+also politeness: a second harvest does not re-read three years of pages to
+reach the one week it needs.
 
 **Fetched pages are data.** Nothing read from HelloFresh is ever treated as an
 instruction, and no URL is followed unless it already starts with the
@@ -320,7 +425,9 @@ Either way the library only ever receives complete, validated recipes.
 | Finished, some recipes unreadable | `succeeded` | "…*k* could not be imported" | The list of failures with reasons |
 | The session ended while reading the history | no job is queued | none | The sheet says so, with **Try Again** — nothing was half-imported |
 | HelloFresh changed its layout | `dead` (`parse`) | "Recipe import needs you" | "We could not read …. Nothing was changed in your recipes." |
-| HelloFresh refused us (403) | `dead` (`blocked`) | "Recipe import needs you" | "…refused our requests… Try again later." |
+| HelloFresh refused us (403) | `dead` (`blocked`) | "Recipe import needs you" | "…refused our requests… Try again later." Importing is then refused for 6 hours with a sentence saying so, rather than queued. |
+| The harvest stopped at its page cap | `succeeded` for what it got | "…There's more of your order history to fetch" | How far back we read, in words ("back to March 2024"), and **Fetch More History** |
+| A catch-up found nothing new | no job is queued | none | "Already up to date" — not an error, and not an empty-account message |
 | Network trouble | `queued`, retried | none until it gives up | "Importing your recipes…" |
 | Five failed attempts | `dead` (`network`) | "Recipe import needs you" | The reason, and **Import Again** |
 | A recipe the import pipeline rejected | `succeeded`, failure recorded | part of the finished one | The pipeline's own reason, e.g. "name is required" |

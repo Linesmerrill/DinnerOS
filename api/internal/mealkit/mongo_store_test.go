@@ -227,3 +227,107 @@ func TestIntegrationPurgeRemovesAHouseholdsJobs(t *testing.T) {
 		t.Errorf("repeat purge error = %v", err)
 	}
 }
+
+// The cursor is what makes a four-year history finishable: 740 recipes in 40
+// pages was one measured harvest, and it stopped on the cap. What survives
+// that run is the earliest week it reached.
+func TestIntegrationTheCursorSurvivesAndResumesTheHarvest(t *testing.T) {
+	store, ctx := newMongoStore(t)
+	now := time.Now().UTC().Truncate(time.Millisecond)
+
+	if _, err := store.GetCursor(ctx, hhAda, SourceHelloFresh); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a household that never harvested = %v, want ErrNotFound", err)
+	}
+
+	capped := Cursor{HouseholdID: hhAda, Source: SourceHelloFresh}.Merge(HarvestReport{
+		EarliestWeek: "2023-W30", LatestWeek: "2026-W38", Pages: 40, Weeks: 160, Stopped: HarvestStopCap,
+	}, now)
+	if err := store.SaveCursor(ctx, capped); err != nil {
+		t.Fatalf("SaveCursor() error = %v", err)
+	}
+	stored, err := store.GetCursor(ctx, hhAda, SourceHelloFresh)
+	if err != nil {
+		t.Fatalf("GetCursor() error = %v", err)
+	}
+	if stored.ResumeFrom() != "2023-W30" || stored.Complete || !stored.MoreToFetch() {
+		t.Fatalf("stored cursor = %+v", stored)
+	}
+
+	// The second harvest resumes below that floor and reaches the start of
+	// the history. Saving again upserts the one document rather than adding
+	// a second, which the unique index would refuse anyway.
+	finished := stored.Merge(HarvestReport{
+		EarliestWeek: "2022-W05", LatestWeek: "2023-W29", Stopped: HarvestStopEnd,
+	}, now)
+	if err := store.SaveCursor(ctx, finished); err != nil {
+		t.Fatalf("second SaveCursor() error = %v", err)
+	}
+	stored, err = store.GetCursor(ctx, hhAda, SourceHelloFresh)
+	if err != nil {
+		t.Fatalf("GetCursor() error = %v", err)
+	}
+	if !stored.Complete || stored.EarliestWeek != "2022-W05" || stored.LatestWeek != "2026-W38" {
+		t.Fatalf("stored cursor after finishing = %+v", stored)
+	}
+
+	// Another household's cursor is its own.
+	if _, err := store.GetCursor(ctx, hhBob, SourceHelloFresh); !errors.Is(err, ErrNotFound) {
+		t.Errorf("another household read Ada's cursor: %v", err)
+	}
+
+	// A refusal is recorded on the cursor and clears with the next save.
+	if err := store.MarkCursorBlocked(ctx, hhAda, SourceHelloFresh, now); err != nil {
+		t.Fatalf("MarkCursorBlocked() error = %v", err)
+	}
+	stored, _ = store.GetCursor(ctx, hhAda, SourceHelloFresh)
+	if !stored.Blocked(now) || !stored.Complete {
+		t.Errorf("cursor after a refusal = %+v", stored)
+	}
+	stored.BlockedAt = time.Time{}
+	if err := store.SaveCursor(ctx, stored); err != nil {
+		t.Fatalf("SaveCursor() error = %v", err)
+	}
+	stored, _ = store.GetCursor(ctx, hhAda, SourceHelloFresh)
+	if stored.Blocked(now) {
+		t.Errorf("the refusal outlived the cooldown: %+v", stored)
+	}
+
+	// A harvest report is stored with the job that carried it, so the member
+	// can be told there is more history.
+	job := seedJob(t, store, ctx, hhAda, userAda, now)
+	if job.Harvest.Stopped != "" {
+		t.Errorf("a seeded job invented a harvest report: %+v", job.Harvest)
+	}
+
+	// Deleting the household takes the cursor with it.
+	if err := store.PurgeHousehold(ctx, hhAda); err != nil {
+		t.Fatalf("PurgeHousehold() error = %v", err)
+	}
+	if _, err := store.GetCursor(ctx, hhAda, SourceHelloFresh); !errors.Is(err, ErrNotFound) {
+		t.Errorf("the cursor survived the purge: %v", err)
+	}
+}
+
+// One household, one import at a time — whichever source asks.
+func TestIntegrationAnyActiveJobIsTheSingleFlightCheck(t *testing.T) {
+	store, ctx := newMongoStore(t)
+	now := time.Now().UTC().Truncate(time.Millisecond)
+
+	if _, err := store.AnyActiveJob(ctx, hhAda); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("AnyActiveJob() with nothing queued = %v", err)
+	}
+	job := seedJob(t, store, ctx, hhAda, userAda, now)
+	active, err := store.AnyActiveJob(ctx, hhAda)
+	if err != nil || active.ID != job.ID {
+		t.Fatalf("AnyActiveJob() = %+v, %v", active, err)
+	}
+	if _, err := store.AnyActiveJob(ctx, hhBob); !errors.Is(err, ErrNotFound) {
+		t.Errorf("Ada's run blocked Bob's household: %v", err)
+	}
+	if _, err := store.CancelJobs(ctx, hhAda, SourceHelloFresh, "stopped", now); err != nil {
+		t.Fatalf("CancelJobs() error = %v", err)
+	}
+	if _, err := store.AnyActiveJob(ctx, hhAda); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a canceled run still counts as active: %v", err)
+	}
+}

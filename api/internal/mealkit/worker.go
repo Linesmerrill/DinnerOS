@@ -341,6 +341,14 @@ func (w *Worker) fail(ctx context.Context, job Job, err error, report *Report, l
 	}
 	report.Dead++
 	log.ErrorContext(ctx, "meal-kit import gave up", "code", jobErr.Code, "attempts", job.Attempts)
+	if errors.Is(err, ErrBlocked) {
+		// Back off hard rather than letting the member queue another 740
+		// pages at the service that just turned us away. The cursor carries
+		// the cooldown; StartImport refuses inside it and says so.
+		if err := w.opts.Store.MarkCursorBlocked(ctx, job.HouseholdID, job.Source, w.now()); err != nil {
+			log.ErrorContext(ctx, "recording the refusal failed", "error", err)
+		}
+	}
 	w.finish(ctx, job, JobDead, jobErr, log)
 	w.notifyAttention(ctx, job, jobErr)
 }
@@ -373,6 +381,12 @@ func (w *Worker) notifyFinished(ctx context.Context, job Job) {
 	}
 	if n := len(job.Checkpoint.Failures); n > 0 {
 		body += fmt.Sprintf(" %d could not be imported — open Recipe Import to see why.", n)
+	}
+	// A harvest that stopped on its page cap read part of the history, not
+	// all of it, and only the member's own browser session can read the rest.
+	// Saying so is the difference between a finished import and a silent one.
+	if job.Harvest.Stopped.MoreToFetch() {
+		body += " There's more of your order history to fetch — open Recipe Import to continue."
 	}
 	w.create(ctx, notifications.New{
 		HouseholdID: job.HouseholdID,
