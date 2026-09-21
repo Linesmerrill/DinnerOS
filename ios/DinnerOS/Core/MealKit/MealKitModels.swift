@@ -28,42 +28,34 @@ nonisolated enum MealKitService: String, CaseIterable, Sendable {
         }
     }
 
+    /// The cookie that already names the account's subscription, when there is one. It saves the
+    /// harvest a request; without it the plan is read from the account's own plans endpoint.
+    var planCookieName: String {
+        switch self {
+        case .helloFresh: "hf_plan_id"
+        }
+    }
+
+    /// The country and locale the account endpoints want. A household outside the US needs these
+    /// to change; there is nowhere yet to say so, which is noted in the docs.
+    var country: String {
+        switch self {
+        case .helloFresh: "US"
+        }
+    }
+
+    var locale: String {
+        switch self {
+        case .helloFresh: "en-US"
+        }
+    }
+
     /// The domain that cookie must come from, so a cookie set by some other site in the web view
     /// is never mistaken for the member's meal-kit session.
     var cookieDomain: String {
         switch self {
         case .helloFresh: "hellofresh.com"
         }
-    }
-}
-
-/// The stored connection to a meal-kit account (`MealKitLink` in `api/openapi.yaml`).
-///
-/// It deliberately carries no email address and nothing derived from the stored tokens:
-/// the API never returns either, and the app never needs them.
-nonisolated struct MealKitLink: Decodable, Hashable, Sendable {
-    /// `active`, or `needs_reauth` when the stored session expired.
-    let status: String
-    /// A display string such as "HelloFresh account".
-    let accountLabel: String
-    let linkedAt: Date
-    let updatedAt: Date
-    /// When the importer last used the connection, or `nil` before the first run.
-    let lastUsedAt: Date?
-
-    /// The member has to sign in again before anything more can be imported.
-    var needsSignIn: Bool { status == "needs_reauth" }
-
-    private enum CodingKeys: String, CodingKey {
-        case status, accountLabel, linkedAt, updatedAt, lastUsedAt
-    }
-
-    init(status: String, accountLabel: String, linkedAt: Date, updatedAt: Date, lastUsedAt: Date? = nil) {
-        self.status = status
-        self.accountLabel = accountLabel
-        self.linkedAt = linkedAt
-        self.updatedAt = updatedAt
-        self.lastUsedAt = lastUsedAt
     }
 }
 
@@ -108,16 +100,14 @@ nonisolated struct MealKitImportError: Decodable, Hashable, Sendable {
     let message: String
     let at: Date
 
-    /// The member's session expired, so signing in again is the fix.
-    var needsSignIn: Bool { code == "auth_expired" }
 }
 
 /// One import run (`MealKitImportJob` in `api/openapi.yaml`).
 nonisolated struct MealKitImportJob: Decodable, Hashable, Sendable, Identifiable {
     let id: String
-    /// `queued`, `running`, `paused_auth`, `succeeded`, `dead`, or `canceled`.
+    /// `queued`, `running`, `succeeded`, `dead`, or `canceled`.
     let status: String
-    /// `orders`, `recipes`, `import`, or `done`.
+    /// `recipes`, `import`, or `done`.
     let phase: String
     /// Recipes on the account's order history; 0 until it has been read.
     let recipesFound: Int
@@ -168,20 +158,17 @@ nonisolated struct MealKitImportJob: Decodable, Hashable, Sendable, Identifiable
         case queued
         /// Being imported right now.
         case running
-        /// Waiting for the member to sign in to the meal kit again.
-        case needsSignIn
         /// Everything on the order history was handled.
         case finished
         /// It gave up. `lastError` says why.
         case failed
-        /// The account was unlinked while it was in flight.
+        /// Someone stopped it while it was in flight.
         case canceled
     }
 
     var state: State {
         switch status {
         case "queued": .queued
-        case "paused_auth": .needsSignIn
         case "succeeded": .finished
         case "dead": .failed
         case "canceled": .canceled
@@ -204,20 +191,21 @@ nonisolated struct MealKitImportJob: Decodable, Hashable, Sendable, Identifiable
 }
 
 /// Response to `GET /api/v1/households/{householdId}/meal-kit/{source}`.
+///
+/// There is no linked account to report: the server stores nothing about one. What a household
+/// has is import runs.
 nonisolated struct MealKitStatus: Decodable, Hashable, Sendable {
-    /// False when the server has no import encryption key: the app then offers adding
-    /// recipes by hand rather than a sign-in it can't honour.
+    /// False when the server has meal-kit import turned off: the app then offers adding recipes
+    /// by hand rather than a sign-in it can't honour.
     let enabled: Bool
-    let link: MealKitLink?
     let latestJob: MealKitImportJob?
 
-    init(enabled: Bool, link: MealKitLink? = nil, latestJob: MealKitImportJob? = nil) {
+    init(enabled: Bool, latestJob: MealKitImportJob? = nil) {
         self.enabled = enabled
-        self.link = link
         self.latestJob = latestJob
     }
 
-    /// Nothing linked, and nothing to show.
+    /// Nothing to show.
     static let unavailable = MealKitStatus(enabled: false)
 
     /// Whether there is anything worth polling for.
@@ -229,23 +217,14 @@ nonisolated struct MealKitImportJobList: Decodable, Hashable, Sendable {
     let items: [MealKitImportJob]
 }
 
-/// Body of `PUT .../meal-kit/{source}/link`.
+/// Body of `POST .../meal-kit/{source}/imports`.
 ///
-/// It carries the session the member's own sign-in on the meal kit's website produced — never a
-/// password, because they never type one into this app. The server stores it encrypted; nothing
-/// on this device keeps it, and nothing logs it.
-nonisolated struct MealKitLinkRequest: Encodable, Sendable {
-    let accessToken: String
-    /// Omitted when the sign-in produced none; the session then simply expires sooner.
-    let refreshToken: String?
-    /// Omitted when the cookie didn't say enough to work it out.
-    let expiresAt: Date?
-    let startImport: Bool
+/// The order history and nothing else. There is deliberately no field for a token, a cookie, or
+/// an account: the sign-in stayed in the web view, and the server has nowhere to put one.
+nonisolated struct MealKitStartImportRequest: Encodable, Sendable {
+    let recipes: [MealKitOrderedRecipe]
 
-    init(session: MealKitWebSession, startImport: Bool) {
-        accessToken = session.accessToken
-        refreshToken = session.refreshToken.isEmpty ? nil : session.refreshToken
-        expiresAt = session.expiresAt
-        self.startImport = startImport
+    init(harvest: MealKitHarvest) {
+        recipes = harvest.recipes
     }
 }

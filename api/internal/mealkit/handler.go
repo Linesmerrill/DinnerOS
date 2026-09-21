@@ -39,51 +39,48 @@ func NewHandler(opts HandlerOptions) *Handler {
 // Mount registers the routes on r, the /api/v1 router.
 //
 // Every route needs recipes.import, the same permission a file import needs:
-// this is the same pipeline reached a different way. The credential travels
-// in a body, never a path or a query, so it cannot reach a request log.
+// this is the same pipeline reached a different way. There is no link route,
+// because there is nothing to link: an import carries the order history the
+// member's own browser session just read, and the server keeps no credential.
 func (h *Handler) Mount(r chi.Router) {
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireAuth(h.opts.Tokens))
 		imports := households.RequirePermission(h.opts.Authorizer, households.PermRecipesImport, h.logger)
 		r.With(imports).Get("/households/{householdId}/meal-kit/{source}", h.status)
-		r.With(imports).Put("/households/{householdId}/meal-kit/{source}/link", h.link)
-		r.With(imports).Delete("/households/{householdId}/meal-kit/{source}/link", h.unlink)
 		r.With(imports).Post("/households/{householdId}/meal-kit/{source}/imports", h.start)
 		r.With(imports).Get("/households/{householdId}/meal-kit/{source}/imports", h.listJobs)
+		r.With(imports).Delete("/households/{householdId}/meal-kit/{source}/imports", h.stop)
 	})
 }
 
 // --- Wire types ---------------------------------------------------------------
 
-// LinkRequestBody is the body of PUT .../meal-kit/{source}/link.
+// OrderedRecipeBody is one recipe of the harvested order history.
 //
-// It carries the session the member's own sign-in on the meal kit's website
-// produced — never a password: they never type one into this app. Nothing here
-// is logged, and nothing is echoed back.
-type LinkRequestBody struct {
-	// AccessToken is the meal-kit session token. Required.
-	AccessToken string `json:"accessToken"`
-	// RefreshToken is optional: a session without one simply expires sooner
-	// and the member links again.
-	RefreshToken string `json:"refreshToken,omitempty"`
-	// ExpiresAt is when the session stops working, when the client could work
-	// it out. Omitted means "we do not know", and the worker finds out.
-	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
-	// StartImport defaults to true: linking an account is how onboarding
-	// starts an import.
-	StartImport *bool `json:"startImport,omitempty"`
+// Every field is untrusted input: it was read from someone else's web page in
+// a web view. The service puts each one through the source's own allow-list
+// before anything is stored or fetched.
+type OrderedRecipeBody struct {
+	// SourceRecipeID is the meal kit's id for the recipe. Required.
+	SourceRecipeID string `json:"sourceRecipeId"`
+	// Name is a label for the app to show before the page is read.
+	Name string `json:"name,omitempty"`
+	// URL is the public recipe page. It is used only when it already points
+	// at the service's own recipe pages; otherwise it is rebuilt from the id.
+	URL string `json:"url,omitempty"`
+	// Weeks are the ISO weeks ("2026-W38") it was delivered.
+	Weeks []string `json:"weeks,omitempty"`
+	// IsAddon marks sides and extras rather than a main meal.
+	IsAddon bool `json:"isAddon,omitempty"`
 }
 
-// LinkResponse describes a stored link. It deliberately carries no email
-// address and nothing derived from the tokens.
-type LinkResponse struct {
-	Source string `json:"source"`
-	Status string `json:"status"`
-	// AccountLabel is a display string such as "HelloFresh account".
-	AccountLabel string     `json:"accountLabel"`
-	LinkedAt     time.Time  `json:"linkedAt"`
-	UpdatedAt    time.Time  `json:"updatedAt"`
-	LastUsedAt   *time.Time `json:"lastUsedAt"`
+// StartImportBody is the body of POST .../meal-kit/{source}/imports.
+//
+// It carries the order history and nothing else. There is deliberately no
+// field for a token, a cookie, or an account: the app must not send one, and
+// this server has nowhere to put one.
+type StartImportBody struct {
+	Recipes []OrderedRecipeBody `json:"recipes"`
 }
 
 // FailedRecipeResponse is one recipe of the order history that did not make it.
@@ -105,9 +102,9 @@ type JobResponse struct {
 	ID     string `json:"id"`
 	Source string `json:"source"`
 	Status string `json:"status"`
-	// Phase is orders, recipes, import, or done.
+	// Phase is recipes, import, or done.
 	Phase string `json:"phase"`
-	// RecipesFound is 0 until the order history has been read.
+	// RecipesFound is how many recipes the submitted order history carried.
 	RecipesFound int `json:"recipesFound"`
 	RecipesDone  int `json:"recipesDone"`
 	Imported     int `json:"imported"`
@@ -128,10 +125,9 @@ type JobResponse struct {
 // StatusResponse is returned by GET .../meal-kit/{source}.
 type StatusResponse struct {
 	Source string `json:"source"`
-	// Enabled is false when the server has no import encryption key, so the
+	// Enabled is false when the server has meal-kit import turned off, so the
 	// app offers adding recipes by hand instead.
-	Enabled bool          `json:"enabled"`
-	Link    *LinkResponse `json:"link"`
+	Enabled bool `json:"enabled"`
 	// LatestJob is the newest run, or null when there has never been one.
 	LatestJob *JobResponse `json:"latestJob"`
 }
@@ -139,18 +135,6 @@ type StatusResponse struct {
 // JobListResponse is returned by GET .../meal-kit/{source}/imports.
 type JobListResponse struct {
 	Items []JobResponse `json:"items"`
-}
-
-func newLinkResponse(l Link) *LinkResponse {
-	out := &LinkResponse{
-		Source: l.Source, Status: string(l.Status), AccountLabel: l.AccountLabel,
-		LinkedAt: l.CreatedAt, UpdatedAt: l.UpdatedAt,
-	}
-	if !l.LastUsedAt.IsZero() {
-		used := l.LastUsedAt
-		out.LastUsedAt = &used
-	}
-	return out
 }
 
 func newJobResponse(j Job) *JobResponse {
@@ -190,70 +174,42 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "read meal-kit status failed", err)
 		return
 	}
-	if status.Link != nil {
-		resp.Link = newLinkResponse(*status.Link)
-	}
 	if status.Job != nil {
 		resp.LatestJob = newJobResponse(*status.Job)
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
-}
-
-func (h *Handler) link(w http.ResponseWriter, r *http.Request) {
-	householdID := chi.URLParam(r, "householdId")
-	source := chi.URLParam(r, "source")
-	userID, _ := auth.UserIDFromContext(r.Context())
-	var body LinkRequestBody
-	if !httpx.DecodeJSON(w, r, &body) {
-		return
-	}
-	start := true
-	if body.StartImport != nil {
-		start = *body.StartImport
-	}
-	tokens := Tokens{AccessToken: body.AccessToken, RefreshToken: body.RefreshToken}
-	if body.ExpiresAt != nil {
-		tokens.ExpiresAt = body.ExpiresAt.UTC()
-	}
-	status, err := h.opts.Service.Link(r.Context(), LinkRequest{
-		HouseholdID: householdID, UserID: userID, Source: source,
-		Tokens: tokens, StartImport: start,
-	})
-	// body goes out of scope here; the tokens are only ever written sealed.
-	if err != nil {
-		h.writeError(w, r, "link meal-kit account failed", err)
-		return
-	}
-	resp := StatusResponse{Source: source, Enabled: true}
-	if status.Link != nil {
-		resp.Link = newLinkResponse(*status.Link)
-	}
-	if status.Job != nil {
-		resp.LatestJob = newJobResponse(*status.Job)
-	}
-	httpx.WriteJSON(w, http.StatusOK, resp)
-}
-
-func (h *Handler) unlink(w http.ResponseWriter, r *http.Request) {
-	householdID := chi.URLParam(r, "householdId")
-	source := chi.URLParam(r, "source")
-	if _, err := h.opts.Service.Unlink(r.Context(), householdID, source); err != nil {
-		h.writeError(w, r, "unlink meal-kit account failed", err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
 	householdID := chi.URLParam(r, "householdId")
 	source := chi.URLParam(r, "source")
 	userID, _ := auth.UserIDFromContext(r.Context())
-	job, err := h.opts.Service.StartImport(r.Context(), householdID, userID, source)
+	var body StartImportBody
+	if !httpx.DecodeJSON(w, r, &body) {
+		return
+	}
+	orders := make([]OrderedRecipe, 0, len(body.Recipes))
+	for _, in := range body.Recipes {
+		orders = append(orders, OrderedRecipe(in))
+	}
+	job, err := h.opts.Service.StartImport(r.Context(), ImportRequest{
+		HouseholdID: householdID, UserID: userID, Source: source, Orders: orders,
+	})
 	if err != nil {
 		h.writeError(w, r, "start meal-kit import failed", err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusAccepted, newJobResponse(job))
+}
+
+func (h *Handler) stop(w http.ResponseWriter, r *http.Request) {
+	householdID := chi.URLParam(r, "householdId")
+	source := chi.URLParam(r, "source")
+	if _, err := h.opts.Service.StopImports(r.Context(), householdID, source); err != nil {
+		h.writeError(w, r, "stop meal-kit imports failed", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) listJobs(w http.ResponseWriter, r *http.Request) {
@@ -285,9 +241,6 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 	case errors.Is(err, ErrDisabled):
 		httpx.WriteError(w, r, http.StatusServiceUnavailable, "import_disabled",
 			"meal-kit recipe import is not enabled on this server")
-	case errors.Is(err, ErrNoLink):
-		httpx.WriteError(w, r, http.StatusConflict, "not_linked",
-			"link a meal-kit account before starting an import")
 	case errors.Is(err, ErrNotFound):
 		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "resource not found")
 	default:

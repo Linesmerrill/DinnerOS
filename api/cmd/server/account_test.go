@@ -82,11 +82,8 @@ var accountDeletionKinds = map[string]collectionKind{
 	recommendations.ProposalsCollection:    householdData,
 	recommendations.OverridesCollection:    householdData,
 	recommendations.WeekPairingsCollection: householdData,
-	// A meal-kit link holds the member's own encrypted tokens, so it goes
-	// with them as well as with an emptied household.
-	mealkit.LinkCollection: userRatings,
-	// Import runs are household history. A run whose link went with a
-	// deleted account finds no tokens and stops itself.
+	// Import runs are household history, and the only thing the meal-kit
+	// import stores: there is no account link and no credential any more.
 	mealkit.JobCollection: householdData,
 }
 

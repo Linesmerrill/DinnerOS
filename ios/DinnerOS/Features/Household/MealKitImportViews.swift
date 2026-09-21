@@ -54,7 +54,7 @@ struct MealKitImportOfferView: View {
         .task { await mealKit.load() }
         .sheet(isPresented: $isSigningIn) {
             NavigationStack {
-                MealKitSignInFlow {
+                MealKitImportFlow {
                     isSigningIn = false
                     onDone()
                 }
@@ -83,19 +83,20 @@ struct MealKitImportOfferView: View {
     }
 }
 
-/// The one-time meal-kit sign-in: the service's own login page, then the link.
+/// The meal-kit import: the service's own login page, then the order history read inside that
+/// session, then the run queued on our own API.
 ///
-/// There is no password field here, and there never was one that worked. The member signs in on
-/// HelloFresh's own page in `MealKitWebLoginView`; what comes back is the session that login
-/// produced, which goes straight to our API and is stored encrypted. Nothing on this device keeps
-/// it, and our server never sees a password at all.
-struct MealKitSignInFlow: View {
-    var onLinked: () -> Void = {}
+/// There is no password field here, and there never was one that worked. There is no stored
+/// session either: the sign-in lives and dies inside `MealKitWebLoginView`, and what comes back
+/// is a list of recipes the household was delivered.
+struct MealKitImportFlow: View {
+    var onQueued: () -> Void = {}
 
     @Environment(MealKitImportStore.self) private var mealKit
     @Environment(\.dismiss) private var dismiss
-    /// Kept only while a link is failing, so **Try Again** does not mean signing in again.
-    @State private var session: MealKitWebSession?
+    /// Kept only while the queueing call is failing, so **Try Again** does not mean signing in
+    /// again. It holds no credential — just recipe ids, page URLs and weeks.
+    @State private var harvest: MealKitHarvest?
     @State private var errorMessage: String?
 
     private var service: MealKitService { mealKit.service }
@@ -103,16 +104,16 @@ struct MealKitSignInFlow: View {
     var body: some View {
         MealKitWebLoginView(
             service: service,
-            onSession: { session in
-                self.session = session
-                Task { await link(session) }
+            onHarvest: { harvest in
+                self.harvest = harvest
+                Task { await queue(harvest) }
             },
             onCancel: { dismiss() }
         )
-        .alert("Couldn't connect", isPresented: showingError) {
+        .alert("Couldn't start the import", isPresented: showingError) {
             Button("Try Again") {
-                guard let session else { return }
-                Task { await link(session) }
+                guard let harvest else { return }
+                Task { await queue(harvest) }
             }
             Button("Not Now", role: .cancel) { dismiss() }
         } message: {
@@ -124,12 +125,12 @@ struct MealKitSignInFlow: View {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
 
-    private func link(_ session: MealKitWebSession) async {
+    private func queue(_ harvest: MealKitHarvest) async {
         errorMessage = nil
         do {
-            try await mealKit.link(webSession: session)
-            self.session = nil
-            onLinked()
+            try await mealKit.startImport(harvest: harvest)
+            self.harvest = nil
+            onQueued()
             dismiss()
         } catch is CancellationError {
         } catch {
@@ -138,12 +139,12 @@ struct MealKitSignInFlow: View {
     }
 }
 
-/// What was imported, what failed and why, and the way out: sign in again, import again, or
-/// unlink.
+/// What was imported, what failed and why, and the way out: import again, or stop the one that
+/// is running.
 struct MealKitImportStatusView: View {
     @Environment(MealKitImportStore.self) private var mealKit
     @State private var isSigningIn = false
-    @State private var isConfirmingUnlink = false
+    @State private var isConfirmingStop = false
     @State private var actionError: String?
 
     private var service: MealKitService { mealKit.service }
@@ -163,14 +164,8 @@ struct MealKitImportStatusView: View {
             if let job = mealKit.job, !job.failures.isEmpty {
                 failuresSection(job)
             }
-            if mealKit.link != nil {
+            if mealKit.isEnabled {
                 actionsSection
-            } else if mealKit.isEnabled {
-                Section {
-                    Button("Connect \(service.displayName)") { isSigningIn = true }
-                } footer: {
-                    Text(MealKitFormatting.credentialExplanation(for: service))
-                }
             }
         }
         .navigationTitle("Recipe Import")
@@ -180,17 +175,15 @@ struct MealKitImportStatusView: View {
         .task(id: mealKit.isImporting) { await mealKit.pollWhileImporting() }
         .refreshable { await mealKit.refresh() }
         .sheet(isPresented: $isSigningIn) {
-            NavigationStack { MealKitSignInFlow() }
+            NavigationStack { MealKitImportFlow() }
         }
         .confirmationDialog(
-            "Unlink your \(service.displayName) account?", isPresented: $isConfirmingUnlink, titleVisibility: .visible
+            "Stop this import?", isPresented: $isConfirmingStop, titleVisibility: .visible
         ) {
-            Button("Unlink", role: .destructive) { Task { await unlink() } }
-            Button("Cancel", role: .cancel) {}
+            Button("Stop Importing", role: .destructive) { Task { await stop() } }
+            Button("Keep Going", role: .cancel) {}
         } message: {
-            Text(
-                "We'll delete the saved sign-in and stop any import in progress. Recipes already imported stay in your library."
-            )
+            Text("Recipes already imported stay in your library. You can import again whenever you like.")
         }
     }
 
@@ -208,18 +201,11 @@ struct MealKitImportStatusView: View {
         } header: {
             Text("\(service.displayName)")
         } footer: {
-            if let link = mealKit.link {
-                Text(linkFooter(link))
-            }
+            Text(
+                "Nothing about your \(service.displayName) account is saved — not your password, not your sign-in. "
+                    + "Importing again reads your orders afresh."
+            )
         }
-    }
-
-    private func linkFooter(_ link: MealKitLink) -> String {
-        let connected = link.linkedAt.formatted(date: .abbreviated, time: .shortened)
-        if link.needsSignIn {
-            return String(localized: "\(link.accountLabel) connected \(connected). The saved session has expired.")
-        }
-        return String(localized: "\(link.accountLabel) connected \(connected). Only the session is stored, encrypted.")
     }
 
     private func failuresSection(_ job: MealKitImportJob) -> some View {
@@ -237,40 +223,31 @@ struct MealKitImportStatusView: View {
         } header: {
             Text("Couldn't Import")
         } footer: {
-            Text("These are still on your \(service.displayName) account. Importing again will try them once more.")
+            Text("These are still on your \(service.displayName) orders. Importing again will try them once more.")
         }
     }
 
     @ViewBuilder
     private var actionsSection: some View {
         Section {
-            if summary.needsAttention, mealKit.job?.state == .needsSignIn {
-                Button("Sign In Again") { isSigningIn = true }
-            } else if !mealKit.isImporting {
-                Button("Import Again") { Task { await startImport() } }
+            if mealKit.isImporting {
+                Button("Stop Importing", role: .destructive) { isConfirmingStop = true }
                     .disabled(mealKit.isWorking)
-            }
-            Button("Unlink \(service.displayName)", role: .destructive) { isConfirmingUnlink = true }
+            } else {
+                Button(mealKit.job == nil ? "Import from \(service.displayName)" : "Import Again") {
+                    isSigningIn = true
+                }
                 .disabled(mealKit.isWorking)
+            }
         } footer: {
-            Text("Importing again is safe: recipes you already have are left alone.")
+            Text(MealKitFormatting.credentialExplanation(for: service))
         }
     }
 
-    private func startImport() async {
+    private func stop() async {
         actionError = nil
         do {
-            try await mealKit.startImport()
-        } catch is CancellationError {
-        } catch {
-            actionError = HouseholdStore.message(for: error)
-        }
-    }
-
-    private func unlink() async {
-        actionError = nil
-        do {
-            try await mealKit.unlink()
+            try await mealKit.stopImports()
         } catch is CancellationError {
         } catch {
             actionError = HouseholdStore.message(for: error)
@@ -341,7 +318,6 @@ private struct MealKitOptionLabel: View {
     let session = HouseholdPreviewData.session()
     let status = MealKitStatus(
         enabled: true,
-        link: MealKitLink(status: "active", accountLabel: "HelloFresh account", linkedAt: .now, updatedAt: .now),
         latestJob: MealKitImportJob(
             id: "job-1", status: "running", phase: "recipes", recipesFound: 48, recipesDone: 12))
     NavigationStack {
@@ -355,7 +331,6 @@ private struct MealKitOptionLabel: View {
     let session = HouseholdPreviewData.session()
     let status = MealKitStatus(
         enabled: true,
-        link: MealKitLink(status: "active", accountLabel: "HelloFresh account", linkedAt: .now, updatedAt: .now),
         latestJob: MealKitImportJob(
             id: "job-1", status: "succeeded", phase: "done", recipesFound: 48, recipesDone: 47,
             imported: 45, updated: 2, unchanged: 1, reviewItems: 6,

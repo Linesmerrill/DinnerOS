@@ -21,8 +21,7 @@ const importBatchSize = 10
 // WorkerOptions configures a Worker.
 type WorkerOptions struct {
 	Store Store
-	// Service supplies the link's decrypted tokens. It is the only thing
-	// that can open an envelope.
+	// Service resolves the source for a job.
 	Service *Service
 	// Publisher is the seam into the recipe library (publisher.go).
 	Publisher RecipePublisher
@@ -101,11 +100,10 @@ func NewWorker(opts WorkerOptions) *Worker {
 type Report struct {
 	// Claimed is how many jobs this run took.
 	Claimed int
-	// Succeeded, Paused, Requeued, Dead, and Gone are their outcomes. Gone
-	// counts jobs that were canceled or taken over while running, which is
-	// the expected shape of an unlink mid-run.
+	// Succeeded, Requeued, Dead, and Gone are their outcomes. Gone counts
+	// jobs that were canceled or taken over while running, which is the
+	// expected shape of a member stopping the import mid-run.
 	Succeeded int
-	Paused    int
 	Requeued  int
 	Dead      int
 	Gone      int
@@ -152,11 +150,6 @@ func (w *Worker) runJob(ctx context.Context, job Job, report *Report) {
 		report.Gone++
 		log.InfoContext(ctx, "meal-kit import job is no longer ours; stopping")
 		return
-	case errors.Is(err, ErrAuthExpired):
-		// The stored session is spent and could not be refreshed. Pause and
-		// ask the member to sign in again rather than spending attempts on
-		// something no retry can fix.
-		outcome = outcomePaused
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		// The dyno is going away. Leave the lease to expire; the next run
 		// resumes from the checkpoint.
@@ -172,12 +165,6 @@ func (w *Worker) runJob(ctx context.Context, job Job, report *Report) {
 		report.Succeeded++
 		w.finish(ctx, job, JobSucceeded, nil, log)
 		w.notifyFinished(ctx, job)
-	case outcomePaused:
-		report.Paused++
-		jobErr := &JobError{Code: ErrCodeAuthExpired, Message: "Your meal-kit sign-in expired. Sign in again to finish importing.", At: w.now()}
-		w.finish(ctx, job, JobPausedAuth, jobErr, log)
-		w.markLinkNeedsReauth(ctx, job)
-		w.notifyAttention(ctx, job, jobErr)
 	case outcomeCapped:
 		report.Requeued++
 		w.requeue(ctx, job, false, nil, log)
@@ -190,56 +177,23 @@ type outcome int
 
 const (
 	outcomeDone outcome = iota
-	outcomePaused
 	outcomeCapped
 	outcomeFailed
 )
 
-// execute runs the job's phases, saving a checkpoint after each unit of work.
+// execute runs the job to its next resting point, saving a checkpoint after
+// each unit of work.
+//
+// There is no order-history phase and no session: the history arrived with the
+// request that queued this job, harvested in the member's own browser, and
+// every page below is public.
 func (w *Worker) execute(ctx context.Context, job *Job, log *slog.Logger) (outcome, error) {
 	src, err := w.opts.Service.Source(job.Source)
 	if err != nil {
 		return outcomeFailed, &ParseError{Subject: "the import", Detail: "this server cannot import from " + job.Source}
 	}
-	link, err := w.opts.Store.GetLinkByID(ctx, job.LinkID)
-	if errors.Is(err, ErrNotFound) {
-		// The tokens are gone: an unlink that raced this claim.
-		return outcomeFailed, ErrNoLink
-	}
-	if err != nil {
-		return outcomeFailed, err
-	}
-	tokens, err := w.opts.Service.Tokens(link)
-	if err != nil {
-		return outcomeFailed, err
-	}
-
-	// A session that is already spent is refreshed before any work, so an
-	// expired token costs one request rather than a whole failed run.
-	if tokens.ExpiresAt.IsZero() || !tokens.ExpiresAt.After(w.now()) {
-		tokens, err = w.refresh(ctx, src, link, tokens)
-		if err != nil {
-			return outcomeFailed, err
-		}
-	}
-
-	if job.Checkpoint.Phase == "" || job.Checkpoint.Phase == PhaseOrders {
-		orders, err := src.OrderHistory(ctx, tokens)
-		if errors.Is(err, ErrAuthExpired) {
-			if tokens, err = w.refresh(ctx, src, link, tokens); err != nil {
-				return outcomeFailed, err
-			}
-			orders, err = src.OrderHistory(ctx, tokens)
-		}
-		if err != nil {
-			return outcomeFailed, err
-		}
-		job.Checkpoint.Orders = orders
+	if job.Checkpoint.Phase == "" {
 		job.Checkpoint.Phase = PhaseRecipes
-		if err := w.save(ctx, job); err != nil {
-			return outcomeFailed, err
-		}
-		log.InfoContext(ctx, "meal-kit order history read", "recipes", len(orders))
 	}
 
 	fetched := 0
@@ -260,15 +214,8 @@ func (w *Worker) execute(ctx context.Context, job *Job, log *slog.Logger) (outco
 			return outcomeCapped, nil
 		}
 
-		recipe, review, err := src.Recipe(ctx, tokens, o)
+		recipe, review, err := src.Recipe(ctx, o)
 		fetched++
-		if errors.Is(err, ErrAuthExpired) {
-			if tokens, err = w.refresh(ctx, src, link, tokens); err != nil {
-				_ = w.flush(ctx, job, &batch, &reviews)
-				return outcomeFailed, err
-			}
-			recipe, review, err = src.Recipe(ctx, tokens, o)
-		}
 		switch {
 		case err == nil:
 		case errors.Is(err, ErrBlocked):
@@ -360,29 +307,6 @@ func appendFailure(list []FailedRecipe, f FailedRecipe) []FailedRecipe {
 	return append(list, f)
 }
 
-// refresh exchanges the refresh token for a new session and stores it. A
-// refresh that fails is ErrAuthExpired, which pauses the job.
-func (w *Worker) refresh(ctx context.Context, src Source, link Link, tokens Tokens) (Tokens, error) {
-	fresh, err := src.Refresh(ctx, tokens)
-	if err != nil {
-		return Tokens{}, ErrAuthExpired
-	}
-	if fresh.Empty() {
-		return Tokens{}, ErrAuthExpired
-	}
-	if fresh.RefreshToken == "" {
-		fresh.RefreshToken = tokens.RefreshToken
-	}
-	sealed, err := w.opts.Service.cipher.SealTokens(fresh)
-	if err != nil {
-		return Tokens{}, err
-	}
-	if err := w.opts.Store.SaveLinkTokens(ctx, link.ID, sealed, fresh.ExpiresAt, w.now()); err != nil {
-		return Tokens{}, err
-	}
-	return fresh, nil
-}
-
 func (w *Worker) save(ctx context.Context, job *Job) error {
 	return w.opts.Store.SaveCheckpoint(ctx, job.ID, w.opts.Owner, job.Checkpoint, w.now())
 }
@@ -424,13 +348,8 @@ func (w *Worker) fail(ctx context.Context, job Job, err error, report *Report, l
 // describe turns an error into what the member reads. It never includes
 // fetched page content, a URL, a token, or a cookie.
 func describe(err error, at time.Time) *JobError {
-	switch {
-	case errors.Is(err, ErrAuthExpired):
-		return &JobError{Code: ErrCodeAuthExpired, Message: "Your meal-kit sign-in expired. Sign in again to finish importing.", At: at}
-	case errors.Is(err, ErrBlocked):
+	if errors.Is(err, ErrBlocked) {
 		return &JobError{Code: ErrCodeBlocked, Message: "The meal-kit service refused our requests, so the import stopped. Try again later.", At: at}
-	case errors.Is(err, ErrNoLink):
-		return &JobError{Code: ErrCodeInternal, Message: "The meal-kit account was unlinked, so the import stopped.", At: at}
 	}
 	var parse *ParseError
 	if errors.As(err, &parse) {
@@ -440,12 +359,6 @@ func describe(err error, at time.Time) *JobError {
 		return &JobError{Code: ErrCodeImport, Message: "Saving the imported recipes failed. Nothing was half-written; the import will be retried.", At: at}
 	}
 	return &JobError{Code: ErrCodeNetwork, Message: "We could not reach the meal-kit service. The import will be retried.", At: at}
-}
-
-func (w *Worker) markLinkNeedsReauth(ctx context.Context, job Job) {
-	if err := w.opts.Store.SetLinkStatus(ctx, job.LinkID, LinkNeedsReauth, w.now()); err != nil && !errors.Is(err, ErrNotFound) {
-		w.opts.Logger.WarnContext(ctx, "marking the meal-kit link for re-authentication failed", "error", err)
-	}
 }
 
 // notifyFinished is the "it's done" notification. The push sweep delivers it.
@@ -476,18 +389,14 @@ func (w *Worker) notifyAttention(ctx context.Context, job Job, jobErr *JobError)
 	if w.opts.Notifier == nil || jobErr == nil {
 		return
 	}
-	title := "Recipe import needs you"
-	if jobErr.Code == ErrCodeAuthExpired {
-		title = "Sign in to finish importing"
-	}
 	w.create(ctx, notifications.New{
 		HouseholdID: job.HouseholdID,
 		Type:        notifications.TypeRecipeImportAttention,
-		Title:       title,
+		Title:       "Recipe import needs you",
 		Body:        jobErr.Message,
 		Subject:     notifications.Subject{Kind: notifications.SubjectRecipeImport, ID: job.ID},
-		// One notification per job per reason: a job that pauses, resumes,
-		// and pauses again does not nag twice for the same thing.
+		// One notification per job per reason, so a retry that fails the
+		// same way does not nag twice.
 		DedupeKey: "recipe_import.attention:" + job.ID + ":" + jobErr.Code,
 	})
 }

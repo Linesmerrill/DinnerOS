@@ -84,8 +84,8 @@ type Response struct {
 
 // Do performs one request politely and returns its body.
 //
-// It returns ErrBlocked on 403, ErrAuthExpired on 401, and a plain error for
-// anything else. The body is read under MaxResponseBytes.
+// It returns ErrBlocked on 401 and 403, and a plain error for anything else.
+// The body is read under MaxResponseBytes.
 func (f *Fetcher) Do(ctx context.Context, req *http.Request) (Response, error) {
 	var lastErr error
 	attempts := f.Attempts
@@ -115,10 +115,11 @@ func (f *Fetcher) Do(ctx context.Context, req *http.Request) (Response, error) {
 		_ = resp.Body.Close()
 
 		switch {
-		case resp.StatusCode == http.StatusForbidden:
+		case resp.StatusCode == http.StatusForbidden, resp.StatusCode == http.StatusUnauthorized:
+			// Nothing a Source fetches needs a session, so being turned away
+			// is the service refusing us, not an expired credential. Either
+			// way the run stops rather than retrying around it.
 			return Response{}, ErrBlocked
-		case resp.StatusCode == http.StatusUnauthorized:
-			return Response{}, ErrAuthExpired
 		case resp.StatusCode == http.StatusTooManyRequests:
 			if d, ok := retryAfter(resp.Header.Get("Retry-After")); ok {
 				if err := f.sleep(ctx, d); err != nil {
@@ -238,13 +239,13 @@ func SleepContext(ctx context.Context, d time.Duration) error {
 	}
 }
 
-// IsRetryable reports whether err is worth another attempt later. Auth
-// expiry, a refusal, a parse failure, and a canceled job are not.
+// IsRetryable reports whether err is worth another attempt later. A refusal, a
+// parse failure, and a canceled job are not.
 func IsRetryable(err error) bool {
 	switch {
 	case err == nil:
 		return false
-	case errors.Is(err, ErrAuthExpired), errors.Is(err, ErrBlocked), errors.Is(err, ErrJobGone), errors.Is(err, ErrNoLink), errors.Is(err, ErrDisabled):
+	case errors.Is(err, ErrBlocked), errors.Is(err, ErrJobGone), errors.Is(err, ErrDisabled):
 		return false
 	}
 	var parse *ParseError

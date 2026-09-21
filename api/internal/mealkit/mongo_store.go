@@ -13,30 +13,13 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb"
 )
 
-// Collections holding meal-kit links and the import job queue.
-const (
-	LinkCollection = "meal_kit_links"
-	JobCollection  = "meal_kit_jobs"
-)
+// JobCollection holds the import job queue. It is the only collection this
+// package has: nothing about a meal-kit account is stored anywhere.
+const JobCollection = "meal_kit_jobs"
 
 // Indexes returns the indexes MongoStore relies on.
 func Indexes() []mongodb.IndexSet {
 	return []mongodb.IndexSet{
-		{
-			Collection: LinkCollection,
-			Indexes: []mongo.IndexModel{
-				{
-					// One link per household per meal-kit service.
-					Keys:    bson.D{{Key: "householdId", Value: 1}, {Key: "source", Value: 1}},
-					Options: options.Index().SetUnique(true).SetName("householdId_source_unique"),
-				},
-				{
-					// Account deletion removes the links a user made.
-					Keys:    bson.D{{Key: "userId", Value: 1}},
-					Options: options.Index().SetName("userId"),
-				},
-			},
-		},
 		{
 			Collection: JobCollection,
 			Indexes: []mongo.IndexModel{
@@ -59,56 +42,17 @@ func Indexes() []mongodb.IndexSet {
 
 // MongoStore is the MongoDB implementation of Store.
 type MongoStore struct {
-	links *mongo.Collection
-	jobs  *mongo.Collection
+	jobs *mongo.Collection
 }
 
 var _ Store = (*MongoStore)(nil)
 
 // NewMongoStore returns a store using db.
 func NewMongoStore(db *mongo.Database) *MongoStore {
-	return &MongoStore{links: db.Collection(LinkCollection), jobs: db.Collection(JobCollection)}
+	return &MongoStore{jobs: db.Collection(JobCollection)}
 }
 
 // --- Documents ----------------------------------------------------------------
-
-// envelopeDoc is the stored envelope. Neither field is usable without the
-// configured RECIPE_IMPORT_ENCRYPTION_KEY.
-type envelopeDoc struct {
-	KeyID      string `bson:"keyId"`
-	Key        []byte `bson:"key"`
-	Ciphertext []byte `bson:"ciphertext"`
-}
-
-type linkDoc struct {
-	ID           bson.ObjectID `bson:"_id"`
-	HouseholdID  bson.ObjectID `bson:"householdId"`
-	UserID       bson.ObjectID `bson:"userId"`
-	Source       string        `bson:"source"`
-	Status       string        `bson:"status"`
-	AccountLabel string        `bson:"accountLabel"`
-	Secret       envelopeDoc   `bson:"secret"`
-	ExpiresAt    *time.Time    `bson:"expiresAt,omitempty"`
-	CreatedAt    time.Time     `bson:"createdAt"`
-	UpdatedAt    time.Time     `bson:"updatedAt"`
-	LastUsedAt   *time.Time    `bson:"lastUsedAt,omitempty"`
-}
-
-func (d linkDoc) toLink() Link {
-	l := Link{
-		ID: d.ID.Hex(), HouseholdID: d.HouseholdID.Hex(), UserID: d.UserID.Hex(),
-		Source: d.Source, Status: LinkStatus(d.Status), AccountLabel: d.AccountLabel,
-		Secret:    Envelope(d.Secret),
-		CreatedAt: d.CreatedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
-	}
-	if d.ExpiresAt != nil {
-		l.ExpiresAt = d.ExpiresAt.UTC()
-	}
-	if d.LastUsedAt != nil {
-		l.LastUsedAt = d.LastUsedAt.UTC()
-	}
-	return l
-}
 
 type orderedRecipeDoc struct {
 	SourceRecipeID string   `bson:"sourceRecipeId"`
@@ -145,7 +89,6 @@ type jobDoc struct {
 	ID             bson.ObjectID `bson:"_id"`
 	HouseholdID    bson.ObjectID `bson:"householdId"`
 	UserID         bson.ObjectID `bson:"userId"`
-	LinkID         bson.ObjectID `bson:"linkId"`
 	Source         string        `bson:"source"`
 	Status         string        `bson:"status"`
 	Attempts       int           `bson:"attempts"`
@@ -163,7 +106,7 @@ type jobDoc struct {
 
 func (d jobDoc) toJob() Job {
 	j := Job{
-		ID: d.ID.Hex(), HouseholdID: d.HouseholdID.Hex(), UserID: d.UserID.Hex(), LinkID: d.LinkID.Hex(),
+		ID: d.ID.Hex(), HouseholdID: d.HouseholdID.Hex(), UserID: d.UserID.Hex(),
 		Source: d.Source, Status: JobStatus(d.Status), Attempts: d.Attempts, MaxAttempts: d.MaxAttempts,
 		AvailableAt: d.AvailableAt.UTC(), LeaseOwner: d.LeaseOwner,
 		Checkpoint: fromCheckpointDoc(d.Checkpoint),
@@ -190,7 +133,7 @@ func toCheckpointDoc(c Checkpoint) checkpointDoc {
 		Unchanged: c.Unchanged, ReviewItems: c.ReviewItems,
 	}
 	if d.Phase == "" {
-		d.Phase = string(PhaseOrders)
+		d.Phase = string(PhaseRecipes)
 	}
 	for _, o := range c.Orders {
 		d.Orders = append(d.Orders, orderedRecipeDoc(o))
@@ -207,7 +150,7 @@ func fromCheckpointDoc(d checkpointDoc) Checkpoint {
 		Unchanged: d.Unchanged, ReviewItems: d.ReviewItems,
 	}
 	if c.Phase == "" {
-		c.Phase = PhaseOrders
+		c.Phase = PhaseRecipes
 	}
 	for _, o := range d.Orders {
 		c.Orders = append(c.Orders, OrderedRecipe(o))
@@ -225,137 +168,6 @@ func errorDoc(e *JobError) *jobErrorDoc {
 	return &jobErrorDoc{Code: e.Code, Message: e.Message, At: e.At}
 }
 
-// --- Links --------------------------------------------------------------------
-
-// UpsertLink implements Store.
-func (s *MongoStore) UpsertLink(ctx context.Context, l Link) (Link, error) {
-	hid, err := oid("household id", l.HouseholdID)
-	if err != nil {
-		return Link{}, err
-	}
-	uid, err := oid("user id", l.UserID)
-	if err != nil {
-		return Link{}, err
-	}
-	set := bson.D{
-		{Key: "userId", Value: uid},
-		{Key: "status", Value: string(l.Status)},
-		{Key: "accountLabel", Value: l.AccountLabel},
-		{Key: "secret", Value: envelopeDoc(l.Secret)},
-		{Key: "updatedAt", Value: l.UpdatedAt},
-	}
-	unset := bson.D{}
-	if l.ExpiresAt.IsZero() {
-		unset = append(unset, bson.E{Key: "expiresAt", Value: ""})
-	} else {
-		set = append(set, bson.E{Key: "expiresAt", Value: l.ExpiresAt})
-	}
-	update := bson.D{
-		{Key: "$set", Value: set},
-		{Key: "$setOnInsert", Value: bson.D{{Key: "createdAt", Value: l.CreatedAt}}},
-	}
-	if len(unset) > 0 {
-		update = append(update, bson.E{Key: "$unset", Value: unset})
-	}
-	var d linkDoc
-	err = s.links.FindOneAndUpdate(ctx,
-		bson.D{{Key: "householdId", Value: hid}, {Key: "source", Value: l.Source}},
-		update,
-		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
-	).Decode(&d)
-	if err != nil {
-		return Link{}, translate(err)
-	}
-	return d.toLink(), nil
-}
-
-// GetLink implements Store.
-func (s *MongoStore) GetLink(ctx context.Context, householdID, source string) (Link, error) {
-	hid, err := oid("household id", householdID)
-	if err != nil {
-		return Link{}, ErrNotFound
-	}
-	var d linkDoc
-	if err := s.links.FindOne(ctx, bson.D{{Key: "householdId", Value: hid}, {Key: "source", Value: source}}).Decode(&d); err != nil {
-		return Link{}, translate(err)
-	}
-	return d.toLink(), nil
-}
-
-// GetLinkByID implements Store.
-func (s *MongoStore) GetLinkByID(ctx context.Context, id string) (Link, error) {
-	lid, err := mongodb.ParseID(id)
-	if err != nil {
-		return Link{}, ErrNotFound
-	}
-	var d linkDoc
-	if err := s.links.FindOne(ctx, bson.D{{Key: "_id", Value: lid}}).Decode(&d); err != nil {
-		return Link{}, translate(err)
-	}
-	return d.toLink(), nil
-}
-
-// SetLinkStatus implements Store.
-func (s *MongoStore) SetLinkStatus(ctx context.Context, id string, status LinkStatus, at time.Time) error {
-	lid, err := mongodb.ParseID(id)
-	if err != nil {
-		return ErrNotFound
-	}
-	res, err := s.links.UpdateOne(ctx, bson.D{{Key: "_id", Value: lid}},
-		bson.D{{Key: "$set", Value: bson.D{
-			{Key: "status", Value: string(status)}, {Key: "updatedAt", Value: at}, {Key: "lastUsedAt", Value: at},
-		}}})
-	if err != nil {
-		return translate(err)
-	}
-	if res.MatchedCount == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
-// SaveLinkTokens implements Store.
-func (s *MongoStore) SaveLinkTokens(ctx context.Context, id string, secret Envelope, expiresAt, at time.Time) error {
-	lid, err := mongodb.ParseID(id)
-	if err != nil {
-		return ErrNotFound
-	}
-	set := bson.D{
-		{Key: "secret", Value: envelopeDoc(secret)},
-		{Key: "status", Value: string(LinkActive)},
-		{Key: "updatedAt", Value: at},
-		{Key: "lastUsedAt", Value: at},
-	}
-	var update bson.D
-	if expiresAt.IsZero() {
-		update = bson.D{
-			{Key: "$set", Value: set},
-			{Key: "$unset", Value: bson.D{{Key: "expiresAt", Value: ""}}},
-		}
-	} else {
-		set = append(set, bson.E{Key: "expiresAt", Value: expiresAt})
-		update = bson.D{{Key: "$set", Value: set}}
-	}
-	res, err := s.links.UpdateOne(ctx, bson.D{{Key: "_id", Value: lid}}, update)
-	if err != nil {
-		return translate(err)
-	}
-	if res.MatchedCount == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
-// DeleteLink implements Store.
-func (s *MongoStore) DeleteLink(ctx context.Context, householdID, source string) error {
-	hid, err := oid("household id", householdID)
-	if err != nil {
-		return nil
-	}
-	_, err = s.links.DeleteOne(ctx, bson.D{{Key: "householdId", Value: hid}, {Key: "source", Value: source}})
-	return translate(err)
-}
-
 // --- Jobs ---------------------------------------------------------------------
 
 // InsertJob implements Store.
@@ -368,12 +180,8 @@ func (s *MongoStore) InsertJob(ctx context.Context, j Job) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
-	lid, err := oid("link id", j.LinkID)
-	if err != nil {
-		return Job{}, err
-	}
 	d := jobDoc{
-		ID: bson.NewObjectID(), HouseholdID: hid, UserID: uid, LinkID: lid, Source: j.Source,
+		ID: bson.NewObjectID(), HouseholdID: hid, UserID: uid, Source: j.Source,
 		Status: string(j.Status), Attempts: j.Attempts, MaxAttempts: j.MaxAttempts,
 		AvailableAt: j.AvailableAt, Checkpoint: toCheckpointDoc(j.Checkpoint),
 		CreatedAt: j.CreatedAt, UpdatedAt: j.UpdatedAt,
@@ -413,7 +221,7 @@ func (s *MongoStore) ActiveJob(ctx context.Context, householdID, source string) 
 }
 
 func activeStatuses() []string {
-	return []string{string(JobQueued), string(JobRunning), string(JobPausedAuth)}
+	return []string{string(JobQueued), string(JobRunning)}
 }
 
 func (s *MongoStore) findOneJob(ctx context.Context, householdID, source string, extra ...bson.E) (Job, error) {
@@ -594,36 +402,15 @@ func (s *MongoStore) CancelJobs(ctx context.Context, householdID, source, reason
 	return int(res.ModifiedCount), nil
 }
 
-// ResumePausedJobs implements Store.
-func (s *MongoStore) ResumePausedJobs(ctx context.Context, householdID, source string, at time.Time) (int, error) {
-	hid, err := oid("household id", householdID)
-	if err != nil {
-		return 0, nil
-	}
-	res, err := s.jobs.UpdateMany(ctx,
-		bson.D{{Key: "householdId", Value: hid}, {Key: "source", Value: source}, {Key: "status", Value: string(JobPausedAuth)}},
-		bson.D{{Key: "$set", Value: bson.D{
-			{Key: "status", Value: string(JobQueued)},
-			{Key: "availableAt", Value: at},
-			{Key: "updatedAt", Value: at},
-		}}})
-	if err != nil {
-		return 0, translate(err)
-	}
-	return int(res.ModifiedCount), nil
-}
-
 // PurgeHousehold deletes every document this package stores for the
 // household. Account deletion calls it when the household's last member
 // deletes their account. It is idempotent.
+//
+// There is no PurgeUser any more: this package stores nothing that belongs to
+// one member. It used to hold their meal-kit tokens; it holds no credential at
+// all now, and an import run belongs to the household that asked for it.
 func (s *MongoStore) PurgeHousehold(ctx context.Context, householdID string) error {
-	return mongodb.DeleteByID(ctx, "householdId", householdID, s.links, s.jobs)
-}
-
-// PurgeUser deletes the meal-kit links a user made, so their stored tokens go
-// with their account. Jobs stay with the household.
-func (s *MongoStore) PurgeUser(ctx context.Context, userID string) error {
-	return mongodb.DeleteByID(ctx, "userId", userID, s.links)
+	return mongodb.DeleteByID(ctx, "householdId", householdID, s.jobs)
 }
 
 func oid(what, id string) (bson.ObjectID, error) {

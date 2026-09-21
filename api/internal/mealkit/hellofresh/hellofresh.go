@@ -1,18 +1,18 @@
 // Package hellofresh is the HelloFresh implementation of mealkit.Source: it
-// reads the account's own order history with tokens the member's own browser
-// session produced, and fetches the public recipe page of each recipe the
-// household actually received.
+// fetches the **public** recipe page of each recipe a household actually
+// received, and normalizes it into the shared import contract.
 //
-// There is deliberately no sign-in here. The member signs in on HelloFresh's
-// own page inside the app (a web view, HelloFresh's real domain, their
-// password manager), and the app sends us the session the login produced. No
-// password ever reaches this process, so there is nothing here to exchange
-// one with.
+// There is deliberately no account access here at all — no sign-in, no token,
+// no cookie, no refresh, and no call to any endpoint that would need one. The
+// member signs in on HelloFresh's own page in a web view in the app and their
+// order history is read there, in their own session; what arrives here is the
+// harvested list of recipe ids and page URLs. Recipe pages need no session, so
+// this client never holds a credential that could expire or leak.
 //
-// It never browses. The only things it requests are the account's own plans,
-// its past-deliveries endpoint, and the recipe pages those deliveries named,
-// and every recipe URL is checked against RecipeURLPrefix before a request is
-// made, so data from the service can never point the fetcher somewhere else.
+// It never browses. The only pages it requests are recipe pages whose URL
+// already starts with RecipeURLPrefix. That check happens twice: once at the
+// door, in NormalizeOrder, and again before the request, because the list is
+// submitted by a client and is untrusted input.
 //
 // Everything it reads is data. A response that does not have the shape this
 // build expects is a *mealkit.ParseError — a layout change, reported as one —
@@ -32,64 +32,40 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/mealkit"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 )
 
-// Where HelloFresh lives. Both are overridable in Options so tests (and a
-// future endpoint change) do not need a code change.
+// Where HelloFresh lives.
 const (
-	// DefaultBaseURL is the account API's origin.
+	// DefaultBaseURL is the origin recipe pages live on.
 	DefaultBaseURL = "https://www.hellofresh.com"
 	// RecipeURLPrefix is the only prefix a recipe page URL may have. A
-	// delivery record that names anything else is skipped, not fetched.
+	// submitted entry naming anything else is rebuilt, never followed.
 	RecipeURLPrefix = "https://www.hellofresh.com/recipes/"
 	// imageBaseURL turns a stored image path into a URL, as the offline
 	// importer does (importers/hellofresh/normalize.go).
 	imageBaseURL = "https://img.hellofresh.com/f_auto,fl_lossy,q_auto,w_1200/hellofresh_s3"
-)
-
-// Paths on the account API. Both were captured from a signed-in browser
-// session; see docs/meal-kit-import.md for what is verified and what is not.
-const (
-	// plansPath lists the account's subscriptions. The one we want is the
-	// "subscription" query parameter past-deliveries needs.
-	plansPath = "/gw/api/plans"
-	// pastDeliveriesPath is the account's own delivered weeks.
-	pastDeliveriesPath = "/gw/my-deliveries/past-deliveries"
-	// maxDeliveryPages bounds the history walk, so a paging bug can never
-	// turn into an unbounded crawl.
-	maxDeliveryPages = 40
-	// defaultCountry and defaultLocale are what the endpoints want when the
-	// deployment does not say. A household outside the US needs these set.
-	defaultCountry = "US"
-	defaultLocale  = "en-US"
-	// ratingScale is a required query parameter; its value does not change
-	// which deliveries come back.
-	ratingScale = "5"
 	// maxExcerptBytes bounds the redacted body excerpt a debug log may carry.
 	maxExcerptBytes = 300
+	// maxOrderNameBytes bounds the name kept from a submitted entry. It is
+	// only a label until the page itself is read.
+	maxOrderNameBytes = 200
 )
 
 // Options configures a Client.
 type Options struct {
 	// Fetcher makes every request. Nil means mealkit.NewFetcher().
 	Fetcher *mealkit.Fetcher
-	// BaseURL overrides DefaultBaseURL.
+	// BaseURL overrides DefaultBaseURL (MEAL_KIT_HELLOFRESH_BASE_URL). When
+	// RecipeURLPrefix is empty it also decides the allowed recipe prefix, so
+	// pointing this at a stub points the whole client at the stub.
 	BaseURL string
-	// RecipeURLPrefix overrides RecipeURLPrefix, for tests.
+	// RecipeURLPrefix overrides the allowed recipe-page prefix.
 	RecipeURLPrefix string
-	// Country and Locale are the account API's query parameters. Empty means
-	// defaultCountry and defaultLocale.
-	Country string
-	Locale  string
-	// Now is the clock: the history walk starts at the current ISO week.
-	Now func() time.Time
-	// Logger, when set, receives debug-level diagnostics about a response
-	// that could not be read. It never receives a token, a cookie, or more
-	// than a short redacted excerpt.
+	// Logger, when set, receives debug-level diagnostics about a page that
+	// could not be read: never more than a short redacted excerpt.
 	Logger *slog.Logger
 }
 
@@ -98,9 +74,6 @@ type Client struct {
 	fetcher *mealkit.Fetcher
 	baseURL string
 	prefix  string
-	country string
-	locale  string
-	now     func() time.Time
 	logger  *slog.Logger
 }
 
@@ -112,19 +85,7 @@ func New(opts Options) *Client {
 		fetcher: opts.Fetcher,
 		baseURL: strings.TrimSuffix(opts.BaseURL, "/"),
 		prefix:  opts.RecipeURLPrefix,
-		country: strings.TrimSpace(opts.Country),
-		locale:  strings.TrimSpace(opts.Locale),
-		now:     opts.Now,
 		logger:  opts.Logger,
-	}
-	if c.country == "" {
-		c.country = defaultCountry
-	}
-	if c.locale == "" {
-		c.locale = defaultLocale
-	}
-	if c.logger == nil {
-		c.logger = slog.New(slog.DiscardHandler)
 	}
 	if c.fetcher == nil {
 		c.fetcher = mealkit.NewFetcher()
@@ -133,10 +94,10 @@ func New(opts Options) *Client {
 		c.baseURL = DefaultBaseURL
 	}
 	if c.prefix == "" {
-		c.prefix = RecipeURLPrefix
+		c.prefix = c.baseURL + "/recipes/"
 	}
-	if c.now == nil {
-		c.now = time.Now
+	if c.logger == nil {
+		c.logger = slog.New(slog.DiscardHandler)
 	}
 	return c
 }
@@ -147,272 +108,59 @@ func (c *Client) Name() string { return mealkit.SourceHelloFresh }
 // Requests is how many HTTP requests this client has made, for the run log.
 func (c *Client) Requests() int { return c.fetcher.Requests() }
 
-// Refresh implements mealkit.Source.
-//
-// HelloFresh's refresh request has NOT been observed, so this build does not
-// guess at one: inventing a contract would mean firing an unknown request at
-// someone else's auth service and, when it failed, retrying it. Returning
-// ErrAuthExpired is the honest answer — the worker pauses the job at
-// paused_auth and the member re-links through the web login, which is a few
-// taps and always works.
-//
-// When the refresh request is captured the same way the rest of this file was,
-// it belongs here and nothing else changes.
-func (c *Client) Refresh(_ context.Context, _ mealkit.Tokens) (mealkit.Tokens, error) {
-	return mealkit.Tokens{}, mealkit.ErrAuthExpired
-}
-
-// plansResponse is the account's own subscriptions. The field names are
-// unverified, so every plausible envelope is tried before giving up; what
-// matters is finding one subscription id.
-type plansResponse struct {
-	Items []plan `json:"items"`
-	Plans []plan `json:"plans"`
-}
-
-type plan struct {
-	ID             string `json:"id"`
-	SubscriptionID string `json:"subscriptionId"`
-	Status         string `json:"status"`
-}
-
-func (p plan) id() string { return strings.TrimSpace(firstNonEmpty(p.SubscriptionID, p.ID)) }
-
-// pastDeliveriesResponse is one page of the account's own delivered weeks,
-// captured from a signed-in session.
-type pastDeliveriesResponse struct {
-	Weeks []deliveryWeek `json:"weeks"`
-}
-
-type deliveryWeek struct {
-	// Week is an ISO week, e.g. "2026-W38".
-	Week   string           `json:"week"`
-	MenuID string           `json:"menuId"`
-	Meals  []deliveryRecipe `json:"meals"`
-	// Addons are the sides and extras delivered alongside the meals. They
-	// were ordered and eaten too, so they are imported, flagged as add-ons.
-	Addons []deliveryRecipe `json:"addons"`
-}
-
-type deliveryRecipe struct {
-	ID string `json:"id"`
-	// Name is the recipe's title; it is used for a fallback slug only.
-	Name string `json:"name"`
-	// WebsiteURL is the recipe page. It is followed only when it already has
-	// the allowed prefix.
-	WebsiteURL string `json:"websiteURL"`
-}
-
-// subscriptionIDRe is what a subscription id may look like. It is applied
-// before the value reaches a query string, so account data cannot smuggle
-// anything into the request we make.
-var subscriptionIDRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
-
-// subscriptionID reads the account's own plans and returns the subscription
-// past-deliveries needs.
-func (c *Client) subscriptionID(ctx context.Context, t mealkit.Tokens) (string, error) {
-	endpoint := c.baseURL + plansPath + "?includeCanceled=false"
-	resp, err := c.get(ctx, endpoint, t)
-	if err != nil {
-		return "", err
-	}
-	var envelope plansResponse
-	candidates := []plan{}
-	if err := json.Unmarshal(resp.Body, &envelope); err == nil {
-		candidates = append(candidates, envelope.Items...)
-		candidates = append(candidates, envelope.Plans...)
-	}
-	if len(candidates) == 0 {
-		// Some of these gateway endpoints answer with a bare array.
-		var bare []plan
-		if err := json.Unmarshal(resp.Body, &bare); err == nil {
-			candidates = bare
-		}
-	}
-	for _, p := range candidates {
-		if id := p.id(); subscriptionIDRe.MatchString(id) {
-			return id, nil
-		}
-	}
-	c.diagnose("plans", resp)
-	return "", &mealkit.ParseError{
-		Subject: "the account's meal-kit plan",
-		Detail:  "HelloFresh did not name a subscription this build can read; the account API has probably changed",
-	}
-}
-
-// get makes one authorized JSON request.
-func (c *Client) get(ctx context.Context, endpoint string, t mealkit.Tokens) (mealkit.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return mealkit.Response{}, err
-	}
-	req.Header.Set("Accept", "application/json")
-	// The session came from the member's own browser login. Nothing logs it.
-	req.Header.Set("Authorization", "Bearer "+t.AccessToken)
-	return c.fetcher.Do(ctx, req)
-}
-
 // recipeIDRe is HelloFresh's recipe ID: 24 hex characters.
 var recipeIDRe = regexp.MustCompile(`^[a-f0-9]{24}$`)
 
-// OrderHistory implements mealkit.Source. It reads only this account's
-// deliveries; no catalog, menu, or browse endpoint is ever requested.
+// weekRe is an ISO week, the form the import contract's orderWeeks wants.
+var weekRe = regexp.MustCompile(`^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$`)
+
+var slugPattern = regexp.MustCompile(`[^a-z0-9]+`)
+
+// NormalizeOrder implements mealkit.Source.
 //
-// Recipes delivered in more than one week merge into one entry carrying every
-// week, which is what the import contract's orderWeeks means.
-// The history is walked backwards a page at a time: `from` starts at the
-// current ISO week and moves to the week before the earliest week each page
-// returned. It stops at an empty page, at maxDeliveryPages, or as soon as a
-// page fails to move `from` backwards, so a paging change cannot become a
-// loop.
-func (c *Client) OrderHistory(ctx context.Context, t mealkit.Tokens) ([]mealkit.OrderedRecipe, error) {
-	subscription, err := c.subscriptionID(ctx, t)
-	if err != nil {
-		return nil, err
+// This is the door. The entry was harvested by an app from a page we do not
+// control, so nothing in it is believed: the id has to be a HelloFresh recipe
+// id, the URL has to be one of our own recipe pages (and is rebuilt from the
+// id when it is not), the weeks have to be ISO weeks, and the name is trimmed
+// to a label. Anything left over is dropped rather than repaired.
+func (c *Client) NormalizeOrder(o mealkit.OrderedRecipe) (mealkit.OrderedRecipe, bool) {
+	id := strings.TrimSpace(o.SourceRecipeID)
+	if !recipeIDRe.MatchString(id) {
+		return mealkit.OrderedRecipe{}, false
 	}
-
-	byID := map[string]*mealkit.OrderedRecipe{}
-	var order []string
-	seenWeek := map[string]bool{}
-	from := c.now().UTC()
-
-	for page := 0; page < maxDeliveryPages; page++ {
-		resp, err := c.get(ctx, c.pastDeliveriesURL(subscription, from), t)
-		if err != nil {
-			return nil, err
-		}
-		var body pastDeliveriesResponse
-		if err := json.Unmarshal(resp.Body, &body); err != nil {
-			c.diagnose("past-deliveries", resp)
-			return nil, &mealkit.ParseError{
-				Subject: "the order history",
-				Detail:  "HelloFresh answered with something this build cannot read; the account API has probably changed",
-			}
-		}
-		if len(body.Weeks) == 0 {
-			break
-		}
-
-		earliest := time.Time{}
-		for _, w := range body.Weeks {
-			week := strings.TrimSpace(w.Week)
-			if !isoWeekRe.MatchString(week) {
-				week = ""
-			} else if monday, ok := parseISOWeek(week); ok && (earliest.IsZero() || monday.Before(earliest)) {
-				earliest = monday
-			}
-			if week != "" {
-				if seenWeek[week] {
-					continue
-				}
-				seenWeek[week] = true
-			}
-			c.collect(w, week, byID, &order)
-		}
-
-		if earliest.IsZero() {
-			// No readable week to step back from; stop rather than ask for
-			// the same page again.
-			break
-		}
-		next := earliest.AddDate(0, 0, -7)
-		if !next.Before(from) {
-			break
-		}
-		from = next
+	name := strings.TrimSpace(o.Name)
+	if len(name) > maxOrderNameBytes {
+		name = strings.TrimSpace(name[:maxOrderNameBytes])
 	}
-
-	out := make([]mealkit.OrderedRecipe, 0, len(order))
-	for _, id := range order {
-		r := byID[id]
-		sort.Strings(r.Weeks)
-		out = append(out, *r)
+	out := mealkit.OrderedRecipe{
+		SourceRecipeID: id,
+		Name:           name,
+		URL:            c.recipeURL(o.URL, name, id),
+		IsAddon:        o.IsAddon,
 	}
-	return out, nil
+	seen := map[string]bool{}
+	for _, w := range o.Weeks {
+		w = strings.TrimSpace(w)
+		if !weekRe.MatchString(w) || seen[w] || len(out.Weeks) >= mealkit.MaxOrderWeeks {
+			continue
+		}
+		seen[w] = true
+		out.Weeks = append(out.Weeks, w)
+	}
+	sort.Strings(out.Weeks)
+	return out, true
 }
 
-// pastDeliveriesURL builds the request for the week `at` falls in. Every value
-// goes through url.Values, so nothing can be smuggled into the query.
-func (c *Client) pastDeliveriesURL(subscription string, at time.Time) string {
-	q := url.Values{
-		"country":      {c.country},
-		"from":         {isoWeekString(at)},
-		"locale":       {c.locale},
-		"rating-scale": {ratingScale},
-		"subscription": {subscription},
-	}
-	return c.baseURL + pastDeliveriesPath + "?" + q.Encode()
-}
-
-// collect folds one delivered week's meals and add-ons into the result.
+// recipeURL is the page to fetch for a delivered recipe.
 //
-// Add-ons are imported, flagged IsAddon: the household paid for them, ate
-// them, and will want to cook them again; the flag is already carried through
-// the import contract, so the library can tell a side from a main without us
-// dropping half of what was delivered.
-func (c *Client) collect(w deliveryWeek, week string, byID map[string]*mealkit.OrderedRecipe, order *[]string) {
-	add := func(r deliveryRecipe, isAddon bool) {
-		id := strings.TrimSpace(r.ID)
-		if !recipeIDRe.MatchString(id) {
-			return
-		}
-		page := c.recipeURL(r, id)
-		if page == "" {
-			return
-		}
-		existing, ok := byID[id]
-		if !ok {
-			byID[id] = &mealkit.OrderedRecipe{
-				SourceRecipeID: id,
-				Name:           strings.TrimSpace(r.Name),
-				URL:            page,
-				IsAddon:        isAddon,
-			}
-			*order = append(*order, id)
-			existing = byID[id]
-		}
-		if week != "" && !contains(existing.Weeks, week) {
-			existing.Weeks = append(existing.Weeks, week)
-		}
-	}
-	for _, r := range w.Meals {
-		add(r, false)
-	}
-	for _, r := range w.Addons {
-		add(r, true)
-	}
-}
-
-// diagnose records, at debug level only, what came back when a response could
-// not be read — enough to tell a redirect from a layout change on the next
-// live attempt, and never a credential.
-//
-// The excerpt is a RESPONSE body, so it cannot contain the member's password:
-// they never typed one into this process. It is redacted anyway, because a
-// body from an auth-adjacent endpoint can carry a token.
-func (c *Client) diagnose(what string, resp mealkit.Response) {
-	c.logger.Debug("meal-kit response was unreadable",
-		"source", mealkit.SourceHelloFresh,
-		"endpoint", what,
-		"contentType", resp.Header.Get("Content-Type"),
-		"finalPath", finalPath(resp.FinalURL),
-		"bytes", len(resp.Body),
-		"excerpt", redactExcerpt(resp.Body))
-}
-
-// recipeURL returns the page to fetch for a delivered recipe, or "" when the
-// delivery record points anywhere but a HelloFresh recipe page.
-//
-// The service's own websiteURL is only used when it already has the allowed
-// prefix; otherwise the URL is built from the ID we validated ourselves and
-// the recipe's own name. Data from the account can therefore never choose the
-// host we talk to.
-func (c *Client) recipeURL(r deliveryRecipe, id string) string {
-	if u := strings.TrimSpace(r.WebsiteURL); strings.HasPrefix(u, c.prefix) {
+// A submitted URL is used only when it already has the allowed prefix;
+// otherwise the URL is built from the id and name we validated ourselves. A
+// submitted list can therefore never choose the host we talk to.
+func (c *Client) recipeURL(submitted, name, id string) string {
+	if u := strings.TrimSpace(submitted); strings.HasPrefix(u, c.prefix) {
 		return u
 	}
-	slug := slugPattern.ReplaceAllString(strings.ToLower(strings.TrimSpace(r.Name)), "-")
+	slug := slugPattern.ReplaceAllString(strings.ToLower(name), "-")
 	slug = strings.Trim(slug, "-")
 	if slug == "" {
 		return c.prefix + id
@@ -420,14 +168,12 @@ func (c *Client) recipeURL(r deliveryRecipe, id string) string {
 	return c.prefix + slug + "-" + id
 }
 
-var slugPattern = regexp.MustCompile(`[^a-z0-9]+`)
-
 // nextDataRe finds the JSON the recipe page embeds.
 var nextDataRe = regexp.MustCompile(`<script id="__NEXT_DATA__" type="application/json"[^>]*>([\s\S]*?)</script>`)
 
-// Recipe implements mealkit.Source: it fetches one recipe page and normalizes
-// it into the shared import contract.
-func (c *Client) Recipe(ctx context.Context, t mealkit.Tokens, o mealkit.OrderedRecipe) (recipes.ImportRecipe, []recipes.ImportReviewItem, error) {
+// Recipe implements mealkit.Source: it fetches one public recipe page and
+// normalizes it into the shared import contract.
+func (c *Client) Recipe(ctx context.Context, o mealkit.OrderedRecipe) (recipes.ImportRecipe, []recipes.ImportReviewItem, error) {
 	if !strings.HasPrefix(o.URL, c.prefix) {
 		return recipes.ImportRecipe{}, nil, &mealkit.ParseError{
 			Subject: "recipe " + o.SourceRecipeID,
@@ -451,10 +197,27 @@ func (c *Client) Recipe(ctx context.Context, t mealkit.Tokens, o mealkit.Ordered
 	}
 	raw, err := extractRecipe(resp.Body, o.SourceRecipeID)
 	if err != nil {
+		c.diagnose(o.SourceRecipeID, resp)
 		return recipes.ImportRecipe{}, nil, err
 	}
 	out, review := normalize(o, raw, resp.FinalURL)
 	return out, review, nil
+}
+
+// diagnose records, at debug level only, what came back when a page could not
+// be read — enough to tell a redirect or a block page from a layout change on
+// the next live run.
+//
+// No credential can appear in it: this client never sends one, and the excerpt
+// is redacted anyway.
+func (c *Client) diagnose(id string, resp mealkit.Response) {
+	c.logger.Debug("meal-kit recipe page was unreadable",
+		"source", mealkit.SourceHelloFresh,
+		"sourceRecipeId", id,
+		"contentType", resp.Header.Get("Content-Type"),
+		"finalPath", finalPath(resp.FinalURL),
+		"bytes", len(resp.Body),
+		"excerpt", redactExcerpt(resp.Body))
 }
 
 // hfRecipe is the subset of HelloFresh's recipe object this build reads. It
@@ -810,43 +573,10 @@ func names(items []named) []string {
 	return out
 }
 
-var isoWeekRe = regexp.MustCompile(`^(\d{4})-W(0[1-9]|[1-4]\d|5[0-3])$`)
-
-// isoWeekString is t's ISO week, the form the account API's `from` takes.
-func isoWeekString(t time.Time) string {
-	y, w := t.ISOWeek()
-	return fmt.Sprintf("%04d-W%02d", y, w)
-}
-
-// parseISOWeek returns the Monday of an ISO week like "2026-W38", so weeks can
-// be ordered and stepped backwards. It reports false for anything else rather
-// than guessing a date.
-func parseISOWeek(s string) (time.Time, bool) {
-	m := isoWeekRe.FindStringSubmatch(strings.TrimSpace(s))
-	if m == nil {
-		return time.Time{}, false
-	}
-	year, err := strconv.Atoi(m[1])
-	if err != nil {
-		return time.Time{}, false
-	}
-	week, err := strconv.Atoi(m[2])
-	if err != nil {
-		return time.Time{}, false
-	}
-	// 4 January is always in ISO week 1, whatever weekday it falls on.
-	jan4 := time.Date(year, time.January, 4, 0, 0, 0, 0, time.UTC)
-	offset := (int(jan4.Weekday()) + 6) % 7 // Monday = 0
-	monday := jan4.AddDate(0, 0, -offset+(week-1)*7)
-	// A year has 52 or 53 ISO weeks; W53 of a 52-week year is not a date.
-	if y, w := monday.ISOWeek(); y != year || w != week {
-		return time.Time{}, false
-	}
-	return monday, true
-}
-
-// tokenishRe matches the things a response body must never put in a log: a
-// JSON field whose name looks like a secret, and a bare JWT.
+// tokenishRe matches the things a fetched body must never put in a log: a
+// JSON field whose name looks like a secret, and a bare JWT. Nothing this
+// client fetches should contain one, which is exactly why a page that does
+// must not be echoed into a log.
 var tokenishRe = regexp.MustCompile(
 	`(?i)"[a-z_]*(token|secret|password|cookie|authorization|session)[a-z_]*"\s*:\s*"[^"]*"|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]+\.?[A-Za-z0-9_-]*`)
 
@@ -863,8 +593,8 @@ func redactExcerpt(body []byte) string {
 	return s
 }
 
-// finalPath is the path a response finally came from. The query is dropped: it
-// carries the account's subscription id.
+// finalPath is the path a response finally came from. The query is dropped on
+// principle: a redirect can put anything in one.
 func finalPath(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -880,13 +610,4 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func contains(list []string, v string) bool {
-	for _, s := range list {
-		if s == v {
-			return true
-		}
-	}
-	return false
 }

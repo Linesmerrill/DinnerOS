@@ -12,8 +12,8 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 )
 
-// workerFixture is a linked household with one queued job, a scripted source,
-// and a recording publisher.
+// workerFixture is a household with one queued job carrying a harvested order
+// history, a scripted source, and a recording publisher.
 type workerFixture struct {
 	store     *memoryStore
 	source    *fakeSource
@@ -27,24 +27,22 @@ func newWorkerFixture(t *testing.T, orders []OrderedRecipe) *workerFixture {
 	t.Helper()
 	f := &workerFixture{
 		store:     &memoryStore{},
-		source:    &fakeSource{orders: orders, validToken: "access", refreshed: "access-2"},
+		source:    &fakeSource{},
 		publisher: &fakePublisher{},
 		notifier:  &fakeNotifier{},
 	}
 	f.service = NewService(ServiceOptions{
-		Store: f.store, Cipher: testCipher(t),
+		Store: f.store, Enabled: true,
 		Sources:  map[string]Source{SourceHelloFresh: f.source},
 		Notifier: f.notifier,
 	})
-	status, err := f.service.Link(context.Background(), LinkRequest{
-		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh,
-		Tokens:      Tokens{AccessToken: "access", RefreshToken: "refresh", ExpiresAt: time.Now().Add(time.Hour)},
-		StartImport: true,
+	job, err := f.service.StartImport(context.Background(), ImportRequest{
+		HouseholdID: hhAda, UserID: userAda, Source: SourceHelloFresh, Orders: orders,
 	})
 	if err != nil {
-		t.Fatalf("Link() error = %v", err)
+		t.Fatalf("StartImport() error = %v", err)
 	}
-	f.job = *status.Job
+	f.job = job
 	return f
 }
 
@@ -161,74 +159,15 @@ func TestWorkerResumesFromItsCheckpointInsteadOfRefetching(t *testing.T) {
 	}
 }
 
-func TestWorkerPausesForSignInWhenTheSessionCannotBeRefreshed(t *testing.T) {
-	f := newWorkerFixture(t, orders(2))
-	f.source.validToken = "something-else" // the stored token no longer works
-	f.source.refreshed = ""                // and the refresh token is spent too
-
-	report, err := f.worker(t).Run(context.Background())
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-	if report.Paused != 1 {
-		t.Fatalf("report = %+v", report)
-	}
-	job := f.reload(t)
-	if job.Status != JobPausedAuth || job.LastError == nil || job.LastError.Code != ErrCodeAuthExpired {
-		t.Fatalf("job = %+v (error %+v)", job.Status, job.LastError)
-	}
-	if !strings.Contains(job.LastError.Message, "Sign in again") {
-		t.Errorf("message = %q", job.LastError.Message)
-	}
-	link, _ := f.store.GetLink(context.Background(), hhAda, SourceHelloFresh)
-	if link.Status != LinkNeedsReauth {
-		t.Errorf("link status = %q, want %q", link.Status, LinkNeedsReauth)
-	}
-	if types := f.notifier.types(); !slices.Contains(types, notifications.TypeRecipeImportAttention) {
-		t.Errorf("notifications = %v, want an attention one", types)
-	}
-	// A paused job is not claimable, so a later run does not burn attempts.
-	if _, err := f.store.ClaimJob(context.Background(), "other", time.Now(), time.Now().Add(time.Minute)); !errors.Is(err, ErrNotFound) {
-		t.Errorf("a paused job was claimable: %v", err)
-	}
-}
-
-func TestWorkerRefreshesAnExpiredSessionAndCarriesOn(t *testing.T) {
-	f := newWorkerFixture(t, orders(2))
-	// The stored session is spent, but the refresh token still works.
-	f.source.validToken = "access-2"
-	f.source.refreshed = "access-2"
-
-	report, err := f.worker(t).Run(context.Background())
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-	if report.Succeeded != 1 {
-		t.Fatalf("report = %+v", report)
-	}
-	if f.source.refreshes == 0 {
-		t.Error("the worker never refreshed the session")
-	}
-	// The new session was stored, encrypted, for the next run.
-	link, _ := f.store.GetLink(context.Background(), hhAda, SourceHelloFresh)
-	tokens, err := f.service.Tokens(link)
-	if err != nil || tokens.AccessToken != "access-2" {
-		t.Errorf("stored tokens = %+v, %v", tokens, err)
-	}
-	if link.Status != LinkActive {
-		t.Errorf("link status = %q", link.Status)
-	}
-}
-
-func TestWorkerStopsWhenTheAccountIsUnlinkedMidRun(t *testing.T) {
+func TestWorkerStopsWhenTheImportIsStoppedMidRun(t *testing.T) {
 	f := newWorkerFixture(t, orders(30))
 	unlinked := false
 	f.source.beforeRecipe = func(OrderedRecipe) {
 		// Unlink once, partway through the run, exactly as the member would.
 		if !unlinked {
 			unlinked = true
-			if _, err := f.service.Unlink(context.Background(), hhAda, SourceHelloFresh); err != nil {
-				t.Errorf("Unlink() error = %v", err)
+			if _, err := f.service.StopImports(context.Background(), hhAda, SourceHelloFresh); err != nil {
+				t.Errorf("StopImports() error = %v", err)
 			}
 		}
 	}
@@ -244,23 +183,25 @@ func TestWorkerStopsWhenTheAccountIsUnlinkedMidRun(t *testing.T) {
 	if job.Status != JobCanceled {
 		t.Errorf("job = %q, want %q", job.Status, JobCanceled)
 	}
-	// It stopped at the first checkpoint after the unlink rather than
-	// importing the whole history.
+	// It stopped at the first checkpoint after the member stopped it, rather
+	// than importing the whole history anyway.
 	if got := len(f.publisher.imported()); got >= 30 {
-		t.Errorf("imported %d recipes after the unlink", got)
-	}
-	if _, err := f.store.GetLink(context.Background(), hhAda, SourceHelloFresh); !errors.Is(err, ErrNotFound) {
-		t.Errorf("the tokens survived the unlink")
+		t.Errorf("imported %d recipes after the import was stopped", got)
 	}
 }
 
 func TestWorkerFailsCleanlyWhenTheSourceLayoutChanged(t *testing.T) {
 	f := newWorkerFixture(t, orders(3))
 	layoutChange := &ParseError{
-		Subject: "the order history",
-		Detail:  "HelloFresh answered with something this build cannot read",
+		Subject: "recipe 1",
+		Detail:  "the recipe page no longer embeds the data this build reads",
 	}
-	f.source.ordersErr = layoutChange
+	// Every recipe fails the same way, which is a layout change rather than
+	// one odd recipe.
+	f.source.recipeErr = map[string]error{}
+	for _, o := range f.job.Checkpoint.Orders {
+		f.source.recipeErr[o.SourceRecipeID] = layoutChange
+	}
 
 	report, err := f.worker(t).Run(context.Background())
 	if err != nil {
@@ -358,7 +299,10 @@ func TestWorkerRecordsRecipesTheImportPipelineRejected(t *testing.T) {
 
 func TestWorkerStopsOutrightWhenTheServiceRefusesUs(t *testing.T) {
 	f := newWorkerFixture(t, orders(3))
-	f.source.ordersErr = ErrBlocked
+	f.source.recipeErr = map[string]error{}
+	for _, o := range f.job.Checkpoint.Orders {
+		f.source.recipeErr[o.SourceRecipeID] = ErrBlocked
+	}
 
 	report, err := f.worker(t).Run(context.Background())
 	if err != nil {

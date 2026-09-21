@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -20,12 +19,7 @@ func newTestClient(t *testing.T, srv *httptest.Server) *Client {
 	f.MinInterval = 0
 	f.Jitter = 0
 	f.Sleep = func(context.Context, time.Duration) error { return nil }
-	return New(Options{
-		Fetcher:         f,
-		BaseURL:         srv.URL,
-		RecipeURLPrefix: srv.URL + "/recipes/",
-		Now:             func() time.Time { return time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC) },
-	})
+	return New(Options{Fetcher: f, BaseURL: srv.URL})
 }
 
 const recipeIDA = "6512aa11bb22cc33dd44ee55"
@@ -70,137 +64,6 @@ const fullRecipe = `{
   ]
 }`
 
-// deliveriesStub answers the two account endpoints the client reads, and
-// fails the test for anything else: this client must never browse. prefix is
-// the stub's own recipe-page prefix, which is only known once it is listening.
-func deliveriesStub(t *testing.T, prefix func() string, seen *[]*http.Request) http.HandlerFunc {
-	t.Helper()
-	return func(w http.ResponseWriter, r *http.Request) {
-		*seen = append(*seen, r)
-		if r.Header.Get("Authorization") != "Bearer session-token" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		switch r.URL.Path {
-		case plansPath:
-			_, _ = w.Write([]byte(`{"items":[{"id":"sub-42","status":"active"}]}`))
-		case pastDeliveriesPath:
-			switch r.URL.Query().Get("from") {
-			case "2026-W39":
-				_, _ = w.Write([]byte(`{"weeks":[
-					{"week":"2026-W38","menuId":"menu-1","meals":[
-						{"id":"` + recipeIDA + `","name":"Sheet Pan Chicken",
-						 "websiteURL":"` + prefix() + `sheet-pan-chicken-` + recipeIDA + `"}
-					],"addons":[
-						{"id":"` + recipeIDB + `","name":"Garlic Bread",
-						 "websiteURL":"https://evil.example.com/recipes/garlic-bread"}
-					]},
-					{"week":"2026-W37","meals":[{"id":"not-a-recipe-id","name":"Junk"}]}
-				]}`))
-			case "2026-W36":
-				// The same recipe again, an earlier week: it merges.
-				_, _ = w.Write([]byte(`{"weeks":[{"week":"2026-W33","meals":[
-					{"id":"` + recipeIDA + `","name":"Sheet Pan Chicken"}
-				]}]}`))
-			default:
-				_, _ = w.Write([]byte(`{"weeks":[]}`))
-			}
-		default:
-			t.Errorf("requested %q; only the account's own endpoints may be fetched", r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}
-}
-
-func TestOrderHistoryWalksTheAccountsOwnDeliveredWeeks(t *testing.T) {
-	var seen []*http.Request
-	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		deliveriesStub(t, func() string { return srv.URL + "/recipes/" }, &seen)(w, r)
-	}))
-	defer srv.Close()
-
-	got, err := newTestClient(t, srv).OrderHistory(context.Background(), mealkit.Tokens{AccessToken: "session-token"})
-	if err != nil {
-		t.Fatalf("OrderHistory() error = %v", err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("recipes = %+v", got)
-	}
-	// Repeat deliveries merge into one recipe carrying every week.
-	if got[0].SourceRecipeID != recipeIDA || len(got[0].Weeks) != 2 ||
-		got[0].Weeks[0] != "2026-W33" || got[0].Weeks[1] != "2026-W38" {
-		t.Errorf("first = %+v", got[0])
-	}
-	// An add-on was delivered too, and is imported flagged as one.
-	if !got[1].IsAddon || got[1].SourceRecipeID != recipeIDB {
-		t.Errorf("add-on = %+v", got[1])
-	}
-	// A websiteURL pointing off HelloFresh is replaced, never followed.
-	if !strings.HasPrefix(got[1].URL, srv.URL+"/recipes/") || strings.Contains(got[1].URL, "evil.example.com") {
-		t.Errorf("add-on URL = %q", got[1].URL)
-	}
-
-	// The subscription is read from the account's own plans, not guessed, and
-	// nothing else is requested.
-	var deliveries []url.Values
-	for i, r := range seen {
-		switch r.URL.Path {
-		case plansPath:
-			if i != 0 {
-				t.Errorf("the plan was read at request %d; it is needed first", i)
-			}
-		case pastDeliveriesPath:
-			deliveries = append(deliveries, r.URL.Query())
-		}
-	}
-	// The walk starts at the current ISO week and steps back until a page is
-	// empty, so it terminates rather than paging forever.
-	if len(deliveries) != 3 {
-		t.Fatalf("past-deliveries requests = %d: %v", len(deliveries), deliveries)
-	}
-	for i, want := range []string{"2026-W39", "2026-W36", "2026-W32"} {
-		if got := deliveries[i].Get("from"); got != want {
-			t.Errorf("request %d from = %q, want %q", i, got, want)
-		}
-	}
-	for field, want := range map[string]string{
-		"country": "US", "locale": "en-US", "rating-scale": "5", "subscription": "sub-42",
-	} {
-		if got := deliveries[0].Get(field); got != want {
-			t.Errorf("%s = %q, want %q", field, got, want)
-		}
-	}
-}
-
-func TestOrderHistoryFailsCleanlyWhenTheResponseChanged(t *testing.T) {
-	for name, handler := range map[string]http.HandlerFunc{
-		"the plans endpoint": func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte(`<html>we redesigned the API</html>`))
-		},
-		"the deliveries endpoint": func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == plansPath {
-				_, _ = w.Write([]byte(`{"items":[{"id":"sub-42"}]}`))
-				return
-			}
-			_, _ = w.Write([]byte(`<html>we redesigned the API</html>`))
-		},
-	} {
-		srv := httptest.NewServer(handler)
-		_, err := newTestClient(t, srv).OrderHistory(context.Background(), mealkit.Tokens{AccessToken: "t"})
-		var parse *mealkit.ParseError
-		switch {
-		case !errors.As(err, &parse):
-			t.Errorf("%s: OrderHistory() = %v, want a ParseError", name, err)
-		case !strings.Contains(parse.Detail, "changed"):
-			t.Errorf("%s: detail = %q; it should say what happened", name, parse.Detail)
-		case strings.Contains(parse.Detail, "we redesigned"):
-			t.Errorf("%s: the message quotes the fetched page: %q", name, parse.Detail)
-		}
-		srv.Close()
-	}
-}
-
 func TestRecipeNormalizesIntoTheSharedImportContract(t *testing.T) {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -213,7 +76,7 @@ func TestRecipeNormalizesIntoTheSharedImportContract(t *testing.T) {
 		SourceRecipeID: recipeIDA, Name: "Sheet Pan Chicken",
 		URL: srv.URL + "/recipes/sheet-pan-chicken-" + recipeIDA, Weeks: []string{"2026-W30", "2026-W33"},
 	}
-	recipe, review, err := c.Recipe(context.Background(), mealkit.Tokens{AccessToken: "t"}, ordered)
+	recipe, review, err := c.Recipe(context.Background(), ordered)
 	if err != nil {
 		t.Fatalf("Recipe() error = %v", err)
 	}
@@ -278,7 +141,7 @@ func TestRecipeFailsCleanlyOnAPageThatChanged(t *testing.T) {
 		}))
 		c := newTestClient(t, srv)
 		ordered := mealkit.OrderedRecipe{SourceRecipeID: recipeIDA, URL: srv.URL + "/recipes/x-" + recipeIDA}
-		_, _, err := c.Recipe(context.Background(), mealkit.Tokens{AccessToken: "t"}, ordered)
+		_, _, err := c.Recipe(context.Background(), ordered)
 		var parse *mealkit.ParseError
 		if !errors.As(err, &parse) {
 			t.Errorf("%s = %v, want a ParseError", name, err)
@@ -297,7 +160,7 @@ func TestRecipeRefusesAURLOutsideHelloFreshsRecipePages(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(t, srv)
-	_, _, err := c.Recipe(context.Background(), mealkit.Tokens{AccessToken: "t"},
+	_, _, err := c.Recipe(context.Background(),
 		mealkit.OrderedRecipe{SourceRecipeID: recipeIDA, URL: "https://evil.example.com/recipes/x"})
 	var parse *mealkit.ParseError
 	if !errors.As(err, &parse) {
@@ -305,33 +168,111 @@ func TestRecipeRefusesAURLOutsideHelloFreshsRecipePages(t *testing.T) {
 	}
 }
 
-func TestRefreshAsksForANewSignInRatherThanGuessingAContract(t *testing.T) {
+func TestNormalizeOrderKeepsOnlyWhatThisBuildWillFetch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Errorf("a request was made to %q; this build does not know HelloFresh's refresh request", r.URL.Path)
-		w.WriteHeader(http.StatusOK)
+		t.Errorf("NormalizeOrder made a request to %q; it must not", r.URL.Path)
 	}))
 	defer srv.Close()
-
 	c := newTestClient(t, srv)
-	for name, tokens := range map[string]mealkit.Tokens{
-		"with a refresh token": {AccessToken: "a", RefreshToken: "r"},
-		"without one":          {},
-	} {
-		if _, err := c.Refresh(context.Background(), tokens); !errors.Is(err, mealkit.ErrAuthExpired) {
-			t.Errorf("Refresh() %s = %v, want ErrAuthExpired", name, err)
+	prefix := srv.URL + "/recipes/"
+
+	t.Run("a good entry survives whole", func(t *testing.T) {
+		got, ok := c.NormalizeOrder(mealkit.OrderedRecipe{
+			SourceRecipeID: recipeIDA, Name: "Sheet Pan Chicken",
+			URL:     prefix + "sheet-pan-chicken-" + recipeIDA,
+			Weeks:   []string{"2026-W38", "2026-W33", "2026-W38", "not-a-week"},
+			IsAddon: true,
+		})
+		if !ok {
+			t.Fatal("a good entry was refused")
 		}
-	}
+		if got.URL != prefix+"sheet-pan-chicken-"+recipeIDA || !got.IsAddon {
+			t.Errorf("entry = %+v", got)
+		}
+		// Weeks are deduplicated, sorted, and anything that is not an ISO
+		// week is dropped rather than repaired.
+		if len(got.Weeks) != 2 || got.Weeks[0] != "2026-W33" || got.Weeks[1] != "2026-W38" {
+			t.Errorf("weeks = %v", got.Weeks)
+		}
+	})
+
+	t.Run("a URL pointing elsewhere is rebuilt, never followed", func(t *testing.T) {
+		got, ok := c.NormalizeOrder(mealkit.OrderedRecipe{
+			SourceRecipeID: recipeIDB, Name: "Garlic Bread",
+			URL: "https://evil.example.com/recipes/garlic-bread",
+		})
+		if !ok {
+			t.Fatal("the entry was refused entirely; only its URL was wrong")
+		}
+		if !strings.HasPrefix(got.URL, prefix) || strings.Contains(got.URL, "evil.example.com") {
+			t.Errorf("URL = %q", got.URL)
+		}
+		if got.URL != prefix+"garlic-bread-"+recipeIDB {
+			t.Errorf("URL = %q, want one built from the id and name we validated", got.URL)
+		}
+	})
+
+	t.Run("anything that is not a recipe id is refused", func(t *testing.T) {
+		for name, id := range map[string]string{
+			"empty":       "",
+			"not hex":     "zzzzzzzzzzzzzzzzzzzzzzzz",
+			"too short":   "6512aa11bb22",
+			"a path":      "../../etc/passwd",
+			"upper case":  strings.ToUpper(recipeIDA),
+			"with spaces": recipeIDA[:23] + " 5",
+		} {
+			if _, ok := c.NormalizeOrder(mealkit.OrderedRecipe{SourceRecipeID: id, Name: "x"}); ok {
+				t.Errorf("%s (%q) was accepted", name, id)
+			}
+		}
+	})
+
+	t.Run("a name long enough to be an attack is trimmed to a label", func(t *testing.T) {
+		got, ok := c.NormalizeOrder(mealkit.OrderedRecipe{
+			SourceRecipeID: recipeIDA, Name: strings.Repeat("a", maxOrderNameBytes*3),
+		})
+		if !ok {
+			t.Fatal("the entry was refused")
+		}
+		if len(got.Name) > maxOrderNameBytes {
+			t.Errorf("name is %d bytes", len(got.Name))
+		}
+	})
+
+	t.Run("the weeks on one recipe are bounded", func(t *testing.T) {
+		weeks := make([]string, mealkit.MaxOrderWeeks*2)
+		for i := range weeks {
+			weeks[i] = "2026-W" + string(rune('0'+i%10)) + string(rune('0'+(i/10)%10))
+		}
+		got, ok := c.NormalizeOrder(mealkit.OrderedRecipe{SourceRecipeID: recipeIDA, Weeks: weeks})
+		if !ok {
+			t.Fatal("the entry was refused")
+		}
+		if len(got.Weeks) > mealkit.MaxOrderWeeks {
+			t.Errorf("weeks = %d, want at most %d", len(got.Weeks), mealkit.MaxOrderWeeks)
+		}
+	})
 }
 
-// There is no SignIn: the member signs in on HelloFresh's own page and the app
-// sends us the session that login produced. This build must not grow a
-// password path back.
-func TestTheSourceHasNoPasswordPath(t *testing.T) {
+// The client holds no credential and calls no account endpoint. This test
+// fails if a sign-in, a refresh, or an order-history reader is ever added back:
+// all of that now happens in the member's own browser session, in the app.
+func TestTheSourceHasNoAccountAccessAtAll(t *testing.T) {
 	var source any = New(Options{})
 	if _, ok := source.(interface {
-		SignIn(context.Context, string, string) (mealkit.Tokens, error)
+		SignIn(context.Context, string, string) (any, error)
 	}); ok {
-		t.Error("the HelloFresh client still has a password sign-in")
+		t.Error("the HelloFresh client has a password sign-in again")
+	}
+	if _, ok := source.(interface {
+		Refresh(context.Context, any) (any, error)
+	}); ok {
+		t.Error("the HelloFresh client has a token refresh again")
+	}
+	if _, ok := source.(interface {
+		OrderHistory(context.Context, any) ([]mealkit.OrderedRecipe, error)
+	}); ok {
+		t.Error("the HelloFresh client reads the account's order history again")
 	}
 }
 
@@ -350,39 +291,5 @@ func TestRedactExcerptKeepsShapeAndDropsAnythingTokenish(t *testing.T) {
 	long := redactExcerpt([]byte(strings.Repeat("a", maxExcerptBytes*2)))
 	if len([]rune(long)) > maxExcerptBytes+1 {
 		t.Errorf("the excerpt is %d runes; it must be bounded", len([]rune(long)))
-	}
-}
-
-func TestISOWeeksRoundTripAndRejectDatesThatDoNotExist(t *testing.T) {
-	for name, tc := range map[string]struct {
-		week string
-		ok   bool
-	}{
-		"a plain week":       {"2026-W38", true},
-		"the first week":     {"2026-W01", true},
-		"a 53-week year":     {"2020-W53", true},
-		"no 53rd week":       {"2025-W53", false},
-		"not a week at all":  {"2026-W99", false},
-		"nothing":            {"", false},
-		"a date, not a week": {"2026-08-10", false},
-	} {
-		monday, ok := parseISOWeek(tc.week)
-		if ok != tc.ok {
-			t.Errorf("%s: parseISOWeek(%q) ok = %v, want %v", name, tc.week, ok, tc.ok)
-			continue
-		}
-		if !ok {
-			continue
-		}
-		if monday.Weekday() != time.Monday {
-			t.Errorf("%s: %v is not a Monday", name, monday)
-		}
-		if got := isoWeekString(monday); got != tc.week {
-			t.Errorf("%s: round trip = %q, want %q", name, got, tc.week)
-		}
-	}
-	// The walk starts from the clock, in the form the endpoint wants.
-	if got := isoWeekString(time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)); got != "2026-W39" {
-		t.Errorf("isoWeekString(2026-09-21) = %q, want 2026-W39", got)
 	}
 }

@@ -56,7 +56,6 @@ func newAccountService(db *mongo.Database, householdService *households.Service,
 			pantryStore,
 			notificationStore,
 			push.NewMongoStore(db),
-			mealKitStore, // the member's encrypted meal-kit tokens go with them
 
 			auth.NewMongoSessionStore(db),
 			users.NewMongoStore(db), // last: deletes the user record

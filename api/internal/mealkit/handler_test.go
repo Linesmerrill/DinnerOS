@@ -1,7 +1,6 @@
 package mealkit
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -24,11 +23,9 @@ func newHandlerFixture(t *testing.T, enabled bool) *handlerFixture {
 		store:  &memoryStore{},
 		source: &fakeSource{},
 	}
-	opts := ServiceOptions{Store: f.store, Sources: map[string]Source{SourceHelloFresh: f.source}}
-	if enabled {
-		opts.Cipher = testCipher(t)
-	}
-	f.service = NewService(opts)
+	f.service = NewService(ServiceOptions{
+		Store: f.store, Enabled: enabled, Sources: map[string]Source{SourceHelloFresh: f.source},
+	})
 	r := chi.NewRouter()
 	r.Route("/api/v1", NewHandler(HandlerOptions{
 		Service: f.service, Authorizer: testAuthorizer, Tokens: fakeTokens{},
@@ -38,13 +35,7 @@ func newHandlerFixture(t *testing.T, enabled bool) *handlerFixture {
 }
 
 func (f *handlerFixture) do(method, path, body, userID string) *httptest.ResponseRecorder {
-	var reader *strings.Reader
-	if body == "" {
-		reader = strings.NewReader("")
-	} else {
-		reader = strings.NewReader(body)
-	}
-	req := httptest.NewRequest(method, path, reader)
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	if userID != "" {
 		req.Header.Set("Authorization", "Bearer token-"+userID)
 	}
@@ -53,8 +44,15 @@ func (f *handlerFixture) do(method, path, body, userID string) *httptest.Respons
 	return rec
 }
 
-const linkPath = "/api/v1/households/" + hhAda + "/meal-kit/hellofresh/link"
 const statusPath = "/api/v1/households/" + hhAda + "/meal-kit/hellofresh"
+const importsPath = statusPath + "/imports"
+
+// harvest is a body shaped like the one the app sends after reading the
+// member's order history in their own browser session.
+const harvest = `{"recipes":[
+	{"sourceRecipeId":"recipe-1","name":"Sheet Pan Chicken","url":"https://example.test/recipes/recipe-1","weeks":["2026-W38"]},
+	{"sourceRecipeId":"recipe-2","name":"Garlic Bread","isAddon":true}
+]}`
 
 func TestMealKitRoutesRequireTheImportPermission(t *testing.T) {
 	f := newHandlerFixture(t, true)
@@ -71,21 +69,19 @@ func TestMealKitRoutesRequireTheImportPermission(t *testing.T) {
 	}
 }
 
-func TestLinkStartsAnImportAndStatusReportsIt(t *testing.T) {
+func TestStartingAnImportQueuesTheHarvestedHistoryAndStatusReportsIt(t *testing.T) {
 	f := newHandlerFixture(t, true)
 
-	rec := f.do(http.MethodPut, linkPath, `{"accessToken":"session-value","refreshToken":"refresh-value"}`, userAda)
-	var linked StatusResponse
-	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &linked) != nil {
-		t.Fatalf("link = %d %s", rec.Code, rec.Body)
+	rec := f.do(http.MethodPost, importsPath, harvest, userAda)
+	var job JobResponse
+	if rec.Code != http.StatusAccepted || json.Unmarshal(rec.Body.Bytes(), &job) != nil {
+		t.Fatalf("start = %d %s", rec.Code, rec.Body)
 	}
-	if linked.Link == nil || linked.Link.Status != string(LinkActive) || linked.LatestJob == nil {
-		t.Fatalf("link response = %+v", linked)
+	if job.Status != string(JobQueued) || job.RecipesFound != 2 || job.Phase != string(PhaseRecipes) {
+		t.Fatalf("job = %+v", job)
 	}
-	// Nothing about the credential comes back.
-	if body := rec.Body.String(); strings.Contains(body, "hunter2") || strings.Contains(body, "cook@example.com") ||
-		strings.Contains(body, "access") || strings.Contains(body, "refresh") {
-		t.Errorf("the response echoes a credential: %s", body)
+	if job.Failures == nil {
+		t.Error("failures should be an empty array, not null")
 	}
 
 	rec = f.do(http.MethodGet, statusPath, "", userAda)
@@ -93,62 +89,76 @@ func TestLinkStartsAnImportAndStatusReportsIt(t *testing.T) {
 	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &status) != nil {
 		t.Fatalf("status = %d %s", rec.Code, rec.Body)
 	}
-	if !status.Enabled || status.Link == nil || status.LatestJob == nil || status.LatestJob.Status != string(JobQueued) {
+	if !status.Enabled || status.LatestJob == nil || status.LatestJob.ID != job.ID {
 		t.Fatalf("status = %+v", status)
 	}
-	if status.LatestJob.Failures == nil {
-		t.Error("failures should be an empty array, not null")
+
+	// Starting again returns the run that is already queued rather than a
+	// second one, so a member tapping twice never doubles the work.
+	rec = f.do(http.MethodPost, importsPath, harvest, userAda)
+	var again JobResponse
+	if rec.Code != http.StatusAccepted || json.Unmarshal(rec.Body.Bytes(), &again) != nil || again.ID != job.ID {
+		t.Fatalf("second start = %d %s", rec.Code, rec.Body)
+	}
+	if len(f.store.jobs) != 1 {
+		t.Errorf("jobs = %d, want the one", len(f.store.jobs))
 	}
 
-	// Starting again returns the run that is already queued.
-	rec = f.do(http.MethodPost, "/api/v1/households/"+hhAda+"/meal-kit/hellofresh/imports", "", userAda)
-	var job JobResponse
-	if rec.Code != http.StatusAccepted || json.Unmarshal(rec.Body.Bytes(), &job) != nil || job.ID != status.LatestJob.ID {
-		t.Fatalf("start = %d %s", rec.Code, rec.Body)
-	}
-
-	rec = f.do(http.MethodGet, "/api/v1/households/"+hhAda+"/meal-kit/hellofresh/imports", "", userAda)
+	rec = f.do(http.MethodGet, importsPath, "", userAda)
 	var list JobListResponse
 	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &list) != nil || len(list.Items) != 1 {
 		t.Fatalf("list = %d %s", rec.Code, rec.Body)
 	}
 }
 
-func TestUnlinkRemovesTheLinkAndIsRepeatable(t *testing.T) {
+// There is no link route and no credential field anywhere on this API. A body
+// carrying one is refused rather than quietly ignored, so an app that tries to
+// send a token finds out immediately.
+func TestTheApiHasNowhereToPutACredential(t *testing.T) {
 	f := newHandlerFixture(t, true)
-	if rec := f.do(http.MethodPut, linkPath, `{"accessToken":"session-value"}`, userAda); rec.Code != http.StatusOK {
-		t.Fatalf("link = %d %s", rec.Code, rec.Body)
-	}
-	for range 2 {
-		if rec := f.do(http.MethodDelete, linkPath, "", userAda); rec.Code != http.StatusNoContent {
-			t.Fatalf("unlink = %d %s", rec.Code, rec.Body)
+	linkPath := statusPath + "/link"
+	for _, method := range []string{http.MethodPut, http.MethodDelete} {
+		if rec := f.do(method, linkPath, `{"accessToken":"a"}`, userAda); rec.Code != http.StatusNotFound &&
+			rec.Code != http.StatusMethodNotAllowed {
+			t.Errorf("%s %s = %d %s; the link route must be gone", method, linkPath, rec.Code, rec.Body)
 		}
 	}
-	if _, err := f.store.GetLink(context.Background(), hhAda, SourceHelloFresh); err == nil {
-		t.Error("the link survived the unlink")
+	body := `{"recipes":[{"sourceRecipeId":"recipe-1"}],"accessToken":"a-token"}`
+	rec := f.do(http.MethodPost, importsPath, body, userAda)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("a body carrying a token = %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestStoppingImportsCancelsEveryRunAndIsRepeatable(t *testing.T) {
+	f := newHandlerFixture(t, true)
+	if rec := f.do(http.MethodPost, importsPath, harvest, userAda); rec.Code != http.StatusAccepted {
+		t.Fatalf("start = %d %s", rec.Code, rec.Body)
+	}
+	for range 2 {
+		if rec := f.do(http.MethodDelete, importsPath, "", userAda); rec.Code != http.StatusNoContent {
+			t.Fatalf("stop = %d %s", rec.Code, rec.Body)
+		}
 	}
 	if f.store.jobs[0].Status != JobCanceled {
-		t.Errorf("job after unlink = %q", f.store.jobs[0].Status)
+		t.Errorf("job after stopping = %q", f.store.jobs[0].Status)
 	}
 }
 
 func TestMealKitRoutesRefuseBadInputAndUnknownServices(t *testing.T) {
 	f := newHandlerFixture(t, true)
 	for name, body := range map[string]string{
-		"no token":      `{"accessToken":"   "}`,
-		"missing token": `{"refreshToken":"r"}`,
-		"unknown field": `{"accessToken":"a","password":"pw"}`,
+		"no recipes":     `{"recipes":[]}`,
+		"no body at all": `{}`,
+		"nothing usable": `{"recipes":[{"name":"no id at all"}]}`,
 	} {
-		if rec := f.do(http.MethodPut, linkPath, body, userAda); rec.Code != http.StatusBadRequest {
+		if rec := f.do(http.MethodPost, importsPath, body, userAda); rec.Code != http.StatusBadRequest {
 			t.Errorf("%s = %d %s", name, rec.Code, rec.Body)
 		}
 	}
 	unknown := "/api/v1/households/" + hhAda + "/meal-kit/blueapron"
 	if rec := f.do(http.MethodGet, unknown, "", userAda); rec.Code != http.StatusNotFound {
 		t.Errorf("unknown service = %d %s", rec.Code, rec.Body)
-	}
-	if rec := f.do(http.MethodPost, "/api/v1/households/"+hhAda+"/meal-kit/hellofresh/imports", "", userAda); rec.Code != http.StatusConflict {
-		t.Errorf("import without a link = %d %s", rec.Code, rec.Body)
 	}
 }
 
@@ -159,8 +169,8 @@ func TestMealKitRoutesSayTheFeatureIsOffWhenItIs(t *testing.T) {
 	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &status) != nil || status.Enabled {
 		t.Fatalf("status = %d %s", rec.Code, rec.Body)
 	}
-	rec = f.do(http.MethodPut, linkPath, `{"accessToken":"session-value"}`, userAda)
+	rec = f.do(http.MethodPost, importsPath, harvest, userAda)
 	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "import_disabled") {
-		t.Errorf("link with the feature off = %d %s", rec.Code, rec.Body)
+		t.Errorf("import with the feature off = %d %s", rec.Code, rec.Body)
 	}
 }

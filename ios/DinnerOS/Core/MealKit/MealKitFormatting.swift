@@ -34,12 +34,6 @@ nonisolated enum MealKitFormatting {
                 title: String(localized: "Importing your recipes"),
                 detail: progressDetail(job, service: service),
                 symbol: "arrow.trianglehead.2.clockwise", needsAttention: false)
-        case .needsSignIn:
-            return Summary(
-                title: String(localized: "Sign in to finish importing"),
-                detail: job.lastError?.message
-                    ?? String(localized: "Your \(service.displayName) sign-in expired. Sign in again to carry on."),
-                symbol: "person.badge.key", needsAttention: true)
         case .finished:
             return Summary(
                 title: finishedTitle(job), detail: finishedDetail(job, service: service),
@@ -54,7 +48,7 @@ nonisolated enum MealKitFormatting {
         case .canceled:
             return Summary(
                 title: String(localized: "Import cancelled"),
-                detail: String(localized: "This import stopped when the account was unlinked."),
+                detail: String(localized: "This import was stopped before it finished."),
                 symbol: "xmark.circle", needsAttention: false)
         }
     }
@@ -63,7 +57,7 @@ nonisolated enum MealKitFormatting {
     /// "Reading your order history" before it — no invented total, no fake bar.
     static func progressDetail(_ job: MealKitImportJob, service: MealKitService) -> String {
         guard job.recipesFound > 0 else {
-            return String(localized: "Reading your \(service.displayName) order history…")
+            return String(localized: "Getting your \(service.displayName) recipes ready…")
         }
         return String(localized: "\(job.recipesDone) of \(job.recipesFound) recipes")
     }
@@ -100,7 +94,8 @@ nonisolated enum MealKitFormatting {
         String(
             localized: """
                 You sign in on \(service.displayName)'s own page, so your password never reaches \
-                DinnerOS. Only the session it hands back is kept, encrypted, to read your order history.
+                DinnerOS. We read your past orders there and keep only the recipes — nothing about \
+                your account is saved.
                 """)
     }
 }
