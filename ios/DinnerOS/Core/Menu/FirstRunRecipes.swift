@@ -33,7 +33,7 @@ nonisolated enum FirstRunRecipes {
     enum Unavailable: Equatable, Sendable {
         /// This member's role doesn't carry `recipes.import`.
         case noPermission
-        /// This API has no meal-kit import, or no encryption key for one.
+        /// This API has meal-kit import switched off.
         case notOnThisServer
     }
 

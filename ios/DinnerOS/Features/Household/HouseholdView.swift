@@ -223,7 +223,7 @@ struct HouseholdView: View {
         } footer: {
             Text(
                 mealKit.isEnabled
-                    ? "Bring in the recipes you ordered. Only the sign-in session is stored, encrypted — never your password."
+                    ? "Bring in the recipes you ordered. Nothing about your meal-kit account is saved — not your password, not your sign-in."
                     : "Recipe import isn't switched on for this server."
             )
         }
