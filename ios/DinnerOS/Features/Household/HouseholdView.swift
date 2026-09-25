@@ -1,7 +1,10 @@
 import SwiftUI
 
-/// The Household tab: the selected household, its members and invitations, other
+/// The Household tab: the selected household's settings, its members and invitations, other
 /// households, and the signed-in account.
+///
+/// Settings are shown and changed in place and save themselves (`HouseholdSettingsSections`);
+/// there is no Edit mode.
 ///
 /// Actions the user's role doesn't allow are hidden. That's a convenience only: the API
 /// enforces every permission and answers `403`/`409` if a hidden rule applies.
@@ -29,7 +32,6 @@ struct HouseholdView: View {
     @State private var actionError: String?
 
     private enum Sheet: String, Identifiable {
-        case settings
         case invite
         case createHousehold
         case joinHousehold
@@ -54,7 +56,9 @@ struct HouseholdView: View {
                         FormErrorLabel(message: refreshError)
                     }
                 }
-                householdSection(detail)
+                if let settings = households.settings {
+                    HouseholdSettingsSections(settings: settings, role: detail.role)
+                }
                 if households.households.count > 1 {
                     switcherSection(detail)
                 }
@@ -111,15 +115,8 @@ struct HouseholdView: View {
                 Text("Deletes your account and any household where you're the only member.")
             }
         }
+        .householdSettingsAutosave(households.settings)
         .navigationTitle(households.current?.household.name ?? String(localized: "Household"))
-        .toolbar {
-            if households.access?.can(.householdUpdate) == true {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Edit") { sheet = .settings }
-                        .accessibilityHint("Rename the household or change its settings.")
-                }
-            }
-        }
         .disabled(isWorking)
         .overlay {
             if isWorking {
@@ -157,15 +154,6 @@ struct HouseholdView: View {
     }
 
     // MARK: - Sections
-
-    private func householdSection(_ detail: HouseholdDetail) -> some View {
-        Section("Household") {
-            LabeledContent("Name", value: detail.household.name)
-            LabeledContent("Time Zone", value: TimeZonePicker.summary(for: detail.household.timeZone))
-            LabeledContent("Default Servings", value: detail.household.defaultServings.formatted())
-            LabeledContent("Your Role", value: detail.role.displayName)
-        }
-    }
 
     private func switcherSection(_ detail: HouseholdDetail) -> some View {
         Section("Your Households") {
@@ -397,12 +385,6 @@ struct HouseholdView: View {
     @ViewBuilder
     private func sheetContent(_ sheet: Sheet) -> some View {
         switch sheet {
-        case .settings:
-            if let detail = households.current {
-                NavigationStack {
-                    HouseholdSettingsForm(household: detail.household)
-                }
-            }
         case .invite:
             InviteMemberSheet(
                 roles: households.access?.invitableRoles ?? [],

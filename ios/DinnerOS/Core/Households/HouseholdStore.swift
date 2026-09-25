@@ -42,6 +42,9 @@ final class HouseholdStore {
     /// Set when a reload failed while content stayed on screen.
     private(set) var refreshError: String?
     private(set) var inviteStatus: InviteStatus?
+    /// The current household's settings as the Household tab edits them, autosaved.
+    /// Rebuilt when another household becomes current; fed every reload of this one.
+    private(set) var settings: HouseholdSettingsAutosave?
 
     var access: HouseholdAccess? { current?.access }
 
@@ -54,6 +57,8 @@ final class HouseholdStore {
     @ObservationIgnored private let selection: any HouseholdSelectionStorage
     @ObservationIgnored private let inviteURLScheme: String
     @ObservationIgnored private let inviteLinkHost: String
+    @ObservationIgnored private let now: () -> Date
+    @ObservationIgnored private let sleep: (Duration) async throws -> Void
     /// Kept in memory only: a token is a secret and must not outlive the process.
     @ObservationIgnored private var pendingInviteToken: String?
     /// Incremented by every load and reset so a slow response can't overwrite newer state.
@@ -71,9 +76,13 @@ final class HouseholdStore {
         api: HouseholdsAPI?,
         selection: any HouseholdSelectionStorage,
         inviteURLScheme: String = InviteLink.defaultScheme,
-        inviteLinkHost: String = InviteLink.defaultWebHost
+        inviteLinkHost: String = InviteLink.defaultWebHost,
+        now: @escaping () -> Date = Date.init,
+        sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.session = session
+        self.now = now
+        self.sleep = sleep
         self.api = api
         self.selection = selection
         self.inviteURLScheme = inviteURLScheme
@@ -93,6 +102,7 @@ final class HouseholdStore {
         store.current = current
         store.households = households
         store.invitations = invitations
+        if let current { store.syncSettings(with: current) }
         return store
     }
 
@@ -119,6 +129,7 @@ final class HouseholdStore {
             guard let chosen = items.first(where: { $0.id == preferred }) ?? items.first else {
                 selection.setSelectedHouseholdID(nil, for: userID)
                 current = nil
+                settings = nil
                 invitations = []
                 refreshError = nil
                 phase = .needsHousehold
@@ -138,6 +149,7 @@ final class HouseholdStore {
             }
             guard started == generation else { return }
             current = detail
+            syncSettings(with: detail)
             invitations = pending
             refreshError = nil
             phase = .ready
@@ -160,6 +172,7 @@ final class HouseholdStore {
     /// Switches to another of the user's households.
     func selectHousehold(id: String) async {
         guard let userID = session.currentUser?.id, id != current?.household.id else { return }
+        settings?.flush()
         selection.setSelectedHouseholdID(id, for: userID)
         await load()
     }
@@ -172,6 +185,7 @@ final class HouseholdStore {
         phase = .idle
         households = []
         current = nil
+        settings = nil
         invitations = []
         refreshError = nil
         inviteGeneration += 1
@@ -330,10 +344,31 @@ final class HouseholdStore {
 
     // MARK: - Managing the current household
 
-    func updateHousehold(_ changes: HouseholdChanges) async throws {
-        guard !changes.isEmpty, let householdID = current?.household.id else { return }
+    /// Saves settings for `householdID` and returns the household the server answered with.
+    /// The reload that follows is what the rest of the app reacts to — a new week start
+    /// re-activates the week stores (`weekScope`), a new meal kit reloads the Shop tab's cost —
+    /// so it runs once per save that went out, never per keystroke.
+    func saveSettings(_ changes: HouseholdChanges, householdID: String) async throws -> Household {
         try await mutate { api, token in
-            _ = try await api.updateHousehold(id: householdID, changes: changes, accessToken: token)
+            try await api.updateHousehold(id: householdID, changes: changes, accessToken: token)
+        }
+    }
+
+    /// Keeps `settings` on the current household: the same one is fed the reload, so a pending
+    /// edit survives it; another household gets its own. A save still waiting for the previous
+    /// household goes out to that household.
+    private func syncSettings(with detail: HouseholdDetail) {
+        let canEdit = detail.access.can(.householdUpdate)
+        if let settings, settings.householdID == detail.household.id {
+            settings.serverDidChange(detail.household, canEdit: canEdit)
+            return
+        }
+        let householdID = detail.household.id
+        settings = HouseholdSettingsAutosave(
+            household: detail.household, canEdit: canEdit, now: now, sleep: sleep
+        ) { [weak self] changes in
+            guard let self else { throw CancellationError() }
+            return try await self.saveSettings(changes, householdID: householdID)
         }
     }
 

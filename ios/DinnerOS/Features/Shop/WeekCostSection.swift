@@ -91,7 +91,6 @@ struct WeekCostSheetView: View {
     let sheet: WeekCostSheet
 
     @Environment(ShoppingStore.self) private var shopping
-    @Environment(HouseholdStore.self) private var households
 
     var body: some View {
         switch sheet {
@@ -99,10 +98,8 @@ struct WeekCostSheetView: View {
         case .prices: LinePricesSheet(lines: shopping.priceableLines)
         case .importScreenshots: OrderImportSheet()
         case .mealKit:
-            if let household = households.current?.household {
-                NavigationStack {
-                    HouseholdSettingsForm(household: household)
-                }
+            NavigationStack {
+                HouseholdSettingsForm()
             }
         }
     }
