@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 
 @testable import DinnerOS
@@ -110,5 +111,134 @@ struct JSONCodingTests {
     @Test func rejectsNonDates() {
         #expect(JSONCoding.parseDate("yesterday") == nil)
         #expect(JSONCoding.parseDate("") == nil)
+    }
+}
+
+/// Retrying the failures a sleeping Heroku dyno causes (`RetryPolicy`). The waits are recorded,
+/// not slept, so these run instantly.
+struct APIClientRetryTests {
+    /// The waits a retry asked for, recorded instead of slept.
+    private nonisolated final class Waits: Sendable {
+        private let storage = Mutex<[Duration]>([])
+        var all: [Duration] { storage.withLock { $0 } }
+        func record(_ delay: Duration) { storage.withLock { $0.append(delay) } }
+    }
+
+    private func makeClient(_ transport: StubTransport, slept: Waits = Waits()) throws -> APIClient {
+        let policy = RetryPolicy(delays: [.milliseconds(1500), .seconds(3), .seconds(6)]) { delay in
+            slept.record(delay)
+        }
+        return APIClient(
+            baseURL: try #require(URL(string: Fixtures.baseURLString)), transport: transport, retry: policy)
+    }
+
+    /// The failure that prompted this: the router answered 503 (H99) while the dyno woke, then
+    /// the same save succeeded.
+    @Test func aGatewayErrorWhileTheServerWakesIsRetriedUntilItAnswers() async throws {
+        let calls = Counter()
+        let transport = StubTransport { _ in
+            calls.increment()
+            return calls.value < 3 ? (503, Data("<html>Application error</html>".utf8)) : (204, Data())
+        }
+        let slept = Waits()
+        let client = try makeClient(transport, slept: slept)
+
+        try await client.sendIgnoringBody(try APIRequest.patch("/api/v1/households/h1", body: ["defaultServings": 3]))
+
+        #expect(calls.value == 3)
+        #expect(slept.all == [.milliseconds(1500), .seconds(3)])
+        let ids = Set(transport.requests.compactMap { $0.value(forHTTPHeaderField: "X-Request-ID") })
+        #expect(ids.count == 1, "every attempt carries the same request ID")
+    }
+
+    @Test func itGivesUpAfterTheLastRetryWithTheRealError() async throws {
+        let calls = Counter()
+        let transport = StubTransport { _ in
+            calls.increment()
+            throw URLError(.cannotConnectToHost)
+        }
+        let slept = Waits()
+        let client = try makeClient(transport, slept: slept)
+
+        await #expect(throws: APIError.transport(.cannotConnectToHost)) {
+            try await client.sendIgnoringBody(APIRequest.get("/api/v1/me"))
+        }
+        #expect(calls.value == 4)
+    }
+
+    /// A POST whose connection dropped may already have created something, so it isn't resent.
+    @Test func aPostIsNotResentAfterAGatewayErrorOrADroppedConnection() async throws {
+        for failure in [URLError(.networkConnectionLost), URLError(.timedOut)] {
+            let calls = Counter()
+            let transport = StubTransport { _ in
+                calls.increment()
+                throw failure
+            }
+            let client = try makeClient(transport)
+            await #expect(throws: APIError.self) {
+                try await client.sendIgnoringBody(try APIRequest.post("/api/v1/households", body: ["name": "x"]))
+            }
+            #expect(calls.value == 1)
+        }
+        let calls = Counter()
+        let transport = StubTransport { _ in
+            calls.increment()
+            return (503, Data())
+        }
+        let client = try makeClient(transport)
+        await #expect(throws: APIError.self) {
+            try await client.sendIgnoringBody(try APIRequest.post("/api/v1/households", body: ["name": "x"]))
+        }
+        #expect(calls.value == 1)
+    }
+
+    /// When no connection was made, nothing reached the API, so even a POST is safe to resend.
+    @Test func aPostIsResentWhenItNeverConnected() async throws {
+        let calls = Counter()
+        let transport = StubTransport { _ in
+            calls.increment()
+            if calls.value == 1 { throw URLError(.cannotConnectToHost) }
+            return (204, Data())
+        }
+        let client = try makeClient(transport)
+
+        try await client.sendIgnoringBody(try APIRequest.post("/api/v1/households", body: ["name": "x"]))
+
+        #expect(calls.value == 2)
+    }
+
+    /// Offline, a real server error, or a rejected request is reported at once.
+    @Test func failuresThatWaitingWontFixAreNotRetried() async throws {
+        let cases: [@Sendable (URLRequest) async throws -> (status: Int, body: Data)] = [
+            { _ in throw URLError(.notConnectedToInternet) },
+            { _ in (500, Data()) },
+            { _ in (400, Fixtures.errorJSON(code: "invalid_request", message: "bad", requestID: "r1")) },
+        ]
+        for handler in cases {
+            let calls = Counter()
+            let transport = StubTransport { request in
+                calls.increment()
+                return try await handler(request)
+            }
+            let client = try makeClient(transport)
+            await #expect(throws: APIError.self) {
+                try await client.sendIgnoringBody(APIRequest.get("/api/v1/me"))
+            }
+            #expect(calls.value == 1)
+        }
+    }
+
+    /// A stub transport doesn't retry unless the test asks, so no other test sleeps.
+    @Test func aSubstitutedTransportDoesNotRetryByDefault() async throws {
+        let calls = Counter()
+        let transport = StubTransport { _ in
+            calls.increment()
+            return (503, Data())
+        }
+        let client = APIClient(baseURL: try #require(URL(string: Fixtures.baseURLString)), transport: transport)
+        await #expect(throws: APIError.self) {
+            try await client.sendIgnoringBody(APIRequest.get("/api/v1/me"))
+        }
+        #expect(calls.value == 1)
     }
 }

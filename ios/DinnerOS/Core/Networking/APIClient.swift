@@ -73,10 +73,14 @@ nonisolated struct APIRequest: Sendable {
 nonisolated struct APIClient: Sendable {
     let baseURL: URL
     let transport: any HTTPTransport
+    let retry: RetryPolicy
 
-    init(baseURL: URL, transport: any HTTPTransport = URLSessionTransport()) {
+    /// `retry` defaults to `.standard` for the real network and `.none` for a substituted
+    /// transport, so a test stub answers once unless the test asks for retries.
+    init(baseURL: URL, transport: any HTTPTransport = URLSessionTransport(), retry: RetryPolicy? = nil) {
         self.baseURL = baseURL
         self.transport = transport
+        self.retry = retry ?? (transport is URLSessionTransport ? .standard : .none)
     }
 
     /// Sends `request` and decodes a JSON response body.
@@ -135,8 +139,24 @@ nonisolated struct APIClient: Sendable {
         string.addingPercentEncoding(withAllowedCharacters: queryAllowed) ?? ""
     }
 
+    /// Sends `request`, retrying the failures that mean the request never reached the API
+    /// (`RetryPolicy`). Every attempt reuses one request ID, so the server's logs tie them together.
     private func perform(_ request: APIRequest) async throws -> Data {
         let requestID = UUID().uuidString
+        var delays = retry.delays[...]
+        while true {
+            do {
+                return try await performOnce(request, requestID: requestID)
+            } catch let error as APIError {
+                guard let delay = delays.popFirst(), RetryPolicy.isRetryable(error, method: request.method) else {
+                    throw error
+                }
+                try await retry.sleep(delay)
+            }
+        }
+    }
+
+    private func performOnce(_ request: APIRequest, requestID: String) async throws -> Data {
         let urlRequest = makeURLRequest(for: request, requestID: requestID)
 
         let data: Data
@@ -161,5 +181,53 @@ nonisolated struct APIClient: Sendable {
                 fallbackRequestID: response.value(forHTTPHeaderField: "X-Request-ID") ?? requestID)
         }
         return data
+    }
+}
+
+/// Which failed requests are worth sending again, and how long to wait between tries.
+///
+/// The API runs on a Heroku Eco dyno that sleeps after 30 idle minutes. The first requests
+/// after that can fail while it wakes: the router answers `503` (H99, H10) or the connection
+/// can't be made. Those requests never reached the API, so sending them again is safe and is
+/// what a person would do — and a sleeping server shouldn't show up as a save error.
+///
+/// Only failures that *didn't reach the API* are retried. A `POST` is retried only when no
+/// connection was made at all, since any later failure might have created something; the other
+/// methods are idempotent, so a gateway error or a dropped connection is retried too. Being
+/// offline is not retried: waiting wouldn't change it, and the member should hear at once.
+nonisolated struct RetryPolicy: Sendable {
+    /// The wait before each retry. Three tries after the first cover a dyno waking (about
+    /// 5–10 seconds, measured from the router's connect times) without hanging much longer.
+    let delays: [Duration]
+    let sleep: @Sendable (Duration) async throws -> Void
+
+    init(
+        delays: [Duration],
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) {
+        self.delays = delays
+        self.sleep = sleep
+    }
+
+    static let standard = RetryPolicy(delays: [.milliseconds(1500), .seconds(3), .seconds(6)])
+    static let none = RetryPolicy(delays: [])
+
+    /// Connection failures where nothing was sent.
+    private static let neverConnected: Set<URLError.Code> = [.cannotConnectToHost, .cannotFindHost, .dnsLookupFailed]
+    /// Failures after a connection, where an idempotent request can safely go again.
+    private static let droppedConnection: Set<URLError.Code> = [.networkConnectionLost, .timedOut]
+    /// The router's own "the app isn't answering" statuses.
+    private static let gatewayStatuses: Set<Int> = [502, 503, 504]
+
+    static func isRetryable(_ error: APIError, method: APIRequest.Method) -> Bool {
+        let idempotent = method != .post
+        switch error {
+        case .transport(let code):
+            return neverConnected.contains(code) || (idempotent && droppedConnection.contains(code))
+        case .server(let status, _, _, _):
+            return idempotent && gatewayStatuses.contains(status)
+        case .invalidResponse, .decoding:
+            return false
+        }
     }
 }
