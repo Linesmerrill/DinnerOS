@@ -9,9 +9,23 @@ struct PantryUsageFormattingTests {
     @Test func remainingTextForRowsVoiceOverAndDetail() {
         let estimate = PantryFixtures.estimate()
 
-        #expect(PantryUsageFormat.remainingShort(estimate, locale: locale) == "~31% left")
-        #expect(PantryUsageFormat.remainingSpoken(estimate, locale: locale) == "About 31% left")
+        #expect(PantryUsageFormat.remainingShort(estimate, locale: locale) == "~31% left (5 tbsp)")
+        #expect(PantryUsageFormat.remainingSpoken(estimate, locale: locale) == "About 31% left, about 5 tbsp")
         #expect(PantryUsageFormat.remainingAmount(estimate, locale: locale) == "5 tbsp of 16 tbsp")
+    }
+
+    /// A package of cream cheese is tracked in ounces, so the row says how much is in it
+    /// rather than "1 package, ~100% left". An estimate is rounded to the half unit it can
+    /// honestly claim.
+    @Test func theRowSaysHowMuchIsLeft() {
+        let full = PantryFixtures.estimate(percentRemaining: 100, unit: "oz", start: 8, remaining: 8)
+        #expect(PantryUsageFormat.remainingShort(full, locale: locale) == "~100% left (8 oz)")
+
+        let used = PantryFixtures.estimate(percentRemaining: 67, unit: "oz", start: 8, remaining: 5.33)
+        #expect(PantryUsageFormat.remainingShort(used, locale: locale) == "~67% left (5.5 oz)")
+
+        let empty = PantryFixtures.estimate(percentRemaining: 0, unit: "oz", start: 8, remaining: 0)
+        #expect(PantryUsageFormat.remainingShort(empty, locale: locale) == "~0% left")
     }
 
     @Test func levelFollowsTheThreshold() {

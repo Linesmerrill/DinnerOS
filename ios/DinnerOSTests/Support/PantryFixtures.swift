@@ -108,12 +108,14 @@ nonisolated enum PantryFixtures {
     static func estimate(
         percentRemaining: Int = 31, belowThreshold: Bool = false, recipeCount: Int = 2,
         dailyRate: PantryDailyRate? = PantryDailyRate(quantity: "1", quantityValue: 1, basedOnSegments: 3),
-        skippedRecipes: Int = 0, lowThresholdPercent: Int = 80, thresholdSource: PantryThresholdSource = .household
+        skippedRecipes: Int = 0, lowThresholdPercent: Int = 80, thresholdSource: PantryThresholdSource = .household,
+        unit: String = "tbsp", start: Double = 16, remaining: Double = 5
     ) -> PantryEstimate {
         PantryEstimate(
             cycleID: "cycle-1", cycleSource: "grocery_list", cycleStartedAt: Date(timeIntervalSince1970: 1_757_000_000),
-            adjustedAt: nil, unit: "tbsp", startAmount: PantryAmount(quantity: "16", quantityValue: 16),
-            remaining: PantryAmount(quantity: "5", quantityValue: 5), percentRemaining: percentRemaining,
+            adjustedAt: nil, unit: unit, startAmount: PantryAmount(quantity: String(start), quantityValue: start),
+            remaining: PantryAmount(quantity: String(remaining), quantityValue: remaining),
+            percentRemaining: percentRemaining,
             percentUsed: 100 - percentRemaining,
             recipeUse: PantryRecipeUse(
                 count: recipeCount, quantity: String(recipeCount * 3), quantityValue: Double(recipeCount * 3)),

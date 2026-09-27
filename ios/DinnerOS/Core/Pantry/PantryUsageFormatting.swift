@@ -12,14 +12,36 @@ nonisolated enum PantryEstimateLevel: Equatable, Sendable {
 /// Display text for usage estimates, purchases, and thresholds. The API's `summary` is
 /// English; these build the short, localizable pieces from the numbers.
 nonisolated enum PantryUsageFormat {
-    /// "~31% left", for a pantry row.
+    /// "~31% left (2.5 oz)", for a pantry row: the percentage alone doesn't say how much
+    /// that is, and a package count ("1 package") doesn't either.
     static func remainingShort(_ estimate: PantryEstimate, locale: Locale = .autoupdatingCurrent) -> String {
-        String(localized: "~\(percent(estimate.percentRemaining, locale: locale)) left")
+        let percentText = percent(estimate.percentRemaining, locale: locale)
+        guard let left = remainingGlance(estimate, locale: locale) else {
+            return String(localized: "~\(percentText) left")
+        }
+        return String(localized: "~\(percentText) left (\(left))")
     }
 
-    /// "About 31% left", for VoiceOver.
+    /// "About 31% left, about 2.5 oz", for VoiceOver.
     static func remainingSpoken(_ estimate: PantryEstimate, locale: Locale = .autoupdatingCurrent) -> String {
-        String(localized: "About \(percent(estimate.percentRemaining, locale: locale)) left")
+        let percentText = percent(estimate.percentRemaining, locale: locale)
+        guard let left = remainingGlance(estimate, locale: locale) else {
+            return String(localized: "About \(percentText) left")
+        }
+        return String(localized: "About \(percentText) left, about \(left)")
+    }
+
+    /// The remaining amount rounded for a glance: "8 oz", "2.5 oz", "1 ½ cups". An estimate
+    /// isn't exact, so "5.33 oz" would claim precision it doesn't have. `nil` when there is
+    /// no amount to show, or it would only repeat a bare count.
+    static func remainingGlance(_ estimate: PantryEstimate, locale: Locale = .autoupdatingCurrent) -> String? {
+        let value = estimate.remaining.quantityValue
+        guard value > 0, !estimate.unit.isEmpty else { return nil }
+        let rounded = (value * 2).rounded() / 2
+        let shown = rounded > 0 ? rounded : value
+        let number = shown.formatted(.number.precision(.fractionLength(0...1)).locale(locale))
+        let label = RecipeFormat.unitLabel(estimate.unit, sourceUnit: estimate.unit, plural: shown != 1)
+        return label.isEmpty ? nil : "\(number) \(label)"
     }
 
     /// "5 tbsp of 16 tbsp".
