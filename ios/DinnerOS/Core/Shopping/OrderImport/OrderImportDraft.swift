@@ -37,10 +37,15 @@ nonisolated enum OrderImportMerge {
             let quantity = min(max(item.quantity, 1), ShoppingLimits.packages.upperBound)
             guard keys.insert("\(normalized)|\(cents)|\(quantity)").inserted else { continue }
             let parsedItem = parsedByName[normalized]
+            // Where the item was read: the parser's item of the same name, or else the one
+            // charged item at that price.
+            let samePrice = parsed.items.filter { $0.wasCharged && $0.priceCents == cents }
+            let source = parsedItem?.source ?? (samePrice.count == 1 ? samePrice[0].source : nil)
             accepted.append(
                 ParsedOrderItem(
                     id: accepted.count, name: name, priceCents: cents, quantity: quantity,
-                    isWeightAdjusted: parsedItem?.isWeightAdjusted ?? false, status: parsedItem?.status ?? .ordered))
+                    isWeightAdjusted: parsedItem?.isWeightAdjusted ?? false, status: parsedItem?.status ?? .ordered,
+                    source: source))
         }
         var result = parsed
         let chargedCount = parsed.items.count(where: \.wasCharged)
@@ -51,7 +56,8 @@ nonisolated enum OrderImportMerge {
                 + uncharged.enumerated().map { offset, item in
                     ParsedOrderItem(
                         id: accepted.count + offset, name: item.name, priceCents: item.priceCents,
-                        quantity: item.quantity, isWeightAdjusted: item.isWeightAdjusted, status: item.status)
+                        quantity: item.quantity, isWeightAdjusted: item.isWeightAdjusted, status: item.status,
+                        source: item.source)
                 }
         }
         if result.totalCents == nil, let modelTotal, let cents = MoneyText.cents(from: modelTotal),
