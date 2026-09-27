@@ -75,6 +75,10 @@ type Segment struct {
 	// SpecialtyName is the specialty ingredient this mention stands in for,
 	// set with SpecialtyID.
 	SpecialtyName string
+	// LeftOut is true when the household leaves this ingredient out of the
+	// recipe. The mention stays in the step, without an amount, so the step
+	// still reads as written and the client can strike it through.
+	LeftOut bool
 }
 
 // StepNoteKind says why a step carries a note.
@@ -85,6 +89,9 @@ const (
 	// NoteSubstitution: the household's choice changes what goes in, or how
 	// much, in a way a swapped word can't say on its own.
 	NoteSubstitution StepNoteKind = "substitution"
+	// NoteLeftOut: the step names an ingredient the household leaves out of
+	// this recipe.
+	NoteLeftOut StepNoteKind = "left_out"
 )
 
 // StepNote is a sentence shown under a step.
@@ -105,6 +112,39 @@ type InstructionStep struct {
 	ImageURL string
 	Segments []Segment
 	Notes    []StepNote
+	// LeftOut is true when every ingredient the step names is left out: the
+	// step is there to make something the household doesn't make, and can be
+	// skipped. A step that names nothing is never LeftOut.
+	LeftOut bool
+}
+
+// IngredientState is one of the recipe's ingredients as the household cooks
+// it, in the recipe's order, so the ingredient list can show what is left out
+// and what a component is made of without matching names on the client.
+type IngredientState struct {
+	// Index is the ingredient's position in the recipe's ingredient list.
+	Index int
+	// IngredientKey is the key a skip for this ingredient is made with: the
+	// catalog ID, or "name:" and the normalized name.
+	IngredientKey string
+	Name          string
+	// LeftOut is set when the household leaves it out of this recipe.
+	LeftOut *grocery.LeftOut
+	// Component is set when the ingredient is a specialty ingredient the
+	// household makes from store ingredients: a component of the meal.
+	Component *Component
+}
+
+// Component is a specialty ingredient (a sauce, crema, paste, or blend) as the
+// household makes it: which option, and from what.
+type Component struct {
+	SpecialtyID   string
+	SpecialtyName string
+	OptionName    string
+	Type          grocery.ChoiceType
+	// Parts are the store ingredients, with amounts for the servings being
+	// cooked when a store alternative's amount converts ("2 tsp Sour Cream").
+	Parts []string
 }
 
 // SpecialtyRef names a specialty ingredient a recipe uses.
@@ -155,6 +195,10 @@ type Instructions struct {
 	// the card wrote them.
 	Substitutions []Substitution
 	Unchosen      []SpecialtyRef
+	// LeftOutApplied is true when the household's left-out ingredients were
+	// consulted; Ingredients are the recipe's ingredients in order.
+	LeftOutApplied bool
+	Ingredients    []IngredientState
 }
 
 // GroceryLines returns the recipe's ingredient lines for servings in the form
@@ -220,6 +264,8 @@ type mention struct {
 	// note is the sentence a step gets the first time it mentions this
 	// ingredient, empty when the swap speaks for itself.
 	note string
+	// leftOut is set when the household leaves the ingredient out.
+	leftOut bool
 	// forms are the spellings to look for, longest first.
 	forms []string
 }
@@ -228,19 +274,46 @@ type mention struct {
 // choices in specs applied. specs may be nil, in which case the steps read as
 // the recipe wrote them; applied says whether they were looked up at all.
 func Annotate(r Recipe, servings int, specs grocery.Specialties, applied bool) Instructions {
+	return AnnotateWith(r, servings, specs, applied, nil, false)
+}
+
+// AnnotateWith is Annotate with what the household leaves out of the recipe
+// (leftOut, looked up when leftOutApplied). A left-out ingredient is still
+// named in the steps, marked and without an amount, with a note — never
+// deleted — so a step reads sensibly and the member knows the recipe calls for
+// it. A left-out specialty ingredient isn't substituted: nothing is made for
+// it.
+func AnnotateWith(r Recipe, servings int, specs grocery.Specialties, applied bool, leftOut grocery.LeftOutSet, leftOutApplied bool) Instructions {
 	out := Instructions{
 		RecipeID: r.ID, RecipeName: r.Name, Servings: servings,
 		ServingOptions: append([]int(nil), r.Servings...), SpecialtiesApplied: applied,
-		Steps: make([]InstructionStep, 0, len(r.Steps)),
+		Steps: make([]InstructionStep, 0, len(r.Steps)), LeftOutApplied: leftOutApplied,
+		Ingredients: make([]IngredientState, 0, len(r.Ingredients)),
 	}
 	mentions := make([]mention, 0, len(r.Ingredients))
 	seenSpecialty := map[string]bool{}
-	for _, ing := range r.Ingredients {
+	for index, ing := range r.Ingredients {
+		key := ingredientKey(ing)
+		state := IngredientState{Index: index, IngredientKey: key, Name: ing.Name}
 		m := mention{ingredientID: ing.IngredientID, name: ing.Name, display: ing.Name, spicy: ingredients.Spicy(ing.Name)}
 		if a, ok := amountAt(ing, servings); ok {
 			m.amount = &a
 		}
-		spec := specs[ingredientKey(ing)]
+		if lo, ok := leftOut.Lookup(key, "name:"+ingredients.NormalizeName(ing.Name)); ok {
+			m.leftOut = true
+			state.LeftOut = &lo
+		}
+		spec := specs[key]
+		if spec != nil {
+			state.Component = componentOf(spec, m.amount)
+		}
+		out.Ingredients = append(out.Ingredients, state)
+		if spec != nil && m.leftOut {
+			// Nothing is made or bought for a left-out specialty ingredient,
+			// so it reads by its own name and isn't listed as substituted.
+			m.specialtyID, m.specialtyName = spec.ID, spec.Name
+			spec = nil
+		}
 		if spec != nil {
 			m.specialtyID, m.specialtyName = spec.ID, spec.Name
 			ref := SpecialtyRef{ID: spec.ID, Key: spec.Key, Name: spec.Name}
@@ -260,7 +333,7 @@ func Annotate(r Recipe, servings int, specs grocery.Specialties, applied bool) I
 			}
 			seenSpecialty[spec.ID] = true
 		}
-		m.forms = nameForms(m.name, spec)
+		m.forms = nameForms(m.name, specs[key])
 		mentions = append(mentions, m)
 	}
 	for _, step := range r.Steps {
@@ -269,6 +342,22 @@ func Annotate(r Recipe, servings int, specs grocery.Specialties, applied bool) I
 	sort.SliceStable(out.Substitutions, func(i, j int) bool { return out.Substitutions[i].Name < out.Substitutions[j].Name })
 	sort.SliceStable(out.Unchosen, func(i, j int) bool { return out.Unchosen[i].Name < out.Unchosen[j].Name })
 	return out
+}
+
+// componentOf describes a specialty ingredient the household makes from store
+// ingredients, or nil when it buys it as is or hasn't chosen.
+func componentOf(spec *grocery.Specialty, amount *Measure) *Component {
+	choice := spec.Choice
+	if choice == nil || (choice.Type != grocery.ChoiceStoreAlternative && choice.Type != grocery.ChoiceHouseMadeBatch) {
+		return nil
+	}
+	c := &Component{SpecialtyID: spec.ID, SpecialtyName: spec.Name, OptionName: choice.OptionName, Type: choice.Type}
+	var ratio *big.Rat
+	if choice.Type == grocery.ChoiceStoreAlternative {
+		ratio = storeRatio(amount, spec, choice)
+	}
+	c.Parts = componentTexts(choice.Components, ratio)
+	return c
 }
 
 // applySubstitute rewrites m to read as the household's chosen option, and

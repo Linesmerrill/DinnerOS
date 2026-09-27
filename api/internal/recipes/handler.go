@@ -50,6 +50,9 @@ type HandlerOptions struct {
 	// choices to cooking instructions. Without it the steps read as the
 	// recipe was written and specialtiesApplied is false.
 	Specialties SpecialtySource
+	// LeftOut, when set, marks the ingredients the household leaves out of a
+	// recipe in its cooking instructions.
+	LeftOut LeftOutSource
 	// Fetcher reads a recipe page for manual entry by URL. The default is a
 	// WebFetcher with every guard on (manual_web.go); tests replace it.
 	Fetcher *WebFetcher

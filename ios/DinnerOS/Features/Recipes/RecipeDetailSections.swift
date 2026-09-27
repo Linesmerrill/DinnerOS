@@ -65,10 +65,20 @@ struct RecipeDescriptionSection: View {
 
 // MARK: - Ingredients
 
-/// Allergens, the serving size, and the ingredient list with round photos.
+/// Allergens, the serving size, and the ingredient list with round photos. An ingredient the
+/// household leaves out stays on the list, struck through, with a way to put it back; a
+/// component (a crema made from store ingredients) shows what it's made of.
 struct RecipeIngredientsSection: View {
     let recipe: Recipe
     @Binding var servings: Int?
+    /// The rendered steps, which carry each ingredient's left-out state. `nil` until they load.
+    var instructions: RecipeInstructions? = nil
+    /// Whether this member may leave ingredients out (`plan.edit`). Others see the state only.
+    var canEdit = false
+    /// Ingredients with a change in flight, by line ID.
+    var working: Set<String> = []
+    var leaveOut: (RecipeIngredientState, GrocerySkipScope) -> Void = { _, _ in }
+    var putBack: (RecipeIngredientState) -> Void = { _ in }
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -88,8 +98,12 @@ struct RecipeIngredientsSection: View {
             }
             servingPicker
             VStack(alignment: .leading, spacing: 14) {
-                ForEach(recipe.ingredientLines(servings: servings ?? options.first ?? 0)) { line in
-                    IngredientRow(line: line)
+                let lines = recipe.ingredientLines(servings: servings ?? options.first ?? 0)
+                ForEach(RecipeIngredientStates.make(lines: lines, instructions: instructions)) { state in
+                    IngredientRow(
+                        line: state.line, state: state, canEdit: canEdit && state.canLeaveOut,
+                        isWorking: working.contains(state.id),
+                        leaveOut: { leaveOut(state, $0) }, putBack: { putBack(state) })
                 }
             }
         }
@@ -125,11 +139,20 @@ struct RecipeIngredientsSection: View {
     }
 }
 
-/// One ingredient: a round photo, the name, the amount, and what it contains.
+/// One ingredient: a round photo, the name, the amount, and what it contains. Left out, it's
+/// struck through and greyed with a Put Back button; otherwise a member who may change the plan
+/// can leave it out of this dish or every dish.
 struct IngredientRow: View {
     let line: IngredientLine
+    var state: RecipeIngredientState? = nil
+    var canEdit = false
+    var isWorking = false
+    var leaveOut: (GrocerySkipScope) -> Void = { _ in }
+    var putBack: () -> Void = {}
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var isLeftOut: Bool { state?.isLeftOut == true }
 
     var body: some View {
         let layout =
@@ -137,15 +160,61 @@ struct IngredientRow: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
             : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
         layout {
+            details
+            if !dynamicTypeSize.isAccessibilitySize {
+                Spacer(minLength: 0)
+            }
+            actions
+        }
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        if isWorking {
+            ProgressView()
+        } else if canEdit, isLeftOut {
+            Button("Put Back", action: putBack)
+                .buttonStyle(.bordered)
+                .font(.subheadline)
+                .accessibilityLabel("Put \(line.name) Back")
+        } else if canEdit {
+            Menu {
+                if state?.isComponent == true {
+                    // A component is a taste preference about this dish, so that comes first.
+                    Section("Don't Make \(line.name)") {
+                        Button("Not for This Dish", systemImage: "fork.knife") { leaveOut(.recipe) }
+                        Button("Never Make It", systemImage: "nosign") { leaveOut(.always) }
+                    }
+                } else {
+                    Section("Leave Out \(line.name)") {
+                        Button("Just This Dish", systemImage: "fork.knife") { leaveOut(.recipe) }
+                        Button("Every Dish (Always)", systemImage: "nosign") { leaveOut(.always) }
+                    }
+                }
+            } label: {
+                Image(systemName: "minus.circle")
+                    .imageScale(.large)
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .accessibilityLabel(state?.isComponent == true ? "Don't Make \(line.name)" : "Leave Out \(line.name)")
+        }
+    }
+
+    private var details: some View {
+        HStack(alignment: .center, spacing: 12) {
             IngredientPhoto(url: line.imageURL)
+                .opacity(isLeftOut ? 0.4 : 1)
             VStack(alignment: .leading, spacing: 2) {
                 Text(line.name)
                     .font(.headline)
-                    .foregroundStyle(Color.primary)
+                    .strikethrough(isLeftOut)
+                    .foregroundStyle(isLeftOut ? Color.secondary : Color.primary)
                 HStack(spacing: 6) {
                     if let amount = line.amount {
                         Text(amount)
                             .font(.subheadline)
+                            .strikethrough(isLeftOut)
                             .foregroundStyle(Color.secondary)
                     }
                     if line.isPantryStaple {
@@ -158,13 +227,25 @@ struct IngredientRow: View {
                             .accessibilityLabel("pantry staple")
                     }
                 }
+                if let component = state?.component, !component.parts.isEmpty {
+                    // The component's own ingredients, clumped under its name.
+                    Text("Made with \(component.parts.formatted(.list(type: .and)))")
+                        .font(.caption)
+                        .strikethrough(isLeftOut)
+                        .foregroundStyle(Color.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let text = state?.leftOutText {
+                    Label(text, systemImage: "minus.circle")
+                        .font(.caption)
+                        .foregroundStyle(Color.secondary)
+                }
                 if !line.allergens.isEmpty {
                     Text("Contains: \(line.allergens.joined(separator: ", "))")
                         .font(.caption)
                         .foregroundStyle(Color.secondary)
                 }
             }
-            Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
     }

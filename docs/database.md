@@ -348,13 +348,26 @@ Implemented in `internal/skips` ([api.md](api.md#skipped-ingredients),
 
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `grocery_skips` | householdId, ingredientKey (catalog ingredient ID or `name:<normalized name>`), key (normalized name), name, scope (`week`/`always`), week (`YYYY-Www`, empty for `always`), createdBy, createdAt, updatedBy, updatedAt | **unique** `{householdId, ingredientKey}` |
+| `grocery_skips` | householdId, ingredientKey (catalog ingredient ID or `name:<normalized name>`), key (normalized name), name, scope (`week`/`always`/`recipe`), week (`YYYY-Www`, empty unless `week`), recipeId (null unless `recipe`), recipeName, createdBy, createdAt, updatedBy, updatedAt | **unique** `{householdId, ingredientKey, recipeId}` |
 
-- **One skip per ingredient.** The unique index is what makes "skip once"
-  become "skip forever" a replacement rather than a second document, so there
-  are never two skips to reconcile for one ingredient. The write is an upsert
-  on that key which `$setOnInsert`s `_id`, `createdBy`, and `createdAt`, so
-  changing a skip keeps who first made it.
+- **One skip per ingredient, and per recipe.** The unique index is what makes
+  "skip once" become "skip forever" a replacement rather than a second
+  document, so there are never two skips to reconcile for one ingredient. A
+  household-wide skip has `recipeId: null`; a recipe skip names its recipe, so
+  cilantro can be left out of the curry and the tacos with one skip each, and
+  skipped everywhere with a third. The write is an upsert on that key which
+  `$setOnInsert`s `_id`, `createdBy`, and `createdAt`, so changing a skip keeps
+  who first made it.
+- **The index grew.** The earlier `{householdId, ingredientKey}` unique index
+  (`householdId_ingredientKey_unique`) is listed in the collection's
+  `Obsolete` indexes and dropped at startup before the new one is created
+  (`mongodb.IndexSet.Obsolete`). Documents written before `recipeId` existed
+  have no such field, which the index and the upsert's `recipeId: null` filter
+  both treat as null: they stay the household-wide skip, with no backfill
+  (decision 542).
+- **A recipe skip outlives nothing it shouldn't.** It keeps `recipeName` from
+  when it was made, so the review screen still names the dish if the recipe is
+  deleted; it simply stops matching, and resuming it removes it.
 - The unique index serves the only query: every read is
   `{householdId}` for the whole list, capped at 500 per household, so nothing
   is paginated.

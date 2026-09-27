@@ -129,9 +129,9 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | PATCH | `/api/v1/households/{householdId}/plans/{week}/entries/{entryId}` `{day?, servings?, note?}` → plan | `plan.edit` | 6 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/plans/{week}/entries/{entryId}` → `204` | `plan.edit` | 6 | ✅ |
 | PUT | `/api/v1/households/{householdId}/plans/{week}/status` `{status}` → plan | `plan.edit` | 6 | ✅ |
-| GET | `/api/v1/households/{householdId}/plans/{week}/grocery` → `{week, status, pantryApplied, categories, skipped, skippedItems}` | `household.view` | 6 | ✅ |
+| GET | `/api/v1/households/{householdId}/plans/{week}/grocery` → `{week, status, pantryApplied, categories, skipped, skippedItems, meals}` | `household.view` | 6 | ✅ |
 | GET | `/api/v1/households/{householdId}/grocery-skips` → `{items}` | `household.view` | 6 | ✅ |
-| POST | `/api/v1/households/{householdId}/grocery-skips` `{ingredientKey, name?, scope, week?}` → `201` skip, or `200` when it replaced the ingredient's skip | `plan.edit` | 6 | ✅ |
+| POST | `/api/v1/households/{householdId}/grocery-skips` `{ingredientKey, name?, scope, week?, recipeId?}` → `201` skip, or `200` when it replaced the ingredient's skip | `plan.edit` | 6 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/grocery-skips/{skipId}` → `204` | `plan.edit` | 6 | ✅ |
 | GET | `/api/v1/households/{householdId}/recipes/{recipeId}/customizations` `?servings&entryId&week` → `{recipeId, servings, groups}` | `household.view` | 6 | ✅ |
 | PUT | `/api/v1/households/{householdId}/plans/{week}/entries/{entryId}/customization` `{selections}` → plan | `plan.edit` | 6 | ✅ |
@@ -379,6 +379,21 @@ Two things happen that the plain recipe doesn't do:
   the swap out. A house-made batch converts the packet into the jar's unit and
   says so. An ingredient nobody has chosen for is left alone and listed in
   `unchosenSpecialties`.
+- **Left-out ingredients stay in the step, struck through**
+  ([Skipped ingredients](#skipped-ingredients)). An ingredient the household
+  leaves out of this recipe (a `recipe` skip for it, or an `always` skip) is
+  still an `ingredient` segment, in the step's own words, with `leftOut: true`
+  and no amount, and the step gets a `left_out` note ("You leave out the
+  Cilantro."). A step whose every ingredient is left out has `leftOut: true`,
+  so a client can show it as one to skip. A left-out specialty ingredient isn't
+  substituted: nothing is made for it. `leftOutApplied` says whether the
+  household's skips were consulted; a failure to read them fails the request.
+- **`ingredients`** lists the recipe's ingredients in order with the
+  `ingredientKey` to skip, `leftOut` (`{skipId, scope}` — delete that skip to
+  put it back — or null), and `component` for a specialty ingredient the
+  household makes from store ingredients (`specialtyName`, `optionName`,
+  `type`, and `parts` with amounts for `servings`), so the ingredient list can
+  clump a component and cross out what's left out without matching names.
 
 Nothing is stored. The steps are rendered on each read from the recipe as
 imported plus the household's current choices, so changing a choice changes
@@ -917,10 +932,22 @@ the pantry. The change is recorded as a `meal.customized`
 - `skippedItems` lists the ingredients the household chose not to buy
   ([Skipped ingredients](#skipped-ingredients)). They are **not** in
   `categories`, so nothing asks anyone to buy them, but each one is a full
-  grocery item — amounts, `recipes`, `via` — plus `skipScope` (`week` or
-  `always`) and `skipText`. Items in `categories` never carry those two
-  fields. This is a different thing from `skipped`, which is about plan
-  *entries*, not ingredients.
+  grocery item — amounts, `recipes`, `via` — plus `skipScope` (`week`,
+  `always`, or `recipe`) and `skipText`. Items in `categories` never carry
+  those two fields. This is a different thing from `skipped`, which is about
+  plan *entries*, not ingredients. An item with `skipScope: recipe` holds only
+  the part the left-out meals needed ("Left out of Thai Coconut Curry
+  Chicken"); the same ingredient can also be in `categories` for the other
+  meals, with its amount reduced to theirs.
+- `meals` are the week's planned recipes in plan order — scheduled days in week
+  order, then unscheduled — each once, with `recipeId`, `recipeName`,
+  `imageUrl`, `isAddon`, and the first `day`.
+- `shares` on every item split it by meal, in `recipes` order: each meal's own
+  `amounts` and `quantityText`, `combined` when a house-made batch was made for
+  several meals at once (no amount split out), `extra` for a pairing added for
+  that meal, and `component` when the share is part of a
+  [component](#components) of the meal. The item is still one line and one
+  purchase: a client shows it under each meal and buys it once.
 
 #### Specialty ingredients on the list
 
@@ -1035,13 +1062,14 @@ fields, and the list has `batches`:
 ## Skipped ingredients
 
 Some ingredients a household will buy, throw away, and resent buying again. A
-**skip** leaves one off the grocery list on purpose, with two lifetimes: `week`
-("skip once", back next week with no action) and `always` ("skip forever",
-until someone resumes it).
+**skip** leaves one off the grocery list on purpose, with three scopes: `week`
+("skip once", back next week with no action), `always` ("skip forever",
+until someone resumes it), and `recipe` ("just this dish": left out of one
+recipe every time it is planned, while other recipes still get it).
 
-A skip is about an **ingredient for a household** — not a product, not one
-recipe, and not one line. It is a third state alongside the two that already
-exist, and the app should keep them apart:
+A skip is about an **ingredient for a household**, or for one of its recipes —
+never a product, and never one line. It is a third state alongside the two
+that already exist, and the app should keep them apart:
 
 | State | Means | Where |
 | --- | --- | --- |
@@ -1065,6 +1093,8 @@ two never disagree about what a meal needs.
       "name": "Cilantro",
       "scope": "always",
       "week": null,
+      "recipeId": null,
+      "recipeName": null,
       "text": "Never buying this",
       "createdBy": "66e5a1f2c3b4a5d6e7f80912",
       "createdAt": "2026-09-15T18:30:00Z",
@@ -1076,17 +1106,26 @@ two never disagree about what a meal needs.
 ```
 
 `POST /api/v1/households/{householdId}/grocery-skips` (`plan.edit`)
-`{ingredientKey, name?, scope, week?}`
+`{ingredientKey, name?, scope, week?, recipeId?}`
 
 - `ingredientKey` is the grocery line's key, as the list gave it: a catalog
-  ingredient ID, or `name:<normalized name>`.
+  ingredient ID, or `name:<normalized name>`. A recipe's
+  [instructions](#cooking-instructions) give each ingredient's key too. A
+  `name:` key is normalized, so `name:Fresh Cilantro` is `name:fresh cilantro`.
 - `name` is what to show on the review screen. It is required unless
   `ingredientKey` is a `name:` key, which already carries one.
-- `scope` is `week` or `always`. `week` requires `week` (`"2026-W38"`);
-  `always` requires it to be absent.
-- One ingredient has at most one skip per household, so posting again
-  **replaces** it and answers `200` instead of `201`. That is how "skip once"
-  becomes "skip forever" — no delete first, and no two skips to reconcile.
+- `scope` is `week`, `always`, or `recipe`. `week` requires `week`
+  (`"2026-W38"`); `recipe` requires `recipeId`, one of the household's
+  recipes, and the skip keeps its name as `recipeName`. Each is rejected for
+  the other scopes.
+- One ingredient has at most one household-wide skip, and one per recipe, so
+  posting again for the same `ingredientKey` (and `recipeId`) **replaces** it
+  and answers `200` instead of `201`. That is how "skip once" becomes "skip
+  forever" — no delete first, and no two skips to reconcile.
+- **Precedence.** A recipe skip and a household-wide skip can both exist for
+  one ingredient. The household-wide one wins while it lasts — `always`, then
+  `week`, then `recipe` — and the list holds the whole item back under it.
+  Resuming it leaves the recipe skip in force.
 - A household may skip at most 500 ingredients. Changing a skip it already has
   still works at the cap.
 
@@ -1105,9 +1144,26 @@ list actually ends up with. Skipping an ingredient that only appears because a
 store alternative calls for it drops that one component and leaves the rest of
 the alternative on the list, with `via` still saying where it came from.
 
+<a id="components"></a>
+**Components.** A specialty ingredient the household makes from store
+ingredients — the Smoky Red Pepper Crema that became sour cream, roasted red
+peppers, and smoked paprika — is a *component* of the meal. Skipping the
+specialty line itself (its `ingredientKey` from the recipe, or `name:` its
+name) leaves out **every** ingredient it became: for that recipe with
+`scope: recipe`, everywhere with `always`. Only the component's share goes:
+sour cream the meal or another meal needs on its own stays on the list. A
+house-made batch made for several meals stays while any of them still wants
+it. Components come from the curated specialty catalog, not from reading step
+text (decision 544).
+
+**Recipes and cooking.** A recipe's [instructions](#cooking-instructions) mark
+what is left out of it — its `recipe` skips and the household's `always`
+skips, never a `week` skip, which is about buying — and cook deductions skip
+the same ingredients ([pantry-usage.md](pantry-usage.md)).
+
 | Status | Code | When |
 | --- | --- | --- |
-| 400 | `validation_failed` | Missing `ingredientKey`, unknown `scope`, `week` missing or given for the wrong scope, no usable `name`, or past the 500 cap |
+| 400 | `validation_failed` | Missing `ingredientKey`, unknown `scope`, `week` or `recipeId` missing or given for the wrong scope, a `recipeId` that isn't the household's, no usable `name`, or past the 500 cap |
 | 400 | `invalid_request` | Body is empty, malformed, has unknown fields, or wrong types |
 | 403 | `forbidden` | Skipping or resuming without `plan.edit` |
 | 404 | `not_found` | Not a member of the household; no such skip |
@@ -1743,6 +1799,17 @@ computed count. `checkedOffKeys` and `excludeKeys` are left out.
 A match has the same shape without `id`, `status`, `createdBy`, `createdAt`,
 and `updatedAt`, and every `confirmation` is `null`.
 
+**Meal by meal.** A match also carries `meals` (the week's recipes in plan
+order, as on the [grocery list](#grocery-list)), and every line and excluded
+line carries `recipes` and `shares` — each meal's own amount, and the
+component it is for. A shared ingredient is still **one line with one package
+count**: the Shop tab shows it under every meal that uses it, with the product
+and the package stepper under the first of those meals and "bought with …" under
+the others, so nothing is bought twice. Leaving it out of one meal (a
+[recipe skip](#skipped-ingredients)) shrinks the line and recounts its
+packages, and adds a `skipped` excluded line for the left-out part. A stored
+handoff doesn't keep `meals`, `shares`, or `skipScope`.
+
 **Package counts** (`computedPackages`) are exact:
 
 | Line amount vs package size | Packages | `reason` |
@@ -1810,6 +1877,7 @@ created with even if the household changes the rule afterwards.
 | `no_product` | No saved product for the ingredient: "Choose a Walmart product" |
 | `not_on_list` | A `lines` key that isn't on the week's list (only `ingredientKey` is set) |
 | `ordered` | A confirmed line of this week's handoffs bought it fresh and didn't put it in the pantry (`pantry: not_tracked`), and `lines` didn't select it: "Ordered this week" |
+| `skipped` | The household left it out ([Skipped ingredients](#skipped-ingredients)); `skipScope` says how, and `text` says so: "Skipped this week", "Never buying this", "Left out of Chili". Never sent. With `skipScope: recipe` it is only the left-out meals' part and the same ingredient can also be a line. Already in the cart and now left out entirely, it is `not_on_list` in `cart.other`, to remove |
 
 **Cart links**: `https://www.walmart.com/sc/cart/addToCart?items=ID_QTY,ID&storeId=N`.
 A quantity of 1 has no suffix, lines that share a product are merged into one

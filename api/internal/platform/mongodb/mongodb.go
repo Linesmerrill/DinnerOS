@@ -79,12 +79,31 @@ func (c *Client) Close(ctx context.Context) error {
 type IndexSet struct {
 	Collection string
 	Indexes    []mongo.IndexModel
+	// Obsolete names indexes an earlier version declared and this one
+	// replaced, typically a unique index whose key grew. They are dropped
+	// before Indexes are created, so the old constraint can't reject writes
+	// the new one allows.
+	Obsolete []string
 }
 
-// EnsureIndexes creates any missing indexes. It is idempotent: existing
-// identical indexes are left untouched.
+// Server error codes for an index or collection that isn't there.
+const (
+	codeNamespaceNotFound = 26
+	codeIndexNotFound     = 27
+)
+
+// EnsureIndexes drops obsolete indexes and creates any missing ones. It is
+// idempotent: an obsolete index already gone and existing identical indexes
+// are left alone.
 func (c *Client) EnsureIndexes(ctx context.Context, sets ...IndexSet) error {
 	for _, set := range sets {
+		for _, name := range set.Obsolete {
+			err := c.db.Collection(set.Collection).Indexes().DropOne(ctx, name)
+			var cmdErr mongo.CommandError
+			if err != nil && !(errors.As(err, &cmdErr) && (cmdErr.Code == codeIndexNotFound || cmdErr.Code == codeNamespaceNotFound)) {
+				return fmt.Errorf("mongodb: drop obsolete index %s on %s: %w", name, set.Collection, err)
+			}
+		}
 		if len(set.Indexes) == 0 {
 			continue
 		}

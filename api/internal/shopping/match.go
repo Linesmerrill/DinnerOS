@@ -132,7 +132,7 @@ func keySet(keys []string) map[string]bool {
 func buildProposal(p providers.GroceryProvider, settings Settings, g planning.GroceryList, prefs []Preference, in MatchInput) (Proposal, error) {
 	out := Proposal{
 		HouseholdID: settings.HouseholdID, Week: g.Week.String(), Provider: p.Key(), AffiliateTracked: p.AffiliateTracked(),
-		Lines: []HandoffLine{}, Excluded: []Excluded{}, Links: []CartLink{},
+		Lines: []HandoffLine{}, Excluded: []Excluded{}, Links: []CartLink{}, Meals: g.Meals,
 	}
 	if settings.Provider == p.Key() {
 		out.StoreID = settings.StoreID
@@ -199,6 +199,14 @@ func buildProposal(p providers.GroceryProvider, settings Settings, g planning.Gr
 			out.Lines = append(out.Lines, line)
 		}
 	}
+	// What the household left out is reported, never sent: the Shop tab
+	// shows it struck through under the meal it was left out of, so it can
+	// be put back from there.
+	for _, item := range g.SkippedItems {
+		src := lineSource(item.Category, item)
+		src.SkipScope = item.SkipScope
+		out.Excluded = append(out.Excluded, Excluded{LineSource: src, Reason: ExcludedSkipped})
+	}
 	for _, sel := range in.Lines {
 		if !onList[sel.IngredientKey] {
 			out.Excluded = append(out.Excluded, Excluded{LineSource: LineSource{IngredientKey: sel.IngredientKey}, Reason: ExcludedNotOnList})
@@ -247,5 +255,6 @@ func lineSource(category string, item grocery.Item) LineSource {
 	for _, s := range item.Sources {
 		src.Recipes = append(src.Recipes, RecipeRef{ID: s.RecipeID, Name: s.RecipeName})
 	}
+	src.Shares = item.Shares
 	return src
 }

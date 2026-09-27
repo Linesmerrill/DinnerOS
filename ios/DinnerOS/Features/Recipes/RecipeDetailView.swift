@@ -15,6 +15,7 @@ struct RecipeDetailView: View {
     @Environment(MealPlanner.self) private var planner
     @Environment(PlanStore.self) private var plans
     @Environment(EventReporter.self) private var events
+    @Environment(GrocerySkipStore.self) private var grocerySkips
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -36,6 +37,15 @@ struct RecipeDetailView: View {
     @State private var showsSpecialtySetup = false
     @State private var heroHeight: CGFloat = 320
     @State private var showsNavigationBar = false
+    /// Ingredients being left out or put back, by line ID.
+    @State private var leavingOut: Set<String> = []
+    @State private var leaveOutError: String?
+
+    /// Leaving an ingredient out changes what the week's list buys, so it needs `plan.edit`, like
+    /// skipping one from the list. Hiding it is a convenience; the API enforces it.
+    private var canLeaveOut: Bool {
+        households.access?.can(.planEdit) == true && !grocerySkips.isForbidden
+    }
 
     /// The meal in the shown week this screen acts on: the most recently added, when the same
     /// recipe is planned more than once.
@@ -126,6 +136,16 @@ struct RecipeDetailView: View {
         // Attached to the screen's root, never inside a section (decision 510).
         .sheet(isPresented: $showsSpecialtySetup, onDismiss: { Task { await loadInstructions() } }) {
             SpecialtyIngredientsSheet()
+        }
+        .alert("Couldn't Change That", isPresented: Binding(presenting: $leaveOutError)) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(leaveOutError ?? "")
+        }
+        // Something was left out or put back elsewhere (the grocery list, the Shop tab, the
+        // review screen): the ingredient list and the steps read it from the instructions.
+        .onChange(of: grocerySkips.revision) {
+            Task { await loadInstructions() }
         }
         .task { await load(reload: false) }
         .task(id: summary.id) { await loadExtras() }
@@ -279,7 +299,9 @@ struct RecipeDetailView: View {
             case .description:
                 RecipeDescriptionSection(recipe: recipe)
             case .ingredients:
-                RecipeIngredientsSection(recipe: recipe, servings: $servings)
+                RecipeIngredientsSection(
+                    recipe: recipe, servings: $servings, instructions: instructions, canEdit: canLeaveOut,
+                    working: leavingOut, leaveOut: leaveOut(_:scope:), putBack: putBack(_:))
             case .nutrition:
                 RecipeNutritionSection(recipe: recipe)
             }
@@ -331,6 +353,39 @@ struct RecipeDetailView: View {
     private func loadInstructions() async {
         guard recipe != nil else { return }
         instructions = (try? await library.instructions(recipeID: summary.id, servings: servings)) ?? instructions
+    }
+
+    /// Leaves an ingredient out of this recipe ("just this dish") or out of every recipe, then
+    /// reloads the steps so it's struck through here and in them.
+    private func leaveOut(_ state: RecipeIngredientState, scope: GrocerySkipScope) {
+        guard let request = state.leaveOutRequest(scope: scope, recipeID: summary.id) else { return }
+        changeLeftOut(state) {
+            try await grocerySkips.skip(request, householdID: households.current?.household.id)
+        }
+    }
+
+    /// Resumes the skip that leaves an ingredient out.
+    private func putBack(_ state: RecipeIngredientState) {
+        guard let leftOut = state.leftOut else { return }
+        changeLeftOut(state) {
+            try await grocerySkips.resume(skipID: leftOut.skipID, householdID: households.current?.household.id)
+        }
+    }
+
+    private func changeLeftOut(_ state: RecipeIngredientState, _ change: @escaping () async throws -> Void) {
+        guard !leavingOut.contains(state.id) else { return }
+        leavingOut.insert(state.id)
+        Task {
+            defer { leavingOut.remove(state.id) }
+            do {
+                try await change()
+                await loadInstructions()
+            } catch is CancellationError {
+                return
+            } catch {
+                leaveOutError = HouseholdStore.message(for: error)
+            }
+        }
     }
 
     /// Customizations and pairings are optional: a household or server without them shows nothing.

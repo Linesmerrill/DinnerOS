@@ -62,8 +62,12 @@ type SkipResponse struct {
 	Key   string `json:"key"`
 	Name  string `json:"name"`
 	Scope Scope  `json:"scope"`
-	// Week is the ISO week a week-scoped skip covers, and null for always.
+	// Week is the ISO week a week-scoped skip covers, and null otherwise.
 	Week *string `json:"week"`
+	// RecipeID and RecipeName are the recipe a recipe skip leaves the
+	// ingredient out of, and null otherwise.
+	RecipeID   *string `json:"recipeId"`
+	RecipeName *string `json:"recipeName"`
 	// Text says what the skip does, in the words the app shows.
 	Text      string    `json:"text"`
 	CreatedBy string    `json:"createdBy"`
@@ -82,6 +86,7 @@ type setSkipRequest struct {
 	Name          string `json:"name"`
 	Scope         string `json:"scope"`
 	Week          string `json:"week"`
+	RecipeID      string `json:"recipeId"`
 }
 
 func newSkipResponse(s Skip) SkipResponse {
@@ -94,11 +99,11 @@ func newSkipResponse(s Skip) SkipResponse {
 		week := s.Week
 		resp.Week = &week
 	}
-	if s.Scope == ScopeAlways {
-		resp.Text = "Never buying this"
-	} else {
-		resp.Text = "Skipped this week"
+	if s.RecipeID != "" {
+		id, name := s.RecipeID, s.RecipeName
+		resp.RecipeID, resp.RecipeName = &id, &name
 	}
+	resp.Text = s.Text()
 	return resp
 }
 
@@ -126,6 +131,7 @@ func (h *Handler) set(w http.ResponseWriter, r *http.Request) {
 	}
 	skip, created, err := h.opts.Service.Set(r.Context(), actor, Input{
 		IngredientKey: req.IngredientKey, Name: req.Name, Scope: Scope(req.Scope), Week: req.Week,
+		RecipeID: req.RecipeID,
 	})
 	if err != nil {
 		h.writeError(w, r, "skip ingredient failed", err)

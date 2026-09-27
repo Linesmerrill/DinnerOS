@@ -93,6 +93,40 @@ func skipsPath(householdID string) string {
 	return "/api/v1/households/" + householdID + "/grocery-skips"
 }
 
+func TestHandlerLeavesAnIngredientOutOfOneRecipe(t *testing.T) {
+	router := newSkipTestRouter(t)
+	rec := do(t, router, http.MethodPost, skipsPath(hhAda),
+		`{"ingredientKey":"name:cilantro","name":"Cilantro","scope":"recipe","recipeId":"`+testRecipe+`"}`, userAda)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST recipe = %d, want 201: %s", rec.Code, rec.Body)
+	}
+	created := decodeSkip(t, rec)
+	if created.Scope != ScopeRecipe || created.RecipeID == nil || *created.RecipeID != testRecipe ||
+		created.RecipeName == nil || *created.RecipeName != "Thai Coconut Curry Chicken" || created.Week != nil {
+		t.Errorf("created = %+v, want a recipe skip for the curry", created)
+	}
+	if created.Text != "Left out of Thai Coconut Curry Chicken" {
+		t.Errorf("text = %q", created.Text)
+	}
+	// A household-wide skip says so with null recipe fields.
+	rec = do(t, router, http.MethodPost, skipsPath(hhAda), `{"ingredientKey":"name:dill","name":"Dill","scope":"always"}`, userAda)
+	if body := rec.Body.String(); !strings.Contains(body, `"recipeId":null`) || !strings.Contains(body, `"recipeName":null`) {
+		t.Errorf("always skip body = %s, want null recipe fields", body)
+	}
+	// A viewer sees it but may not make one.
+	rec = do(t, router, http.MethodPost, skipsPath(hhAda),
+		`{"ingredientKey":"name:onion","name":"Onion","scope":"recipe","recipeId":"`+testRecipe+`"}`, userViewer)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("viewer POST = %d, want 403", rec.Code)
+	}
+	// A recipe of another household is refused.
+	rec = do(t, router, http.MethodPost, skipsPath(hhAda),
+		`{"ingredientKey":"name:onion","name":"Onion","scope":"recipe","recipeId":"`+otherRecipe+`"}`, userAda)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("POST for another household's recipe = %d, want 400", rec.Code)
+	}
+}
+
 func TestHandlerSkipsAndResumesAnIngredient(t *testing.T) {
 	router := newSkipTestRouter(t)
 

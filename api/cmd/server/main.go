@@ -182,10 +182,12 @@ func run() error {
 	// one, so it is recorded server-side.
 	substitutesService.WithEvents(behavior.events)
 	// Ingredients the household never wants bought (cilantro, for a household
-	// that tastes soap in it). Grocery lists hold them back instead of asking
-	// anyone to buy them; the catalog links a skip made from free text to the
-	// same ingredient reached through the catalog.
-	skipsService := skips.NewService(skips.NewMongoStore(db.Database()), recipeService, logger)
+	// that tastes soap in it), or leaves out of one recipe. Grocery lists hold
+	// them back instead of asking anyone to buy them; the catalog links a skip
+	// made from free text to the same ingredient reached through the catalog.
+	// Cook deductions skip what a recipe is cooked without.
+	skipsService := skips.NewService(skips.NewMongoStore(db.Database()), recipeService, logger).WithRecipes(recipeService)
+	pantryService.SetLeftOut(skipsService)
 	planService := planning.NewService(planning.NewMongoStore(db.Database()), recipeService).
 		WithPantry(pantryService).WithSpecialties(substitutesService).WithSkips(skipsService).
 		WithEvents(behavior.events, logger).WithWeekStart(householdService).
@@ -261,6 +263,7 @@ func run() error {
 	recipeHandler := recipes.NewHandler(recipes.HandlerOptions{
 		Service:        recipeService,
 		Specialties:    substitutesService,
+		LeftOut:        skipsService,
 		Ratings:        behavior.ratings,
 		Events:         behavior.events,
 		TimeBands:      autopilotService,

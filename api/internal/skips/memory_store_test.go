@@ -56,11 +56,11 @@ func (m *memoryStore) PutSkip(_ context.Context, skip Skip) (Skip, bool, error) 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i, s := range m.skips {
-		if s.HouseholdID != skip.HouseholdID || s.IngredientKey != skip.IngredientKey {
+		if s.HouseholdID != skip.HouseholdID || s.IngredientKey != skip.IngredientKey || s.RecipeID != skip.RecipeID {
 			continue
 		}
 		// Replacing keeps the identity of the skip that is already there.
-		m.skips[i].Key, m.skips[i].Name = skip.Key, skip.Name
+		m.skips[i].Key, m.skips[i].Name, m.skips[i].RecipeName = skip.Key, skip.Name, skip.RecipeName
 		m.skips[i].Scope, m.skips[i].Week = skip.Scope, skip.Week
 		m.skips[i].UpdatedBy, m.skips[i].UpdatedAt = skip.UpdatedBy, skip.UpdatedAt
 		return m.skips[i], false, nil

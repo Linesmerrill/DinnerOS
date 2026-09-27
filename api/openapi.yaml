@@ -2053,14 +2053,23 @@ paths:
     post:
       summary: Skip an ingredient
       description: |
-        Leaves an ingredient off the grocery list, for one week or for good.
-        Requires `plan.edit`.
+        Leaves an ingredient off the grocery list, for one week or for good,
+        or out of one recipe (`scope: recipe` with `recipeId`: "just this
+        dish", every time that recipe is planned). Requires `plan.edit`.
 
-        One ingredient has at most one skip per household, so posting again for
-        the same `ingredientKey` replaces it and answers 200 rather than 201.
-        That is how a skip-once becomes a skip-forever, with nothing to delete
-        first. A household may skip at most 500 ingredients; changing a skip it
-        already has still works at the cap.
+        One ingredient has at most one household-wide skip, and at most one
+        per recipe, so posting again for the same `ingredientKey` (and
+        `recipeId`) replaces it and answers 200 rather than 201. That is how a
+        skip-once becomes a skip-forever, with nothing to delete first. A
+        recipe skip stands beside a household-wide one for the same
+        ingredient; the household-wide one wins while both exist (always, then
+        week, then recipe). A household may skip at most 500 ingredients;
+        changing a skip it already has still works at the cap.
+
+        A recipe skip of a specialty ingredient the household makes from store
+        ingredients (a component, such as a crema) leaves out every
+        ingredient it became, and only for that recipe. A `name:` key is
+        normalized, so a client may build it from a recipe line's name.
 
         The skip matches the key it was made from, `name:<normalized name>`,
         and the catalog ingredient ID for that name, so it covers every way a
@@ -5958,7 +5967,7 @@ components:
           example: ½ ounce Parmesan Cheese
     RecipeInstructions:
       type: object
-      required: [recipeId, recipeName, servings, servingOptions, specialtiesApplied, steps, substitutions, unchosenSpecialties]
+      required: [recipeId, recipeName, servings, servingOptions, specialtiesApplied, steps, substitutions, unchosenSpecialties, leftOutApplied, ingredients]
       properties:
         recipeId:
           type: string
@@ -6001,6 +6010,65 @@ components:
                 type: string
               name:
                 type: string
+        leftOutApplied:
+          type: boolean
+          description: False when the server could not consult what the household leaves out, so nothing is marked left out.
+        ingredients:
+          type: array
+          description: |
+            The recipe's ingredients in its order, as the household cooks
+            them: the key a skip is made with, whether it is left out (a
+            recipe skip for this recipe, or an always skip), and what a
+            component is made of. A week skip is about buying and is never
+            shown here.
+          items:
+            $ref: "#/components/schemas/InstructionIngredient"
+    InstructionIngredient:
+      type: object
+      required: [index, ingredientKey, name, leftOut, component]
+      properties:
+        index:
+          type: integer
+          description: Position in the recipe's ingredient list.
+        ingredientKey:
+          type: string
+          description: The catalog ingredient ID, or `name:<normalized name>`; post it to grocery-skips to leave the ingredient out.
+        name:
+          type: string
+        leftOut:
+          oneOf:
+            - type: object
+              required: [skipId, scope]
+              properties:
+                skipId:
+                  type: string
+                  description: Delete this skip to put the ingredient back.
+                scope:
+                  type: string
+                  enum: [recipe, always]
+            - type: "null"
+        component:
+          description: Set when the ingredient is a specialty ingredient the household makes from store ingredients.
+          oneOf:
+            - type: object
+              required: [specialtyId, specialtyName, optionName, type, parts]
+              properties:
+                specialtyId:
+                  type: string
+                specialtyName:
+                  type: string
+                  example: Smoky Red Pepper Crema
+                optionName:
+                  type: string
+                type:
+                  type: string
+                  enum: [store_alternative, house_made_batch]
+                parts:
+                  type: array
+                  items:
+                    type: string
+                  example: [4 tsp Sour Cream, 2 tsp Roasted Red Peppers, ¼ tsp Smoked Paprika]
+            - type: "null"
     InstructionStep:
       type: object
       required: [index, text, segments, notes]
@@ -6016,6 +6084,9 @@ components:
           description: The recipe's own wording, present only when a substitution changed it.
         imageUrl:
           type: string
+        leftOut:
+          type: boolean
+          description: True when every ingredient the step names is left out, so the step can be skipped. Absent otherwise.
         segments:
           type: array
           items:
@@ -6024,14 +6095,15 @@ components:
           type: array
           description: |
             Sentences to show under the step when a substitution changes the
-            amount or the method in a way a swapped word cannot say.
+            amount or the method in a way a swapped word cannot say, or when
+            the step names an ingredient the household leaves out.
           items:
             type: object
             required: [kind, text]
             properties:
               kind:
                 type: string
-                enum: [substitution]
+                enum: [substitution, left_out]
               specialtyId:
                 type: string
               text:
@@ -6083,6 +6155,12 @@ components:
           type: string
         specialtyName:
           type: string
+        leftOut:
+          type: boolean
+          description: |
+            The household leaves this ingredient out of the recipe. The text is
+            the step's own words without an amount, so the step still reads as
+            written; show it struck through.
     InstructionSubstitution:
       type: object
       required: [specialtyId, specialtyKey, specialtyName, optionId, optionName, type, source, text]
@@ -6102,7 +6180,7 @@ components:
           enum: [store_alternative, house_made_batch]
         source:
           type: string
-          description: Who decided: a member, or the household's standing strategy.
+          description: "Who decided: a member, or the household's standing strategy."
           enum: [household, strategy]
         text:
           type: string
@@ -7490,7 +7568,7 @@ components:
             $ref: "#/components/schemas/PlanSummary"
     GroceryList:
       type: object
-      required: [week, status, pantryApplied, specialtiesApplied, categories, batches, skipped, skippedItems]
+      required: [week, status, pantryApplied, specialtiesApplied, categories, batches, skipped, skippedItems, meals]
       properties:
         week:
           $ref: "#/components/schemas/IsoWeek"
@@ -7522,9 +7600,86 @@ components:
             The ingredients the household chose not to buy. They are not in
             `categories`, so nothing asks anyone to buy them, but each is a
             full grocery item carrying `skipScope` and `skipText`. Not to be
-            confused with `skipped`, which is about plan entries.
+            confused with `skipped`, which is about plan entries. An item
+            with `skipScope: recipe` holds only the left-out meals' part: the
+            same ingredient can also be in `categories` for other meals, with
+            its amount reduced to theirs.
           items:
             $ref: "#/components/schemas/GroceryItem"
+        meals:
+          type: array
+          description: |
+            The week's planned recipes in plan order (scheduled days in week
+            order, then unscheduled), each once. Every item's `shares` name
+            one of them, so a client can show the list meal by meal.
+          items:
+            $ref: "#/components/schemas/GroceryMeal"
+    GroceryMeal:
+      type: object
+      required: [recipeId, recipeName, imageUrl, isAddon, day]
+      properties:
+        recipeId:
+          type: string
+        recipeName:
+          type: string
+        imageUrl:
+          type: [string, "null"]
+        isAddon:
+          type: boolean
+        day:
+          description: The first day the recipe is planned on, null when unscheduled.
+          oneOf:
+            - $ref: "#/components/schemas/PlanDay"
+            - type: "null"
+    GroceryShare:
+      type: object
+      required: [recipeId, recipeName, amounts, quantityText, unquantified, combined, extra, component]
+      description: The part of an item one meal needs. The item stays one purchase.
+      properties:
+        recipeId:
+          type: string
+        recipeName:
+          type: string
+        amounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroceryAmount"
+        quantityText:
+          type: string
+          description: This meal's amount for display; empty when it has none.
+          example: 2 cloves
+        unquantified:
+          type: boolean
+        combined:
+          type: boolean
+          description: The amount was made for several meals together (a house-made batch), so none is split out for this one.
+        extra:
+          type: boolean
+          description: A line added for this meal directly, such as an accepted pairing.
+        component:
+          description: |
+            Set when the share is part of a component of the meal: the store
+            ingredients a specialty ingredient (a sauce, crema, paste, or
+            blend) became. Leaving the component out of the meal (a recipe
+            skip of `ingredientKey`) leaves out every share that names it.
+          oneOf:
+            - $ref: "#/components/schemas/GroceryComponent"
+            - type: "null"
+    GroceryComponent:
+      type: object
+      required: [specialtyId, specialtyKey, specialtyName, ingredientKey]
+      properties:
+        specialtyId:
+          type: string
+          example: smoky-red-pepper-crema
+        specialtyKey:
+          type: string
+        specialtyName:
+          type: string
+          example: Smoky Red Pepper Crema
+        ingredientKey:
+          type: string
+          description: The recipe line the component replaced, the key to skip to leave it out. Empty for a batch.
     GrocerySkipList:
       type: object
       required: [items]
@@ -7535,14 +7690,17 @@ components:
             $ref: "#/components/schemas/GrocerySkip"
     GrocerySkipScope:
       type: string
-      enum: [week, always]
+      enum: [week, always, recipe]
       description: |
-        How long a skip lasts. `week` leaves the ingredient off one week's list
-        and ends on its own the following week. `always` leaves it off every
-        list until someone resumes it.
+        How far a skip reaches. `week` leaves the ingredient off one week's
+        list and ends on its own the following week. `always` leaves it off
+        every list, and out of every recipe, until someone resumes it.
+        `recipe` leaves it out of one recipe every time that recipe is
+        planned, while other recipes on the list still get it: on a grocery
+        item it means the item holds only the left-out meals' part.
     GrocerySkip:
       type: object
-      required: [id, ingredientKey, key, name, scope, week, text, createdBy, createdAt, updatedBy, updatedAt]
+      required: [id, ingredientKey, key, name, scope, week, recipeId, recipeName, text, createdBy, createdAt, updatedBy, updatedAt]
       properties:
         id:
           type: string
@@ -7559,14 +7717,21 @@ components:
         scope:
           $ref: "#/components/schemas/GrocerySkipScope"
         week:
-          description: The ISO week a week-scoped skip covers, and null when the scope is always.
+          description: The ISO week a week-scoped skip covers, and null otherwise.
           oneOf:
             - $ref: "#/components/schemas/IsoWeek"
             - type: "null"
+        recipeId:
+          type: [string, "null"]
+          description: The recipe a recipe skip leaves the ingredient out of, and null otherwise.
+        recipeName:
+          type: [string, "null"]
+          description: The recipe's name when the skip was made, so the review screen can name the dish even after the recipe is gone.
+          example: Thai Coconut Curry Chicken
         text:
           type: string
           description: What the skip does, in the words the app shows.
-          example: Never buying this
+          example: Left out of Thai Coconut Curry Chicken
         createdBy:
           type: string
         createdAt:
@@ -7594,10 +7759,13 @@ components:
         scope:
           $ref: "#/components/schemas/GrocerySkipScope"
         week:
-          description: Required when the scope is week, and rejected when it is always.
+          description: Required when the scope is week, and rejected otherwise.
           oneOf:
             - $ref: "#/components/schemas/IsoWeek"
             - type: "null"
+        recipeId:
+          type: [string, "null"]
+          description: Required when the scope is recipe, and rejected otherwise. Must be one of the household's recipes.
     GroceryCategory:
       type: object
       required: [category, items]
@@ -7611,7 +7779,7 @@ components:
             $ref: "#/components/schemas/GroceryItem"
     GroceryItem:
       type: object
-      required: [ingredientKey, name, amounts, quantityText, unquantified, status, recipes, specialty, specialtyDetail, via, extras]
+      required: [ingredientKey, name, amounts, quantityText, unquantified, status, recipes, shares, specialty, specialtyDetail, via, extras]
       properties:
         ingredientKey:
           type: string
@@ -7683,6 +7851,11 @@ components:
               text:
                 type: string
                 example: Club crackers for Chicken Noodle Soup
+        shares:
+          type: array
+          description: The item split by meal, in the order of `recipes`.
+          items:
+            $ref: "#/components/schemas/GroceryShare"
         skipScope:
           $ref: "#/components/schemas/GrocerySkipScope"
         skipText:
@@ -11420,7 +11593,7 @@ components:
           format: date-time
     ShoppingHandoffLine:
       type: object
-      required: [id, ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, product, computedPackages, packages, packagesOverridden, checkAmount, reason, reasonText, coverageText, coverage, coversWeek, searchTerms, confirmation, cart, recipes, priceCents, pantry]
+      required: [id, ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, product, computedPackages, packages, packagesOverridden, checkAmount, reason, reasonText, coverageText, coverage, coversWeek, searchTerms, confirmation, cart, recipes, shares, priceCents, pantry]
       properties:
         id:
           type: string
@@ -11529,6 +11702,15 @@ components:
                 type: string
               name:
                 type: string
+        shares:
+          type: array
+          description: |
+            The line split by meal: each meal's own amount, and whether it is
+            for a component of that meal. The line is still one purchase with
+            one package count; show it under each meal, with the stepper in
+            one place. Empty on a stored handoff.
+          items:
+            $ref: "#/components/schemas/GroceryShare"
         priceCents:
           type: [integer, "null"]
           description: What the line cost in all (every package), in US cents; null until a member enters it.
@@ -11609,7 +11791,7 @@ components:
             $ref: "#/components/schemas/ShoppingSentLine"
     ShoppingExcludedLine:
       type: object
-      required: [ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, reason, text, searchTerms]
+      required: [ingredientKey, ingredientId, name, category, amounts, quantityText, unquantified, groceryStatus, reason, text, searchTerms, recipes, shares]
       properties:
         ingredientKey:
           type: string
@@ -11633,13 +11815,35 @@ components:
           enum: [toBuy, inPantry, pantryHint, fromFreezer, null]
         reason:
           type: string
-          enum: [in_pantry, pantry_hint, in_freezer, house_made, checked_off, excluded, not_selected, no_product, not_on_list, ordered]
-          description: "`in_freezer`: a frozen pantry item covers it (grocery status `fromFreezer`), so the week grabs it instead of buying it again; its `text` is \"Grab from the freezer\"."
+          enum: [in_pantry, pantry_hint, in_freezer, house_made, checked_off, excluded, not_selected, no_product, not_on_list, ordered, skipped]
+          description: |
+            `in_freezer`: a frozen pantry item covers it (grocery status
+            `fromFreezer`), so the week grabs it instead of buying it again;
+            its `text` is "Grab from the freezer". `skipped`: the household
+            left it out (`skipScope`); never sent, and shown struck through
+            under its meal. With `skipScope: recipe` the same ingredient can
+            also be a line for other meals.
         text:
           type: string
           example: Choose a Walmart product
         searchTerms:
           $ref: "#/components/schemas/ShoppingSearchTerms"
+        recipes:
+          type: array
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+        shares:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroceryShare"
+        skipScope:
+          $ref: "#/components/schemas/GrocerySkipScope"
     ShoppingSearchTerms:
       type: object
       description: |
@@ -11693,7 +11897,7 @@ components:
           description: Distinct products in the link.
     ShoppingProposal:
       type: object
-      required: [provider, week, storeId, lines, excluded, cartLinks, affiliateTracked, cart]
+      required: [provider, week, storeId, lines, excluded, cartLinks, affiliateTracked, cart, meals]
       properties:
         cart:
           description: |
@@ -11724,6 +11928,11 @@ components:
             $ref: "#/components/schemas/ShoppingCartLink"
         affiliateTracked:
           type: boolean
+        meals:
+          type: array
+          description: The week's planned recipes in plan order; every line's `shares` name one. Empty on a stored handoff.
+          items:
+            $ref: "#/components/schemas/GroceryMeal"
     ShoppingHandoff:
       allOf:
         - $ref: "#/components/schemas/ShoppingProposal"

@@ -321,20 +321,23 @@ struct GroceryListContent: View {
                     }
                 }
             }
-            // One quiet row, only when the week actually has something held back.
+            // What the week leaves out stays visible, struck through, so the list never
+            // disagrees with the recipes about what they call for — and it can be put back here.
             if !model.skippedItems.isEmpty {
                 Section {
+                    ForEach(model.skippedItems) { item in
+                        LeftOutItemRow(
+                            item: item, canPutBack: model.canPutBack(item), isWorking: model.isSkipping(item)
+                        ) {
+                            Task { await model.putBack(item) }
+                        }
+                    }
                     Button {
                         showsSkipped = true
                     } label: {
                         HStack {
-                            Label(
-                                model.skippedItems.count == 1
-                                    ? String(localized: "1 ingredient you don't buy")
-                                    : String(localized: "\(model.skippedItems.count) ingredients you don't buy"),
-                                systemImage: "cart.badge.minus"
-                            )
-                            .font(.subheadline)
+                            Label("Everything You Leave Out", systemImage: "cart.badge.minus")
+                                .font(.subheadline)
                             Spacer(minLength: 0)
                             Image(systemName: "chevron.right")
                                 .font(.footnote)
@@ -344,6 +347,8 @@ struct GroceryListContent: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
+                } header: {
+                    Text("Left Out")
                 } footer: {
                     Text("The recipes still call for these. You're just not buying them.")
                 }
@@ -397,6 +402,12 @@ struct GroceryListContent: View {
         }
         .contextMenu {
             if model.canSkip {
+                // "Just this dish": left out of one meal, and still bought for the others.
+                ForEach(item.recipes) { recipe in
+                    Button("Leave Out of \(recipe.name)", systemImage: "fork.knife") {
+                        Task { await model.skip(item, scope: .recipe, recipeID: recipe.id) }
+                    }
+                }
                 Button("Skip Just This Week", systemImage: "calendar") {
                     Task { await model.skip(item, scope: .week) }
                 }
@@ -596,6 +607,52 @@ private struct GroceryItemRow: View {
         default: break
         }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// A left-out ingredient on the list: struck through, with how much the recipes wanted and why
+/// it isn't bought, and a way to put it back.
+struct LeftOutItemRow: View {
+    let item: GroceryItem
+    let canPutBack: Bool
+    let isWorking: Bool
+    let putBack: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Image(systemName: "minus.circle")
+                .foregroundStyle(.secondary)
+                .font(.title3)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name)
+                    .strikethrough()
+                    .foregroundStyle(.secondary)
+                if let amount = GroceryListText.amountText(for: item) {
+                    Text(amount)
+                        .font(.subheadline)
+                        .strikethrough()
+                        .foregroundStyle(.secondary)
+                }
+                if let text = item.skipText {
+                    Text(text)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(
+                "\(item.name), left out. \(item.skipText ?? "")")
+            Spacer(minLength: 0)
+            if isWorking {
+                ProgressView()
+            } else if canPutBack {
+                Button("Put Back", action: putBack)
+                    .buttonStyle(.bordered)
+                    .font(.subheadline)
+                    .accessibilityLabel("Put \(item.name) Back")
+            }
+        }
     }
 }
 

@@ -62,7 +62,9 @@ func applyCart(p providers.GroceryProvider, proposal *Proposal, h Handoff) error
 	}
 	onList := map[string]bool{}
 	for _, e := range proposal.Excluded {
-		if e.Reason != ExcludedNotOnList {
+		// A line left out entirely is off the list too: what was sent for it
+		// is to be removed from the cart.
+		if e.Reason != ExcludedNotOnList && e.Reason != ExcludedSkipped {
 			onList[e.IngredientKey] = true
 		}
 	}

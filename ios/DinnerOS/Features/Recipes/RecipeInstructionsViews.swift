@@ -31,6 +31,11 @@ struct InstructionStepText: View {
 
     static func text(for segment: InstructionSegment) -> Text {
         guard segment.isIngredient else { return Text(verbatim: segment.text) }
+        // Left out: struck through and quiet, never removed, so the step still reads as written
+        // and says the recipe calls for it.
+        if segment.leftOut {
+            return Text(verbatim: segment.text).strikethrough().foregroundStyle(Color.secondary)
+        }
         let named = Text(verbatim: segment.text).fontWeight(.semibold)
         guard segment.spicy else { return named }
         // A flame and the weight carry the meaning; red only reinforces it.
@@ -53,6 +58,12 @@ struct InstructionStepRow: View {
                 .accessibilityLabel("Step \(step.index)")
             VStack(alignment: .leading, spacing: 10) {
                 InstructionStepText(step: step)
+                    .opacity(step.leftOut ? 0.6 : 1)
+                if step.leftOut {
+                    Label("Nothing to do here: you leave out everything in this step.", systemImage: "forward")
+                        .font(.footnote)
+                        .foregroundStyle(Color.secondary)
+                }
                 ForEach(step.notes) { note in
                     InstructionNoteLabel(note: note)
                 }
@@ -76,7 +87,7 @@ struct InstructionNoteLabel: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
             : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 6))
         layout {
-            Image(systemName: "arrow.triangle.swap")
+            Image(systemName: note.isLeftOut ? "minus.circle" : "arrow.triangle.swap")
                 .foregroundStyle(.tint)
                 .accessibilityHidden(true)
             Text(note.text)
@@ -88,7 +99,7 @@ struct InstructionNoteLabel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 10))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Substitution. \(note.text)")
+        .accessibilityLabel(note.isLeftOut ? "Left out. \(note.text)" : "Substitution. \(note.text)")
     }
 }
 

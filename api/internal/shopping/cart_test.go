@@ -11,6 +11,21 @@ func cartLine(id, key, product string, packages int, status LineStatus) HandoffL
 	return HandoffLine{ID: id, LineSource: LineSource{IngredientKey: key, Name: key}, ProductID: product, Packages: packages, Status: status}
 }
 
+// An ingredient sent to the cart and then left out entirely is off the list:
+// the cart says to remove it, rather than calling it "not included".
+func TestApplyCartTreatsASkippedLineAsOffTheList(t *testing.T) {
+	walmart := providers.NewWalmart(providers.WalmartOptions{})
+	sent := Handoff{ID: "h1", Proposal: Proposal{Lines: []HandoffLine{cartLine("l1", "cilantro", "100000001", 1, LinePending)}}}
+	proposal := Proposal{Excluded: []Excluded{{LineSource: LineSource{IngredientKey: "cilantro"}, Reason: ExcludedSkipped}}}
+	if err := applyCart(walmart, &proposal, sent); err != nil {
+		t.Fatal(err)
+	}
+	other := proposal.Cart.Other
+	if len(other) != 1 || other[0].Reason != SentNotOnList || other[0].RemovePackages != 1 {
+		t.Errorf("other = %+v, want the cilantro to remove", other)
+	}
+}
+
 func TestApplyCartAndMergeSend(t *testing.T) {
 	walmart := providers.NewWalmart(providers.WalmartOptions{})
 	sent := Handoff{ID: "h1", Revision: 4, Proposal: Proposal{Lines: []HandoffLine{

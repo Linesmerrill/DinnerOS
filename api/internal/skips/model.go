@@ -2,8 +2,9 @@
 // on purpose: the ones it would buy, throw away, and resent buying again
 // (cilantro, for the household that tastes soap in it).
 //
-// A skip is about an INGREDIENT for a HOUSEHOLD, not about a product or a
-// single recipe, and it is a third state alongside the two that already exist:
+// A skip is about an INGREDIENT for a HOUSEHOLD — or for one of its recipes
+// (ScopeRecipe: "leave the cilantro out of the curry") — never about a
+// product, and it is a third state alongside the two that already exist:
 //
 //   - the pantry says the household HAS it (grocery.StatusInPantry),
 //   - check-off says a member BOUGHT it (client-side, per week),
@@ -21,6 +22,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 )
 
@@ -59,8 +61,9 @@ const (
 // catalog ingredient ID, matching pantry.UnresolvedKeyPrefix.
 const UnresolvedKeyPrefix = "name:"
 
-// Scope is how long a skip lasts. The household asked for exactly two
-// lifetimes: "skip once" and "skip forever".
+// Scope is how far a skip reaches. Two are lifetimes for the whole
+// household ("skip once", "skip forever"); the third is one recipe, for good
+// ("just this dish").
 type Scope string
 
 // Scopes.
@@ -68,20 +71,39 @@ const (
 	// ScopeWeek leaves the ingredient off one week's list. Next week it is
 	// back, with no action needed.
 	ScopeWeek Scope = "week"
-	// ScopeAlways leaves it off every list until someone resumes it.
+	// ScopeAlways leaves it off every list, and out of every recipe, until
+	// someone resumes it.
 	ScopeAlways Scope = "always"
+	// ScopeRecipe leaves it out of one recipe every time that recipe is
+	// planned, while other recipes still get it. It is per recipe rather than
+	// per planned meal because a household re-plans the dishes it likes: a
+	// preference about the curry that had to be repeated every week would not
+	// be a preference.
+	ScopeRecipe Scope = "recipe"
 )
 
 // Valid reports whether s is a known scope.
-func (s Scope) Valid() bool { return s == ScopeWeek || s == ScopeAlways }
+func (s Scope) Valid() bool { return s == ScopeWeek || s == ScopeAlways || s == ScopeRecipe }
+
+// Grocery is the grocery engine's name for the scope.
+func (s Scope) Grocery() grocery.SkipScope {
+	switch s {
+	case ScopeAlways:
+		return grocery.SkipAlways
+	case ScopeRecipe:
+		return grocery.SkipRecipe
+	}
+	return grocery.SkipThisWeek
+}
 
 // Skip is one ingredient a household leaves off its grocery list.
 type Skip struct {
 	ID          string
 	HouseholdID string
 	// IngredientKey is the grocery line key the skip was made from: a catalog
-	// ingredient ID, or UnresolvedKeyPrefix + the normalized name. It is the
-	// unique key, so one ingredient has at most one skip per household.
+	// ingredient ID, or UnresolvedKeyPrefix + the normalized name. With
+	// RecipeID it is the unique key, so one ingredient has at most one
+	// household-wide skip, and at most one per recipe.
 	IngredientKey string
 	// Key is ingredients.NormalizeName of Name. A recipe can reach the same
 	// ingredient with a catalog ID or as free text, so the skip is matched
@@ -90,6 +112,12 @@ type Skip struct {
 	// Name is what the list called the ingredient, for the review screen.
 	Name  string
 	Scope Scope
+	// RecipeID is the recipe a ScopeRecipe skip leaves the ingredient out of,
+	// and empty for the household-wide scopes. RecipeName is its name when
+	// the skip was made, so the review screen can say which dish even after
+	// the recipe is gone.
+	RecipeID   string
+	RecipeName string
 	// Week is the ISO week a ScopeWeek skip applies to ("2026-W38"), and is
 	// empty for ScopeAlways. A week-scoped skip for a past week simply stops
 	// matching; nothing is deleted behind the household's back.
@@ -119,13 +147,27 @@ func (s Skip) Keys() []string {
 	return keys
 }
 
-// AppliesTo reports whether the skip leaves the ingredient off week's list.
-// An always-skip applies to every week; a week-skip only to its own.
+// AppliesTo reports whether the skip applies to week's list. An always-skip
+// and a recipe skip apply to every week; a week-skip only to its own.
 func (s Skip) AppliesTo(week string) bool {
-	if s.Scope == ScopeAlways {
+	if s.Scope == ScopeAlways || s.Scope == ScopeRecipe {
 		return true
 	}
 	return s.Week != "" && s.Week == week
+}
+
+// Text says what the skip does, in the words the app shows.
+func (s Skip) Text() string {
+	switch s.Scope {
+	case ScopeAlways:
+		return "Never buying this"
+	case ScopeRecipe:
+		if s.RecipeName != "" {
+			return "Left out of " + s.RecipeName
+		}
+		return "Left out of one recipe"
+	}
+	return "Skipped this week"
 }
 
 // Input is a request to skip an ingredient. An input for an ingredient the
@@ -137,8 +179,11 @@ type Input struct {
 	// from a key the catalog doesn't resolve, since nothing else can name it.
 	Name  string
 	Scope Scope
-	// Week is required for ScopeWeek and must be empty for ScopeAlways.
+	// Week is required for ScopeWeek and must be empty otherwise.
 	Week string
+	// RecipeID is required for ScopeRecipe and must be empty otherwise. The
+	// recipe must be the household's.
+	RecipeID string
 }
 
 // normalize validates in and fills in what the store needs.
@@ -146,19 +191,32 @@ func (in Input) normalize() (Input, string, error) {
 	in.IngredientKey = strings.TrimSpace(in.IngredientKey)
 	in.Name = strings.TrimSpace(in.Name)
 	in.Week = strings.TrimSpace(in.Week)
+	in.RecipeID = strings.TrimSpace(in.RecipeID)
+	// A free-text key is normalized here, so a client that builds it from a
+	// recipe line's name ("name:Fresh Cilantro") matches the key the grocery
+	// list gives the same line.
+	if rest, ok := strings.CutPrefix(in.IngredientKey, UnresolvedKeyPrefix); ok {
+		if normalized := ingredients.NormalizeName(rest); normalized != "" {
+			in.IngredientKey = UnresolvedKeyPrefix + normalized
+		}
+	}
 	switch {
 	case in.IngredientKey == "":
 		return Input{}, "", invalid("ingredientKey is required")
 	case utf8.RuneCountInString(in.IngredientKey) > MaxIngredientKeyLength:
 		return Input{}, "", invalid("ingredientKey must be at most %d characters", MaxIngredientKeyLength)
 	case !in.Scope.Valid():
-		return Input{}, "", invalid("scope must be week or always")
+		return Input{}, "", invalid("scope must be week, always, or recipe")
 	case utf8.RuneCountInString(in.Name) > MaxNameLength:
 		return Input{}, "", invalid("name must be at most %d characters", MaxNameLength)
 	case in.Scope == ScopeWeek && in.Week == "":
 		return Input{}, "", invalid("week is required when scope is week")
-	case in.Scope == ScopeAlways && in.Week != "":
-		return Input{}, "", invalid("week must be empty when scope is always")
+	case in.Scope != ScopeWeek && in.Week != "":
+		return Input{}, "", invalid("week must be empty unless scope is week")
+	case in.Scope == ScopeRecipe && in.RecipeID == "":
+		return Input{}, "", invalid("recipeId is required when scope is recipe")
+	case in.Scope != ScopeRecipe && in.RecipeID != "":
+		return Input{}, "", invalid("recipeId must be empty unless scope is recipe")
 	}
 	// The name is what the review screen shows, so a skip without one is only
 	// useful when the key itself carries the name.

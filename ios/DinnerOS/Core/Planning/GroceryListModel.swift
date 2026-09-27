@@ -416,22 +416,29 @@ final class GroceryListModel {
         canSkipIngredients = canSkip
     }
 
-    /// Leaves an ingredient off the list, for this week or for good, then reloads so the line
-    /// goes away. Skipping an ingredient the household already skips changes that skip's
-    /// lifetime rather than adding a second one.
-    func skip(_ item: GroceryItem, scope: GrocerySkipScope) async {
+    /// Leaves an ingredient off the list, for this week or for good, or out of one of the meals
+    /// it's for (`recipe`, with `recipeID`), then reloads so the list shows the result: the line
+    /// goes away, or shrinks to the other meals' amount. Skipping an ingredient the household
+    /// already skips changes that skip's lifetime rather than adding a second one.
+    func skip(_ item: GroceryItem, scope: GrocerySkipScope, recipeID: String? = nil) async {
         guard let skips, canSkipIngredients, !skipsInFlight.contains(item.ingredientKey) else { return }
-        let request =
-            scope == .always
-            ? GrocerySkipRequest.forever(item: item)
-            : GrocerySkipRequest.thisWeek(item: item, week: week)
+        let request: GrocerySkipRequest
+        switch scope {
+        case .always: request = .forever(item: item)
+        case .recipe:
+            guard let recipeID else { return }
+            request = .leaveOut(ingredientKey: item.ingredientKey, name: item.name, recipeID: recipeID)
+        default: request = .thisWeek(item: item, week: week)
+        }
         skipsInFlight.insert(item.ingredientKey)
         defer { skipsInFlight.remove(item.ingredientKey) }
         do {
             try await skips.skip(request, householdID: householdID)
             // The line is about to leave the list, and a check-off left behind would strike it
             // through if the ingredient is ever resumed. Forget it now (as `pruneChecks` would).
-            if checked.remove(item.ingredientKey) != nil {
+            // Leaving it out of one of several meals keeps the line, so its check stays.
+            let leavesTheList = scope != .recipe || item.recipes.allSatisfy { $0.id == recipeID }
+            if leavesTheList, checked.remove(item.ingredientKey) != nil {
                 checks.setCheckedItems(checked, householdID: householdID, week: week)
             }
             handledSkipRevision = skips.revision
@@ -455,6 +462,42 @@ final class GroceryListModel {
 
     func dismissSkipFailure() {
         skipFailure = nil
+    }
+
+    /// Puts a left-out item back: resumes the skips holding it back, then reloads. For an item
+    /// left out of one meal, only that meal's skip; for a component, the component's.
+    func putBack(_ item: GroceryItem) async {
+        guard let skips, canSkipIngredients, !skipsInFlight.contains(item.ingredientKey) else { return }
+        let holding = GrocerySkipMatching.skips(holdingBack: item, in: skips.items)
+        guard !holding.isEmpty else { return }
+        skipsInFlight.insert(item.ingredientKey)
+        defer { skipsInFlight.remove(item.ingredientKey) }
+        do {
+            for skip in holding {
+                try await skips.resume(skipID: skip.id, householdID: householdID)
+            }
+            handledSkipRevision = skips.revision
+            Self.logger.info("Left-out ingredient put back from the grocery list")
+            await load()
+        } catch is CancellationError {
+            return
+        } catch let error as APIError where error.status == 403 {
+            setCanSkipIngredients(false)
+            skipFailure = SkipFailure(
+                id: UUID().uuidString, name: item.name, message: HouseholdStore.message(for: error),
+                isForbidden: true)
+        } catch {
+            skipFailure = SkipFailure(
+                id: UUID().uuidString, name: item.name, message: HouseholdStore.message(for: error),
+                isForbidden: false)
+        }
+    }
+
+    /// Whether a left-out item can be put back from here: this member may change the plan, and
+    /// the skip holding it back is one this device knows about.
+    func canPutBack(_ item: GroceryItem) -> Bool {
+        guard let skips, canSkipIngredients else { return false }
+        return !GrocerySkipMatching.skips(holdingBack: item, in: skips.items).isEmpty
     }
 
     /// Reloads after skips changed elsewhere, such as the review sheet resuming an ingredient.
@@ -556,6 +599,54 @@ final class GroceryListModel {
     /// The list as plain text for sharing, or `nil` before it loads.
     func plainText(locale: Locale = .autoupdatingCurrent) -> String? {
         list.map { GroceryListText.make($0, week: week, weekStartsOn: weekStartsOn, checked: checked, locale: locale) }
+    }
+}
+
+/// Which of the household's skips hold a skipped grocery item back, so "Put Back" resumes exactly
+/// those. Pure, so it can be tested without a list.
+nonisolated enum GrocerySkipMatching {
+    /// The keys a skip of a line can carry: the line's own, and the recipe line of any component
+    /// it is part of ("we don't make the crema" is a skip of the crema's line, or of its name).
+    static func keys(ingredientKey: String, shares: [GroceryShare]) -> Set<String> {
+        var keys: Set<String> = [ingredientKey]
+        for share in shares {
+            if let component = share.component {
+                keys.insert(GroceryComponentKey.skipKey(for: component))
+            }
+        }
+        return keys
+    }
+
+    /// The skips holding back a line skipped with `scope`. A `recipe`-skipped line is held by
+    /// recipe skips for its meals; a `week` or `always` one by the household-wide skip of that
+    /// scope.
+    static func skips(
+        scope: GrocerySkipScope?, keys: Set<String>, recipeIDs: Set<String>, in skips: [GrocerySkip]
+    ) -> [GrocerySkip] {
+        guard let scope else { return [] }
+        return skips.filter { skip in
+            guard skip.scope == scope, keys.contains(where: skip.matches(ingredientKey:)) else { return false }
+            if scope == .recipe {
+                return skip.recipeID.map(recipeIDs.contains) ?? false
+            }
+            return skip.recipeID == nil
+        }
+    }
+
+    /// The skips holding a skipped grocery item back.
+    static func skips(holdingBack item: GroceryItem, in skips: [GrocerySkip]) -> [GrocerySkip] {
+        Self.skips(
+            scope: item.skipScope, keys: keys(ingredientKey: item.ingredientKey, shares: item.shares),
+            recipeIDs: Set(item.recipes.map(\.id)).union(item.shares.map(\.recipeID)), in: skips)
+    }
+}
+
+/// The key that leaves a whole component out: the recipe line it replaced, or — for a house-made
+/// batch, which serves several lines — `name:` and the component's name, which the API matches
+/// against the specialty's own name.
+nonisolated enum GroceryComponentKey {
+    static func skipKey(for component: GroceryComponent) -> String {
+        component.ingredientKey.isEmpty ? "name:\(component.specialtyName)" : component.ingredientKey
     }
 }
 

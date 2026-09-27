@@ -51,6 +51,10 @@ type Via struct {
 	SpecialtyName string
 	OptionID      string
 	OptionName    string
+	// LineKey is the ingredient key of the recipe line a store alternative
+	// replaced, so leaving that line out of a recipe leaves out every
+	// component it became. Empty for a batch, which serves several lines.
+	LineKey string
 	// Strategy is the household strategy that picked the option, empty when a
 	// member chose it explicitly. It lets the list say "(your default)".
 	Strategy string
@@ -329,6 +333,7 @@ func storeLines(line Line, spec *Specialty, choice *Choice) []Line {
 	via := &Via{
 		Kind: ViaStoreAlternative, SpecialtyID: spec.ID, SpecialtyKey: spec.Key, SpecialtyName: spec.Name,
 		OptionID: choice.OptionID, OptionName: choice.OptionName, Strategy: choice.Strategy,
+		LineKey: strings.TrimSpace(line.IngredientKey),
 	}
 	lines := make([]Line, 0, len(choice.Components))
 	for _, c := range choice.Components {
@@ -517,6 +522,29 @@ func scaleUnit(q *big.Rat, from, to ingredients.Unit) *big.Rat {
 
 func viaKey(v Via) string {
 	return string(v.Kind) + "\x00" + v.SpecialtyKey + "\x00" + v.OptionID
+}
+
+// IsComponent reports whether v makes its line part of a component: one of
+// the store ingredients a specialty ingredient (a sauce, crema, paste, or
+// blend) became. A customization is not a component; it replaces a line.
+func (v *Via) IsComponent() bool {
+	return v != nil && (v.Kind == ViaStoreAlternative || v.Kind == ViaHouseMadeBatch)
+}
+
+// componentKeys are the keys a skip of the component v belongs to is
+// registered under: the recipe line it replaced, and the specialty's name.
+func (v *Via) componentKeys() []string {
+	if !v.IsComponent() {
+		return nil
+	}
+	keys := make([]string, 0, 2)
+	if v.LineKey != "" {
+		keys = append(keys, v.LineKey)
+	}
+	if v.SpecialtyKey != "" {
+		keys = append(keys, "name:"+v.SpecialtyKey)
+	}
+	return keys
 }
 
 func (a *accumulator) addVia(v *Via, sources []Source) {
