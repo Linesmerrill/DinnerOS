@@ -348,10 +348,15 @@ nonisolated struct ShoppingHandoffLine: Decodable, Hashable, Sendable, Identifia
     var priceCents: Int? = nil
     /// Whether a confirmed line became a pantry purchase; `nil` until confirmed.
     var pantry: ShoppingLinePantry? = nil
+    /// The line split by meal; `nil` on a stored handoff and from a server without meal grouping.
+    var shareRefs: [GroceryShare]? = nil
 
     /// The planned recipes this line is for, sorted by name. Empty for an extra, and on
     /// handoffs stored before the API recorded them.
     var recipes: [GroceryRecipe] { recipeRefs ?? [] }
+
+    /// Each meal's part of the line. The line is still one purchase with one package count.
+    var shares: [GroceryShare] { shareRefs ?? [] }
 
     /// Packages already in the Walmart cart.
     var sentPackages: Int { cart?.sentPackages ?? 0 }
@@ -383,6 +388,7 @@ nonisolated struct ShoppingHandoffLine: Decodable, Hashable, Sendable, Identifia
             confirmation, cart
         case recipeRefs = "recipes"
         case priceCents, pantry
+        case shareRefs = "shares"
     }
 }
 
@@ -497,6 +503,9 @@ nonisolated struct ShoppingExclusionReason: RawRepresentable, Codable, Hashable,
     /// No saved product yet: the line needs one chosen.
     static let noProduct = ShoppingExclusionReason(rawValue: "no_product")
     static let notOnList = ShoppingExclusionReason(rawValue: "not_on_list")
+    /// The household left it out (`skipScope` says how). Never sent; shown struck through under
+    /// its meal so it can be put back.
+    static let skipped = ShoppingExclusionReason(rawValue: "skipped")
 }
 
 /// A grocery line left out of the cart (`ShoppingExcludedLine`).
@@ -515,13 +524,24 @@ nonisolated struct ShoppingExcludedLine: Decodable, Hashable, Sendable, Identifi
     let text: String
     /// What to search for when choosing a product for this line.
     let searchTerms: ShoppingSearchTerms
+    /// The meals the line is for; `nil` from a server that doesn't send them.
+    var recipeRefs: [GroceryRecipe]? = nil
+    var shareRefs: [GroceryShare]? = nil
+    /// How a `skipped` line was left out; `nil` otherwise.
+    var skipScope: GrocerySkipScope? = nil
 
-    var id: String { "\(reason.rawValue)|\(ingredientKey)" }
+    var recipes: [GroceryRecipe] { recipeRefs ?? [] }
+    var shares: [GroceryShare] { shareRefs ?? [] }
+
+    var id: String { "\(reason.rawValue)|\(ingredientKey)|\(skipScope?.rawValue ?? "")" }
 
     private enum CodingKeys: String, CodingKey {
         case ingredientKey
         case ingredientID = "ingredientId"
         case name, category, amounts, quantityText, unquantified, groceryStatus, reason, text, searchTerms
+        case recipeRefs = "recipes"
+        case shareRefs = "shares"
+        case skipScope
     }
 }
 
@@ -554,6 +574,11 @@ nonisolated struct ShoppingProposal: Decodable, Hashable, Sendable {
     /// Set on a match once this week's list went to Walmart; `cartLinks` then add only what
     /// isn't in the cart yet.
     var cart: ShoppingCartState? = nil
+    /// The week's planned recipes in plan order; `nil` on a stored handoff and from a server
+    /// without meal grouping.
+    var mealRefs: [GroceryMeal]? = nil
+
+    var meals: [GroceryMeal] { mealRefs ?? [] }
 
     /// Lines still to send: never sent, or wanted in larger numbers than the cart holds.
     var linesToSend: [ShoppingHandoffLine] {
@@ -575,15 +600,22 @@ nonisolated struct ShoppingProposal: Decodable, Hashable, Sendable {
         excluded.filter { $0.reason == .noProduct }
     }
 
-    /// Lines left out for any other reason: at home, checked off, and so on.
+    /// Lines left out for any other reason: at home, checked off, and so on. What the household
+    /// left out on purpose isn't here; it's shown struck through under its meal.
     var notIncluded: [ShoppingExcludedLine] {
-        excluded.filter { $0.reason != .noProduct }
+        excluded.filter { $0.reason != .noProduct && $0.reason != .skipped }
+    }
+
+    /// What the household left out: for this week, always, or out of single meals.
+    var leftOut: [ShoppingExcludedLine] {
+        excluded.filter { $0.reason == .skipped }
     }
 
     private enum CodingKeys: String, CodingKey {
         case provider, week
         case storeID = "storeId"
         case lines, excluded, cartLinks, affiliateTracked, cart
+        case mealRefs = "meals"
     }
 }
 

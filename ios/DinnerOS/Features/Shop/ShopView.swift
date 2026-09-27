@@ -134,9 +134,22 @@ private struct ShopWeekList: View {
     @Environment(PantryStore.self) private var pantry
     @Environment(SpecialtyStore.self) private var specialties
     @Environment(HouseholdStore.self) private var households
+    @Environment(GrocerySkipStore.self) private var grocerySkips
 
     @State private var showsNotIncluded = false
     @State private var isRequestingStore = false
+    @State private var showsLeftOut = false
+    /// Lines with a leave-out or put-back in flight, by row ID.
+    @State private var working: Set<String> = []
+    @State private var leaveOutError: String?
+    /// The skip revision this list already re-matched for, so its own changes don't match twice.
+    @State private var handledSkipRevision: Int?
+
+    /// Leaving something out changes what the week buys, so it needs `plan.edit`, as on the
+    /// grocery list. Everyone else sees what's left out, read-only.
+    private var canLeaveOut: Bool {
+        households.access?.can(.planEdit) == true && !grocerySkips.isForbidden
+    }
     /// The shown week's grocery list, only so the export section has the same text the
     /// Grocery List screen shares.
     @State private var groceryModel: GroceryListModel?
@@ -200,6 +213,26 @@ private struct ShopWeekList: View {
         .sheet(isPresented: $isRequestingStore) {
             RequestStoreSheet(openStoreSetup: openStoreSetup)
         }
+        .sheet(isPresented: $showsLeftOut) {
+            SkippedIngredientsSheet(week: shopping.week)
+        }
+        .alert("Couldn't Change That", isPresented: Binding(presenting: $leaveOutError)) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(leaveOutError ?? "")
+        }
+        .task(id: shopping.householdID) {
+            // Put Back needs the household's skips, and the review sheet reads them.
+            guard let householdID = shopping.householdID else { return }
+            await grocerySkips.activate(householdID: householdID)
+            handledSkipRevision = grocerySkips.revision
+        }
+        // Left out or put back on the grocery list, a recipe, or the review sheet.
+        .onChange(of: grocerySkips.revision) { _, revision in
+            guard revision != handledSkipRevision else { return }
+            handledSkipRevision = revision
+            Task { await shopping.groceryDidChange() }
+        }
         .groceryExportPrompts(exportController)
         // The week, and the plan behind it: a serving size changed on the Menu changes every
         // quantity the export writes, and the week alone can't see that.
@@ -236,38 +269,36 @@ private struct ShopWeekList: View {
             }
             .listRowBackground(Color.clear)
         }
-        if !needsProduct.isEmpty {
+        let layout = ShopMealLayout(proposal: proposal)
+        ForEach(Array(layout.groups.enumerated()), id: \.element.id) { index, group in
             Section {
-                ForEach(needsProduct) { line in
-                    NeedsProductRow(line: line, canChoose: shopping.canEdit) {
-                        choose(ProductChoice(excluded: line))
+                ForEach(group.rows) { row in
+                    mealRow(row, in: group)
+                }
+                ForEach(group.components) { component in
+                    ShopComponentHeader(
+                        component: component, canEdit: canLeaveOut && group.meal != nil,
+                        isWorking: working.contains(component.id),
+                        leaveOut: { scope in leaveOut(component: component, in: group, scope: scope) },
+                        putBack: { putBack(component: component) })
+                    ForEach(component.rows) { row in
+                        mealRow(row, in: group, inComponent: true)
                     }
                 }
             } header: {
-                Text("Needs a Product")
+                ShopMealHeader(group: group)
             } footer: {
-                if shopping.canEdit {
-                    Text("Choose a Walmart product once and it's used every week.")
-                } else {
-                    Text("Your role can't choose products.")
+                if index == layout.groups.count - 1 {
+                    mealsFooter(needsProduct: !needsProduct.isEmpty)
                 }
             }
         }
-        let toSend = proposal.linesToSend
-        if !toSend.isEmpty {
+        if !proposal.leftOut.isEmpty || !grocerySkips.items.isEmpty {
             Section {
-                ForEach(toSend) { line in
-                    ReadyLineRow(
-                        line: line, packages: packagesBinding(for: line), canEdit: shopping.canEdit,
-                        changeProduct: { choose(ProductChoice(line: line)) },
-                        fixPackageSize: { choose(ProductChoice(line: line, packageSizeFix: $0)) })
+                Button("Everything You Leave Out", systemImage: "cart.badge.minus") {
+                    showsLeftOut = true
                 }
-            } header: {
-                Text("Ready")
-            } footer: {
-                Text(
-                    "We work out how many to buy from each product's size. Tap anything marked Check Amount to fix it before opening Walmart."
-                )
+                .foregroundStyle(.secondary)
             }
         }
         if !proposal.linesInCart.isEmpty || !proposal.otherInCart.isEmpty {
@@ -293,6 +324,152 @@ private struct ShopWeekList: View {
         }
     }
 
+    @ViewBuilder
+    private func mealsFooter(needsProduct: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(
+                "An item several meals use is bought once, with the meal it's listed under first. We work out how many to buy from each product's size."
+            )
+            if needsProduct {
+                Text(
+                    shopping.canEdit
+                        ? "Choose a Walmart product once and it's used every week."
+                        : "Your role can't choose products.")
+            }
+        }
+    }
+
+    /// One line under a meal: the purchase itself where it's bought, a pointer to it under the
+    /// other meals that use it, or a struck-through line the household left out.
+    @ViewBuilder
+    private func mealRow(_ row: ShopMealLayout.Row, in group: ShopMealLayout.Group, inComponent: Bool = false)
+        -> some View
+    {
+        let options = inComponent ? nil : removeOptions(for: row, in: group)
+        Group {
+            switch row.kind {
+            case .line(let line) where row.isPrimary:
+                ReadyLineRow(
+                    line: line, packages: packagesBinding(for: line), canEdit: shopping.canEdit,
+                    changeProduct: { choose(ProductChoice(line: line)) },
+                    fixPackageSize: { choose(ProductChoice(line: line, packageSizeFix: $0)) },
+                    mealNote: ShopMealText.note(for: row), remove: options)
+            case .line(let line):
+                SharedLineRow(
+                    row: row, detail: ShopMealText.boughtWith(row, packages: shopping.packages(for: line)),
+                    isWorking: working.contains(row.id), remove: options)
+            case .needsProduct(let line) where row.isPrimary:
+                NeedsProductRow(
+                    line: line, canChoose: shopping.canEdit, mealNote: ShopMealText.note(for: row), remove: options
+                ) {
+                    choose(ProductChoice(excluded: line))
+                }
+            case .needsProduct:
+                SharedLineRow(
+                    row: row, detail: ShopMealText.boughtWith(row, packages: nil),
+                    isWorking: working.contains(row.id), remove: options)
+            case .leftOut(let line):
+                LeftOutShopRow(
+                    row: row, text: line.text, canPutBack: canLeaveOut && !inComponent,
+                    isWorking: working.contains(row.id)
+                ) {
+                    putBack(line, rowID: row.id)
+                }
+            }
+        }
+        .padding(.leading, inComponent ? 12 : 0)
+    }
+
+    /// "Remove from the list": out of this meal only, for this week, or always. `nil` when this
+    /// member can't, or for a pairing, which is removed from the grocery list instead.
+    private func removeOptions(for row: ShopMealLayout.Row, in group: ShopMealLayout.Group) -> ShopRemoveOptions? {
+        guard canLeaveOut, !row.isLeftOut, row.share?.extra != true else { return nil }
+        let name = row.name
+        let key = row.ingredientKey
+        var options = ShopRemoveOptions(name: name, mealName: nil, justThisMeal: nil, thisWeek: {}, always: {})
+        if let recipeID = row.recipeID, let meal = group.meal {
+            options.mealName = meal.recipeName
+            options.justThisMeal = {
+                leaveOut(.leaveOut(ingredientKey: key, name: name, recipeID: recipeID), key: key, rowID: row.id)
+            }
+        }
+        options.thisWeek = {
+            leaveOut(
+                GrocerySkipRequest(ingredientKey: key, name: name, scope: .week, week: shopping.week.description),
+                key: key, rowID: row.id)
+        }
+        options.always = {
+            leaveOut(.always(ingredientKey: key, name: name), key: key, rowID: row.id)
+        }
+        return options
+    }
+
+    private func leaveOut(
+        component: ShopMealLayout.Component, in group: ShopMealLayout.Group, scope: GrocerySkipScope
+    ) {
+        let key = GroceryComponentKey.skipKey(for: component.component)
+        let request: GrocerySkipRequest
+        switch scope {
+        case .recipe:
+            guard let meal = group.meal else { return }
+            request = .leaveOut(ingredientKey: key, name: component.name, recipeID: meal.recipeID)
+        default:
+            request = .always(ingredientKey: key, name: component.name)
+        }
+        leaveOut(request, keys: Set(component.rows.map(\.ingredientKey)), rowID: component.id)
+    }
+
+    private func putBack(component: ShopMealLayout.Component) {
+        var skips: [GrocerySkip] = []
+        for row in component.rows {
+            if case .leftOut(let line) = row.kind {
+                skips += line.holdingSkips(in: grocerySkips.items).filter { skip in !skips.contains(skip) }
+            }
+        }
+        resume(skips, keys: Set(component.rows.map(\.ingredientKey)), rowID: component.id)
+    }
+
+    private func leaveOut(_ request: GrocerySkipRequest, key: String, rowID: String) {
+        leaveOut(request, keys: [key], rowID: rowID)
+    }
+
+    private func leaveOut(_ request: GrocerySkipRequest, keys: Set<String>, rowID: String) {
+        change(rowID: rowID, keys: keys) {
+            try await grocerySkips.skip(request, householdID: shopping.householdID)
+        }
+    }
+
+    private func putBack(_ line: ShoppingExcludedLine, rowID: String) {
+        resume(line.holdingSkips(in: grocerySkips.items), keys: [line.ingredientKey], rowID: rowID)
+    }
+
+    private func resume(_ skips: [GrocerySkip], keys: Set<String>, rowID: String) {
+        guard !skips.isEmpty else { return }
+        change(rowID: rowID, keys: keys) {
+            for skip in skips {
+                try await grocerySkips.resume(skipID: skip.id, householdID: shopping.householdID)
+            }
+        }
+    }
+
+    /// Runs a change, then re-matches at once so the totals and package counts show it.
+    private func change(rowID: String, keys: Set<String>, _ body: @escaping () async throws -> Void) {
+        guard !working.contains(rowID) else { return }
+        working.insert(rowID)
+        Task {
+            defer { working.remove(rowID) }
+            do {
+                try await body()
+                handledSkipRevision = grocerySkips.revision
+                await shopping.groceryDidChange(forgettingCountsFor: keys)
+            } catch is CancellationError {
+                return
+            } catch {
+                leaveOutError = ShopErrors.message(for: error, households: households)
+            }
+        }
+    }
+
     /// The week the export section's list is built for, and the plan it was built from.
     private struct ShopListKey: Equatable {
         let week: ISOWeek
@@ -309,6 +486,8 @@ private struct ShopWeekList: View {
 private struct NeedsProductRow: View {
     let line: ShoppingExcludedLine
     let canChoose: Bool
+    var mealNote: String? = nil
+    var remove: ShopRemoveOptions? = nil
     let choose: () -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -325,6 +504,11 @@ private struct NeedsProductRow: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+                if let mealNote {
+                    Text(mealNote)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
             .accessibilityElement(children: .combine)
             if !dynamicTypeSize.isAccessibilitySize {
@@ -334,6 +518,9 @@ private struct NeedsProductRow: View {
                 Button("Choose Product", action: choose)
                     .buttonStyle(.bordered)
                     .accessibilityLabel("Choose Product for \(line.name)")
+            }
+            if let remove {
+                ShopRemoveMenu(options: remove)
             }
         }
     }
@@ -346,6 +533,10 @@ private struct ReadyLineRow: View {
     let changeProduct: () -> Void
     /// Opens the product to fix the package size a Check Amount warning is about.
     let fixPackageSize: (ShoppingPackageSizeFix) -> Void
+    /// This meal's amount and the other meals that use it, under a meal.
+    var mealNote: String? = nil
+    /// Ways to take it off the list; `nil` when this member can't.
+    var remove: ShopRemoveOptions? = nil
 
     /// The warning's fix, when this member can make it.
     private var fix: ShoppingPackageSizeFix? {
@@ -371,12 +562,17 @@ private struct ReadyLineRow: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 details
                 Spacer(minLength: 0)
-                if canEdit {
+                if canEdit || remove != nil {
                     Menu {
-                        if let fix {
-                            Button(fix.title, systemImage: "ruler") { fixPackageSize(fix) }
+                        if canEdit {
+                            if let fix {
+                                Button(fix.title, systemImage: "ruler") { fixPackageSize(fix) }
+                            }
+                            Button("Change Product", systemImage: "arrow.triangle.2.circlepath", action: changeProduct)
                         }
-                        Button("Change Product", systemImage: "arrow.triangle.2.circlepath", action: changeProduct)
+                        if let remove {
+                            ShopRemoveMenuItems(options: remove)
+                        }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                             .imageScale(.large)
@@ -438,6 +634,11 @@ private struct ReadyLineRow: View {
             Text(productText)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            if let mealNote {
+                Text(mealNote)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             if !coverageText.isEmpty {
                 Text(coverageText)
                     .font(.footnote)
@@ -451,6 +652,179 @@ private struct ReadyLineRow: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// A line bought with another meal, shown under this one with this meal's own amount.
+private struct SharedLineRow: View {
+    let row: ShopMealLayout.Row
+    let detail: String
+    let isWorking: Bool
+    let remove: ShopRemoveOptions?
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.name)
+                if !row.quantityText.isEmpty {
+                    Text(row.quantityText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Label(detail, systemImage: "arrow.turn.down.right")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 0)
+            if isWorking {
+                ProgressView()
+            } else if let remove {
+                ShopRemoveMenu(options: remove)
+            }
+        }
+    }
+}
+
+/// A line the household left out, struck through under the meal it was left out of.
+private struct LeftOutShopRow: View {
+    let row: ShopMealLayout.Row
+    let text: String
+    let canPutBack: Bool
+    let isWorking: Bool
+    let putBack: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.name)
+                    .strikethrough()
+                    .foregroundStyle(.secondary)
+                if !row.quantityText.isEmpty {
+                    Text(row.quantityText)
+                        .font(.subheadline)
+                        .strikethrough()
+                        .foregroundStyle(.secondary)
+                }
+                Label(text, systemImage: "minus.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(row.name), left out. \(text)")
+            Spacer(minLength: 0)
+            if isWorking {
+                ProgressView()
+            } else if canPutBack {
+                Button("Put Back", action: putBack)
+                    .buttonStyle(.bordered)
+                    .font(.subheadline)
+                    .accessibilityLabel("Put \(row.name) Back")
+            }
+        }
+    }
+}
+
+/// A component of a meal (a crema made from store ingredients): its name, and "Don't Make
+/// This" for the whole of it, or Put Back when the meal doesn't make it.
+private struct ShopComponentHeader: View {
+    let component: ShopMealLayout.Component
+    let canEdit: Bool
+    let isWorking: Bool
+    let leaveOut: (GrocerySkipScope) -> Void
+    let putBack: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Label(component.name, systemImage: "square.stack.3d.up")
+                    .font(.subheadline.weight(.semibold))
+                    .strikethrough(component.isLeftOut)
+                    .foregroundStyle(component.isLeftOut ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.primary))
+                Text(component.isLeftOut ? "Not making this" : "Made from the items below")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 0)
+            if isWorking {
+                ProgressView()
+            } else if canEdit, component.isLeftOut {
+                Button("Put Back", action: putBack)
+                    .buttonStyle(.bordered)
+                    .font(.subheadline)
+                    .accessibilityLabel("Make \(component.name) Again")
+            } else if canEdit {
+                Menu {
+                    Section("Don't Make \(component.name)") {
+                        // A taste preference about this dish, so that's the first choice.
+                        Button("Not for This Dish", systemImage: "fork.knife") { leaveOut(.recipe) }
+                        Button("Never Make It", systemImage: "nosign") { leaveOut(.always) }
+                    }
+                } label: {
+                    Image(systemName: "minus.circle")
+                        .imageScale(.large)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .accessibilityLabel("Don't Make \(component.name)")
+            }
+        }
+    }
+}
+
+/// A meal's section header: its photo, when it has one, and its name.
+private struct ShopMealHeader: View {
+    let group: ShopMealLayout.Group
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if let image = group.meal?.imageURL.flatMap(URL.init(string:)) {
+                RecipePhoto(url: image, aspectRatio: 1, pointWidth: 32, cornerRadius: 6)
+                    .frame(width: 32, height: 32)
+                    .accessibilityHidden(true)
+            }
+            Text(group.title)
+        }
+    }
+}
+
+/// What "Remove" offers for a line under a meal.
+struct ShopRemoveOptions {
+    let name: String
+    var mealName: String?
+    /// Leaves it out of this meal only; `nil` when it can't be (a pairing, a shared batch).
+    var justThisMeal: (() -> Void)?
+    var thisWeek: () -> Void
+    var always: () -> Void
+}
+
+private struct ShopRemoveMenuItems: View {
+    let options: ShopRemoveOptions
+
+    var body: some View {
+        Section("Remove \(options.name)") {
+            if let justThisMeal = options.justThisMeal, let meal = options.mealName {
+                Button("Just for \(meal)", systemImage: "fork.knife", action: justThisMeal)
+            }
+            Button("Just This Week", systemImage: "calendar", action: options.thisWeek)
+            Button("Always", systemImage: "nosign", action: options.always)
+        }
+    }
+}
+
+private struct ShopRemoveMenu: View {
+    let options: ShopRemoveOptions
+
+    var body: some View {
+        Menu {
+            ShopRemoveMenuItems(options: options)
+        } label: {
+            Image(systemName: "minus.circle")
+                .imageScale(.large)
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 44, minHeight: 44)
+        }
+        .accessibilityLabel("Remove \(options.name)")
     }
 }
 

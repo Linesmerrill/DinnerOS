@@ -18,11 +18,12 @@ struct SkippedIngredientsSheet: View {
     }
 }
 
-/// The ingredients the household leaves off its grocery list, split by how long each skip
-/// lasts, with one tap to resume and one to change the lifetime.
+/// Everything the household leaves out, split by how far each skip reaches, with one tap to
+/// resume and one to change the lifetime.
 ///
-/// The two sections are the whole design: "back next week" and "never again" are different
-/// promises, and a single list would make the household read each row to tell them apart.
+/// The sections are the whole design: "back next week", "never again", and "not in this dish"
+/// are different promises, and a single list would make the household read each row to tell
+/// them apart. Every exclusion — from the grocery list, the Shop tab, or a recipe — is here.
 struct SkippedIngredientsView: View {
     let week: ISOWeek
 
@@ -38,7 +39,7 @@ struct SkippedIngredientsView: View {
 
     var body: some View {
         content
-            .navigationTitle("Not Buying")
+            .navigationTitle("Left Out")
             .navigationBarTitleDisplayMode(.inline)
             .alert("Couldn't Change That", isPresented: Binding(presenting: $actionError)) {
                 Button("OK", role: .cancel) {}
@@ -76,8 +77,9 @@ struct SkippedIngredientsView: View {
             }
             if skips.items.isEmpty {
                 ContentUnavailableView(
-                    "Nothing Skipped", systemImage: "cart.badge.minus",
-                    description: Text("Swipe a line on the grocery list to skip an ingredient you don't use.")
+                    "Nothing Left Out", systemImage: "cart.badge.minus",
+                    description: Text(
+                        "Swipe a line on the grocery list, or remove an ingredient from a recipe, to leave it out.")
                 )
                 .listRowBackground(Color.clear)
             }
@@ -87,6 +89,10 @@ struct SkippedIngredientsView: View {
             section(
                 skips.thisWeek, title: String(localized: "Just This Week"),
                 footer: String(localized: "Back on the list next week, with nothing to do."))
+            section(
+                skips.inRecipes, title: String(localized: "Left Out of One Dish"),
+                footer: String(localized: "Left out of that recipe every time it's planned. Other dishes still get it.")
+            )
         }
         .refreshable {
             await skips.refresh()
@@ -110,10 +116,22 @@ struct SkippedIngredientsView: View {
 
     private func row(_ skip: GrocerySkip) -> some View {
         HStack {
-            Text(skip.name)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(skip.name)
+                if skip.scope == .recipe, let recipe = skip.recipeName, !recipe.isEmpty {
+                    Text("in \(recipe)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
             Spacer(minLength: 0)
-            if skips.isBusy(ingredientKey: skip.ingredientKey) {
+            if skips.isBusy(skip) {
                 ProgressView()
+            } else if canEdit, skip.scope == .recipe {
+                Button("Put Back") { resume(skip) }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel("Put \(skip.name) Back in \(skip.recipeName ?? "the Recipe")")
             } else if canEdit {
                 Menu {
                     Button("Buy It Again", systemImage: "arrow.uturn.backward") {
@@ -138,7 +156,9 @@ struct SkippedIngredientsView: View {
         }
         .swipeActions(edge: .trailing) {
             if canEdit {
-                Button("Buy It Again", systemImage: "arrow.uturn.backward") {
+                Button(
+                    skip.scope == .recipe ? "Put Back" : "Buy It Again", systemImage: "arrow.uturn.backward"
+                ) {
                     resume(skip)
                 }
                 .tint(.blue)
@@ -183,5 +203,9 @@ struct SkippedIngredientsView: View {
                 GrocerySkip(
                     id: "skip-2", ingredientKey: "name:dill", key: "dill", name: "Dill",
                     scope: .week, week: "2026-W38", text: "Skipped this week"),
+                GrocerySkip(
+                    id: "skip-3", ingredientKey: "name:peanuts", key: "peanuts", name: "Peanuts",
+                    scope: .recipe, week: nil, text: "Left out of Thai Coconut Curry Chicken",
+                    recipeID: "recipe-1", recipeName: "Thai Coconut Curry Chicken"),
             ]))
 }

@@ -8,7 +8,10 @@ protocol GrocerySkipping: AnyObject {
     /// Incremented after every change, so an open grocery list knows to reload.
     var revision: Int { get }
 
-    /// The household's skip for an ingredient key, when it has one.
+    /// Every skip the household has, newest first.
+    var items: [GrocerySkip] { get }
+
+    /// The household-wide skip for an ingredient key, when it has one.
     func skip(forIngredientKey key: String) -> GrocerySkip?
 
     @discardableResult
@@ -44,8 +47,8 @@ final class GrocerySkipStore: GrocerySkipping {
     private(set) var refreshError: String?
     /// Incremented after every change that can alter a grocery list.
     private(set) var revision = 0
-    /// Skips being changed or resumed, by ingredient key, so a row can show progress.
-    private(set) var busyKeys: Set<String> = []
+    /// Skips being changed or resumed, by ingredient and recipe, so a row can show progress.
+    private(set) var busySlots: Set<GrocerySkipSlot> = []
     /// The role may not change the plan, so skipping is hidden. The API enforces it anyway.
     private(set) var isForbidden = false
 
@@ -80,15 +83,24 @@ final class GrocerySkipStore: GrocerySkipping {
     // MARK: - Reading
 
     func skip(forIngredientKey key: String) -> GrocerySkip? {
-        items.first { $0.ingredientKey == key }
+        items.first { $0.recipeID == nil && $0.ingredientKey == key }
     }
 
-    /// The skips that end on their own, and the ones that don't. The review screen shows them
-    /// apart, because "back next week" and "never again" are different promises.
+    /// The skips that end on their own, the ones that don't, and the ones for single dishes. The
+    /// review screen shows them apart, because "back next week", "never again", and "not in this
+    /// dish" are different promises.
     var thisWeek: [GrocerySkip] { items.filter { $0.scope == .week } }
     var forever: [GrocerySkip] { items.filter { $0.scope == .always } }
+    var inRecipes: [GrocerySkip] {
+        items.filter { $0.scope == .recipe }
+            .sorted { ($0.recipeName ?? "", $0.name) < ($1.recipeName ?? "", $1.name) }
+    }
 
-    func isBusy(ingredientKey: String) -> Bool { busyKeys.contains(ingredientKey) }
+    func isBusy(ingredientKey: String) -> Bool {
+        busySlots.contains(GrocerySkipSlot(ingredientKey: ingredientKey, recipeID: nil))
+    }
+
+    func isBusy(_ skip: GrocerySkip) -> Bool { busySlots.contains(skip.slot) }
 
     // MARK: - Loading
 
@@ -155,8 +167,8 @@ final class GrocerySkipStore: GrocerySkipping {
     @discardableResult
     func skip(_ request: GrocerySkipRequest, householdID: String? = nil) async throws -> GrocerySkip {
         let (api, target) = try require(householdID)
-        busyKeys.insert(request.ingredientKey)
-        defer { busyKeys.remove(request.ingredientKey) }
+        busySlots.insert(request.slot)
+        defer { busySlots.remove(request.slot) }
         do {
             let stored = try await session.authorized { token in
                 try await api.skip(householdID: target, request: request, accessToken: token)
@@ -176,9 +188,9 @@ final class GrocerySkipStore: GrocerySkipping {
     /// Resumes an ingredient.
     func resume(skipID: String, householdID: String? = nil) async throws {
         let (api, target) = try require(householdID)
-        let key = items.first { $0.id == skipID }?.ingredientKey
-        if let key { busyKeys.insert(key) }
-        defer { if let key { busyKeys.remove(key) } }
+        let slot = items.first { $0.id == skipID }?.slot
+        if let slot { busySlots.insert(slot) }
+        defer { if let slot { busySlots.remove(slot) } }
         do {
             try await session.authorized { token in
                 try await api.resume(householdID: target, skipID: skipID, accessToken: token)
@@ -217,9 +229,10 @@ final class GrocerySkipStore: GrocerySkipping {
         return (api, target)
     }
 
-    /// Replaces the skip for the same ingredient, or adds it at the front (newest first).
+    /// Replaces the skip for the same ingredient and recipe, or adds it at the front (newest
+    /// first). A recipe skip and a household-wide skip for one ingredient are two skips.
     private func apply(_ skip: GrocerySkip) {
-        if let index = items.firstIndex(where: { $0.ingredientKey == skip.ingredientKey }) {
+        if let index = items.firstIndex(where: { $0.slot == skip.slot }) {
             items[index] = skip
         } else {
             items.insert(skip, at: 0)
@@ -242,7 +255,7 @@ final class GrocerySkipStore: GrocerySkipping {
         phase = .idle
         items = []
         refreshError = nil
-        busyKeys = []
+        busySlots = []
         isForbidden = false
     }
 }

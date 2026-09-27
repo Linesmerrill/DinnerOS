@@ -432,6 +432,19 @@ final class ShoppingStore {
         packageOverrides[line.ingredientKey] = clamped == line.packages ? nil : clamped
     }
 
+    /// Something was left out or put back — here, on the grocery list, or on a recipe — so what
+    /// the week buys changed. The match is read again so the totals and package counts show the
+    /// new need at once; a count the member changed for an ingredient whose need just changed is
+    /// dropped, because it was chosen for the old amount; and the export section rebuilds.
+    func groceryDidChange(forgettingCountsFor keys: Set<String> = []) async {
+        for key in keys {
+            packageOverrides[key] = nil
+        }
+        planRevision += 1
+        guard proposalPhase == .loaded, isConfigured else { return }
+        await loadProposal(clearing: false)
+    }
+
     /// The handoff body. Without changes it's the match's defaults. Once a count changed it
     /// names every ready line, because `lines` replaces the default candidates, with
     /// `packages` only where the member changed it.

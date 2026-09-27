@@ -358,6 +358,27 @@ struct ShoppingStoreTests {
         #expect(!store.hasPackageEdits)
     }
 
+    /// Leaving an ingredient out of a meal changes its need, so the match is read again at once
+    /// and a count chosen for the old amount is dropped; other changed counts stay.
+    @Test func aGroceryChangeRematchesAndForgetsTheCountsItChanged() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.load()
+        let lines = store.readyLines
+        try #require(lines.count == 2)
+        store.setPackages(5, for: lines[0])
+        store.setPackages(4, for: lines[1])
+        let matches = harness.server.log.filter { $0 == Self.matchRoute }.count
+        let revision = store.planRevision
+
+        await store.groceryDidChange(forgettingCountsFor: ["i-beef"])
+
+        #expect(harness.server.log.filter { $0 == Self.matchRoute }.count == matches + 1)
+        #expect(store.planRevision == revision + 1)
+        #expect(store.packages(for: lines[0]) == lines[0].packages)
+        #expect(store.packages(for: lines[1]) == 4)
+    }
+
     // MARK: Handoff
 
     @Test func openInWalmartStoresAHandoffAndOpensEachLinkInOrder() async throws {

@@ -13,8 +13,10 @@ private final class FakeSkipper: GrocerySkipping, @unchecked Sendable {
     /// When set, every change throws it.
     var failure: (any Error)?
 
+    var items: [GrocerySkip] { stored }
+
     func skip(forIngredientKey key: String) -> GrocerySkip? {
-        stored.first { $0.ingredientKey == key }
+        stored.first { $0.recipeID == nil && $0.ingredientKey == key }
     }
 
     @discardableResult
@@ -24,8 +26,8 @@ private final class FakeSkipper: GrocerySkipping, @unchecked Sendable {
         let skip = GrocerySkip(
             id: "skip-\(requests.count)", ingredientKey: request.ingredientKey, key: request.name.lowercased(),
             name: request.name, scope: request.scope, week: request.week,
-            text: request.scope == .always ? "Never buying this" : "Skipped this week")
-        stored.removeAll { $0.ingredientKey == request.ingredientKey }
+            text: request.scope == .always ? "Never buying this" : "Skipped this week", recipeID: request.recipeID)
+        stored.removeAll { $0.slot == request.slot }
         stored.append(skip)
         revision += 1
         return skip
@@ -48,6 +50,7 @@ private nonisolated final class FakeSkipServer: Sendable {
         var name: String
         var scope: String
         var week: String?
+        var recipeID: String?
     }
 
     struct State: Sendable {
@@ -95,9 +98,10 @@ private nonisolated final class FakeSkipServer: Sendable {
                 }
                 let name = body["name"] as? String ?? key
                 let week = body["week"] as? String
-                // One skip per ingredient: posting again replaces it and answers 200.
+                let recipeID = body["recipeId"] as? String
+                // One skip per ingredient and recipe: posting again replaces it and answers 200.
                 if let index = state.rows.firstIndex(where: {
-                    $0.householdID == household && $0.ingredientKey == key
+                    $0.householdID == household && $0.ingredientKey == key && $0.recipeID == recipeID
                 }) {
                     state.rows[index].scope = scope
                     state.rows[index].week = week
@@ -106,7 +110,7 @@ private nonisolated final class FakeSkipServer: Sendable {
                 }
                 let row = Row(
                     id: "skip-\(state.nextID)", householdID: household, ingredientKey: key, name: name,
-                    scope: scope, week: week)
+                    scope: scope, week: week, recipeID: recipeID)
                 state.nextID += 1
                 state.rows.append(row)
                 return (201, Data(Self.json(row).utf8))
@@ -128,10 +132,13 @@ private nonisolated final class FakeSkipServer: Sendable {
 
     private static func json(_ row: Row) -> String {
         let week = row.week.map { #""\#($0)""# } ?? "null"
+        let recipeID = row.recipeID.map { #""\#($0)""# } ?? "null"
+        let recipeName = row.recipeID.map { _ in #""Thai Coconut Curry Chicken""# } ?? "null"
         let text = row.scope == "always" ? "Never buying this" : "Skipped this week"
         return #"""
             {"id":"\#(row.id)","ingredientKey":"\#(row.ingredientKey)","key":"\#(row.name.lowercased())",
-             "name":"\#(row.name)","scope":"\#(row.scope)","week":\#(week),"text":"\#(text)"}
+             "name":"\#(row.name)","scope":"\#(row.scope)","week":\#(week),"text":"\#(text)",
+             "recipeId":\#(recipeID),"recipeName":\#(recipeName)}
             """#
     }
 }
@@ -323,6 +330,157 @@ struct GrocerySkipTests {
                 GrocerySkipRequest(ingredientKey: "name:cilantro", name: "Cilantro", scope: .always, week: nil))
         }
         #expect(store.isForbidden)
+    }
+
+    // MARK: - Just this dish
+
+    @Test func aRecipeSkipStandsBesideTheHouseholdWideOne() async throws {
+        let server = FakeSkipServer()
+        let transport = StubTransport { request in server.handle(request) }
+        let (session, client) = try await session(transport)
+        let store = GrocerySkipStore(session: session, api: GrocerySkipsAPI(client: client))
+        await store.activate(householdID: "household-1")
+
+        let curry = try await store.skip(
+            .leaveOut(ingredientKey: "name:cilantro", name: "Cilantro", recipeID: "recipe-curry"))
+        let always = try await store.skip(.always(ingredientKey: "name:cilantro", name: "Cilantro"))
+        let again = try await store.skip(
+            .leaveOut(ingredientKey: "name:cilantro", name: "Cilantro", recipeID: "recipe-curry"))
+
+        #expect(curry.scope == .recipe)
+        #expect(curry.recipeID == "recipe-curry")
+        #expect(curry.recipeName == "Thai Coconut Curry Chicken")
+        #expect(again.id == curry.id)
+        #expect(store.items.count == 2)
+        #expect(store.inRecipes.map(\.id) == [curry.id])
+        #expect(store.forever.map(\.id) == [always.id])
+        // The household-wide skip is the one the grocery list's review asks about.
+        #expect(store.skip(forIngredientKey: "name:cilantro")?.id == always.id)
+        #expect(server.rows.count == 2)
+    }
+
+    @Test func aRecipeSkipRequestNamesItsRecipeAndOnlyThen() throws {
+        let encoder = JSONEncoder()
+        let dish =
+            try JSONSerialization.jsonObject(
+                with: encoder.encode(
+                    GrocerySkipRequest.leaveOut(ingredientKey: "name:cilantro", name: "Cilantro", recipeID: "r1")))
+            as? [String: Any]
+        #expect(dish?["scope"] as? String == "recipe")
+        #expect(dish?["recipeId"] as? String == "r1")
+        #expect(dish?["week"] == nil)
+
+        let always =
+            try JSONSerialization.jsonObject(
+                with: encoder.encode(GrocerySkipRequest.always(ingredientKey: "name:cilantro", name: "Cilantro")))
+            as? [String: Any]
+        #expect(always?["recipeId"] == nil)
+    }
+
+    @Test func leavingAnIngredientOutOfOneMealSendsARecipeSkipAndKeepsItsCheck() async throws {
+        let skipper = FakeSkipper()
+        let model = try await makeModel(skipper: skipper)
+        await model.load()
+        // A line two meals share: leaving it out of one keeps it on the list for the other.
+        let shared = GroceryItem(
+            ingredientKey: "i-onion", name: "Yellow Onion", amounts: [], quantityText: "2", unquantified: false,
+            status: .toBuy,
+            recipes: [GroceryRecipe(id: "r-tacos", name: "Tacos"), GroceryRecipe(id: "r-soup", name: "Soup")])
+        model.toggle(shared)
+
+        await model.skip(shared, scope: .recipe, recipeID: "r-soup")
+
+        let request = try #require(skipper.requests.last)
+        #expect(request == .leaveOut(ingredientKey: "i-onion", name: "Yellow Onion", recipeID: "r-soup"))
+        #expect(model.isChecked(shared))
+    }
+
+    @Test func putBackResumesOnlyTheSkipHoldingTheItemBack() async throws {
+        let skipper = FakeSkipper()
+        skipper.stored = [
+            GrocerySkip(
+                id: "s-curry", ingredientKey: "i-cilantro", key: "cilantro", name: "Cilantro", scope: .recipe,
+                week: nil, text: "Left out of Curry", recipeID: "r-curry"),
+            GrocerySkip(
+                id: "s-tacos", ingredientKey: "i-cilantro", key: "cilantro", name: "Cilantro", scope: .recipe,
+                week: nil, text: "Left out of Tacos", recipeID: "r-tacos"),
+            GrocerySkip(
+                id: "s-dill", ingredientKey: "name:dill", key: "dill", name: "Dill", scope: .always, week: nil,
+                text: "Never buying this"),
+        ]
+        let model = try await makeModel(skipper: skipper)
+        await model.load()
+        let leftOut = GroceryItem(
+            ingredientKey: "i-cilantro", name: "Cilantro", amounts: [], quantityText: "¼ oz", unquantified: false,
+            status: GroceryItemStatus(rawValue: "skipped"), recipes: [GroceryRecipe(id: "r-curry", name: "Curry")],
+            skipScope: .recipe, skipText: "Left out of Curry")
+
+        #expect(model.canPutBack(leftOut))
+        await model.putBack(leftOut)
+
+        #expect(skipper.resumed == ["s-curry"])
+    }
+
+    @Test func aComponentIsHeldBackByTheSkipOfItsRecipeLine() {
+        let crema = GroceryComponent(
+            specialtyID: "smoky-red-pepper-crema", specialtyName: "Smoky Red Pepper Crema", ingredientKey: "i-crema")
+        let sourCream = GroceryItem(
+            ingredientKey: "i-sour-cream", name: "Sour Cream", amounts: [], quantityText: "4 tsp",
+            unquantified: false, status: GroceryItemStatus(rawValue: "skipped"),
+            recipes: [GroceryRecipe(id: "r-tacos", name: "Tacos")], skipScope: .recipe,
+            shares: [GroceryShare(recipeID: "r-tacos", recipeName: "Tacos", quantityText: "4 tsp", component: crema)])
+        let skips = [
+            GrocerySkip(
+                id: "s-crema", ingredientKey: "i-crema", key: "smoky red pepper crema", name: "Smoky Red Pepper Crema",
+                scope: .recipe, week: nil, text: "Left out of Tacos", recipeID: "r-tacos")
+        ]
+
+        #expect(GrocerySkipMatching.skips(holdingBack: sourCream, in: skips).map(\.id) == ["s-crema"])
+        // A batch's component has no recipe line; its name stands in, compared without case.
+        let batch = GroceryComponent(specialtyID: "blend", specialtyName: "Southwest Spice Blend")
+        #expect(GroceryComponentKey.skipKey(for: batch) == "name:Southwest Spice Blend")
+        let blendSkip = GrocerySkip(
+            id: "s-blend", ingredientKey: "name:southwest spice blend", key: "southwest spice blend",
+            name: "Southwest Spice Blend", scope: .always, week: nil, text: "Never buying this")
+        #expect(blendSkip.matches(ingredientKey: GroceryComponentKey.skipKey(for: batch)))
+    }
+
+    @Test func groceryListDecodesSharesMealsAndRecipeSkips() throws {
+        let json = Data(
+            #"""
+            {"week":"2026-W38","status":"draft","pantryApplied":true,"skipped":[],
+             "meals":[{"recipeId":"r-tacos","recipeName":"Tacos","imageUrl":null,"isAddon":false,"day":"mon"}],
+             "categories":[{"category":"produce","items":[
+               {"ingredientKey":"i-cilantro","name":"Cilantro","amounts":[],"quantityText":"½ oz","unquantified":false,
+                "status":"toBuy","recipes":[{"id":"r-tacos","name":"Tacos"}],
+                "shares":[{"recipeId":"r-tacos","recipeName":"Tacos","amounts":[],"quantityText":"½ oz",
+                           "unquantified":false,"combined":false,"extra":false,"component":null}]}]}],
+             "skippedItems":[
+               {"ingredientKey":"i-cilantro","name":"Cilantro","amounts":[],"quantityText":"¼ oz","unquantified":false,
+                "status":"skipped","recipes":[{"id":"r-curry","name":"Curry"}],"skipScope":"recipe",
+                "skipText":"Left out of Curry","shares":[]}]}
+            """#.utf8)
+        let list = try JSONDecoder().decode(GroceryList.self, from: json)
+
+        #expect(list.meals.map(\.recipeName) == ["Tacos"])
+        #expect(list.meals.first?.day == "mon")
+        let listed = try #require(list.allItems.first)
+        let skipped = try #require(list.skippedItems.first)
+        #expect(listed.shares.first?.quantityText == "½ oz")
+        #expect(skipped.skipScope == .recipe)
+        // The same ingredient is on the list for one meal and left out of another: two rows.
+        #expect(listed.id != skipped.id)
+    }
+
+    @Test func aSkipStoredBeforeRecipeSkipsStillDecodes() throws {
+        let json = Data(
+            #"""
+            {"id":"s1","ingredientKey":"name:cilantro","key":"cilantro","name":"Cilantro","scope":"always",
+             "week":null,"text":"Never buying this"}
+            """#.utf8)
+        let skip = try JSONDecoder().decode(GrocerySkip.self, from: json)
+        #expect(skip.recipeID == nil)
+        #expect(skip.slot == GrocerySkipSlot(ingredientKey: "name:cilantro", recipeID: nil))
     }
 
     @Test func storeClearsWhenTheHouseholdChanges() async throws {

@@ -287,8 +287,13 @@ nonisolated struct GroceryList: Decodable, Equatable, Sendable {
     /// Ingredients the household chose not to buy. They are deliberately **not** in
     /// `categories` or `allItems`, so nothing asks anyone to buy them, but they still carry
     /// their amounts and recipes so the app can say what is being skipped and why it was
-    /// wanted. A different thing from `skipped`, which is about plan entries.
+    /// wanted. A different thing from `skipped`, which is about plan entries. An item skipped
+    /// with `recipe` is only the left-out meals' part: the same ingredient can also be in
+    /// `categories` for other meals.
     var skippedItems: [GroceryItem] = []
+    /// The week's planned recipes in plan order, each once. Every item's `shares` name one.
+    /// Empty from a server without meal grouping.
+    var meals: [GroceryMeal] = []
 
     var isEmpty: Bool { categories.allSatisfy { $0.items.isEmpty } && batches.isEmpty }
 
@@ -297,7 +302,7 @@ nonisolated struct GroceryList: Decodable, Equatable, Sendable {
 
 extension GroceryList {
     private enum CodingKeys: String, CodingKey {
-        case week, status, pantryApplied, categories, skipped, specialtiesApplied, batches, skippedItems
+        case week, status, pantryApplied, categories, skipped, specialtiesApplied, batches, skippedItems, meals
     }
 
     /// The specialty fields are additive, so they're read leniently: a response without them, or
@@ -312,7 +317,98 @@ extension GroceryList {
             skipped: try container.decode([GrocerySkippedEntry].self, forKey: .skipped),
             specialtiesApplied: (try? container.decodeIfPresent(Bool.self, forKey: .specialtiesApplied)) ?? false,
             batches: (try? container.decodeIfPresent([GroceryBatch].self, forKey: .batches)) ?? [],
-            skippedItems: container.decodeLossyArray(GroceryItem.self, forKey: .skippedItems))
+            skippedItems: container.decodeLossyArray(GroceryItem.self, forKey: .skippedItems),
+            meals: container.decodeLossyArray(GroceryMeal.self, forKey: .meals))
+    }
+}
+
+/// One planned recipe a grocery list can be grouped under (`GroceryMeal`).
+nonisolated struct GroceryMeal: Decodable, Hashable, Sendable, Identifiable {
+    let recipeID: String
+    let recipeName: String
+    var imageURL: String? = nil
+    var isAddon = false
+    /// The first day it's planned on; `nil` when unscheduled.
+    var day: String? = nil
+
+    var id: String { recipeID }
+
+    private enum CodingKeys: String, CodingKey {
+        case recipeID = "recipeId"
+        case recipeName
+        case imageURL = "imageUrl"
+        case isAddon, day
+    }
+}
+
+extension GroceryMeal {
+    nonisolated init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            recipeID: try container.decode(String.self, forKey: .recipeID),
+            recipeName: try container.decode(String.self, forKey: .recipeName),
+            imageURL: container.decodeLenient(String.self, forKey: .imageURL),
+            isAddon: container.decodeLenientBool(forKey: .isAddon) ?? false,
+            day: container.decodeLenient(String.self, forKey: .day))
+    }
+}
+
+/// A component of a meal (`GroceryComponent`): the store ingredients a specialty ingredient —
+/// a sauce, crema, paste, or blend — became, which can be left out of the meal as a whole.
+nonisolated struct GroceryComponent: Decodable, Hashable, Sendable {
+    let specialtyID: String
+    let specialtyName: String
+    /// The recipe line the component replaced: the key to skip to leave it all out. Empty for a
+    /// house-made batch, which serves several meals.
+    var ingredientKey: String = ""
+
+    private enum CodingKeys: String, CodingKey {
+        case specialtyID = "specialtyId"
+        case specialtyName, ingredientKey
+    }
+}
+
+extension GroceryComponent {
+    nonisolated init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            specialtyID: try container.decode(String.self, forKey: .specialtyID),
+            specialtyName: try container.decode(String.self, forKey: .specialtyName),
+            ingredientKey: container.decodeLenient(String.self, forKey: .ingredientKey) ?? "")
+    }
+}
+
+/// The part of a grocery item one meal needs (`GroceryShare`). The item stays one purchase.
+nonisolated struct GroceryShare: Decodable, Hashable, Sendable {
+    let recipeID: String
+    let recipeName: String
+    /// This meal's amount ("2 cloves"); empty when it gave none, or the share is `combined`.
+    var quantityText: String = ""
+    var unquantified = false
+    /// Made for several meals together (a house-made batch), so no amount is split out.
+    var combined = false
+    /// A line added for this meal directly, such as an accepted pairing.
+    var extra = false
+    /// Set when the share is part of a component of the meal.
+    var component: GroceryComponent? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case recipeID = "recipeId"
+        case recipeName, quantityText, unquantified, combined, extra, component
+    }
+}
+
+extension GroceryShare {
+    nonisolated init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            recipeID: try container.decode(String.self, forKey: .recipeID),
+            recipeName: try container.decode(String.self, forKey: .recipeName),
+            quantityText: container.decodeLenient(String.self, forKey: .quantityText) ?? "",
+            unquantified: container.decodeLenientBool(forKey: .unquantified) ?? false,
+            combined: container.decodeLenientBool(forKey: .combined) ?? false,
+            extra: container.decodeLenientBool(forKey: .extra) ?? false,
+            component: container.decodeLenient(GroceryComponent.self, forKey: .component))
     }
 }
 
@@ -393,8 +489,12 @@ nonisolated struct GroceryItem: Decodable, Equatable, Sendable, Identifiable {
     var skipScope: GrocerySkipScope?
     /// What the skip does, in the server's words. Set only on a skipped item.
     var skipText: String?
+    /// The item split by meal, in `recipes` order. Empty from a server without meal grouping.
+    var shares: [GroceryShare] = []
 
-    var id: String { ingredientKey }
+    /// A skipped item and a listed one can share an ingredient (one meal left it out, another
+    /// didn't), so a skipped item's identity includes how it was skipped.
+    var id: String { skipScope.map { "\(ingredientKey)|\($0.rawValue)" } ?? ingredientKey }
 
     /// The pairing extras on this item, which can be taken off the week's list.
     var pairingExtras: [GroceryExtra] {
@@ -415,7 +515,7 @@ nonisolated struct GroceryItem: Decodable, Equatable, Sendable, Identifiable {
 extension GroceryItem {
     private enum CodingKeys: String, CodingKey {
         case ingredientKey, name, amounts, quantityText, unquantified, status, recipes, specialty,
-            specialtyDetail, via, extras, skipScope, skipText
+            specialtyDetail, via, extras, skipScope, skipText, shares
     }
 
     /// The specialty fields are additive, so they're read leniently, like `GroceryList`'s.
@@ -434,7 +534,8 @@ extension GroceryItem {
             via: (try? container.decodeIfPresent([GroceryVia].self, forKey: .via)) ?? [],
             extras: container.decodeLossyArray(GroceryExtra.self, forKey: .extras),
             skipScope: (try? container.decodeIfPresent(GrocerySkipScope.self, forKey: .skipScope)) ?? nil,
-            skipText: (try? container.decodeIfPresent(String.self, forKey: .skipText)) ?? nil)
+            skipText: (try? container.decodeIfPresent(String.self, forKey: .skipText)) ?? nil,
+            shares: container.decodeLossyArray(GroceryShare.self, forKey: .shares))
     }
 }
 

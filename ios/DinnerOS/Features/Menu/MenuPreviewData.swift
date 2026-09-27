@@ -215,5 +215,6 @@ struct MenuPreviewEnvironment: ViewModifier {
             .environment(NotificationPreviewData.store(session: session))
             .environment(SpecialtyPreviewData.store(session: session))
             .environment(ShopPreviewData.store(session: session))
+            .environment(GrocerySkipStore.preview(session: session))
     }
 }
