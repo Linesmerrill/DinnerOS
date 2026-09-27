@@ -279,6 +279,10 @@ type HandoffLineResponse struct {
 	Cart *LineCartResponse `json:"cart"`
 	// Recipes are the planned recipes the line is for, never null.
 	Recipes []RecipeRefResponse `json:"recipes"`
+	// Shares split the line by meal: each meal's own amount, and whether it
+	// is for a component of that meal. The line stays one purchase with one
+	// package count. Empty on a stored handoff.
+	Shares []planning.GroceryShareResponse `json:"shares"`
 	// PriceCents is what the line cost in all, or null.
 	PriceCents *int64 `json:"priceCents"`
 	// Pantry is null until confirmed; then tracked (a pantry purchase) or
@@ -355,6 +359,13 @@ type ExcludedResponse struct {
 	// SearchTerms is what to search for when choosing a product for this
 	// line, which is what the "no_product" rows need.
 	SearchTerms SearchTermsResponse `json:"searchTerms"`
+	// Recipes and Shares are the meals the line is for, as on a line.
+	Recipes []RecipeRefResponse             `json:"recipes"`
+	Shares  []planning.GroceryShareResponse `json:"shares"`
+	// SkipScope is week, always, or recipe on a skipped line, and absent
+	// otherwise. A recipe-scoped line holds only the left-out meals' part;
+	// the same ingredient can also be a line for other meals.
+	SkipScope grocery.SkipScope `json:"skipScope,omitempty"`
 }
 
 // CartLinkResponse is one handoff URL.
@@ -376,6 +387,9 @@ type ProposalResponse struct {
 	// Cart is set on a match when the week has a current handoff; null
 	// otherwise, and always on a stored handoff.
 	Cart *CartStateResponse `json:"cart"`
+	// Meals are the week's planned recipes in plan order; every line's and
+	// excluded line's shares name one of them. Empty on a stored handoff.
+	Meals []planning.GroceryMealResponse `json:"meals"`
 }
 
 // HandoffResponse is a stored handoff.
@@ -679,10 +693,8 @@ func (h *Handler) lineResponse(provider providers.Key, l HandoffLine, stored boo
 		tracking := l.Pantry
 		resp.Pantry = &tracking
 	}
-	resp.Recipes = make([]RecipeRefResponse, 0, len(l.Recipes))
-	for _, r := range l.Recipes {
-		resp.Recipes = append(resp.Recipes, RecipeRefResponse(r))
-	}
+	resp.Recipes = recipeRefs(l.Recipes)
+	resp.Shares = planning.GroceryShares(l.Shares)
 	if l.Reason != "" {
 		reason := l.Reason
 		count.Reason = reason
@@ -701,6 +713,34 @@ func (h *Handler) lineResponse(provider providers.Key, l HandoffLine, stored boo
 		resp.Cart = &LineCartResponse{SentPackages: l.Cart.SentPackages, AddPackages: l.Cart.AddPackages, RemovePackages: l.Cart.RemovePackages}
 	}
 	return resp
+}
+
+func recipeRefs(refs []RecipeRef) []RecipeRefResponse {
+	out := make([]RecipeRefResponse, 0, len(refs))
+	for _, r := range refs {
+		out = append(out, RecipeRefResponse(r))
+	}
+	return out
+}
+
+// skippedText says why a skipped line isn't bought, in the grocery list's
+// words.
+func skippedText(e Excluded) string {
+	switch e.SkipScope {
+	case grocery.SkipAlways:
+		return "Never buying this"
+	case grocery.SkipThisWeek:
+		return "Skipped this week"
+	case grocery.SkipRecipe:
+		names := make([]string, 0, len(e.Recipes))
+		for _, r := range e.Recipes {
+			names = append(names, r.Name)
+		}
+		if len(names) > 0 {
+			return "Left out of " + strings.Join(names, ", ")
+		}
+	}
+	return "Left out"
 }
 
 func (h *Handler) sentText(provider providers.Key, l SentLine) string {
@@ -748,6 +788,7 @@ func (h *Handler) proposalResponse(p Proposal, stored bool) ProposalResponse {
 		Lines:     make([]HandoffLineResponse, 0, len(p.Lines)),
 		Excluded:  make([]ExcludedResponse, 0, len(p.Excluded)),
 		CartLinks: make([]CartLinkResponse, 0, len(p.Links)),
+		Meals:     planning.GroceryMeals(p.Meals),
 	}
 	for _, l := range p.Lines {
 		resp.Lines = append(resp.Lines, h.lineResponse(p.Provider, l, stored))
@@ -757,6 +798,10 @@ func (h *Handler) proposalResponse(p Proposal, stored bool) ProposalResponse {
 			IngredientKey: e.IngredientKey, IngredientID: optionalString(e.IngredientID()), Name: e.Name, Category: e.Category,
 			Unquantified: e.Unquantified, Reason: e.Reason, Text: h.exclusionText(p.Provider, e.Reason),
 			SearchTerms: searchTermsResponse(e.Name, e.Category),
+			Recipes:     recipeRefs(e.Recipes), Shares: planning.GroceryShares(e.Shares), SkipScope: e.SkipScope,
+		}
+		if e.Reason == ExcludedSkipped {
+			er.Text = skippedText(e)
 		}
 		er.Amounts, er.QuantityText = amounts(e.Amounts)
 		if e.GroceryStatus != "" {

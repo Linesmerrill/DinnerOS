@@ -131,3 +131,44 @@ func TestIntegrationEnsureIndexesAndErrorTranslation(t *testing.T) {
 		t.Errorf("missing document error = %v, want ErrNotFound", TranslateError(err))
 	}
 }
+
+// An index whose unique key grew is replaced: the old one is dropped first,
+// so it can't reject what the new one allows, and running again (the old
+// index already gone, the collection maybe missing) is fine.
+func TestIntegrationEnsureIndexesDropsObsoleteIndexes(t *testing.T) {
+	client := testClient(t)
+	ctx := context.Background()
+	old := IndexSet{
+		Collection: "widgets",
+		Indexes: []mongo.IndexModel{{
+			Keys:    bson.D{{Key: "owner", Value: 1}},
+			Options: options.Index().SetUnique(true).SetName("owner_unique"),
+		}},
+	}
+	if err := client.EnsureIndexes(ctx, old); err != nil {
+		t.Fatalf("EnsureIndexes(old) error = %v", err)
+	}
+	grown := IndexSet{
+		Collection: "widgets",
+		Indexes: []mongo.IndexModel{{
+			Keys:    bson.D{{Key: "owner", Value: 1}, {Key: "kind", Value: 1}},
+			Options: options.Index().SetUnique(true).SetName("owner_kind_unique"),
+		}},
+		Obsolete: []string{"owner_unique"},
+	}
+	for i := range 2 {
+		if err := client.EnsureIndexes(ctx, grown, IndexSet{Collection: "never_created", Obsolete: []string{"gone"}}); err != nil {
+			t.Fatalf("EnsureIndexes(grown) run %d error = %v", i+1, err)
+		}
+	}
+	coll := client.Database().Collection("widgets")
+	for _, kind := range []string{"a", "b"} {
+		if _, err := coll.InsertOne(ctx, bson.D{{Key: "owner", Value: "x"}, {Key: "kind", Value: kind}}); err != nil {
+			t.Fatalf("InsertOne(kind %s) error = %v; the obsolete index should be gone", kind, err)
+		}
+	}
+	_, err := coll.InsertOne(ctx, bson.D{{Key: "owner", Value: "x"}, {Key: "kind", Value: "a"}})
+	if !errors.Is(TranslateError(err), ErrDuplicate) {
+		t.Errorf("duplicate under the grown key = %v, want ErrDuplicate", err)
+	}
+}

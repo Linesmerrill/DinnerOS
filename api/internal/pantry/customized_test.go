@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 )
 
@@ -102,5 +103,65 @@ func TestCookWithoutEntryIgnoresAdjuster(t *testing.T) {
 	}
 	if adjuster.calls != 0 {
 		t.Errorf("adjuster called %d times for an unplanned meal", adjuster.calls)
+	}
+}
+
+// fakeLeftOut leaves ingredients out of one recipe.
+type fakeLeftOut struct {
+	recipeID string
+	set      grocery.LeftOutSet
+	err      error
+}
+
+func (f *fakeLeftOut) RecipeLeftOut(_ context.Context, _, recipeID string) (grocery.LeftOutSet, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if recipeID != f.recipeID {
+		return nil, nil
+	}
+	return f.set, nil
+}
+
+// TestCookSkipsLeftOutIngredients: butter left out of the noodles was never
+// used, so cooking them doesn't deduct it; the parmesan still is.
+func TestCookSkipsLeftOutIngredients(t *testing.T) {
+	f := newUsageFixture(t)
+	butter, err := f.svc.RecordPurchase(f.ctx, f.actor, PurchaseInput{Name: "Butter", Source: PurchaseManual, Quantity: "1", Unit: "cup"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parmesan, err := f.svc.RecordPurchase(f.ctx, f.actor, PurchaseInput{Name: "Parmesan", Source: PurchaseManual, Quantity: "2", Unit: "cup"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Left out by name, the way a skip made from a free-text line is keyed;
+	// it matches the catalogued butter line too.
+	f.svc.SetLeftOut(&fakeLeftOut{recipeID: noodlesRecipe, set: grocery.LeftOutSet{
+		"name:butter": {SkipID: "s1", Scope: grocery.SkipRecipe},
+	}})
+	if _, applied := f.cook(t, "entry-1", 2); !applied {
+		t.Fatal("meal not deducted")
+	}
+	if got := f.item(t, butter.Item.ID).Tracking; got.RecipeUsed != "0" && got.RecipeUsed != "" {
+		t.Errorf("left-out butter deducted: %s", got.RecipeUsed)
+	}
+	if got := f.item(t, parmesan.Item.ID).Tracking; got.RecipeUsed != "1/2" {
+		t.Errorf("parmesan deduction = %s, want 1/2 cup", got.RecipeUsed)
+	}
+}
+
+func TestCookLeftOutFailureDeductsNothing(t *testing.T) {
+	f := newUsageFixture(t)
+	if _, err := f.svc.RecordPurchase(f.ctx, f.actor, PurchaseInput{Name: "Butter", Source: PurchaseManual, Quantity: "1", Unit: "cup"}); err != nil {
+		t.Fatal(err)
+	}
+	boom := errors.New("skips unavailable")
+	f.svc.SetLeftOut(&fakeLeftOut{err: boom})
+	_, applied, err := f.svc.ApplyCooked(f.ctx, CookedMeal{
+		HouseholdID: testHousehold, UserID: testUser, RecipeID: noodlesRecipe, EntryID: "entry1", Servings: 2, OccurredAt: *f.clock,
+	})
+	if !errors.Is(err, boom) || applied {
+		t.Fatalf("ApplyCooked() = %v, %v; want the failure and nothing applied", applied, err)
 	}
 }

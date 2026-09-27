@@ -14,6 +14,13 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
 )
 
+// LeftOutSource says what a household leaves out of one recipe when it cooks
+// it. *skips.Service implements it — the same skips the week's grocery list
+// holds back, so the steps and the list agree about what goes in.
+type LeftOutSource interface {
+	RecipeLeftOut(ctx context.Context, householdID, recipeID string) (grocery.LeftOutSet, error)
+}
+
 // SpecialtySource resolves the specialty ingredients among a set of
 // ingredient lines, with the household's choices already applied.
 // *substitutes.Service implements it — the same method the week's grocery
@@ -44,6 +51,41 @@ type InstructionsResponse struct {
 	// UnchosenSpecialties are the specialty ingredients this recipe uses that
 	// the household hasn't decided about. They read as the card wrote them.
 	UnchosenSpecialties []SpecialtyRefResponse `json:"unchosenSpecialties"`
+	// LeftOutApplied is false when the server could not consult what the
+	// household leaves out, so nothing is marked left out.
+	LeftOutApplied bool `json:"leftOutApplied"`
+	// Ingredients are the recipe's ingredients in its order, as the household
+	// cooks them: the key a skip is made with, whether it's left out, and
+	// what a component is made of.
+	Ingredients []IngredientStateResponse `json:"ingredients"`
+}
+
+// IngredientStateResponse is one recipe ingredient as the household cooks it.
+type IngredientStateResponse struct {
+	Index         int    `json:"index"`
+	IngredientKey string `json:"ingredientKey"`
+	Name          string `json:"name"`
+	// LeftOut is set when the household leaves it out of this recipe: by a
+	// skip for this recipe (scope recipe) or for every recipe (always).
+	LeftOut *LeftOutResponse `json:"leftOut"`
+	// Component is set when it is a specialty ingredient the household makes
+	// from store ingredients.
+	Component *ComponentResponse `json:"component"`
+}
+
+// LeftOutResponse is the skip that leaves an ingredient out.
+type LeftOutResponse struct {
+	SkipID string            `json:"skipId"`
+	Scope  grocery.SkipScope `json:"scope"`
+}
+
+// ComponentResponse is a specialty ingredient as the household makes it.
+type ComponentResponse struct {
+	SpecialtyID   string             `json:"specialtyId"`
+	SpecialtyName string             `json:"specialtyName"`
+	OptionName    string             `json:"optionName"`
+	Type          grocery.ChoiceType `json:"type"`
+	Parts         []string           `json:"parts"`
 }
 
 // InstructionStepResponse is one step ready to read.
@@ -57,6 +99,8 @@ type InstructionStepResponse struct {
 	ImageURL     string                    `json:"imageUrl,omitempty"`
 	Segments     []StepSegmentResponse     `json:"segments"`
 	Notes        []InstructionNoteResponse `json:"notes"`
+	// LeftOut is true when every ingredient the step names is left out.
+	LeftOut bool `json:"leftOut,omitempty"`
 }
 
 // StepSegmentResponse is one run of a step: plain text, or an ingredient the
@@ -83,6 +127,9 @@ type StepSegmentResponse struct {
 	// ingredient, chosen for or not.
 	SpecialtyID   string `json:"specialtyId,omitempty"`
 	SpecialtyName string `json:"specialtyName,omitempty"`
+	// LeftOut is true when the household leaves this ingredient out of the
+	// recipe. The text is the step's own words, without an amount.
+	LeftOut bool `json:"leftOut,omitempty"`
 }
 
 // InstructionAmountResponse is an amount. Quantity is exact ("1/2"); use
@@ -97,7 +144,7 @@ type InstructionAmountResponse struct {
 // InstructionNoteResponse is a sentence shown under a step when a substitution
 // changes the amount or the method.
 type InstructionNoteResponse struct {
-	// Kind is "substitution".
+	// Kind is "substitution" or "left_out".
 	Kind        string `json:"kind"`
 	SpecialtyID string `json:"specialtyId,omitempty"`
 	Text        string `json:"text"`
@@ -132,10 +179,25 @@ func newInstructionsResponse(in Instructions) InstructionsResponse {
 		Steps:               make([]InstructionStepResponse, 0, len(in.Steps)),
 		Substitutions:       make([]SubstitutionResponse, 0, len(in.Substitutions)),
 		UnchosenSpecialties: make([]SpecialtyRefResponse, 0, len(in.Unchosen)),
+		LeftOutApplied:      in.LeftOutApplied,
+		Ingredients:         make([]IngredientStateResponse, 0, len(in.Ingredients)),
+	}
+	for _, st := range in.Ingredients {
+		sr := IngredientStateResponse{Index: st.Index, IngredientKey: st.IngredientKey, Name: st.Name}
+		if lo := st.LeftOut; lo != nil {
+			sr.LeftOut = &LeftOutResponse{SkipID: lo.SkipID, Scope: lo.Scope}
+		}
+		if c := st.Component; c != nil {
+			sr.Component = &ComponentResponse{
+				SpecialtyID: c.SpecialtyID, SpecialtyName: c.SpecialtyName, OptionName: c.OptionName, Type: c.Type,
+				Parts: orEmpty(c.Parts),
+			}
+		}
+		resp.Ingredients = append(resp.Ingredients, sr)
 	}
 	for _, step := range in.Steps {
 		sr := InstructionStepResponse{
-			Index: step.Index, Text: step.Text, OriginalText: step.Original, ImageURL: step.ImageURL,
+			Index: step.Index, Text: step.Text, OriginalText: step.Original, ImageURL: step.ImageURL, LeftOut: step.LeftOut,
 			Segments: make([]StepSegmentResponse, 0, len(step.Segments)),
 			Notes:    make([]InstructionNoteResponse, 0, len(step.Notes)),
 		}
@@ -146,7 +208,7 @@ func newInstructionsResponse(in Instructions) InstructionsResponse {
 			sr.Segments = append(sr.Segments, StepSegmentResponse{
 				Kind: string(seg.Kind), Text: seg.Text, IngredientID: seg.IngredientID, Name: seg.Name,
 				Amount: instructionAmount(seg.Amount), Spicy: seg.Spicy, Substituted: seg.Substituted,
-				SpecialtyID: seg.SpecialtyID, SpecialtyName: seg.SpecialtyName,
+				SpecialtyID: seg.SpecialtyID, SpecialtyName: seg.SpecialtyName, LeftOut: seg.LeftOut,
 			})
 		}
 		for _, n := range step.Notes {
@@ -202,7 +264,27 @@ func (h *Handler) instructions(w http.ResponseWriter, r *http.Request) {
 		h.internalError(w, r, "load specialty choices failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, newInstructionsResponse(Annotate(recipe, servings, specs, applied)))
+	leftOut, leftOutApplied, err := h.recipeLeftOut(r.Context(), actor.HouseholdID, recipe.ID)
+	if err != nil {
+		// Steps that tell a member to add what they asked to leave out are
+		// wrong in the same way, so this fails the request too.
+		h.internalError(w, r, "load left-out ingredients failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, newInstructionsResponse(AnnotateWith(recipe, servings, specs, applied, leftOut, leftOutApplied)))
+}
+
+// recipeLeftOut loads what the household leaves out of the recipe. applied is
+// false when no source is configured.
+func (h *Handler) recipeLeftOut(ctx context.Context, householdID, recipeID string) (grocery.LeftOutSet, bool, error) {
+	if h.opts.LeftOut == nil {
+		return nil, false, nil
+	}
+	set, err := h.opts.LeftOut.RecipeLeftOut(ctx, householdID, recipeID)
+	if err != nil {
+		return nil, false, err
+	}
+	return set, true, nil
 }
 
 // instructionServings picks the serving size to render. Amounts are never

@@ -154,3 +154,58 @@ func TestInstructionsFailWhenChoicesCannotBeRead(t *testing.T) {
 	// worse than an error.
 	wantError(t, srv.do(t, http.MethodGet, recipesPath(hhAda)+"/"+id+"/instructions", "", userAda), http.StatusInternalServerError, "internal")
 }
+
+// fakeLeftOut leaves ingredients out of every recipe it is asked about, or
+// fails.
+type fakeLeftOut struct {
+	set      grocery.LeftOutSet
+	failWith error
+	asked    []string
+}
+
+func (f *fakeLeftOut) RecipeLeftOut(_ context.Context, householdID, recipeID string) (grocery.LeftOutSet, error) {
+	f.asked = append(f.asked, householdID+"/"+recipeID)
+	return f.set, f.failWith
+}
+
+func TestInstructionsMarkWhatTheHouseholdLeavesOut(t *testing.T) {
+	leftOut := &fakeLeftOut{set: grocery.LeftOutSet{"name:gochujang": {SkipID: "skip-g", Scope: grocery.SkipRecipe}}}
+	srv := newRecipeTestServer(t, func(o *HandlerOptions) { o.LeftOut = leftOut })
+	srv.do(t, http.MethodPost, recipesPath(hhAda)+"/import", mustJSON(t, instructionsFixture()), userAda)
+	id := recipeIDFor(t, srv, "Gochujang Bowl")
+
+	// A viewer reads the left-out state too; only changing it needs plan.edit.
+	resp := decodeBody[InstructionsResponse](t, srv.do(t, http.MethodGet, recipesPath(hhAda)+"/"+id+"/instructions", "", userViewer))
+	if !resp.LeftOutApplied || len(resp.Ingredients) != 4 {
+		t.Fatalf("response = %+v, want left-out applied and every ingredient", resp)
+	}
+	if len(leftOut.asked) != 1 || leftOut.asked[0] != hhAda+"/"+id {
+		t.Errorf("asked = %v, want this household and recipe", leftOut.asked)
+	}
+	var marked bool
+	for _, st := range resp.Ingredients {
+		if st.Name == "Gochujang" {
+			marked = st.LeftOut != nil && st.LeftOut.SkipID == "skip-g" && st.LeftOut.Scope == grocery.SkipRecipe
+		} else if st.LeftOut != nil {
+			t.Errorf("%s is marked left out", st.Name)
+		}
+	}
+	if !marked {
+		t.Errorf("ingredients = %+v, want gochujang left out", resp.Ingredients)
+	}
+	for _, seg := range resp.Steps[0].Segments {
+		if seg.Name == "Gochujang" && (!seg.LeftOut || seg.Amount != nil) {
+			t.Errorf("gochujang segment = %+v, want it left out without an amount", seg)
+		}
+	}
+	if len(resp.Steps[0].Notes) != 1 || resp.Steps[0].Notes[0].Kind != "left_out" {
+		t.Errorf("notes = %+v, want a left-out note", resp.Steps[0].Notes)
+	}
+}
+
+func TestInstructionsFailWhenLeftOutCannotBeRead(t *testing.T) {
+	srv := newRecipeTestServer(t, func(o *HandlerOptions) { o.LeftOut = &fakeLeftOut{failWith: errors.New("mongo is down")} })
+	srv.do(t, http.MethodPost, recipesPath(hhAda)+"/import", mustJSON(t, instructionsFixture()), userAda)
+	id := recipeIDFor(t, srv, "Gochujang Bowl")
+	wantError(t, srv.do(t, http.MethodGet, recipesPath(hhAda)+"/"+id+"/instructions", "", userAda), http.StatusInternalServerError, "internal")
+}

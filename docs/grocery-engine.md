@@ -165,12 +165,46 @@ household's skips into the `grocery.SkipSet` that `AggregateWith` takes
 ([api.md](api.md#skipped-ingredients),
 [database.md](database.md#skipped-ingredients)).
 
-Two lifetimes, and nothing else:
+Three scopes, and nothing else:
 
 | Scope | Applies to | Ends |
 | --- | --- | --- |
-| `week` | the one ISO week it names | on its own, next week |
-| `always` | every week | when someone resumes it |
+| `week` | the one ISO week it names, every recipe | on its own, next week |
+| `always` | every week, every recipe | when someone resumes it |
+| `recipe` | every week, one recipe ("just this dish") | when someone resumes it |
+
+`GrocerySkips` returns a `grocery.SkipRules`: ingredient-wide skips by key
+(`week` and `always`; when two land on one key, `always` wins), and recipe
+skips by recipe, then key.
+
+- **Per recipe, not per planned meal.** "Only this dish" is about the dish: a
+  household re-plans the recipes it likes, and a preference about the curry
+  that had to be repeated every week it is planned would not be a preference.
+  "Just this week" is already the `week` scope. A plan entry is also not
+  stable enough to hang a preference on: swapping or re-adding the meal makes
+  a new one (decision 541).
+- **Recipe skips work on lines, not items.** `AggregateWith` decides a recipe
+  skip before merging: a line is held back when every recipe it is for leaves
+  its ingredient out. Held lines are aggregated into their own item, reported
+  in `SkippedItems` with `SkipScope: recipe`, while the other recipes' lines
+  for the same ingredient stay on the list. Cilantro wanted by the curry
+  (¼ oz, left out) and the tacos (½ oz) is a ½ oz list line for the tacos and
+  a ¼ oz skipped item for the curry — the line shrinks, it doesn't vanish.
+- **Precedence** is `always` > `week` > `recipe`. An ingredient-wide skip holds
+  the whole item back under its own scope and a recipe skip for the same
+  ingredient changes nothing while it lasts.
+- **Components.** A line a store alternative or a house-made batch produced
+  carries `Via`; a skip of the specialty line it replaced (`Via.LineKey`, or
+  `name:` + the specialty's key) leaves that line out — for the week, always,
+  or for one recipe — so "we don't make the crema" drops all of the crema's
+  ingredients and nothing else. A batch line made for several recipes stays
+  while any of them still wants it (the batch is whole jars).
+- **Shares.** Every item carries `Shares`: one per recipe (and per component
+  of that recipe, and per pairing added for it) with that recipe's own amount.
+  The item is still one line and one purchase; shares only say how it splits,
+  so the Shop tab can list lines meal by meal without re-deriving amounts. A
+  batch line for several recipes has a `Combined` share for each, with no
+  amount split out.
 
 - **Three different states.** `inPantry` says the household *has* it, check-off
   says someone *bought* it, and a skip says the household never *wants* it.
@@ -191,6 +225,12 @@ Two lifetimes, and nothing else:
 - **Keys** work as the pantry's do: the key the skip was made from,
   `name:<normalized name>`, and the catalog ingredient ID resolved from that
   name, so skipping cilantro once covers every way a recipe reaches cilantro.
+- **Cooking follows the list.** A recipe's cooking instructions mark its
+  left-out ingredients (`recipe` skips for it, and `always` skips) struck
+  through with a note, never deleted, and a step that only adds left-out
+  things is marked skippable; cook deductions skip the same ingredients, so
+  the pantry and the week's cost never count what wasn't used. A `week` skip
+  is about buying and changes neither.
 - **Not an Autopilot signal.** A forever-skip is weak evidence against recipes
   built around that ingredient, but nothing reads it as one. Autopilot already
   has explicit restrictions and ratings, and making a skip quietly rank meals

@@ -44,6 +44,8 @@ type Service struct {
 	notifier Notifier
 	// resolver is set by SetKeyResolver; it's optional.
 	resolver KeyResolver
+	// leftOut is set by SetLeftOut; it's optional (customized.go).
+	leftOut LeftOutSource
 	// adjuster is set by SetCookAdjuster; it's optional (customized.go).
 	adjuster CookAdjuster
 	logger   *slog.Logger

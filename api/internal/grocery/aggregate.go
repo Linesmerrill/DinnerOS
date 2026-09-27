@@ -83,7 +83,31 @@ const (
 	SkipThisWeek SkipScope = "week"
 	// SkipAlways leaves it off every list until the household resumes it.
 	SkipAlways SkipScope = "always"
+	// SkipRecipe leaves the ingredient out of one recipe, every time that
+	// recipe is planned, while other recipes on the list still get it
+	// (docs/grocery-engine.md#skipped-ingredients). It applies to lines, not
+	// to a whole item: a skipped item with this scope holds only the left-out
+	// recipes' share, and the same ingredient can be on the list for the
+	// others.
+	SkipRecipe SkipScope = "recipe"
 )
+
+// Outranks reports whether s wins over other when both skip one ingredient:
+// always beats week, and either beats recipe, since an ingredient-wide skip
+// already covers every recipe.
+func (s SkipScope) Outranks(other SkipScope) bool { return s.rank() > other.rank() }
+
+func (s SkipScope) rank() int {
+	switch s {
+	case SkipAlways:
+		return 3
+	case SkipThisWeek:
+		return 2
+	case SkipRecipe:
+		return 1
+	}
+	return 0
+}
 
 // Amount is a combined quantity in one unit.
 type Amount struct {
@@ -121,6 +145,43 @@ type Item struct {
 	// SkipScope is set only on an item the household skipped, and says which
 	// lifetime skipped it. Empty on every item in List.Items.
 	SkipScope SkipScope
+	// Shares split the item by the recipe each part is for, in the order of
+	// Sources: how much of it each meal needs. The list shows an item under
+	// every meal that uses it, with that meal's own amount, while it stays one
+	// purchase.
+	Shares []Share
+}
+
+// Share is the part of an item one recipe needs.
+type Share struct {
+	Source
+	// Amounts is this recipe's amount for its planned servings, one entry per
+	// group of convertible units, like Item.Amounts. Empty when the recipe
+	// gave no amount, or when the share is Combined.
+	Amounts      []Amount
+	Unquantified bool
+	// Combined is true when the line was made for several recipes together
+	// (a house-made batch), so no amount can be split out for one of them.
+	Combined bool
+	// Extra is true when the share is a line added for this meal directly,
+	// such as an accepted pairing, rather than one of its ingredients.
+	Extra bool
+	// Component is set when this share is part of a component of the meal: a
+	// specialty ingredient (a sauce, crema, paste, or blend) the household
+	// makes from store ingredients. A meal can need the same ingredient on its
+	// own and in a component; those are two shares, so leaving the component
+	// out removes only its part.
+	Component *ShareComponent
+}
+
+// ShareComponent names the component a share belongs to.
+type ShareComponent struct {
+	SpecialtyID   string
+	SpecialtyKey  string
+	SpecialtyName string
+	// LineKey is the recipe line the component replaced, when known: the key
+	// to leave out to leave out the whole component.
+	LineKey string
 }
 
 // List is the aggregated grocery list.
@@ -202,6 +263,54 @@ func (s SkipSet) Skip(key string) (SkipScope, bool) {
 	return scope, ok
 }
 
+// RecipeSkips is Skips that also knows the ingredients a household leaves out
+// of one recipe (SkipRecipe). AggregateWith holds back only that recipe's
+// lines for the ingredient; the same ingredient from other recipes stays on
+// the list, with its amount reduced to theirs.
+type RecipeSkips interface {
+	Skips
+	// SkipInRecipe reports whether the household leaves ingredientKey out of
+	// recipeID.
+	SkipInRecipe(recipeID, ingredientKey string) bool
+}
+
+// SkipRules is the household's skips in the form AggregateWith takes:
+// ingredient-wide skips (week and always) by key, and recipe skips by recipe
+// ID, then key. Both are registered under every key the ingredient can carry.
+type SkipRules struct {
+	Ingredients SkipSet
+	Recipes     map[string]map[string]bool
+}
+
+// Skip implements Skips.
+func (r SkipRules) Skip(key string) (SkipScope, bool) { return r.Ingredients.Skip(key) }
+
+// SkipInRecipe implements RecipeSkips.
+func (r SkipRules) SkipInRecipe(recipeID, key string) bool { return r.Recipes[recipeID][key] }
+
+// LeftOut is why one ingredient of a recipe is left out when it is cooked: a
+// skip for that recipe, or one for every recipe. A week skip is about buying
+// and is never a LeftOut.
+type LeftOut struct {
+	SkipID string
+	Scope  SkipScope
+}
+
+// LeftOutSet is what a household leaves out of one recipe, registered under
+// every key a line for the ingredient can carry. Cooking instructions read it
+// to mark a mention, and cook deductions to skip a line.
+type LeftOutSet map[string]LeftOut
+
+// Lookup returns the entry for the first of keys that has one.
+func (s LeftOutSet) Lookup(keys ...string) (LeftOut, bool) {
+	for _, k := range keys {
+		if lo, ok := s[k]; ok && k != "" {
+			return lo, true
+		}
+	}
+	return LeftOut{}, false
+}
+
 // CategoryOrder is the aisle order used to sort the list.
 var CategoryOrder = []string{
 	"produce", "meat-seafood", "dairy-eggs", "bakery", "deli",
@@ -212,12 +321,34 @@ type accumulator struct {
 	key, name, category string
 	unquantified        bool
 	allHinted           bool
-	groups              map[string]*unitGroup
+	groups              unitGroups
 	sources             map[string]Source
 	via                 map[string]*ItemVia
 	specialty           *LineSpecialty
 	extras              map[string]Extra
+	shares              map[shareKey]*shareAccumulator
 }
+
+// shareKey identifies one recipe's part of an item. A recipe can need an
+// ingredient itself and have it added as a pairing too; those are two shares.
+type shareKey struct {
+	recipeID  string
+	extra     bool
+	component string
+}
+
+// shareAccumulator sums one recipe's lines for an item.
+type shareAccumulator struct {
+	source       Source
+	groups       unitGroups
+	unquantified bool
+	combined     bool
+	extra        bool
+	component    *ShareComponent
+}
+
+// unitGroups sums quantities by group of convertible units.
+type unitGroups map[string]*unitGroup
 
 // unitGroup sums quantities that convert to each other, exactly, in the kind's
 // base unit (or the discrete unit itself).
@@ -248,6 +379,11 @@ func AggregateWith(selections []RecipeSelection, pantry Pantry, skips Skips) (Li
 	frozenPantry, _ := pantry.(FrozenPantry)
 	isFrozen := func(key string) bool { return frozenPantry != nil && frozenPantry.Frozen(key) }
 	acc := map[string]*accumulator{}
+	// held are the parts of items left out line by line — of one recipe, or
+	// as part of a left-out component — aggregated the same way and reported
+	// in SkippedItems, by key and scope.
+	held := map[string]*accumulator{}
+	heldScope := map[string]SkipScope{}
 
 	for _, sel := range selections {
 		if sel.RecipeServings <= 0 || sel.TargetServings <= 0 {
@@ -260,58 +396,24 @@ func AggregateWith(selections []RecipeSelection, pantry Pantry, skips Skips) (Li
 			if key == "" {
 				return List{}, fmt.Errorf("%w: recipe %q has a line without an ingredient key", ErrInvalidSelection, sel.RecipeID)
 			}
-			a, ok := acc[key]
-			if !ok {
-				a = &accumulator{key: key, name: line.Name, category: line.Category, allHinted: true, groups: map[string]*unitGroup{}, sources: map[string]Source{}, via: map[string]*ItemVia{}}
-				acc[key] = a
-			}
-			// Deterministic name/category choice independent of input order.
-			if a.name == "" || (line.Name != "" && line.Name < a.name) {
-				a.name = line.Name
-			}
-			if a.category == "" || (line.Category != "" && line.Category < a.category) {
-				a.category = line.Category
-			}
-			a.allHinted = a.allHinted && line.PantryStaple
 			lineSources := line.Sources
 			if len(lineSources) == 0 {
 				lineSources = []Source{{RecipeID: sel.RecipeID, RecipeName: sel.RecipeName}}
 			}
-			for _, src := range lineSources {
-				a.sources[src.RecipeID] = src
+			into, accKey := acc, key
+			if scope, ok := lineHeld(skips, key, line.Via, lineSources); ok {
+				into, accKey = held, key+"\x00"+string(scope)
+				heldScope[accKey] = scope
 			}
-			a.addVia(line.Via, lineSources)
-			a.addExtra(line.Extra)
-			if s := line.Specialty; s != nil && (a.specialty == nil || s.less(*a.specialty)) {
-				c := *s
-				a.specialty = &c
+			if err := accumulate(into, accKey, key, line, lineSources, sel, factor); err != nil {
+				return List{}, err
 			}
-
-			if line.Quantity == nil || line.Quantity.IsZero() || line.UnitCode == "" {
-				a.unquantified = true
-				continue
-			}
-			unit, err := ingredients.LookupUnit(line.UnitCode)
-			if err != nil {
-				return List{}, fmt.Errorf("%w: recipe %q ingredient %q: %w", ErrInvalidSelection, sel.RecipeID, line.Name, err)
-			}
-			scaled := line.Quantity.Mul(factor)
-			a.add(scaled, unit)
 		}
 	}
 
 	list := List{Items: make([]Item, 0, len(acc))}
 	for _, a := range acc {
-		item := Item{
-			IngredientKey: a.key,
-			Name:          a.name,
-			Category:      normalizeCategory(a.category),
-			Unquantified:  a.unquantified,
-			Amounts:       a.amounts(),
-			Via:           a.itemVia(),
-			Specialty:     a.specialty,
-			Extras:        a.itemExtras(),
-		}
+		item := a.item()
 		var skipScope SkipScope
 		isSkipped := false
 		if skips != nil {
@@ -333,25 +435,195 @@ func AggregateWith(selections []RecipeSelection, pantry Pantry, skips Skips) (Li
 		default:
 			item.Status = StatusToBuy
 		}
-		for _, s := range a.sources {
-			item.Sources = append(item.Sources, s)
-		}
-		sort.Slice(item.Sources, func(i, j int) bool {
-			if item.Sources[i].RecipeName != item.Sources[j].RecipeName {
-				return item.Sources[i].RecipeName < item.Sources[j].RecipeName
-			}
-			return item.Sources[i].RecipeID < item.Sources[j].RecipeID
-		})
 		if isSkipped {
 			list.SkippedItems = append(list.SkippedItems, item)
 			continue
 		}
 		list.Items = append(list.Items, item)
 	}
+	// A recipe-skipped part is reported beside the rest of the item, not
+	// merged into it: the list line shrinks to the other recipes' amount, and
+	// this item says how much was left out, and of which meals.
+	for k, a := range held {
+		item := a.item()
+		item.Status, item.SkipScope = StatusSkipped, heldScope[k]
+		list.SkippedItems = append(list.SkippedItems, item)
+	}
 
 	sortItems(list.Items)
 	sortItems(list.SkippedItems)
 	return list, nil
+}
+
+// lineHeld decides whether one line is left out on its own, and by which
+// scope, before lines are merged into items.
+//
+//   - A skip of the line's own ingredient (week or always) is not decided
+//     here: it covers the whole item, and the item says so.
+//   - A line that is part of a component (a store alternative's or a batch's
+//     ingredient) is left out when the component is skipped for the week or
+//     always, whichever outranks.
+//   - Otherwise it is left out when every recipe it is for leaves out its
+//     ingredient, or its component (SkipRecipe). A line for several recipes
+//     (a batch) stays while any of them still wants it.
+func lineHeld(skips Skips, key string, via *Via, sources []Source) (SkipScope, bool) {
+	if skips == nil {
+		return "", false
+	}
+	if _, ok := skips.Skip(key); ok {
+		return "", false
+	}
+	componentKeys := via.componentKeys()
+	var best SkipScope
+	for _, ck := range componentKeys {
+		if scope, ok := skips.Skip(ck); ok && scope.Outranks(best) {
+			best = scope
+		}
+	}
+	if best != "" {
+		return best, true
+	}
+	recipeSkips, ok := skips.(RecipeSkips)
+	if !ok || len(sources) == 0 {
+		return "", false
+	}
+	for _, src := range sources {
+		if !skipsInRecipe(recipeSkips, src.RecipeID, key, componentKeys) {
+			return "", false
+		}
+	}
+	return SkipRecipe, true
+}
+
+func skipsInRecipe(skips RecipeSkips, recipeID, key string, componentKeys []string) bool {
+	if skips.SkipInRecipe(recipeID, key) {
+		return true
+	}
+	for _, ck := range componentKeys {
+		if skips.SkipInRecipe(recipeID, ck) {
+			return true
+		}
+	}
+	return false
+}
+
+// accumulate adds one line, for the ingredient key, to the item at accKey in
+// acc.
+func accumulate(acc map[string]*accumulator, accKey, key string, line Line, lineSources []Source, sel RecipeSelection, factor ingredients.Quantity) error {
+	a, ok := acc[accKey]
+	if !ok {
+		a = &accumulator{
+			key: key, name: line.Name, category: line.Category, allHinted: true, groups: unitGroups{},
+			sources: map[string]Source{}, via: map[string]*ItemVia{}, shares: map[shareKey]*shareAccumulator{},
+		}
+		acc[accKey] = a
+	}
+	// Deterministic name/category choice independent of input order.
+	if a.name == "" || (line.Name != "" && line.Name < a.name) {
+		a.name = line.Name
+	}
+	if a.category == "" || (line.Category != "" && line.Category < a.category) {
+		a.category = line.Category
+	}
+	a.allHinted = a.allHinted && line.PantryStaple
+	for _, src := range lineSources {
+		a.sources[src.RecipeID] = src
+	}
+	a.addVia(line.Via, lineSources)
+	a.addExtra(line.Extra)
+	if s := line.Specialty; s != nil && (a.specialty == nil || s.less(*a.specialty)) {
+		c := *s
+		a.specialty = &c
+	}
+	var component *ShareComponent
+	if v := line.Via; v.IsComponent() {
+		component = &ShareComponent{SpecialtyID: v.SpecialtyID, SpecialtyKey: v.SpecialtyKey, SpecialtyName: v.SpecialtyName, LineKey: v.LineKey}
+	}
+	shares := make([]*shareAccumulator, 0, len(lineSources))
+	for _, src := range lineSources {
+		k := shareKey{recipeID: src.RecipeID, extra: line.Extra != nil}
+		if component != nil {
+			k.component = component.SpecialtyKey
+		}
+		sh := a.shares[k]
+		if sh == nil {
+			sh = &shareAccumulator{source: src, groups: unitGroups{}, extra: k.extra, component: component}
+			a.shares[k] = sh
+		}
+		if len(lineSources) > 1 {
+			sh.combined = true
+		}
+		shares = append(shares, sh)
+	}
+
+	if line.Quantity == nil || line.Quantity.IsZero() || line.UnitCode == "" {
+		a.unquantified = true
+		for _, sh := range shares {
+			sh.unquantified = true
+		}
+		return nil
+	}
+	unit, err := ingredients.LookupUnit(line.UnitCode)
+	if err != nil {
+		return fmt.Errorf("%w: recipe %q ingredient %q: %w", ErrInvalidSelection, sel.RecipeID, line.Name, err)
+	}
+	scaled := line.Quantity.Mul(factor)
+	a.groups.add(scaled, unit)
+	// A line for several recipes at once can't be split between them.
+	if len(shares) == 1 {
+		shares[0].groups.add(scaled, unit)
+	}
+	return nil
+}
+
+// item renders the accumulated item, without a status.
+func (a *accumulator) item() Item {
+	item := Item{
+		IngredientKey: a.key,
+		Name:          a.name,
+		Category:      normalizeCategory(a.category),
+		Unquantified:  a.unquantified,
+		Amounts:       a.groups.amounts(),
+		Via:           a.itemVia(),
+		Specialty:     a.specialty,
+		Extras:        a.itemExtras(),
+	}
+	for _, s := range a.sources {
+		item.Sources = append(item.Sources, s)
+	}
+	sort.Slice(item.Sources, func(i, j int) bool { return sourceLess(item.Sources[i], item.Sources[j]) })
+	for _, sh := range a.shares {
+		share := Share{Source: sh.source, Unquantified: sh.unquantified, Combined: sh.combined, Extra: sh.extra, Component: sh.component}
+		if !sh.combined {
+			share.Amounts = sh.groups.amounts()
+		}
+		item.Shares = append(item.Shares, share)
+	}
+	sort.Slice(item.Shares, func(i, j int) bool {
+		a, b := item.Shares[i], item.Shares[j]
+		if a.Source != b.Source {
+			return sourceLess(a.Source, b.Source)
+		}
+		if a.Extra != b.Extra {
+			return !a.Extra
+		}
+		return componentName(a.Component) < componentName(b.Component)
+	})
+	return item
+}
+
+func componentName(c *ShareComponent) string {
+	if c == nil {
+		return ""
+	}
+	return c.SpecialtyName + "\x00" + c.SpecialtyKey
+}
+
+func sourceLess(a, b Source) bool {
+	if a.RecipeName != b.RecipeName {
+		return a.RecipeName < b.RecipeName
+	}
+	return a.RecipeID < b.RecipeID
 }
 
 // sortItems puts items in aisle order, then by name, then by key, so the
@@ -373,15 +645,15 @@ func sortItems(items []Item) {
 	})
 }
 
-func (a *accumulator) add(q ingredients.Quantity, unit ingredients.Unit) {
+func (groups unitGroups) add(q ingredients.Quantity, unit ingredients.Unit) {
 	groupKey := string(unit.Kind)
 	if unit.Discrete() {
 		groupKey = "discrete:" + unit.Code
 	}
-	g, ok := a.groups[groupKey]
+	g, ok := groups[groupKey]
 	if !ok {
 		g = &unitGroup{kind: unit.Kind, discrete: unit, baseTotal: new(big.Rat), units: map[string]ingredients.Unit{}}
-		a.groups[groupKey] = g
+		groups[groupKey] = g
 	}
 	g.units[unit.Code] = unit
 	if unit.Discrete() {
@@ -395,16 +667,16 @@ func (a *accumulator) add(q ingredients.Quantity, unit ingredients.Unit) {
 // contributed: the largest unit in which the total is at least 1, otherwise the
 // smallest contributing unit. The choice depends on the set of units, never on
 // order.
-func (a *accumulator) amounts() []Amount {
-	keys := make([]string, 0, len(a.groups))
-	for k := range a.groups {
+func (groups unitGroups) amounts() []Amount {
+	keys := make([]string, 0, len(groups))
+	for k := range groups {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
 	out := make([]Amount, 0, len(keys))
 	for _, k := range keys {
-		g := a.groups[k]
+		g := groups[k]
 		if g.kind == ingredients.KindDiscrete {
 			out = append(out, Amount{Quantity: quantityFromRat(g.baseTotal), Unit: g.discrete})
 			continue

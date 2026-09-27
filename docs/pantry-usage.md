@@ -174,6 +174,14 @@ read the customization fails that deduction instead of deducting an ingredient
 that may not have been cooked; an entry that isn't customized, or isn't found,
 deducts the recipe as written.
 
+Ingredients the household leaves out of the recipe — its recipe skips for it,
+and its always-skips ([api.md](api.md#skipped-ingredients)) — are dropped
+before step 1: cilantro left out of the curry was never used, so the pantry
+and the week's cost ([grocery-engine.md](grocery-engine.md#weekly-cost), whose
+earlier stock is these deductions) never count it. A week skip is about
+buying, so it isn't dropped. A failure to read the skips fails that deduction,
+like a customization.
+
 Deduction is best effort, like event recording (#71): a failure is logged and
 the event is still stored. Any member who can send events can cook, so
 deductions don't require `pantry.edit`.

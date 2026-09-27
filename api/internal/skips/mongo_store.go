@@ -19,13 +19,17 @@ const Collection = "grocery_skips"
 // Indexes returns the indexes MongoStore relies on. The unique key is what
 // makes a second skip for one ingredient impossible, so "skip once" can become
 // "skip forever" by replacing the stored skip rather than stacking a new one.
+// recipeId is part of it — null for a household-wide skip — so one ingredient
+// can also be left out of several recipes, one skip each. The key without it
+// is dropped on startup (decision 541).
 func Indexes() []mongodb.IndexSet {
 	return []mongodb.IndexSet{{
 		Collection: Collection,
 		Indexes: []mongo.IndexModel{{
-			Keys:    bson.D{{Key: "householdId", Value: 1}, {Key: "ingredientKey", Value: 1}},
-			Options: options.Index().SetUnique(true).SetName("householdId_ingredientKey_unique"),
+			Keys:    bson.D{{Key: "householdId", Value: 1}, {Key: "ingredientKey", Value: 1}, {Key: "recipeId", Value: 1}},
+			Options: options.Index().SetUnique(true).SetName("householdId_ingredientKey_recipeId_unique"),
 		}},
+		Obsolete: []string{"householdId_ingredientKey_unique"},
 	}}
 }
 
@@ -49,19 +53,27 @@ type skipDoc struct {
 	Name          string        `bson:"name"`
 	Scope         string        `bson:"scope"`
 	Week          string        `bson:"week,omitempty"`
-	CreatedBy     bson.ObjectID `bson:"createdBy"`
-	CreatedAt     time.Time     `bson:"createdAt"`
-	UpdatedBy     bson.ObjectID `bson:"updatedBy"`
-	UpdatedAt     time.Time     `bson:"updatedAt"`
+	// RecipeID is null on a household-wide skip. It is stored as an explicit
+	// null rather than left out, which the unique index treats the same.
+	RecipeID   *bson.ObjectID `bson:"recipeId"`
+	RecipeName string         `bson:"recipeName,omitempty"`
+	CreatedBy  bson.ObjectID  `bson:"createdBy"`
+	CreatedAt  time.Time      `bson:"createdAt"`
+	UpdatedBy  bson.ObjectID  `bson:"updatedBy"`
+	UpdatedAt  time.Time      `bson:"updatedAt"`
 }
 
 func (d skipDoc) toSkip() Skip {
-	return Skip{
+	s := Skip{
 		ID: d.ID.Hex(), HouseholdID: d.HouseholdID.Hex(), IngredientKey: d.IngredientKey,
-		Key: d.Key, Name: d.Name, Scope: Scope(d.Scope), Week: d.Week,
+		Key: d.Key, Name: d.Name, Scope: Scope(d.Scope), Week: d.Week, RecipeName: d.RecipeName,
 		CreatedBy: d.CreatedBy.Hex(), CreatedAt: d.CreatedAt.UTC(),
 		UpdatedBy: d.UpdatedBy.Hex(), UpdatedAt: d.UpdatedAt.UTC(),
 	}
+	if d.RecipeID != nil {
+		s.RecipeID = d.RecipeID.Hex()
+	}
+	return s
 }
 
 func translate(err error) error {
@@ -132,13 +144,28 @@ func (s *MongoStore) PutSkip(ctx context.Context, skip Skip) (Skip, bool, error)
 	if err != nil {
 		return Skip{}, false, fmt.Errorf("skips: updatedBy: %w", err)
 	}
-	filter := bson.D{{Key: "householdId", Value: hid}, {Key: "ingredientKey", Value: skip.IngredientKey}}
+	// A household-wide skip matches recipeId null, which also matches the
+	// documents written before recipe skips existed, when the field was
+	// absent.
+	var recipeID *bson.ObjectID
+	if skip.RecipeID != "" {
+		rid, err := mongodb.ParseID(skip.RecipeID)
+		if err != nil {
+			return Skip{}, false, fmt.Errorf("skips: recipe id: %w", err)
+		}
+		recipeID = &rid
+	}
+	filter := bson.D{
+		{Key: "householdId", Value: hid}, {Key: "ingredientKey", Value: skip.IngredientKey},
+		{Key: "recipeId", Value: recipeID},
+	}
 	update := bson.D{
 		{Key: "$set", Value: bson.D{
 			{Key: "key", Value: skip.Key},
 			{Key: "name", Value: skip.Name},
 			{Key: "scope", Value: string(skip.Scope)},
 			{Key: "week", Value: skip.Week},
+			{Key: "recipeName", Value: skip.RecipeName},
 			{Key: "updatedBy", Value: by},
 			{Key: "updatedAt", Value: skip.UpdatedAt},
 		}},

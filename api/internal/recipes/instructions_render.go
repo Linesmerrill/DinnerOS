@@ -81,6 +81,11 @@ func renderStep(step Step, mentions []mention) InstructionStep {
 		}
 		m := mentions[hit]
 		amount := m.amount
+		if m.leftOut {
+			// A left-out ingredient keeps the step's own words and gets no
+			// amount: nothing of it goes in.
+			amount = nil
+		}
 		if amountShown[hit] {
 			// The same ingredient twice in one step: the amount belongs to
 			// the first mention, so the second is only marked.
@@ -102,9 +107,15 @@ func renderStep(step Step, mentions []mention) InstructionStep {
 		segments = append(segments, Segment{
 			Kind: SegmentIngredient, Text: text, IngredientID: m.ingredientID, Name: m.display,
 			Amount: amount, Spicy: m.spicy, Substituted: m.substituted,
-			SpecialtyID: m.specialtyID, SpecialtyName: m.specialtyName,
+			SpecialtyID: m.specialtyID, SpecialtyName: m.specialtyName, LeftOut: m.leftOut,
 		})
-		if m.note != "" && !noted[m.note] {
+		if m.leftOut {
+			note := "You leave out the " + m.name + "."
+			if !noted[note] {
+				noted[note] = true
+				out.Notes = append(out.Notes, StepNote{Kind: NoteLeftOut, SpecialtyID: m.specialtyID, Text: note})
+			}
+		} else if m.note != "" && !noted[m.note] {
 			noted[m.note] = true
 			out.Notes = append(out.Notes, StepNote{Kind: NoteSubstitution, SpecialtyID: m.specialtyID, Text: m.note})
 		}
@@ -116,6 +127,16 @@ func renderStep(step Step, mentions []mention) InstructionStep {
 		b.WriteString(s.Text)
 	}
 	out.Segments = segments
+	named, left := 0, 0
+	for _, s := range segments {
+		if s.Kind == SegmentIngredient {
+			named++
+			if s.LeftOut {
+				left++
+			}
+		}
+	}
+	out.LeftOut = named > 0 && left == named
 	if rendered := b.String(); rendered != step.Text {
 		out.Text, out.Original = rendered, step.Text
 	}

@@ -150,6 +150,50 @@ type GroceryListResponse struct {
 	// Not to be confused with Skipped, which is about plan ENTRIES that could
 	// not contribute at all.
 	SkippedItems []GroceryItemResponse `json:"skippedItems"`
+	// Meals are the week's planned recipes in plan order, each once. Every
+	// item's shares name one of them, so a client can show the list meal by
+	// meal without deriving anything.
+	Meals []GroceryMealResponse `json:"meals"`
+}
+
+// GroceryMealResponse is one planned recipe the list can be grouped under.
+type GroceryMealResponse struct {
+	RecipeID   string  `json:"recipeId"`
+	RecipeName string  `json:"recipeName"`
+	ImageURL   *string `json:"imageUrl"`
+	IsAddon    bool    `json:"isAddon"`
+	// Day is the first day the recipe is planned on, null when unscheduled.
+	Day *Day `json:"day"`
+}
+
+// GroceryShareResponse is the part of an item one meal needs.
+type GroceryShareResponse struct {
+	RecipeID   string                  `json:"recipeId"`
+	RecipeName string                  `json:"recipeName"`
+	Amounts    []GroceryAmountResponse `json:"amounts"`
+	// QuantityText is this meal's amount for display, "" when it has none.
+	QuantityText string `json:"quantityText"`
+	Unquantified bool   `json:"unquantified"`
+	// Combined is true when the amount was made for several meals together (a
+	// house-made batch), so none is split out for this one.
+	Combined bool `json:"combined"`
+	// Extra is true for a line added for this meal directly (a pairing).
+	Extra bool `json:"extra"`
+	// Component is set when the share is part of a component of the meal: the
+	// store ingredients a specialty ingredient (a sauce, crema, paste, or
+	// blend) became. Leaving the component out of the meal leaves out every
+	// share that names it.
+	Component *GroceryComponentResponse `json:"component"`
+}
+
+// GroceryComponentResponse names a component of a meal.
+type GroceryComponentResponse struct {
+	SpecialtyID   string `json:"specialtyId"`
+	SpecialtyKey  string `json:"specialtyKey"`
+	SpecialtyName string `json:"specialtyName"`
+	// IngredientKey is the recipe line the component replaced: the key to
+	// skip to leave the whole component out. Empty for a batch.
+	IngredientKey string `json:"ingredientKey"`
 }
 
 // GrocerySpecialtyResponse describes an item that is itself a specialty
@@ -239,8 +283,13 @@ type GroceryItemResponse struct {
 	// Extras are items added to the week directly, such as an Autopilot
 	// pairing ("Club crackers for Chicken Noodle Soup").
 	Extras []GroceryExtraResponse `json:"extras"`
-	// SkipScope is week or always on an item in SkippedItems, and absent on
-	// every item that is actually on the list.
+	// Shares split the item by meal, in the order of recipes: how much each
+	// meal needs, and whether it is for a component of that meal.
+	Shares []GroceryShareResponse `json:"shares"`
+	// SkipScope is week, always, or recipe on an item in SkippedItems, and
+	// absent on every item that is actually on the list. An item skipped with
+	// recipe holds only the left-out meals' share; the same ingredient can
+	// also be on the list for other meals.
 	SkipScope grocery.SkipScope `json:"skipScope,omitempty"`
 	// SkipText says what the skip does, in the words the app shows. Absent
 	// unless the item is skipped.
@@ -351,6 +400,7 @@ func newGroceryListResponse(g GroceryList) GroceryListResponse {
 		Batches:      make([]GroceryBatchResponse, 0, len(g.Batches)),
 		Skipped:      make([]SkippedEntryResponse, 0, len(g.Skipped)),
 		SkippedItems: make([]GroceryItemResponse, 0, len(g.SkippedItems)),
+		Meals:        GroceryMeals(g.Meals),
 	}
 	for _, b := range g.Batches {
 		resp.Batches = append(resp.Batches, newGroceryBatchResponse(b))
@@ -392,6 +442,7 @@ func newGroceryItemResponse(item grocery.Item) GroceryItemResponse {
 	for _, src := range item.Sources {
 		ir.Recipes = append(ir.Recipes, GroceryRecipeResponse{ID: src.RecipeID, Name: src.RecipeName})
 	}
+	ir.Shares = GroceryShares(item.Shares)
 	ir.Via = make([]GroceryViaResponse, 0, len(item.Via))
 	for _, v := range item.Via {
 		ir.Via = append(ir.Via, newGroceryViaResponse(v))
@@ -404,17 +455,73 @@ func newGroceryItemResponse(item grocery.Item) GroceryItemResponse {
 		ir.Specialty, ir.SpecialtyDetail = true, newGrocerySpecialtyResponse(*s)
 	}
 	if item.SkipScope != "" {
-		ir.SkipScope, ir.SkipText = item.SkipScope, skipText(item.SkipScope)
+		ir.SkipScope, ir.SkipText = item.SkipScope, skipText(item)
 	}
 	return ir
 }
 
-// skipText is the app's wording for a skip's lifetime. The skips package says
-// the same thing about its own records; this is the grocery list's copy, so
-// planning doesn't depend on that package for two strings.
-func skipText(scope grocery.SkipScope) string {
-	if scope == grocery.SkipAlways {
+// GroceryMeals renders the week's meals, for the Shop tab's proposal too.
+func GroceryMeals(meals []GroceryMeal) []GroceryMealResponse {
+	out := make([]GroceryMealResponse, 0, len(meals))
+	for _, m := range meals {
+		mr := GroceryMealResponse{RecipeID: m.RecipeID, RecipeName: m.RecipeName, IsAddon: m.IsAddon}
+		if m.ImageURL != "" {
+			image := m.ImageURL
+			mr.ImageURL = &image
+		}
+		if m.Day != "" {
+			day := m.Day
+			mr.Day = &day
+		}
+		out = append(out, mr)
+	}
+	return out
+}
+
+// GroceryShares renders an item's per-meal shares, for the Shop tab's lines
+// too.
+func GroceryShares(shares []grocery.Share) []GroceryShareResponse {
+	out := make([]GroceryShareResponse, 0, len(shares))
+	for _, sh := range shares {
+		sr := GroceryShareResponse{
+			RecipeID: sh.RecipeID, RecipeName: sh.RecipeName, Unquantified: sh.Unquantified,
+			Combined: sh.Combined, Extra: sh.Extra, Amounts: make([]GroceryAmountResponse, 0, len(sh.Amounts)),
+		}
+		texts := make([]string, 0, len(sh.Amounts))
+		for _, a := range sh.Amounts {
+			text := amountText(a)
+			texts = append(texts, text)
+			sr.Amounts = append(sr.Amounts, GroceryAmountResponse{
+				Quantity: a.Quantity.String(), QuantityValue: a.Quantity.Float64(), Unit: a.Unit.Code, Text: text,
+			})
+		}
+		sr.QuantityText = strings.Join(texts, " + ")
+		if c := sh.Component; c != nil {
+			sr.Component = &GroceryComponentResponse{
+				SpecialtyID: c.SpecialtyID, SpecialtyKey: c.SpecialtyKey, SpecialtyName: c.SpecialtyName, IngredientKey: c.LineKey,
+			}
+		}
+		out = append(out, sr)
+	}
+	return out
+}
+
+// skipText is the app's wording for why an item is held back. The skips
+// package says the same thing about its own records; this is the grocery
+// list's copy, so planning doesn't depend on that package for a few strings.
+func skipText(item grocery.Item) string {
+	switch item.SkipScope {
+	case grocery.SkipAlways:
 		return "Never buying this"
+	case grocery.SkipRecipe:
+		names := make([]string, 0, len(item.Sources))
+		for _, s := range item.Sources {
+			names = append(names, s.RecipeName)
+		}
+		if len(names) == 0 {
+			return "Left out of one recipe"
+		}
+		return "Left out of " + strings.Join(names, ", ")
 	}
 	return "Skipped this week"
 }

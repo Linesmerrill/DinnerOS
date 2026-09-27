@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
+	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
 	"github.com/Linesmerrill/DinnerOS/api/internal/providers"
 )
 
@@ -183,6 +184,11 @@ const (
 	// this week, and it isn't tracked in the pantry (leftovers.go), and the
 	// member didn't select it.
 	ExcludedOrdered ExclusionReason = "ordered"
+	// ExcludedSkipped: the household left the ingredient out (a grocery
+	// skip): for this week, always, or out of the meals the line names
+	// (LineSource.SkipScope). It is reported so the Shop tab can show it
+	// struck through under its meal, and it is never sent.
+	ExcludedSkipped ExclusionReason = "skipped"
 )
 
 // LineStatus is a handoff line's confirmation state.
@@ -227,6 +233,12 @@ type LineSource struct {
 	// grocery engine's sources; empty for an item only an extra added, and
 	// on handoffs stored before recipes were recorded.
 	Recipes []RecipeRef
+	// Shares split the line by meal (grocery.Item.Shares): each meal's own
+	// amount, and whether it is for a component of that meal. The line is
+	// still one purchase. Not stored.
+	Shares []grocery.Share
+	// SkipScope is set on an ExcludedSkipped line. Not stored.
+	SkipScope grocery.SkipScope
 }
 
 // RecipeRef names a recipe a line is for.
@@ -361,6 +373,9 @@ type Proposal struct {
 	// Cart is set on a match when the week has a current handoff (see
 	// Service.Match). It is never stored.
 	Cart *CartState
+	// Meals are the week's planned recipes in plan order, which every line's
+	// Shares name, so the Shop tab can list lines meal by meal. Not stored.
+	Meals []planning.GroceryMeal
 }
 
 // CloseReason says why a handoff stopped collecting sends.

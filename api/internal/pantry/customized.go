@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
+	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 )
 
@@ -20,6 +22,46 @@ type CookAdjuster interface {
 func (s *Service) SetCookAdjuster(a CookAdjuster) *Service {
 	s.adjuster = a
 	return s
+}
+
+// LeftOutSource says what a household leaves out of a recipe when it cooks
+// it (package skips): the ingredients it skipped for that recipe or for every
+// recipe. A week skip is about buying and doesn't count.
+type LeftOutSource interface {
+	RecipeLeftOut(ctx context.Context, householdID, recipeID string) (grocery.LeftOutSet, error)
+}
+
+// SetLeftOut makes cook deductions skip the ingredients the household leaves
+// out of a recipe, and returns s: cilantro left out of the curry was never
+// used, so the pantry shouldn't think it was.
+func (s *Service) SetLeftOut(l LeftOutSource) *Service {
+	s.leftOut = l
+	return s
+}
+
+// withoutLeftOut drops the ingredients the household leaves out of r. A
+// failure fails the deduction, for the same reason adjustCooked does.
+func (s *Service) withoutLeftOut(ctx context.Context, householdID string, r recipes.Recipe) (recipes.Recipe, error) {
+	if s.leftOut == nil {
+		return r, nil
+	}
+	set, err := s.leftOut.RecipeLeftOut(ctx, householdID, r.ID)
+	if err != nil {
+		return recipes.Recipe{}, fmt.Errorf("load left-out ingredients: %w", err)
+	}
+	if len(set) == 0 {
+		return r, nil
+	}
+	kept := make([]recipes.RecipeIngredient, 0, len(r.Ingredients))
+	for _, ing := range r.Ingredients {
+		name := "name:" + ingredients.NormalizeName(ing.Name)
+		if _, ok := set.Lookup(ing.IngredientID, name); ok {
+			continue
+		}
+		kept = append(kept, ing)
+	}
+	r.Ingredients = kept
+	return r, nil
 }
 
 // adjustCooked applies the adjuster to a planned meal. A failure fails the

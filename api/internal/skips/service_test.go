@@ -32,10 +32,29 @@ func (f *fakeCatalog) IngredientsByKey(_ context.Context, keys []string) ([]reci
 	return out, nil
 }
 
+// Recipes: testRecipe is the household's curry, otherRecipe belongs to
+// another household.
+const (
+	testRecipe  = "66e5a1f2c3b4a5d6e7f81001"
+	tacoRecipe  = "66e5a1f2c3b4a5d6e7f81002"
+	otherRecipe = "66e5a1f2c3b4a5d6e7f81009"
+)
+
+// fakeRecipes is a RecipeReader over two of the household's recipes.
+type fakeRecipes struct{}
+
+func (fakeRecipes) Get(_ context.Context, householdID, id string) (recipes.Recipe, error) {
+	names := map[string]string{testRecipe: "Thai Coconut Curry Chicken", tacoRecipe: "Pork Tacos"}
+	if name, ok := names[id]; ok && householdID == testHousehold {
+		return recipes.Recipe{ID: id, HouseholdID: householdID, Name: name}, nil
+	}
+	return recipes.Recipe{}, recipes.ErrNotFound
+}
+
 func newTestService(t *testing.T, catalog Catalog) (*Service, *memoryStore) {
 	t.Helper()
 	store := newMemoryStore()
-	svc := NewService(store, catalog, nil)
+	svc := NewService(store, catalog, nil).WithRecipes(fakeRecipes{})
 	svc.now = func() time.Time { return testNow }
 	return svc, store
 }
@@ -94,6 +113,10 @@ func TestSetSkipValidates(t *testing.T) {
 		{"week scope without a week", Input{IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeWeek}},
 		{"always scope with a week", Input{IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeAlways, Week: "2026-W38"}},
 		{"catalog key without a name", Input{IngredientKey: "66e5a1f2c3b4a5d6e7f82001", Scope: ScopeAlways}},
+		{"recipe scope without a recipe", Input{IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeRecipe}},
+		{"recipe scope with a week", Input{IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeRecipe, RecipeID: testRecipe, Week: "2026-W38"}},
+		{"always scope with a recipe", Input{IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeAlways, RecipeID: testRecipe}},
+		{"a recipe outside the household", Input{IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeRecipe, RecipeID: otherRecipe}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -133,7 +156,7 @@ func TestRemoveResumesTheIngredient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GrocerySkips() error = %v", err)
 	}
-	if len(set) != 0 {
+	if len(set.Ingredients) != 0 || len(set.Recipes) != 0 {
 		t.Errorf("a resumed ingredient still skips: %v", set)
 	}
 	if err := svc.Remove(ctx, editor(testHousehold), skip.ID); !errors.Is(err, ErrNotFound) {
@@ -215,7 +238,7 @@ func TestGrocerySkipsIgnoresOtherHouseholds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GrocerySkips() error = %v", err)
 	}
-	if len(set) != 0 {
+	if len(set.Ingredients) != 0 || len(set.Recipes) != 0 {
 		t.Errorf("another household's skips leaked: %v", set)
 	}
 }
@@ -225,7 +248,7 @@ func TestSetSkipCapsOneHousehold(t *testing.T) {
 	svc, store := newTestService(t, nil)
 	for i := range MaxPerHousehold {
 		if _, _, err := store.PutSkip(ctx, Skip{
-			HouseholdID: testHousehold, IngredientKey: "name:herb-" + string(rune('a'+i%26)) + string(rune('a'+i/26)),
+			HouseholdID: testHousehold, IngredientKey: "name:herb " + string(rune('a'+i%26)) + string(rune('a'+i/26)),
 			Key: "herb", Name: "Herb", Scope: ScopeAlways, CreatedBy: testUser, CreatedAt: testNow,
 			UpdatedBy: testUser, UpdatedAt: testNow,
 		}); err != nil {
@@ -240,8 +263,144 @@ func TestSetSkipCapsOneHousehold(t *testing.T) {
 	}
 	// Changing a skip that is already stored still works at the cap.
 	if _, _, err := svc.Set(ctx, editor(testHousehold), Input{
-		IngredientKey: "name:herb-aa", Name: "Herb", Scope: ScopeWeek, Week: "2026-W38",
+		IngredientKey: "name:herb aa", Name: "Herb", Scope: ScopeWeek, Week: "2026-W38",
 	}); err != nil {
 		t.Fatalf("changing an existing skip at the cap error = %v", err)
 	}
+}
+
+// "Just this dish": a recipe skip stands beside a household-wide skip for the
+// same ingredient, one per recipe, and replacing one never touches another.
+func TestSetRecipeSkipIsOnePerIngredientAndRecipe(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newTestService(t, nil)
+	curry, created, err := svc.Set(ctx, editor(testHousehold), Input{
+		IngredientKey: "name:Fresh  Cilantro", Name: "Fresh Cilantro", Scope: ScopeRecipe, RecipeID: testRecipe,
+	})
+	if err != nil || !created {
+		t.Fatalf("Set(recipe) = %+v, %v, %v; want created", curry, created, err)
+	}
+	if curry.IngredientKey != "name:fresh cilantro" {
+		t.Errorf("free-text key = %q, want it normalized like the list's", curry.IngredientKey)
+	}
+	if curry.RecipeID != testRecipe || curry.RecipeName != "Thai Coconut Curry Chicken" || curry.Text() != "Left out of Thai Coconut Curry Chicken" {
+		t.Errorf("recipe skip = %+v, want the curry's ID and name", curry)
+	}
+	again, created, err := svc.Set(ctx, editor(testHousehold), Input{
+		IngredientKey: "name:fresh cilantro", Name: "Fresh Cilantro", Scope: ScopeRecipe, RecipeID: testRecipe,
+	})
+	if err != nil || created || again.ID != curry.ID {
+		t.Errorf("setting it again = %+v, created %v, %v; want the same skip replaced", again, created, err)
+	}
+	if _, created, err := svc.Set(ctx, editor(testHousehold), Input{
+		IngredientKey: "name:fresh cilantro", Name: "Fresh Cilantro", Scope: ScopeRecipe, RecipeID: tacoRecipe,
+	}); err != nil || !created {
+		t.Errorf("the same ingredient for another recipe = created %v, %v; want a second skip", created, err)
+	}
+	if _, created, err := svc.Set(ctx, editor(testHousehold), Input{
+		IngredientKey: "name:fresh cilantro", Name: "Fresh Cilantro", Scope: ScopeAlways,
+	}); err != nil || !created {
+		t.Errorf("an always skip beside recipe skips = created %v, %v; want a third skip", created, err)
+	}
+	items, _ := svc.List(ctx, testHousehold)
+	if len(items) != 3 {
+		t.Errorf("List() = %d skips, want 3", len(items))
+	}
+}
+
+func TestSetRecipeSkipNeedsARecipeReader(t *testing.T) {
+	svc := NewService(newMemoryStore(), nil, nil)
+	var validation *ValidationError
+	_, _, err := svc.Set(context.Background(), editor(testHousehold), Input{
+		IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeRecipe, RecipeID: testRecipe,
+	})
+	if !errors.As(err, &validation) {
+		t.Fatalf("Set(recipe) without recipes = %v, want a ValidationError", err)
+	}
+}
+
+func TestGrocerySkipsSeparatesRecipeSkips(t *testing.T) {
+	ctx := context.Background()
+	const catalogID = "66e5a1f2c3b4a5d6e7f82001"
+	svc, _ := newTestService(t, &fakeCatalog{byKey: map[string]string{"cilantro": catalogID}})
+	mustSet(t, svc, Input{IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeRecipe, RecipeID: testRecipe})
+
+	rules, err := svc.GrocerySkips(ctx, testHousehold, "2026-W38")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := rules.Skip("name:cilantro"); ok {
+		t.Error("a recipe skip must not skip the ingredient for every recipe")
+	}
+	if !rules.SkipInRecipe(testRecipe, "name:cilantro") || !rules.SkipInRecipe(testRecipe, catalogID) {
+		t.Error("the curry must leave cilantro out under both spellings")
+	}
+	if rules.SkipInRecipe(tacoRecipe, "name:cilantro") {
+		t.Error("the tacos must still get cilantro")
+	}
+	// Recipe skips have no week: they apply every week.
+	next, _ := svc.GrocerySkips(ctx, testHousehold, "2026-W52")
+	if !next.SkipInRecipe(testRecipe, "name:cilantro") {
+		t.Error("a recipe skip must apply to every week")
+	}
+}
+
+// Two household-wide skips can land on one key (a free-text and a catalog
+// spelling of the same ingredient); always outranks week whatever the order.
+func TestGrocerySkipsAlwaysOutranksWeekOnTheSameKey(t *testing.T) {
+	ctx := context.Background()
+	const catalogID = "66e5a1f2c3b4a5d6e7f82001"
+	for _, order := range [][]Input{
+		{{IngredientKey: catalogID, Name: "Cilantro", Scope: ScopeAlways}, {IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeWeek, Week: "2026-W38"}},
+		{{IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeWeek, Week: "2026-W38"}, {IngredientKey: catalogID, Name: "Cilantro", Scope: ScopeAlways}},
+	} {
+		svc, _ := newTestService(t, &fakeCatalog{byKey: map[string]string{"cilantro": catalogID}})
+		for _, in := range order {
+			mustSet(t, svc, in)
+		}
+		rules, err := svc.GrocerySkips(ctx, testHousehold, "2026-W38")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, key := range []string{"name:cilantro", catalogID} {
+			if scope, _ := rules.Skip(key); scope != grocery.SkipAlways {
+				t.Errorf("%s = %q, want always to outrank week", key, scope)
+			}
+		}
+	}
+}
+
+func TestRecipeLeftOutIsTheRecipesAndAlwaysSkips(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newTestService(t, nil)
+	curry := mustSet(t, svc, Input{IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeRecipe, RecipeID: testRecipe})
+	mustSet(t, svc, Input{IngredientKey: "name:peanuts", Name: "Peanuts", Scope: ScopeRecipe, RecipeID: tacoRecipe})
+	dill := mustSet(t, svc, Input{IngredientKey: "name:dill", Name: "Dill", Scope: ScopeAlways})
+	mustSet(t, svc, Input{IngredientKey: "name:lime", Name: "Lime", Scope: ScopeWeek, Week: "2026-W38"})
+
+	set, err := svc.RecipeLeftOut(ctx, testHousehold, testRecipe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lo, ok := set.Lookup("name:cilantro"); !ok || lo.SkipID != curry.ID || lo.Scope != grocery.SkipRecipe {
+		t.Errorf("cilantro = %+v, %v; want the curry's recipe skip", lo, ok)
+	}
+	if lo, ok := set.Lookup("name:dill"); !ok || lo.SkipID != dill.ID || lo.Scope != grocery.SkipAlways {
+		t.Errorf("dill = %+v, %v; want the always skip", lo, ok)
+	}
+	if _, ok := set.Lookup("name:peanuts"); ok {
+		t.Error("another recipe's skip leaked into the curry")
+	}
+	if _, ok := set.Lookup("name:lime"); ok {
+		t.Error("a week skip is about buying, not cooking, and must not be left out of the recipe")
+	}
+}
+
+func mustSet(t *testing.T, svc *Service, in Input) Skip {
+	t.Helper()
+	skip, _, err := svc.Set(context.Background(), editor(testHousehold), in)
+	if err != nil {
+		t.Fatalf("Set(%+v) error = %v", in, err)
+	}
+	return skip
 }

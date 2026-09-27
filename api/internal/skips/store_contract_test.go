@@ -73,6 +73,44 @@ func runStoreContract(t *testing.T, store Store) {
 		}
 	})
 
+	t.Run("recipe skips stand beside the household-wide one", func(t *testing.T) {
+		curry := cilantro(testHousehold, ScopeRecipe, "")
+		curry.RecipeID, curry.RecipeName = "66e5a1f2c3b4a5d6e7f81001", "Thai Coconut Curry Chicken"
+		stored, created, err := store.PutSkip(ctx, curry)
+		if err != nil || !created {
+			t.Fatalf("PutSkip(recipe) = %+v, created %v, %v; want created beside the always skip", stored, created, err)
+		}
+		if stored.RecipeID != curry.RecipeID || stored.RecipeName != curry.RecipeName || stored.Scope != ScopeRecipe {
+			t.Errorf("stored recipe skip = %+v, want the curry", stored)
+		}
+		curry.RecipeName = "Coconut Curry"
+		renamed, created, err := store.PutSkip(ctx, curry)
+		if err != nil || created || renamed.ID != stored.ID || renamed.RecipeName != "Coconut Curry" {
+			t.Errorf("replacing the recipe skip = %+v, created %v, %v; want the same skip, renamed", renamed, created, err)
+		}
+		tacos := cilantro(testHousehold, ScopeRecipe, "")
+		tacos.RecipeID, tacos.RecipeName = "66e5a1f2c3b4a5d6e7f81002", "Pork Tacos"
+		if _, created, err := store.PutSkip(ctx, tacos); err != nil || !created {
+			t.Errorf("PutSkip(another recipe) = created %v, %v; want created", created, err)
+		}
+		items, err := store.ListSkips(ctx, testHousehold)
+		if err != nil || len(items) != 3 {
+			t.Fatalf("ListSkips() = %d, %v; want the always skip and two recipe skips", len(items), err)
+		}
+		var wide int
+		for _, s := range items {
+			if s.RecipeID == "" {
+				wide++
+				if s.Scope != ScopeAlways {
+					t.Errorf("the household-wide skip changed: %+v", s)
+				}
+			}
+		}
+		if wide != 1 {
+			t.Errorf("household-wide skips = %d, want 1", wide)
+		}
+	})
+
 	t.Run("skips are scoped to their household", func(t *testing.T) {
 		if _, _, err := store.PutSkip(ctx, cilantro(otherHousehold, ScopeAlways, "")); err != nil {
 			t.Fatalf("PutSkip() for the other household error = %v", err)

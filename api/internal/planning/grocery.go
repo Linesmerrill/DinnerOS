@@ -2,6 +2,7 @@ package planning
 
 import (
 	"slices"
+	"sort"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
@@ -31,6 +32,63 @@ type GroceryList struct {
 	// This is a different thing from Skipped, which is about plan ENTRIES that
 	// could not contribute at all.
 	SkippedItems []grocery.Item
+	// Meals are the week's planned recipes in plan order — scheduled days in
+	// week order, then unscheduled — each once, so the list can be shown meal
+	// by meal: every item's Shares name one of these.
+	Meals []GroceryMeal
+}
+
+// GroceryMeal is one planned recipe the list can be grouped under.
+type GroceryMeal struct {
+	RecipeID   string
+	RecipeName string
+	ImageURL   string
+	IsAddon    bool
+	// Day is the first day it is planned on, empty when unscheduled.
+	Day Day
+}
+
+// groceryMeals lists p's recipes once each, in plan order.
+func groceryMeals(p Plan) []GroceryMeal {
+	type ordered struct {
+		meal  GroceryMeal
+		order int
+		index int
+	}
+	first := p.First()
+	byRecipe := map[string]*ordered{}
+	var list []*ordered
+	for i, e := range p.Entries {
+		order := len(dayOrder)
+		if e.Day != "" {
+			if o := e.Day.OrderOn(first); o >= 0 {
+				order = o
+			}
+		}
+		if o, ok := byRecipe[e.RecipeID]; ok {
+			if order < o.order {
+				o.order, o.meal.Day = order, e.Day
+			}
+			continue
+		}
+		o := &ordered{
+			meal:  GroceryMeal{RecipeID: e.RecipeID, RecipeName: e.RecipeName, ImageURL: e.RecipeImageURL, IsAddon: e.RecipeIsAddon, Day: e.Day},
+			order: order, index: i,
+		}
+		byRecipe[e.RecipeID] = o
+		list = append(list, o)
+	}
+	sort.SliceStable(list, func(i, j int) bool {
+		if list[i].order != list[j].order {
+			return list[i].order < list[j].order
+		}
+		return list[i].index < list[j].index
+	})
+	out := make([]GroceryMeal, 0, len(list))
+	for _, o := range list {
+		out = append(out, o.meal)
+	}
+	return out
 }
 
 // GroceryCategory is one aisle of the list.
@@ -98,7 +156,7 @@ func grocerySelections(p Plan, live []recipes.Recipe) ([]grocery.RecipeSelection
 func aggregateGroceryList(
 	p Plan, selections []grocery.RecipeSelection, skipped []SkippedEntry, pantry grocery.Pantry, skips grocery.Skips,
 ) (GroceryList, error) {
-	out := GroceryList{Week: p.Week, Status: p.Status, Skipped: skipped}
+	out := GroceryList{Week: p.Week, Status: p.Status, Skipped: skipped, Meals: groceryMeals(p)}
 	list, err := grocery.AggregateWith(selections, pantry, skips)
 	if err != nil {
 		return GroceryList{}, err

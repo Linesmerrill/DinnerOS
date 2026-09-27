@@ -48,9 +48,10 @@ type SpecialtySource interface {
 }
 
 // SkipSource provides the ingredients a household chose not to buy in week,
-// already narrowed to the skips that apply to it. *skips.Service implements it.
+// already narrowed to the skips that apply to it: ingredient-wide skips, and
+// the ingredients left out of single recipes. *skips.Service implements it.
 type SkipSource interface {
-	GrocerySkips(ctx context.Context, householdID, week string) (grocery.SkipSet, error)
+	GrocerySkips(ctx context.Context, householdID, week string) (grocery.SkipRules, error)
 }
 
 // WeekStartSource says which day a household's week starts on ("sun".."sat").
@@ -679,11 +680,11 @@ func (s *Service) GroceryList(ctx context.Context, householdID, week string) (Gr
 	// name without disturbing the rest of that alternative.
 	var skips grocery.Skips
 	if s.skips != nil {
-		set, err := s.skips.GrocerySkips(ctx, householdID, w.String())
+		rules, err := s.skips.GrocerySkips(ctx, householdID, w.String())
 		if err != nil {
 			return GroceryList{}, fmt.Errorf("planning: load skipped ingredients: %w", err)
 		}
-		skips = set
+		skips = rules
 	}
 	g, err := aggregateGroceryList(p, selections, skipped, pantry, skips)
 	if err != nil {
