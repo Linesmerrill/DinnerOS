@@ -85,7 +85,13 @@ struct MealKitWebLoginView: View {
             MealKitWebViewHost(webView: model.webView)
                 .ignoresSafeArea(edges: .bottom)
             switch model.phase {
-            case .reading, .harvesting, .done:
+            case .harvesting:
+                // A long history takes a while; a line that changes every few seconds says
+                // it's still working. The first line is the plain one.
+                MealKitWebLoginOverlay(
+                    message: model.progressMessage,
+                    followUps: MealKitHarvestMessages.lines(for: model.service))
+            case .reading, .done:
                 MealKitWebLoginOverlay(message: model.progressMessage)
             case .failed(let message, let canRetry):
                 MealKitWebLoginMessage(
@@ -410,18 +416,56 @@ private struct MealKitWebViewHost: UIViewRepresentable {
 /// The veil over the page while the sign-in finishes and the history is read.
 private struct MealKitWebLoginOverlay: View {
     let message: String
+    /// Lines shown after `message`, one every few seconds, looping on the last few.
+    var followUps: [String] = []
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var index = 0
+
+    private var shown: String {
+        index == 0 || followUps.isEmpty ? message : followUps[(index - 1) % followUps.count]
+    }
 
     var body: some View {
         VStack(spacing: 12) {
             ProgressView()
-            Text(message)
+            Text(shown)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .id(shown)
+                .transition(reduceMotion ? .opacity : .push(from: .bottom).combined(with: .opacity))
         }
         .padding(24)
+        .frame(maxWidth: 320)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .combine)
+        .task(id: followUps) {
+            guard !followUps.isEmpty else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: MealKitHarvestMessages.interval)
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: 0.35)) { index += 1 }
+            }
+        }
+    }
+}
+
+/// The playful lines the harvest veil cycles through, so a long read looks alive.
+enum MealKitHarvestMessages {
+    static let interval: Duration = .milliseconds(2800)
+
+    static func lines(for service: MealKitService) -> [String] {
+        [
+            String(localized: "Counting your past orders…"),
+            String(localized: "Looking back in time…"),
+            String(localized: "Wow, you have good taste 😉"),
+            String(localized: "Collecting every recipe name…"),
+            String(localized: "Noting what you order again and again…"),
+            String(localized: "Just a moment longer…"),
+            String(localized: "Dang, you look good today 😉"),
+            String(localized: "Still reading — \(service.displayName) has a lot of history…"),
+        ]
     }
 }
 

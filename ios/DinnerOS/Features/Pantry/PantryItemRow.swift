@@ -118,8 +118,9 @@ struct FrozenBadge: View {
             .font(.caption2.weight(.semibold))
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .foregroundStyle(.tint)
-            .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+            // Ice blue, not the app's green: at a glance it reads as cold, not as a status.
+            .foregroundStyle(Color(.systemBlue))
+            .background(Capsule().fill(Color(.systemBlue).opacity(0.15)))
             .accessibilityLabel(Text("In the freezer"))
     }
 }

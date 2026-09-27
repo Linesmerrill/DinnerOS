@@ -744,3 +744,16 @@ struct MealKitHarvestResumeTests {
         #expect(MealKitFormatting.monthAndYear(of: "not a week") == nil)
     }
 }
+
+/// The harvest veil's rotating lines: there are enough to cover a long read without an
+/// obvious repeat, none is empty, and the service is named where it's used.
+struct MealKitHarvestMessagesTests {
+    @Test func thereAreEnoughDistinctLines() {
+        let lines = MealKitHarvestMessages.lines(for: .helloFresh)
+        #expect(lines.count >= 6)
+        #expect(Set(lines).count == lines.count)
+        #expect(lines.allSatisfy { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
+        #expect(lines.contains { $0.contains("HelloFresh") })
+        #expect(MealKitHarvestMessages.interval >= .seconds(2))
+    }
+}
