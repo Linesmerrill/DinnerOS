@@ -2,6 +2,7 @@ package shopping
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -107,11 +108,17 @@ func surplusText(p BulkPack) string {
 	return fmt.Sprintf("This week uses %s of %s", amountText(p.Needed, p.Unit), amountText(p.Bought, p.Unit))
 }
 
-// amountText renders an exact amount with its unit label.
+// amountText renders an exact amount with its unit label. A weight reads in
+// the ounces a kitchen scale shows ("10 oz", "3 lb 6 oz"), never as a
+// fraction of a pound: "keep ⅝ lb out" is arithmetic the member shouldn't
+// have to do with raw meat in their hands.
 func amountText(exact, unitCode string) string {
 	q, err := ingredients.ParseQuantity(exact)
 	if err != nil {
 		return exact
+	}
+	if text, ok := weightText(q, unitCode); ok {
+		return text
 	}
 	text := q.Format()
 	if u, err := ingredients.LookupUnit(unitCode); err == nil {
@@ -138,4 +145,37 @@ func (h *Handler) bulkPacks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, bulkPacksResponse(packs))
+}
+
+// weightText renders a mass in whole ounces, or pounds and ounces from three
+// pounds up, rounded to the nearest ounce. ok is false for anything that
+// isn't a mass, and for amounts too small to round to an ounce.
+func weightText(q ingredients.Quantity, unitCode string) (string, bool) {
+	from, err := ingredients.LookupUnit(unitCode)
+	if err != nil || from.Kind != ingredients.KindMass {
+		return "", false
+	}
+	oz, err := ingredients.LookupUnit("oz")
+	if err != nil {
+		return "", false
+	}
+	inOz, err := ingredients.Convert(q, from, oz)
+	if err != nil {
+		return "", false
+	}
+	total := int(math.Round(inOz.Float64()))
+	if total < 1 {
+		return "", false
+	}
+	// Ounces up to three pounds, where a kitchen scale and a recipe both
+	// still talk in ounces; pounds and ounces above, where 54 oz stops meaning
+	// anything at a glance.
+	if total < 48 {
+		return fmt.Sprintf("%d oz", total), true
+	}
+	pounds, ounces := total/16, total%16
+	if ounces == 0 {
+		return fmt.Sprintf("%d lb", pounds), true
+	}
+	return fmt.Sprintf("%d lb %d oz", pounds, ounces), true
 }

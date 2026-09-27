@@ -51,7 +51,7 @@ struct PrepSessionSheet: View {
                         Button {
                             Task { await finish(card) }
                         } label: {
-                            Label(card.freezable ? "Freeze the Rest" : "Done", systemImage: "checkmark.circle")
+                            Label(finishTitle(for: card), systemImage: "checkmark.circle")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
@@ -118,9 +118,19 @@ struct PrepSessionSheet: View {
         session.cards.firstIndex { $0.status == .skipped }
     }
 
+    /// Names what the button actually seals: whole dinner-sized bags, not "the rest".
+    private func finishTitle(for card: PrepCard) -> String {
+        guard card.freezable else { return String(localized: "Done") }
+        switch chosenPortions(for: card) {
+        case 0: return String(localized: "Done")
+        case 1: return String(localized: "Freeze 1 Bag")
+        case let n: return String(localized: "Freeze \(n) Bags")
+        }
+    }
+
     /// The count in effect: the member's choice, or the suggestion the API made.
     private func chosenPortions(for card: PrepCard) -> Int {
-        portions ?? card.portions?.portions ?? 1
+        portions ?? card.portions?.portions ?? 0
     }
 
     private func finish(_ card: PrepCard) async {
@@ -204,10 +214,11 @@ private struct PrepCardSections: View {
             Section {
                 Text(card.instruction)
                     .font(.subheadline)
-                if canEdit {
+                // Only whole dinners are offered; a surplus under one dinner has nothing to bag.
+                if canEdit, portionLimit > 0 {
                     Stepper(value: Binding(get: { chosenPortions }, set: setPortions), in: 1...portionLimit) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("\(chosenPortions) portions")
+                            Text(chosenPortions == 1 ? "1 bag" : "\(chosenPortions) bags")
                             Text(sizeAndThaw(portions))
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
@@ -216,7 +227,7 @@ private struct PrepCardSections: View {
                     .disabled(isBusy)
                 }
             } header: {
-                Text("Portion the rest")
+                Text("Freeze the rest")
             } footer: {
                 Text(basisText(portions))
             }
@@ -235,8 +246,9 @@ private struct PrepCardSections: View {
         }
     }
 
+    /// The most bags the surplus holds whole dinners of; zero when it holds none.
     private var portionLimit: Int {
-        max(card.portions?.options.last?.portions ?? 1, 1)
+        card.portions?.options.last?.portions ?? 0
     }
 
     /// The size and thaw time for the chosen count — never another count's. Each option
@@ -245,7 +257,7 @@ private struct PrepCardSections: View {
         guard let option = plan.option(chosenPortions) else {
             return plan.portionSizeText
         }
-        return String(localized: "about \(option.sizeText) each · \(option.thaw.summary) to thaw")
+        return String(localized: "\(option.sizeText) each · \(option.thaw.summary) to thaw")
     }
 
     private func basisText(_ plan: PrepPortionPlan) -> String {
@@ -253,10 +265,12 @@ private struct PrepCardSections: View {
         case .meal:
             return String(
                 localized:
-                    "A portion is about one meal's worth: your \(plan.meals) meals this week use \(plan.typicalMealText) each."
+                    plan.meals == 1
+                    ? "A bag is one dinner: this week's meal uses \(plan.typicalMealText)."
+                    : "A bag is one dinner: your \(plan.meals) meals this week use \(plan.typicalMealText) each."
             )
         case .week:
-            return String(localized: "A portion is about what this week uses, \(plan.typicalMealText).")
+            return String(localized: "A bag is what this week uses, \(plan.typicalMealText).")
         }
     }
 }

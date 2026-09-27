@@ -86,7 +86,7 @@ func TestBulkPackReportsTheRealAmounts(t *testing.T) {
 	case !pack.Freezable:
 		t.Error("Freezable = false, want true: meat is worth sealing")
 	}
-	if got := surplusText(pack); got != "This week uses 10 oz of 64 oz" {
+	if got := surplusText(pack); got != "This week uses 10 oz of 4 lb" {
 		t.Errorf("surplusText = %q", got)
 	}
 }

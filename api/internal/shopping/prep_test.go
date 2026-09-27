@@ -31,16 +31,18 @@ func TestPortionPlanCutsTheLoinIntoMeals(t *testing.T) {
 	case plan.TypicalMeal != "10" || plan.Basis != BasisMeal:
 		t.Errorf("typical meal = %q (%s), want 10 from the week's meals", plan.TypicalMeal, plan.Basis)
 	case plan.Portions != 5:
-		t.Errorf("Portions = %d, want 5: 54 oz is five more dinners", plan.Portions)
-	case plan.PortionSize != "54/5":
-		t.Errorf("PortionSize = %q, want 54/5 (10.8 oz)", plan.PortionSize)
+		t.Errorf("Portions = %d, want 5: 54 oz holds five whole 10 oz dinners", plan.Portions)
+	case plan.PortionSize != "10":
+		t.Errorf("PortionSize = %q, want 10: a bag is one dinner, not the surplus split evenly", plan.PortionSize)
+	case plan.Frozen != "50" || plan.Leftover != "4":
+		t.Errorf("frozen %q, leftover %q; want 50 and 4", plan.Frozen, plan.Leftover)
 	}
-	// 10.8 oz of meat at five hours a pound is 3.375 hours. The old button
+	// 10 oz of meat at five hours a pound is about three hours. The old button
 	// recorded one 54 oz portion and quoted seventeen.
 	if plan.Thaw.Hours != 3 || !plan.Thaw.Measured {
 		t.Errorf("thaw = %d hours (measured %v), want 3", plan.Thaw.Hours, plan.Thaw.Measured)
 	}
-	if whole := thawForPortions(packOf(t, "Pork Loin", ingredients.CategoryMeatSeafood, "64", "10"), 1); whole.Hours != 17 {
+	if whole := thawForPortion(packOf(t, "Pork Loin", ingredients.CategoryMeatSeafood, "64", "10"), ratOfExact("54")); whole.Hours != 17 {
 		t.Errorf("one whole portion = %d hours, want 17; the test no longer shows what portioning buys", whole.Hours)
 	}
 }
@@ -52,9 +54,9 @@ func TestPortionPlanDividesByTheMealsThatNeedIt(t *testing.T) {
 	case plan.TypicalMeal != "18":
 		t.Errorf("TypicalMeal = %q, want 18", plan.TypicalMeal)
 	case plan.Portions != 5:
-		t.Errorf("Portions = %d, want 5: 92 oz is about five 18 oz dinners", plan.Portions)
-	case plan.PortionSize != "92/5":
-		t.Errorf("PortionSize = %q, want 92/5", plan.PortionSize)
+		t.Errorf("Portions = %d, want 5: 92 oz holds five whole 18 oz dinners", plan.Portions)
+	case plan.PortionSize != "18" || plan.Leftover != "2":
+		t.Errorf("PortionSize = %q, leftover %q; want 18 and 2", plan.PortionSize, plan.Leftover)
 	case plan.Thaw.Hours != 6:
 		t.Errorf("thaw = %d hours, want 6", plan.Thaw.Hours)
 	}
@@ -71,42 +73,39 @@ func TestPortionPlanFallsBackToTheWeeksNeed(t *testing.T) {
 	}
 }
 
-// Every offered count carries its own size and thaw time. That is what stops
-// a stepper from showing the five-portion thaw beside a two-portion cut.
-func TestPortionOptionsEachCarryTheirOwnThaw(t *testing.T) {
+// The stepper offers every whole number of dinners the surplus holds, each
+// bag one dinner's worth with that dinner's thaw time — never a bigger bag.
+func TestPortionOptionsAreWholeDinners(t *testing.T) {
 	plan := portionPlanFor(packOf(t, "Pork Loin", ingredients.CategoryMeatSeafood, "64", "10"), 1)
-	if len(plan.Options) != MaxPrepPortions {
-		t.Fatalf("%d options, want %d", len(plan.Options), MaxPrepPortions)
+	if len(plan.Options) != 5 {
+		t.Fatalf("%d options, want 5: 54 oz holds five 10 oz dinners", len(plan.Options))
 	}
-	for _, want := range []struct {
-		portions, hours int
-		size            string
-	}{{1, 17, "54"}, {2, 8, "27"}, {5, 3, "54/5"}, {12, 2, "9/2"}} {
-		o := plan.Options[want.portions-1]
-		if o.Portions != want.portions || o.Size != want.size || o.Thaw.Hours != want.hours {
-			t.Errorf("option %d = %q, %d hours; want %q, %d hours",
-				o.Portions, o.Size, o.Thaw.Hours, want.size, want.hours)
+	for _, o := range plan.Options {
+		if o.Size != "10" || o.Thaw.Hours != 3 {
+			t.Errorf("option %d = %q, %d hours; want 10 oz, 3 hours", o.Portions, o.Size, o.Thaw.Hours)
 		}
 	}
 }
 
-// A chosen count is honoured, and the thaw estimate follows it.
-func TestApplyPortionsRecomputesTheThaw(t *testing.T) {
+// Fewer bags than the surplus holds leaves more over; more is capped at
+// what it holds.
+func TestApplyPortionsKeepsBagsDinnerSized(t *testing.T) {
 	pack := packOf(t, "Pork Loin", ingredients.CategoryMeatSeafood, "64", "10")
-	plan := applyPortions(portionPlanFor(pack, 1), pack, 2)
-	if plan.Portions != 2 || plan.PortionSize != "27" || plan.Thaw.Hours != 8 {
-		t.Errorf("two portions = %q, %d hours; want 27, 8", plan.PortionSize, plan.Thaw.Hours)
+	two := applyPortions(portionPlanFor(pack, 1), pack, 2)
+	if two.Portions != 2 || two.PortionSize != "10" || two.Frozen != "20" || two.Leftover != "34" {
+		t.Errorf("two bags = %+v, want 2 × 10 frozen and 34 left", two)
+	}
+	if many := applyPortions(portionPlanFor(pack, 1), pack, 9); many.Portions != 5 {
+		t.Errorf("nine bags of a 54 oz surplus = %d, want 5", many.Portions)
 	}
 }
 
-// The count is clamped, never zero and never absurd.
+// The count never runs away, and a surplus under one dinner freezes nothing.
 func TestPortionPlanClamps(t *testing.T) {
-	// Barely any surplus: 16 oz for 8 oz is one more dinner, not none.
 	plan := portionPlanFor(packOf(t, "Ground Beef", ingredients.CategoryMeatSeafood, "16", "8"), 1)
-	if plan.Portions != 1 {
-		t.Errorf("Portions = %d, want 1", plan.Portions)
+	if plan.Portions != 1 || plan.Leftover != "0" {
+		t.Errorf("16 oz for 8 oz = %d portions, leftover %q; want exactly one more dinner", plan.Portions, plan.Leftover)
 	}
-	// A tiny per-meal amount against a huge pack would run away.
 	big := portionPlanFor(packOf(t, "Ground Beef", ingredients.CategoryMeatSeafood, "512", "1"), 1)
 	if big.Portions != MaxPrepPortions {
 		t.Errorf("Portions = %d, want the cap %d", big.Portions, MaxPrepPortions)
@@ -185,5 +184,69 @@ func TestPrepSessionStates(t *testing.T) {
 	done.count()
 	if done.State != PrepFinished || done.Skipped != 1 || done.Headline != "Everything's put away." {
 		t.Errorf("finished session = %s %q", done.State, done.Headline)
+	}
+}
+
+// The card reads in ounces a scale shows and freezes only whole dinners. The
+// case that prompted it: a 1.5 lb pack of pork bought for a 10 oz Tuesday
+// said "Keep ⅝ lb out … cut the rest into 1 portions of about ⅞ lb" — a 14 oz
+// bag that would be thawed for a 10 oz dinner. The household's library uses
+// 10 oz of ground pork in 53 recipes and never 4 oz.
+func TestPrepFreezesWholeDinnersAndReadsInOunces(t *testing.T) {
+	pork := BulkPack{Needed: "5/8", Surplus: "7/8", Unit: "lb", Freezable: true}
+	pork.Name = "Ground Pork"
+	plan := portionPlanFor(pork, 1)
+	if plan.Portions != 1 || plan.PortionSize != "5/8" || plan.Frozen != "5/8" || plan.Leftover != "1/4" {
+		t.Fatalf("plan = %+v, want 1 portion of 5/8 lb frozen and 1/4 lb left over", plan)
+	}
+	card := PrepCard{Pack: pork, Meals: []PrepMeal{{RecipeName: "Citrus Pork Tacos", Day: "tue"}}, Portions: plan}
+	want := "Keep 10 oz out for Tuesday's Citrus Pork Tacos, then freeze another 10 oz in one bag for a future dinner. The last 4 oz is less than a dinner — toss it or cook it in."
+	if got := prepInstruction(card); got != want {
+		t.Errorf("instruction:\n got %q\nwant %q", got, want)
+	}
+	if got := frozenAmount(plan, plan.Portions); got != "5/8" {
+		t.Errorf("frozen amount = %q, want 5/8: only the whole portion is sealed", got)
+	}
+
+	loin := BulkPack{Needed: "10", Surplus: "54", Unit: "oz", Freezable: true}
+	loin.Name = "Pork Loin"
+	plan = portionPlanFor(loin, 1)
+	if plan.Portions != 5 || plan.Leftover != "4" || len(plan.Options) != 5 {
+		t.Fatalf("plan = %+v, want 5 bags of 10 oz, 4 oz left, options 1..5", plan)
+	}
+	card = PrepCard{Pack: loin, Meals: []PrepMeal{{RecipeName: "Tuscan Pork", Day: "thu"}}, Portions: plan}
+	want = "Keep 10 oz out for Thursday's Tuscan Pork, then freeze 5 bags of 10 oz — one per future dinner. The last 4 oz is less than a dinner — toss it or cook it in."
+	if got := prepInstruction(card); got != want {
+		t.Errorf("instruction:\n got %q\nwant %q", got, want)
+	}
+
+	// A member asking for more bags than the surplus holds gets what it holds.
+	if capped := applyPortions(plan, loin, 9); capped.Portions != 5 {
+		t.Errorf("9 portions of a 54 oz surplus = %d, want 5", capped.Portions)
+	}
+
+	// Less than a dinner left: nothing to freeze.
+	small := BulkPack{Needed: "10", Surplus: "4", Unit: "oz", Freezable: true}
+	small.Name = "Ground Beef"
+	plan = portionPlanFor(small, 1)
+	if plan.Portions != 0 || plan.Frozen != "0" {
+		t.Fatalf("plan = %+v, want nothing frozen", plan)
+	}
+}
+
+func TestWeightTextRoundsToTheOunce(t *testing.T) {
+	cases := []struct{ exact, unit, want string }{
+		{"5/8", "lb", "10 oz"},
+		{"7/8", "lb", "14 oz"},
+		{"18", "oz", "18 oz"},
+		{"4", "lb", "4 lb"},
+		{"54", "oz", "3 lb 6 oz"},
+		{"283", "g", "10 oz"},
+		{"2", "tbsp", "2 tbsp"}, // not a weight: left to the unit's own label
+	}
+	for _, c := range cases {
+		if got := amountText(c.exact, c.unit); got != c.want {
+			t.Errorf("amountText(%s %s) = %q, want %q", c.exact, c.unit, got, c.want)
+		}
 	}
 }

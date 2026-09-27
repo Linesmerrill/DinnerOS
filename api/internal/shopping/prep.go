@@ -155,9 +155,16 @@ type PortionPlan struct {
 	// portion count comes from, and Basis says how it was arrived at.
 	TypicalMeal string
 	Basis       PortionBasis
-	// Portions is the suggested count, and PortionSize one portion's size.
+	// Portions is the suggested count, and PortionSize one portion's size —
+	// always one dinner's worth (TypicalMeal), never the surplus split evenly:
+	// a 14 oz bag thawed for a 10 oz dinner is 4 oz thrown out later.
 	Portions    int
 	PortionSize string
+	// Frozen is what goes in the freezer (Portions × PortionSize) and Leftover
+	// what is left of the surplus after whole portions — less than a dinner,
+	// which no recipe in the library calls for, so the card says to toss it.
+	Frozen   string
+	Leftover string
 	// Thaw is the estimate for one portion of PortionSize. It follows the
 	// count, which is the whole point: four portions of a four-pound pack
 	// thaw in a fifth of the time the pack does.
@@ -477,7 +484,7 @@ func prepMeals(pack BulkPack, byRecipe map[string][]PrepMeal) []PrepMeal {
 func portionPlanFor(pack BulkPack, meals int) PortionPlan {
 	plan := PortionPlan{
 		Unit: pack.Unit, Reserved: pack.Needed, Surplus: pack.Surplus, Meals: meals,
-		Basis: BasisMeal, Portions: 1,
+		Basis: BasisMeal,
 	}
 	mealCount := meals
 	if mealCount < 1 {
@@ -486,61 +493,54 @@ func portionPlanFor(pack BulkPack, meals int) PortionPlan {
 	surplus, needed := ratOfExact(pack.Surplus), ratOfExact(pack.Needed)
 	typical := new(big.Rat).Quo(needed, big.NewRat(int64(mealCount), 1))
 	plan.TypicalMeal = typical.RatString()
-	if typical.Sign() > 0 && surplus.Sign() > 0 {
-		plan.Portions = clampPortions(roundRatToInt(new(big.Rat).Quo(surplus, typical)))
-	}
-	for n := 1; n <= MaxPrepPortions; n++ {
+	whole := wholePortions(surplus, typical)
+	for n := 1; n <= whole && n <= MaxPrepPortions; n++ {
 		plan.Options = append(plan.Options, PortionOption{
-			Portions: n, Size: portionSize(surplus, n), Thaw: thawForPortions(pack, n),
+			Portions: n, Size: plan.TypicalMeal, Thaw: thawForPortion(pack, typical),
 		})
 	}
-	return applyPortions(plan, pack, plan.Portions)
+	return applyPortions(plan, pack, whole)
 }
 
-// applyPortions sets the chosen count and the size and thaw estimate that
-// follow from it. The estimate is never carried over from another count:
-// that is exactly the bug this feature fixes.
-func applyPortions(plan PortionPlan, pack BulkPack, portions int) PortionPlan {
-	if portions < 1 {
-		portions = 1
+// wholePortions is how many dinners of typical the surplus holds, rounded
+// down: only whole ones are worth sealing.
+func wholePortions(surplus, typical *big.Rat) int {
+	if typical.Sign() <= 0 || surplus.Sign() <= 0 {
+		return 0
 	}
-	plan.Portions = portions
-	plan.PortionSize = portionSize(ratOfExact(pack.Surplus), portions)
-	plan.Thaw = thawForPortions(pack, portions)
-	return plan
-}
-
-func portionSize(surplus *big.Rat, portions int) string {
-	if portions < 1 {
-		portions = 1
-	}
-	return new(big.Rat).Quo(surplus, big.NewRat(int64(portions), 1)).RatString()
-}
-
-// thawForPortions asks the pantry's own thaw model about one portion, by
-// describing the sealed remainder exactly as the freezer would store it. The
-// prep card and the freezer therefore cannot disagree.
-func thawForPortions(pack BulkPack, portions int) pantry.ThawEstimate {
-	return pantry.ThawFor(pantry.Item{
-		DisplayName: pack.Name, Key: ingredients.NormalizeName(pack.Name), Category: pack.Category,
-		Quantity: pack.Surplus, Unit: pack.Unit, Portions: portions,
-	})
-}
-
-func clampPortions(n int64) int {
-	switch {
-	case n < 1:
-		return 1
-	case n > MaxPrepPortions:
+	q := new(big.Rat).Quo(surplus, typical)
+	n := new(big.Int).Quo(q.Num(), q.Denom()).Int64()
+	if n > MaxPrepPortions {
 		return MaxPrepPortions
 	}
 	return int(n)
 }
 
-// roundRatToInt rounds a positive ratio to the nearest whole number.
-func roundRatToInt(r *big.Rat) int64 {
-	x := new(big.Rat).Add(r, big.NewRat(1, 2))
-	return new(big.Int).Div(x.Num(), x.Denom()).Int64()
+// applyPortions sets the chosen count and what follows from it: each portion
+// is one dinner, the freezer gets count × dinner, and the rest is leftover.
+// A count above what the surplus holds is capped; zero means nothing to seal.
+func applyPortions(plan PortionPlan, pack BulkPack, portions int) PortionPlan {
+	surplus, typical := ratOfExact(pack.Surplus), ratOfExact(plan.TypicalMeal)
+	if most := wholePortions(surplus, typical); portions > most {
+		portions = most
+	}
+	if portions < 0 {
+		portions = 0
+	}
+	plan.Portions = portions
+	plan.PortionSize = plan.TypicalMeal
+	frozen := new(big.Rat).Mul(typical, big.NewRat(int64(portions), 1))
+	plan.Frozen = frozen.RatString()
+	plan.Leftover = new(big.Rat).Sub(surplus, frozen).RatString()
+	plan.Thaw = thawForPortion(pack, typical)
+	return plan
+}
+
+func thawForPortion(pack BulkPack, size *big.Rat) pantry.ThawEstimate {
+	return pantry.ThawFor(pantry.Item{
+		DisplayName: pack.Name, Key: ingredients.NormalizeName(pack.Name), Category: pack.Category,
+		Quantity: size.RatString(), Unit: pack.Unit, Portions: 1,
+	})
 }
 
 func ratOfExact(exact string) *big.Rat {
@@ -586,13 +586,24 @@ func prepInstruction(card PrepCard) string {
 		return fmt.Sprintf("Keep %s out for %s. Cook the rest again this week — it doesn't freeze back into itself.",
 			reserved, mealsText(card.Meals))
 	}
-	portions := amountText(card.Portions.PortionSize, card.Pack.Unit)
+	each := amountText(card.Portions.PortionSize, card.Pack.Unit)
 	keep := fmt.Sprintf("Keep %s out", reserved)
 	if len(card.Meals) > 0 {
 		keep = fmt.Sprintf("Keep %s out for %s", reserved, mealsText(card.Meals))
 	}
-	return fmt.Sprintf("%s, then cut the rest into %d portions of about %s and freeze them.",
-		keep, card.Portions.Portions, portions)
+	leftover := ""
+	if ratOfExact(card.Portions.Leftover).Sign() > 0 {
+		leftover = fmt.Sprintf(" The last %s is less than a dinner — toss it or cook it in.",
+			amountText(card.Portions.Leftover, card.Pack.Unit))
+	}
+	switch n := card.Portions.Portions; {
+	case n == 0:
+		return fmt.Sprintf("%s.%s", keep, leftover)
+	case n == 1:
+		return fmt.Sprintf("%s, then freeze another %s in one bag for a future dinner.%s", keep, each, leftover)
+	default:
+		return fmt.Sprintf("%s, then freeze %d bags of %s — one per future dinner.%s", keep, n, each, leftover)
+	}
 }
 
 // mealsText names the meals a reserve is for, with their days: "Thursday's
@@ -649,15 +660,19 @@ func (s *Service) CompletePrepCard(
 	if card.Pack.Freezable {
 		portions := card.Portions.Portions
 		if in.Portions > 0 {
-			portions = in.Portions
+			// Never more bags than the surplus holds whole dinners of.
+			portions = applyPortions(card.Portions, card.Pack, in.Portions).Portions
 		}
-		res, err := s.freeze(ctx, actor, card, portions)
-		if err != nil {
-			return PrepSession{}, PrepCard{}, err
-		}
-		state.FrozenItemID, state.Portions = res.Item.ID, portions
-		if res.AlreadyFrozen {
-			state.Portions = max(res.Item.Portions, 1)
+		// Less than a dinner left over: nothing to seal, and the card is done.
+		if portions > 0 {
+			res, err := s.freeze(ctx, actor, card, portions)
+			if err != nil {
+				return PrepSession{}, PrepCard{}, err
+			}
+			state.FrozenItemID, state.Portions = res.Item.ID, portions
+			if res.AlreadyFrozen {
+				state.Portions = max(res.Item.Portions, 1)
+			}
 		}
 	}
 	return s.answer(ctx, session, state)
@@ -729,7 +744,8 @@ func (s *Service) freeze(
 	}
 	res, err := s.freezer.Freeze(ctx, actor, pantry.FreezeInput{
 		IngredientID: card.Pack.IngredientID(), Name: card.Pack.Name,
-		Quantity: card.Pack.Surplus, Unit: card.Pack.Unit, Portions: portions,
+		// Only the whole portions go in: the leftover is less than a dinner.
+		Quantity: frozenAmount(card.Portions, portions), Unit: card.Pack.Unit, Portions: portions,
 		Source: &pantry.FreezeSource{
 			Provider: string(card.Provider), HandoffID: card.HandoffID, LineID: card.LineID,
 		},
@@ -738,4 +754,9 @@ func (s *Service) freeze(
 		return pantry.FreezeResult{}, fmt.Errorf("freeze the remainder: %w", err)
 	}
 	return res, nil
+}
+
+// frozenAmount is what sealing count portions puts in the freezer.
+func frozenAmount(plan PortionPlan, count int) string {
+	return new(big.Rat).Mul(ratOfExact(plan.TypicalMeal), big.NewRat(int64(count), 1)).RatString()
 }

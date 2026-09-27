@@ -84,10 +84,11 @@ func TestIntegrationPrepSession(t *testing.T) {
 	case card.Portions.Meals != 2 || card.Portions.TypicalMeal != "18" || card.Portions.Basis != BasisMeal:
 		t.Errorf("meals = %d, typical = %q (%s); want 2 meals of 18 oz",
 			card.Portions.Meals, card.Portions.TypicalMeal, card.Portions.Basis)
-	case card.Portions.Portions != 5 || card.Portions.PortionSize != "92/5":
-		t.Errorf("portions = %d × %q, want 5 × 92/5", card.Portions.Portions, card.Portions.PortionSize)
+	case card.Portions.Portions != 5 || card.Portions.PortionSize != "18" || card.Portions.Leftover != "2":
+		t.Errorf("portions = %d × %q, leftover %q; want 5 × 18 oz dinners and 2 oz over",
+			card.Portions.Portions, card.Portions.PortionSize, card.Portions.Leftover)
 	case card.Portions.Thaw.Hours != 6:
-		t.Errorf("thaw = %d hours, want 6 for one 18.4 oz portion", card.Portions.Thaw.Hours)
+		t.Errorf("thaw = %d hours, want 6 for one 18 oz portion", card.Portions.Thaw.Hours)
 	}
 	// The card names the meals the reserve is for, by day, and promises only
 	// the reminder that actually exists.
@@ -109,22 +110,22 @@ func TestIntegrationPrepSession(t *testing.T) {
 	if done.Status != PrepDone || done.FrozenPortions != 4 || done.FrozenItemID == "" {
 		t.Fatalf("finished card = %+v", done)
 	}
-	if done.Portions.Portions != 4 || done.Portions.PortionSize != "23" || done.Portions.Thaw.Hours != 7 {
-		t.Errorf("four portions = %d × %q, %d hours; want 4 × 23 oz, 7 hours",
+	if done.Portions.Portions != 4 || done.Portions.PortionSize != "18" || done.Portions.Thaw.Hours != 6 {
+		t.Errorf("four portions = %d × %q, %d hours; want 4 × 18 oz, 6 hours",
 			done.Portions.Portions, done.Portions.PortionSize, done.Portions.Thaw.Hours)
 	}
 	if session.State != PrepFinished || session.Pending != 0 || session.Done != 1 {
 		t.Errorf("session after = %s, %d pending, %d done", session.State, session.Pending, session.Done)
 	}
 
-	// The 36 oz the week needs stayed out of the freezer: only the surplus
-	// was sealed.
+	// The 36 oz the week needs stayed out of the freezer, and so did what is
+	// left after four whole dinners: only 4 × 18 oz was sealed.
 	stock, err := f.pantry.FrozenStock(ctx, testHousehold)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(stock) != 1 || stock[0].Item.Quantity != "92" || stock[0].Item.Portions != 4 {
-		t.Fatalf("freezer = %+v, want one 92 oz item in four portions", stock)
+	if len(stock) != 1 || stock[0].Item.Quantity != "72" || stock[0].Item.Portions != 4 {
+		t.Fatalf("freezer = %+v, want one 72 oz item in four portions", stock)
 	}
 
 	// Redoing the card seals nothing twice and does not rewrite the count:
@@ -140,7 +141,7 @@ func TestIntegrationPrepSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(stock) != 1 || stock[0].Item.Quantity != "92" || stock[0].Item.Portions != 4 {
+	if len(stock) != 1 || stock[0].Item.Quantity != "72" || stock[0].Item.Portions != 4 {
 		t.Fatalf("freezer after redoing = %+v, want the same one item", stock)
 	}
 }
@@ -274,12 +275,12 @@ func TestIntegrationPrepHTTP(t *testing.T) {
 	switch {
 	case card["status"] != "pending" || card["kind"] != "bulk_pack" || card["freezable"] != true:
 		t.Errorf("card = %v", card)
-	case portions["portions"] != float64(5) || portions["portionSizeText"] != "18.4 oz" || portions["basis"] != "meal":
+	case portions["portions"] != float64(5) || portions["portionSizeText"] != "18 oz" || portions["basis"] != "meal":
 		t.Errorf("portions = %v", portions)
 	case thaw["hours"] != float64(6) || thaw["measured"] != true:
 		t.Errorf("thaw = %v", thaw)
-	case len(options) != MaxPrepPortions:
-		t.Errorf("%d options, want %d", len(options), MaxPrepPortions)
+	case len(options) != 5:
+		t.Errorf("%d options, want 5: 92 oz holds five whole 18 oz dinners", len(options))
 	case card["reminder"] != "thaw":
 		t.Errorf("reminder = %v", card["reminder"])
 	}
