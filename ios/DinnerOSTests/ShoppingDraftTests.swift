@@ -114,6 +114,24 @@ struct SavedProductDraftTests {
         #expect(draft.isValid)
     }
 
+    /// Walmart's share sheet copies its link with a "whatDoYouThink" preamble, and pasting it
+    /// with the system menu put that word in the field. Only the link is kept.
+    @Test func pastedShareTextIsTrimmedToTheLink() {
+        var draft = SavedProductDraft(ingredientName: "Red Onion")
+        draft.linkText = "whatDoYouThink https://www.walmart.com/ip/51259215?sid=3AB8E9F0-7EFE-447A-B26B-04AF8BC9695B"
+        draft.trimLinkToURL()
+        #expect(draft.linkText == "https://www.walmart.com/ip/51259215?sid=3AB8E9F0-7EFE-447A-B26B-04AF8BC9695B")
+        #expect(draft.linkError == nil)
+
+        // A bare link, an item number, and half-typed text are left exactly as they are.
+        for untouched in ["https://www.walmart.com/ip/51259215", "51259215", "https://www.walm"] {
+            var other = SavedProductDraft()
+            other.linkText = untouched
+            other.trimLinkToURL()
+            #expect(other.linkText == untouched)
+        }
+    }
+
     @Test func anItemNumberWithoutASizeSendsTheIDAndNoSize() {
         var draft = SavedProductDraft()
         draft.linkText = "100000002"

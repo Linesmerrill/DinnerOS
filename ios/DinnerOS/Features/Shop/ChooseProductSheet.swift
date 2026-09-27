@@ -199,7 +199,14 @@ struct ChooseProductSheet: View {
             .autocorrectionDisabled()
             // A pasted link names the product, so the name fills itself in. Typing a link by
             // hand fills it too; an edited name is never overwritten.
-            .onChange(of: draft.linkText) { draft.fillNameFromLink() }
+            .onChange(of: draft.linkText) {
+                // Deferred: a focused multi-line field doesn't redraw a value changed inside
+                // its own onChange, so the pasted preamble would stay on screen.
+                Task { @MainActor in
+                    draft.trimLinkToURL()
+                    draft.fillNameFromLink()
+                }
+            }
             // A plain button, not PasteButton: Walmart's share sheet copies a URL, which a
             // String-only PasteButton treats as nothing to paste and shows disabled. Reading
             // the pasteboard here shows iOS's one-time "Allow Paste" prompt instead.
@@ -283,7 +290,9 @@ struct ChooseProductSheet: View {
     }
 
     private func paste(_ strings: [String]) {
-        guard let text = strings.first else { return }
+        // The text form first: Walmart puts the link and its "whatDoYouThink" preamble there,
+        // and some apps set only `url`. Either way the link inside is what's kept.
+        guard let text = strings.first(where: { ProductLink.firstURL(in: $0) != nil }) ?? strings.first else { return }
         draft.linkText = ProductLink.firstURL(in: text) ?? text.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.fillNameFromLink()
     }

@@ -92,6 +92,15 @@ nonisolated struct SavedProductDraft: Equatable, Sendable {
         displayName = derived
     }
 
+    /// Keeps only the link when the text around it isn't part of it. Walmart's share sheet
+    /// copies "whatDoYouThink https://www.walmart.com/ip/…" as its text, and pasting that into
+    /// the field with the system menu bypasses the Paste button's own clean-up.
+    mutating func trimLinkToURL() {
+        let trimmed = linkText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = ProductLink.firstURL(in: trimmed), url != trimmed else { return }
+        linkText = url
+    }
+
     var linkError: String? {
         guard !linkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, product == nil else { return nil }
         return String(localized: "Paste a Walmart product link, such as walmart.com/ip/…, or the item number.")
