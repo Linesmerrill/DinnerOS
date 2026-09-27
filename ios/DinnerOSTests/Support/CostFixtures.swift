@@ -309,6 +309,91 @@ nonisolated enum CostFixtures {
         return screen.pieces
     }
 
+    // MARK: - Order-details screenshots with a layout
+
+    /// Builds the recognized pieces of a Walmart-order-details-style screenshot: a card per item
+    /// with the photo at the left (no text in it here), the title beside it wrapped over as many
+    /// lines as it takes, then "Qty N" and the price *under* the title.
+    ///
+    /// Recognition boxes a line of text more tightly than the app spaces its lines, so the gap
+    /// between two lines of one title is wider than either box is tall. Cards sit a photo's
+    /// height apart. Coordinates are normalized with the origin at the top left.
+    nonisolated struct OrderDetailsScreen {
+        private(set) var pieces: [RecognizedPiece] = []
+        private var y: CGFloat = 0.06
+        static let column: CGFloat = 0.27
+        static let lineHeight: CGFloat = 0.009
+        static let linePitch: CGFloat = 0.022
+        static let rowStep: CGFloat = 0.026
+        /// A square photo 0.2 of the width wide, on a 1179 × 2556 screenshot.
+        static let photoHeight: CGFloat = 0.092
+        static let cardGap: CGFloat = 0.04
+
+        /// One row of text at the column's edge.
+        mutating func text(_ value: String, width: CGFloat = 0.4) {
+            pieces.append(
+                RecognizedPiece(value, CGRect(x: Self.column, y: y, width: width, height: Self.lineHeight)))
+            y += Self.rowStep
+        }
+
+        /// A card: each title line with how far across the screen it reaches, then the quantity
+        /// and the price.
+        mutating func card(title lines: [(text: String, width: CGFloat)], price cents: Int, quantity: Int = 1) {
+            let top = y
+            for line in lines {
+                pieces.append(
+                    RecognizedPiece(
+                        line.text, CGRect(x: Self.column, y: y, width: line.width, height: Self.lineHeight)))
+                y += Self.linePitch
+            }
+            y += Self.rowStep - Self.linePitch
+            text("Qty \(quantity)", width: 0.1)
+            text(String(format: "$%d.%02d", cents / 100, cents % 100), width: 0.1)
+            y = max(y, top + Self.photoHeight) + Self.cardGap
+        }
+    }
+
+    /// The cream cheese title the Walmart app wraps and then cuts off with its own "…", over two
+    /// lines at the regular text size.
+    static let creamCheeseTwoLines: [(text: String, width: CGFloat)] = [
+        ("Testfield Farms Cream Cheese Spread, 1 Tub, for", 0.64),
+        ("Smooth, Spreadable Mornings, Original, No Arti…", 0.65),
+    ]
+
+    /// The same title over three lines, as a larger text size wraps it.
+    static let creamCheeseThreeLines: [(text: String, width: CGFloat)] = [
+        ("Testfield Farms Cream Cheese Spread,", 0.63),
+        ("1 Tub, for Smooth, Spreadable", 0.6),
+        ("Mornings, Original, No Arti…", 0.52),
+    ]
+
+    /// An order-details screenshot with the cream cheese between two short titles, which sit on
+    /// the cards right next to it and have to stay their own items.
+    static func orderDetailsPieces(creamCheese: [(text: String, width: CGFloat)]) -> [RecognizedPiece] {
+        var screen = OrderDetailsScreen()
+        screen.text("Shopped items (4)")
+        screen.card(title: [("Fresh Lime, Each", 0.24)], price: 50)
+        screen.card(title: creamCheese, price: 397)
+        screen.card(title: [("Fresh Cilantro, Bunch", 0.3)], price: 93)
+        screen.card(
+            title: [("Great Value Light Brown Sugar, 32 oz Resealable", 0.66), ("Bag", 0.07)], price: 424, quantity: 2)
+        screen.text("Subtotal $9.64")
+        screen.text("Total $10.21")
+        return screen.pieces
+    }
+
+    /// Every item in `orderDetailsPieces`, in order.
+    static func orderDetailsItems(creamCheese: [(text: String, width: CGFloat)]) -> [(
+        name: String, cents: Int, quantity: Int
+    )] {
+        [
+            ("Fresh Lime, Each", 50, 1),
+            (creamCheese.map(\.text).joined(separator: " "), 397, 1),
+            ("Fresh Cilantro, Bunch", 93, 1),
+            ("Great Value Light Brown Sugar, 32 oz Resealable Bag", 424, 2),
+        ]
+    }
+
     /// Every item in `realCartPieces`, in order, as the review screen should show it.
     static let realCartItems: [(name: String, cents: Int, quantity: Int)] = [
         ("Sample Brand Super Soft Flour Tortillas Street Tacos, 12 ct", 244, 1),

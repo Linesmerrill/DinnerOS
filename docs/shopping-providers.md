@@ -385,9 +385,21 @@ or unused), unmatched items (assignable), lines still without a price, and the
 detected total; saving sends only those numbers. No image, recognized text,
 or unused item leaves the phone, and nothing is stored on it.
 
+**Each review row can show where it was read.** Walmart cuts long titles off
+with its own "…", so the recognized text genuinely ends there and a longer
+row wouldn't help. A row's name stays at two lines, and View (or tapping the
+name) shows the part of the member's own screenshot the item came from: the
+title, the price, and the photo beside them, which is what tells two cut-off
+titles apart. Parsing keeps each item's screenshot and the box its title,
+price, and quantity rows cover (`ParsedOrderItem.source`); recognition boxes
+only text, so the crop (`OrderItemSource.cropRect`) spans the full width, pads
+the rows, and is at least as tall as a photo filling the space left of the
+column. The picked images stay in memory until the sheet closes, and the crop
+is made only while it's on screen. VoiceOver reads the full recognized name.
+
 **The layout decides what belongs to what.** Recognition keeps each row's box
 (`RecognizedRow`, normalized with the origin at the top left, one screen of
-offset per screenshot). Three things need it:
+offset per screenshot). Several things need it:
 
 - **Which side the price is on.** The order-details screen prints the price
   under the name; the cart prints it *above*. Every bare price votes for the
@@ -408,8 +420,18 @@ offset per screenshot). Three things need it:
 - **Photos.** The card's photo is to the left of that column and the packaging
   in it is printed text, so "Sour Cream Original" off the tub lands on the name's
   row. `OrderTextLayout.withoutProductPhotos` drops pieces that end before the
-  column begins, and a name only carries onto the next row when that row starts
-  at the same edge.
+  column begins.
+- **Wrapped titles.** A long title wraps over two or three lines, and each line
+  arrives as its own row. The next row carries the title on
+  (`OrderScreenshotParser.continuesName`) when it starts at the same edge and
+  follows within 1.8 times the taller line's height — recognition boxes a line
+  more tightly than the app spaces them — and the line above doesn't end in
+  Walmart's "…" (the title's last line) and reaches at least 60% as far as the
+  read's widest title row (a short title that ended didn't wrap). The next
+  product's title sits a card away, past the photo's height, and a price,
+  quantity, or chrome row between closes the title, so neighbours aren't glued
+  together. Split, the first half had no price and was lost, and the second took
+  the price and matched nothing.
 - **Titles.** `OrderTitleCleaner` keeps the product name and drops what the app
   prints around it: a unit price above it ("88¢/lb | Final cost by weight"),
   and Subscribe, SNAP EBT eligible, Free N-day returns, Gift eligible, Remove,

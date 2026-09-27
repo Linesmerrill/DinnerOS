@@ -39,6 +39,51 @@ nonisolated struct RecognizedRow: Hashable, Sendable {
     }
 }
 
+/// Where an item was read from: which screenshot, and the box its title and price sit in.
+///
+/// The review screen crops the member's own screenshot to this box so a title the Walmart app cut
+/// off with "…" can still be told apart by its photo. Only the box is kept here; the image stays
+/// with the review screen, in memory, and is never saved.
+nonisolated struct OrderItemSource: Hashable, Sendable {
+    /// The screenshot's position in the member's selection.
+    let screen: Int
+    /// Normalized to that screenshot (0…1) with the origin at the top left, like `RecognizedRow`.
+    let rect: CGRect
+
+    /// The source of rows spanning `rect` in stacked-screenshot coordinates, kept to the
+    /// screenshot the title (`anchor`) is on: a card cut by the bottom of one screenshot and
+    /// repeated at the top of the next is shown from where its title was read.
+    static func stacked(_ rect: CGRect, anchor: CGRect) -> OrderItemSource? {
+        guard !rect.isNull, !anchor.isNull else { return nil }
+        let screen = Int(anchor.midY.rounded(.down))
+        let band = CGRect(x: -1, y: CGFloat(screen), width: 3, height: 1)
+        let clipped = rect.intersection(band)
+        guard !clipped.isNull, !clipped.isEmpty else { return nil }
+        return OrderItemSource(screen: screen, rect: clipped.offsetBy(dx: 0, dy: -CGFloat(screen)))
+    }
+
+    /// The part of a screenshot `size` pixels big to show for this item, in pixels with the
+    /// origin at the top left.
+    ///
+    /// Recognition only boxes text, so the photo's box is inferred: it sits left of the text
+    /// column, about as wide as the space there, beside the title. The crop spans the whole width
+    /// (photo, title, and a price at the right), pads the rows above and below, and is at least as
+    /// tall as that photo would be.
+    func cropRect(in size: CGSize) -> CGRect {
+        guard size.width > 0, size.height > 0 else { return .null }
+        let top = rect.minY * size.height
+        let bottom = rect.maxY * size.height
+        let padding = max(size.height * 0.012, 8)
+        // The photo fills most of the space left of the column and is roughly square.
+        let photo = rect.minX * size.width * 1.1
+        let height = min(max(bottom - top + padding * 2, photo + padding * 2), size.height)
+        var minY = (top + bottom) / 2 - height / 2
+        minY = min(max(minY, 0), size.height - height)
+        return CGRect(x: 0, y: minY, width: size.width, height: height).integral
+            .intersection(CGRect(origin: .zero, size: size))
+    }
+}
+
 /// Turns recognized pieces into the rows a person sees.
 ///
 /// Two things need the layout rather than the reading order. Rows are grouped by their vertical

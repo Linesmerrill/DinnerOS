@@ -18,6 +18,8 @@ nonisolated struct ParsedOrderItem: Hashable, Sendable, Identifiable {
     let quantity: Int
     let isWeightAdjusted: Bool
     let status: Status
+    /// Where on the member's screenshots the item was read, or `nil` without a layout.
+    var source: OrderItemSource? = nil
 
     /// Unavailable and refunded items weren't paid for, so they aren't matched to lines.
     var wasCharged: Bool { status == .ordered || status == .substituted }
@@ -50,7 +52,7 @@ nonisolated struct ParsedOrder: Hashable, Sendable {
 /// Reads Walmart order-details text, as on-device text recognition returns it, into items and
 /// totals. Deterministic, so it's the fallback for Apple Intelligence and the check on it.
 ///
-/// It expects the app's layout: an item name (sometimes wrapped over two lines), then lines
+/// It expects the app's layout: an item name (sometimes wrapped over several lines), then lines
 /// like "Qty 2", "2 x $2.49", "Weight-adjusted", and the price. The cart screen prints the price
 /// *above* the name instead, so which side a price is on is decided from where the rows sit
 /// (`pricesComeFirst`), not from the order they're read in. Was-prices, per-unit prices, average
@@ -71,7 +73,9 @@ nonisolated enum OrderScreenshotParser {
 
     static func parse(rows: [RecognizedRow], style: PriceStyle) -> ParsedOrder {
         let tokens = rows.map { classify($0.text, style: style) }
-        var builder = Builder(pricesFirst: pricesComeFirst(tokens: tokens, rows: rows))
+        var builder = Builder(
+            pricesFirst: pricesComeFirst(tokens: tokens, rows: rows),
+            widestTitle: widestTitle(tokens: tokens, rows: rows))
         for (token, row) in zip(tokens, rows) {
             builder.consume(token, at: row.rect)
         }
@@ -210,21 +214,34 @@ nonisolated enum OrderScreenshotParser {
         var isNameOpen = true
         /// Where the last row of the name sits, so a continuation can be checked against it.
         var nameRect: CGRect = .null
+        /// Every row of the name.
+        var titleRect: CGRect = .null
+        /// The name's rows and the rows its price and quantity came from.
+        var sourceRect: CGRect = .null
+
+        mutating func include(_ rect: CGRect) {
+            guard !rect.isNull else { return }
+            sourceRect = sourceRect.union(rect)
+        }
     }
 
     private struct Builder {
         let pricesFirst: Bool
+        /// The widest title row in the read, which is about how wide the text column is.
+        let widestTitle: CGFloat
         var order = ParsedOrder()
         var current: Draft?
         var pendingPrice: Int?
+        var pendingPriceRect: CGRect = .null
         var pendingSummary: SummaryKind?
         var pendingMarkers: [Marker] = []
         var sectionStatus: ParsedOrderItem.Status?
         var fees: [Int] = []
         var seen: Set<String> = []
 
-        init(pricesFirst: Bool) {
+        init(pricesFirst: Bool, widestTitle: CGFloat = 0) {
             self.pricesFirst = pricesFirst
+            self.widestTitle = widestTitle
         }
 
         mutating func consume(_ token: Token, at rect: CGRect = .null) {
@@ -238,6 +255,7 @@ nonisolated enum OrderScreenshotParser {
                 if kind != .savings {
                     finishItem()
                     pendingPrice = nil
+                    pendingPriceRect = .null
                 }
                 if let amount {
                     record(kind, amount)
@@ -252,16 +270,20 @@ nonisolated enum OrderScreenshotParser {
                 } else if pricesFirst {
                     finishItem()
                     pendingPrice = cents
+                    pendingPriceRect = rect
                 } else if current != nil, current?.price == nil {
                     current?.price = cents
                     current?.isNameOpen = false
+                    current?.include(rect)
                 }
             case .name(let text, let trailingPrice):
                 if var draft = current, draft.isNameOpen, draft.price == nil,
-                    Builder.continuesName(draft.nameRect, rect)
+                    OrderScreenshotParser.continuesName(draft.name, draft.nameRect, rect, widestTitle: widestTitle)
                 {
                     draft.name += " " + text
                     draft.nameRect = rect
+                    draft.titleRect = draft.titleRect.isNull ? rect : draft.titleRect.union(rect)
+                    draft.include(rect)
                     if let trailingPrice {
                         draft.price = trailingPrice
                         draft.isNameOpen = false
@@ -269,10 +291,15 @@ nonisolated enum OrderScreenshotParser {
                     current = draft
                 } else {
                     finishItem()
-                    var draft = Draft(name: text, price: trailingPrice, nameRect: rect)
+                    var draft = Draft(name: text, price: trailingPrice, nameRect: rect, titleRect: rect)
+                    draft.include(rect)
                     if pricesFirst {
                         draft.leadingPrice = pendingPrice
+                        if pendingPrice != nil {
+                            draft.include(pendingPriceRect)
+                        }
                         pendingPrice = nil
+                        pendingPriceRect = .null
                     }
                     if trailingPrice != nil {
                         draft.isNameOpen = false
@@ -286,6 +313,7 @@ nonisolated enum OrderScreenshotParser {
             case .quantity(let count, let price):
                 current?.quantity = count
                 current?.isNameOpen = false
+                current?.include(rect)
                 if let price, !pricesFirst, current?.price == nil {
                     current?.price = price
                 }
@@ -293,6 +321,7 @@ nonisolated enum OrderScreenshotParser {
                 current?.quantity = count
                 current?.unitCents = unitCents
                 current?.isNameOpen = false
+                current?.include(rect)
             case .marker(let marker):
                 if var draft = current {
                     apply(marker, to: &draft)
@@ -304,6 +333,7 @@ nonisolated enum OrderScreenshotParser {
             case .section(let status):
                 finishItem()
                 pendingPrice = nil
+                pendingPriceRect = .null
                 sectionStatus = status == .ordered ? nil : status
             case .ignoredPrice, .noise:
                 current?.isNameOpen = false
@@ -316,16 +346,6 @@ nonisolated enum OrderScreenshotParser {
                 order.feesCents = fees.reduce(0, +)
             }
             return order
-        }
-
-        /// Whether a name row carries on the name above it: the line under it, starting at the
-        /// same edge. Words picked out of a product photo sit elsewhere on the card, so they
-        /// don't get glued onto the title. Without a layout, reading order is all there is.
-        static func continuesName(_ name: CGRect, _ next: CGRect) -> Bool {
-            guard !name.isNull, !next.isNull else { return true }
-            guard abs(next.minX - name.minX) <= 0.03 else { return false }
-            let gap = next.minY - name.maxY
-            return gap >= -name.height && gap <= name.height * 1.2
         }
 
         private func apply(_ marker: Marker, to draft: inout Draft) {
@@ -361,7 +381,41 @@ nonisolated enum OrderScreenshotParser {
             order.items.append(
                 ParsedOrderItem(
                     id: order.items.count, name: draft.name, priceCents: price, quantity: quantity,
-                    isWeightAdjusted: draft.isWeightAdjusted, status: status))
+                    isWeightAdjusted: draft.isWeightAdjusted, status: status,
+                    source: OrderItemSource.stacked(draft.sourceRect, anchor: draft.titleRect)))
+        }
+    }
+
+    /// Whether a name row carries on the title above it, one title wrapped over lines.
+    ///
+    /// Walmart ends a title it cuts short with "…", so a line ending that way is the title's
+    /// last. Otherwise the next row has to start at the same edge (words read off a product
+    /// photo sit elsewhere on the card) and follow at line spacing. That gap is measured against
+    /// the taller of the two lines and allowed up to nearly twice it: recognition boxes a line
+    /// more tightly than the app spaces its lines, and a line without descenders gets a shorter
+    /// box still. A real order split "Philadelphia Cream Cheese Spread, 1 Tub, for" from the
+    /// rest of its title, and the half without a price was lost.
+    ///
+    /// Two guards keep the next product's title off: it sits a card away, past the photo's
+    /// height, and a short title that stops well before the column's edge (`widestTitle`, the
+    /// widest title row in the read) didn't wrap. Without a layout, reading order is all there is.
+    static func continuesName(_ name: String, _ line: CGRect, _ next: CGRect, widestTitle: CGFloat = 0) -> Bool {
+        if name.hasSuffix("…") || name.hasSuffix("...") { return false }
+        guard !line.isNull, !next.isNull else { return true }
+        guard abs(next.minX - line.minX) <= 0.03 else { return false }
+        let lineHeight = max(line.height, next.height)
+        let gap = next.minY - line.maxY
+        guard gap >= -lineHeight, gap <= lineHeight * 1.8 else { return false }
+        return widestTitle <= 0 || line.width >= widestTitle * 0.6
+    }
+
+    /// How wide the widest title row is, which is about how wide the text column is: a wrapped
+    /// line fills it, a short title that ended doesn't. Rows carrying a price beside the name
+    /// aren't counted, since the price widens them.
+    static func widestTitle(tokens: [Token], rows: [RecognizedRow]) -> CGFloat {
+        zip(tokens, rows).reduce(0) { widest, pair in
+            guard case .name(_, trailingPrice: nil) = pair.0, pair.1.hasLayout else { return widest }
+            return max(widest, pair.1.rect.width)
         }
     }
 

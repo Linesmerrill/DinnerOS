@@ -234,6 +234,99 @@ struct OrderScreenshotParserTests {
         #expect(OrderTextLayout.withoutProductPhotos(column).count == column.count)
     }
 
+    /// A real order split "Philadelphia Cream Cheese Spread, 1 Tub, for" from the rest of its
+    /// title: the first line had no price and was dropped, and "Smooth, Spreadable Mornings,
+    /// Original, No Arti…" took the $3.97 and matched nothing. The wrapped lines are one title.
+    @Test(arguments: [CostFixtures.creamCheeseTwoLines, CostFixtures.creamCheeseThreeLines])
+    func wrappedTitlesAreOneName(creamCheese: [(text: String, width: CGFloat)]) {
+        let rows = OrderTextLayout.rows(CostFixtures.orderDetailsPieces(creamCheese: creamCheese))
+
+        let order = OrderScreenshotParser.parse(rows: rows)
+
+        let expected = CostFixtures.orderDetailsItems(creamCheese: creamCheese)
+        #expect(order.items.map(\.name) == expected.map(\.name))
+        #expect(order.items.map(\.priceCents) == expected.map(\.cents))
+        #expect(order.items.map(\.quantity) == expected.map(\.quantity))
+        #expect(order.totalCents == 1_021)
+        // No half of the title stands on its own.
+        #expect(!order.items.contains { $0.name.hasPrefix("Smooth") || $0.name.hasPrefix("Mornings") })
+        // The whole title matches the week's cream cheese line.
+        let items = order.items.filter { $0.priceCents == 397 }
+        #expect(OrderPriceMatcher.score(OrderPriceMatcher.tokens(items.first?.name ?? ""), ["cream", "cheese"]) >= 0.5)
+    }
+
+    /// The looser line spacing mustn't glue the next product's title onto a short one.
+    @Test func shortTitlesNextToEachOtherStayApart() {
+        let line = CGRect(x: 0.27, y: 0.1, width: 0.64, height: 0.009)
+        let below = CGRect(x: 0.27, y: 0.122, width: 0.6, height: 0.009)
+        let short = CGRect(x: 0.27, y: 0.1, width: 0.24, height: 0.009)
+        let nextCard = CGRect(x: 0.27, y: 0.23, width: 0.3, height: 0.009)
+        let continues = OrderScreenshotParser.continuesName
+
+        // A full line with the next right under it, even with a gap wider than the boxes.
+        #expect(continues("Testfield Farms Cream Cheese Spread, 1 Tub, for", line, below, 0.66))
+        // A short title ended where it stopped, however close the next title is.
+        #expect(!continues("Fresh Lime, Each", short, below, 0.66))
+        // The next card's title is a photo's height away.
+        #expect(!continues("Testfield Farms Cream Cheese Spread, 1 Tub, for", line, nextCard, 0.66))
+        // Walmart's "…" ends a title.
+        #expect(!continues("Smooth, Spreadable Mornings, Original, No Arti…", line, below, 0.66))
+        #expect(!continues("Smooth, Spreadable Mornings, Original, No Arti...", .null, .null, 0))
+        // Starting at another edge, it's not the same title.
+        #expect(
+            !continues("Testfield Farms Cream Cheese Spread, 1 Tub, for", line, below.offsetBy(dx: 0.1, dy: 0), 0.66))
+        // Without a layout, reading order is all there is.
+        #expect(continues("Great Value Light Brown Sugar,", .null, .null, 0))
+
+        // Two short products on neighbouring cards keep their own names and prices.
+        let order = OrderScreenshotParser.parse(
+            rows: OrderTextLayout.rows(CostFixtures.orderDetailsPieces(creamCheese: CostFixtures.creamCheeseTwoLines)))
+        let byName = Dictionary(order.items.map { ($0.name, $0.priceCents) }, uniquingKeysWith: { first, _ in first })
+        #expect(byName["Fresh Lime, Each"] == 50)
+        #expect(byName["Fresh Cilantro, Bunch"] == 93)
+    }
+
+    /// Each item knows which screenshot it came from and where, so review can show the member
+    /// their own photo and title for a name the app cut off.
+    @Test func itemsKnowWhereOnTheScreenshotTheyWereRead() throws {
+        let first = OrderTextLayout.rows(CostFixtures.orderDetailsPieces(creamCheese: CostFixtures.creamCheeseTwoLines))
+        // The second screenshot repeats the cream cheese, wrapped over three lines this time, and
+        // goes on to an item of its own.
+        var next = CostFixtures.OrderDetailsScreen()
+        next.card(title: CostFixtures.creamCheeseThreeLines, price: 397)
+        next.card(title: [("Fresh Ginger Root, Each", 0.3)], price: 197)
+        let second = OrderTextLayout.rows(next.pieces).map { $0.movedDown(byScreens: 1) }
+        let order = OrderScreenshotParser.parse(rows: first + second)
+
+        // The repeat is read once, from where it was first seen.
+        #expect(order.items.count(where: { $0.priceCents == 397 }) == 1)
+        let creamCheese = try #require(order.items.first { $0.priceCents == 397 })
+        let source = try #require(creamCheese.source)
+        #expect(source.screen == 0)
+        // Both title lines and the price under them.
+        let column = CostFixtures.OrderDetailsScreen.column
+        #expect(abs(source.rect.minX - column) < 0.001)
+        #expect(source.rect.height > CostFixtures.OrderDetailsScreen.linePitch * 2)
+        let ginger = try #require(order.items.first { $0.name == "Fresh Ginger Root, Each" })
+        #expect(ginger.source?.screen == 1)
+        #expect((ginger.source?.rect.maxY ?? 2) < 1)
+
+        // The crop is the card's full width, the rows padded, and at least as tall as the photo.
+        let size = CGSize(width: 1179, height: 2556)
+        let crop = source.cropRect(in: size)
+        #expect(crop.minX == 0 && crop.width == size.width)
+        #expect(crop.minY <= source.rect.minY * size.height)
+        #expect(crop.maxY >= source.rect.maxY * size.height)
+        #expect(crop.height >= column * size.width)
+        #expect(crop.height < size.height / 4)
+        // Near the top of the screenshot it stays inside the image.
+        let top = OrderItemSource(screen: 0, rect: CGRect(x: 0.27, y: 0, width: 0.6, height: 0.02))
+        #expect(top.cropRect(in: size).minY == 0)
+        #expect(OrderItemSource.stacked(.null, anchor: .null) == nil)
+        // Plain text has nowhere to point.
+        #expect(OrderScreenshotParser.parse(text: CostFixtures.orderDetailsText).items.allSatisfy { $0.source == nil })
+    }
+
     @Test func raisedCentsJoinOntoTheirDollars() {
         let dollars = RecognizedPiece("$2", CGRect(x: 0.2, y: 0.1, width: 0.05, height: 0.02))
         let cents = RecognizedPiece("68", CGRect(x: 0.255, y: 0.095, width: 0.03, height: 0.012))
