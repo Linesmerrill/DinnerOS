@@ -1441,6 +1441,9 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 	var pantryValidation *pantry.ValidationError
 	var decision *DecisionNeededError
 	switch {
+	case errors.Is(err, ErrEverythingLeftOut):
+		httpx.WriteError(w, r, http.StatusConflict, "nothing_to_send",
+			"Nothing to add to your cart. You left out every item with a product.")
 	case errors.As(err, &decision):
 		httpx.WriteError(w, r, http.StatusConflict, "products_need_decision",
 			"Decide on these first: "+decision.Names()+".")

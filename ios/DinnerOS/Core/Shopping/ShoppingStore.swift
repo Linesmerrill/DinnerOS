@@ -671,6 +671,15 @@ final class ShoppingStore {
                 isReviewingProducts = true
             }
             return
+        } catch let error as APIError where error.code == "nothing_to_send" {
+            // Every line with a product was left out: say so on the Shop tab rather than
+            // failing inside a sheet that has already closed.
+            guard started == scope else { return }
+            isCreatingHandoff = false
+            isReviewingProducts = false
+            linkNotice = String(localized: "Nothing to add to your cart. You left out every item with a product.")
+            await loadProposal(clearing: false)
+            return
         } catch {
             if started == scope { isCreatingHandoff = false }
             throw error

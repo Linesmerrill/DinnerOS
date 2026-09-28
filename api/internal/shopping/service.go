@@ -473,7 +473,7 @@ func (s *Service) CreateHandoff(ctx context.Context, actor households.Membership
 			return Handoff{}, false, &DecisionNeededError{Lines: lines}
 		}
 		if len(proposal.Lines) == 0 && slices.ContainsFunc(proposal.Excluded, func(e Excluded) bool { return e.Reason.ForProductCheck() }) {
-			return Handoff{}, false, invalid("every line with a saved product was left out, so there is nothing to add to the cart")
+			return Handoff{}, false, ErrEverythingLeftOut
 		}
 		if len(proposal.Lines) == 0 {
 			return Handoff{}, false, invalid("no grocery line has a saved product to add to the cart")

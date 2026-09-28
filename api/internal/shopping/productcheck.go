@@ -2,6 +2,7 @@ package shopping
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -285,6 +286,11 @@ func (s *Service) recordChecks(ctx context.Context, prefs []Preference, reports 
 // DecisionNeededError is returned by CreateHandoff when a line's product is
 // gone, or couldn't be checked, and the member hasn't decided what to do.
 // Nothing is stored or sent.
+// ErrEverythingLeftOut means every line with a saved product was left out, so
+// there is nothing to put in the cart. The app says so instead of opening an
+// empty cart, and records nothing.
+var ErrEverythingLeftOut = errors.New("shopping: every line with a saved product was left out")
+
 type DecisionNeededError struct {
 	Lines []Excluded
 }

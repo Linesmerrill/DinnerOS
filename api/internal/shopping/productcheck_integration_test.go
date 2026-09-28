@@ -247,3 +247,19 @@ func TestIntegrationProductChecksHTTP(t *testing.T) {
 		}
 	}
 }
+
+// Leaving out the only line with a product leaves nothing for the cart. That
+// is its own answer, so the app can say "nothing to add" instead of showing a
+// generic failure, and no handoff is stored.
+func TestIntegrationEverythingLeftOutIsNothingToSend(t *testing.T) {
+	f := newFixture(t)
+	f.save(t, "Ground Beef", "https://www.walmart.com/ip/100000001", &PackageSize{Quantity: "16", Unit: "oz"})
+	check := f.check("Ground Beef", "100000001", ProductGone, DecisionLeaveOut)
+	_, _, err := f.svc.CreateHandoff(f.ctx, f.actor, testWeek, "walmart", MatchInput{Checks: []ProductCheckReport{check}})
+	if !errors.Is(err, ErrEverythingLeftOut) {
+		t.Fatalf("err = %v, want ErrEverythingLeftOut", err)
+	}
+	if list, _ := f.svc.ListHandoffs(f.ctx, testHousehold, HandoffFilter{}); len(list) != 0 {
+		t.Fatalf("stored a handoff for an empty cart: %+v", list)
+	}
+}

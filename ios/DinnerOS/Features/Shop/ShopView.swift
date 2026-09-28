@@ -257,8 +257,10 @@ private struct ShopWeekList: View {
             await model.load()
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
+            // Also while a notice is up: "nothing to add" arrives exactly when there are no
+            // lines left to show, and would otherwise never be seen.
             if shopping.proposalPhase == .loaded, let proposal = shopping.proposal,
-                !proposal.lines.isEmpty || !proposal.needsDecision.isEmpty
+                !proposal.lines.isEmpty || !proposal.needsDecision.isEmpty || shopping.linkNotice != nil
             {
                 ShopHandoffBar(proposal: proposal)
             }
@@ -1290,6 +1292,9 @@ private struct ShopHandoffBar: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+            } else if shopping.linkNotice != nil && proposal.lines.isEmpty && proposal.needsDecision.isEmpty {
+                // "Nothing to add": every line with a product was left out.
+                everythingInCart
             } else if shopping.isEverythingInCart && proposal.needsDecision.isEmpty {
                 // Walmart's link would only add these a second time.
                 everythingInCart
