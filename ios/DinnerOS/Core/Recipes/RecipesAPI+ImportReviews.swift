@@ -1,8 +1,9 @@
 import Foundation
 
 nonisolated extension RecipesAPI {
-    /// The most review items one request asks for. The household's whole backlog is small
-    /// (93 items for 431 recipes), so the screen reads it in one page.
+    /// The most review items one request asks for, and the most one resolve call sends. The
+    /// household's whole backlog is small (93 items for 431 recipes), so the screen reads it in
+    /// one page.
     static let importReviewLimit = 500
 
     /// Things the importer could not map confidently, oldest first (`recipes.import`).
@@ -19,5 +20,19 @@ nonisolated extension RecipesAPI {
         ]
         let response: ImportReviewListResponse = try await client.send(request.authorized(with: accessToken))
         return response.items
+    }
+
+    /// Records a decision on up to `importReviewLimit` items and returns how many open items it
+    /// resolved (`recipes.import`). `recipeID` links a recipe added for a delivered variant, and
+    /// goes only with `.differentRecipe`.
+    func resolveImportReviews(
+        householdID: String, ids: [String], resolution: ImportReviewResolution, recipeID: String? = nil,
+        accessToken: String
+    ) async throws -> Int {
+        let request = try APIRequest.post(
+            "/api/v1/households/\(householdID)/recipes/import-reviews/resolve",
+            body: ResolveImportReviewsRequest(ids: ids, resolution: resolution.rawValue, recipeId: recipeID))
+        let response: ResolveImportReviewsResponse = try await client.send(request.authorized(with: accessToken))
+        return response.resolved
     }
 }

@@ -130,10 +130,21 @@ index while the rest still import. A recipe is rejected when:
 
 Review items are stored per household in `import_reviews`, and read back with
 `GET /api/v1/households/{householdId}/recipes/import-reviews` (requires
-`recipes.import`). Nothing closes an item automatically: a `variant` item is
-resolved by capturing that delivered ID from the signed-in account
-(`go run . capture`, after `go run . variants` lists what is pending) and
-re-importing, which replaces the stored details with the delivered variant's.
+`recipes.import`). Nothing closes an item automatically. A person resolves one
+from the app's Import Review screen, which calls
+`POST /api/v1/households/{householdId}/recipes/import-reviews/resolve`:
+
+| Item | What it means | What the member can decide |
+| --- | --- | --- |
+| `variant` | The box carried a different name than the stored recipe, often a protein swap. The stored details come from the page, not the box. | **Same recipe** (`same_recipe`): the delivery already counts toward the stored recipe, so nothing else changes. **Different recipe** (`different_recipe`): the stored recipe stays as it is; the import has only the delivered name, not its ingredients, so the member adds it with Add Recipe and it is linked. **Dismiss**. |
+| `steps` | The page had no instructions. | Open the recipe, or **Dismiss**. |
+| `cookTime`, `ingredients.<name>.unit`, anything else | A value the importer would not guess. | Open the recipe, or **Dismiss**. |
+
+A resolved item stays resolved: re-importing the same file never reopens it.
+For the offline importer, a `variant` item can still be fixed at the source by
+capturing that delivered ID from the signed-in account (`go run . capture`,
+after `go run . variants` lists what is pending) and re-importing, which
+replaces the stored details with the delivered variant's.
 
 **Command (recommended for a full history).** It writes directly to MongoDB, so
 HTTP body limits and timeouts don't apply. The household must already exist.

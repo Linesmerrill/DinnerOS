@@ -906,6 +906,11 @@ type reviewDoc struct {
 	Reason         string        `bson:"reason"`
 	Status         string        `bson:"status"`
 	CreatedAt      time.Time     `bson:"createdAt"`
+	// Set when a person resolved the item.
+	Resolution     string    `bson:"resolution,omitempty"`
+	LinkedRecipeID string    `bson:"linkedRecipeId,omitempty"`
+	ResolvedBy     string    `bson:"resolvedBy,omitempty"`
+	ResolvedAt     time.Time `bson:"resolvedAt,omitempty"`
 }
 
 // ListReviewItems implements Store, reading the householdId_status_createdAt
@@ -932,7 +937,7 @@ func (s *MongoStore) ListReviewItems(ctx context.Context, householdID, status st
 	}
 	var out []ReviewRecord
 	for _, d := range docs {
-		out = append(out, ReviewRecord{
+		rec := ReviewRecord{
 			ReviewItem: ReviewItem{
 				Source:         d.Source,
 				SourceRecipeID: d.SourceRecipeID,
@@ -941,11 +946,52 @@ func (s *MongoStore) ListReviewItems(ctx context.Context, householdID, status st
 				Value:          d.Value,
 				Reason:         d.Reason,
 			},
+			ID:        d.Key,
 			Status:    d.Status,
 			CreatedAt: d.CreatedAt,
-		})
+		}
+		if d.Resolution != "" {
+			rec.Resolved = &ReviewResolution{
+				Resolution: Resolution(d.Resolution), LinkedRecipeID: d.LinkedRecipeID,
+				ResolvedBy: d.ResolvedBy, ResolvedAt: d.ResolvedAt,
+			}
+		}
+		out = append(out, rec)
 	}
 	return out, nil
+}
+
+// ResolveReviewItems implements Store with one update on the
+// householdId_key_unique index. Only open items change, so resolving twice is
+// harmless and a later import (which only ever inserts) never reopens one.
+func (s *MongoStore) ResolveReviewItems(ctx context.Context, householdID string, ids []string, onlyField string, res ReviewResolution) (int, error) {
+	hid, err := mongodb.ParseID(householdID)
+	if err != nil || len(ids) == 0 {
+		return 0, nil
+	}
+	filter := bson.D{
+		{Key: "householdId", Value: hid},
+		{Key: "key", Value: bson.D{{Key: "$in", Value: ids}}},
+		{Key: "status", Value: reviewStatusOpen},
+	}
+	if onlyField != "" {
+		filter = append(filter, bson.E{Key: "field", Value: onlyField})
+	}
+	set := bson.D{
+		{Key: "status", Value: ReviewStatusResolved},
+		{Key: "resolution", Value: string(res.Resolution)},
+		{Key: "resolvedBy", Value: res.ResolvedBy},
+		{Key: "resolvedAt", Value: res.ResolvedAt},
+		{Key: "updatedAt", Value: res.ResolvedAt},
+	}
+	if res.LinkedRecipeID != "" {
+		set = append(set, bson.E{Key: "linkedRecipeId", Value: res.LinkedRecipeID})
+	}
+	out, err := s.reviews.UpdateMany(ctx, filter, bson.D{{Key: "$set", Value: set}})
+	if err != nil {
+		return 0, translate(err)
+	}
+	return int(out.ModifiedCount), nil
 }
 
 // translate maps platform errors to this package's sentinels.

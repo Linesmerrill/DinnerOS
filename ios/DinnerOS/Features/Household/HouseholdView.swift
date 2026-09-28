@@ -229,20 +229,20 @@ struct HouseholdView: View {
         }
     }
 
-    /// The importer's backlog. The badge counts recipes worth a second look, not every item:
-    /// a spelling difference is not something to act on.
+    /// The importer's backlog. The badge is `ImportReviewDigest.openCount`: the rows the screen
+    /// lists, so it agrees with the screen and with the Recipe Import row.
     private var importReviewSection: some View {
         Section {
             NavigationLink {
                 ImportReviewView()
             } label: {
                 Label("Import Review", systemImage: "tray.full")
-                    .badge(importReviews.digest.differences.count)
+                    .badge(importReviews.digest.openCount)
             }
         } header: {
             Text("Imports")
         } footer: {
-            Text("Deliveries the importer couldn't match to the recipe page it stored the details from.")
+            Text("Recipes the importer wasn't sure about. Tap one to decide.")
         }
     }
 

@@ -1257,9 +1257,14 @@ paths:
         A `variant` item means the delivered menu variant differed from the
         canonical recipe page the details came from, so the stored ingredients
         may name a different protein than the box held. `value` is the
-        delivered variant's name. Resolving one needs an account capture of
-        that delivered ID and a re-import; nothing closes an item
-        automatically.
+        delivered variant's name. A person resolves an item with
+        `POST .../import-reviews/resolve`; nothing closes one automatically,
+        and a re-import never reopens a resolved one.
+
+        The open list is the household's whole backlog, across every import.
+        A meal-kit job's `reviewItems` counts what that run flagged, which can
+        include items an earlier import already recorded, so a badge counts
+        this list, not the job.
       operationId: listImportReviews
       tags: [recipes]
       security:
@@ -1267,10 +1272,10 @@ paths:
       parameters:
         - name: status
           in: query
-          description: "`open` (default) for unresolved items, `all` for every status."
+          description: "`open` (default) for unresolved items, `resolved` for decided ones, `all` for every status."
           schema:
             type: string
-            enum: [open, all]
+            enum: [open, resolved, all]
             default: open
         - name: limit
           in: query
@@ -1286,6 +1291,53 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ImportReviewListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/recipes/import-reviews/resolve:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    post:
+      summary: Resolve import review items
+      description: |
+        Records a person's decision on one or more open review items, so they
+        leave the open list. Requires `recipes.import`. One call takes up to
+        500 ids, which is how a screen clears a backlog in bulk.
+
+        - `same_recipe`: the delivered variant is the stored recipe. The import
+          already counted that delivery toward it, so no recipe changes.
+        - `different_recipe`: the delivered variant is its own dish. The stored
+          recipe is left as it is. The import has only the delivered name, not
+          its ingredients, so this cannot create that recipe; `recipeId` links
+          one the member added by hand.
+        - `dismissed`: nothing to do. Any kind of item.
+
+        `same_recipe` and `different_recipe` touch only `variant` items; any
+        other id is left open and not counted. Ids that are unknown, already
+        resolved, or another household's are skipped, so resolving twice is
+        harmless.
+      operationId: resolveImportReviews
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveImportReviewsRequest"
+      responses:
+        "200":
+          description: How many open items were resolved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolveImportReviewsResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -6471,8 +6523,9 @@ components:
         reviewItems:
           type: integer
           description: |
-            Things the importer could not map confidently. They are read
-            through `GET .../recipes/import-reviews`.
+            Things this run flagged, including any an earlier import already
+            recorded. The household's open backlog, which is what a screen
+            should count, is `GET .../recipes/import-reviews`.
         failures:
           type: array
           items:
@@ -6608,13 +6661,43 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ImportReview"
+    ResolveImportReviewsRequest:
+      type: object
+      required: [ids, resolution]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            type: string
+          description: ImportReview ids.
+        resolution:
+          type: string
+          enum: [same_recipe, different_recipe, dismissed]
+        recipeId:
+          type: string
+          description: The household recipe the member added for the delivered variant. Only with different_recipe.
+    ResolveImportReviewsResponse:
+      type: object
+      required: [resolved]
+      properties:
+        resolved:
+          type: integer
+          description: Open items this call resolved.
     ImportReview:
       type: object
-      required: [recipeName, source, sourceRecipeId, field, reason, status, createdAt]
+      required: [id, recipeName, source, sourceRecipeId, field, reason, status, createdAt]
       properties:
+        id:
+          type: string
+          description: Identifies the item within the household. Stable across re-imports.
         recipeId:
           type: string
           description: The household recipe this is about. Absent when no stored recipe carries the source ID.
+        recipeImageUrl:
+          type: string
+          description: That recipe's photo. Absent when it has none.
         recipeName:
           type: string
         source:
@@ -6631,10 +6714,21 @@ components:
           type: string
         status:
           type: string
-          enum: [open]
+          enum: [open, resolved]
         createdAt:
           type: string
           format: date-time
+        resolution:
+          type: string
+          enum: [same_recipe, different_recipe, dismissed]
+          description: Set once resolved.
+        linkedRecipeId:
+          type: string
+          description: The recipe linked with different_recipe, when one was.
+        resolvedAt:
+          type: string
+          format: date-time
+          description: Set once resolved.
     ImportResult:
       type: object
       required: [created, updated, unchanged, ingredientsCreated, reviewItems, errors]

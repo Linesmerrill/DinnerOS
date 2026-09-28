@@ -90,7 +90,8 @@ struct ImportReviewTests {
         let unknownUnit = ImportReviewFixtures.item(
             recipeName: "Pickled Onion Bowls", field: "ingredients.Red Onion.unit", value: "pick")
         #expect(unknownUnit.kind == .ingredientUnit(ingredient: "Red Onion"))
-        #expect(ImportReviewFixtures.item(recipeName: "X", field: "cookTime").kind == .other)
+        #expect(ImportReviewFixtures.item(recipeName: "X", field: "cookTime").kind == .cookTime)
+        #expect(ImportReviewFixtures.item(recipeName: "X", field: "servings").kind == .other)
         // A variant item with no delivered name has nothing to compare, so it isn't one.
         #expect(ImportReviewFixtures.item(recipeName: "X", field: "variant", value: "").kind == .other)
     }

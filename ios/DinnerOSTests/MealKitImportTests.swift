@@ -436,9 +436,40 @@ struct MealKitImportTests {
 
         let summary = MealKitFormatting.summary(for: job, service: .helloFresh)
 
-        #expect(job.recipesAdded == 10)
-        #expect(summary.title == "10 recipes added")
-        #expect(summary.detail == "1 already in your library. 1 couldn't be imported.")
+        #expect(summary.title == "Import finished")
+        #expect(
+            summary.detail
+                == "8 new recipes.\n2 updated with your order history.\n1 already up to date.\n1 couldn't be imported.")
+    }
+
+    /// The report that prompted this: 5 new, 671 updated, 55 unchanged read as "676 recipes
+    /// added". Updated recipes are never counted as added.
+    @Test func aReimportSaysHowFewWereNewAndHowManyGainedHistory() {
+        let job = MealKitImportJob(
+            id: "job-1", status: "succeeded", recipesFound: 731, recipesDone: 731,
+            imported: 5, updated: 671, unchanged: 55)
+
+        let summary = MealKitFormatting.summary(for: job, service: .helloFresh)
+
+        #expect(summary.detail == "5 new recipes.\n671 updated with your order history.\n55 already up to date.")
+        #expect(!summary.title.contains("676"))
+        #expect(!summary.detail.contains("676"))
+        #expect(!summary.detail.contains("added"))
+    }
+
+    @Test func oneNewRecipeIsSingularAndZeroCountsAreLeftOut() {
+        let one = MealKitImportJob(id: "j", status: "succeeded", imported: 1)
+        #expect(MealKitFormatting.finishedDetail(one, service: .helloFresh) == "1 new recipe.")
+
+        let onlyUpdated = MealKitImportJob(id: "j", status: "succeeded", updated: 3)
+        #expect(
+            MealKitFormatting.finishedDetail(onlyUpdated, service: .helloFresh)
+                == "3 updated with your order history.")
+
+        let nothing = MealKitImportJob(id: "j", status: "succeeded")
+        #expect(
+            MealKitFormatting.finishedDetail(nothing, service: .helloFresh)
+                == "Your HelloFresh recipes were already up to date.")
     }
 
     @Test func theExplanationSaysNothingAboutTheAccountIsKept() {

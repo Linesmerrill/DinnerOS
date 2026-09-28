@@ -553,23 +553,90 @@ func (s *Service) ImportReviews(ctx context.Context, householdID, status string,
 			idsBySource[it.Source] = append(idsBySource[it.Source], it.SourceRecipeID)
 		}
 	}
-	recipeIDs := map[sourceRecipeKey]string{}
+	type storedRef struct{ id, imageURL string }
+	recipeIDs := map[sourceRecipeKey]storedRef{}
 	for _, source := range slices.Sorted(maps.Keys(idsBySource)) {
 		found, err := s.store.FindRecipesBySourceIDs(ctx, householdID, source, idsBySource[source])
 		if err != nil {
 			return nil, fmt.Errorf("find recipes for review items: %w", err)
 		}
 		for _, r := range found {
-			recipeIDs[sourceRecipeKey{source, r.SourceRecipeID}] = r.ID
+			ref := storedRef{id: r.ID, imageURL: r.ImageURL}
+			recipeIDs[sourceRecipeKey{source, r.SourceRecipeID}] = ref
 			for _, alias := range r.SourceAliases {
-				recipeIDs[sourceRecipeKey{source, alias}] = r.ID
+				recipeIDs[sourceRecipeKey{source, alias}] = ref
 			}
 		}
 	}
 	for i := range items {
-		items[i].RecipeID = recipeIDs[sourceRecipeKey{items[i].Source, items[i].SourceRecipeID}]
+		ref := recipeIDs[sourceRecipeKey{items[i].Source, items[i].SourceRecipeID}]
+		items[i].RecipeID, items[i].RecipeImageURL = ref.id, ref.imageURL
 	}
 	return items, nil
+}
+
+// ResolveReviews is a person's decision about one or more review items.
+type ResolveReviews struct {
+	// IDs are ReviewRecord.ID values. At most MaxReviewLimit per call.
+	IDs        []string
+	Resolution Resolution
+	// LinkedRecipeID is the household recipe the member added for a delivered
+	// variant. Only with ResolutionDifferentRecipe, and optional there.
+	LinkedRecipeID string
+}
+
+// ResolveImportReviews records a person's decision on the household's open
+// review items and returns how many it resolved. Resolved items leave the
+// open list and stay resolved across re-imports.
+//
+// SameRecipe changes no recipe: the import already merged that delivery into
+// the stored recipe (its ID is an alias and its weeks are in orderWeeks), so
+// the decision only confirms it. DifferentRecipe leaves the stored recipe as
+// it is too; the pipeline has only the delivered variant's name, not its
+// ingredients, so it cannot create that recipe, and the member adds it by
+// hand and may link it here. Both touch only variant items; any other item a
+// request names is left open and not counted.
+//
+// It returns ErrInvalidResolution for an unusable request and ErrNotFound
+// when LinkedRecipeID is not one of the household's recipes.
+func (s *Service) ResolveImportReviews(ctx context.Context, householdID, userID string, in ResolveReviews) (int, error) {
+	if householdID == "" {
+		return 0, errHouseholdRequired
+	}
+	if !in.Resolution.Valid() {
+		return 0, fmt.Errorf("%w: resolution must be same_recipe, different_recipe, or dismissed", ErrInvalidResolution)
+	}
+	ids := uniqueStrings(in.IDs, "")
+	switch {
+	case len(ids) == 0:
+		return 0, fmt.Errorf("%w: ids is required", ErrInvalidResolution)
+	case len(ids) > MaxReviewLimit:
+		return 0, fmt.Errorf("%w: at most %d ids per request", ErrInvalidResolution, MaxReviewLimit)
+	}
+	linked := strings.TrimSpace(in.LinkedRecipeID)
+	if linked != "" {
+		if in.Resolution != ResolutionDifferentRecipe {
+			return 0, fmt.Errorf("%w: recipeId goes only with different_recipe", ErrInvalidResolution)
+		}
+		found, err := s.store.ExistingRecipeIDs(ctx, householdID, []string{linked})
+		if err != nil {
+			return 0, fmt.Errorf("check linked recipe: %w", err)
+		}
+		if !slices.Contains(found, linked) {
+			return 0, ErrNotFound
+		}
+	}
+	onlyField := ""
+	if in.Resolution.VariantOnly() {
+		onlyField = ReviewFieldVariant
+	}
+	n, err := s.store.ResolveReviewItems(ctx, householdID, ids, onlyField, ReviewResolution{
+		Resolution: in.Resolution, LinkedRecipeID: linked, ResolvedBy: userID, ResolvedAt: s.now().UTC(),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("resolve review items: %w", err)
+	}
+	return n, nil
 }
 
 // reviewKey identifies a review item so re-imports don't duplicate it.

@@ -20,13 +20,14 @@ type memoryStore struct {
 	recipes     []Recipe
 	reviews     map[string]ReviewItem // householdID + "/" + reviewKey
 	reviewTimes map[string]time.Time  // same key, when the item was recorded
+	resolved    map[string]ReviewResolution
 
 	saveRecipesCalls int
 	upsertCalls      int
 }
 
 func newMemoryStore() *memoryStore {
-	return &memoryStore{reviews: map[string]ReviewItem{}, reviewTimes: map[string]time.Time{}}
+	return &memoryStore{reviews: map[string]ReviewItem{}, reviewTimes: map[string]time.Time{}, resolved: map[string]ReviewResolution{}}
 }
 
 func (m *memoryStore) id() string {
@@ -374,12 +375,14 @@ func (m *memoryStore) ListReviewItems(_ context.Context, householdID, status str
 		if !ok || hh != householdID {
 			continue
 		}
-		if status != "" && status != ReviewStatusOpen {
+		rec := ReviewRecord{ReviewItem: it, ID: rk, Status: ReviewStatusOpen, CreatedAt: m.reviewTimes[key]}
+		if res, ok := m.resolved[key]; ok {
+			rec.Status, rec.Resolved = ReviewStatusResolved, &res
+		}
+		if status != "" && status != rec.Status {
 			continue
 		}
-		rows = append(rows, keyed{key: rk, rec: ReviewRecord{
-			ReviewItem: it, Status: ReviewStatusOpen, CreatedAt: m.reviewTimes[key],
-		}})
+		rows = append(rows, keyed{key: rk, rec: rec})
 	}
 	// Oldest first, then by review key, as MongoStore sorts.
 	slices.SortFunc(rows, func(a, b keyed) int {
@@ -396,6 +399,25 @@ func (m *memoryStore) ListReviewItems(_ context.Context, householdID, status str
 		out = append(out, r.rec)
 	}
 	return out, nil
+}
+
+func (m *memoryStore) ResolveReviewItems(_ context.Context, householdID string, ids []string, onlyField string, res ReviewResolution) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, id := range ids {
+		key := householdID + "/" + id
+		it, ok := m.reviews[key]
+		if !ok || (onlyField != "" && it.Field != onlyField) {
+			continue
+		}
+		if _, done := m.resolved[key]; done {
+			continue
+		}
+		m.resolved[key] = res
+		n++
+	}
+	return n, nil
 }
 
 func cloneIngredient(ing Ingredient) Ingredient {

@@ -556,7 +556,19 @@ pipeline).
 Review items (an unknown unit, a recipe with no steps) are not failures: they
 are recorded by the shared pipeline and read through
 `GET /api/v1/households/{householdId}/recipes/import-reviews`, exactly as for a
-file import.
+file import, and resolved from the app (see
+[import-format.md](import-format.md#loading-into-dinneros)).
+
+**One review number.** The Import Review row on Recipe Import and on the
+Household tab both show the household's open backlog, the same rows the screen
+lists. A job's `reviewItems` is what that run flagged, and it can include items
+an earlier import (or the offline file import) already recorded, so it is not
+shown as a badge; showing it produced "Import Review 3" over a screen of 90.
+
+**What the finished run says.** Recipes that were new, then recipes whose
+order history changed, then any that could not be imported, one per line:
+"5 new recipes." / "671 updated with your order history." A run that changed
+nothing reads "Your recipes were already up to date."
 
 ## Operating the worker
 

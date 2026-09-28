@@ -48,7 +48,7 @@ nonisolated enum MealKitFormatting {
                 symbol: "pause.circle", needsAttention: false)
         case .finished:
             return Summary(
-                title: finishedTitle(job), detail: finishedDetail(job, service: service),
+                title: String(localized: "Import finished"), detail: finishedDetail(job, service: service),
                 symbol: job.failures.isEmpty ? "checkmark.circle" : "exclamationmark.triangle",
                 needsAttention: false)
         case .failed:
@@ -140,24 +140,33 @@ nonisolated enum MealKitFormatting {
         return formatter.string(from: monday)
     }
 
-    private static func finishedTitle(_ job: MealKitImportJob) -> String {
-        job.recipesAdded == 1
-            ? String(localized: "1 recipe added")
-            : String(localized: "\(job.recipesAdded) recipes added")
-    }
-
-    private static func finishedDetail(_ job: MealKitImportJob, service: MealKitService) -> String {
-        var parts: [String] = []
+    /// One line per kind of outcome, straight from the job's counts: what is new, what only
+    /// gained order history, what was already current, and what failed.
+    ///
+    /// "Added" is never used for an updated recipe. A re-import of a long history updates
+    /// hundreds of recipes and creates a handful, and counting both as "added" told a member
+    /// 676 recipes were new when 5 were.
+    static func finishedDetail(_ job: MealKitImportJob, service: MealKitService) -> String {
+        var lines: [String] = []
+        if job.imported > 0 {
+            lines.append(
+                job.imported == 1
+                    ? String(localized: "1 new recipe.")
+                    : String(localized: "\(job.imported) new recipes."))
+        }
+        if job.updated > 0 {
+            lines.append(String(localized: "\(job.updated) updated with your order history."))
+        }
         if job.unchanged > 0 {
-            parts.append(String(localized: "\(job.unchanged) already in your library."))
+            lines.append(String(localized: "\(job.unchanged) already up to date."))
         }
         if !job.failures.isEmpty {
-            parts.append(String(localized: "\(job.failures.count) couldn't be imported."))
+            lines.append(String(localized: "\(job.failures.count) couldn't be imported."))
         }
-        if parts.isEmpty {
-            return String(localized: "All your \(service.displayName) recipes are in your library.")
+        if lines.isEmpty {
+            return String(localized: "Your \(service.displayName) recipes were already up to date.")
         }
-        return parts.joined(separator: " ")
+        return lines.joined(separator: "\n")
     }
 
     /// What the sign-in actually does, shown under the button that starts it: two short lines,
