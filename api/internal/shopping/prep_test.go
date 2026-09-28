@@ -22,7 +22,7 @@ func packOf(t *testing.T, name, category string, size, need string) BulkPack {
 // The case the whole feature exists for. A portion is one meal's worth,
 // because the household's own Thursday says a meal is ten ounces.
 func TestPortionPlanCutsTheLoinIntoMeals(t *testing.T) {
-	plan := portionPlanFor(packOf(t, "Pork Loin", ingredients.CategoryMeatSeafood, "64", "10"), 1)
+	plan := portionPlanFor(packOf(t, "Pork Loin", ingredients.CategoryMeatSeafood, "64", "10"), 1, nil)
 	switch {
 	case plan.Reserved != "10":
 		t.Errorf("Reserved = %q, want 10: Thursday's meal stays out of the freezer", plan.Reserved)
@@ -49,7 +49,7 @@ func TestPortionPlanCutsTheLoinIntoMeals(t *testing.T) {
 
 // Two meals of beef say a meal is eighteen ounces, not thirty-six.
 func TestPortionPlanDividesByTheMealsThatNeedIt(t *testing.T) {
-	plan := portionPlanFor(packOf(t, "Ground Beef", ingredients.CategoryMeatSeafood, "128", "36"), 2)
+	plan := portionPlanFor(packOf(t, "Ground Beef", ingredients.CategoryMeatSeafood, "128", "36"), 2, nil)
 	switch {
 	case plan.TypicalMeal != "18":
 		t.Errorf("TypicalMeal = %q, want 18", plan.TypicalMeal)
@@ -66,7 +66,7 @@ func TestPortionPlanDividesByTheMealsThatNeedIt(t *testing.T) {
 // whole need stands in for a meal and the basis says so rather than
 // pretending to know more.
 func TestPortionPlanFallsBackToTheWeeksNeed(t *testing.T) {
-	plan := portionPlanFor(packOf(t, "Pork Loin", ingredients.CategoryMeatSeafood, "64", "16"), 0)
+	plan := portionPlanFor(packOf(t, "Pork Loin", ingredients.CategoryMeatSeafood, "64", "16"), 0, nil)
 	if plan.Basis != BasisWeek || plan.TypicalMeal != "16" || plan.Portions != 3 {
 		t.Errorf("plan = %s basis, typical %q, %d portions; want week / 16 / 3",
 			plan.Basis, plan.TypicalMeal, plan.Portions)
@@ -76,7 +76,7 @@ func TestPortionPlanFallsBackToTheWeeksNeed(t *testing.T) {
 // The stepper offers every whole number of dinners the surplus holds, each
 // bag one dinner's worth with that dinner's thaw time — never a bigger bag.
 func TestPortionOptionsAreWholeDinners(t *testing.T) {
-	plan := portionPlanFor(packOf(t, "Pork Loin", ingredients.CategoryMeatSeafood, "64", "10"), 1)
+	plan := portionPlanFor(packOf(t, "Pork Loin", ingredients.CategoryMeatSeafood, "64", "10"), 1, nil)
 	if len(plan.Options) != 5 {
 		t.Fatalf("%d options, want 5: 54 oz holds five 10 oz dinners", len(plan.Options))
 	}
@@ -91,22 +91,22 @@ func TestPortionOptionsAreWholeDinners(t *testing.T) {
 // what it holds.
 func TestApplyPortionsKeepsBagsDinnerSized(t *testing.T) {
 	pack := packOf(t, "Pork Loin", ingredients.CategoryMeatSeafood, "64", "10")
-	two := applyPortions(portionPlanFor(pack, 1), pack, 2)
+	two := applyPortions(portionPlanFor(pack, 1, nil), pack, 2)
 	if two.Portions != 2 || two.PortionSize != "10" || two.Frozen != "20" || two.Leftover != "34" {
 		t.Errorf("two bags = %+v, want 2 × 10 frozen and 34 left", two)
 	}
-	if many := applyPortions(portionPlanFor(pack, 1), pack, 9); many.Portions != 5 {
+	if many := applyPortions(portionPlanFor(pack, 1, nil), pack, 9); many.Portions != 5 {
 		t.Errorf("nine bags of a 54 oz surplus = %d, want 5", many.Portions)
 	}
 }
 
 // The count never runs away, and a surplus under one dinner freezes nothing.
 func TestPortionPlanClamps(t *testing.T) {
-	plan := portionPlanFor(packOf(t, "Ground Beef", ingredients.CategoryMeatSeafood, "16", "8"), 1)
+	plan := portionPlanFor(packOf(t, "Ground Beef", ingredients.CategoryMeatSeafood, "16", "8"), 1, nil)
 	if plan.Portions != 1 || plan.Leftover != "0" {
 		t.Errorf("16 oz for 8 oz = %d portions, leftover %q; want exactly one more dinner", plan.Portions, plan.Leftover)
 	}
-	big := portionPlanFor(packOf(t, "Ground Beef", ingredients.CategoryMeatSeafood, "512", "1"), 1)
+	big := portionPlanFor(packOf(t, "Ground Beef", ingredients.CategoryMeatSeafood, "512", "1"), 1, nil)
 	if big.Portions != MaxPrepPortions {
 		t.Errorf("Portions = %d, want the cap %d", big.Portions, MaxPrepPortions)
 	}
@@ -122,7 +122,7 @@ func TestPrepReminderPromisesOnlyWhatExists(t *testing.T) {
 		LineSource: LineSource{IngredientKey: "name:carrots", Name: "Carrots", Category: ingredients.CategoryProduce},
 		LineID:     "l1", Unit: "oz", Bought: "64", Needed: "10", Surplus: "54", SurplusPercent: 84,
 	}
-	card := prepCardFor("h1", "walmart", pack, nil, "2026-09-15")
+	card := prepCardFor("h1", "walmart", pack, nil, "2026-09-15", nil)
 	if card.Reminder != PrepReminderNone || card.ReminderText != "" {
 		t.Errorf("unfreezable card promises %q: %q", card.Reminder, card.ReminderText)
 	}
@@ -130,7 +130,7 @@ func TestPrepReminderPromisesOnlyWhatExists(t *testing.T) {
 	meat := packOf(t, "Pork Loin", ingredients.CategoryMeatSeafood, "64", "10")
 	meat.Recipes = []RecipeRef{{ID: "r1", Name: "Tuscan Pork"}}
 	meals := map[string][]PrepMeal{"r1": {{RecipeID: "r1", RecipeName: "Tuscan Pork", Day: "thu", Date: "2026-09-17"}}}
-	ahead := prepCardFor("h1", "walmart", meat, meals, "2026-09-15")
+	ahead := prepCardFor("h1", "walmart", meat, meals, "2026-09-15", nil)
 	if ahead.Reminder != PrepReminderThaw || !strings.Contains(ahead.ReminderText, "Thursday") {
 		t.Errorf("a meal still ahead = %q: %q", ahead.Reminder, ahead.ReminderText)
 	}
@@ -142,7 +142,7 @@ func TestPrepReminderPromisesOnlyWhatExists(t *testing.T) {
 	// it off the list, and the thaw reminder still starts the day something
 	// is planned — so the copy says that instead of naming a past day.
 	meals["r1"][0].Past = true
-	late := prepCardFor("h1", "walmart", meat, meals, "2026-09-19")
+	late := prepCardFor("h1", "walmart", meat, meals, "2026-09-19", nil)
 	if late.Reminder != PrepReminderList || strings.Contains(late.ReminderText, "Thursday") {
 		t.Errorf("a week that has gone = %q: %q", late.Reminder, late.ReminderText)
 	}
@@ -194,13 +194,13 @@ func TestPrepSessionStates(t *testing.T) {
 // 10 oz of ground pork in 53 recipes and never 4 oz.
 func TestPrepFreezesWholeDinnersAndReadsInOunces(t *testing.T) {
 	pork := BulkPack{Needed: "5/8", Surplus: "7/8", Unit: "lb", Freezable: true}
-	pork.Name = "Ground Pork"
-	plan := portionPlanFor(pork, 1)
+	pork.Name, pork.Category = "Ground Pork", ingredients.CategoryMeatSeafood
+	plan := portionPlanFor(pork, 1, nil)
 	if plan.Portions != 1 || plan.PortionSize != "5/8" || plan.Frozen != "5/8" || plan.Leftover != "1/4" {
 		t.Fatalf("plan = %+v, want 1 portion of 5/8 lb frozen and 1/4 lb left over", plan)
 	}
 	card := PrepCard{Pack: pork, Meals: []PrepMeal{{RecipeName: "Citrus Pork Tacos", Day: "tue"}}, Portions: plan}
-	want := "Keep 10 oz out for Tuesday's Citrus Pork Tacos, then freeze another 10 oz in one bag for a future dinner. 4 oz left over. Toss it or cook it in."
+	want := "Keep 10 oz out for Tuesday's Citrus Pork Tacos, then freeze another 10 oz in one bag for a future dinner. 4 oz left over. Throw it in for a little more protein, or toss it."
 	if got := prepInstruction(card); got != want {
 		t.Errorf("instruction:\n got %q\nwant %q", got, want)
 	}
@@ -209,13 +209,13 @@ func TestPrepFreezesWholeDinnersAndReadsInOunces(t *testing.T) {
 	}
 
 	loin := BulkPack{Needed: "10", Surplus: "54", Unit: "oz", Freezable: true}
-	loin.Name = "Pork Loin"
-	plan = portionPlanFor(loin, 1)
+	loin.Name, loin.Category = "Pork Loin", ingredients.CategoryMeatSeafood
+	plan = portionPlanFor(loin, 1, nil)
 	if plan.Portions != 5 || plan.Leftover != "4" || len(plan.Options) != 5 {
 		t.Fatalf("plan = %+v, want 5 bags of 10 oz, 4 oz left, options 1..5", plan)
 	}
 	card = PrepCard{Pack: loin, Meals: []PrepMeal{{RecipeName: "Tuscan Pork", Day: "thu"}}, Portions: plan}
-	want = "Keep 10 oz out for Thursday's Tuscan Pork, then freeze 5 bags of 10 oz, one per future dinner. 4 oz left over. Toss it or cook it in."
+	want = "Keep 10 oz out for Thursday's Tuscan Pork, then freeze 5 bags of 10 oz, one per future dinner. 4 oz left over. Throw it in for a little more protein, or toss it."
 	if got := prepInstruction(card); got != want {
 		t.Errorf("instruction:\n got %q\nwant %q", got, want)
 	}
@@ -228,9 +228,50 @@ func TestPrepFreezesWholeDinnersAndReadsInOunces(t *testing.T) {
 	// Less than a dinner left: nothing to freeze.
 	small := BulkPack{Needed: "10", Surplus: "4", Unit: "oz", Freezable: true}
 	small.Name = "Ground Beef"
-	plan = portionPlanFor(small, 1)
+	plan = portionPlanFor(small, 1, nil)
 	if plan.Portions != 0 || plan.Frozen != "0" {
 		t.Fatalf("plan = %+v, want nothing frozen", plan)
+	}
+}
+
+// The household's bag size replaces the recipe's dinner, converted to the
+// pack's unit; less than a bag is thrown in or tossed. The case that prompted
+// it: 19 oz of chicken for a 10 oz dinner left 9 oz and got no card at all.
+func TestPrepBagSizeIsTheHouseholdsFutureDinner(t *testing.T) {
+	chicken := BulkPack{Needed: "10", Surplus: "9", Unit: "oz", Freezable: true}
+	chicken.Name, chicken.Category = "Chicken Breast", ingredients.CategoryMeatSeafood
+	plan := portionPlanFor(chicken, 1, nil)
+	if plan.Portions != 0 || plan.Leftover != "9" {
+		t.Fatalf("default plan = %+v, want no bag and 9 oz left", plan)
+	}
+	card := PrepCard{Pack: chicken, Meals: []PrepMeal{{RecipeName: "Tuscan Chicken", Day: "mon"}}, Portions: plan}
+	want := "Keep 10 oz out for Monday's Tuscan Chicken. 9 oz left over. Throw it in for a little more protein, or toss it."
+	if got := prepInstruction(card); got != want {
+		t.Errorf("instruction:\n got %q\nwant %q", got, want)
+	}
+
+	eight := 8
+	plan = portionPlanFor(chicken, 1, &eight)
+	if plan.Portions != 1 || plan.PortionSize != "8" || plan.Leftover != "1" {
+		t.Fatalf("8 oz plan = %+v, want one 8 oz bag and 1 oz left", plan)
+	}
+	if got := frozenAmount(plan, 1); got != "8" {
+		t.Errorf("frozen amount = %q, want 8", got)
+	}
+
+	// A pack in pounds: 8 oz is half a pound.
+	beef := BulkPack{Needed: "5/8", Surplus: "3/2", Unit: "lb", Freezable: true}
+	beef.Name, beef.Category = "Ground Beef", ingredients.CategoryMeatSeafood
+	plan = portionPlanFor(beef, 1, &eight)
+	if plan.Portions != 3 || plan.PortionSize != "1/2" || plan.Leftover != "0" {
+		t.Fatalf("lb plan = %+v, want 3 bags of 1/2 lb", plan)
+	}
+
+	// Not a weight: the recipe's dinner stands.
+	buns := BulkPack{Needed: "4", Surplus: "8", Unit: "count", Freezable: true}
+	buns.Name, buns.Category = "Buns", ingredients.CategoryBakery
+	if plan = portionPlanFor(buns, 1, &eight); plan.PortionSize != "4" || plan.Portions != 2 {
+		t.Fatalf("count plan = %+v, want 2 bags of 4", plan)
 	}
 }
 
@@ -256,7 +297,7 @@ func TestWeightTextRoundsToTheOunce(t *testing.T) {
 func TestPortionOptionsCarryTheirLeftover(t *testing.T) {
 	loin := BulkPack{Needed: "10", Surplus: "54", Unit: "oz", Freezable: true}
 	loin.Name = "Pork Loin"
-	resp := portionPlanResponse(portionPlanFor(loin, 1))
+	resp := portionPlanResponse(portionPlanFor(loin, 1, nil))
 	want := map[int]string{1: "44 oz", 2: "34 oz", 3: "24 oz", 4: "14 oz", 5: "4 oz"}
 	for _, o := range resp.Options {
 		if o.LeftoverText != want[o.Portions] {
@@ -270,14 +311,14 @@ func TestPortionOptionsCarryTheirLeftover(t *testing.T) {
 	// Nothing left over reads as nothing, not "0 oz".
 	even := BulkPack{Needed: "10", Surplus: "20", Unit: "oz", Freezable: true}
 	even.Name = "Ground Turkey"
-	if got := portionPlanResponse(portionPlanFor(even, 1)).LeftoverText; got != "" {
+	if got := portionPlanResponse(portionPlanFor(even, 1, nil)).LeftoverText; got != "" {
 		t.Errorf("an even split leaves %q, want empty", got)
 	}
 
 	// Under a dinner: no bags, and the whole surplus is the leftover.
 	small := BulkPack{Needed: "10", Surplus: "4", Unit: "oz", Freezable: true}
 	small.Name = "Ground Beef"
-	resp = portionPlanResponse(portionPlanFor(small, 1))
+	resp = portionPlanResponse(portionPlanFor(small, 1, nil))
 	if resp.Portions != 0 || len(resp.Options) != 0 || resp.LeftoverText != "4 oz" {
 		t.Errorf("small surplus = %d bags, %d options, leftover %q; want 0, 0, 4 oz",
 			resp.Portions, len(resp.Options), resp.LeftoverText)

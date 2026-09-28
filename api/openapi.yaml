@@ -534,7 +534,7 @@ paths:
       summary: Update household settings
       description: |
         Partial update of `name`, `timeZone`, `defaultServings`, `orderDay`,
-        `thawReminderHour`, `weekStartsOn`, and `mealKit`; at least one field
+        `thawReminderHour`, `freezeMinOunces`, `weekStartsOn`, and `mealKit`; at least one field
         is required. Requires `household.update`.
       operationId: updateHousehold
       tags: [households]
@@ -6981,7 +6981,7 @@ components:
         - shopping.edit
     Household:
       type: object
-      required: [id, name, defaultServings, timeZone, orderDay, thawReminderHour, weekStartsOn, mealKit, createdBy, createdAt, updatedAt]
+      required: [id, name, defaultServings, timeZone, orderDay, thawReminderHour, freezeMinOunces, weekStartsOn, mealKit, createdBy, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -7011,6 +7011,12 @@ components:
           default: 6
           description: The local hour the household's thaw reminders go out. Always set; 6 for a household that never chose one.
           example: 6
+        freezeMinOunces:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 80
+          description: The size of one frozen bag of leftover meat, in ounces. Less than this is thrown into the meal or tossed. Null means one dinner's worth, as the week's recipe measures it.
+          example: null
         weekStartsOn:
           $ref: "#/components/schemas/WeekStartDay"
         mealKit:
@@ -7118,6 +7124,12 @@ components:
           maximum: 23
           description: The local hour thaw reminders go out; null returns the household to the default hour of 6.
           example: 7
+        freezeMinOunces:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 80
+          description: The size of one frozen bag of leftover meat, in ounces; null returns the household to one dinner's worth.
+          example: 8
         weekStartsOn:
           $ref: "#/components/schemas/WeekStartDay"
         mealKit:

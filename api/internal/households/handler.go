@@ -70,6 +70,9 @@ type HouseholdResponse struct {
 	// ThawReminderHour is the local hour thaw reminders go out, always set
 	// (DefaultThawReminderHour when the household never chose one).
 	ThawReminderHour int `json:"thawReminderHour"`
+	// FreezeMinOunces is the least leftover meat worth freezing, null for
+	// one dinner's worth as the week's recipe measures it.
+	FreezeMinOunces *int `json:"freezeMinOunces"`
 	// WeekStartsOn is the first day of the household's week: "sun" for new
 	// households, "mon" for households that never chose.
 	WeekStartsOn string `json:"weekStartsOn"`
@@ -108,6 +111,7 @@ func NewHouseholdResponse(hh Household) HouseholdResponse {
 		TimeZone:         hh.TimeZone,
 		OrderDay:         orderDayOrNil(hh.OrderDay),
 		ThawReminderHour: hh.ThawHour(),
+		FreezeMinOunces:  hh.FreezeMinOunces,
 		WeekStartsOn:     hh.FirstDay(),
 		CreatedBy:        hh.CreatedBy,
 		CreatedAt:        hh.CreatedAt.UTC(),
@@ -195,6 +199,9 @@ type updateHouseholdRequest struct {
 	// ThawReminderHour set to null returns the household to the default
 	// hour; absent leaves it.
 	ThawReminderHour httpx.Optional[int] `json:"thawReminderHour"`
+	// FreezeMinOunces set to null returns the household to one dinner's
+	// worth; absent leaves it.
+	FreezeMinOunces httpx.Optional[int] `json:"freezeMinOunces"`
 	// WeekStartsOn changes the first day of the week, moving meals whose date
 	// now falls in another week into that week.
 	WeekStartsOn *string `json:"weekStartsOn"`
@@ -271,7 +278,8 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := UpdateInput{Name: req.Name, TimeZone: req.TimeZone, DefaultServings: req.DefaultServings, OrderDay: req.OrderDay, WeekStartsOn: req.WeekStartsOn, SetMealKit: req.MealKit.Set,
-		SetThawReminderHour: req.ThawReminderHour.Set, ThawReminderHour: req.ThawReminderHour.Value}
+		SetThawReminderHour: req.ThawReminderHour.Set, ThawReminderHour: req.ThawReminderHour.Value,
+		SetFreezeMinOunces: req.FreezeMinOunces.Set, FreezeMinOunces: req.FreezeMinOunces.Value}
 	if v := req.MealKit.Value; v != nil {
 		in.MealKit = &MealKit{WeeklyCents: v.WeeklyCents, Meals: v.Meals}
 	}

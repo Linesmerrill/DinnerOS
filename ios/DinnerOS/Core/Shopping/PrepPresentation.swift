@@ -81,11 +81,18 @@ nonisolated struct PrepCardPresentation: Equatable, Sendable {
         return String(localized: "\(thaw.summary) to thaw")
     }
 
-    /// The small line under the bags when less than a dinner is left:
-    /// "4 oz left over. Toss it or cook it in.". `nil` when nothing is.
+    /// The small line under the bags when less than a bag is left:
+    /// "4 oz left over. Throw it in for a little more protein, or toss it.". `nil` when nothing is.
     var leftoverLine: String? {
         guard let leftover = leftoverText else { return nil }
-        return String(localized: "\(leftover) left over. Toss it or cook it in.")
+        return String(localized: "\(leftover) left over. \(leftoverAdvice)")
+    }
+
+    /// What to do with less than a bag. Meat can go into the meal as extra protein.
+    private var leftoverAdvice: String {
+        card.category == "meat-seafood"
+            ? String(localized: "Throw it in for a little more protein, or toss it.")
+            : String(localized: "Cook it in or toss it.")
     }
 
     /// Names what the button actually does: whole dinner-sized bags, or just "Done".
@@ -120,7 +127,7 @@ nonisolated struct PrepCardPresentation: Equatable, Sendable {
     /// The leftover line as it should be read: ounces, not "oz".
     var leftoverAccessibilityLabel: String? {
         guard let leftover = leftoverText else { return nil }
-        return String(localized: "\(Self.spoken(leftover)) left over. Toss it or cook it in.")
+        return String(localized: "\(Self.spoken(leftover)) left over. \(leftoverAdvice)")
     }
 
     /// Announced after a bag is added or removed.

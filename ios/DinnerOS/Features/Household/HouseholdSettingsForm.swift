@@ -13,6 +13,9 @@ struct HouseholdSettingsSections: View {
     @FocusState private var focus: TextSetting?
     /// A week start picked and not yet confirmed; it moves meals, so it's asked about first.
     @State private var proposedWeekStart: PlanDay?
+    /// The Custom bag size alert, and what's typed in it.
+    @State private var asksCustomBag = false
+    @State private var customBagText = ""
 
     private enum TextSetting: Hashable {
         case name, mealKitAmount
@@ -155,6 +158,30 @@ struct HouseholdSettingsSections: View {
         }
     }
 
+    /// The offered sizes, plus the household's own if it picked one the list doesn't have.
+    private var freezeBagChoices: [Int] {
+        let current = draft.freezeBagOunces
+        return Household.freezeBagOunces.contains(current)
+            ? Household.freezeBagOunces : (Household.freezeBagOunces + [current]).sorted()
+    }
+
+    /// The picker's tag for Custom, which asks for a number instead of saving.
+    private static let customBagTag = -1
+
+    private var freezeBagBinding: Binding<Int> {
+        Binding(
+            get: { settings.draft.freezeBagOunces },
+            set: { ounces in
+                if ounces == Self.customBagTag {
+                    let current = settings.draft.freezeBagOunces
+                    customBagText = current > 0 ? String(current) : ""
+                    asksCustomBag = true
+                } else {
+                    settings.edit(\.freezeBagOunces, to: ounces, delay: HouseholdSettingsAutosave.controlDelay)
+                }
+            })
+    }
+
     private var thawSection: some View {
         Section {
             if settings.canEdit {
@@ -166,11 +193,34 @@ struct HouseholdSettingsSections: View {
             } else {
                 LabeledContent("Reminder Time", value: Household.thawHourText(saved.thawReminderHour))
             }
+            if settings.canEdit {
+                Picker("Freezer Bag", selection: freezeBagBinding) {
+                    ForEach(freezeBagChoices, id: \.self) { ounces in
+                        Text(Household.freezeBagText(ounces)).tag(ounces)
+                    }
+                    Text("Custom…").tag(Self.customBagTag)
+                }
+                .alert("Freezer Bag", isPresented: $asksCustomBag) {
+                    TextField("Ounces", text: $customBagText)
+                        .keyboardType(.numberPad)
+                    Button("Save") {
+                        if let ounces = Household.customBagOunces(customBagText) {
+                            settings.edit(\.freezeBagOunces, to: ounces, delay: .zero)
+                        }
+                    }
+                    .disabled(Household.customBagOunces(customBagText) == nil)
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("How many ounces in each bag? 1 to \(Household.maxFreezeBagOunces).")
+                }
+            } else {
+                LabeledContent("Freezer Bag", value: Household.freezeBagText(saved.freezeMinOunces ?? 0))
+            }
         } header: {
-            Text("Thaw Reminders")
+            Text("Freezer")
         } footer: {
             Text(
-                "On the day a frozen ingredient is needed, the household gets a reminder to move it to the fridge, with roughly how long it takes to thaw. Pick the time of day that suits your morning."
+                "We remind you the morning a frozen item needs to thaw.\nLeftover meat gets frozen in bags this size. Less than a bag goes into the meal or gets tossed."
             )
         }
     }

@@ -100,10 +100,13 @@ nonisolated struct Household: Decodable, Equatable, Sendable, Identifiable {
     /// The local hour thaw reminders go out (0–23). Always set; a household that never
     /// chose one reads as `Household.defaultThawReminderHour`.
     var thawReminderHour: Int = Household.defaultThawReminderHour
+    /// The size of one frozen bag of leftover meat, in ounces. Less is thrown in or tossed.
+    /// `nil` means one dinner's worth, as the week's recipe measures it.
+    var freezeMinOunces: Int? = nil
 
     private enum CodingKeys: String, CodingKey {
         case id, name, defaultServings, timeZone, orderDay, createdBy, createdAt, updatedAt, mealKit, weekStartsOn,
-            thawReminderHour
+            thawReminderHour, freezeMinOunces
     }
 }
 
@@ -124,7 +127,27 @@ nonisolated extension Household {
             mealKit: try container.decodeIfPresent(MealKitBaseline.self, forKey: .mealKit),
             weekStartsOn: container.decodeLenient(PlanDay.self, forKey: .weekStartsOn) ?? PlanDay.isoWeekStart,
             thawReminderHour: (try? container.decodeIfPresent(Int.self, forKey: .thawReminderHour))
-                ?? Household.defaultThawReminderHour)
+                ?? Household.defaultThawReminderHour,
+            freezeMinOunces: try? container.decodeIfPresent(Int.self, forKey: .freezeMinOunces))
+    }
+
+    /// The bag sizes the picker offers, in ounces. 0 stands for one dinner from the recipe.
+    static let freezeBagOunces = [0, 4, 6, 8, 10, 12, 14, 16, 20, 24, 32]
+
+    /// The largest bag size the server takes, matching `households.MaxFreezeMinOunces`.
+    static let maxFreezeBagOunces = 80
+
+    /// A typed custom bag size, or `nil` when it isn't a whole number from 1 to 80.
+    static func customBagOunces(_ text: String) -> Int? {
+        guard let ounces = Int(text.trimmingCharacters(in: .whitespaces)),
+            (1...maxFreezeBagOunces).contains(ounces)
+        else { return nil }
+        return ounces
+    }
+
+    /// `8` as "8 oz", and 0 as the recipe's own dinner.
+    static func freezeBagText(_ ounces: Int) -> String {
+        ounces <= 0 ? String(localized: "One Dinner") : String(localized: "\(ounces) oz")
     }
 
     /// The hour thaw reminders go out for a household that hasn't chosen one, matching
@@ -274,14 +297,16 @@ nonisolated struct HouseholdChanges: Encodable, Equatable, Sendable {
     var weekStartsOn: PlanDay? = nil
     /// The local hour thaw reminders go out (0–23); `nil` leaves it alone.
     var thawReminderHour: Int? = nil
+    /// The frozen bag size in ounces: `.clear` returns it to one dinner.
+    var freezeMinOunces: FieldChange<Int> = .keep
 
     var isEmpty: Bool {
         name == nil && timeZone == nil && defaultServings == nil && orderDay == nil && mealKit == .keep
-            && weekStartsOn == nil && thawReminderHour == nil
+            && weekStartsOn == nil && thawReminderHour == nil && freezeMinOunces == .keep
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, timeZone, defaultServings, orderDay, mealKit, weekStartsOn, thawReminderHour
+        case name, timeZone, defaultServings, orderDay, mealKit, weekStartsOn, thawReminderHour, freezeMinOunces
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -293,6 +318,7 @@ nonisolated struct HouseholdChanges: Encodable, Equatable, Sendable {
         try container.encodeChange(mealKit, forKey: .mealKit)
         try container.encodeIfPresent(weekStartsOn, forKey: .weekStartsOn)
         try container.encodeIfPresent(thawReminderHour, forKey: .thawReminderHour)
+        try container.encodeChange(freezeMinOunces, forKey: .freezeMinOunces)
     }
 }
 

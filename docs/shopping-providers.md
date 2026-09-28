@@ -986,15 +986,24 @@ a checklist must not do.
 
 **One portion is one meal's worth.** The household's own recipes already say
 how much of an ingredient a dinner takes: it is the week's need for the line
-divided by the planned meals that need it. The suggested count is then the
-surplus measured in those dinners, rounded to the nearest whole one, and the
-per-portion size is the surplus divided by that count.
+divided by the planned meals that need it. Each frozen bag is one of those
+dinners, only whole bags are frozen, and what's left is too little for a
+dinner: the card says to throw it in or toss it.
 
 ```text
 typical meal = needed ÷ meals that need it
-portions     = round(surplus ÷ typical meal), clamped to [1, MaxPrepPortions = 12]
-portion size = surplus ÷ portions
+bag          = household freezeMinOunces (weight packs only), else typical meal
+portions     = floor(surplus ÷ bag), at most MaxPrepPortions = 12
+leftover     = surplus − portions × bag
 ```
+
+- **Every meat pack with extra gets a card**, even under the 50% bulk-pack
+  threshold. 19 oz of chicken for a 10 oz dinner is 9 oz the member wants
+  told about: "9 oz left over. Throw it in for a little more protein, or toss
+  it."
+- **The household can set its own bag size** (`freezeMinOunces`, Household
+  settings). Unset, a bag is the recipe's dinner, usually 10 oz. Set to 8, an
+  8 oz leftover becomes a bag. It only changes packs measured by weight.
 
 - **The numbers are the household's, not a table.** A four-pound loin bought
   for a ten-ounce Thursday becomes five portions of about 10.8 oz because a

@@ -212,9 +212,19 @@ func (s *Service) Update(ctx context.Context, actor Membership, in UpdateInput) 
 	}
 	var patch HouseholdPatch
 	if in.Name == nil && in.TimeZone == nil && in.DefaultServings == nil && in.OrderDay == nil &&
-		in.WeekStartsOn == nil && !in.SetMealKit && !in.SetThawReminderHour {
+		in.WeekStartsOn == nil && !in.SetMealKit && !in.SetThawReminderHour && !in.SetFreezeMinOunces {
 		return Household{}, invalid(
-			"at least one of name, timeZone, defaultServings, orderDay, weekStartsOn, thawReminderHour, or mealKit is required")
+			"at least one of name, timeZone, defaultServings, orderDay, weekStartsOn, thawReminderHour, freezeMinOunces, or mealKit is required")
+	}
+	if in.SetFreezeMinOunces {
+		if err := validateFreezeMinOunces(in.FreezeMinOunces); err != nil {
+			return Household{}, err
+		}
+		patch.SetFreezeMinOunces = true
+		if in.FreezeMinOunces != nil {
+			oz := *in.FreezeMinOunces
+			patch.FreezeMinOunces = &oz
+		}
 	}
 	if in.SetThawReminderHour {
 		if err := validateThawReminderHour(in.ThawReminderHour); err != nil {

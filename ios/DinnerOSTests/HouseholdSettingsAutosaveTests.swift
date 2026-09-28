@@ -131,6 +131,36 @@ struct HouseholdSettingsDraftTests {
         #expect(draft.changes(against: base) == HouseholdChanges(thawReminderHour: 7))
     }
 
+    /// One Dinner (0) is the server's null: picking it clears the bag size.
+    @Test func theFreezerBagSizeSetsAndClears() throws {
+        let base = SettingsFixtures.household()
+        var draft = HouseholdSettingsDraft(base)
+        #expect(draft.freezeBagOunces == 0)
+        draft.freezeBagOunces = 8
+        let changes = draft.changes(against: base)
+        #expect(changes == HouseholdChanges(freezeMinOunces: .set(8)))
+        let body = try JSONSerialization.jsonObject(with: JSONEncoder().encode(changes)) as? [String: Any]
+        #expect(body?["freezeMinOunces"] as? Int == 8)
+
+        var eight = base
+        eight.freezeMinOunces = 8
+        var back = HouseholdSettingsDraft(eight)
+        back.freezeBagOunces = 0
+        let cleared = back.changes(against: eight)
+        #expect(cleared == HouseholdChanges(freezeMinOunces: .clear))
+        let json = String(decoding: try JSONEncoder().encode(cleared), as: UTF8.self)
+        #expect(json == #"{"freezeMinOunces":null}"#)
+    }
+
+    @Test func aCustomBagSizeIsAWholeNumberTheServerTakes() {
+        #expect(Household.customBagOunces("9") == 9)
+        #expect(Household.customBagOunces(" 18 ") == 18)
+        #expect(Household.customBagOunces("0") == nil)
+        #expect(Household.customBagOunces("81") == nil)
+        #expect(Household.customBagOunces("8.5") == nil)
+        #expect(Household.customBagOunces("") == nil)
+    }
+
     @Test func aServerAnswerFillsInSomeoneElsesChangeButNotTheMembersOwn() {
         let old = SettingsFixtures.household()
         var draft = HouseholdSettingsDraft(old)
@@ -503,7 +533,14 @@ final class FakeSettingsServer {
             createdBy: household.createdBy, createdAt: household.createdAt,
             updatedAt: household.updatedAt.addingTimeInterval(1), mealKit: household.mealKit,
             weekStartsOn: changes.weekStartsOn ?? household.weekStartsOn,
-            thawReminderHour: changes.thawReminderHour ?? household.thawReminderHour)
+            thawReminderHour: changes.thawReminderHour ?? household.thawReminderHour,
+            freezeMinOunces: {
+                switch changes.freezeMinOunces {
+                case .keep: household.freezeMinOunces
+                case .clear: nil
+                case .set(let oz): oz
+                }
+            }())
         household = next
         return next
     }

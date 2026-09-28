@@ -106,6 +106,11 @@ type Household struct {
 	// the setting exists because not every household's morning is the same
 	// (docs/pantry-usage.md#thaw-reminders).
 	ThawReminderHour *int
+	// FreezeMinOunces is the least leftover meat worth freezing as a bag for
+	// a future dinner, or nil for one dinner's worth as the week's own recipe
+	// measures it (docs/shopping-providers.md#the-portion-size-heuristic).
+	// Less than that is thrown into the meal or tossed.
+	FreezeMinOunces *int
 	// MealKit is what the household spent on meal kits, the baseline the
 	// weekly grocery cost is compared with, or nil when not set.
 	MealKit   *MealKit
@@ -182,6 +187,10 @@ type UpdateInput struct {
 	// ThawReminderHour; nil returns the household to the default.
 	SetThawReminderHour bool
 	ThawReminderHour    *int
+	// SetFreezeMinOunces changes the freezing cutoff to FreezeMinOunces; nil
+	// returns the household to one dinner's worth.
+	SetFreezeMinOunces bool
+	FreezeMinOunces    *int
 	// SetMealKit changes the meal kit baseline to MealKit; nil clears it.
 	SetMealKit bool
 	MealKit    *MealKit
@@ -198,6 +207,10 @@ type HouseholdPatch struct {
 	// ThawReminderHour is nil.
 	SetThawReminderHour bool
 	ThawReminderHour    *int
+	// SetFreezeMinOunces sets FreezeMinOunces, or removes it when
+	// FreezeMinOunces is nil.
+	SetFreezeMinOunces bool
+	FreezeMinOunces    *int
 	// SetMealKit sets MealKit, or removes it when MealKit is nil.
 	SetMealKit bool
 	MealKit    *MealKit
@@ -238,6 +251,18 @@ var OrderDays = []string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 func validateThawReminderHour(hour *int) error {
 	if hour != nil && (*hour < 0 || *hour > 23) {
 		return invalid("thawReminderHour must be between 0 and 23, or null")
+	}
+	return nil
+}
+
+// MaxFreezeMinOunces bounds the freezing cutoff: past five pounds no
+// leftover would ever be frozen, which is a typo, not a preference.
+const MaxFreezeMinOunces = 80
+
+// validateFreezeMinOunces accepts a positive number of ounces.
+func validateFreezeMinOunces(oz *int) error {
+	if oz != nil && (*oz < 1 || *oz > MaxFreezeMinOunces) {
+		return invalid("freezeMinOunces must be between 1 and 80, or null")
 	}
 	return nil
 }

@@ -289,13 +289,13 @@ func (s *Service) prepSession(ctx context.Context, householdID, week string) (Pr
 	if err != nil {
 		return PrepSession{}, err
 	}
-	meals, today, err := s.weekMeals(ctx, householdID, week)
+	meals, today, bagOz, err := s.weekMeals(ctx, householdID, week)
 	if err != nil {
 		return PrepSession{}, err
 	}
 	images := s.ingredientImages(ctx, packs)
 	for _, p := range packs {
-		card := prepCardFor(p.handoffID, p.provider, p.pack, meals, today)
+		card := prepCardFor(p.handoffID, p.provider, p.pack, meals, today, bagOz)
 		card.ImageURL = images[p.pack.IngredientID()]
 		if st, ok := states[card.ID]; ok {
 			card.Status, card.FrozenItemID = st.Status, st.FrozenItemID
@@ -448,25 +448,29 @@ func (s *Service) prepStates(ctx context.Context, householdID, week string) (map
 }
 
 // weekMeals maps a recipe ID to the planned meals that use it, and returns
-// today's date in the household's time zone. Without a planner the meals are
-// simply unknown, and a card then reserves the week's whole need as one
+// today's date in the household's time zone and the household's frozen bag
+// size in ounces (nil for one dinner's worth). Without a planner the meals
+// are simply unknown, and a card then reserves the week's whole need as one
 // meal's worth.
-func (s *Service) weekMeals(ctx context.Context, householdID, week string) (map[string][]PrepMeal, string, error) {
+func (s *Service) weekMeals(
+	ctx context.Context, householdID, week string,
+) (map[string][]PrepMeal, string, *int, error) {
 	loc := time.UTC
+	var bagOz *int
 	if s.households != nil {
 		hh, err := s.orderHousehold(ctx, householdID)
 		if err != nil {
-			return nil, "", err
+			return nil, "", nil, err
 		}
-		loc = orderLocation(hh.TimeZone)
+		loc, bagOz = orderLocation(hh.TimeZone), hh.FreezeMinOunces
 	}
 	today := s.now().In(loc).Format(time.DateOnly)
 	if s.plans == nil {
-		return map[string][]PrepMeal{}, today, nil
+		return map[string][]PrepMeal{}, today, bagOz, nil
 	}
 	plan, err := s.plans.Get(ctx, householdID, week)
 	if err != nil {
-		return nil, "", fmt.Errorf("load plan: %w", err)
+		return nil, "", nil, fmt.Errorf("load plan: %w", err)
 	}
 	out := map[string][]PrepMeal{}
 	for _, e := range plan.Entries {
@@ -476,19 +480,19 @@ func (s *Service) weekMeals(ctx context.Context, householdID, week string) (map[
 			Past: date != "" && date < today,
 		})
 	}
-	return out, today, nil
+	return out, today, bagOz, nil
 }
 
 // prepCardFor builds one card from a measured pack.
 func prepCardFor(
-	handoffID string, provider providers.Key, pack BulkPack, meals map[string][]PrepMeal, today string,
+	handoffID string, provider providers.Key, pack BulkPack, meals map[string][]PrepMeal, today string, bagOz *int,
 ) PrepCard {
 	card := PrepCard{
 		ID: handoffID + ":" + pack.LineID, Kind: PrepBulkPack, HandoffID: handoffID, Provider: provider,
 		LineID: pack.LineID, Status: PrepPending, Pack: pack, Meals: prepMeals(pack, meals),
 	}
 	if pack.Freezable {
-		card.Portions = portionPlanFor(pack, len(card.Meals))
+		card.Portions = portionPlanFor(pack, len(card.Meals), bagOz)
 	}
 	card.Reminder, card.ReminderText = prepReminder(card, today)
 	card.Instruction = prepInstruction(card)
@@ -527,10 +531,15 @@ func prepMeals(pack BulkPack, byRecipe map[string][]PrepMeal) []PrepMeal {
 // One portion is one meal's worth. The household's own recipes already say
 // how much of this ingredient a dinner takes — it is the week's need for the
 // line divided by the meals that need it — so the suggested count is the
-// surplus measured in dinners, rounded to the nearest whole one. Nothing is
-// invented: a four-pound loin bought for a ten-ounce Thursday becomes five
-// portions of about eleven ounces, because that is what this household cooks.
-func portionPlanFor(pack BulkPack, meals int) PortionPlan {
+// surplus measured in dinners, rounded down to whole ones. Nothing is
+// invented: a four-pound loin bought for a ten-ounce Thursday becomes bags of
+// ten ounces, because that is what this household cooks.
+//
+// bagOz, when set, is the household's own idea of a future dinner
+// (households.Household.FreezeMinOunces): bags are that size instead, and
+// anything less is thrown in or tossed. It only applies to a pack measured by
+// weight; a count or a volume keeps the recipe's dinner.
+func portionPlanFor(pack BulkPack, meals int, bagOz *int) PortionPlan {
 	plan := PortionPlan{
 		Unit: pack.Unit, Reserved: pack.Needed, Surplus: pack.Surplus, Meals: meals,
 		Basis: BasisMeal,
@@ -542,12 +551,17 @@ func portionPlanFor(pack BulkPack, meals int) PortionPlan {
 	surplus, needed := ratOfExact(pack.Surplus), ratOfExact(pack.Needed)
 	typical := new(big.Rat).Quo(needed, big.NewRat(int64(mealCount), 1))
 	plan.TypicalMeal = typical.RatString()
-	whole := wholePortions(surplus, typical)
+	bag := typical
+	if b, ok := ouncesIn(bagOz, pack.Unit); ok {
+		bag = b
+	}
+	plan.PortionSize = bag.RatString()
+	whole := wholePortions(surplus, bag)
 	for n := 1; n <= whole && n <= MaxPrepPortions; n++ {
-		frozen := new(big.Rat).Mul(typical, big.NewRat(int64(n), 1))
+		frozen := new(big.Rat).Mul(bag, big.NewRat(int64(n), 1))
 		plan.Options = append(plan.Options, PortionOption{
-			Portions: n, Size: plan.TypicalMeal, Leftover: new(big.Rat).Sub(surplus, frozen).RatString(),
-			Thaw: thawForPortion(pack, typical),
+			Portions: n, Size: plan.PortionSize, Leftover: new(big.Rat).Sub(surplus, frozen).RatString(),
+			Thaw: thawForPortion(pack, bag),
 		})
 	}
 	return applyPortions(plan, pack, whole)
@@ -568,23 +582,49 @@ func wholePortions(surplus, typical *big.Rat) int {
 }
 
 // applyPortions sets the chosen count and what follows from it: each portion
-// is one dinner, the freezer gets count × dinner, and the rest is leftover.
-// A count above what the surplus holds is capped; zero means nothing to seal.
+// is one bag of PortionSize, the freezer gets count × bag, and the rest is
+// leftover. A count above what the surplus holds is capped; zero means
+// nothing to seal.
 func applyPortions(plan PortionPlan, pack BulkPack, portions int) PortionPlan {
-	surplus, typical := ratOfExact(pack.Surplus), ratOfExact(plan.TypicalMeal)
-	if most := wholePortions(surplus, typical); portions > most {
+	surplus, bag := ratOfExact(pack.Surplus), ratOfExact(plan.PortionSize)
+	if most := wholePortions(surplus, bag); portions > most {
 		portions = most
 	}
 	if portions < 0 {
 		portions = 0
 	}
 	plan.Portions = portions
-	plan.PortionSize = plan.TypicalMeal
-	frozen := new(big.Rat).Mul(typical, big.NewRat(int64(portions), 1))
+	frozen := new(big.Rat).Mul(bag, big.NewRat(int64(portions), 1))
 	plan.Frozen = frozen.RatString()
 	plan.Leftover = new(big.Rat).Sub(surplus, frozen).RatString()
-	plan.Thaw = thawForPortion(pack, typical)
+	plan.Thaw = thawForPortion(pack, bag)
 	return plan
+}
+
+// ouncesIn converts a household's bag size in ounces to the pack's unit. ok
+// is false when there is no bag size or the pack isn't measured by weight.
+func ouncesIn(oz *int, unitCode string) (*big.Rat, bool) {
+	if oz == nil || *oz <= 0 {
+		return nil, false
+	}
+	to, err := ingredients.LookupUnit(unitCode)
+	if err != nil || to.Kind != ingredients.KindMass {
+		return nil, false
+	}
+	from, err := ingredients.LookupUnit("oz")
+	if err != nil {
+		return nil, false
+	}
+	q, err := ingredients.ParseQuantity(fmt.Sprint(*oz))
+	if err != nil {
+		return nil, false
+	}
+	in, err := ingredients.Convert(q, from, to)
+	if err != nil {
+		return nil, false
+	}
+	r := in.Rat()
+	return r, r.Sign() > 0
 }
 
 func thawForPortion(pack BulkPack, size *big.Rat) pantry.ThawEstimate {
@@ -644,8 +684,8 @@ func prepInstruction(card PrepCard) string {
 	}
 	leftover := ""
 	if ratOfExact(card.Portions.Leftover).Sign() > 0 {
-		leftover = fmt.Sprintf(" %s left over. Toss it or cook it in.",
-			amountText(card.Portions.Leftover, card.Pack.Unit))
+		leftover = fmt.Sprintf(" %s left over. %s",
+			amountText(card.Portions.Leftover, card.Pack.Unit), leftoverAdvice(card.Pack.Category))
 	}
 	switch n := card.Portions.Portions; {
 	case n == 0:
@@ -655,6 +695,14 @@ func prepInstruction(card PrepCard) string {
 	default:
 		return fmt.Sprintf("%s, then freeze %d bags of %s, one per future dinner.%s", keep, n, each, leftover)
 	}
+}
+
+// leftoverAdvice is what to do with less than a bag.
+func leftoverAdvice(category string) string {
+	if category == ingredients.CategoryMeatSeafood {
+		return "Throw it in for a little more protein, or toss it."
+	}
+	return "Cook it in or toss it."
 }
 
 // mealsText names the meals a reserve is for, with their days: "Thursday's
@@ -809,5 +857,5 @@ func (s *Service) freeze(
 
 // frozenAmount is what sealing count portions puts in the freezer.
 func frozenAmount(plan PortionPlan, count int) string {
-	return new(big.Rat).Mul(ratOfExact(plan.TypicalMeal), big.NewRat(int64(count), 1)).RatString()
+	return new(big.Rat).Mul(ratOfExact(plan.PortionSize), big.NewRat(int64(count), 1)).RatString()
 }

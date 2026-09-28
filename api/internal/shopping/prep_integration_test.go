@@ -384,3 +384,55 @@ func TestIntegrationPrepCardPhoto(t *testing.T) {
 		t.Errorf("response imageUrl = %q, want %q", got, photo)
 	}
 }
+
+// TestIntegrationPrepSmallMeatSurplus is the week that prompted the bag size:
+// a 3 lb pack of beef for 36 oz of dinners leaves 12 oz, a quarter of the
+// pack. It used to get no card at all. By default a bag is one 18 oz dinner,
+// so the card says to throw the 12 oz in; with 6 oz bags it freezes two.
+func TestIntegrationPrepSmallMeatSurplus(t *testing.T) {
+	f := newFixture(t)
+	f.svc.frozen, f.svc.freezer = f.pantry, f.pantry
+	if _, err := f.svc.UpdateSettings(f.ctx, f.actor, "walmart", "5435"); err != nil {
+		t.Fatal(err)
+	}
+	f.save(t, "Ground Beef", "https://www.walmart.com/ip/Test-Beef/100000001", &PackageSize{Quantity: "48", Unit: "oz"})
+	if _, _, err := f.svc.CreateHandoff(f.ctx, f.actor, testWeek, "walmart", MatchInput{}); err != nil {
+		t.Fatalf("CreateHandoff: %v", err)
+	}
+	f.svc.households = orderHouseholds{households.Household{ID: testHousehold, TimeZone: "UTC"}}
+
+	session, err := f.svc.PrepSession(f.ctx, testHousehold, testWeek)
+	if err != nil {
+		t.Fatalf("PrepSession: %v", err)
+	}
+	card := prepCard(t, session, "Ground Beef")
+	if card.Portions.Portions != 0 || card.Portions.Leftover != "12" {
+		t.Fatalf("default = %d bags, %q left; want no bag and 12 oz left", card.Portions.Portions, card.Portions.Leftover)
+	}
+	if !strings.HasSuffix(card.Instruction, "12 oz left over. Throw it in for a little more protein, or toss it.") {
+		t.Errorf("instruction = %q", card.Instruction)
+	}
+
+	six := 6
+	f.svc.households = orderHouseholds{households.Household{ID: testHousehold, TimeZone: "UTC", FreezeMinOunces: &six}}
+	session, err = f.svc.PrepSession(f.ctx, testHousehold, testWeek)
+	if err != nil {
+		t.Fatalf("PrepSession: %v", err)
+	}
+	card = prepCard(t, session, "Ground Beef")
+	if card.Portions.Portions != 2 || card.Portions.PortionSize != "6" || card.Portions.Leftover != "0" {
+		t.Fatalf("6 oz bags = %d × %q, %q left; want 2 × 6 oz", card.Portions.Portions,
+			card.Portions.PortionSize, card.Portions.Leftover)
+	}
+	_, done, err := f.svc.CompletePrepCard(f.ctx, f.actor, testWeek, card.ID, PrepInput{})
+	if err != nil {
+		t.Fatalf("CompletePrepCard: %v", err)
+	}
+	stock, err := f.pantry.FrozenStock(f.ctx, testHousehold)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.FrozenPortions != 2 || len(stock) != 1 || stock[0].Item.Quantity != "12" || stock[0].Item.Portions != 2 {
+		t.Fatalf("freezer = %+v, want one 12 oz item in two bags", stock)
+	}
+}

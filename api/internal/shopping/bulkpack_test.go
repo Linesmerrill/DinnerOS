@@ -31,9 +31,16 @@ func TestBulkPackOf(t *testing.T) {
 		},
 		{
 			name: "a pack mostly used is ordinary shopping",
-			line: boughtLine("l3", "Ground Beef", ingredients.CategoryMeatSeafood,
+			line: boughtLine("l3", "Cheddar", ingredients.CategoryDeli,
 				providers.CoveragePerWeek, oz("16"), 1, Amount{"12", "oz"}),
 			want: false,
+		},
+		{
+			// Any extra meat gets a card: a bag, or a handful to throw in.
+			name: "meat mostly used still counts",
+			line: boughtLine("l7", "Ground Beef", ingredients.CategoryMeatSeafood,
+				providers.CoveragePerWeek, oz("16"), 1, Amount{"12", "oz"}),
+			want: true, percent: 25,
 		},
 		{
 			// Sour cream's leftover is already recorded as pantry stock, so

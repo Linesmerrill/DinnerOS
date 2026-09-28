@@ -65,7 +65,9 @@ nonisolated enum ImportReviewCopy {
             ]
         }
         var lines = [
-            String(localized: "Your library has this as \(group.storedName)."),
+            group.recipeID == nil
+                ? String(localized: "Your library had this as \(group.storedName).")
+                : String(localized: "Your library has this as \(group.storedName)."),
             group.deliveredNames.count == 1
                 ? String(localized: "At least one box said \(group.deliveredNames[0]).")
                 : String(localized: "Some boxes said something else, listed below."),

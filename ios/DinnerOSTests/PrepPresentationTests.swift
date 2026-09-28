@@ -47,7 +47,7 @@ struct PrepPresentationTests {
         #expect(small.bagRange == 0...0)
         #expect(!small.hasBags)
         #expect(!small.canAddBag)
-        #expect(small.leftoverLine == "4 oz left over. Toss it or cook it in.")
+        #expect(small.leftoverLine == "4 oz left over. Throw it in for a little more protein, or toss it.")
     }
 
     // MARK: - Words
@@ -61,13 +61,15 @@ struct PrepPresentationTests {
     /// The leftover belongs to the count beside it, and a count that leaves nothing says so by
     /// showing no line at all.
     @Test func theLeftoverLineFollowsTheCount() throws {
-        #expect(try presentation(PrepPreviewData.oneBag).leftoverLine == "4 oz left over. Toss it or cook it in.")
+        #expect(
+            try presentation(PrepPreviewData.oneBag).leftoverLine
+                == "4 oz left over. Throw it in for a little more protein, or toss it.")
         #expect(
             try presentation(PrepPreviewData.severalBags, bags: 2).leftoverLine
-                == "24 oz left over. Toss it or cook it in.")
+                == "24 oz left over. Throw it in for a little more protein, or toss it.")
         #expect(
             try presentation(PrepPreviewData.severalBags, bags: 4).leftoverLine
-                == "4 oz left over. Toss it or cook it in.")
+                == "4 oz left over. Throw it in for a little more protein, or toss it.")
         #expect(try presentation(PrepPreviewData.noPhoto, bags: 3).leftoverLine == nil)
     }
 
@@ -96,7 +98,8 @@ struct PrepPresentationTests {
         let one = try presentation(PrepPreviewData.oneBag)
         #expect(one.keepAccessibilityLabel == "Keep 10 ounces of ground turkey out for Tuesday's Citrus Turkey Tacos")
         #expect(one.bagAccessibilityLabel(1) == "Freezer bag 1 of 1, 10 ounces, about 3 hours to thaw")
-        #expect(one.leftoverAccessibilityLabel == "4 ounces left over. Toss it or cook it in.")
+        #expect(
+            one.leftoverAccessibilityLabel == "4 ounces left over. Throw it in for a little more protein, or toss it.")
         let several = try presentation(PrepPreviewData.severalBags, bags: 3)
         #expect(several.bagAccessibilityLabel(2) == "Freezer bag 2 of 3, 10 ounces, about 3 hours to thaw")
     }

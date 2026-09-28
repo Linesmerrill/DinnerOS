@@ -147,9 +147,13 @@ func bulkPackOf(l HandoffLine) (BulkPack, bool) {
 	if surplus.Sign() <= 0 {
 		return BulkPack{}, false
 	}
-	// surplus ÷ bought ≥ MinBulkSurplusPercent ÷ 100
+	// surplus ÷ bought ≥ MinBulkSurplusPercent ÷ 100. Meat is the exception:
+	// any extra meat is either a bag for a future dinner or a handful to
+	// throw in or toss, and the member wants to be told which, even when it
+	// is a 19 oz pack for a 10 oz dinner.
 	scaled := new(big.Rat).Mul(surplus, big.NewRat(100, 1))
-	if scaled.Cmp(new(big.Rat).Mul(left.Bought, big.NewRat(MinBulkSurplusPercent, 1))) < 0 {
+	if l.Category != ingredients.CategoryMeatSeafood &&
+		scaled.Cmp(new(big.Rat).Mul(left.Bought, big.NewRat(MinBulkSurplusPercent, 1))) < 0 {
 		return BulkPack{}, false
 	}
 	pct := new(big.Rat).Quo(scaled, left.Bought)
