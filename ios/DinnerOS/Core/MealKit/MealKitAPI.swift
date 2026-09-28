@@ -47,4 +47,37 @@ nonisolated struct MealKitAPI: Sendable {
         try await client.sendIgnoringBody(
             APIRequest.delete(path(householdID, service, "/imports")).authorized(with: accessToken))
     }
+
+    /// Hands the server the push token of the run's Live Activity, so it can update the activity
+    /// while the app is closed. Called again whenever ActivityKit rotates the token. The token
+    /// goes in the body, never the path, so it stays out of request logs.
+    func registerLiveActivity(
+        householdID: String, service: String, jobID: String, token: String, environment: PushEnvironment,
+        accessToken: String
+    ) async throws {
+        try await client.sendIgnoringBody(
+            try APIRequest.put(
+                liveActivityPath(householdID, service, jobID),
+                body: MealKitLiveActivityRegistration(token: token, environment: environment)
+            ).authorized(with: accessToken))
+    }
+
+    /// Forgets the run's Live Activity token, for a member who swiped the activity away.
+    func unregisterLiveActivity(householdID: String, service: String, jobID: String, accessToken: String)
+        async throws
+    {
+        try await client.sendIgnoringBody(
+            APIRequest.delete(liveActivityPath(householdID, service, jobID)).authorized(with: accessToken))
+    }
+
+    private func liveActivityPath(_ householdID: String, _ service: String, _ jobID: String) -> String {
+        "/api/v1/households/\(householdID)/meal-kit/\(service)/imports/\(jobID)/live-activity"
+    }
+}
+
+/// Body of `PUT .../imports/{jobId}/live-activity`.
+nonisolated struct MealKitLiveActivityRegistration: Encodable, Equatable, Sendable {
+    /// The activity's push token as lowercase hex — not the device token.
+    let token: String
+    let environment: PushEnvironment
 }

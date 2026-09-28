@@ -177,36 +177,55 @@ func (c *APNsClient) Send(ctx context.Context, m Message) error {
 	if err != nil {
 		return fmt.Errorf("apns: payload: %w", err)
 	}
-	err = c.send(ctx, base, m, payload, false)
+	return c.deliver(ctx, base, m.Token, payload, alertHeaders(c.opts.Topic, m))
+}
+
+// alertHeaders are the headers of an ordinary alert push.
+func alertHeaders(topic string, m Message) map[string]string {
+	h := map[string]string{
+		"apns-topic":      topic,
+		"apns-push-type":  "alert",
+		"apns-priority":   "10",
+		"apns-expiration": expirationHeader(m.Expiration),
+	}
+	if m.CollapseID != "" {
+		h["apns-collapse-id"] = m.CollapseID
+	}
+	return h
+}
+
+func expirationHeader(t time.Time) string {
+	if t.IsZero() {
+		return "0"
+	}
+	return strconv.FormatInt(t.Unix(), 10)
+}
+
+// deliver posts payload to one token, re-signing the provider token and
+// retrying once when APNs reports it expired.
+func (c *APNsClient) deliver(ctx context.Context, base, deviceToken string, payload []byte, headers map[string]string) error {
+	err := c.send(ctx, base, deviceToken, payload, headers, false)
 	var apnsErr *APNsError
 	if errors.As(err, &apnsErr) && apnsErr.Reason == "ExpiredProviderToken" {
-		err = c.send(ctx, base, m, payload, true)
+		err = c.send(ctx, base, deviceToken, payload, headers, true)
 	}
 	return err
 }
 
-func (c *APNsClient) send(ctx context.Context, base string, m Message, payload []byte, forceToken bool) error {
+func (c *APNsClient) send(ctx context.Context, base, deviceToken string, payload []byte, headers map[string]string, forceToken bool) error {
 	token, err := c.providerToken(forceToken)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/3/device/"+m.Token, bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/3/device/"+deviceToken, bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("apns: request: %w", err)
 	}
 	req.Header.Set("authorization", "bearer "+token)
-	req.Header.Set("apns-topic", c.opts.Topic)
-	req.Header.Set("apns-push-type", "alert")
-	req.Header.Set("apns-priority", "10")
 	req.Header.Set("content-type", "application/json")
-	if m.CollapseID != "" {
-		req.Header.Set("apns-collapse-id", m.CollapseID)
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
-	expiration := int64(0)
-	if !m.Expiration.IsZero() {
-		expiration = m.Expiration.Unix()
-	}
-	req.Header.Set("apns-expiration", strconv.FormatInt(expiration, 10))
 
 	resp, err := c.opts.HTTPClient.Do(req)
 	if err != nil {

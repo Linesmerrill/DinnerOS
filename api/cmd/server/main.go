@@ -26,6 +26,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/httpapi"
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/liveactivity"
 	"github.com/Linesmerrill/DinnerOS/api/internal/mealkit"
 	mealkitsources "github.com/Linesmerrill/DinnerOS/api/internal/mealkit/sources"
 	"github.com/Linesmerrill/DinnerOS/api/internal/menu"
@@ -368,6 +369,14 @@ func run() error {
 		Tokens:     tokens,
 		Logger:     logger,
 	})
+	// The app attaches its Live Activity's push token to an import job here
+	// (docs/meal-kit-import.md#live-activity).
+	liveActivityHandler := liveactivity.NewHandler(liveactivity.HandlerOptions{
+		Store:      liveactivity.NewMongoStore(db.Database()),
+		Authorizer: householdService,
+		Tokens:     tokens,
+		Logger:     logger,
+	})
 
 	srv := &http.Server{
 		Addr: cfg.Addr(),
@@ -402,6 +411,7 @@ func run() error {
 				notificationHandler.Mount(r)
 				deviceTokenHandler.Mount(r)
 				mealKitHandler.Mount(r)
+				liveActivityHandler.Mount(r)
 				accountHandler.Mount(r)
 				behavior.ratingHandler.Mount(r)
 				behavior.eventHandler.Mount(r)
@@ -537,9 +547,16 @@ func newHouseholdHandlers(cfg config.Config, db *mongodb.Client, userService *us
 // encryption key turns the feature on; without one the service is returned
 // disabled, which is what every route and the worker check.
 func newMealKitService(cfg config.Config, db *mongo.Database, notifier *notifications.Service, logger *slog.Logger) (*mealkit.Service, error) {
+	// Stopping an import ends its Live Activity with a push; nil without
+	// APNs configured.
+	observer, err := liveactivity.NewObserver(cfg.APNs, db, logger)
+	if err != nil {
+		return nil, err
+	}
 	opts := mealkit.ServiceOptions{
 		Store:    mealkit.NewMongoStore(db),
 		Notifier: notifier,
+		Observer: observer,
 		Logger:   logger,
 	}
 	if cfg.MealKitImport.Active() {

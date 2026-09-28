@@ -322,6 +322,13 @@ machine and CI run. They live encrypted in the private repository
 key. Cloud-managed signing used to request a new certificate per run, which hit
 Apple's per-account certificate limit and failed every archive.
 
+- **Two identifiers are signed**: the app, `com.linesmerrill.dinneros`, and its
+  Live Activities widget extension, `com.linesmerrill.dinneros.LiveActivities`
+  (`LIVE_ACTIVITIES_BUNDLE_ID` in `ios/Config/Shared.xcconfig`). Each has its
+  own App Store profile in match; `beta` passes them to their targets as
+  `APP_PROFILE_SPECIFIER` and `LIVE_ACTIVITIES_PROFILE_SPECIFIER`, never as one
+  global `PROVISIONING_PROFILE_SPECIFIER`, which would put the app's profile on
+  the extension.
 - **`ios/fastlane/Matchfile`** points at the storage repository and defaults to
   read-only.
 - **`bundle exec fastlane beta`** never creates or revokes anything.
@@ -334,6 +341,33 @@ Apple's per-account certificate limit and failed every archive.
   **Apple Distribution** certificate in Certificates, Identifiers & Profiles and
   run it again. `bundle exec fastlane run match_nuke type:appstore` revokes every
   distribution certificate and profile for the team, so use it only deliberately.
+
+#### Adding the Live Activities extension (once)
+
+Until this is done every `beta` run fails at `match` with "match did not install
+a profile for com.linesmerrill.dinneros.LiveActivities". Lint and tests are
+unaffected: the extension builds for the simulator without signing.
+
+1. Run the writing lane once: Actions → iOS CI → Run workflow on `main` with
+   **Create or renew the shared signing certificate** ticked (or
+   `bundle exec fastlane signing` in `ios/` with the same secrets). It
+   registers the App ID `com.linesmerrill.dinneros.LiveActivities` ("DinnerOS
+   Live Activities", no capabilities) through the App Store Connect API key if
+   it is missing, then creates its App Store profile and stores both profiles
+   in match. The existing certificate is reused.
+2. If step 1 fails while registering the App ID (for example, the key's role
+   cannot create identifiers), register it by hand and re-run step 1:
+   **Certificates, Identifiers & Profiles → Identifiers → + → App IDs → App** →
+   Description `DinnerOS Live Activities`, Bundle ID **Explicit**
+   `com.linesmerrill.dinneros.LiveActivities`, no capabilities → Register.
+3. Re-run Actions → iOS CI on `main`; `beta` now signs both targets.
+
+The extension needs no entitlement: Live Activity pushes use the app's
+`aps-environment`, and the app's Info.plist carries `NSSupportsLiveActivities`.
+The server sends Live Activity pushes with the same APNs key and the topic
+`com.linesmerrill.dinneros.push-type.liveactivity`, from `/importmealkit` and
+(for a stopped import) the web dyno. Both read the existing `APNS_*` config
+vars; there is nothing new to set.
 - **Rotating the passphrase or the deploy key** means regenerating the secrets
   below and re-running `signing`.
 

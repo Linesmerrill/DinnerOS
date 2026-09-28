@@ -31,6 +31,8 @@ type ServiceOptions struct {
 	// notifications.
 	Notifier Notifier
 	Logger   *slog.Logger
+	// Observer, when set, hears when StopImports cancels a run (observer.go).
+	Observer ProgressObserver
 	// MaxAttempts overrides DefaultMaxAttempts.
 	MaxAttempts int
 }
@@ -44,6 +46,7 @@ type Service struct {
 	enabled  bool
 	sources  map[string]Source
 	notifier Notifier
+	observer ProgressObserver
 	logger   *slog.Logger
 	attempts int
 	now      func() time.Time
@@ -61,7 +64,7 @@ func NewService(opts ServiceOptions) *Service {
 	}
 	return &Service{
 		store: opts.Store, enabled: opts.Enabled, sources: opts.Sources,
-		notifier: opts.Notifier, logger: logger, attempts: attempts, now: time.Now,
+		notifier: opts.Notifier, observer: opts.Observer, logger: logger, attempts: attempts, now: time.Now,
 	}
 }
 
@@ -317,9 +320,14 @@ func (s *Service) StopImports(ctx context.Context, householdID, source string) (
 		return 0, invalid("source must be %q", SourceHelloFresh)
 	}
 	now := s.now().UTC().Truncate(time.Millisecond)
+	// Read before canceling, so the observer can be told which run ended.
+	active, activeErr := s.store.ActiveJob(ctx, householdID, source)
 	canceled, err = s.store.CancelJobs(ctx, householdID, source, "the import was stopped", now)
 	if err != nil {
 		return 0, fmt.Errorf("cancel import jobs: %w", err)
+	}
+	if activeErr == nil && canceled > 0 {
+		observeEnd(ctx, s.observer, active, JobCanceled)
 	}
 	s.logger.InfoContext(ctx, "meal-kit imports stopped", "source", source, "householdId", householdID, "jobsCanceled", canceled)
 	return canceled, nil

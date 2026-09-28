@@ -39,6 +39,8 @@ final class MealKitImportStore {
     static let pollInterval: Duration = .seconds(15)
 
     @ObservationIgnored let service: MealKitService
+    /// The run's Live Activity, when the member allows them. `nil` in previews and most tests.
+    @ObservationIgnored var liveActivities: MealKitLiveActivities?
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let api: MealKitAPI?
     /// The user the status was loaded for, so another sign-in never sees it.
@@ -136,6 +138,9 @@ final class MealKitImportStore {
         isAvailable = true
         refreshError = nil
         phase = .loaded
+        // After the run is queued, never before: a member with Live Activities off, or one whose
+        // activity ActivityKit refuses, gets exactly the import they would have had anyway.
+        await liveActivities?.importQueued(job, householdID: householdID, service: service)
     }
 
     /// Stops every run in flight. Recipes already imported stay in the library.
@@ -167,6 +172,9 @@ final class MealKitImportStore {
             isAvailable = true
             refreshError = nil
             phase = .loaded
+            // The poll doubles as the activity's updater while the app is open, so it is live
+            // even when no push arrives.
+            await liveActivities?.statusLoaded(result.latestJob)
         } catch let error as APIError where error.status == 404 {
             guard started == scope else { return }
             Self.logger.info("Meal-kit import isn't available on this API yet")

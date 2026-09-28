@@ -1467,6 +1467,73 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/meal-kit/{source}/imports/{jobId}/live-activity:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/MealKitSource"
+      - name: jobId
+        in: path
+        required: true
+        description: The import run the activity follows.
+        schema:
+          type: string
+    put:
+      summary: Attach a Live Activity to an import run
+      description: |
+        Stores the push token of the Live Activity the app started for this
+        run (ActivityKit, `pushType: .token`), so the server can update it
+        while the app is closed and end it — green — when the run finishes
+        (docs/meal-kit-import.md#live-activity). Send it again whenever
+        ActivityKit rotates the token; the new one replaces the old. Requires
+        `recipes.import`.
+
+        The token is stored on the run, never logged or returned, and removed
+        when the run ends. A run that already finished, was stopped, or is not
+        this household's is a `404`; the app then ends its activity from the
+        status it polls.
+
+        The pushes the server sends carry
+        `MealKitLiveActivityContentState` as `content-state`: counts only,
+        nothing about the meal-kit account.
+      operationId: registerMealKitLiveActivity
+      tags: [meal-kit-import]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MealKitLiveActivityRegistration"
+      responses:
+        "204":
+          description: Stored.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Detach the Live Activity
+      description: |
+        Removes the stored token, for a member who dismissed the activity.
+        Idempotent. Requires `recipes.import`.
+      operationId: unregisterMealKitLiveActivity
+      tags: [meal-kit-import]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Removed, or there was nothing to remove.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/menu:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -8577,6 +8644,42 @@ components:
       description: |
         The APNs gateway the token belongs to: `sandbox` for Xcode debug
         builds, `production` for TestFlight and App Store builds.
+    MealKitLiveActivityRegistration:
+      type: object
+      additionalProperties: false
+      required: [token, environment]
+      properties:
+        token:
+          type: string
+          pattern: "^[0-9a-f]{16,400}$"
+          description: The activity's push token as lowercase hex. Not the device token.
+        environment:
+          $ref: "#/components/schemas/PushEnvironment"
+    MealKitLiveActivityContentState:
+      type: object
+      description: |
+        The `content-state` of the Live Activity pushes the server sends
+        (`apns-push-type: liveactivity`). It is exactly what the app's
+        `MealKitImportActivityAttributes.ContentState` decodes, and nothing
+        else: a phase and three counts.
+      required: [phase, done, total, failed]
+      properties:
+        phase:
+          type: string
+          enum: [importing, waiting, done, failed, canceled]
+          description: |
+            `importing` while a worker fetches; `waiting` while queued (not
+            started, between batches, or waiting out a retry); `done`,
+            `failed`, `canceled` on the final `end` push.
+        done:
+          type: integer
+          description: Recipes handled; on `done`, recipes now in the library from this history.
+        total:
+          type: integer
+          description: Recipes on the submitted order history.
+        failed:
+          type: integer
+          description: Recipes that could not be imported.
     RegisterDeviceTokenRequest:
       type: object
       additionalProperties: false

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/config"
+	"github.com/Linesmerrill/DinnerOS/api/internal/liveactivity"
 	"github.com/Linesmerrill/DinnerOS/api/internal/mealkit"
 	mealkitsources "github.com/Linesmerrill/DinnerOS/api/internal/mealkit/sources"
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
@@ -107,9 +108,15 @@ func newWorker(cfg config.Config, db *mongodb.Client, logger *slog.Logger) (*mea
 	notifier := notifications.NewService(notifications.ServiceOptions{
 		Store: notifications.NewMongoStore(database), Logger: logger,
 	})
+	// Live Activity pushes (docs/meal-kit-import.md#live-activity); nil
+	// without APNs configured.
+	observer, err := liveactivity.NewObserver(cfg.APNs, database, logger)
+	if err != nil {
+		return nil, err
+	}
 	service := mealkit.NewService(mealkit.ServiceOptions{
 		Store: store, Enabled: cfg.MealKitImport.Active(), Sources: srcs,
-		Notifier: notifier, Logger: logger,
+		Notifier: notifier, Observer: observer, Logger: logger,
 	})
 	return mealkit.NewWorker(mealkit.WorkerOptions{
 		Store:   store,
@@ -119,6 +126,7 @@ func newWorker(cfg config.Config, db *mongodb.Client, logger *slog.Logger) (*mea
 		Publisher:     mealkit.ServicePublisher{Service: recipes.NewService(recipes.NewMongoStore(database))},
 		Sources:       srcs,
 		Notifier:      notifier,
+		Observer:      observer,
 		Logger:        logger,
 		RecipesPerRun: cfg.MealKitImport.RecipesPerRun,
 	}), nil

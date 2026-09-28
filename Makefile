@@ -65,10 +65,10 @@ docs-check: ## Check the decision log for reused row numbers
 	./scripts/check-decision-rows.sh
 
 ios-lint: ## Lint Swift sources with swift-format (bundled with Xcode)
-	xcrun swift-format lint --strict --recursive --configuration $(IOS_DIR)/.swift-format $(IOS_DIR)/DinnerOS $(IOS_DIR)/DinnerOSTests
+	xcrun swift-format lint --strict --recursive --configuration $(IOS_DIR)/.swift-format $(IOS_DIR)/DinnerOS $(IOS_DIR)/Shared $(IOS_DIR)/DinnerOSLiveActivities $(IOS_DIR)/DinnerOSTests
 
 ios-fmt: ## Format Swift sources
-	xcrun swift-format format --in-place --recursive --configuration $(IOS_DIR)/.swift-format $(IOS_DIR)/DinnerOS $(IOS_DIR)/DinnerOSTests
+	xcrun swift-format format --in-place --recursive --configuration $(IOS_DIR)/.swift-format $(IOS_DIR)/DinnerOS $(IOS_DIR)/Shared $(IOS_DIR)/DinnerOSLiveActivities $(IOS_DIR)/DinnerOSTests
 
 # --- Everything ---------------------------------------------------------------
 
