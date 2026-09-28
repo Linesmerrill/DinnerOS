@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
@@ -102,29 +103,62 @@ func (s *Service) LeftoverPicks(
 	if len(in.Catalog) == 0 {
 		return nil, nil
 	}
-	day := openDay(plan, in.WeekStart)
-	if day == "" {
-		// Every day is taken, so there is nowhere to put a second meal. The
-		// member can still plan one by hand; this just has nothing to add.
+	loc := data.loc
+	if loc == nil {
+		loc = time.UTC
+	}
+	days := openDays(plan, in.WeekStart, s.now().In(loc).Format(time.DateOnly))
+	if len(days) == 0 {
+		// Every day left is taken, so there is nowhere to put a second meal.
+		// The member can still plan one by hand; this just has nothing to add.
 		return nil, nil
 	}
-	res, err := s.provider.RankMeals(ctx, autopilot.RankRequest{Input: in, Day: day, Limit: limit})
-	if err != nil {
-		return nil, fmt.Errorf("rank meals: %w", err)
+	if len(days) > limit {
+		days = days[:limit]
 	}
-	out := make([]LeftoverPick, 0, len(res.Items))
-	for _, item := range res.Items {
-		r := data.byID[item.ItemID]
-		pick := LeftoverPick{
-			RecipeID: item.ItemID, RecipeName: r.Name, ImageURL: r.ImageURL, Day: string(day),
-			Servings: item.Servings, CookMinutes: r.CookMinutes(), Score: item.Score,
+	// Rank for each open day, then take the days in turn, each its best
+	// recipe not already picked: three picks land on three different days
+	// when there are three to land on, instead of all on the first one.
+	ranked := make([][]autopilot.Recommendation, len(days))
+	for i, day := range days {
+		res, err := s.provider.RankMeals(ctx, autopilot.RankRequest{Input: in, Day: day, Limit: limit})
+		if err != nil {
+			return nil, fmt.Errorf("rank meals: %w", err)
 		}
-		for _, reason := range item.Reasons {
-			pick.Reasons = append(pick.Reasons, Reason{Code: reason.Code, Text: reason.Text})
+		ranked[i] = res.Items
+	}
+	out := make([]LeftoverPick, 0, limit)
+	picked := map[string]bool{}
+	for progress := true; progress && len(out) < limit; {
+		progress = false
+		for i, day := range days {
+			if len(out) == limit {
+				break
+			}
+			for len(ranked[i]) > 0 && picked[ranked[i][0].ItemID] {
+				ranked[i] = ranked[i][1:]
+			}
+			if len(ranked[i]) == 0 {
+				continue
+			}
+			item := ranked[i][0]
+			ranked[i] = ranked[i][1:]
+			picked[item.ItemID], progress = true, true
+			out = append(out, leftoverPick(data.byID[item.ItemID], item, day))
 		}
-		out = append(out, pick)
 	}
 	return out, nil
+}
+
+func leftoverPick(r recipes.Recipe, item autopilot.Recommendation, day autopilot.Day) LeftoverPick {
+	pick := LeftoverPick{
+		RecipeID: item.ItemID, RecipeName: r.Name, ImageURL: r.ImageURL, Day: string(day),
+		Servings: item.Servings, CookMinutes: r.CookMinutes(), Score: item.Score,
+	}
+	for _, reason := range item.Reasons {
+		pick.Reasons = append(pick.Reasons, Reason{Code: reason.Code, Text: reason.Text})
+	}
+	return pick
 }
 
 // usesIngredient reports whether r calls for the ingredient, by catalog ID
@@ -142,18 +176,23 @@ func usesIngredient(r recipes.Recipe, ingredientID, nameKey string) bool {
 	return false
 }
 
-// openDay is the first day of the week with no meal planned, or "" when the
-// week is full. Days run in the household's own order, so a Sunday-start
-// household is offered Sunday first.
-func openDay(plan planning.Plan, first autopilot.Day) autopilot.Day {
+// openDays are the week's days with no meal planned, from today on (a day
+// already gone is no place for a second meal), in the household's own order.
+// today is a date ("2026-09-27") in the household's time zone.
+func openDays(plan planning.Plan, first autopilot.Day, today string) []autopilot.Day {
 	taken := map[string]bool{}
 	for _, e := range plan.Entries {
 		taken[string(e.Day)] = true
 	}
+	var out []autopilot.Day
 	for _, code := range planning.DaysFrom(planning.Day(first)) {
-		if !taken[string(code)] {
-			return autopilot.Day(code)
+		if taken[string(code)] {
+			continue
 		}
+		if date := plan.DateOf(code); date != "" && date < today {
+			continue
+		}
+		out = append(out, autopilot.Day(code))
 	}
-	return ""
+	return out
 }

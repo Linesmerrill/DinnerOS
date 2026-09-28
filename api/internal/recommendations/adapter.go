@@ -42,6 +42,8 @@ type inputData struct {
 	byID map[string]recipes.Recipe
 	// context is the context the week was planned with.
 	context ProposalContext
+	// loc is the household's time zone, UTC when it has none.
+	loc *time.Location
 	// resetAt and resetBy are the household's last learning reset within
 	// the learning window.
 	resetAt time.Time
@@ -174,6 +176,7 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 	if err != nil {
 		loc = time.UTC
 	}
+	data.loc = loc
 	for _, e := range outcomes {
 		kind, date, reason := autopilot.KindCooked, "", ""
 		switch payload := e.Payload.(type) {

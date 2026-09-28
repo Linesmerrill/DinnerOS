@@ -135,9 +135,27 @@ struct PrepPresentationTests {
             PrepPreviewData.session(
                 PrepPreviewData.severalBagsJSON, PrepPreviewData.noPhotoJSON, PrepPreviewData.leftoverOnlyJSON))
         let banner = PrepBannerPresentation(session: session)
-        #expect(banner.amountText == "20 oz this week")
-        #expect(banner.detailText == "3 items to put away")
-        #expect(!banner.detailIsFreezer)
+        #expect(banner.listsItems)
+        #expect(banner.countTitle == "3 things to put away")
+        #expect(banner.moreText == nil)
+        // Each item says what to do with it, so the member knows which is which at a glance.
+        #expect(banner.rows.map(\.card.name) == ["Ground Pork", "Chicken Thighs", "Ground Beef"])
+        #expect(banner.rows.map(\.glanceText) == ["4 bags", "3 bags", "4 oz extra"])
+        let spoken =
+            "Put the groceries away. 3 things to put away. "
+            + "Ground Pork, 4 bags. Chicken Thighs, 3 bags. Ground Beef, 4 ounces extra"
+        #expect(banner.accessibilityLabel == spoken)
+    }
+
+    @Test func aLongBannerListsFourAndCountsTheRest() throws {
+        let session = try #require(
+            PrepPreviewData.session(
+                PrepPreviewData.severalBagsJSON, PrepPreviewData.noPhotoJSON, PrepPreviewData.leftoverOnlyJSON,
+                PrepPreviewData.oneBagJSON,
+                PrepPreviewData.oneBagJSON.replacingOccurrences(of: "l1\"", with: "l9\"")))
+        let banner = PrepBannerPresentation(session: session)
+        #expect(banner.rows.count == 4)
+        #expect(banner.moreText == "And 1 more")
     }
 
     @Test func aBannerWithNothingToFreezeSaysOnlyTheAmount() throws {

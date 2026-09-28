@@ -575,10 +575,64 @@ struct PrepSessionBanner: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .headline) private var photoSize: CGFloat = 48
+    @ScaledMetric(relativeTo: .subheadline) private var rowPhotoSize: CGFloat = 32
 
     private var presentation: PrepBannerPresentation { PrepBannerPresentation(session: session) }
 
     var body: some View {
+        if presentation.listsItems {
+            itemList
+        } else {
+            singleItem
+        }
+    }
+
+    /// Several things to put away: a row for each, so the member sees which at a glance.
+    private var itemList: some View {
+        Section {
+            HStack(spacing: 12) {
+                Text(presentation.countTitle)
+                    .font(.headline)
+                Spacer(minLength: 0)
+                Button("Start", action: open)
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityHint(Text("Opens the checklist for putting the groceries away"))
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(presentation.rows, id: \.card.id) { row in
+                    itemRow(row)
+                }
+                if let more = presentation.moreText {
+                    Text(more)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: open)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(presentation.accessibilityLabel))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(named: Text("Start"), open)
+        }
+    }
+
+    private func itemRow(_ row: PrepCardPresentation) -> some View {
+        HStack(spacing: 10) {
+            PrepIngredientTile(url: row.card.imageURL, category: row.card.category, size: min(rowPhotoSize, 52))
+            Text(row.card.name)
+                .font(.subheadline)
+                .lineLimit(2)
+            Spacer(minLength: 8)
+            Text(row.glanceText)
+                .font(PrepStyle.readout(.subheadline))
+                .foregroundStyle(row.hasBags ? PrepStyle.ice : .secondary)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private var singleItem: some View {
         Section {
             let layout =
                 dynamicTypeSize.isAccessibilitySize
