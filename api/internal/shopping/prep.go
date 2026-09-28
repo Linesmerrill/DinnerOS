@@ -617,12 +617,12 @@ func prepReminder(card PrepCard, today string) (PrepReminder, string) {
 		}
 		if m.Date >= today {
 			return PrepReminderThaw, fmt.Sprintf(
-				"We'll remind you the morning of any day a planned meal needs it — one portion takes %s in the fridge. %s is the next one.",
-				hours, dayName(m.Day))
+				"We'll remind you %s morning to move a bag to the fridge. It takes %s to thaw.",
+				dayName(m.Day), hours)
 		}
 	}
 	return PrepReminderList, fmt.Sprintf(
-		"Next time a meal needs it, your list will say \"Grab from the freezer\" and we'll remind you that morning to move a portion over — %s in the fridge.",
+		"When you plan it again, we'll remind you that morning to move a bag to the fridge. It takes %s to thaw.",
 		hours)
 }
 
@@ -644,7 +644,7 @@ func prepInstruction(card PrepCard) string {
 	}
 	leftover := ""
 	if ratOfExact(card.Portions.Leftover).Sign() > 0 {
-		leftover = fmt.Sprintf(" The last %s is less than a dinner — toss it or cook it in.",
+		leftover = fmt.Sprintf(" %s left over. Toss it or cook it in.",
 			amountText(card.Portions.Leftover, card.Pack.Unit))
 	}
 	switch n := card.Portions.Portions; {
@@ -653,7 +653,7 @@ func prepInstruction(card PrepCard) string {
 	case n == 1:
 		return fmt.Sprintf("%s, then freeze another %s in one bag for a future dinner.%s", keep, each, leftover)
 	default:
-		return fmt.Sprintf("%s, then freeze %d bags of %s — one per future dinner.%s", keep, n, each, leftover)
+		return fmt.Sprintf("%s, then freeze %d bags of %s, one per future dinner.%s", keep, n, each, leftover)
 	}
 }
 

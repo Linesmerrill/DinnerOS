@@ -82,10 +82,10 @@ nonisolated struct PrepCardPresentation: Equatable, Sendable {
     }
 
     /// The small line under the bags when less than a dinner is left:
-    /// "4 oz left over — toss it or cook it in". `nil` when nothing is.
+    /// "4 oz left over. Toss it or cook it in.". `nil` when nothing is.
     var leftoverLine: String? {
         guard let leftover = leftoverText else { return nil }
-        return String(localized: "\(leftover) left over — toss it or cook it in")
+        return String(localized: "\(leftover) left over. Toss it or cook it in.")
     }
 
     /// Names what the button actually does: whole dinner-sized bags, or just "Done".

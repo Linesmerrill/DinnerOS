@@ -200,7 +200,7 @@ func TestPrepFreezesWholeDinnersAndReadsInOunces(t *testing.T) {
 		t.Fatalf("plan = %+v, want 1 portion of 5/8 lb frozen and 1/4 lb left over", plan)
 	}
 	card := PrepCard{Pack: pork, Meals: []PrepMeal{{RecipeName: "Citrus Pork Tacos", Day: "tue"}}, Portions: plan}
-	want := "Keep 10 oz out for Tuesday's Citrus Pork Tacos, then freeze another 10 oz in one bag for a future dinner. The last 4 oz is less than a dinner — toss it or cook it in."
+	want := "Keep 10 oz out for Tuesday's Citrus Pork Tacos, then freeze another 10 oz in one bag for a future dinner. 4 oz left over. Toss it or cook it in."
 	if got := prepInstruction(card); got != want {
 		t.Errorf("instruction:\n got %q\nwant %q", got, want)
 	}
@@ -215,7 +215,7 @@ func TestPrepFreezesWholeDinnersAndReadsInOunces(t *testing.T) {
 		t.Fatalf("plan = %+v, want 5 bags of 10 oz, 4 oz left, options 1..5", plan)
 	}
 	card = PrepCard{Pack: loin, Meals: []PrepMeal{{RecipeName: "Tuscan Pork", Day: "thu"}}, Portions: plan}
-	want = "Keep 10 oz out for Thursday's Tuscan Pork, then freeze 5 bags of 10 oz — one per future dinner. The last 4 oz is less than a dinner — toss it or cook it in."
+	want = "Keep 10 oz out for Thursday's Tuscan Pork, then freeze 5 bags of 10 oz, one per future dinner. 4 oz left over. Toss it or cook it in."
 	if got := prepInstruction(card); got != want {
 		t.Errorf("instruction:\n got %q\nwant %q", got, want)
 	}
