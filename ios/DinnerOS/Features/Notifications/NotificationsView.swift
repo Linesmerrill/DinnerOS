@@ -10,6 +10,8 @@ struct NotificationsView: View {
     @Environment(\.dismiss) private var dismiss
     /// `nil` outside the tab shell, where there's no Shop tab to open.
     @Environment(\.openShop) private var openShop
+    /// Optional so previews needn't supply one; a product notice opens Saved Products with it.
+    @Environment(ShoppingStore.self) private var shopping: ShoppingStore?
 
     @State private var path: [PantryItemRoute] = []
     @State private var actionError: String?
@@ -137,6 +139,9 @@ struct NotificationsView: View {
         if notification.subject.shoppingWeek != nil, openShop != nil {
             return Text("Opens the week in Shop.")
         }
+        if notification.subject.shoppingProducts != nil, openShop != nil, shopping != nil {
+            return Text("Opens Saved Products.")
+        }
         return Text("")
     }
 
@@ -148,6 +153,10 @@ struct NotificationsView: View {
             // The bell is a sheet over another tab, so it closes before switching tabs.
             dismiss()
             openShop(week)
+        } else if let openShop, let shopping, notification.subject.shoppingProducts != nil {
+            dismiss()
+            shopping.requestSavedProducts()
+            openShop(shopping.week)
         }
     }
 
@@ -172,6 +181,7 @@ struct NotificationRow: View {
         switch notification.type {
         case .pantryLow: "cabinet"
         case .shoppingOrderDue: "cart"
+        case .shoppingProductGone: "exclamationmark.triangle"
         default: "bell"
         }
     }

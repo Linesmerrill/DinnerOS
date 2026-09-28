@@ -193,12 +193,16 @@ func (s *Service) Refresh(ctx context.Context, householdID string) error {
 	return nil
 }
 
-// StillRelevant reports whether an order reminder should still be pushed:
+// StillRelevant reports whether an order reminder should still be pushed —
+// and a product-gone notice, whether the product is still gone:
 // the week isn't marked ordered and its reminder is still due. A reminder that
 // waited out the night isn't pushed after someone ordered at breakfast. Other
 // notification types are not shopping's to judge. It implements
 // push.Relevance.
 func (s *Service) StillRelevant(ctx context.Context, n notifications.Notification) (bool, error) {
+	if n.Type == notifications.TypeShoppingProductGone {
+		return s.goneStillRelevant(ctx, n)
+	}
 	if n.Type != notifications.TypeShoppingOrderDue {
 		return true, nil
 	}

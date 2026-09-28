@@ -54,7 +54,7 @@ func (s *MongoStore) SetPreferencePrice(ctx context.Context, householdID string,
 	}
 	filter := append(preferenceFilter(hid, provider, ingredientKey), bson.E{Key: "productId", Value: productID})
 	res, err := s.preferences.UpdateOne(ctx, filter, bson.D{{Key: "$set", Value: bson.D{
-		{Key: "priceCents", Value: priceCents}, {Key: "priceUpdatedAt", Value: at},
+		{Key: "priceCents", Value: priceCents}, {Key: "priceUpdatedAt", Value: at}, {Key: "priceSource", Value: string(PriceFromMember)},
 	}}})
 	if err != nil {
 		return translate(err)

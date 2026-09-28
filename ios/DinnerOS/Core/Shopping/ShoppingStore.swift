@@ -100,6 +100,25 @@ final class ShoppingStore {
     var openPrepCards: [PrepCard] {
         (prepSession?.cards ?? []).filter { !$0.isAnswered }
     }
+    /// Lines the member left out of the shown week's cart because Walmart no longer lists their
+    /// saved product, or it couldn't be confirmed. Sent as `excludeKeys`, so the API reports
+    /// them as left out, with why, instead of asking again.
+    private(set) var leftOutOfCart: Set<String> = []
+    /// A preflight that found lines needing a decision: shown as "Before Opening Walmart", and
+    /// nothing opens until each line is re-chosen or left out.
+    private(set) var decisionPrompt: ShoppingProposal?
+    private(set) var isCheckingProducts = false
+    /// A product notice asked for Saved Products; the Shop tab opens it and clears this.
+    private(set) var wantsSavedProducts = false
+
+    func requestSavedProducts() {
+        wantsSavedProducts = true
+    }
+
+    func didShowSavedProducts() {
+        wantsSavedProducts = false
+    }
+
     /// The handoff "Did you order these?" asks about. The app shell presents it.
     private(set) var confirmationPrompt: ShoppingHandoff?
 
@@ -323,6 +342,8 @@ final class ShoppingStore {
         proposalPhase = .idle
         refreshError = nil
         packageOverrides = [:]
+        leftOutOfCart = []
+        decisionPrompt = nil
         linkError = nil
         linkNotice = nil
         openHandoff = nil
@@ -370,7 +391,7 @@ final class ShoppingStore {
         let started = (proposalGeneration, scope)
         let week = week
         let provider = provider
-        let request = ShoppingMatchRequest(checkedOffKeys: checkedOffKeys(for: week))
+        let request = ShoppingMatchRequest(checkedOffKeys: checkedOffKeys(for: week), excludeKeys: leftOutKeys)
         if clearing || proposal == nil {
             proposal = nil
             proposalPhase = .loading
@@ -450,11 +471,66 @@ final class ShoppingStore {
     /// `packages` only where the member changed it.
     var handoffRequest: ShoppingMatchRequest {
         let keys = checkedOffKeys(for: week)
-        guard hasPackageEdits else { return ShoppingMatchRequest(checkedOffKeys: keys) }
+        guard hasPackageEdits else { return ShoppingMatchRequest(checkedOffKeys: keys, excludeKeys: leftOutKeys) }
         let lines = readyLines.prefix(ShoppingLimits.maxKeys).map {
             ShoppingLineSelection(ingredientKey: $0.ingredientKey, packages: packageOverrides[$0.ingredientKey])
         }
-        return ShoppingMatchRequest(lines: Array(lines), checkedOffKeys: keys)
+        return ShoppingMatchRequest(lines: Array(lines), checkedOffKeys: keys, excludeKeys: leftOutKeys)
+    }
+
+    private var leftOutKeys: [String]? {
+        leftOutOfCart.isEmpty ? nil : Array(leftOutOfCart.sorted().prefix(ShoppingLimits.maxKeys))
+    }
+
+    // MARK: - Products Walmart no longer lists
+
+    /// Leaves a line whose product is gone or unverified out of this week's cart, knowingly.
+    func leaveOutOfCart(_ ingredientKey: String) async {
+        leftOutOfCart.insert(ingredientKey)
+        await recheckDecision()
+    }
+
+    /// Puts a line left out of the cart back, so it needs a decision again.
+    func putBackInCart(_ ingredientKey: String) async {
+        leftOutOfCart.remove(ingredientKey)
+        await recheckDecision()
+    }
+
+    func dismissDecision() {
+        decisionPrompt = nil
+    }
+
+    /// Checks the shown week's products again and refreshes "Before Opening Walmart", after
+    /// "Check Again", a re-chosen product, or a line left out. The match is read again too, so
+    /// the Shop tab shows the same states.
+    func recheckDecision(presenting: Bool = false) async {
+        guard let api, let householdID, isConfigured else { return }
+        let started = scope
+        let week = week
+        let provider = provider
+        let request = handoffRequest
+        isCheckingProducts = true
+        defer {
+            if started == scope { isCheckingProducts = false }
+        }
+        do {
+            let checked = try await session.authorized { token in
+                try await api.preflight(
+                    householdID: householdID, week: week, provider: provider, request: request, accessToken: token)
+            }
+            guard started == scope, week == self.week else { return }
+            if presenting || decisionPrompt != nil {
+                decisionPrompt = checked
+            }
+            linkError = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            guard started == scope else { return }
+            Self.logger.notice("Shopping preflight failed: \(Self.describe(error), privacy: .public)")
+            linkError = Self.message(for: error)
+        }
+        await loadProposal(clearing: false)
     }
 
     // MARK: - Handoff
@@ -465,6 +541,11 @@ final class ShoppingStore {
     /// API keeps what the week already sent and links only what's new. When nothing is, no
     /// link opens and `linkNotice` says everything is already in the cart. The week is matched
     /// again afterwards so the sent lines move under "In Walmart Cart" on every phone.
+    ///
+    /// First the saved products are checked on Walmart (the API's preflight). A line whose
+    /// product Walmart no longer lists, or that couldn't be confirmed lately, must be re-chosen
+    /// or left out: `decisionPrompt` shows them and nothing opens. The API refuses a hand-off
+    /// with such a line too (`products_need_decision`), which shows the same prompt.
     func openInWalmart() async throws {
         let (api, householdID) = try requireHousehold()
         guard !isCreatingHandoff else { return }
@@ -477,10 +558,29 @@ final class ShoppingStore {
         linkNotice = nil
         let handoff: ShoppingHandoff
         do {
+            let checked = try await session.authorized { token in
+                try await api.preflight(
+                    householdID: householdID, week: week, provider: provider, request: request, accessToken: token)
+            }
+            guard started == scope else { return }
+            guard checked.needsDecision.isEmpty else {
+                Self.logger.info(
+                    "Shopping handoff held: \(checked.needsDecision.count, privacy: .public) lines need a decision")
+                isCreatingHandoff = false
+                decisionPrompt = checked
+                await loadProposal(clearing: false)
+                return
+            }
+            decisionPrompt = nil
             handoff = try await session.authorized { token in
                 try await api.createHandoff(
                     householdID: householdID, week: week, provider: provider, request: request, accessToken: token)
             }
+        } catch let error as APIError where error.code == "products_need_decision" {
+            // A product went while the member looked: ask again rather than fail.
+            if started == scope { isCreatingHandoff = false }
+            await recheckDecision(presenting: true)
+            return
         } catch {
             if started == scope { isCreatingHandoff = false }
             throw error
@@ -967,6 +1067,8 @@ final class ShoppingStore {
         }
         guard started == scope else { return saved }
         Self.logger.info("Saved product saved")
+        // A re-chosen product goes back in the cart; left out is only for the old one.
+        leftOutOfCart.remove(ingredientKey)
         if preferencesPhase == .loaded {
             preferences = (preferences.filter { $0.ingredientKey != saved.ingredientKey } + [saved]).sorted {
                 $0.ingredientName.localizedCaseInsensitiveCompare($1.ingredientName) == .orderedAscending
@@ -1141,6 +1243,9 @@ final class ShoppingStore {
         proposal = nil
         refreshError = nil
         packageOverrides = [:]
+        leftOutOfCart = []
+        decisionPrompt = nil
+        isCheckingProducts = false
         prepGeneration += 1
         prepSession = nil
         isLoadingPrep = false

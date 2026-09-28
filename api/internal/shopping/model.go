@@ -5,8 +5,8 @@
 // they ordered, which are recorded as pantry purchases with source provider.
 //
 // Provider specifics (link formats, product IDs, package math) live in
-// internal/providers. Nothing here fetches provider pages or calls provider
-// APIs.
+// internal/providers. The one thing fetched is a saved product's own page, to
+// check it still exists (productcheck.go); nothing calls provider APIs.
 package shopping
 
 import (
@@ -110,14 +110,25 @@ type Preference struct {
 	// entered a price; PriceUpdatedAt is when it was set.
 	PriceCents     *int64
 	PriceUpdatedAt time.Time
-	CreatedBy      string
-	CreatedAt      time.Time
-	UpdatedBy      string
-	UpdatedAt      time.Time
+	// PriceSource says who set PriceCents: the member, or a product check.
+	PriceSource PriceSource
+	// ProductChosenAt is when the member saved this ProductID, or zero on
+	// products saved before it was recorded.
+	ProductChosenAt time.Time
+	// Check is the product's last check, or nil when it was never checked.
+	// Use CurrentCheck, which ignores a check of a previous product.
+	Check     *ProductCheckState
+	CreatedBy string
+	CreatedAt time.Time
+	UpdatedBy string
+	UpdatedAt time.Time
 
 	// setPrice tells UpsertPreference to write PriceCents (nil clears it);
 	// otherwise the stored price is kept.
 	setPrice bool
+	// newProduct tells UpsertPreference the member chose a different product:
+	// it records ProductChosenAt and drops the old product's check.
+	newProduct bool
 }
 
 // PreferenceInput saves a product for an ingredient. Exactly one of
@@ -189,7 +200,30 @@ const (
 	// (LineSource.SkipScope). It is reported so the Shop tab can show it
 	// struck through under its meal, and it is never sent.
 	ExcludedSkipped ExclusionReason = "skipped"
+	// ExcludedProductGone: the saved product is no longer on the provider's
+	// site. The line needs a decision — re-choose the product, or leave the
+	// line out — and no hand-off is made until it has one.
+	ExcludedProductGone ExclusionReason = "product_gone"
+	// ExcludedProductUnverified: no check has confirmed the saved product
+	// within ProductFreshness. It needs the same decision.
+	ExcludedProductUnverified ExclusionReason = "product_unverified"
+	// ExcludedLeftOutGone and ExcludedLeftOutUnverified: the member knowingly
+	// left out a line whose product is gone or unverified.
+	ExcludedLeftOutGone       ExclusionReason = "left_out_gone"
+	ExcludedLeftOutUnverified ExclusionReason = "left_out_unverified"
 )
+
+// NeedsDecision reports whether a line excluded for r blocks a hand-off until
+// the member re-chooses its product or leaves it out.
+func (r ExclusionReason) NeedsDecision() bool {
+	return r == ExcludedProductGone || r == ExcludedProductUnverified
+}
+
+// LeftOutForProduct reports whether the member left the line out because of
+// its product's check.
+func (r ExclusionReason) LeftOutForProduct() bool {
+	return r == ExcludedLeftOutGone || r == ExcludedLeftOutUnverified
+}
 
 // LineStatus is a handoff line's confirmation state.
 type LineStatus string
@@ -290,6 +324,11 @@ type HandoffLine struct {
 	// that handoff already put in the provider's cart for this product. It is
 	// derived on read and never stored.
 	Cart *LineCart
+	// Health and Check are the saved product's check on a match: ok or
+	// unavailable (a line is never gone or unverified; those are excluded).
+	// Not stored.
+	Health ProductHealth
+	Check  *ProductCheckState
 }
 
 // LineCart compares a match line with what the week's current handoff
@@ -349,6 +388,12 @@ type CartState struct {
 type Excluded struct {
 	LineSource
 	Reason ExclusionReason
+	// ProductID and ProductName are the saved product of a line excluded
+	// because of its check (NeedsDecision or LeftOutForProduct), else "".
+	ProductID   string
+	ProductName string
+	// Check is that product's check, on a match. Not stored.
+	Check *ProductCheckState
 }
 
 // CartLink is one handoff URL.
@@ -376,6 +421,21 @@ type Proposal struct {
 	// Meals are the week's planned recipes in plan order, which every line's
 	// Shares name, so the Shop tab can list lines meal by meal. Not stored.
 	Meals []planning.GroceryMeal
+	// ChecksPaused is set on a match when the provider refused our product
+	// checks recently, so none were made. Not stored.
+	ChecksPaused bool
+}
+
+// NeedsDecision returns the excluded lines that block a hand-off: their
+// product is gone or unverified and the member hasn't left them out.
+func (p Proposal) NeedsDecision() []Excluded {
+	var out []Excluded
+	for _, e := range p.Excluded {
+		if e.Reason.NeedsDecision() {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // CloseReason says why a handoff stopped collecting sends.

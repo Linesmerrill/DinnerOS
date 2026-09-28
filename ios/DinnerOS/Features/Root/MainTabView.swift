@@ -127,6 +127,9 @@ struct MainTabView: View {
                 householdID: current.id, timeZone: current.planningTimeZone, weekStartsOn: current.weekStartsOn)
             let shopping = shopping
             Task { await shopping.show(week: week) }
+        } else if route.subject?.shoppingProducts != nil {
+            selection = .shop
+            shopping.requestSavedProducts()
         } else {
             showsPushedNotifications = true
         }
