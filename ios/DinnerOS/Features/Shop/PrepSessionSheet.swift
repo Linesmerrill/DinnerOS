@@ -635,7 +635,16 @@ struct PrepSessionBanner: View {
             }
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(presentation.rows, id: \.card.id) { row in
-                    itemRow(row)
+                    itemRow(row, trailing: row.glanceText, isFreezer: row.hasBags)
+                }
+                if !presentation.extraRows.isEmpty {
+                    Text(PrepBannerPresentation.extrasNote)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, presentation.rows.isEmpty ? 0 : 4)
+                    ForEach(presentation.extraRows, id: \.card.id) { row in
+                        itemRow(row, trailing: row.extraText ?? "", isFreezer: false)
+                    }
                 }
                 if let more = presentation.moreText {
                     Text(more)
@@ -653,16 +662,16 @@ struct PrepSessionBanner: View {
         }
     }
 
-    private func itemRow(_ row: PrepCardPresentation) -> some View {
+    private func itemRow(_ row: PrepCardPresentation, trailing: String, isFreezer: Bool) -> some View {
         HStack(spacing: 10) {
             PrepIngredientTile(url: row.card.imageURL, category: row.card.category, size: min(rowPhotoSize, 52))
             Text(row.card.name)
                 .font(.subheadline)
                 .lineLimit(2)
             Spacer(minLength: 8)
-            Text(row.glanceText)
+            Text(trailing)
                 .font(PrepStyle.readout(.subheadline))
-                .foregroundStyle(row.hasBags ? PrepStyle.ice : .secondary)
+                .foregroundStyle(isFreezer ? PrepStyle.ice : .secondary)
                 .multilineTextAlignment(.trailing)
         }
     }

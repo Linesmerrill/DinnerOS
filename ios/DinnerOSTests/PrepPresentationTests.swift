@@ -136,15 +136,29 @@ struct PrepPresentationTests {
                 PrepPreviewData.severalBagsJSON, PrepPreviewData.noPhotoJSON, PrepPreviewData.leftoverOnlyJSON))
         let banner = PrepBannerPresentation(session: session)
         #expect(banner.listsItems)
-        #expect(banner.countTitle == "3 things to put away")
+        #expect(banner.countTitle == "7 bags to freeze")
         #expect(banner.moreText == nil)
         // Each item says what to do with it, so the member knows which is which at a glance.
-        #expect(banner.rows.map(\.card.name) == ["Ground Pork", "Chicken Thighs", "Ground Beef"])
-        #expect(banner.rows.map(\.glanceText) == ["4 bags", "3 bags", "4 oz extra"])
+        #expect(banner.rows.map(\.card.name) == ["Ground Pork", "Chicken Thighs"])
+        #expect(banner.rows.map(\.glanceText) == ["4 bags", "3 bags"])
+        // Less than a bag isn't something to put away: it's listed apart, as an amount.
+        #expect(banner.extraRows.map(\.card.name) == ["Ground Beef"])
+        #expect(banner.extraRows.map(\.extraText) == ["4 oz"])
         let spoken =
-            "Put the groceries away. 3 things to put away. "
-            + "Ground Pork, 4 bags. Chicken Thighs, 3 bags. Ground Beef, 4 ounces extra"
+            "Put the groceries away. 7 bags to freeze. Ground Pork, 4 bags. Chicken Thighs, 3 bags. "
+            + "Too little to freeze. Cook it in or toss it. Ground Beef, 4 ounces"
         #expect(banner.accessibilityLabel == spoken)
+    }
+
+    @Test func aBannerWithOnlyExtrasFreezesNothing() throws {
+        let session = try #require(
+            PrepPreviewData.session(
+                PrepPreviewData.leftoverOnlyJSON,
+                PrepPreviewData.leftoverOnlyJSON.replacingOccurrences(of: "l3\"", with: "l8\"")))
+        let banner = PrepBannerPresentation(session: session)
+        #expect(banner.countTitle == "A little extra this week")
+        #expect(banner.rows.isEmpty)
+        #expect(banner.extraRows.count == 2)
     }
 
     @Test func aLongBannerListsFourAndCountsTheRest() throws {

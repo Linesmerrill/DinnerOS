@@ -104,6 +104,13 @@ nonisolated struct PrepCardPresentation: Equatable, Sendable {
         }
     }
 
+    /// True when there's nothing to freeze, only a little left over to cook in or toss. It
+    /// isn't something to put away, so the banner lists it apart from the bags.
+    var isExtraOnly: Bool { card.freezable && !hasBags && leftoverText != nil }
+
+    /// The extra, "6 oz", for a card that is only extra.
+    var extraText: String? { isExtraOnly ? leftoverText : nil }
+
     /// The banner row's one word on what to do with it: "2 bags" to freeze, "4 oz extra" when
     /// there's less than a bag, or "Keep 10 oz" when it doesn't freeze.
     var glanceText: String {
@@ -213,19 +220,33 @@ nonisolated struct PrepBannerPresentation: Equatable, Sendable {
     /// True when the banner lists each item instead of showing one.
     var listsItems: Bool { pendingCards.count > 1 }
 
-    /// The rows to list, at most `maxRows`.
+    private var presentations: [PrepCardPresentation] { pendingCards.map { PrepCardPresentation(card: $0) } }
+
+    /// The items to put away: bags to freeze, or amounts to keep out. At most `maxRows`.
     var rows: [PrepCardPresentation] {
-        pendingCards.prefix(Self.maxRows).map { PrepCardPresentation(card: $0) }
+        Array(presentations.filter { !$0.isExtraOnly }.prefix(Self.maxRows))
     }
 
-    /// "4 things to put away".
+    /// The items with only a little left over, too little to freeze, in the rows left over.
+    var extraRows: [PrepCardPresentation] {
+        Array(presentations.filter(\.isExtraOnly).prefix(Self.maxRows - rows.count))
+    }
+
+    /// The line over the extras.
+    static let extrasNote = String(localized: "Too little to freeze. Cook it in or toss it.")
+
+    /// "1 bag to freeze" when anything is being frozen; otherwise what the rows are.
     var countTitle: String {
-        String(localized: "\(pendingCards.count) things to put away")
+        let bags = rows.reduce(0) { $0 + $1.bags }
+        if bags == 1 { return String(localized: "1 bag to freeze") }
+        if bags > 1 { return String(localized: "\(bags) bags to freeze") }
+        if !rows.isEmpty { return String(localized: "\(rows.count) things to put away") }
+        return String(localized: "A little extra this week")
     }
 
     /// "And 2 more", or `nil` when every item has a row.
     var moreText: String? {
-        let more = pendingCards.count - Self.maxRows
+        let more = pendingCards.count - rows.count - extraRows.count
         return more > 0 ? String(localized: "And \(more) more") : nil
     }
 
@@ -254,10 +275,14 @@ nonisolated struct PrepBannerPresentation: Equatable, Sendable {
     /// The row read as one sentence.
     var accessibilityLabel: String {
         if listsItems {
-            let items = pendingCards.map { card in
-                "\(card.name), \(PrepCardPresentation.spoken(PrepCardPresentation(card: card).glanceText))"
+            var parts = [String(localized: "Put the groceries away"), countTitle]
+            parts += rows.map { "\($0.card.name), \(PrepCardPresentation.spoken($0.glanceText))" }
+            if !extraRows.isEmpty {
+                parts.append(String(Self.extrasNote.dropLast()))
+                parts += extraRows.map { "\($0.card.name), \(PrepCardPresentation.spoken($0.extraText ?? ""))" }
             }
-            return ([String(localized: "Put the groceries away"), countTitle] + items).joined(separator: ". ")
+            if let moreText { parts.append(moreText) }
+            return parts.joined(separator: ". ")
         }
         guard let card else { return session.headline }
         let presentation = PrepCardPresentation(card: card)
