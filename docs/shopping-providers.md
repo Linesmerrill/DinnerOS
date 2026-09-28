@@ -805,11 +805,41 @@ bought.
 | --- | --- |
 | What the week's meals need, and which meals by name and day | The hand-off line's measured need, joined with the week's plan for each recipe's day |
 | What is left over | The pack's surplus, the same number the bulk pack reports |
-| How many portions to cut the rest into, and how big each is | The heuristic below, with a stepper to change it |
+| How many bags to freeze, each one dinner's worth | The heuristic below, with add/remove-bag controls to change it |
+| What is left under a dinner, to toss or cook in | `leftoverText` on the plan and on each offered count |
+| The ingredient's photo | `imageUrl`: the catalog ingredient's image, which is exactly what the recipe screen shows on that ingredient's row (the recipe service fills a recipe ingredient's image from the catalog); empty when there is none |
 | How long **one of those portions** takes to thaw | `pantry.ThawFor` on the sealed remainder at the chosen count |
 | Whether a second meal this week would use it instead | The bulk pack's Autopilot suggestions, planned through the ordinary plan endpoint |
 
-Each card has **Done** and **Skip**, and a skipped card stays in the list so
+### What the card looks like
+
+The card is a picture of the counter, not a paragraph, because the member is
+standing there weighing meat:
+
+- **A "this week" card** in the app's green: the ingredient's photo, the
+  amount as a kitchen-scale readout ("10 oz" in heavy rounded numerals with
+  monospaced digits), and who it is for ("for Tuesday's Citrus Pork Tacos").
+- **One frosted card per freezer bag** in the freezer's ice blue (the same
+  `systemBlue` family as the pantry's Freezer tag): the same photo with a
+  snowflake, the bag's readout, and its thaw time. The bags sit in a row that
+  scrolls sideways, and stack one per line at accessibility text sizes.
+- **Remove/add-bag controls** on that row replace the old stepper. Adding a
+  bag inserts its card (animated as the response to the tap, a fade under
+  Reduce Motion) and VoiceOver announces the new count. The count stays
+  within one and the whole dinners the surplus holds.
+- **The leftover** is one small line ("4 oz left over — toss it or cook it
+  in"), not a card, and it changes with the count.
+- **The button says what it does:** "Freeze 1 Bag", "Freeze 3 Bags", or
+  "Done" when nothing whole is left to freeze.
+- **No photo** falls back to a category glyph on the same tile, never a
+  broken image.
+
+The words and numbers the view shows live in `PrepCardPresentation`, and the
+banner's in `PrepBannerPresentation`, so they are tested apart from the view.
+The Shop/Pantry banner is one row: the photo, "10 oz this week", "1 bag to
+freeze" (or "3 items to put away"), and **Start**.
+
+Each card has a freeze button and **Skip**, and a skipped card stays in the list so
 it can be done later. A remainder that is already in the freezer — sealed from
 another member's phone, or before the session existed — counts as done, because
 asking a household to put away something already in the drawer is exactly what

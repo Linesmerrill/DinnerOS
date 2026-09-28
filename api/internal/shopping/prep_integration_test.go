@@ -10,10 +10,12 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
+	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 )
 
 // prepFixture is the story's setup: the store's only ground beef is an
@@ -283,6 +285,13 @@ func TestIntegrationPrepHTTP(t *testing.T) {
 		t.Errorf("%d options, want 5: 92 oz holds five whole 18 oz dinners", len(options))
 	case card["reminder"] != "thaw":
 		t.Errorf("reminder = %v", card["reminder"])
+	case card["imageUrl"] != "":
+		// Present and empty, never missing: the fixture's beef has no photo.
+		t.Errorf("imageUrl = %#v, want an empty string", card["imageUrl"])
+	case card["boughtText"] != "8 lb" || card["neededText"] != "36 oz":
+		t.Errorf("bought %v / needed %v, want 8 lb / 36 oz", card["boughtText"], card["neededText"])
+	case portions["leftoverText"] != "2 oz":
+		t.Errorf("leftoverText = %v, want 2 oz after five 18 oz bags", portions["leftoverText"])
 	}
 	cardID, _ := card["id"].(string)
 
@@ -314,5 +323,64 @@ func TestIntegrationPrepHTTP(t *testing.T) {
 	}
 	if rec, body = do(http.MethodGet, base, "", testUser); rec.Code != 200 || body["done"] != float64(1) {
 		t.Errorf("GET prep after = %d %v", rec.Code, body)
+	}
+}
+
+// The card shows the ingredient's photo — the same one the recipe screen
+// shows on that ingredient's row — and nothing when there isn't one.
+func TestIntegrationPrepCardPhoto(t *testing.T) {
+	f, _ := prepFixture(t)
+	ctx := f.ctx
+
+	session, err := f.svc.PrepSession(ctx, testHousehold, testWeek)
+	if err != nil {
+		t.Fatalf("PrepSession: %v", err)
+	}
+	card := prepCard(t, session, "Ground Beef")
+	if card.ImageURL != "" {
+		t.Fatalf("imageUrl = %q before the ingredient has a photo, want empty", card.ImageURL)
+	}
+	if len(card.Pack.Recipes) == 0 {
+		t.Fatalf("beef line records no recipes: %+v", card.Pack)
+	}
+
+	// HelloFresh's ingredient photo, as an import records it on the catalog.
+	const photo = "https://img.example.com/ingredients/ground-beef.png"
+	oid, err := bson.ObjectIDFromHex(card.Pack.IngredientID())
+	if err != nil {
+		t.Fatalf("beef ingredient ID %q: %v", card.Pack.IngredientID(), err)
+	}
+	catalog := f.store.prepCards.Database().Collection(recipes.IngredientsCollection)
+	if _, err := catalog.UpdateOne(ctx, bson.D{{Key: "_id", Value: oid}},
+		bson.D{{Key: "$set", Value: bson.D{{Key: "imageUrl", Value: photo}}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The recipe screen's ingredient row shows it...
+	recipe, err := f.recipes.Get(ctx, testHousehold, card.Pack.Recipes[0].ID)
+	if err != nil {
+		t.Fatalf("Get recipe: %v", err)
+	}
+	var onRecipe string
+	for _, line := range recipe.Ingredients {
+		if line.IngredientID == card.Pack.IngredientID() {
+			onRecipe = line.ImageURL
+		}
+	}
+	if onRecipe != photo {
+		t.Fatalf("recipe ingredient image = %q, want %q", onRecipe, photo)
+	}
+
+	// ...and so does the prep card, as a service value and on the wire.
+	session, err = f.svc.PrepSession(ctx, testHousehold, testWeek)
+	if err != nil {
+		t.Fatalf("PrepSession after: %v", err)
+	}
+	card = prepCard(t, session, "Ground Beef")
+	if card.ImageURL != photo {
+		t.Errorf("card imageUrl = %q, want the recipe ingredient's %q", card.ImageURL, photo)
+	}
+	if got := prepCardResponse(card).ImageURL; got != photo {
+		t.Errorf("response imageUrl = %q, want %q", got, photo)
 	}
 }

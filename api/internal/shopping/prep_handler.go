@@ -40,15 +40,21 @@ type PrepCardResponse struct {
 	IngredientKey string  `json:"ingredientKey"`
 	IngredientID  *string `json:"ingredientId"`
 	Name          string  `json:"name"`
-	Category      string  `json:"category"`
-	ProductName   string  `json:"productName"`
-	Unit          string  `json:"unit"`
+	// ImageURL is the ingredient's photo, the one the recipe screen shows;
+	// empty when there is none.
+	ImageURL    string `json:"imageUrl"`
+	Category    string `json:"category"`
+	ProductName string `json:"productName"`
+	Unit        string `json:"unit"`
 	// Bought, Needed, and Surplus are exact ("27/2"); the *Value fields are
-	// the same numbers for display.
+	// the same numbers for display, and the *Text fields ready to show
+	// ("24 oz", "3 lb 8 oz").
 	Bought         string  `json:"bought"`
 	BoughtValue    float64 `json:"boughtValue"`
+	BoughtText     string  `json:"boughtText"`
 	Needed         string  `json:"needed"`
 	NeededValue    float64 `json:"neededValue"`
+	NeededText     string  `json:"neededText"`
 	Surplus        string  `json:"surplus"`
 	SurplusValue   float64 `json:"surplusValue"`
 	SurplusPercent int     `json:"surplusPercent"`
@@ -102,6 +108,12 @@ type PortionPlanResponse struct {
 	PortionSize      string  `json:"portionSize"`
 	PortionSizeValue float64 `json:"portionSizeValue"`
 	PortionSizeText  string  `json:"portionSizeText"`
+	// Leftover is what is left after Portions whole bags: less than a dinner,
+	// which the card says to toss or cook in. The whole surplus when it holds
+	// no whole dinner at all.
+	Leftover      string  `json:"leftover"`
+	LeftoverValue float64 `json:"leftoverValue"`
+	LeftoverText  string  `json:"leftoverText"`
 	// Thaw is the estimate for one portion at this count.
 	Thaw pantry.ThawResponse `json:"thaw"`
 	// Options are the counts the app offers, each with its own size and
@@ -111,11 +123,15 @@ type PortionPlanResponse struct {
 
 // PortionOptionResponse is one choice of portion count.
 type PortionOptionResponse struct {
-	Portions  int                 `json:"portions"`
-	Size      string              `json:"size"`
-	SizeValue float64             `json:"sizeValue"`
-	SizeText  string              `json:"sizeText"`
-	Thaw      pantry.ThawResponse `json:"thaw"`
+	Portions  int     `json:"portions"`
+	Size      string  `json:"size"`
+	SizeValue float64 `json:"sizeValue"`
+	SizeText  string  `json:"sizeText"`
+	// Leftover is what is left of the surplus after this many bags.
+	Leftover      string              `json:"leftover"`
+	LeftoverValue float64             `json:"leftoverValue"`
+	LeftoverText  string              `json:"leftoverText"`
+	Thaw          pantry.ThawResponse `json:"thaw"`
 }
 
 // PrepCardResultResponse is returned by finishing or skipping a card: the
@@ -156,7 +172,7 @@ func prepCardResponse(c PrepCard) PrepCardResponse {
 	out := PrepCardResponse{
 		ID: c.ID, Kind: string(c.Kind), HandoffID: c.HandoffID, LineID: c.LineID, Status: string(c.Status),
 		IngredientKey: p.IngredientKey, IngredientID: optionalString(p.IngredientID()),
-		Name: p.Name, Category: p.Category, ProductName: p.ProductName, Unit: p.Unit,
+		Name: p.Name, ImageURL: c.ImageURL, Category: p.Category, ProductName: p.ProductName, Unit: p.Unit,
 		Bought: p.Bought, Needed: p.Needed, Surplus: p.Surplus, SurplusPercent: p.SurplusPercent,
 		SurplusText: surplusText(p), Freezable: p.Freezable, Frozen: p.Frozen,
 		Instruction: c.Instruction, Reminder: string(c.Reminder), ReminderText: c.ReminderText,
@@ -164,6 +180,7 @@ func prepCardResponse(c PrepCard) PrepCardResponse {
 		Suggestions: bulkPackResponse(p).Suggestions,
 	}
 	out.BoughtValue, out.NeededValue, out.SurplusValue = exactValue(p.Bought), exactValue(p.Needed), exactValue(p.Surplus)
+	out.BoughtText, out.NeededText = amountText(p.Bought, p.Unit), amountText(p.Needed, p.Unit)
 	for _, m := range c.Meals {
 		meal := PrepMealResponse{RecipeID: m.RecipeID, RecipeName: m.RecipeName, Past: m.Past}
 		if m.Day != "" {
@@ -197,15 +214,26 @@ func portionPlanResponse(p PortionPlan) *PortionPlanResponse {
 		TypicalMealText: amountText(p.TypicalMeal, p.Unit), Basis: string(p.Basis),
 		Portions: p.Portions, PortionSize: p.PortionSize, PortionSizeValue: exactValue(p.PortionSize),
 		PortionSizeText: amountText(p.PortionSize, p.Unit), Thaw: pantry.NewThawResponse(p.Thaw),
+		Leftover: p.Leftover, LeftoverValue: exactValue(p.Leftover), LeftoverText: leftoverText(p.Leftover, p.Unit),
 		Options: make([]PortionOptionResponse, 0, len(p.Options)),
 	}
 	for _, o := range p.Options {
 		out.Options = append(out.Options, PortionOptionResponse{
 			Portions: o.Portions, Size: o.Size, SizeValue: exactValue(o.Size),
-			SizeText: amountText(o.Size, p.Unit), Thaw: pantry.NewThawResponse(o.Thaw),
+			SizeText: amountText(o.Size, p.Unit), Leftover: o.Leftover, LeftoverValue: exactValue(o.Leftover),
+			LeftoverText: leftoverText(o.Leftover, p.Unit), Thaw: pantry.NewThawResponse(o.Thaw),
 		})
 	}
 	return out
+}
+
+// leftoverText is a leftover ready to show, or empty when nothing is left
+// over — so the app can show the line exactly when the text is there.
+func leftoverText(exact, unit string) string {
+	if ratOfExact(exact).Sign() <= 0 {
+		return ""
+	}
+	return amountText(exact, unit)
 }
 
 func (h *Handler) prepSession(w http.ResponseWriter, r *http.Request) {

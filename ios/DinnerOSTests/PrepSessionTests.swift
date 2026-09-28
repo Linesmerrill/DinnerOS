@@ -63,6 +63,17 @@ struct PrepSessionTests {
         #expect(plan.option(9) == nil)
     }
 
+    /// A server from before the photo and the ready-to-show amounts still decodes: the card
+    /// falls back to the category glyph and the plan's own texts.
+    @Test func aCardFromAnOlderServerStillDecodes() throws {
+        let session = try decode(PrepSession.self, Self.sessionJSON)
+        let pork = try #require(session.cards.last)
+        #expect(pork.imageURL == nil)
+        #expect(pork.boughtText == nil)
+        #expect(pork.portions?.leftoverText == nil)
+        #expect(PrepCardPresentation(card: pork).keepText == "10 oz")
+    }
+
     @Test func aFinishedCardSaysWhatItRecorded() throws {
         let session = try decode(PrepSession.self, Self.sessionJSON)
         let beef = try #require(session.cards.first)

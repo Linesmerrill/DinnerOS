@@ -62,14 +62,21 @@ nonisolated struct PrepCard: Decodable, Equatable, Sendable, Identifiable {
     let handoffID: String
     let lineID: String
     let name: String
+    /// The ingredient's photo, the one the recipe screen shows on its row. `nil` (or empty)
+    /// when there is none; the card then shows a category glyph.
+    let imageURLString: String?
     let category: String
     let productName: String
     /// The package size's unit; every amount on the card is in it.
     let unit: String
     let bought: String
     let boughtValue: Double
+    /// The pack's size ready to show, "24 oz". Older servers leave it out.
+    let boughtText: String?
     let needed: String
     let neededValue: Double
+    /// What this week's meals need, ready to show, "10 oz". Older servers leave it out.
+    let neededText: String?
     let surplus: String
     let surplusValue: Double
     let surplusPercent: Int
@@ -92,6 +99,10 @@ nonisolated struct PrepCard: Decodable, Equatable, Sendable, Identifiable {
     /// Second meals to plan this week that use the surplus, best first.
     let suggestions: [PrepSuggestion]
 
+    var imageURL: URL? {
+        guard let imageURLString, !imageURLString.isEmpty else { return nil }
+        return URL(string: imageURLString)
+    }
     var status: PrepCardStatus { PrepCardStatus(rawValue: statusRaw) ?? .pending }
     var reminder: PrepReminder { PrepReminder(rawValue: reminderRaw) ?? .none }
     var isAnswered: Bool { status != .pending }
@@ -100,9 +111,10 @@ nonisolated struct PrepCard: Decodable, Equatable, Sendable, Identifiable {
     private let reminderRaw: String
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, category, unit, bought, boughtValue, needed, neededValue, surplus,
-            surplusValue, surplusPercent, surplusText, freezable, frozen, instruction,
-            reminderText, meals, portions, frozenPortions, answeredAt, suggestions
+        case id, name, category, unit, bought, boughtValue, boughtText, needed, neededValue,
+            neededText, surplus, surplusValue, surplusPercent, surplusText, freezable, frozen,
+            instruction, reminderText, meals, portions, frozenPortions, answeredAt, suggestions
+        case imageURLString = "imageUrl"
         case handoffID = "handoffId"
         case lineID = "lineId"
         case productName
@@ -151,6 +163,9 @@ nonisolated struct PrepPortionPlan: Decodable, Equatable, Sendable {
     let portionSize: String
     let portionSizeValue: Double
     let portionSizeText: String
+    /// What is left after `portions` whole bags, ready to show; empty when nothing is. The
+    /// whole surplus when it holds no whole dinner. Older servers leave it out.
+    let leftoverText: String?
     let thaw: PantryThaw
     /// The counts the app offers, each with its own size and thaw estimate, so a stepper can
     /// never show a thaw time that belongs to another count.
@@ -175,7 +190,7 @@ nonisolated struct PrepPortionPlan: Decodable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case unit, reserved, reservedValue, reservedText, surplus, surplusValue, meals,
             typicalMeal, typicalMealValue, typicalMealText, portions, portionSize,
-            portionSizeValue, portionSizeText, thaw, options
+            portionSizeValue, portionSizeText, leftoverText, thaw, options
         case basisRaw = "basis"
     }
 }
@@ -186,6 +201,8 @@ nonisolated struct PrepPortionOption: Decodable, Equatable, Sendable, Identifiab
     let size: String
     let sizeValue: Double
     let sizeText: String
+    /// What is left of the surplus after this many bags; empty when nothing is.
+    let leftoverText: String?
     let thaw: PantryThaw
 
     var id: Int { portions }

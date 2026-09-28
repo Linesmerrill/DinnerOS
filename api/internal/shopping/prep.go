@@ -179,6 +179,9 @@ type PortionPlan struct {
 type PortionOption struct {
 	Portions int
 	Size     string
+	// Leftover is what is left of the surplus after this many bags — what
+	// the card tells the member to toss or cook in when they pick it.
+	Leftover string
 	Thaw     pantry.ThawEstimate
 }
 
@@ -192,6 +195,9 @@ type PrepCard struct {
 	Provider  providers.Key
 	LineID    string
 	Status    PrepStatus
+	// ImageURL is the ingredient's photo — the one the recipe screen shows on
+	// this ingredient's row — or empty when there is none (ingredientImages).
+	ImageURL string
 	// Pack is the measured pack, with its second-meal suggestions.
 	Pack BulkPack
 	// Meals are the planned meals the reserved amount is for.
@@ -287,8 +293,10 @@ func (s *Service) prepSession(ctx context.Context, householdID, week string) (Pr
 	if err != nil {
 		return PrepSession{}, err
 	}
+	images := s.ingredientImages(ctx, packs)
 	for _, p := range packs {
 		card := prepCardFor(p.handoffID, p.provider, p.pack, meals, today)
+		card.ImageURL = images[p.pack.IngredientID()]
 		if st, ok := states[card.ID]; ok {
 			card.Status, card.FrozenItemID = st.Status, st.FrozenItemID
 			card.AnsweredBy, card.AnsweredAt = st.AnsweredBy, st.AnsweredAt
@@ -383,6 +391,47 @@ func (s *Service) weekPacks(ctx context.Context, householdID string, list []Hand
 		}
 	}
 	return out, nil
+}
+
+// ingredientImages maps each pack's catalog ingredient ID to its photo, with
+// one catalog read for the whole session.
+//
+// The photo a card shows is the one the recipe screen shows on that
+// ingredient's row. A recipe ingredient's image is not stored on the recipe:
+// recipes.Service fills it from the catalog ingredient the line references
+// (fillCategories), and a grocery line's key is that same catalog ID. So the
+// catalog is the recipe ingredient's image — the same for every meal the line
+// is for, which makes "first match across its meals" the catalog's one value.
+// A line keyed by name (an extra a member typed) has no catalog ingredient
+// and no photo, and the app shows a category glyph instead.
+//
+// A picture is decoration: when the catalog can't be read the cards still
+// come back, without photos, rather than failing the checklist.
+func (s *Service) ingredientImages(ctx context.Context, packs []weekPack) map[string]string {
+	out := map[string]string{}
+	if s.catalog == nil {
+		return out
+	}
+	var ids []string
+	for _, p := range packs {
+		if id := p.pack.IngredientID(); id != "" && !slices.Contains(ids, id) {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return out
+	}
+	found, err := s.catalog.IngredientsByID(ctx, ids)
+	if err != nil {
+		s.logger.WarnContext(ctx, "prep card photos unavailable", "error", err)
+		return out
+	}
+	for _, ing := range found {
+		if url := strings.TrimSpace(ing.ImageURL); url != "" {
+			out[ing.ID] = url
+		}
+	}
+	return out
 }
 
 // prepStates reads the week's stored answers, keyed by card ID.
@@ -495,8 +544,10 @@ func portionPlanFor(pack BulkPack, meals int) PortionPlan {
 	plan.TypicalMeal = typical.RatString()
 	whole := wholePortions(surplus, typical)
 	for n := 1; n <= whole && n <= MaxPrepPortions; n++ {
+		frozen := new(big.Rat).Mul(typical, big.NewRat(int64(n), 1))
 		plan.Options = append(plan.Options, PortionOption{
-			Portions: n, Size: plan.TypicalMeal, Thaw: thawForPortion(pack, typical),
+			Portions: n, Size: plan.TypicalMeal, Leftover: new(big.Rat).Sub(surplus, frozen).RatString(),
+			Thaw: thawForPortion(pack, typical),
 		})
 	}
 	return applyPortions(plan, pack, whole)

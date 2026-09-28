@@ -12229,9 +12229,10 @@ components:
       description: One thing to prep, today always a bulk pack.
       required:
         [id, kind, handoffId, lineId, status, ingredientKey, ingredientId, name, category,
-         productName, unit, bought, boughtValue, needed, neededValue, surplus, surplusValue,
+         productName, unit, bought, boughtValue, boughtText, needed, neededValue, neededText,
+         surplus, surplusValue,
          surplusPercent, surplusText, freezable, frozen, instruction, reminder, reminderText,
-         meals, portions, frozenItemId, frozenPortions, answeredBy, answeredAt, suggestions]
+         meals, portions, frozenItemId, frozenPortions, answeredBy, answeredAt, suggestions, imageUrl]
       properties:
         id:
           type: string
@@ -12254,6 +12255,13 @@ components:
         name:
           type: string
           example: Pork Loin
+        imageUrl:
+          type: string
+          description: >-
+            The ingredient's photo - the same image the recipe screen shows on this ingredient's
+            row (the recipe ingredient's image, which comes from the catalog ingredient the line
+            is keyed by). Empty when there is none; the app then shows a category glyph.
+          example: https://img.example.com/ingredients/pork-loin.png
         category:
           $ref: "#/components/schemas/GroceryCategoryName"
         productName:
@@ -12266,11 +12274,19 @@ components:
           example: "64"
         boughtValue:
           type: number
+        boughtText:
+          type: string
+          description: The pack's size, ready to show - ounces up to 3 lb, pounds and ounces above.
+          example: 24 oz
         needed:
           type: string
           example: "10"
         neededValue:
           type: number
+        neededText:
+          type: string
+          description: What this week's meals need, ready to show.
+          example: 10 oz
         surplus:
           type: string
           example: "54"
@@ -12356,7 +12372,7 @@ components:
       required:
         [unit, reserved, reservedValue, reservedText, surplus, surplusValue, meals,
          typicalMeal, typicalMealValue, typicalMealText, basis, portions, portionSize,
-         portionSizeValue, portionSizeText, thaw, options]
+         portionSizeValue, portionSizeText, leftover, leftoverValue, leftoverText, thaw, options]
       properties:
         unit:
           type: string
@@ -12396,7 +12412,8 @@ components:
             stands in for one meal.
         portions:
           type: integer
-          minimum: 1
+          minimum: 0
+          description: Whole dinner-sized bags to freeze; 0 when the surplus holds less than one dinner.
         portionSize:
           type: string
           example: 54/5
@@ -12406,6 +12423,19 @@ components:
         portionSizeText:
           type: string
           example: 10.8 oz
+        leftover:
+          type: string
+          description: |
+            What is left of the surplus after `portions` whole bags - less
+            than a dinner, which the card says to toss or cook in. The whole
+            surplus when it holds no whole dinner.
+          example: "4"
+        leftoverValue:
+          type: number
+        leftoverText:
+          type: string
+          description: The leftover ready to show, or empty when nothing is left over.
+          example: 4 oz
         thaw:
           $ref: "#/components/schemas/PantryThaw"
         options:
@@ -12418,7 +12448,7 @@ components:
             $ref: "#/components/schemas/PrepPortionOption"
     PrepPortionOption:
       type: object
-      required: [portions, size, sizeValue, sizeText, thaw]
+      required: [portions, size, sizeValue, sizeText, leftover, leftoverValue, leftoverText, thaw]
       properties:
         portions:
           type: integer
@@ -12429,6 +12459,14 @@ components:
           type: number
         sizeText:
           type: string
+        leftover:
+          type: string
+          description: What is left of the surplus after this many bags.
+        leftoverValue:
+          type: number
+        leftoverText:
+          type: string
+          description: The leftover ready to show, or empty when nothing is left over.
         thaw:
           $ref: "#/components/schemas/PantryThaw"
     PrepCardResult:

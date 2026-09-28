@@ -250,3 +250,36 @@ func TestWeightTextRoundsToTheOunce(t *testing.T) {
 		}
 	}
 }
+
+// Every bag count carries its own leftover, so the line under the bag cards
+// changes with the count and never shows another count's number.
+func TestPortionOptionsCarryTheirLeftover(t *testing.T) {
+	loin := BulkPack{Needed: "10", Surplus: "54", Unit: "oz", Freezable: true}
+	loin.Name = "Pork Loin"
+	resp := portionPlanResponse(portionPlanFor(loin, 1))
+	want := map[int]string{1: "44 oz", 2: "34 oz", 3: "24 oz", 4: "14 oz", 5: "4 oz"}
+	for _, o := range resp.Options {
+		if o.LeftoverText != want[o.Portions] {
+			t.Errorf("%d bags leave %q, want %q", o.Portions, o.LeftoverText, want[o.Portions])
+		}
+	}
+	if resp.LeftoverText != "4 oz" || resp.LeftoverValue != 4 {
+		t.Errorf("suggested count leaves %q (%v), want 4 oz", resp.LeftoverText, resp.LeftoverValue)
+	}
+
+	// Nothing left over reads as nothing, not "0 oz".
+	even := BulkPack{Needed: "10", Surplus: "20", Unit: "oz", Freezable: true}
+	even.Name = "Ground Turkey"
+	if got := portionPlanResponse(portionPlanFor(even, 1)).LeftoverText; got != "" {
+		t.Errorf("an even split leaves %q, want empty", got)
+	}
+
+	// Under a dinner: no bags, and the whole surplus is the leftover.
+	small := BulkPack{Needed: "10", Surplus: "4", Unit: "oz", Freezable: true}
+	small.Name = "Ground Beef"
+	resp = portionPlanResponse(portionPlanFor(small, 1))
+	if resp.Portions != 0 || len(resp.Options) != 0 || resp.LeftoverText != "4 oz" {
+		t.Errorf("small surplus = %d bags, %d options, leftover %q; want 0, 0, 4 oz",
+			resp.Portions, len(resp.Options), resp.LeftoverText)
+	}
+}
