@@ -945,3 +945,17 @@ struct MealKitHarvestMessagesTests {
         #expect(MealKitHarvestMessages.interval >= .seconds(2))
     }
 }
+
+/// Which web-view failures leave the sign-in page usable. A real device reported "We
+/// couldn't load the HelloFresh sign-in page" on a second import; redirects, app links and
+/// App Store links on their page must not count.
+struct MealKitWebLoginFailureTests {
+    @Test func harmlessFailuresDoNotEndTheSignIn() {
+        #expect(MealKitWebLoginModel.isHarmless(NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled)))
+        #expect(MealKitWebLoginModel.isHarmless(NSError(domain: NSURLErrorDomain, code: NSURLErrorUnsupportedURL)))
+        #expect(MealKitWebLoginModel.isHarmless(NSError(domain: "WebKitErrorDomain", code: 102)))
+        #expect(
+            !MealKitWebLoginModel.isHarmless(NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet)))
+        #expect(!MealKitWebLoginModel.isHarmless(NSError(domain: NSURLErrorDomain, code: NSURLErrorTimedOut)))
+    }
+}

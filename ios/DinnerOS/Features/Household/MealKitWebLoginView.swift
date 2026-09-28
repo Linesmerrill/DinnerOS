@@ -155,6 +155,12 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
     private var leftSignInAt: ContinuousClock.Instant?
     private var clock = ContinuousClock()
     private var harvesting = false
+    /// A page has finished loading at least once, so the member has something to use and a
+    /// later failed navigation (an app-store link, a tracker) is not a dead end.
+    private var hasLoadedAPage = false
+    /// The first load gets one quiet retry: a flaky network or a cold start of their site
+    /// shouldn't greet the member with an error.
+    private var retriedFirstLoad = false
 
     private static let logger = Logger(subsystem: "DinnerOS", category: "meal-kit-import")
 
@@ -201,6 +207,7 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
     /// Reloads the sign-in page after a failure.
     func retry() {
         guard let url = service.loginURL else { return }
+        hasLoadedAPage = false
         leftSignInAt = nil
         harvesting = false
         phase = .signingIn
@@ -352,6 +359,7 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
     // MARK: - WKNavigationDelegate
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        hasLoadedAPage = true
         noteLocation(webView.url)
     }
 
@@ -363,6 +371,21 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
         _ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error
     ) {
         reportNavigationFailure(error)
+    }
+
+    /// Failures that don't mean the page is unusable: a newer navigation replacing this one
+    /// (normal in a redirect chain), a load stopped because it became a download or another
+    /// app's link, and a link to a scheme the web view can't open (an App Store or app link on
+    /// their page).
+    static func isHarmless(_ error: NSError) -> Bool {
+        if error.domain == NSURLErrorDomain {
+            return error.code == NSURLErrorCancelled || error.code == NSURLErrorUnsupportedURL
+        }
+        if error.domain == "WebKitErrorDomain" {
+            // 101 cannot show URL, 102 frame load interrupted by policy change, 204 plug-in handled load.
+            return [101, 102, 204].contains(error.code)
+        }
+        return false
     }
 
     /// Records which host the member is on and whether they are past the sign-in pages.
@@ -395,12 +418,22 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
         default:
             break
         }
-        let code = (error as NSError).code
-        // -999 is "a newer navigation replaced this one", which is normal in a redirect chain.
-        guard code != NSURLErrorCancelled else { return }
-        Self.logger.notice("Meal-kit web sign-in navigation failed: \(code, privacy: .public)")
+        let nsError = error as NSError
+        let code = nsError.code
+        Self.logger.notice(
+            "Meal-kit web sign-in navigation failed: \(nsError.domain, privacy: .public) \(code, privacy: .public)")
+        if Self.isHarmless(nsError) { return }
+        // Once a page is on screen, a failed follow-up navigation isn't a reason to cover it.
+        if hasLoadedAPage { return }
+        if !retriedFirstLoad, let url = service.loginURL {
+            retriedFirstLoad = true
+            webView.load(URLRequest(url: url))
+            return
+        }
         phase = .failed(
-            String(localized: "We couldn't load the \(service.displayName) sign-in page. Check your connection."),
+            String(
+                localized:
+                    "We couldn't load the \(service.displayName) sign-in page. Check your connection. (Error \(code))"),
             canRetry: true)
     }
 }
