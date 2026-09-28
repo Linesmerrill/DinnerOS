@@ -223,6 +223,10 @@ struct NotificationBell: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: "bell")
+                // Room for the badge inside the button: a toolbar clips anything drawn past
+                // the item's frame (the iPad toolbar cut it in half).
+                .padding(.top, count > 0 ? badgeSize * 0.4 : 0)
+                .padding(.trailing, count > 0 ? badgeSize * 0.5 : 0)
                 .overlay(alignment: .topTrailing) {
                     if count > 0 {
                         Text(count > 99 ? "99+" : count.formatted())
@@ -233,7 +237,7 @@ struct NotificationBell: View {
                             .frame(minWidth: badgeSize, minHeight: badgeSize)
                             .background(.red, in: .capsule)
                             .fixedSize()
-                            .offset(x: badgeSize * 0.55, y: -badgeSize * 0.45)
+                            .offset(x: badgeSize * 0.15, y: -badgeSize * 0.1)
                     }
                 }
         }
