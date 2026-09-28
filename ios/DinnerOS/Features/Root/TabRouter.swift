@@ -12,6 +12,7 @@ struct RecipeImportRoute: Hashable {}
 @Observable
 final class TabRouter {
     var selection: AppTab = .menu
+    var menuPath = NavigationPath()
     var pantryPath = NavigationPath()
     var householdPath = NavigationPath()
     /// A tapped push of a type this build doesn't know opens the bell.

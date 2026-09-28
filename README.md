@@ -32,7 +32,7 @@ Autopilot's first customer.
 | 9 | Ratings and behavioral events | ✅ Done (API and iOS) |
 | 10 | Autopilot V1: taste profile, week context, deterministic week proposals (generate, swap, accept) | ✅ Done (API and iOS) |
 | — | Push notifications (APNs, hourly reminder sweep), starter recipe library for new households, account deletion, privacy policy, external TestFlight | ✅ Done |
-| 11 | Autopilot learning from feedback and context engine (season, US holidays, order day, weekday; calendar and weather signals from the phone) | ✅ Done (API and iOS: calendar busyness and weather bands derived on the iPhone, Siri "Plan my dinners" and "What's for dinner tonight") |
+| 11 | Autopilot learning from feedback and context engine (season, US holidays, order day, weekday; calendar and weather signals from the phone) | ✅ Done (API and iOS: calendar busyness and weather bands derived on the iPhone, Siri "Plan my dinners" and "What's for dinner tonight"; a Dinner widget for the home and lock screens with tonight, the week, next week, and shortcuts into Autopilot and Shop) |
 | — | Meal-kit recipe import at onboarding (HelloFresh): sign in on their site in a web view, read your own order history there, import the public recipe pages through a durable Mongo job queue with leases and checkpoints, scheduled worker, push when done, reviewable result. A long history (four years is ~740 recipes) is read over several sittings: the harvest says where it stopped and the server remembers it. **Nothing about the meal-kit account is stored** | ✅ API, worker, and iOS. Off until `MEAL_KIT_IMPORT_ENABLED` is set; the flow needs one run on a real device ([docs](docs/meal-kit-import.md)) |
 | 12 | Autopilot private service | Later |
 

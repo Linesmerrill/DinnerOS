@@ -122,6 +122,17 @@ final class PlanStore {
     }
 
     /// Pull to refresh: the plan stays on screen until the response arrives.
+    /// The household's time zone, for anything that needs "today" the way the plan means it.
+    var planningTimeZone: TimeZone { timeZone }
+
+    /// Loads another week's plan without showing it, for the widgets' look at next week.
+    func fetch(week: ISOWeek) async throws -> Plan? {
+        guard let api, let householdID else { return nil }
+        return try await session.authorized { token in
+            try await api.plan(householdID: householdID, week: week, accessToken: token)
+        }
+    }
+
     func reload() async {
         await load(clearing: false)
     }

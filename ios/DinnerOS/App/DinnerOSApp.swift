@@ -49,6 +49,8 @@ struct DinnerOSApp: App {
                         // Back from Walmart: "Did you order these?"
                         let shopping = dependencies.shopping
                         Task { await shopping.appDidBecomeActive() }
+                        // A new day, or someone else's change: keep the widgets current.
+                        dependencies.widgets.planChanged()
                     case .background:
                         BackgroundActivity.run(named: "Send events") {
                             await events.appDidEnterBackground()
@@ -59,8 +61,17 @@ struct DinnerOSApp: App {
                 }
                 // Never log these URLs: invitation links carry a secret token.
                 .onOpenURL { url in
+                    // A widget: open the meal, Autopilot, or Shop.
+                    if let link = DinnerWidgetLink(url: url) {
+                        dependencies.intentRouter.widgetLink = link
+                        return
+                    }
                     // Custom-scheme links (dinneros://invite?token=...).
                     dependencies.households.handleOpenURL(url)
+                }
+                // Signed out: the widgets stop showing this household's dinners.
+                .onChange(of: dependencies.session.state) { _, state in
+                    if case .signedOut = state { dependencies.widgets.clear() }
                 }
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
                     // Universal links (https://api.tlps.dev/invite#token=...).

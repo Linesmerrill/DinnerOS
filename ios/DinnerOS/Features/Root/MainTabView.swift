@@ -21,7 +21,7 @@ struct MainTabView: View {
                 Tab(value: tab) {
                     switch tab {
                     case .menu:
-                        NavigationStack {
+                        NavigationStack(path: $tabs.menuPath) {
                             MenuView()
                         }
                         // Another household starts at its own menu, not at a recipe
@@ -70,6 +70,25 @@ struct MainTabView: View {
         .onChange(of: households.access, initial: true) { _, access in
             shopping.setPermissions(
                 canEdit: access?.can(.shoppingEdit) == true, canConfirm: access?.can(.pantryEdit) == true)
+        }
+        // A widget: open the meal it shows, plan the week, or go to Shop.
+        .onChange(of: router?.widgetLink, initial: true) { _, link in
+            guard let link else { return }
+            router?.widgetLink = nil
+            switch link {
+            case .recipe(let id, let name):
+                tabs.selection = .menu
+                tabs.menuPath = NavigationPath([RecipeSummary.placeholder(id: id, name: name, imageURLString: nil)])
+            case .autopilot:
+                tabs.selection = .menu
+                tabs.menuPath = NavigationPath()
+                router?.planWeekRequested = true
+            case .shop:
+                tabs.selection = .shop
+            case .menu:
+                tabs.selection = .menu
+                tabs.menuPath = NavigationPath()
+            }
         }
         // Siri planned a week: the Menu tab opens its suggestions.
         .onChange(of: router?.autopilotReviewWeek, initial: true) { _, week in

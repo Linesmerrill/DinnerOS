@@ -341,6 +341,16 @@ struct WeekAutopilotModifier: ViewModifier {
                 router?.autopilotReviewWeek = nil
                 flow.showReview(week: week, plans: plans)
             }
+            // "Plan my week" from a widget.
+            .onChange(of: router?.planWeekRequested, initial: true) { _, requested in
+                guard requested == true, canEdit else { return }
+                router?.planWeekRequested = false
+                if autopilot.isConfigured {
+                    flow.planCurrentWeek(autopilot: autopilot, plans: plans)
+                } else {
+                    flow.sheet = .onboarding
+                }
+            }
             .task(id: households.current?.household.id) {
                 guard let householdID = households.current?.household.id else { return }
                 await autopilot.activate(householdID: householdID)

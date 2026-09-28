@@ -20,6 +20,7 @@ final class AppDependencies {
     /// The global recipe catalog: "Try Something Else" and catalog search.
     let discover: DiscoverStore
     let plans: PlanStore
+    let widgets: WidgetSync
     let pantry: PantryStore
     let thaw: ThawStore
     let specialties: SpecialtyStore
@@ -159,9 +160,12 @@ final class AppDependencies {
         self.shopping = shopping
         // Every plan the server returns patches the Menu screen's cards and week counts, and
         // re-matches the Shop tab when it changes what the week's grocery list asks for.
-        plans.planDidChange = { [menu, shopping] plan in
+        let widgets = WidgetSync(plans: plans, library: recipes)
+        self.widgets = widgets
+        plans.planDidChange = { [menu, shopping, widgets] plan in
             menu.applyPlan(plan)
             Task { await shopping.planDidChange(plan) }
+            widgets.planChanged()
         }
         // A confirmed order records pantry purchases.
         shopping.onPantryChanged = { [pantry, notifications] in
