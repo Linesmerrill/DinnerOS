@@ -14,8 +14,22 @@ struct ProductChoice: Identifiable {
     let isSaved: Bool
     /// Opened to fix a package size: the size comes first, switched on, with its field focused.
     var packageSizeFix: ShoppingPackageSizeFix?
+    /// Opened because Walmart no longer lists the saved product (or it couldn't be confirmed):
+    /// why, shown first. The link starts empty, since the old one is what's wrong.
+    var rechooseReason: String?
 
     var id: String { ingredientKey }
+
+    /// Re-chooses the product of a line whose saved product is gone or unverified.
+    init(rechoosing line: ShoppingExcludedLine) {
+        ingredientKey = line.ingredientKey
+        ingredientName = line.name
+        amountText = line.quantityText.isEmpty ? nil : line.quantityText
+        draft = SavedProductDraft(ingredientName: line.name)
+        searchTerms = line.searchTerms
+        isSaved = true
+        rechooseReason = line.product?.healthText ?? line.text
+    }
 
     init(excluded line: ShoppingExcludedLine) {
         ingredientKey = line.ingredientKey
@@ -45,8 +59,13 @@ struct ProductChoice: Identifiable {
         ingredientName = preference.ingredientName
         amountText = nil
         var draft = SavedProductDraft(preference: preference)
-        // A product without a size is opened to add one.
-        if preference.packageSize == nil {
+        if preference.needsRechoosing || preference.health == .unverified {
+            // The old link is what's wrong: start from an empty one, keeping the size.
+            rechooseReason = preference.healthText
+            draft.linkText = ""
+            draft.displayName = preference.ingredientName
+        } else if preference.packageSize == nil {
+            // A product without a size is opened to add one.
             draft.hasPackageSize = true
             packageSizeFix = .add
         }
@@ -58,8 +77,9 @@ struct ProductChoice: Identifiable {
 }
 
 /// Saves the Walmart product the household buys for an ingredient, from a link the member
-/// copies in Walmart. Nothing here reads Walmart's pages: the search button is a plain link,
-/// and the API takes the item ID from the pasted link.
+/// copies in Walmart. The search button is a plain link and the API takes the item ID from the
+/// pasted link; once saved, the API checks the product's page on Walmart to confirm it's still
+/// listed, and says so if it isn't.
 struct ChooseProductSheet: View {
     let choice: ProductChoice
 
@@ -78,6 +98,9 @@ struct ChooseProductSheet: View {
         if let fix = choice.packageSizeFix {
             return fix.title
         }
+        if choice.rechooseReason != nil {
+            return String(localized: "Re-choose Product")
+        }
         return choice.isSaved ? String(localized: "Change Product") : String(localized: "Choose Product")
     }
 
@@ -92,6 +115,15 @@ struct ChooseProductSheet: View {
                 if let errorMessage {
                     Section {
                         FormErrorLabel(message: errorMessage)
+                    }
+                }
+                if let reason = choice.rechooseReason {
+                    Section {
+                        Label(reason, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text("Find the product Walmart sells now and paste its link.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 if choice.packageSizeFix != nil {
@@ -184,7 +216,9 @@ struct ChooseProductSheet: View {
         } header: {
             Text(choice.amountText.map { "\(choice.ingredientName), \($0)" } ?? choice.ingredientName)
         } footer: {
-            Text("Opens the Walmart app or Safari. \(configuration.displayName) doesn't read Walmart's pages.")
+            Text(
+                "Opens the Walmart app or Safari. \(configuration.displayName) checks that your saved products are still on Walmart, and tells you if one needs re-choosing."
+            )
         }
     }
 
@@ -300,7 +334,27 @@ struct ChooseProductSheet: View {
     private func save() {
         guard let request = draft.request(ingredientName: choice.ingredientName) else { return }
         let key = choice.ingredientKey
-        run { try await shopping.savePreference(ingredientKey: key, request: request) }
+        Task {
+            isSaving = true
+            defer { isSaving = false }
+            errorMessage = nil
+            do {
+                let saved = try await shopping.savePreference(ingredientKey: key, request: request)
+                // Saving checks the product on Walmart at once. A link to an item Walmart no
+                // longer sells is saved but can't go in a cart, so the sheet stays to say so.
+                if saved.needsRechoosing {
+                    errorMessage = String(
+                        localized: "Walmart no longer lists this product. Paste a link to one it sells now.")
+                    draft.linkText = ""
+                    return
+                }
+                dismiss()
+            } catch is CancellationError {
+                return
+            } catch {
+                errorMessage = ShopErrors.message(for: error, households: households)
+            }
+        }
     }
 
     private func remove() {

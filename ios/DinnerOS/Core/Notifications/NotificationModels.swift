@@ -12,12 +12,15 @@ nonisolated struct AppNotificationType: RawRepresentable, Codable, Hashable, Sen
     static let pantryLow = AppNotificationType(rawValue: "pantry.low")
     /// The household's order day has arrived and the week isn't marked ordered.
     static let shoppingOrderDue = AppNotificationType(rawValue: "shopping.order_due")
+    /// A saved product is no longer on Walmart and needs re-choosing.
+    static let shoppingProductGone = AppNotificationType(rawValue: "shopping.product_gone")
 }
 
 /// What a notification is about, and so what tapping it opens.
 nonisolated struct AppNotificationSubject: Codable, Hashable, Sendable {
     static let pantryItemKind = "pantry_item"
     static let shoppingWeekKind = "shopping_week"
+    static let shoppingProductsKind = "shopping_products"
 
     let kind: String
     let id: String
@@ -30,6 +33,11 @@ nonisolated struct AppNotificationSubject: Codable, Hashable, Sendable {
     /// The ISO week to open in Shop, when the subject is one.
     var shoppingWeek: String? {
         kind == Self.shoppingWeekKind ? id : nil
+    }
+
+    /// The provider whose Saved Products to open, when the subject is one.
+    var shoppingProducts: String? {
+        kind == Self.shoppingProductsKind ? id : nil
     }
 }
 

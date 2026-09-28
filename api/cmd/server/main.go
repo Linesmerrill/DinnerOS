@@ -290,7 +290,9 @@ func run() error {
 	})
 	// Shopping hands the week's list (as planning builds it) to a provider and
 	// records confirmed orders as pantry purchases. Walmart needs no keys in
-	// Phase 8a; the Impact IDs only wrap its links when set.
+	// Phase 8a; the Impact IDs only wrap its links when set. The checker reads
+	// a saved product's public page when it is saved and before a hand-off,
+	// a few requests at a time (docs/shopping-providers.md#checking-saved-products).
 	shoppingService := shopping.NewService(shopping.ServiceOptions{
 		Store:      shopping.NewMongoStore(db.Database()),
 		Providers:  providers.NewRegistry(newWalmartProvider(cfg)),
@@ -304,6 +306,7 @@ func run() error {
 		Households: householdService,
 		Notifier:   notificationService,
 		Events:     behavior.events,
+		Checker:    shopping.NewHandoffChecker(),
 		Logger:     logger,
 	})
 	// The weekly order reminder is derived when notifications are read, the

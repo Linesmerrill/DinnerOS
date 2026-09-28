@@ -869,4 +869,98 @@ struct ShoppingStoreTests {
             try await store.openInWalmart()
         }
     }
+
+    // MARK: Products Walmart no longer lists
+
+    private static let preflightRoute = "POST /households/household-1/plans/2026-W38/shopping/walmart/preflight"
+
+    /// A saved product Walmart no longer lists never reaches a cart link: "Open in Walmart"
+    /// checks first and holds everything until the line is re-chosen or knowingly left out,
+    /// and then the line is reported as left out, with why.
+    @Test func aGoneProductHoldsTheHandOffUntilItIsLeftOut() async throws {
+        var state = FakeShoppingServer.State()
+        state.goneProducts = ["100000002"]
+        let harness = try await makeHarness(state)
+        let store = harness.store
+        await store.load()
+
+        // The Shop tab already shows it as needing a decision, under its meal.
+        let shown = try #require(store.proposal)
+        #expect(shown.needsDecision.map(\.ingredientKey) == ["i-cilantro"])
+        #expect(shown.needsDecision.first?.product?.health == .gone)
+        #expect(!shown.lines.contains { $0.ingredientKey == "i-cilantro" })
+        #expect(!shown.notIncluded.contains { $0.ingredientKey == "i-cilantro" })
+        #expect(
+            ShopMealLayout(proposal: shown).groups.flatMap(\.rows).contains {
+                if case .needsDecision(let line) = $0.kind { return line.ingredientKey == "i-cilantro" }
+                return false
+            })
+
+        try await store.openInWalmart()
+
+        #expect(harness.server.log.contains(Self.preflightRoute))
+        #expect(!harness.server.log.contains(Self.handoffRoute))
+        #expect(harness.recorder.opened.isEmpty)
+        #expect(harness.server.handoffs.isEmpty)
+        #expect(store.decisionPrompt?.needsDecision.map(\.name) == ["Cilantro"])
+        #expect(!store.isCreatingHandoff)
+
+        await store.leaveOutOfCart("i-cilantro")
+
+        let prompt = try #require(store.decisionPrompt)
+        #expect(prompt.needsDecision.isEmpty)
+        #expect(prompt.excluded.first { $0.ingredientKey == "i-cilantro" }?.reason == .leftOutGone)
+        #expect(store.proposal?.notIncluded.first { $0.ingredientKey == "i-cilantro" }?.reason == .leftOutGone)
+
+        store.dismissDecision()
+        try await store.openInWalmart()
+
+        let body = try #require(harness.server.bodies(Self.handoffRoute).last)
+        #expect(body["excludeKeys"] as? [String] == ["i-cilantro"])
+        #expect(harness.server.handoffs.count == 1)
+        let opened = try #require(harness.recorder.opened.first?.absoluteString)
+        #expect(!opened.contains("100000002"))
+        #expect(opened.contains("100000001"))
+        #expect(store.decisionPrompt == nil)
+    }
+
+    /// Re-choosing the gone product resolves the line, and the new product is what's sent.
+    @Test func reChoosingAGoneProductSendsTheNewOne() async throws {
+        var state = FakeShoppingServer.State()
+        state.goneProducts = ["100000002"]
+        let harness = try await makeHarness(state)
+        let store = harness.store
+        await store.load()
+        try await store.openInWalmart()
+        #expect(store.decisionPrompt?.needsDecision.count == 1)
+
+        var draft = SavedProductDraft(ingredientName: "Cilantro")
+        draft.linkText = "https://www.walmart.com/ip/Test-Cilantro/100000012"
+        let saved = try await store.savePreference(
+            ingredientKey: "i-cilantro", request: try #require(draft.request(ingredientName: "Cilantro")))
+        #expect(!saved.needsRechoosing)
+        await store.recheckDecision()
+        #expect(store.decisionPrompt?.needsDecision.isEmpty == true)
+
+        store.dismissDecision()
+        try await store.openInWalmart()
+        #expect(harness.recorder.opened.first?.absoluteString.contains("100000012") == true)
+    }
+
+    /// Saving a link to an item Walmart no longer lists comes back gone at once, so the sheet
+    /// can say so instead of pretending it worked.
+    @Test func savingAGoneLinkSaysItNeedsReChoosing() async throws {
+        var state = FakeShoppingServer.State()
+        state.goneProducts = ["100000013"]
+        let harness = try await makeHarness(state)
+        let store = harness.store
+        await store.load()
+        await store.loadPreferences()
+        var draft = SavedProductDraft(ingredientName: "Cilantro")
+        draft.linkText = "https://www.walmart.com/ip/Old-Cilantro/100000013"
+        let saved = try await store.savePreference(
+            ingredientKey: "i-cilantro", request: try #require(draft.request(ingredientName: "Cilantro")))
+        #expect(saved.needsRechoosing)
+        #expect(SavedProductGroups(store.preferences).needsRechoosing.map(\.ingredientKey) == ["i-cilantro"])
+    }
 }

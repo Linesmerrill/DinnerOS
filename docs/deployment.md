@@ -217,6 +217,56 @@ Optional: `MEAL_KIT_RECIPES_PER_RUN` lowers the per-run cap, and
 [meal-kit-import.md](meal-kit-import.md#when-a-run-goes-wrong) has the runbook
 for a run that goes wrong.
 
+### Product checks
+
+Saved Walmart products are checked against Walmart's public product pages so
+a retired item is never sent to a cart
+([shopping-providers.md](shopping-providers.md#checking-saved-products)). The
+web dyno checks a product when it's saved and a few stale ones before a
+hand-off; a daily sweep, `/checkproducts` (a binary in the same image), keeps
+every saved product's check fresh. There is no key and nothing to turn on.
+
+1. Add the job:
+
+   ```bash
+   heroku addons:open scheduler -a dinneros-api
+   ```
+
+   **Add Job** → **Every day at** a quiet hour (for example **10:00 UTC**,
+   early morning in the US) → command `/checkproducts` → dyno size **Eco**.
+   Daily is the design: a product is re-checked when its last check is over 20
+   hours old, the hand-off window is 72 hours, and a run is capped at 200
+   distinct products, about ten minutes at 2.5 s apart.
+
+2. Run it once by hand right after deploying this version. Products saved
+   before it have never been checked, so without a run a hand-off checks at
+   most 8 of them and asks the member about the rest ("Check Again" checks 8
+   more):
+
+   ```bash
+   heroku run /checkproducts -a dinneros-api
+   ```
+
+   It ends with `product check run finished` and counts (`cap`, `candidates`,
+   `checked`, `found`, `gone`, `unknown`, `newlyGone`, `notified`, `requests`,
+   `stopped`, `paused`). With more saved products than the cap, run it again
+   (each run takes the oldest next) or raise the cap for one run:
+   `heroku run -a dinneros-api -e PRODUCT_CHECKS_PER_RUN=600 /checkproducts`.
+
+3. Watch for these in the log line:
+   - `stopped=true`: Walmart refused (403 or its bot wall) or throttled (429)
+     a check. The run stopped at once and **every** check, the web dyno's
+     included, is paused for 24 or 6 hours (`shopping_check_pauses`). Don't
+     re-run to push through; let the pause expire. To clear it early after
+     fixing a cause: `db.shopping_check_pauses.deleteOne({_id: "walmart"})`.
+   - `paused=true`: a pause was in force, so nothing ran.
+   - Mostly `unknown` with few `found`: Walmart changed its page and the
+     parser (`providers/walmartpage.go`) needs updating. Nothing is sent
+     wrongly meanwhile — unreadable products turn `unverified` after 72 hours.
+
+`PRODUCT_CHECKS_PER_RUN` (1–1000, default 200) is optional. Gone-product
+notifications are pushed by the hourly `/sendreminders`.
+
 ### Starter recipe library
 
 New households get a copy of one household's recipes so friends and family
@@ -400,6 +450,7 @@ vars or GitHub Secrets.
 | `APNS_TOPIC` | push | Optional; defaults to `APPLE_BUNDLE_ID` (`com.linesmerrill.dinneros`). |
 | `MEAL_KIT_IMPORT_ENABLED` | meal-kit import | Your choice, default `false`. `true` turns on asynchronous recipe import of a household's own meal-kit order history. Not a secret, and it needs no companion secret: nothing about the meal-kit account is stored. See [Meal-kit recipe import](#meal-kit-recipe-import). |
 | `MEAL_KIT_RECIPES_PER_RUN` | optional | Recipe pages one worker run fetches per household (default 40). Lower is more polite to the meal-kit service; the rest waits for the next scheduled run. Not a secret. |
+| `PRODUCT_CHECKS_PER_RUN` | optional | Distinct saved products one `/checkproducts` run checks on Walmart (1–1000, default 200). Read only by `/checkproducts`. See [Product checks](#product-checks). Not a secret. |
 | `MEAL_KIT_HELLOFRESH_BASE_URL` | optional | Overrides the HelloFresh account API origin (https only), for testing against a stub. Empty uses HelloFresh. Not a secret. |
 | `STARTER_RECIPES_HOUSEHOLD_ID` | optional | The 24-character hex ID of the household whose recipes every new household receives as a starter library. Empty (the default) disables it; a malformed value stops the API at startup. Not a secret. See [Starter recipe library](#starter-recipe-library). |
 | `OPENAI_API_KEY` | future | platform.openai.com → API keys (backend only) |

@@ -53,6 +53,10 @@ const (
 	// TypeRecipeImportAttention: a meal-kit recipe import needs a person —
 	// the session expired, the service refused us, or the run gave up.
 	TypeRecipeImportAttention Type = "recipe_import.attention"
+	// TypeShoppingProductGone: a saved product is no longer on the
+	// provider's site and needs re-choosing
+	// (docs/shopping-providers.md#checking-saved-products).
+	TypeShoppingProductGone Type = "shopping.product_gone"
 )
 
 // SubjectKind is the kind of record a notification points at.
@@ -65,6 +69,9 @@ const (
 	SubjectShoppingWeek SubjectKind = "shopping_week"
 	// SubjectRecipeImport is a meal-kit import job ID: the run to open.
 	SubjectRecipeImport SubjectKind = "recipe_import_job"
+	// SubjectShoppingProducts is a provider key ("walmart"): open its saved
+	// products.
+	SubjectShoppingProducts SubjectKind = "shopping_products"
 )
 
 // Subject is the record a notification is about, so an app can open it.
