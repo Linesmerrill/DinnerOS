@@ -42,6 +42,12 @@ type Store interface {
 	// applies the matching update to a single document, so a job is claimed
 	// exactly once however many workers race.
 	ClaimJob(ctx context.Context, owner string, now, leaseUntil time.Time) (Job, error)
+	// ClaimJobByID is ClaimJob for one named job: the same filter (queued and
+	// due, or running with an expired lease) with the job's ID added, in the
+	// same single find-and-modify. The web process uses it to start the job a
+	// member just queued. It returns ErrNotFound when that job is not
+	// runnable — already claimed by someone else, backing off, or finished.
+	ClaimJobByID(ctx context.Context, id, owner string, now, leaseUntil time.Time) (Job, error)
 	// ExtendLease pushes a claimed job's visibility timeout out. It returns
 	// ErrJobGone when the job is no longer running under owner.
 	ExtendLease(ctx context.Context, id, owner string, leaseUntil, at time.Time) error

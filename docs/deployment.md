@@ -172,9 +172,11 @@ can't receive remote pushes anyway.
 New households can import the recipes they actually ordered from their meal-kit
 service instead of starting empty ([meal-kit-import.md](meal-kit-import.md)).
 The member signs in on the meal kit's own site in a web view in the app, where
-their order history is also read; the app hands the API that list and a worker
-binary in the same container image, `/importmealkit`, fetches the **public**
-recipe pages it names on **Heroku Scheduler**.
+their order history is also read; the app hands the API that list, and the API
+process starts fetching the **public** recipe pages it names straight away, in
+batches of 50 with a minute's rest between them. A worker binary in the same
+container image, `/importmealkit`, drains the same queue on **Heroku
+Scheduler** as the backstop.
 
 The feature is **off** unless `MEAL_KIT_IMPORT_ENABLED=true`, and that is its
 entire configuration. There is no key, because **nothing about a member's
@@ -190,17 +192,30 @@ with the now-unused `meal_kit_links` collection.
    heroku config:set -a dinneros-api MEAL_KIT_IMPORT_ENABLED=true
    ```
 
-2. Add the worker to the scheduler:
+2. Add the backstop worker to the scheduler. **Still recommended**, even
+   though the API process does the work:
 
    ```bash
    heroku addons:open scheduler -a dinneros-api
    ```
 
    **Add Job** → **Every 10 minutes** → command `/importmealkit` → dyno size
-   **Eco**. Ten minutes is enough: an import is a background chore, a run is
-   capped at 40 recipe pages per household, and a long order history is meant
-   to spread across runs rather than hammer HelloFresh. Overlapping runs are
-   safe — a job is claimed with one atomic find-and-modify under a lease.
+   **Eco**.
+
+   Why it is still needed: the web runner is a goroutine in the one Eco web
+   dyno, and an Eco dyno sleeps after 30 minutes without HTTP traffic. A
+   member who closes the app partway through a long import lets the dyno
+   sleep; the runner hands the job back to the queue, and without this job it
+   waits there until the next request wakes the dyno. With it, the import
+   carries on at 40 recipe pages per household every ten minutes. It is also
+   what finishes a job if the runner ever fails to start. Overlapping with the
+   web runner is safe — a job is claimed with one atomic find-and-modify under
+   a lease, so whichever claims it first has it
+   ([meal-kit-import.md](meal-kit-import.md#who-does-the-work)).
+
+   Without the job an import still starts at once and finishes while the dyno
+   is awake; this was learned the hard way, when a missing job left a member's
+   740 recipes on "queued" with nothing running.
 
 3. Check a run by hand, then its log line:
 
@@ -209,10 +224,13 @@ with the now-unused `meal_kit_links` collection.
    ```
 
    It ends with `meal-kit import run finished` and counts (`claimed`,
-   `succeeded`, `paused`, `requeued`, `dead`, `gone`, `recipes`,
-   `recipeFailures`). With the feature off it logs that and exits 0.
+   `succeeded`, `requeued`, `dead`, `gone`, `recipes`, `recipeFailures`). With
+   the feature off it logs that and exits 0. The web process logs
+   `meal-kit import runner started` at boot and `meal-kit import batch
+   finished` per batch.
 
-Optional: `MEAL_KIT_RECIPES_PER_RUN` lowers the per-run cap, and
+Optional: `MEAL_KIT_RECIPES_PER_RUN` lowers the per-run cap (and the web
+batch, when set below 50), and
 `MEAL_KIT_HELLOFRESH_BASE_URL` points the client at a stub for testing.
 [meal-kit-import.md](meal-kit-import.md#when-a-run-goes-wrong) has the runbook
 for a run that goes wrong.

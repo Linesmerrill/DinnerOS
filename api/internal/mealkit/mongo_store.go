@@ -335,12 +335,32 @@ func (s *MongoStore) ListJobs(ctx context.Context, householdID string, limit int
 
 // ClaimJob implements Store with one find-and-modify.
 func (s *MongoStore) ClaimJob(ctx context.Context, owner string, now, leaseUntil time.Time) (Job, error) {
-	filter := bson.D{{Key: "$or", Value: bson.A{
+	return s.claim(ctx, runnable(now), owner, now, leaseUntil)
+}
+
+// ClaimJobByID implements Store: the same find-and-modify as ClaimJob, with
+// the job's ID added to the filter, so it races a scheduled worker's claim on
+// exactly the same terms.
+func (s *MongoStore) ClaimJobByID(ctx context.Context, id, owner string, now, leaseUntil time.Time) (Job, error) {
+	jid, err := mongodb.ParseID(id)
+	if err != nil {
+		return Job{}, ErrNotFound
+	}
+	return s.claim(ctx, append(bson.D{{Key: "_id", Value: jid}}, runnable(now)...), owner, now, leaseUntil)
+}
+
+// runnable matches a job a worker may take: queued and due, or running under
+// a lease that has expired.
+func runnable(now time.Time) bson.D {
+	return bson.D{{Key: "$or", Value: bson.A{
 		bson.D{{Key: "status", Value: string(JobQueued)}, {Key: "availableAt", Value: bson.D{{Key: "$lte", Value: now}}}},
 		// A worker that died mid-run left the lease behind; taking it over
 		// resumes from the checkpoint rather than starting again.
 		bson.D{{Key: "status", Value: string(JobRunning)}, {Key: "leaseExpiresAt", Value: bson.D{{Key: "$lte", Value: now}}}},
 	}}}
+}
+
+func (s *MongoStore) claim(ctx context.Context, filter bson.D, owner string, now, leaseUntil time.Time) (Job, error) {
 	update := bson.D{
 		{Key: "$set", Value: bson.D{
 			{Key: "status", Value: string(JobRunning)},

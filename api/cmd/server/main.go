@@ -350,16 +350,24 @@ func run() error {
 		Tokens:  tokens,
 		Logger:  logger,
 	})
-	// Meal-kit recipe import. The web dyno only links accounts and enqueues
-	// jobs; the fetching is cmd/importmealkit's, on Heroku Scheduler
-	// (docs/meal-kit-import.md). Without RECIPE_IMPORT_ENCRYPTION_KEY the
-	// service is disabled and every route answers 503 rather than storing a
-	// token in the clear.
+	// Meal-kit recipe import (docs/meal-kit-import.md). The web dyno queues a
+	// job and its runner starts fetching the first batch at once, then keeps
+	// going batch by batch; cmd/importmealkit on Heroku Scheduler drains the
+	// same queue as the backstop. Off unless MEAL_KIT_IMPORT_ENABLED=true.
 	mealKitService, err := newMealKitService(cfg, db.Database(), notificationService, logger)
 	if err != nil {
 		return err
 	}
-	if !mealKitService.Enabled() {
+	mealKitRunnerDone := make(chan struct{})
+	if mealKitService.Enabled() {
+		runner := newMealKitRunner(cfg, db.Database(), mealKitService, notificationService, logger)
+		mealKitService.SetKicker(runner)
+		go func() {
+			defer close(mealKitRunnerDone)
+			runner.Run(ctx)
+		}()
+	} else {
+		close(mealKitRunnerDone)
 		logger.Info("meal-kit recipe import is off; set MEAL_KIT_IMPORT_ENABLED=true to enable it")
 	}
 	mealKitHandler := mealkit.NewHandler(mealkit.HandlerOptions{
@@ -437,6 +445,13 @@ func run() error {
 	// A copy cut off here is logged; cmd/seedstarter finishes it.
 	if err := starter.Wait(shutdownCtx); err != nil {
 		logger.Warn("starter recipe copies still running at shutdown", "error", err)
+	}
+	// ctx is already done, so the runner is handing its batch back to the
+	// queue; waiting lets that one write land before the database closes.
+	select {
+	case <-mealKitRunnerDone:
+	case <-shutdownCtx.Done():
+		logger.Warn("meal-kit import runner still stopping at shutdown; its lease will expire instead")
 	}
 	logger.Info("api stopped")
 	return nil
@@ -533,9 +548,9 @@ func newHouseholdHandlers(cfg config.Config, db *mongodb.Client, userService *us
 	return householdService, householdHandler, invitationHandler
 }
 
-// newMealKitService builds the meal-kit import service. A configured
-// encryption key turns the feature on; without one the service is returned
-// disabled, which is what every route and the worker check.
+// newMealKitService builds the meal-kit import service. MEAL_KIT_IMPORT_ENABLED
+// turns the feature on; without it the service is returned disabled, which is
+// what every route, the runner, and the scheduled worker check.
 func newMealKitService(cfg config.Config, db *mongo.Database, notifier *notifications.Service, logger *slog.Logger) (*mealkit.Service, error) {
 	opts := mealkit.ServiceOptions{
 		Store:    mealkit.NewMongoStore(db),
@@ -549,6 +564,31 @@ func newMealKitService(cfg config.Config, db *mongo.Database, notifier *notifica
 		})
 	}
 	return mealkit.NewService(opts), nil
+}
+
+// newMealKitRunner builds the web process's import runner from the same parts
+// cmd/importmealkit wires: the queue, the service's sources, and a plain
+// recipes service as the seam into the library, so a batch run here and one
+// run by the scheduled command import identically.
+//
+// MEAL_KIT_RECIPES_PER_RUN, when an operator has lowered it below the web
+// batch size, lowers the web batch too: it is the documented "be more polite"
+// setting, and it should mean that everywhere.
+func newMealKitRunner(cfg config.Config, db *mongo.Database, service *mealkit.Service, notifier *notifications.Service, logger *slog.Logger) *mealkit.Runner {
+	batch := mealkit.DefaultBatchSize
+	if n := cfg.MealKitImport.RecipesPerRun; n > 0 && n < batch {
+		batch = n
+	}
+	return mealkit.NewRunner(mealkit.RunnerOptions{
+		Worker: mealkit.WorkerOptions{
+			Store:     mealkit.NewMongoStore(db),
+			Service:   service,
+			Publisher: mealkit.ServicePublisher{Service: recipes.NewService(recipes.NewMongoStore(db))},
+			Notifier:  notifier,
+			Logger:    logger,
+		},
+		BatchSize: batch,
+	})
 }
 
 // newWalmartProvider returns the Walmart provider, with Impact affiliate

@@ -317,6 +317,10 @@ func TestImportMatchesAliases(t *testing.T) {
 	if res.Updated != 1 || len(res.Errors) != 1 || res.Errors[0].Index != 1 || !strings.Contains(res.Errors[0].Problems[0], "same stored recipe as recipes[0]") {
 		t.Errorf("result = %+v, want second recipe rejected", res)
 	}
+	// It says so in a way a caller can act on without reading the sentence.
+	if len(res.Errors) == 1 && (!res.Errors[0].Duplicate || res.Errors[0].DuplicateOf != 0) {
+		t.Errorf("error = %+v, want it marked a duplicate of recipes[0]", res.Errors[0])
+	}
 	if len(store.recipes) != 1 {
 		t.Errorf("stored %d recipes, want 1", len(store.recipes))
 	}

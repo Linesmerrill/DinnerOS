@@ -33,10 +33,15 @@ final class MealKitImportStore {
     /// Set while starting or stopping a run.
     private(set) var isWorking = false
 
-    /// How often the status is re-read while a run is in flight. Slow on purpose: the work
-    /// takes minutes and spans scheduled worker runs, so polling harder would only cost
-    /// battery and requests.
-    static let pollInterval: Duration = .seconds(15)
+    /// How often the status is re-read while a run is in flight.
+    ///
+    /// While a batch is being worked the server checkpoints every 10 recipes — about every 30
+    /// seconds at its polite rate — so a 5-second poll shows each step within moments, which is
+    /// the whole point of the bar. Resting between batches nothing moves for a minute, so it
+    /// polls less. It only ever polls while the screen is open (`pollWhileImporting`).
+    static func pollInterval(for job: MealKitImportJob?) -> Duration {
+        job?.state == .waiting ? .seconds(15) : .seconds(5)
+    }
 
     @ObservationIgnored let service: MealKitService
     @ObservationIgnored private let session: AuthSession
@@ -108,7 +113,7 @@ final class MealKitImportStore {
     func pollWhileImporting() async {
         while !Task.isCancelled, isImporting {
             do {
-                try await Task.sleep(for: Self.pollInterval)
+                try await Task.sleep(for: Self.pollInterval(for: job))
             } catch {
                 return
             }

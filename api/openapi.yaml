@@ -6323,8 +6323,12 @@ components:
         reason:
           type: string
           description: |
-            Why this one recipe did not make it, in words a member can read. It
-            never quotes fetched page content.
+            Why this one recipe did not make it, as one of three plain
+            sentences: "This recipe is no longer on HelloFresh.", "We couldn't
+            read this recipe on HelloFresh.", or "This recipe was missing
+            details we need." Never page content, a field name, an index, an
+            id, or a code. A recipe that is the same dish as another on the
+            order history is merged, not listed here.
     MealKitImportError:
       type: object
       required: [code, message, at]
@@ -6345,7 +6349,7 @@ components:
       required:
         [id, source, status, phase, recipesFound, recipesDone, imported, updated,
          unchanged, reviewItems, failures, harvest, attempts, maxAttempts, lastError,
-         createdAt, updatedAt, finishedAt]
+         nextRunAt, createdAt, updatedAt, finishedAt]
       properties:
         id:
           type: string
@@ -6356,9 +6360,12 @@ components:
           type: string
           enum: [queued, running, succeeded, dead, canceled]
           description: |
-            `dead` gave up: either the attempt limit or something retrying
-            cannot fix, such as a source layout change. `canceled` means
-            someone stopped the import.
+            `queued` is waiting for a worker: for a moment after the import
+            is started, then between batches (see `nextRunAt`). `running`
+            means a worker holds it and `recipesDone` climbs every 10
+            recipes. `dead` gave up: either the attempt limit or something
+            retrying cannot fix, such as a source layout change. `canceled`
+            means someone stopped the import.
         phase:
           type: string
           enum: [recipes, import, done]
@@ -6397,6 +6404,15 @@ components:
           allOf:
             - $ref: "#/components/schemas/MealKitImportError"
           nullable: true
+        nextRunAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            When a `queued` run can next be picked up: about now for one just
+            started (the API process begins it within seconds), about a
+            minute out for one resting between batches, later for one backing
+            off after an error. Null unless `status` is `queued`.
         createdAt:
           type: string
           format: date-time

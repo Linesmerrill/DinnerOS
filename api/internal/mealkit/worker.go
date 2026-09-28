@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"time"
 
@@ -49,6 +51,15 @@ type WorkerOptions struct {
 	// BackoffBase and BackoffMax shape the retry delay.
 	BackoffBase time.Duration
 	BackoffMax  time.Duration
+	// ReleaseOnCancel hands a job back to the queue, due at once, when ctx is
+	// canceled mid-run, instead of leaving its lease to expire. The web
+	// process sets it (runner.go): a dyno restart or an Eco dyno going to
+	// sleep cancels the runner, and releasing means the next worker resumes
+	// straight away rather than after DefaultLease of a bar that doesn't move.
+	// The scheduled command leaves it off, so its run timeout keeps the
+	// lease-expiry behavior the rest of this file documents. A process that
+	// dies without being told (SIGKILL, a crash) still falls back on the lease.
+	ReleaseOnCancel bool
 
 	Now    func() time.Time
 	Random func() float64
@@ -136,6 +147,30 @@ func (w *Worker) Run(ctx context.Context) (Report, error) {
 	return report, nil
 }
 
+// RunJob claims one named job, if it is runnable, and runs it to its next
+// resting point: finished, failed, or stopped on RecipesPerRun. It uses the
+// same atomic claim as Run with the job's ID added (Store.ClaimJobByID), so a
+// scheduled worker racing for the same job gets it or doesn't, never both.
+// Claimed is 0 when the job was not runnable — someone else holds its lease,
+// it is waiting out a pause or a backoff, or it has finished.
+func (w *Worker) RunJob(ctx context.Context, id string) (Report, error) {
+	var report Report
+	if err := ctx.Err(); err != nil {
+		return report, nil
+	}
+	now := w.now()
+	job, err := w.opts.Store.ClaimJobByID(ctx, id, w.opts.Owner, now, now.Add(w.opts.Lease))
+	if errors.Is(err, ErrNotFound) {
+		return report, nil
+	}
+	if err != nil {
+		return report, fmt.Errorf("claim import job: %w", err)
+	}
+	report.Claimed++
+	w.runJob(ctx, job, &report)
+	return report, nil
+}
+
 // runJob executes one claimed job to its next resting point. It never returns
 // an error: every outcome is recorded on the job, which is what the member
 // sees.
@@ -151,8 +186,13 @@ func (w *Worker) runJob(ctx context.Context, job Job, report *Report) {
 		log.InfoContext(ctx, "meal-kit import job is no longer ours; stopping")
 		return
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
-		// The dyno is going away. Leave the lease to expire; the next run
-		// resumes from the checkpoint.
+		// The dyno is going away. By default the lease is left to expire and
+		// the next run resumes from the checkpoint; the web process hands the
+		// job straight back instead (ReleaseOnCancel).
+		if w.opts.ReleaseOnCancel {
+			w.release(ctx, job, log)
+			return
+		}
 		log.InfoContext(ctx, "meal-kit import interrupted; the lease will expire and the next run resumes")
 		return
 	}
@@ -230,8 +270,11 @@ func (w *Worker) execute(ctx context.Context, job *Job, log *slog.Logger) (outco
 				return outcomeFailed, err
 			}
 			if errors.As(err, &parse) {
+				// The detail is for the log; the member gets one plain
+				// sentence (reasons.go).
+				log.InfoContext(ctx, "meal-kit recipe could not be read", "sourceRecipeId", o.SourceRecipeID, "detail", parse.Detail, "status", parse.Status)
 				job.Checkpoint.Failures = appendFailure(job.Checkpoint.Failures, FailedRecipe{
-					SourceRecipeID: o.SourceRecipeID, Name: o.Name, Reason: parse.Detail,
+					SourceRecipeID: o.SourceRecipeID, Name: o.Name, Reason: fetchFailureReason(job.Source, err),
 				})
 				if err := w.save(ctx, job); err != nil {
 					return outcomeFailed, err
@@ -281,23 +324,86 @@ func (w *Worker) flush(ctx context.Context, job *Job, batch *[]recipes.ImportRec
 	if err != nil {
 		return fmt.Errorf("import fetched recipes: %w", err)
 	}
+	merged, err := w.mergeDuplicates(ctx, job, *batch, res.Errors)
+	if err != nil {
+		return err
+	}
 	for _, r := range *batch {
 		job.Checkpoint.Done = append(job.Checkpoint.Done, r.SourceRecipeID)
 	}
-	// A recipe the shared pipeline rejected is a failure the member can see,
-	// with the pipeline's own reason. It is already excluded from the counts.
+	// Any other recipe the shared pipeline rejected is a failure the member
+	// can see. Its problems are the pipeline's own wording, with field names
+	// ("name is required"), so they go to the log and the member reads one
+	// plain sentence. It is already excluded from the counts.
 	for _, e := range res.Errors {
+		if e.Duplicate {
+			continue
+		}
+		w.opts.Logger.InfoContext(ctx, "the recipe library refused a meal-kit recipe",
+			"jobId", job.ID, "sourceRecipeId", e.SourceRecipeID, "problems", strings.Join(e.Problems, "; "))
 		job.Checkpoint.Failures = appendFailure(job.Checkpoint.Failures, FailedRecipe{
-			SourceRecipeID: e.SourceRecipeID, Name: e.Name, Reason: strings.Join(e.Problems, "; "),
+			SourceRecipeID: e.SourceRecipeID, Name: e.Name, Reason: reasonIncomplete(),
 		})
 	}
 	job.Checkpoint.Imported += res.Created
 	job.Checkpoint.Updated += res.Updated
-	job.Checkpoint.Unchanged += res.Unchanged
+	// A merged duplicate is a recipe that is already in the library.
+	job.Checkpoint.Unchanged += res.Unchanged + merged
 	job.Checkpoint.ReviewItems += res.ReviewItems
 	*batch = (*batch)[:0]
 	*reviews = nil
 	return w.save(ctx, job)
+}
+
+// mergeDuplicates handles the recipes the pipeline refused only because
+// another recipe in the batch is the same stored recipe.
+//
+// That is a real thing on a meal-kit order history: the same dish arrives
+// under more than one recipe id (a re-release, or an add-on ordered in
+// different weeks), and the library's identity rule rightly keeps one recipe
+// for it. So it is not a failure. The duplicate's delivery weeks belong to
+// that one recipe, and they are carried onto it with a second, small import
+// of the recipe it matched; the duplicate itself is counted as already in the
+// library. It returns how many were merged.
+func (w *Worker) mergeDuplicates(ctx context.Context, job *Job, batch []recipes.ImportRecipe, errs []recipes.RecipeError) (int, error) {
+	merged := 0
+	carried := map[int]recipes.ImportRecipe{} // winner index -> winner with the extra weeks
+	for _, e := range errs {
+		if !e.Duplicate {
+			continue
+		}
+		merged++
+		if e.Index < 0 || e.Index >= len(batch) || e.DuplicateOf < 0 || e.DuplicateOf >= len(batch) {
+			continue
+		}
+		winner, ok := carried[e.DuplicateOf]
+		if !ok {
+			winner = batch[e.DuplicateOf]
+			winner.OrderWeeks = slices.Clone(winner.OrderWeeks)
+		}
+		before := len(winner.OrderWeeks)
+		for _, week := range batch[e.Index].OrderWeeks {
+			if !slices.Contains(winner.OrderWeeks, week) {
+				winner.OrderWeeks = append(winner.OrderWeeks, week)
+			}
+		}
+		if ok || len(winner.OrderWeeks) > before {
+			carried[e.DuplicateOf] = winner
+		}
+	}
+	if len(carried) == 0 {
+		return merged, nil
+	}
+	file := recipes.ImportFile{Version: recipes.ImportVersion, Source: job.Source, GeneratedAt: w.now()}
+	for _, i := range slices.Sorted(maps.Keys(carried)) {
+		file.Recipes = append(file.Recipes, carried[i])
+	}
+	// Its counts are about recipes this batch already counted, so only an
+	// error matters here.
+	if _, err := w.opts.Publisher.Import(ctx, job.HouseholdID, file); err != nil {
+		return 0, fmt.Errorf("import fetched recipes: %w", err)
+	}
+	return merged, nil
 }
 
 func appendFailure(list []FailedRecipe, f FailedRecipe) []FailedRecipe {
@@ -328,11 +434,34 @@ func (w *Worker) requeue(ctx context.Context, job Job, countAttempt bool, jobErr
 	}
 }
 
+// release puts a job this worker was interrupted in back on the queue, due
+// now, without spending an attempt. Every recipe that reached the library is
+// already in the last checkpoint; the few fetched since are fetched again.
+// It runs on a short context of its own, because ctx is the one that was just
+// canceled.
+func (w *Worker) release(ctx context.Context, job Job, log *slog.Logger) {
+	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
+	defer cancel()
+	at := w.now()
+	err := w.opts.Store.RequeueJob(releaseCtx, job.ID, w.opts.Owner, at, false, nil, at)
+	switch {
+	case err == nil:
+		log.InfoContext(releaseCtx, "meal-kit import interrupted; handed back to the queue for the next worker")
+	case errors.Is(err, ErrJobGone):
+	default:
+		log.WarnContext(releaseCtx, "handing back an interrupted import failed; its lease will expire instead", "error", err)
+	}
+}
+
+// releaseTimeout bounds the one write release makes during shutdown, well
+// inside the web server's own shutdown budget.
+const releaseTimeout = 5 * time.Second
+
 // fail decides between another attempt and the dead-letter, and tells the
 // member either way.
 func (w *Worker) fail(ctx context.Context, job Job, err error, report *Report, log *slog.Logger) {
-	jobErr := describe(err, w.now())
 	retryable := IsRetryable(err) && job.Attempts < job.MaxAttempts
+	jobErr := describe(err, job.Source, retryable, w.now())
 	if retryable {
 		report.Requeued++
 		log.WarnContext(ctx, "meal-kit import will retry", "code", jobErr.Code, "attempts", job.Attempts, "maxAttempts", job.MaxAttempts)
@@ -353,20 +482,29 @@ func (w *Worker) fail(ctx context.Context, job Job, err error, report *Report, l
 	w.notifyAttention(ctx, job, jobErr)
 }
 
-// describe turns an error into what the member reads. It never includes
-// fetched page content, a URL, a token, or a cookie.
-func describe(err error, at time.Time) *JobError {
+// describe turns an error into what the member reads: short, plain, and
+// saying what happens next. It never includes fetched page content, a URL, a
+// recipe id, a code, a token, or a cookie; the error itself goes to the log.
+//
+// retrying says whether another attempt is coming, so a job that has used its
+// last one never promises "we'll try again".
+func describe(err error, source string, retrying bool, at time.Time) *JobError {
+	name := displayName(source)
+	next := " We'll try again."
+	if !retrying {
+		next = " We stopped. Try again later."
+	}
 	if errors.Is(err, ErrBlocked) {
-		return &JobError{Code: ErrCodeBlocked, Message: "The meal-kit service refused our requests, so the import stopped. Try again later.", At: at}
+		return &JobError{Code: ErrCodeBlocked, Message: name + " turned us away, so we stopped. Try again later.", At: at}
 	}
 	var parse *ParseError
 	if errors.As(err, &parse) {
-		return &JobError{Code: ErrCodeParse, Message: "We could not read " + parse.Subject + ": " + parse.Detail + " Nothing was changed in your recipes.", At: at}
+		return &JobError{Code: ErrCodeParse, Message: "We couldn't read " + name + "'s recipe pages. Nothing was changed in your recipes.", At: at}
 	}
 	if strings.Contains(err.Error(), "import fetched recipes") {
-		return &JobError{Code: ErrCodeImport, Message: "Saving the imported recipes failed. Nothing was half-written; the import will be retried.", At: at}
+		return &JobError{Code: ErrCodeImport, Message: "Saving your recipes failed." + next, At: at}
 	}
-	return &JobError{Code: ErrCodeNetwork, Message: "We could not reach the meal-kit service. The import will be retried.", At: at}
+	return &JobError{Code: ErrCodeNetwork, Message: "We couldn't reach " + name + "." + next, At: at}
 }
 
 // notifyFinished is the "it's done" notification. The push sweep delivers it.
@@ -380,13 +518,13 @@ func (w *Worker) notifyFinished(ctx context.Context, job Job) {
 		body = fmt.Sprintf("%d of your meal-kit recipes are in your library.", imported)
 	}
 	if n := len(job.Checkpoint.Failures); n > 0 {
-		body += fmt.Sprintf(" %d could not be imported — open Recipe Import to see why.", n)
+		body += fmt.Sprintf(" %d couldn't be imported. Open Recipe Import to see which.", n)
 	}
 	// A harvest that stopped on its page cap read part of the history, not
 	// all of it, and only the member's own browser session can read the rest.
 	// Saying so is the difference between a finished import and a silent one.
 	if job.Harvest.Stopped.MoreToFetch() {
-		body += " There's more of your order history to fetch — open Recipe Import to continue."
+		body += " You have older orders too. Open Recipe Import to get them."
 	}
 	w.create(ctx, notifications.New{
 		HouseholdID: job.HouseholdID,

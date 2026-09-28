@@ -47,6 +47,8 @@ type Service struct {
 	logger   *slog.Logger
 	attempts int
 	now      func() time.Time
+	// kicker, when set, starts a queued job straight away (runner.go).
+	kicker Kicker
 }
 
 // NewService returns a Service.
@@ -62,6 +64,17 @@ func NewService(opts ServiceOptions) *Service {
 	return &Service{
 		store: opts.Store, enabled: opts.Enabled, sources: opts.Sources,
 		notifier: opts.Notifier, logger: logger, attempts: attempts, now: time.Now,
+	}
+}
+
+// SetKicker has every queued job handed to k the moment it is queued, so the
+// web process starts it instead of waiting for a scheduled run. Call it once,
+// at startup, before serving requests.
+func (s *Service) SetKicker(k Kicker) { s.kicker = k }
+
+func (s *Service) kick(jobID string) {
+	if s.kicker != nil {
+		s.kicker.Kick(jobID)
 	}
 }
 
@@ -194,6 +207,9 @@ func (s *Service) StartImport(ctx context.Context, req ImportRequest) (Job, erro
 	}
 
 	if existing, err := s.store.ActiveJob(ctx, req.HouseholdID, req.Source); err == nil {
+		// Nudging it is harmless: a job someone else holds, or one resting
+		// between batches, is simply not claimable yet.
+		s.kick(existing.ID)
 		return existing, nil
 	} else if !errors.Is(err, ErrNotFound) {
 		return Job{}, fmt.Errorf("get active import job: %w", err)
@@ -226,6 +242,7 @@ func (s *Service) StartImport(ctx context.Context, req ImportRequest) (Job, erro
 		s.logger.ErrorContext(ctx, "saving the meal-kit harvest cursor failed",
 			"source", req.Source, "householdId", req.HouseholdID, "error", err)
 	}
+	s.kick(job.ID)
 	return job, nil
 }
 

@@ -190,6 +190,10 @@ nonisolated struct MealKitImportJob: Decodable, Hashable, Sendable, Identifiable
     let attempts: Int
     let maxAttempts: Int
     let lastError: MealKitImportError?
+    /// When a queued run can next be picked up: about now for one just started, about a minute
+    /// out between batches, later while backing off after an error. `nil` unless queued, and
+    /// absent from a server older than the in-process runner.
+    let nextRunAt: Date?
     let createdAt: Date
     let updatedAt: Date
     let finishedAt: Date?
@@ -199,7 +203,7 @@ nonisolated struct MealKitImportJob: Decodable, Hashable, Sendable, Identifiable
         imported: Int = 0, updated: Int = 0, unchanged: Int = 0, reviewItems: Int = 0,
         failures: [MealKitImportFailure] = [], harvest: MealKitHarvestSummary? = nil,
         attempts: Int = 0, maxAttempts: Int = 5,
-        lastError: MealKitImportError? = nil, createdAt: Date = .distantPast,
+        lastError: MealKitImportError? = nil, nextRunAt: Date? = nil, createdAt: Date = .distantPast,
         updatedAt: Date = .distantPast, finishedAt: Date? = nil
     ) {
         self.id = id
@@ -216,6 +220,7 @@ nonisolated struct MealKitImportJob: Decodable, Hashable, Sendable, Identifiable
         self.attempts = attempts
         self.maxAttempts = maxAttempts
         self.lastError = lastError
+        self.nextRunAt = nextRunAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.finishedAt = finishedAt
@@ -224,10 +229,13 @@ nonisolated struct MealKitImportJob: Decodable, Hashable, Sendable, Identifiable
     /// What the screen shows. A status this build doesn't know is treated as still working,
     /// which is the safe direction: it never claims a run finished that hasn't.
     enum State: Hashable, Sendable {
-        /// Waiting for the importer to pick it up.
+        /// Just started, for the moment before the server picks it up.
         case queued
         /// Being imported right now.
         case running
+        /// Part-way through and resting between batches (or waiting to retry after a hiccup).
+        /// `nextRunAt` says when it carries on.
+        case waiting
         /// Everything on the order history was handled.
         case finished
         /// It gave up. `lastError` says why.
@@ -238,7 +246,8 @@ nonisolated struct MealKitImportJob: Decodable, Hashable, Sendable, Identifiable
 
     var state: State {
         switch status {
-        case "queued": .queued
+        // Queued with work behind it is resting between batches, not waiting to start.
+        case "queued": recipesDone > 0 || !failures.isEmpty || lastError != nil ? .waiting : .queued
         case "succeeded": .finished
         case "dead": .failed
         case "canceled": .canceled
@@ -247,7 +256,7 @@ nonisolated struct MealKitImportJob: Decodable, Hashable, Sendable, Identifiable
     }
 
     /// True while the run is still going to do something without anyone's help.
-    var isWorking: Bool { state == .queued || state == .running }
+    var isWorking: Bool { state == .queued || state == .running || state == .waiting }
 
     /// Recipes that reached the library, new or refreshed.
     var recipesAdded: Int { imported + updated }

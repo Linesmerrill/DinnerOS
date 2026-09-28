@@ -106,7 +106,7 @@ struct GetStartedSection: View {
                 Text("Let's Fill Your Library")
                     .font(.title3.bold())
                     .accessibilityAddTraits(.isHeader)
-                Text("There are no recipes in this household yet, so there's nothing to plan with.")
+                Text("Add recipes to start planning.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -133,10 +133,7 @@ struct GetStartedSection: View {
         case .offer:
             importOffer(
                 title: String(localized: "Import from \(service.displayName)"),
-                detail: String(
-                    localized:
-                        "Sign in on \(service.displayName)'s own page and we'll bring over the recipes you've ordered."
-                ),
+                detail: String(localized: "Bring in the recipes you've ordered."),
                 button: String(localized: "Import from \(service.displayName)"),
                 action: { isSigningIn = true })
         case .importing(let job):
@@ -154,10 +151,7 @@ struct GetStartedSection: View {
         case .foundNothing:
             importOffer(
                 title: String(localized: "Nothing to import"),
-                detail: String(
-                    localized:
-                        "We didn't find any recipes on your \(service.displayName) order history. You can try again, or start from the catalog below."
-                ),
+                detail: String(localized: "No recipes found in your \(service.displayName) orders."),
                 button: String(localized: "Try Again"), symbol: "tray",
                 action: { isSigningIn = true })
         case .imported(let count):
@@ -192,7 +186,7 @@ struct GetStartedSection: View {
             } else {
                 ProgressView().progressViewStyle(.linear)
             }
-            Text("It keeps going on our server, so you can close the app. We'll let you know when it's done.")
+            Text("We'll let you know when it's done.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -205,7 +199,7 @@ struct GetStartedSection: View {
             blurb(
                 title: count == 1
                     ? String(localized: "1 recipe imported") : String(localized: "\(count) recipes imported"),
-                detail: String(localized: "They're in your library. This list hasn't caught up yet."),
+                detail: String(localized: "They're in your library."),
                 symbol: "checkmark.circle")
             Button("Show Them") {
                 Task { await library.refresh() }
@@ -220,15 +214,9 @@ struct GetStartedSection: View {
             detail: {
                 switch reason {
                 case .noPermission:
-                    String(
-                        localized:
-                            "Importing a meal-kit order history is up to whoever manages this household. You can still browse the catalog or type a recipe."
-                    )
+                    String(localized: "Ask a household admin to import recipes.")
                 case .notOnThisServer:
-                    String(
-                        localized:
-                            "Meal-kit import isn't available here. You can browse the catalog or type a recipe."
-                    )
+                    String(localized: "Meal-kit import isn't available yet.")
                 }
             }(), symbol: "books.vertical")
     }

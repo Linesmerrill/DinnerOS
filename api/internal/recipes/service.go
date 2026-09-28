@@ -57,6 +57,14 @@ type RecipeError struct {
 	SourceRecipeID string
 	Name           string
 	Problems       []string
+	// Duplicate is true when the recipe was refused only because another
+	// recipe in the same file is the same stored recipe: it shares a source
+	// ID with it, or both resolve to one stored recipe. DuplicateOf is that
+	// other recipe's Index. A caller that knows the two are one dish (the
+	// meal-kit importer: a re-release under a new id) can treat it as a
+	// merge rather than a failure; Problems still says why for everyone else.
+	Duplicate   bool
+	DuplicateOf int
 }
 
 // importCandidate is a valid recipe from the file and the stored recipe it
@@ -98,6 +106,11 @@ func (s *Service) Import(ctx context.Context, householdID string, file ImportFil
 	reject := func(index int, r ImportRecipe, problems ...string) {
 		res.Errors = append(res.Errors, RecipeError{Index: index, SourceRecipeID: r.SourceRecipeID, Name: strings.TrimSpace(r.Name), Problems: problems})
 	}
+	duplicate := func(index int, r ImportRecipe, of int, problem string) {
+		reject(index, r, problem)
+		res.Errors[len(res.Errors)-1].Duplicate = true
+		res.Errors[len(res.Errors)-1].DuplicateOf = of
+	}
 
 	// 1. Validate, and reject recipes that share a source ID with an earlier
 	// recipe in the same file.
@@ -111,7 +124,7 @@ func (s *Service) Import(ctx context.Context, householdID string, file ImportFil
 		}
 		ids := append([]string{r.SourceRecipeID}, r.SourceAliases...)
 		if other, dup := firstClaim(claimed, r.Source, ids); dup {
-			reject(i, r, fmt.Sprintf("shares a source ID with recipes[%d]", other))
+			duplicate(i, r, other, fmt.Sprintf("shares a source ID with recipes[%d]", other))
 			continue
 		}
 		for _, id := range ids {
@@ -157,7 +170,7 @@ func (s *Service) Import(ctx context.Context, householdID string, file ImportFil
 			if w := winners[c.existing.ID]; w != i {
 				winner := candidates[w]
 				if !winner.match.beats(c.match) || c.match.strength != matchAlias {
-					reject(c.index, c.in, fmt.Sprintf("matches the same stored recipe as recipes[%d]", winner.index))
+					duplicate(c.index, c.in, winner.index, fmt.Sprintf("matches the same stored recipe as recipes[%d]", winner.index))
 					continue
 				}
 				c.existing = nil
