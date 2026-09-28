@@ -7,10 +7,12 @@
 #   bundle exec fastlane signing — create or renew the shared certificate
 #
 # Signing uses fastlane match: one Apple Distribution certificate and one
-# App Store profile, encrypted in a private repository, shared by every machine
+# App Store profile per bundle identifier — the app and its Live Activities
+# widget extension — encrypted in a private repository, shared by every machine
 # and CI run. `beta` reads them (readonly), so a build never creates or revokes
-# a certificate; `signing` is the only lane that writes. Required environment
-# variables are documented in docs/deployment.md.
+# a certificate; `signing` is the only lane that writes, and it also registers
+# the extension's App ID on the Developer portal when it is missing. Required
+# environment variables are documented in docs/deployment.md.
 
 require "base64"
 require "shellwords"
@@ -21,7 +23,50 @@ default_platform(:ios)
 PROJECT = "DinnerOS.xcodeproj"
 SCHEME = "DinnerOS"
 DEFAULT_BUNDLE_ID = "com.linesmerrill.dinneros"
+# The widget extension that draws Live Activities. Must match
+# LIVE_ACTIVITIES_BUNDLE_ID in ios/Config/Shared.xcconfig.
+LIVE_ACTIVITIES_SUFFIX = ".LiveActivities"
 TEST_DEVICE = "iPhone 17 Pro"
+
+def app_bundle_id
+  ENV.fetch("APP_BUNDLE_ID", DEFAULT_BUNDLE_ID)
+end
+
+def live_activities_bundle_id
+  ENV.fetch("LIVE_ACTIVITIES_BUNDLE_ID", "#{app_bundle_id}#{LIVE_ACTIVITIES_SUFFIX}")
+end
+
+# Every identifier that is signed into the archive, app first.
+def signed_bundle_ids
+  [app_bundle_id, live_activities_bundle_id]
+end
+
+# The name of the App Store profile match installed for identifier.
+def match_profile_name(identifier)
+  name = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING]&.dig(identifier) ||
+         ENV["sigh_#{identifier}_appstore_profile-name"]
+  UI.user_error!("match did not install a profile for #{identifier}; run the signing lane once (docs/deployment.md)") if name.to_s.empty?
+  name
+end
+
+# Registers an explicit App ID on the Developer portal unless it exists, using
+# the App Store Connect API key app_store_connect_api_key already put on the
+# Spaceship session. No capabilities are added: the extension needs none.
+def ensure_bundle_id(identifier, name)
+  if Spaceship::ConnectAPI::BundleId.find(identifier)
+    UI.message("App ID #{identifier} is registered.")
+    return
+  end
+  # The App Store Connect API's POST /v1/bundleIds. The seed ID is the App ID
+  # prefix, which for this team is the team ID.
+  Spaceship::ConnectAPI::BundleId.create(
+    name: name,
+    identifier: identifier,
+    platform: "IOS",
+    seed_id: ENV["DEVELOPMENT_TEAM"]
+  )
+  UI.success("Registered App ID #{identifier} (#{name}).")
+end
 
 def asc_api_key
   required = %w[APP_STORE_CONNECT_KEY_ID APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_PRIVATE_KEY DEVELOPMENT_TEAM]
@@ -52,15 +97,15 @@ platform :ios do
     # CI has no unlocked keychain, so codesign would block on a prompt after
     # match imports the certificate. This creates a temporary one.
     setup_ci if is_ci
-    bundle_id = ENV.fetch("APP_BUNDLE_ID", DEFAULT_BUNDLE_ID)
+    bundle_id = app_bundle_id
+    extension_id = live_activities_bundle_id
     api_key = asc_api_key
 
-    # Read the shared certificate and profile. Nothing is created here, so a
-    # build can never add a certificate to the account.
-    match(type: "appstore", app_identifier: bundle_id, api_key: api_key, readonly: true)
-    profile_name = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING]&.dig(bundle_id) ||
-                   ENV["sigh_#{bundle_id}_appstore_profile-name"]
-    UI.user_error!("match did not install a profile for #{bundle_id}") if profile_name.to_s.empty?
+    # Read the shared certificate and both profiles. Nothing is created here, so
+    # a build can never add a certificate to the account.
+    match(type: "appstore", app_identifier: signed_bundle_ids, api_key: api_key, readonly: true)
+    profile_name = match_profile_name(bundle_id)
+    extension_profile_name = match_profile_name(extension_id)
 
     build_number = latest_testflight_build_number(
       api_key: api_key,
@@ -74,7 +119,12 @@ platform :ios do
       "CODE_SIGN_STYLE=Manual",
       # The value has a space, so it has to survive the shell as one argument.
       "CODE_SIGN_IDENTITY=#{'Apple Distribution'.shellescape}",
-      "PROVISIONING_PROFILE_SPECIFIER=#{profile_name.shellescape}"
+      # Each target reads its own variable (project.pbxproj), so one command
+      # line signs the app and the extension with different profiles. Setting
+      # PROVISIONING_PROFILE_SPECIFIER here would force the app's profile onto
+      # the extension and fail the archive.
+      "APP_PROFILE_SPECIFIER=#{profile_name.shellescape}",
+      "LIVE_ACTIVITIES_PROFILE_SPECIFIER=#{extension_profile_name.shellescape}"
     ]
     build_settings << "API_BASE_URL=#{ENV['API_BASE_URL'].shellescape}" unless ENV["API_BASE_URL"].to_s.empty?
 
@@ -89,7 +139,7 @@ platform :ios do
       export_options: {
         signingStyle: "manual",
         teamID: ENV["DEVELOPMENT_TEAM"],
-        provisioningProfiles: { bundle_id => profile_name }
+        provisioningProfiles: { bundle_id => profile_name, extension_id => extension_profile_name }
       }
     )
 
@@ -132,13 +182,17 @@ platform :ios do
     end
   end
 
-  desc "Create or renew the shared signing certificate and profile in the match repository"
+  desc "Create or renew the shared signing certificate and profiles in the match repository"
   lane :signing do
     setup_ci if is_ci
-    bundle_id = ENV.fetch("APP_BUNDLE_ID", DEFAULT_BUNDLE_ID)
     UI.user_error!("MATCH_PASSWORD is required") if ENV["MATCH_PASSWORD"].to_s.strip.empty?
+    api_key = asc_api_key
 
-    match(type: "appstore", app_identifier: bundle_id, api_key: asc_api_key, readonly: false)
-    UI.success("Signing assets are stored for #{bundle_id}; every machine and CI run now shares them.")
+    # match can only make a profile for an App ID that exists. The app's was
+    # registered by hand long ago; the extension's is registered here.
+    ensure_bundle_id(live_activities_bundle_id, "DinnerOS Live Activities")
+
+    match(type: "appstore", app_identifier: signed_bundle_ids, api_key: api_key, readonly: false)
+    UI.success("Signing assets are stored for #{signed_bundle_ids.join(', ')}; every machine and CI run now shares them.")
   end
 end

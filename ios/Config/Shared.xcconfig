@@ -7,6 +7,14 @@
 
 APP_DISPLAY_NAME = DinnerOS
 APP_BUNDLE_ID_BASE = com.linesmerrill.dinneros
+// The widget extension that draws Live Activities (DinnerOSLiveActivities). It is its own App
+// ID with its own App Store profile; fastlane's Fastfile uses the same value.
+LIVE_ACTIVITIES_BUNDLE_ID = $(APP_BUNDLE_ID_BASE).LiveActivities
+
+// Provisioning profiles for manual (CI) signing. Empty here: local builds sign automatically,
+// and `fastlane beta` passes the match profile names on the command line.
+APP_PROFILE_SPECIFIER =
+LIVE_ACTIVITIES_PROFILE_SPECIFIER =
 
 // Custom URL scheme for invitation links (dinneros://invite?token=...). The API's
 // invitation landing page opens it; it must match the API's APP_URL_SCHEME.

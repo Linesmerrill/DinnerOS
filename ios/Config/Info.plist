@@ -31,6 +31,8 @@
 	<string>Autopilot uses your approximate location for the forecast, to suggest dinners that suit the weather. Your location never leaves your iPhone.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>Adds your week's grocery list to a Reminders list so you can use it while you shop.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

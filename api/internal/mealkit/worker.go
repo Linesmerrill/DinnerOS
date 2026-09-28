@@ -32,6 +32,8 @@ type WorkerOptions struct {
 	Sources  map[string]Source
 	Notifier Notifier
 	Logger   *slog.Logger
+	// Observer, when set, hears about progress and the outcome (observer.go).
+	Observer ProgressObserver
 
 	// Owner identifies this worker run in job leases. Empty means a random
 	// one is generated.
@@ -205,9 +207,11 @@ func (w *Worker) runJob(ctx context.Context, job Job, report *Report) {
 		report.Succeeded++
 		w.finish(ctx, job, JobSucceeded, nil, log)
 		w.notifyFinished(ctx, job)
+		observeEnd(ctx, w.opts.Observer, job, JobSucceeded)
 	case outcomeCapped:
 		report.Requeued++
 		w.requeue(ctx, job, false, nil, log)
+		observeProgress(ctx, w.opts.Observer, job, JobQueued)
 	case outcomeFailed:
 		w.fail(ctx, job, err, report, log)
 	}
@@ -414,7 +418,11 @@ func appendFailure(list []FailedRecipe, f FailedRecipe) []FailedRecipe {
 }
 
 func (w *Worker) save(ctx context.Context, job *Job) error {
-	return w.opts.Store.SaveCheckpoint(ctx, job.ID, w.opts.Owner, job.Checkpoint, w.now())
+	if err := w.opts.Store.SaveCheckpoint(ctx, job.ID, w.opts.Owner, job.Checkpoint, w.now()); err != nil {
+		return err
+	}
+	observeProgress(ctx, w.opts.Observer, *job, JobRunning)
+	return nil
 }
 
 func (w *Worker) finish(ctx context.Context, job Job, status JobStatus, jobErr *JobError, log *slog.Logger) {
@@ -466,6 +474,7 @@ func (w *Worker) fail(ctx context.Context, job Job, err error, report *Report, l
 		report.Requeued++
 		log.WarnContext(ctx, "meal-kit import will retry", "code", jobErr.Code, "attempts", job.Attempts, "maxAttempts", job.MaxAttempts)
 		w.requeue(ctx, job, true, jobErr, log)
+		observeProgress(ctx, w.opts.Observer, job, JobQueued)
 		return
 	}
 	report.Dead++
@@ -480,6 +489,7 @@ func (w *Worker) fail(ctx context.Context, job Job, err error, report *Report, l
 	}
 	w.finish(ctx, job, JobDead, jobErr, log)
 	w.notifyAttention(ctx, job, jobErr)
+	observeEnd(ctx, w.opts.Observer, job, JobDead)
 }
 
 // describe turns an error into what the member reads: short, plain, and

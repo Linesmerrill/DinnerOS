@@ -60,6 +60,9 @@ final class AppDependencies {
         recipes = RecipeLibrary(session: session, api: client.map { RecipesAPI(client: $0) })
         importReviews = ImportReviewStore(session: session, api: client.map { RecipesAPI(client: $0) })
         mealKitImport = MealKitImportStore(session: session, api: client.map { MealKitAPI(client: $0) })
+        // The import's Live Activity: started when a member queues an import, kept current by the
+        // status poll while open and by the server's pushes while closed.
+        mealKitImport.liveActivities = .live(session: session, api: client.map { MealKitAPI(client: $0) })
         discover = DiscoverStore(session: session, api: client.map { CatalogAPI(client: $0) })
         // A recipe added from the catalog is the household's from then on, so
         // the library refreshes rather than guessing at the new row.

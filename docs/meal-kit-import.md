@@ -5,7 +5,8 @@ signs in on the meal kit's **own website** in a web view (HelloFresh first),
 their order history is read **there, in their own session**, the app hands us
 that list, and a backend worker imports **the recipes that account actually
 ordered** into the household's library. A push notification says when it is
-done. Skipping is a first-class choice — recipes can be added by hand later.
+done, and a [Live Activity](#live-activity) shows progress on the Lock Screen in
+between. Skipping is a first-class choice — recipes can be added by hand later.
 
 > **Nothing about the meal-kit account is stored.** Not a password, not a
 > session token, not a cookie, not an email address. There is no field for one
@@ -678,6 +679,107 @@ db.meal_kit_jobs.updateMany({householdId: ObjectId("…"), status: {$in: ["queue
 | `LOG_LEVEL=debug` | `info` | Turns on the redacted response diagnostics above for one run. |
 
 See [deployment.md](deployment.md#meal-kit-recipe-import) for the Heroku steps.
+
+## Live Activity
+
+A 740-recipe import takes about three hours of polite batches, so the progress
+lives on the Lock Screen and in the Dynamic Island rather than only on the
+Recipe Import screen.
+
+| State | Lock Screen / expanded island | Compact island | Minimal |
+| --- | --- | --- | --- |
+| `importing` | "HelloFresh recipes", **40** of 740 recipes (SF Rounded), progress bar, "Importing" | fork-and-knife, `40/740` | circular progress |
+| `waiting` | same, "Starting soon" (nothing done yet) or "Next batch soon" | same | same |
+| `done` | **Green** banner (`DoneBackground`, white text): "740 recipes imported", full bar, "All done" or "3 couldn't be read" | check, `740` | green check |
+| `failed` | "Import stopped", "Open DinnerOS to see why", orange icon, no bar | orange `!` | orange `!` |
+| `canceled` | "Import stopped", "Recipes already imported stay" | stop icon | stop icon |
+| stale (no update for 30 min) | the count, and "Waiting for an update" instead of the status | — | — |
+
+**What it may show is counts only**: the service's name and recipe numbers. No
+recipe names, nothing about the meal-kit account, nothing about the household —
+the Lock Screen is readable by anyone holding the phone.
+`MealKitImportActivityAttributes` (`ios/Shared/`, compiled into the app and the
+`DinnerOSLiveActivities` widget extension) is the whole of it: attributes
+`serviceName`, `service`, `householdID` (ours, never shown; used to route a
+rotated token after a relaunch), `jobID`; content state `phase`, `done`,
+`total`, `failed`. An encoded state is under 128 bytes; the push payload limit
+is 4 KB.
+
+**Starting.** When a member queues an import (Recipe Import screen, Menu
+get-started card — both go through `MealKitImportStore.startImport`), the app
+starts the activity **after** the run is queued, with `pushType: .token`,
+unless the member has Live Activities off (`ActivityAuthorizationInfo`). With
+them off, or when ActivityKit refuses, the import proceeds exactly as before
+(`MealKitLiveActivities.StartDecision`). A second tap on a run already followed
+updates it instead of starting another; an activity left from an older run of
+the same household is ended. A run another member started never grows an
+activity on this phone.
+
+**Tokens.** Every token ActivityKit hands out — including each rotation, and
+activities that survive a relaunch — goes to
+`PUT .../meal-kit/{source}/imports/{jobId}/live-activity` (body only, never the
+path). The server stores it on the job (`liveActivity` subdocument of
+`meal_kit_jobs`, written only by `internal/liveactivity`), never logs or
+returns it, and removes it when the job ends. It is refused (`404`) for a run
+that already finished. Swiping the activity away sends a `DELETE`.
+
+**Updating while the app is open.** The status poll the screens already run
+(every 15 s while a run is in flight) updates the activity locally and ends it
+when it sees the run finish. Local updates cost no push budget.
+
+**Updating while the app is closed.** `liveactivity.Pusher` implements
+`mealkit.ProgressObserver`, a hook the worker calls after each checkpoint and
+when a run puts the job down, and the worker and `StopImports` call when a job
+ends. It sends through the same APNs token-auth client as alerts:
+
+| | `update` | `end` |
+| --- | --- | --- |
+| Headers | `apns-push-type: liveactivity`, `apns-topic: <bundle id>.push-type.liveactivity` | same |
+| `apns-priority` | **5** | 10 |
+| Payload `aps` | `timestamp`, `event`, `content-state`, `stale-date` (+30 min) | `timestamp`, `event`, `content-state`, `dismissal-date` |
+| `apns-expiration` | the stale date | the dismissal date |
+| Rate limit | yes (below) | never |
+
+An ended activity stays on the Lock Screen for **4 hours when done** (Apple's
+maximum — a three-hour import usually finishes while nobody is looking),
+**1 hour when failed**, and not at all when canceled — the member stopped it on
+purpose. The app uses the same values when it ends the activity itself.
+
+**The push budget.** Apple budgets Live Activity pushes per activity and
+throttles apps that send high-priority updates too often, without publishing
+the numbers. So progress goes at priority 5 (not counted against the
+high-priority budget; delivered when the system finds it convenient) and
+`liveactivity.Limiter` spaces it out per job — and a household has at most one
+job in flight, so per household:
+
+- nothing new (same phase, same counts): no push;
+- same phase, new count: at most one per **30 s**;
+- a change of phase (importing ↔ waiting): at most one per **15 s**;
+- `end`: always, once.
+
+That is at most **4 updates in any minute**
+(`TestTheLimiterNeverAllowsMoreThanAHandfulAMinute`) and about 2 in practice,
+since a batch of ten recipes takes about thirty seconds. A 740-recipe import is
+roughly 74 checkpoints plus a phase change per run — under a hundred
+low-priority pushes over three hours, and one high-priority `end`. We do not
+set `NSSupportsLiveActivitiesFrequentUpdates`. The last sent state and time are
+stored on the job, so the limit holds across worker processes.
+
+A token APNs rejects as gone (`410`, `BadDeviceToken`) is removed at once.
+Without `APNS_*` configured the observer is nil: no pushes, and the activity is
+only as live as the app's poll — ActivityKit ends an activity nobody updates
+after eight hours anyway.
+
+**What can be checked where.**
+
+| | Simulator | Device |
+| --- | --- | --- |
+| The views, all states, light and dark | Yes (widget previews, or start one by queuing an import) | Yes |
+| Start on queue; update/end from the poll with the app open | Yes | Yes |
+| "Live Activities off" skips it | Yes (Settings → DinnerOS) | Yes |
+| A push token arrives and reaches the API | Unreliable; do not trust a missing one | Yes |
+| Server `update`/`end` pushes while closed | No reliable delivery; a local `.apns` drag-in does not exercise our server | Yes, on a TestFlight or Xcode build against an API with `APNS_*` set |
+| Throttling, priority-5 delivery timing, the 4-hour linger | No | Yes, over a real import |
 
 ## Where the import is offered
 
