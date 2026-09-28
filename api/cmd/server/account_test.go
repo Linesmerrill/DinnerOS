@@ -76,6 +76,7 @@ var accountDeletionKinds = map[string]collectionKind{
 	shopping.PrepCardsCollection:           householdData,
 	skips.Collection:                       householdData,
 	ratings.Collection:                     userRatings,
+	ratings.NotesCollection:                userRatings,
 	events.Collection:                      userHistory,
 	recommendations.ProfilesCollection:     householdData,
 	recommendations.WeekContextsCollection: householdData,

@@ -25,7 +25,9 @@ type UserDirectory interface {
 
 // ServiceOptions configures a Service.
 type ServiceOptions struct {
-	Store   Store
+	Store Store
+	// Notes stores members' private recipe notes. Optional.
+	Notes   NoteStore
 	Recipes RecipeChecker
 	Users   UserDirectory
 	// Events records recipe.rated and recipe.unrated. Optional.
@@ -38,6 +40,7 @@ type ServiceOptions struct {
 // Service implements rating use cases.
 type Service struct {
 	store   Store
+	notes   NoteStore
 	recipes RecipeChecker
 	users   UserDirectory
 	events  events.Recorder
@@ -47,7 +50,7 @@ type Service struct {
 
 // NewService returns a Service.
 func NewService(opts ServiceOptions) *Service {
-	s := &Service{store: opts.Store, recipes: opts.Recipes, users: opts.Users, events: opts.Events, logger: opts.Logger, now: opts.Now}
+	s := &Service{store: opts.Store, notes: opts.Notes, recipes: opts.Recipes, users: opts.Users, events: opts.Events, logger: opts.Logger, now: opts.Now}
 	if s.logger == nil {
 		s.logger = slog.New(slog.DiscardHandler)
 	}

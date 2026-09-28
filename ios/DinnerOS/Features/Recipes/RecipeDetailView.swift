@@ -40,6 +40,7 @@ struct RecipeDetailView: View {
     /// Ingredients being left out or put back, by line ID.
     @State private var leavingOut: Set<String> = []
     @State private var leaveOutError: String?
+    @State private var showsCooking = false
 
     /// Leaving an ingredient out changes what the week's list buys, so it needs `plan.edit`, like
     /// skipping one from the list. Hiding it is a convenience; the API enforces it.
@@ -95,6 +96,16 @@ struct RecipeDetailView: View {
                         RecipeDetailTabPicker(tabs: availableTabs, selection: tabSelection)
                     }
                     if let recipe, !recipe.steps.isEmpty {
+                        Button {
+                            showsCooking = true
+                        } label: {
+                            Label("Start Cooking", systemImage: "frying.pan")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .padding(.horizontal, 16)
                         CookingStepsSection(
                             steps: recipe.steps, instructions: instructions,
                             chooseSpecialty: { _ in showsSpecialtySetup = true }, isExpanded: $stepsExpanded
@@ -133,6 +144,9 @@ struct RecipeDetailView: View {
                 selections: customizationSelections)
         }
         .overlay(alignment: .bottom) { toast }
+        .fullScreenCover(isPresented: $showsCooking) {
+            CookingView(start: cookMeal, meals: weekMeals)
+        }
         // Attached to the screen's root, never inside a section (decision 510).
         .sheet(isPresented: $showsSpecialtySetup, onDismiss: { Task { await loadInstructions() } }) {
             SpecialtyIngredientsSheet()
@@ -319,6 +333,29 @@ struct RecipeDetailView: View {
                 toast: toast,
                 undo: { Task { await planner.undo() } },
                 dismiss: { planner.dismissToast(toast.id) })
+        }
+    }
+
+    // MARK: Cooking
+
+    /// This recipe, as the cooking screen's first dish, at the size on screen.
+    private var cookMeal: CookMeal {
+        let entry = plannedEntries.last
+        return CookMeal(
+            id: entry?.id ?? summary.id, recipeID: summary.id, name: name,
+            imageURL: recipe?.imageURL ?? summary.imageURL, dayText: entry?.day?.name(), servings: servings)
+    }
+
+    /// The week's planned dishes, for the cooking screen's switcher, in day order.
+    private var weekMeals: [CookMeal] {
+        let first = households.current?.household.weekStartsOn ?? PlanDay.isoWeekStart
+        var seen = Set<String>()
+        return (plans.plan?.entriesInDayOrder(weekStartsOn: first) ?? []).compactMap { entry in
+            guard seen.insert(entry.recipe.id).inserted else { return nil }
+            let isThis = entry.recipe.id == summary.id
+            return CookMeal(
+                id: entry.id, recipeID: entry.recipe.id, name: entry.recipe.name, imageURL: entry.recipe.imageURL,
+                dayText: entry.day?.name(), servings: isThis ? servings : entry.servings)
         }
     }
 

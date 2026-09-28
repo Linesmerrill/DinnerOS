@@ -64,6 +64,9 @@ type Segment struct {
 	// the same step already carried it, or when a substitution's amount
 	// doesn't convert.
 	Amount *Measure
+	// Part is true when Amount is this step's share of the ingredient, as
+	// the card wrote it, rather than the recipe's whole amount.
+	Part bool
 	// Spicy is the catalog's heat signal (ingredients.Spicy).
 	Spicy bool
 	// Substituted is true when the household's specialty choice changed this
@@ -256,7 +259,10 @@ type mention struct {
 	name    string
 	display string
 	amount  *Measure
-	spicy   bool
+	// baseAmount is the amount for the card's smallest serving size, the
+	// size its step numbers are written for.
+	baseAmount *Measure
+	spicy      bool
 
 	substituted   bool
 	specialtyID   string
@@ -299,6 +305,9 @@ func AnnotateWith(r Recipe, servings int, specs grocery.Specialties, applied boo
 		if a, ok := amountAt(ing, servings); ok {
 			m.amount = &a
 		}
+		if a, ok := amountAt(ing, smallest(r.Servings)); ok {
+			m.baseAmount = &a
+		}
 		if lo, ok := leftOut.Lookup(key, "name:"+ingredients.NormalizeName(ing.Name)); ok {
 			m.leftOut = true
 			state.LeftOut = &lo
@@ -336,12 +345,34 @@ func AnnotateWith(r Recipe, servings int, specs grocery.Specialties, applied boo
 		m.forms = nameForms(m.name, specs[key])
 		mentions = append(mentions, m)
 	}
+	amounts := stepAmounts{servings: servings, base: smallest(r.Servings), stated: statedMentions(r.Steps, mentions)}
 	for _, step := range r.Steps {
-		out.Steps = append(out.Steps, renderStep(step, mentions))
+		out.Steps = append(out.Steps, renderStep(step, mentions, amounts))
 	}
 	sort.SliceStable(out.Substitutions, func(i, j int) bool { return out.Substitutions[i].Name < out.Substitutions[j].Name })
 	sort.SliceStable(out.Unchosen, func(i, j int) bool { return out.Unchosen[i].Name < out.Unchosen[j].Name })
 	return out
+}
+
+// smallest is the smallest serving size, the one a meal-kit card's own
+// numbers are written for, or 0.
+func smallest(sizes []int) int {
+	out := 0
+	for _, s := range sizes {
+		if s > 0 && (out == 0 || s < out) {
+			out = s
+		}
+	}
+	return out
+}
+
+// statedMentions are the ingredients some step writes its own amount for.
+func statedMentions(steps []Step, mentions []mention) map[int]bool {
+	found := map[int]bool{}
+	for _, step := range steps {
+		renderStep(step, mentions, stepAmounts{stated: map[int]bool{}, found: found})
+	}
+	return found
 }
 
 // componentOf describes a specialty ingredient the household makes from store

@@ -4120,6 +4120,49 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/recipes/{recipeId}/note:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/RecipeID"
+    get:
+      summary: Get your private note on a recipe
+      description: The caller's own note. Nobody else in the household can read it. Empty text and a null updatedAt when there is none. Requires `household.view`.
+      operationId: getRecipeNote
+      tags: [ratings]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The note.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecipeNote"
+    put:
+      summary: Save your private note on a recipe
+      description: Replaces the caller's note; blank text deletes it. At most 5000 characters. Requires `household.view`.
+      operationId: putRecipeNote
+      tags: [ratings]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                  maxLength: 5000
+      responses:
+        "200":
+          description: The saved note.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecipeNote"
   /api/v1/households/{householdId}/recipes/{recipeId}/ratings:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -5347,6 +5390,17 @@ components:
         type: string
         example: 66e5a1f2c3b4a5d6e7f80d01
   schemas:
+    RecipeNote:
+      type: object
+      required: [recipeId, text, updatedAt]
+      properties:
+        recipeId:
+          type: string
+        text:
+          type: string
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
     RecipeSummary:
       type: object
       required: [id, name, timesOrdered, isAddon, tags, calories, proteinGrams, timeBand, householdRating, myRating]
@@ -6281,6 +6335,9 @@ components:
             text:
               type: string
               example: ½ tbsp
+        part:
+          type: boolean
+          description: True when amount is this step's share of the ingredient, as the card wrote it, rather than the recipe's whole amount.
         spicy:
           type: boolean
           description: |

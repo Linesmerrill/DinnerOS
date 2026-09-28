@@ -119,6 +119,9 @@ type StepSegmentResponse struct {
 	// when an earlier mention in the same step carried it, or when a
 	// substitution's amount doesn't convert exactly.
 	Amount *InstructionAmountResponse `json:"amount,omitempty"`
+	// Part is true when amount is this step's share of the ingredient rather
+	// than the recipe's whole amount.
+	Part bool `json:"part,omitempty"`
 	// Spicy marks an ingredient that brings heat.
 	Spicy bool `json:"spicy,omitempty"`
 	// Substituted is true when the household's choice changed this mention.
@@ -207,7 +210,7 @@ func newInstructionsResponse(in Instructions) InstructionsResponse {
 		for _, seg := range step.Segments {
 			sr.Segments = append(sr.Segments, StepSegmentResponse{
 				Kind: string(seg.Kind), Text: seg.Text, IngredientID: seg.IngredientID, Name: seg.Name,
-				Amount: instructionAmount(seg.Amount), Spicy: seg.Spicy, Substituted: seg.Substituted,
+				Amount: instructionAmount(seg.Amount), Part: seg.Part, Spicy: seg.Spicy, Substituted: seg.Substituted,
 				SpecialtyID: seg.SpecialtyID, SpecialtyName: seg.SpecialtyName, LeftOut: seg.LeftOut,
 			})
 		}

@@ -45,6 +45,9 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Put("/households/{householdId}/recipes/{recipeId}/rating", h.rate)
 		r.Delete("/households/{householdId}/recipes/{recipeId}/rating", h.remove)
 		r.Get("/households/{householdId}/recipes/{recipeId}/ratings", h.list)
+		// A member's private note: only ever their own, never the household's.
+		r.Get("/households/{householdId}/recipes/{recipeId}/note", h.getNote)
+		r.Put("/households/{householdId}/recipes/{recipeId}/note", h.putNote)
 	})
 }
 

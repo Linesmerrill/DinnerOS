@@ -47,8 +47,10 @@ func newBehavior(db *mongodb.Client, recipeService *recipes.Service, userService
 		Logger:    logger,
 		Listeners: listeners,
 	})
+	ratingStore := ratings.NewMongoStore(db.Database())
 	ratingService := ratings.NewService(ratings.ServiceOptions{
-		Store:   ratings.NewMongoStore(db.Database()),
+		Store:   ratingStore,
+		Notes:   ratingStore,
 		Recipes: recipeService,
 		Users:   userService,
 		Events:  eventService,

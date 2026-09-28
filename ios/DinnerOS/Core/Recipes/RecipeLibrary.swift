@@ -263,6 +263,24 @@ final class RecipeLibrary {
         }
     }
 
+    // MARK: - Notes
+
+    /// The member's own note on a recipe, empty when there is none.
+    func note(recipeID: String) async throws -> RecipeNote {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        return try await session.authorized { token in
+            try await api.note(householdID: householdID, recipeID: recipeID, accessToken: token)
+        }
+    }
+
+    /// Saves the member's own note; blank text deletes it.
+    func saveNote(recipeID: String, text: String) async throws -> RecipeNote {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        return try await session.authorized { token in
+            try await api.saveNote(householdID: householdID, recipeID: recipeID, text: text, accessToken: token)
+        }
+    }
+
     // MARK: - Ratings
 
     /// Saves the signed-in user's rating of a recipe, then refreshes that recipe in the

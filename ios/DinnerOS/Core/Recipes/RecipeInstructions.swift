@@ -233,11 +233,14 @@ nonisolated struct InstructionSegment: Decodable, Equatable, Sendable {
     /// The household leaves this ingredient out of the recipe. Shown struck through, never
     /// hidden: the step still reads as written.
     var leftOut = false
+    /// `amount` is this step's share of the ingredient ("1 tbsp" of the recipe's 3), as the card
+    /// wrote it, rather than the whole amount.
+    var part = false
 
     var isIngredient: Bool { kind == .ingredient }
 
     private enum CodingKeys: String, CodingKey {
-        case kind, text, name, amount, spicy, substituted, leftOut
+        case kind, text, name, amount, spicy, substituted, leftOut, part
         case ingredientID = "ingredientId"
         case specialtyID = "specialtyId"
         case specialtyName
@@ -274,6 +277,7 @@ nonisolated struct InstructionSegment: Decodable, Equatable, Sendable {
             specialtyID: container.decodeLenient(String.self, forKey: .specialtyID),
             specialtyName: container.decodeLenient(String.self, forKey: .specialtyName),
             leftOut: container.decodeLenientBool(forKey: .leftOut) ?? false)
+        part = container.decodeLenientBool(forKey: .part) ?? false
     }
 }
 

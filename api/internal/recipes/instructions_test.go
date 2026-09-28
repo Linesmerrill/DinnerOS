@@ -380,3 +380,72 @@ func TestSegmentTextsJoinToTheStep(t *testing.T) {
 		t.Errorf("joined = %q, want the step's text %q", joined(step), step.Text)
 	}
 }
+
+// A card that splits an ingredient across steps writes each step's share,
+// with the other box size in parentheses. The step shows its share for the
+// size being cooked, not the recipe's total: "Melt 7 tbsp butter" twice was
+// the bug. A later "remaining butter" gets no amount rather than the total.
+func TestAnnotateKeepsEachStepsShare(t *testing.T) {
+	r := instructionRecipe(
+		[]RecipeIngredient{instructionLine("ing-butter", "Butter", "3", "tbsp")},
+		"Melt 1 TBSP butter (2 TBSP for 4 servings) in a large pan.",
+		"Stir in 2 TBSP butter (4 TBSP for 4 servings) until glossy.",
+		"Top with the remaining butter.")
+	two := Annotate(r, 2, nil, true)
+	for i, want := range []string{
+		"Melt 1 tbsp butter in a large pan.",
+		"Stir in 2 tbsp butter until glossy.",
+		"Top with the remaining butter.",
+	} {
+		if got := joined(two.Steps[i]); got != want {
+			t.Errorf("2 servings, step %d = %q, want %q", i+1, got, want)
+		}
+	}
+	first := ingredientSegments(two.Steps[0])
+	if len(first) != 1 || !first[0].Part || first[0].Amount == nil || first[0].Amount.Text() != "1 tbsp" {
+		t.Errorf("step 1 segment = %+v, want a 1 tbsp share", first)
+	}
+	if last := ingredientSegments(two.Steps[2]); len(last) != 1 || last[0].Amount != nil {
+		t.Errorf("remaining butter = %+v, want no amount", last)
+	}
+
+	four := Annotate(r, 4, nil, true)
+	if got, want := joined(four.Steps[0]), "Melt 2 tbsp butter in a large pan."; got != want {
+		t.Errorf("4 servings, step 1 = %q, want %q", got, want)
+	}
+	if got, want := joined(four.Steps[1]), "Stir in 4 tbsp butter until glossy."; got != want {
+		t.Errorf("4 servings, step 2 = %q, want %q", got, want)
+	}
+}
+
+// Without the parenthetical, a share for a bigger box grows the way the
+// recipe's own amounts do.
+func TestAnnotateScalesAShareByTheRecipesOwnAmounts(t *testing.T) {
+	r := instructionRecipe(
+		[]RecipeIngredient{instructionLine("ing-butter", "Butter", "7", "tbsp")},
+		"Dice 6 TBSP butter into pieces.",
+		"Grease a baking dish with 1 TBSP butter.")
+	two := Annotate(r, 2, nil, true)
+	if got, want := joined(two.Steps[0]), "Dice 6 tbsp butter into pieces."; got != want {
+		t.Errorf("step 1 = %q, want %q", got, want)
+	}
+	if got, want := joined(two.Steps[1]), "Grease a baking dish with 1 tbsp butter."; got != want {
+		t.Errorf("step 2 = %q, want %q", got, want)
+	}
+	if got, want := joined(Annotate(r, 4, nil, true).Steps[1]), "Grease a baking dish with 2 tbsp butter."; got != want {
+		t.Errorf("4 servings, step 2 = %q, want %q", got, want)
+	}
+}
+
+// Meal-kit cards often write fractions with the fraction slash (U+2044).
+func TestAnnotateReadsTheFractionSlash(t *testing.T) {
+	r := instructionRecipe(
+		[]RecipeIngredient{instructionLine("ing-sugar", "Sugar", "1/4", "tsp")},
+		"Combine coleslaw, 1⁄4 tsp sugar (1⁄2 tsp for 4 servings), and salt.")
+	if got, want := joined(Annotate(r, 2, nil, true).Steps[0]), "Combine coleslaw, ¼ tsp sugar, and salt."; got != want {
+		t.Errorf("2 servings = %q, want %q", got, want)
+	}
+	if got, want := joined(Annotate(r, 4, nil, true).Steps[0]), "Combine coleslaw, ½ tsp sugar, and salt."; got != want {
+		t.Errorf("4 servings = %q, want %q", got, want)
+	}
+}

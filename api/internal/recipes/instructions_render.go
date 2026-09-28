@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"math/big"
 	"sort"
 	"strings"
 	"unicode"
@@ -30,8 +31,19 @@ var articles = map[string]bool{"the": true, "a": true, "an": true}
 // it.
 var unitWords = buildUnitWords()
 
+// unitCodes maps each of those words to its unit code.
+var unitCodes = buildUnitCodes()
+
 func buildUnitWords() map[string]bool {
 	out := map[string]bool{}
+	for w := range buildUnitCodes() {
+		out[w] = true
+	}
+	return out
+}
+
+func buildUnitCodes() map[string]string {
+	out := map[string]string{}
 	for _, code := range ingredients.UnitCodes() {
 		u, err := ingredients.LookupUnit(code)
 		if err != nil {
@@ -39,15 +51,98 @@ func buildUnitWords() map[string]bool {
 		}
 		for _, w := range []string{u.Code, u.Singular, u.Plural} {
 			if w != "" {
-				out[strings.ToLower(w)] = true
+				out[strings.ToLower(w)] = code
 			}
 		}
 	}
 	return out
 }
 
+// statedAmount reads the amount a step wrote right before a mention ("1
+// TBSP", "1 ½ cups", "2"), and how many runes of text it spans with its
+// trailing spaces. ok is false when the text doesn't end in one.
+func statedAmount(text []rune) (m Measure, length int, ok bool) {
+	spaces := trailingSpaces(text, len(text))
+	if spaces == 0 {
+		return Measure{}, 0, false
+	}
+	end := len(text) - spaces
+	word, start := lastWord(text, end)
+	unit := ""
+	numEnd := end
+	if code, isUnit := unitCodes[strings.ToLower(word)]; isUnit {
+		unit = code
+		numEnd = start - trailingSpaces(text, start)
+	} else if !isNumberWord(word) {
+		return Measure{}, 0, false
+	}
+	n := trailingNumbers(text, numEnd)
+	if n == 0 {
+		return Measure{}, 0, false
+	}
+	// Cards write fractions with the fraction slash ("1⁄4") as often as with "/".
+	q, err := ingredients.ParseQuantity(strings.ReplaceAll(string(text[numEnd-n:numEnd]), "\u2044", "/"))
+	if err != nil {
+		return Measure{}, 0, false
+	}
+	return Measure{Quantity: q, Unit: unit}, len(text) - (numEnd - n), true
+}
+
+// otherServings reads the note meal-kit cards put after a mention for the
+// other box size, " (2 TBSP for 4 servings)", at the start of text. It
+// returns the amount, the serving size it's for, and how many runes it spans.
+func otherServings(text []rune) (m Measure, servings, length int, ok bool) {
+	i := 0
+	for i < len(text) && text[i] == ' ' {
+		i++
+	}
+	if i >= len(text) || text[i] != '(' {
+		return Measure{}, 0, 0, false
+	}
+	closeAt := -1
+	for j := i + 1; j < len(text) && j < i+48; j++ {
+		if text[j] == ')' {
+			closeAt = j
+			break
+		}
+	}
+	if closeAt < 0 {
+		return Measure{}, 0, 0, false
+	}
+	inner := strings.Fields(strings.ToLower(string(text[i+1 : closeAt])))
+	// "<amount…> for <n> serving(s)"
+	if len(inner) < 4 || inner[len(inner)-3] != "for" ||
+		!strings.HasPrefix(inner[len(inner)-1], "serving") {
+		return Measure{}, 0, 0, false
+	}
+	n := 0
+	for _, r := range inner[len(inner)-2] {
+		if r < '0' || r > '9' {
+			return Measure{}, 0, 0, false
+		}
+		n = n*10 + int(r-'0')
+	}
+	amount := []rune(strings.Join(inner[:len(inner)-3], " ") + " ")
+	stated, used, ok := statedAmount(amount)
+	if !ok || used != len(amount) || n == 0 {
+		return Measure{}, 0, 0, false
+	}
+	return stated, n, closeAt + 1, true
+}
+
 // renderStep annotates one step against the recipe's ingredients.
-func renderStep(step Step, mentions []mention) InstructionStep {
+// stepAmounts carries what renderStep needs to read the amounts a step
+// wrote itself: the size being cooked, the size the card's own numbers are for
+// (its smallest), and which ingredients have an amount written in some step.
+type stepAmounts struct {
+	servings, base int
+	stated         map[int]bool
+	// found, when set, collects the ingredients this step writes an amount
+	// for (statedMentions).
+	found map[int]bool
+}
+
+func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionStep {
 	out := InstructionStep{Index: step.Index, Text: step.Text, ImageURL: step.ImageURL}
 	candidates := make([]candidate, 0, len(mentions)*3)
 	for i, m := range mentions {
@@ -81,17 +176,63 @@ func renderStep(step Step, mentions []mention) InstructionStep {
 		}
 		m := mentions[hit]
 		amount := m.amount
+		shownBefore := amountShown[hit]
+		part := false
+		skipAfter := 0
+		// The card wrote this step's share ("1 TBSP butter (2 TBSP for 4
+		// servings)"): that share is the amount here, not the recipe's total,
+		// which belongs on the ingredient list.
+		if stated, statedLen, ok := statedAmount(plain); ok && !shownBefore && !m.substituted {
+			if amounts.found != nil {
+				amounts.found[hit] = true
+			}
+			other, otherSize, otherLen, hasOther := otherServings(runes[i+length:])
+			if stated.Unit == "" && m.amount != nil {
+				stated.Unit = m.amount.Unit
+			}
+			switch {
+			case hasOther && amounts.servings == otherSize:
+				stated = other
+			case amounts.servings == amounts.base || amounts.base == 0:
+			case m.baseAmount != nil && m.amount != nil && stated.Unit == m.baseAmount.Unit &&
+				m.amount.Unit == m.baseAmount.Unit && !m.baseAmount.Quantity.IsZero():
+				// The card's numbers are for its smallest box; the recipe's own
+				// amounts for the two sizes say how this step's share grows.
+				ratio := new(big.Rat).Quo(m.amount.Quantity.Rat(), m.baseAmount.Quantity.Rat())
+				stated.Quantity = stated.Quantity.MulRat(ratio)
+			default:
+				// No way to know this step's share at this size: the step keeps
+				// its words, and no amount is claimed.
+				amount = nil
+			}
+			if amount != nil {
+				amount = &stated
+				part = m.amount == nil || stated.Quantity.Cmp(m.amount.Quantity) != 0 || stated.Unit != m.amount.Unit
+				plain = plain[:len(plain)-statedLen]
+				if len(plain) > 0 && plain[len(plain)-1] != ' ' {
+					plain = append(plain, ' ')
+				}
+				amountShown[hit] = true
+			}
+			if hasOther {
+				skipAfter = otherLen
+			}
+		} else if amounts.stated[hit] && !shownBefore {
+			// Another step wrote its own share of this ingredient, so the
+			// total would be wrong here ("the remaining butter").
+			amount = nil
+		}
 		if m.leftOut {
 			// A left-out ingredient keeps the step's own words and gets no
 			// amount: nothing of it goes in.
 			amount = nil
 		}
-		if amountShown[hit] {
+		if shownBefore {
 			// The same ingredient twice in one step: the amount belongs to
 			// the first mention, so the second is only marked.
 			amount = nil
 		}
-		if amount != nil {
+		if amount != nil && !amountShown[hit] {
 			plain = plain[:len(plain)-trailingAmountLen(plain)]
 			amountShown[hit] = true
 		}
@@ -106,7 +247,7 @@ func renderStep(step Step, mentions []mention) InstructionStep {
 		}
 		segments = append(segments, Segment{
 			Kind: SegmentIngredient, Text: text, IngredientID: m.ingredientID, Name: m.display,
-			Amount: amount, Spicy: m.spicy, Substituted: m.substituted,
+			Amount: amount, Part: part && amount != nil, Spicy: m.spicy, Substituted: m.substituted,
 			SpecialtyID: m.specialtyID, SpecialtyName: m.specialtyName, LeftOut: m.leftOut,
 		})
 		if m.leftOut {
@@ -119,7 +260,7 @@ func renderStep(step Step, mentions []mention) InstructionStep {
 			noted[m.note] = true
 			out.Notes = append(out.Notes, StepNote{Kind: NoteSubstitution, SpecialtyID: m.specialtyID, Text: m.note})
 		}
-		i += length
+		i += length + skipAfter
 	}
 	flush()
 	var b strings.Builder
@@ -260,7 +401,7 @@ func isNumberWord(word string) bool {
 		switch {
 		case unicode.IsDigit(r):
 			digits = true
-		case r == '/' || r == '.' || r == ',':
+		case r == '/' || r == '\u2044' || r == '.' || r == ',':
 		case unicode.IsNumber(r):
 			digits = true
 		default:

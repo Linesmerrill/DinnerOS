@@ -26,19 +26,20 @@ func Indexes() []mongodb.IndexSet {
 			Keys:    bson.D{{Key: "householdId", Value: 1}, {Key: "recipeId", Value: 1}, {Key: "userId", Value: 1}},
 			Options: options.Index().SetUnique(true).SetName("householdId_recipeId_userId_unique"),
 		}},
-	}}
+	}, noteIndexes()}
 }
 
 // MongoStore is the MongoDB implementation of Store.
 type MongoStore struct {
 	ratings *mongo.Collection
+	notes   *mongo.Collection
 }
 
 var _ Store = (*MongoStore)(nil)
 
 // NewMongoStore returns a store using db.
 func NewMongoStore(db *mongo.Database) *MongoStore {
-	return &MongoStore{ratings: db.Collection(Collection)}
+	return &MongoStore{ratings: db.Collection(Collection), notes: db.Collection(NotesCollection)}
 }
 
 type ratingDoc struct {

@@ -10,11 +10,11 @@ import (
 // household. Account deletion calls it when the household's last member
 // deletes their account. It is idempotent.
 func (s *MongoStore) PurgeHousehold(ctx context.Context, householdID string) error {
-	return mongodb.DeleteByID(ctx, "householdId", householdID, s.ratings)
+	return mongodb.DeleteByID(ctx, "householdId", householdID, s.ratings, s.notes)
 }
 
 // PurgeUser deletes the user's own ratings in every household. It is
 // idempotent.
 func (s *MongoStore) PurgeUser(ctx context.Context, userID string) error {
-	return mongodb.DeleteByID(ctx, "userId", userID, s.ratings)
+	return mongodb.DeleteByID(ctx, "userId", userID, s.ratings, s.notes)
 }
