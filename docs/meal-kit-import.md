@@ -510,13 +510,13 @@ Either way the library only ever receives complete, validated recipes.
 
 | What happened | Job | Notification | In the app |
 | --- | --- | --- | --- |
-| Finished, everything imported | `succeeded` | "Your recipes are ready" | *n* recipes added |
-| Finished, some recipes unreadable | `succeeded` | "…*k* couldn't be imported. Open Recipe Import to see which." | The list under **Couldn't Import**, each with one plain sentence (below) |
+| Finished, everything imported | `succeeded` | "Your recipes are ready": "*n* recipes are in your library." Tapping any import notification opens Household → Recipe Import | *n* recipes added |
+| Finished, some recipes unreadable | `succeeded` | "…*k* couldn't be imported. Tap to see which." (with older orders too: "…Older orders are waiting. Tap for details.") | The list under **Couldn't Import**, each with one plain sentence (below) |
 | The same dish under two recipe ids | `succeeded`, merged | none | Nothing: it is counted as already in the library, and its delivery weeks land on the one recipe |
 | The session ended while reading the history | no job is queued | none | The sheet says so, with **Try Again** — nothing was half-imported |
 | HelloFresh changed its layout | `dead` (`parse`) | "Recipe import needs you" | "We couldn't read HelloFresh's recipe pages. Nothing was changed in your recipes." |
 | HelloFresh refused us (403) | `dead` (`blocked`) | "Recipe import needs you" | "HelloFresh turned us away, so we stopped. Try again later." Importing is then refused for 6 hours with a sentence saying so, rather than queued. |
-| The harvest stopped at its page cap | `succeeded` for what it got | "…You have older orders too. Open Recipe Import to get them." | "Got your HelloFresh orders back to April 2023. Tap Import Again for older ones." and **Import Again** |
+| The harvest stopped at its page cap | `succeeded` for what it got | "…Older orders are waiting. Tap to import them." | "Got your HelloFresh orders back to April 2023. Tap Import Again for older ones." and **Import Again** |
 | A catch-up found nothing new | no job is queued | none | "Already up to date" — not an error, and not an empty-account message |
 | Network trouble | `queued`, retried | none until it gives up | The bar where it was, and "50 of 740 recipes imported. Trying again in about 4 minutes." |
 | Five failed attempts | `dead` (`network`) | "Recipe import needs you" | The reason, and **Import Again** |

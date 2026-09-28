@@ -11,7 +11,8 @@ struct GroceryListView: View {
     @Environment(SpecialtyStore.self) private var specialties
     @Environment(GrocerySkipStore.self) private var grocerySkips
     @Environment(HouseholdStore.self) private var households
-    @Environment(\.openShop) private var openShop
+    /// `nil` outside the tab shell, where there is no Shop tab to switch to.
+    @Environment(TabRouter.self) private var tabs: TabRouter?
     @State private var model: GroceryListModel?
     /// Set when there was no household to build the list for, so the screen says so instead of
     /// showing a spinner nothing would ever replace.
@@ -56,9 +57,9 @@ struct GroceryListView: View {
         .navigationTitle("Grocery List")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if let openShop, households.access?.can(.shoppingEdit) == true {
+            if let tabs, households.access?.can(.shoppingEdit) == true {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Open in Walmart", systemImage: "cart") { openShop(week) }
+                    Button("Open in Walmart", systemImage: "cart") { tabs.openShop(week) }
                 }
             }
         }

@@ -270,12 +270,14 @@ func (s *Service) markReminderRead(ctx context.Context, actor households.Members
 	}
 }
 
+// orderReminderBody is the reminder's text. Tapping it opens the week in
+// Shop, so it says "Tap" rather than naming the screen.
 func orderReminderBody(r OrderReminder) string {
 	day, ok := weekdayNames[r.OrderDay]
 	if !ok {
 		day = r.OrderDay
 	}
 	return fmt.Sprintf(
-		"%s is your order day. Open Shop to send your list, then mark the week ordered so this stops reminding you.",
+		"%s is your order day. Tap to send your list. Mark the week ordered to stop this reminder.",
 		day)
 }

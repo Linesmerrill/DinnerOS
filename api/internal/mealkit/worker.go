@@ -522,28 +522,51 @@ func (w *Worker) notifyFinished(ctx context.Context, job Job) {
 	if w.opts.Notifier == nil {
 		return
 	}
-	imported := job.Checkpoint.Imported + job.Checkpoint.Updated
-	body := fmt.Sprintf("%d of your HelloFresh recipes are in your library.", imported)
-	if job.Source != SourceHelloFresh {
-		body = fmt.Sprintf("%d of your meal-kit recipes are in your library.", imported)
-	}
-	if n := len(job.Checkpoint.Failures); n > 0 {
-		body += fmt.Sprintf(" %d couldn't be imported. Open Recipe Import to see which.", n)
-	}
-	// A harvest that stopped on its page cap read part of the history, not
-	// all of it, and only the member's own browser session can read the rest.
-	// Saying so is the difference between a finished import and a silent one.
-	if job.Harvest.Stopped.MoreToFetch() {
-		body += " You have older orders too. Open Recipe Import to get them."
-	}
 	w.create(ctx, notifications.New{
 		HouseholdID: job.HouseholdID,
 		Type:        notifications.TypeRecipeImportFinished,
 		Title:       "Your recipes are ready",
-		Body:        body,
+		Body:        finishedBody(job),
 		Subject:     notifications.Subject{Kind: notifications.SubjectRecipeImport, ID: job.ID},
 		DedupeKey:   "recipe_import.finished:" + job.ID,
 	})
+}
+
+// finishedBody is the finished notification's text: how many recipes are in
+// the library, then failures and older orders only when there are any, and at
+// most one "tap" sentence, because tapping opens Recipe Import. A duplicate
+// merged into a recipe already in the library is not a failure
+// (mergeDuplicates), so it never shows here.
+func finishedBody(job Job) string {
+	var b strings.Builder
+	switch imported := job.Checkpoint.Imported + job.Checkpoint.Updated; imported {
+	case 0:
+		b.WriteString("No new recipes this time.")
+	case 1:
+		b.WriteString("1 recipe is in your library.")
+	default:
+		fmt.Fprintf(&b, "%d recipes are in your library.", imported)
+	}
+	failed := len(job.Checkpoint.Failures)
+	if failed > 0 {
+		fmt.Fprintf(&b, " %d couldn't be imported.", failed)
+	}
+	// A harvest that stopped on its page cap read part of the history, not
+	// all of it, and only the member's own browser session can read the rest.
+	// Saying so is the difference between a finished import and a silent one.
+	more := job.Harvest.Stopped.MoreToFetch()
+	if more {
+		b.WriteString(" Older orders are waiting.")
+	}
+	switch {
+	case failed > 0 && more:
+		b.WriteString(" Tap for details.")
+	case failed > 0:
+		b.WriteString(" Tap to see which.")
+	case more:
+		b.WriteString(" Tap to import them.")
+	}
+	return b.String()
 }
 
 // notifyAttention is the other notification: something needs a person.
