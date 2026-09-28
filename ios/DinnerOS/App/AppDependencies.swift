@@ -152,7 +152,10 @@ final class AppDependencies {
         let shopping = ShoppingStore(
             session: session, api: client.map { ShoppingAPI(client: $0) }, checks: groceryChecks,
             // Cart links open the Walmart app when it's installed (a universal link), otherwise Safari.
-            openURL: { url in await UIApplication.shared.open(url) })
+            openURL: { url in await UIApplication.shared.open(url) },
+            // Saved products are checked on Walmart from this phone before each hand-off; the
+            // server never fetches Walmart.
+            productCheck: WalmartProductCheck())
         self.shopping = shopping
         // Every plan the server returns patches the Menu screen's cards and week counts, and
         // re-matches the Shop tab when it changes what the week's grocery list asks for.

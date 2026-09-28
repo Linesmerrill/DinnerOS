@@ -49,6 +49,14 @@ struct ShopView: View {
             .sheet(isPresented: $isShowingPrep) {
                 PrepSessionSheet()
             }
+            // Held at the screen root like the others: the bar that opens it comes and goes.
+            .sheet(
+                isPresented: Binding(
+                    get: { shopping.isReviewingProducts },
+                    set: { if !$0 { shopping.dismissProductReview() } })
+            ) {
+                ProductDecisionSheet()
+            }
             // A meal kit saved in Household changes every comparison. Watched here rather than
             // on the card, which isn't on screen for every week that has a cost to reload.
             .onChange(of: household?.mealKit) {
@@ -249,7 +257,9 @@ private struct ShopWeekList: View {
             await model.load()
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if shopping.proposalPhase == .loaded, let proposal = shopping.proposal, !proposal.lines.isEmpty {
+            if shopping.proposalPhase == .loaded, let proposal = shopping.proposal,
+                !proposal.lines.isEmpty || !proposal.needsDecision.isEmpty
+            {
                 ShopHandoffBar(proposal: proposal)
             }
         }
@@ -259,7 +269,7 @@ private struct ShopWeekList: View {
     private func sections(_ proposal: ShoppingProposal) -> some View {
         let needsProduct = proposal.needsProduct
         let notIncluded = proposal.notIncluded
-        if proposal.lines.isEmpty && needsProduct.isEmpty {
+        if proposal.lines.isEmpty && needsProduct.isEmpty && proposal.needsDecision.isEmpty {
             ContentUnavailableView {
                 Label("Nothing to Buy", systemImage: "cart")
             } description: {
@@ -367,6 +377,15 @@ private struct ShopWeekList: View {
             case .needsProduct:
                 SharedLineRow(
                     row: row, detail: ShopMealText.boughtWith(row, packages: nil),
+                    isWorking: working.contains(row.id), remove: options)
+            case .needsDecision(let line) where row.isPrimary:
+                NeedsDecisionRow(
+                    line: line, canChoose: shopping.canEdit, mealNote: ShopMealText.note(for: row), remove: options,
+                    rechoose: { choose(ProductChoice(rechoosing: line)) },
+                    leaveOut: { Task { await shopping.leaveOut(line) } })
+            case .needsDecision:
+                SharedLineRow(
+                    row: row, detail: ShopMealText.decideUnder(row),
                     isWorking: working.contains(row.id), remove: options)
             case .leftOut(let line):
                 LeftOutShopRow(
@@ -526,6 +545,65 @@ private struct NeedsProductRow: View {
     }
 }
 
+/// A line whose saved product is gone from Walmart, or couldn't be checked: it needs re-choosing
+/// or leaving out before Walmart opens.
+private struct NeedsDecisionRow: View {
+    let line: ShoppingExcludedLine
+    let canChoose: Bool
+    var mealNote: String? = nil
+    var remove: ShopRemoveOptions? = nil
+    let rechoose: () -> Void
+    let leaveOut: () -> Void
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(line.name)
+                    .font(.headline)
+                if let product = line.product {
+                    Text(product.displayName)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .strikethrough(line.reason == .productGone)
+                }
+                Label(
+                    line.reason == .productGone ? "No longer on Walmart" : "Couldn't check it on Walmart",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.orange)
+                if let mealNote {
+                    Text(mealNote)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            if canChoose {
+                let layout =
+                    dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+                    : AnyLayout(HStackLayout(spacing: 12))
+                layout {
+                    Button("Re-choose", action: rechoose)
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel("Re-choose the product for \(line.name)")
+                    Button("Leave Out", action: leaveOut)
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Leave \(line.name) out of this cart")
+                    if let remove {
+                        Spacer(minLength: 0)
+                        ShopRemoveMenu(options: remove)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
 private struct ReadyLineRow: View {
     let line: ShoppingHandoffLine
     @Binding var packages: Int
@@ -593,6 +671,16 @@ private struct ReadyLineRow: View {
                 } else {
                     CheckAmountBadge(text: line.reasonText, action: nil)
                 }
+            }
+            // Softer than a gone product: it still goes in, and may come back.
+            if line.mayBeUnavailable {
+                Label(ShoppingText.mayBeUnavailable, systemImage: "exclamationmark.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            } else if line.sentAnyway {
+                Label(ShoppingText.sentAnyway, systemImage: "questionmark.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
             if canEdit {
                 Stepper(value: $packages, in: ShoppingLimits.packages) {
@@ -1202,7 +1290,7 @@ private struct ShopHandoffBar: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-            } else if shopping.isEverythingInCart {
+            } else if shopping.isEverythingInCart && proposal.needsDecision.isEmpty {
                 // Walmart's link would only add these a second time.
                 everythingInCart
             } else {
@@ -1211,6 +1299,11 @@ private struct ShopHandoffBar: View {
                 Text(summary)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                if !proposal.needsDecision.isEmpty {
+                    Label(decisionNote(proposal.needsDecision.count), systemImage: "exclamationmark.triangle")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
             }
             if proposal.affiliateTracked {
                 Text("\(configuration.displayName) may earn a commission on Walmart purchases.")
@@ -1245,10 +1338,21 @@ private struct ShopHandoffBar: View {
             : String(localized: "Adds \(count) items to your Walmart cart. You check out in Walmart.")
     }
 
+    private func decisionNote(_ count: Int) -> String {
+        count == 1
+            ? String(localized: "1 item needs a decision first.")
+            : String(localized: "\(count) items need a decision first.")
+    }
+
     private func openButton(title: LocalizedStringKey) -> some View {
         Button(action: open) {
             Group {
-                if shopping.isCreatingHandoff {
+                if let progress = shopping.checkProgress {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text(ShoppingText.checking(progress.done, of: progress.total))
+                    }
+                } else if shopping.isCreatingHandoff || shopping.isCheckingProducts {
                     ProgressView()
                 } else {
                     Label(title, systemImage: "cart")
@@ -1257,7 +1361,7 @@ private struct ShopHandoffBar: View {
             .frame(maxWidth: .infinity)
         }
         .controlSize(.large)
-        .disabled(shopping.isCreatingHandoff)
+        .disabled(shopping.isCreatingHandoff || shopping.isCheckingProducts)
     }
 
     private func open() {

@@ -103,6 +103,22 @@ final class ShoppingStore {
     /// The handoff "Did you order these?" asks about. The app shell presents it.
     private(set) var confirmationPrompt: ShoppingHandoff?
 
+    /// The phone's checks of the products the shown week's cart sends, with the member's
+    /// decisions (docs/shopping-providers.md#checking-saved-products). Sent with every match and
+    /// hand-off, so the Shop tab and the server agree on what's left out and why.
+    private(set) var productReview: ProductCheckReview?
+    /// "Before Opening Walmart" is showing: some gone or unknown line needs a decision, or the
+    /// member hasn't opened Walmart from it yet.
+    private(set) var isReviewingProducts = false
+    private(set) var isCheckingProducts = false
+    /// Products checked so far and how many this check covers, while it runs.
+    private(set) var checkProgress: CheckProgress?
+
+    struct CheckProgress: Equatable {
+        let done: Int
+        let total: Int
+    }
+
     /// The shown week's order state, derived by the API on every read. `remind` is the only
     /// thing the banner keys off; nothing here is inferred from a handoff.
     private(set) var orderReminder: OrderReminder?
@@ -183,6 +199,9 @@ final class ShoppingStore {
     @ObservationIgnored private let checks: any GroceryCheckStorage
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let openURL: @MainActor (URL) async -> Bool
+    /// Checks saved products on Walmart from this phone. Without one (previews), every product
+    /// is unknown, so nothing is sent without the member deciding.
+    @ObservationIgnored private let productCheck: (any WalmartProductChecking)?
     @ObservationIgnored private var timeZone: TimeZone = .autoupdatingCurrent
     /// The user the state was loaded for, so another sign-in never sees it.
     @ObservationIgnored private var userID: String?
@@ -205,13 +224,15 @@ final class ShoppingStore {
 
     init(
         session: AuthSession, api: ShoppingAPI?, checks: any GroceryCheckStorage,
-        now: @escaping () -> Date = Date.init, openURL: @escaping @MainActor (URL) async -> Bool
+        now: @escaping () -> Date = Date.init, openURL: @escaping @MainActor (URL) async -> Bool,
+        productCheck: (any WalmartProductChecking)? = nil
     ) {
         self.session = session
         self.api = api
         self.checks = checks
         self.now = now
         self.openURL = openURL
+        self.productCheck = productCheck
         week = .current(in: .autoupdatingCurrent, weekStartsOn: PlanDay.defaultWeekStart, now: now())
     }
 
@@ -326,6 +347,8 @@ final class ShoppingStore {
         linkError = nil
         linkNotice = nil
         openHandoff = nil
+        productReview = nil
+        isReviewingProducts = false
         // Each week has its own order state; the previous week's must not linger.
         orderReminder = nil
         clearWeekCost()
@@ -370,7 +393,7 @@ final class ShoppingStore {
         let started = (proposalGeneration, scope)
         let week = week
         let provider = provider
-        let request = ShoppingMatchRequest(checkedOffKeys: checkedOffKeys(for: week))
+        let request = ShoppingMatchRequest(checkedOffKeys: checkedOffKeys(for: week), productChecks: productChecks)
         if clearing || proposal == nil {
             proposal = nil
             proposalPhase = .loading
@@ -450,11 +473,139 @@ final class ShoppingStore {
     /// `packages` only where the member changed it.
     var handoffRequest: ShoppingMatchRequest {
         let keys = checkedOffKeys(for: week)
-        guard hasPackageEdits else { return ShoppingMatchRequest(checkedOffKeys: keys) }
+        guard hasPackageEdits else { return ShoppingMatchRequest(checkedOffKeys: keys, productChecks: productChecks) }
         let lines = readyLines.prefix(ShoppingLimits.maxKeys).map {
             ShoppingLineSelection(ingredientKey: $0.ingredientKey, packages: packageOverrides[$0.ingredientKey])
         }
-        return ShoppingMatchRequest(lines: Array(lines), checkedOffKeys: keys)
+        return ShoppingMatchRequest(lines: Array(lines), checkedOffKeys: keys, productChecks: productChecks)
+    }
+
+    private var productChecks: [ShoppingProductCheckReport]? {
+        guard let reports = productReview?.reports, !reports.isEmpty else { return nil }
+        return Array(reports.prefix(ShoppingLimits.maxKeys))
+    }
+
+    // MARK: - Checking products on Walmart
+
+    /// The products a check covers: every line the next "Open in Walmart" adds, every line
+    /// waiting on a decision, and every line left out because of its check, so a decision stays
+    /// visible and can be taken back.
+    var productsToCheck: [ProductCheckLine] {
+        guard let proposal else { return [] }
+        let pending = WalmartProductResult.unknown(.outOfTime, at: now())
+        var lines = linesToAdd.map {
+            ProductCheckLine(
+                ingredientKey: $0.ingredientKey, name: $0.name, productID: $0.product.productID,
+                productName: $0.product.displayName, productURL: URL(string: $0.product.productURLString),
+                result: pending)
+        }
+        let decided: Set<ShoppingExclusionReason> = [.leftOutGone, .leftOutUnverified, .excluded]
+        for line in proposal.excluded where line.reason.needsDecision || decided.contains(line.reason) {
+            guard let product = line.product, !lines.contains(where: { $0.ingredientKey == line.ingredientKey })
+            else { continue }
+            lines.append(
+                ProductCheckLine(
+                    ingredientKey: line.ingredientKey, name: line.name, productID: product.productID,
+                    productName: product.displayName, productURL: URL(string: product.productURLString),
+                    result: pending))
+        }
+        return lines
+    }
+
+    /// Checks the products the cart covers on Walmart and returns the review, keeping what
+    /// `previous` knew about products that haven't changed. `refreshing` skips the phone's cache
+    /// (Check Again). `nil` when the household or week changed meanwhile.
+    private func checkProducts(refreshing: Set<String>, keeping previous: ProductCheckReview?) async
+        -> ProductCheckReview?
+    {
+        let started = scope
+        let week = week
+        let candidates = productsToCheck
+        var review = (previous ?? ProductCheckReview(lines: [])).replacingLines(candidates)
+        guard !candidates.isEmpty else { return review }
+        isCheckingProducts = true
+        checkProgress = CheckProgress(done: 0, total: candidates.count)
+        defer {
+            if started == scope {
+                isCheckingProducts = false
+                checkProgress = nil
+            }
+        }
+        let ids = candidates.map(\.productID)
+        let refreshIDs = Set(candidates.filter { refreshing.contains($0.ingredientKey) }.map(\.productID))
+        let results: [String: WalmartProductResult]
+        if let productCheck {
+            results = await productCheck.check(ids, refreshing: refreshIDs) { [weak self] done, total in
+                guard let self, started == self.scope else { return }
+                self.checkProgress = CheckProgress(done: done, total: total)
+            }
+        } else {
+            results = [:]
+        }
+        guard started == scope, week == self.week else { return nil }
+        for line in candidates {
+            review.update(results[line.productID] ?? .unknown(.network, at: now()), for: line.ingredientKey)
+        }
+        return review
+    }
+
+    /// Records a decision about a gone or unknown line, then matches again so the Shop tab
+    /// shows it.
+    func decide(_ decision: ProductCheckDecision, for ingredientKey: String) async {
+        guard productReview?.decide(decision, for: ingredientKey) == true else { return }
+        Self.logger.info("Product check decision: \(decision.rawValue, privacy: .public)")
+        await loadProposal(clearing: false)
+    }
+
+    /// Leaves a line out from the Shop tab, where it shows as needing a decision. The line's
+    /// last check (the server's) is what's decided about when this phone hasn't checked it.
+    func leaveOut(_ line: ShoppingExcludedLine) async {
+        if productReview?.lines.contains(where: { $0.ingredientKey == line.ingredientKey }) != true {
+            guard let product = line.product else { return }
+            let status = WalmartProductStatus(rawValue: line.check?.status ?? "") ?? .unknown
+            let result = WalmartProductResult(status: status, checkedAt: line.check?.checkedAt ?? now())
+            let entry = ProductCheckLine(
+                ingredientKey: line.ingredientKey, name: line.name, productID: product.productID,
+                productName: product.displayName, productURL: URL(string: product.productURLString), result: result)
+            let lines = (productReview?.lines ?? []) + [entry]
+            productReview = (productReview ?? ProductCheckReview(lines: [])).replacingLines(lines)
+            productReview?.update(result, for: line.ingredientKey)
+        }
+        await decide(.leaveOut, for: line.ingredientKey)
+    }
+
+    /// Takes a decision back ("Put Back"): the line needs one again.
+    func undecide(_ ingredientKey: String) async {
+        productReview?.undecide(ingredientKey)
+        await loadProposal(clearing: false)
+    }
+
+    /// "Check Again": checks these lines' products once more, skipping the phone's cache.
+    func checkAgain(_ ingredientKeys: Set<String>) async {
+        guard !isCheckingProducts else { return }
+        guard let checked = await checkProducts(refreshing: ingredientKeys, keeping: productReview) else { return }
+        productReview = checked
+        await loadProposal(clearing: false)
+    }
+
+    /// A product was re-chosen from "Before Opening Walmart": the week is matched again (saving
+    /// did that) and the new product is checked.
+    func productWasRechosen() async {
+        guard let checked = await checkProducts(refreshing: [], keeping: productReview) else { return }
+        productReview = checked
+        await loadProposal(clearing: false)
+    }
+
+    /// Closes "Before Opening Walmart". Decisions made there are kept for the week.
+    func dismissProductReview() {
+        isReviewingProducts = false
+    }
+
+    /// "Open Walmart" from "Before Opening Walmart", once every gone and unknown line is decided.
+    func openReviewedInWalmart() async throws {
+        guard let review = productReview, review.canOpen else { return }
+        isReviewingProducts = false
+        try await sendHandoff()
     }
 
     // MARK: - Handoff
@@ -465,7 +616,35 @@ final class ShoppingStore {
     /// API keeps what the week already sent and links only what's new. When nothing is, no
     /// link opens and `linkNotice` says everything is already in the cart. The week is matched
     /// again afterwards so the sent lines move under "In Walmart Cart" on every phone.
+    ///
+    /// First this phone checks the products the cart sends on Walmart. A gone line, or one it
+    /// couldn't check, must be decided in "Before Opening Walmart" (`isReviewingProducts`), and
+    /// nothing opens until each is. The results and decisions go with the hand-off, and the API
+    /// never puts a gone or left-out product in a link.
     func openInWalmart() async throws {
+        _ = try requireHousehold()
+        guard !isCreatingHandoff, !isCheckingProducts else { return }
+        linkError = nil
+        linkNotice = nil
+        // Send Anyway is asked again for each send; leaving a line out holds for the week.
+        var previous = productReview
+        for line in previous?.lines ?? [] where previous?.decision(for: line) == .sendAnyway {
+            previous?.undecide(line.ingredientKey)
+        }
+        guard let review = await checkProducts(refreshing: [], keeping: previous) else { return }
+        productReview = review
+        guard review.canOpen else {
+            Self.logger.info("Hand-off held: \(review.needsDecision.count, privacy: .public) products need a decision")
+            isReviewingProducts = true
+            await loadProposal(clearing: false)
+            return
+        }
+        isReviewingProducts = false
+        try await sendHandoff()
+    }
+
+    /// Sends the shown week's list, with the product checks, and opens the first cart link.
+    private func sendHandoff() async throws {
         let (api, householdID) = try requireHousehold()
         guard !isCreatingHandoff else { return }
         let week = week
@@ -481,6 +660,17 @@ final class ShoppingStore {
                 try await api.createHandoff(
                     householdID: householdID, week: week, provider: provider, request: request, accessToken: token)
             }
+        } catch let error as APIError where error.code == "products_need_decision" {
+            // The list changed under the check (a product re-chosen on another phone): check
+            // again and ask, rather than fail.
+            guard started == scope else { return }
+            isCreatingHandoff = false
+            await loadProposal(clearing: false)
+            if let checked = await checkProducts(refreshing: [], keeping: productReview) {
+                productReview = checked
+                isReviewingProducts = true
+            }
+            return
         } catch {
             if started == scope { isCreatingHandoff = false }
             throw error
@@ -967,6 +1157,8 @@ final class ShoppingStore {
         }
         guard started == scope else { return saved }
         Self.logger.info("Saved product saved")
+        // The old product's check says nothing about the new one.
+        productReview?.remove(ingredientKey)
         if preferencesPhase == .loaded {
             preferences = (preferences.filter { $0.ingredientKey != saved.ingredientKey } + [saved]).sorted {
                 $0.ingredientName.localizedCaseInsensitiveCompare($1.ingredientName) == .orderedAscending
@@ -1145,6 +1337,10 @@ final class ShoppingStore {
         prepSession = nil
         isLoadingPrep = false
         isCreatingHandoff = false
+        productReview = nil
+        isReviewingProducts = false
+        isCheckingProducts = false
+        checkProgress = nil
         linkProgress = nil
         linkError = nil
         linkNotice = nil

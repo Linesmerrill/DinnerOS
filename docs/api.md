@@ -192,8 +192,8 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}` → saved product | `household.view` | 8a | ✅ |
 | PUT | `/api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}` `{productUrl or productId, displayName, packageSize?, ingredientName?, coverage?, priceCents?}` → `201` saved product, or `200` when replaced | `shopping.edit` | 8a | ✅ |
 | DELETE | `/api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}` → `204` | `shopping.edit` | 8a | ✅ |
-| POST | `/api/v1/households/{householdId}/plans/{week}/shopping/{provider}/match` `{lines?, checkedOffKeys?, excludeKeys?}` → proposal (not stored) | `household.view` | 8a | ✅ |
-| POST | `/api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs` `{lines?, checkedOffKeys?, excludeKeys?}` → `201` new handoff, or `200` the week's handoff with links for only what's new | `shopping.edit` | 8a | ✅ |
+| POST | `/api/v1/households/{householdId}/plans/{week}/shopping/{provider}/match` `{lines?, checkedOffKeys?, excludeKeys?, productChecks?}` → proposal (not stored) | `household.view` | 8a | ✅ |
+| POST | `/api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs` `{lines?, checkedOffKeys?, excludeKeys?, productChecks?}` → `201` new handoff, or `200` the week's handoff with links for only what's new | `shopping.edit` | 8a | ✅ |
 | POST | `/api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs/start-over` → `204` | `shopping.edit` | 8a | ✅ |
 | POST | `/api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs/send-again` `{ingredientKey}` → `204` | `shopping.edit` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/handoffs` `?week&status&limit` → `{items}` | `household.view` | 8a | ✅ |
@@ -1725,6 +1725,17 @@ percent-encoded (`name:red%20onion`).
   normalized name after `name:`.
 - `201` creates, `200` replaces (keeping `id`, `createdBy`, `createdAt`). At
   most 1,000 saved products per store.
+- `check` is the latest check of this product a phone reported with a
+  hand-off (`productChecks`): `{status, checkedAt, name, priceCents}`, or
+  `null`. An `unknown` check never replaces a conclusive one for the same
+  product, and a check of a product since replaced is dropped.
+  `needsRechoosing` is `true` when that check found it `gone`, so Saved
+  Products can say so without fetching anything.
+- `priceSource` is `member` (typed, confirmed after an order, or read from an
+  order screenshot) or `provider` (Walmart's price at a check), `null` without
+  a price. A reported check with a price fills an empty price and keeps a
+  `provider` price current. It replaces a `member` price only when Walmart's
+  own price changed since the previous check, never on the first check.
 
 ### Match and hand off
 
@@ -1736,7 +1747,16 @@ the week's list and stores nothing. `POST .../plans/{week}/shopping/{provider}/h
 {
   "lines": [{ "ingredientKey": "66e5a1f2c3b4a5d6e7f80a14", "packages": 2 }],
   "checkedOffKeys": ["name:cilantro"],
-  "excludeKeys": []
+  "excludeKeys": [],
+  "productChecks": [
+    {
+      "ingredientKey": "66e5a1f2c3b4a5d6e7f80a14",
+      "productId": "100000001",
+      "status": "unknown",
+      "checkedAt": "2026-09-27T18:00:00Z",
+      "decision": "send_anyway"
+    }
+  ]
 }
 ```
 
@@ -1744,6 +1764,32 @@ Every field is optional; send `{}` for the defaults. Without `lines`, the
 candidates are the list's `toBuy` lines. With `lines`, exactly those lines
 are candidates, whatever their status, and `packages` (1–99) overrides the
 computed count. `checkedOffKeys` and `excludeKeys` are left out.
+
+`productChecks` are what the app found when it checked each saved product on
+Walmart from the member's phone
+([Checking saved products](shopping-providers.md#checking-saved-products)):
+`status` is `found`, `unavailable`, `gone`, or `unknown`, with Walmart's
+`name` and `priceCents` on found or unavailable, and `decision` is
+`send_anyway`, `leave_out`, or absent. The server never fetches Walmart. It
+applies the rule to every link it builds:
+
+- `gone` is never a cart line, even when `lines` selects it. `send_anyway`
+  on it is `400`.
+- `unknown` is a line only with `send_anyway`.
+- `unavailable` and `found` are lines as usual; each line carries the
+  `check` it went with.
+- Left out, the line is excluded as `left_out_gone` or `left_out_unverified`.
+- Undecided `gone` or `unknown` is excluded as `product_gone` or
+  `product_unverified` with `needsDecision: true`, and the proposal counts
+  them in `needsDecision`. A hand-off with any of them is
+  `409 products_need_decision` naming the lines, and nothing is sent.
+- A report for a product other than the one saved now counts as undecided
+  `unknown`.
+- Without a report, a saved product whose last recorded check was `gone`
+  counts as gone (`check.saved: true`).
+
+A hand-off records every report on its saved product first, whatever happens
+next (see [Saved products](#saved-products) for `check` and the price rule).
 
 ```json
 {
@@ -1877,6 +1923,10 @@ created with even if the household changes the rule afterwards.
 | `no_product` | No saved product for the ingredient: "Choose a Walmart product" |
 | `not_on_list` | A `lines` key that isn't on the week's list (only `ingredientKey` is set) |
 | `ordered` | A confirmed line of this week's handoffs bought it fresh and didn't put it in the pantry (`pantry: not_tracked`), and `lines` didn't select it: "Ordered this week" |
+| `product_gone` | The product check found the product gone from Walmart and the member hasn't decided: "No longer on Walmart. Re-choose it or leave it out." `needsDecision: true`; `product` and `check` are set |
+| `product_unverified` | The phone couldn't check the product and the member hasn't chosen Send Anyway or Leave Out: "Couldn't check it on Walmart." `needsDecision: true` |
+| `left_out_gone` | The member left out a line whose product is gone: "Left out. No longer on Walmart." |
+| `left_out_unverified` | The member left out a line the phone couldn't check: "Left out. Couldn't check it on Walmart." |
 | `skipped` | The household left it out ([Skipped ingredients](#skipped-ingredients)); `skipScope` says how, and `text` says so: "Skipped this week", "Never buying this", "Left out of Chili". Never sent. With `skipScope: recipe` it is only the left-out meals' part and the same ingredient can also be a line. Already in the cart and now left out entirely, it is `not_on_list` in `cart.other`, to remove |
 
 **Cart links**: `https://www.walmart.com/sc/cart/addToCart?items=ID_QTY,ID&storeId=N`.

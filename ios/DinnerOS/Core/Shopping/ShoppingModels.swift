@@ -181,6 +181,15 @@ nonisolated struct ShoppingPreference: Decodable, Hashable, Sendable, Identifiab
     /// One package's price; `nil` when unknown or from a server without prices.
     var priceCents: Int? = nil
     var priceUpdatedAt: Date? = nil
+    /// Who set the price: `member`, or `provider` (Walmart's price at a check).
+    var priceSource: String? = nil
+    /// The latest check a phone reported for this product; `nil` until one is.
+    var check: ShoppingProductCheckState? = nil
+    /// That check found the product gone from Walmart; `nil` from an older server.
+    var needsRechoosingFlag: Bool? = nil
+
+    /// Gone from Walmart at the last check: it can't go in a cart until it's re-chosen.
+    var needsRechoosing: Bool { needsRechoosingFlag ?? false }
 
     private enum CodingKeys: String, CodingKey {
         case id, provider, ingredientKey
@@ -189,23 +198,47 @@ nonisolated struct ShoppingPreference: Decodable, Hashable, Sendable, Identifiab
         case productID = "productId"
         case productURLString = "productUrl"
         case displayName, packageSize, createdBy, createdAt, updatedBy, updatedAt, priceCents, priceUpdatedAt
+        case priceSource, check
+        case needsRechoosingFlag = "needsRechoosing"
     }
+}
+
+/// A saved product's latest check on Walmart, as a phone reported it.
+nonisolated struct ShoppingProductCheckState: Decodable, Hashable, Sendable {
+    let status: String
+    let checkedAt: Date
+    var name: String? = nil
+    var priceCents: Int? = nil
+}
+
+/// The product check a line or exclusion went with.
+nonisolated struct ShoppingLineCheck: Decodable, Hashable, Sendable {
+    let status: String
+    let checkedAt: Date
+    var decision: String? = nil
+    /// The saved product's last recorded check, not one reported with the request.
+    var saved: Bool? = nil
 }
 
 nonisolated struct ShoppingPreferenceList: Decodable, Sendable {
     let items: [ShoppingPreference]
 }
 
-/// Saved Products, split so the products still missing a package size are listed first.
+/// Saved Products, split so what needs attention comes first: products no longer on Walmart,
+/// then those still missing a package size.
 nonisolated struct SavedProductGroups: Equatable, Sendable {
+    /// Gone from Walmart at the last check, in the given order.
+    let needsRechoosing: [ShoppingPreference]
     /// No package size saved, in the given order.
     let needsPackageSize: [ShoppingPreference]
     /// Everything else, in the given order.
     let complete: [ShoppingPreference]
 
     init(_ preferences: [ShoppingPreference]) {
-        needsPackageSize = preferences.filter { $0.packageSize == nil }
-        complete = preferences.filter { $0.packageSize != nil }
+        needsRechoosing = preferences.filter(\.needsRechoosing)
+        let rest = preferences.filter { !$0.needsRechoosing }
+        needsPackageSize = rest.filter { $0.packageSize == nil }
+        complete = rest.filter { $0.packageSize != nil }
     }
 }
 
@@ -239,9 +272,11 @@ nonisolated struct ShoppingMatchRequest: Encodable, Equatable, Sendable {
     var lines: [ShoppingLineSelection]?
     var checkedOffKeys: [String]?
     var excludeKeys: [String]?
+    /// The phone's checks of the products this cart sends, with the member's decisions.
+    var productChecks: [ShoppingProductCheckReport]?
 
     private enum CodingKeys: String, CodingKey {
-        case lines, checkedOffKeys, excludeKeys
+        case lines, checkedOffKeys, excludeKeys, productChecks
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -249,6 +284,7 @@ nonisolated struct ShoppingMatchRequest: Encodable, Equatable, Sendable {
         try container.encodeIfPresent(lines, forKey: .lines)
         try container.encodeIfPresent(checkedOffKeys, forKey: .checkedOffKeys)
         try container.encodeIfPresent(excludeKeys, forKey: .excludeKeys)
+        try container.encodeIfPresent(productChecks, forKey: .productChecks)
     }
 }
 
@@ -350,6 +386,14 @@ nonisolated struct ShoppingHandoffLine: Decodable, Hashable, Sendable, Identifia
     var pantry: ShoppingLinePantry? = nil
     /// The line split by meal; `nil` on a stored handoff and from a server without meal grouping.
     var shareRefs: [GroceryShare]? = nil
+    /// The product check the line went with; `nil` when none was reported.
+    var check: ShoppingLineCheck? = nil
+
+    /// Walmart had it out of stock for pickup and delivery at the check. It still goes in.
+    var mayBeUnavailable: Bool { check?.status == WalmartProductStatus.unavailable.rawValue }
+
+    /// Sent without a check because the member chose Send Anyway.
+    var sentAnyway: Bool { check?.decision == ProductCheckDecision.sendAnyway.rawValue }
 
     /// The planned recipes this line is for, sorted by name. Empty for an extra, and on
     /// handoffs stored before the API recorded them.
@@ -389,6 +433,7 @@ nonisolated struct ShoppingHandoffLine: Decodable, Hashable, Sendable, Identifia
         case recipeRefs = "recipes"
         case priceCents, pantry
         case shareRefs = "shares"
+        case check
     }
 }
 
@@ -506,6 +551,17 @@ nonisolated struct ShoppingExclusionReason: RawRepresentable, Codable, Hashable,
     /// The household left it out (`skipScope` says how). Never sent; shown struck through under
     /// its meal so it can be put back.
     static let skipped = ShoppingExclusionReason(rawValue: "skipped")
+    /// The check found the saved product gone from Walmart. Never sent; it needs re-choosing or
+    /// leaving out.
+    static let productGone = ShoppingExclusionReason(rawValue: "product_gone")
+    /// The check couldn't read the saved product and the member hasn't decided.
+    static let productUnverified = ShoppingExclusionReason(rawValue: "product_unverified")
+    /// Left out of this cart by the member: gone, or couldn't be checked.
+    static let leftOutGone = ShoppingExclusionReason(rawValue: "left_out_gone")
+    static let leftOutUnverified = ShoppingExclusionReason(rawValue: "left_out_unverified")
+
+    /// No hand-off until the member decides about the line.
+    var needsDecision: Bool { self == .productGone || self == .productUnverified }
 }
 
 /// A grocery line left out of the cart (`ShoppingExcludedLine`).
@@ -529,6 +585,9 @@ nonisolated struct ShoppingExcludedLine: Decodable, Hashable, Sendable, Identifi
     var shareRefs: [GroceryShare]? = nil
     /// How a `skipped` line was left out; `nil` otherwise.
     var skipScope: GrocerySkipScope? = nil
+    /// The saved product and its check, on a line excluded because of that check.
+    var product: ShoppingLineProduct? = nil
+    var check: ShoppingLineCheck? = nil
 
     var recipes: [GroceryRecipe] { recipeRefs ?? [] }
     var shares: [GroceryShare] { shareRefs ?? [] }
@@ -541,7 +600,7 @@ nonisolated struct ShoppingExcludedLine: Decodable, Hashable, Sendable, Identifi
         case name, category, amounts, quantityText, unquantified, groceryStatus, reason, text, searchTerms
         case recipeRefs = "recipes"
         case shareRefs = "shares"
-        case skipScope
+        case skipScope, product, check
     }
 }
 
@@ -600,10 +659,17 @@ nonisolated struct ShoppingProposal: Decodable, Hashable, Sendable {
         excluded.filter { $0.reason == .noProduct }
     }
 
-    /// Lines left out for any other reason: at home, checked off, and so on. What the household
-    /// left out on purpose isn't here; it's shown struck through under its meal.
+    /// Lines whose product is gone or couldn't be checked, still waiting on a decision. They're
+    /// shown under their meal.
+    var needsDecision: [ShoppingExcludedLine] {
+        excluded.filter { $0.reason.needsDecision }
+    }
+
+    /// Lines left out for any other reason: at home, checked off, left out because the product
+    /// is gone, and so on. What the household left out on purpose isn't here; it's shown struck
+    /// through under its meal. Neither are lines waiting on a decision.
     var notIncluded: [ShoppingExcludedLine] {
-        excluded.filter { $0.reason != .noProduct && $0.reason != .skipped }
+        excluded.filter { $0.reason != .noProduct && $0.reason != .skipped && !$0.reason.needsDecision }
     }
 
     /// What the household left out: for this week, always, or out of single meals.
@@ -807,4 +873,15 @@ nonisolated enum ShoppingText {
     }
 
     static let everythingInCart = String(localized: "Everything is already in your Walmart cart")
+
+    /// Under a line that went in although Walmart had it out of stock.
+    static let mayBeUnavailable = String(localized: "Out of stock on Walmart. It may come back.")
+
+    /// Under a line sent without a check.
+    static let sentAnyway = String(localized: "Not checked. You chose Send Anyway.")
+
+    /// While the phone checks products: "Checking 3 of 12 on Walmart…".
+    static func checking(_ done: Int, of total: Int) -> String {
+        String(localized: "Checking \(min(done + 1, total)) of \(total) on Walmart…")
+    }
 }

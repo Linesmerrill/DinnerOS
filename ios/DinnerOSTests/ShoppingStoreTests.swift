@@ -15,6 +15,7 @@ struct ShoppingStoreTests {
         let server: FakeShoppingServer
         let checks: InMemoryGroceryChecks
         let recorder: Recorder
+        let productCheck: StubProductCheck
     }
 
     private static let denver = TimeZone(identifier: "America/Denver") ?? .gmt
@@ -35,16 +36,17 @@ struct ShoppingStoreTests {
         let instant = try #require(JSONCoding.parseDate("2026-09-16T12:00:00Z"))
         let checks = InMemoryGroceryChecks()
         let recorder = Recorder()
+        let productCheck = StubProductCheck()
         let store = ShoppingStore(
             session: session, api: ShoppingAPI(client: client), checks: checks, now: { instant },
             openURL: { url in
                 recorder.opened.append(url)
                 return recorder.opens
-            })
+            }, productCheck: productCheck)
         store.onPantryChanged = { recorder.pantryRefreshes += 1 }
         store.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .mon)
         store.setPermissions(canEdit: true, canConfirm: true)
-        return Harness(store: store, server: server, checks: checks, recorder: recorder)
+        return Harness(store: store, server: server, checks: checks, recorder: recorder, productCheck: productCheck)
     }
 
     private func week() throws -> ISOWeek {
@@ -377,6 +379,133 @@ struct ShoppingStoreTests {
         #expect(store.planRevision == revision + 1)
         #expect(store.packages(for: lines[0]) == lines[0].packages)
         #expect(store.packages(for: lines[1]) == 4)
+    }
+
+    // MARK: Checking products before the hand-off
+
+    private func productChecks(_ body: [String: Any]?) -> [String: [String: Any]] {
+        let list = body?["productChecks"] as? [[String: Any]] ?? []
+        return Dictionary(
+            uniqueKeysWithValues: list.compactMap { check in
+                (check["ingredientKey"] as? String).map { ($0, check) }
+            })
+    }
+
+    @Test func everyProductFoundOpensWalmartAndReportsEachCheck() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.load()
+
+        try await store.openInWalmart()
+
+        #expect(harness.productCheck.calls.map(\.ids) == [["100000001", "100000002"]])
+        #expect(!store.isReviewingProducts)
+        #expect(!harness.recorder.opened.isEmpty)
+        let checks = productChecks(harness.server.bodies(Self.handoffRoute).last)
+        #expect(checks["i-beef"]?["status"] as? String == "found")
+        #expect(checks["i-beef"]?["productId"] as? String == "100000001")
+        #expect(checks["i-beef"]?["priceCents"] as? Int == 348)
+        #expect(checks["i-beef"]?["decision"] == nil)
+        #expect(checks["i-cilantro"]?["status"] as? String == "found")
+    }
+
+    @Test func aGoneProductHoldsWalmartUntilItsLeftOutAndIsNeverSent() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        harness.productCheck.statuses = ["100000002": .gone]
+        await store.load()
+
+        try await store.openInWalmart()
+
+        // Nothing sent, nothing opened: the member is asked first.
+        #expect(store.isReviewingProducts)
+        #expect(!harness.server.log.contains(Self.handoffRoute))
+        #expect(harness.recorder.opened.isEmpty)
+        let review = try #require(store.productReview)
+        #expect(review.needsDecision.map(\.ingredientKey) == ["i-cilantro"])
+        #expect(!review.canOpen)
+
+        // Open is refused while undecided, and Send Anyway can't apply to a gone product.
+        try await store.openReviewedInWalmart()
+        #expect(!harness.server.log.contains(Self.handoffRoute))
+        await store.decide(.sendAnyway, for: "i-cilantro")
+        #expect(store.productReview?.canOpen == false)
+
+        await store.decide(.leaveOut, for: "i-cilantro")
+        #expect(store.productReview?.canOpen == true)
+        try await store.openReviewedInWalmart()
+
+        #expect(!store.isReviewingProducts)
+        let checks = productChecks(harness.server.bodies(Self.handoffRoute).last)
+        #expect(checks["i-cilantro"]?["status"] as? String == "gone")
+        #expect(checks["i-cilantro"]?["decision"] as? String == "leave_out")
+        #expect(checks["i-beef"]?["status"] as? String == "found")
+        // The match after deciding carried the decision too, so the Shop tab agrees.
+        let match = productChecks(harness.server.bodies(Self.matchRoute).last)
+        #expect(match["i-cilantro"]?["decision"] as? String == "leave_out")
+    }
+
+    @Test func anUnknownProductIsSentOnlyWithSendAnyway() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        harness.productCheck.statuses = ["100000001": .unknown]
+        await store.load()
+
+        try await store.openInWalmart()
+        #expect(store.isReviewingProducts)
+        #expect(store.productReview?.needsDecision.map(\.ingredientKey) == ["i-beef"])
+
+        // Check Again asks the check to skip its cache for that product.
+        await store.checkAgain(["i-beef"])
+        #expect(harness.productCheck.calls.last?.refreshing == ["100000001"])
+        #expect(store.productReview?.canOpen == false)
+
+        await store.decide(.sendAnyway, for: "i-beef")
+        try await store.openReviewedInWalmart()
+
+        let checks = productChecks(harness.server.bodies(Self.handoffRoute).last)
+        #expect(checks["i-beef"]?["status"] as? String == "unknown")
+        #expect(checks["i-beef"]?["decision"] as? String == "send_anyway")
+        #expect(!harness.recorder.opened.isEmpty)
+
+        // The next send asks again: Send Anyway is never carried over silently.
+        store.setPackages(5, for: try #require(store.readyLines.first { $0.ingredientKey == "i-beef" }))
+        try await store.openInWalmart()
+        #expect(store.isReviewingProducts)
+        #expect(store.productReview?.needsDecision.map(\.ingredientKey) == ["i-beef"])
+    }
+
+    @Test func onlyTheProductsThisCartSendsAreChecked() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.load()
+        try await store.openInWalmart()
+        #expect(harness.productCheck.calls.count == 1)
+
+        // Everything is in the cart now: a second tap checks nothing new.
+        try await store.openInWalmart()
+        #expect(harness.productCheck.calls.count == 1)
+    }
+
+    @Test func withoutAProductCheckNothingIsSentUndecided() async throws {
+        let server = FakeShoppingServer()
+        let transport = StubTransport { request in server.handle(request) }
+        let client = APIClient(baseURL: try #require(URL(string: Fixtures.baseURLString)), transport: transport)
+        let session = AuthSession(
+            api: AuthAPI(client: client),
+            store: InMemoryTokenStore(session: StoredSession(tokens: Fixtures.tokens(), user: Fixtures.user)))
+        await session.restore()
+        let store = ShoppingStore(
+            session: session, api: ShoppingAPI(client: client), checks: InMemoryGroceryChecks(), openURL: { _ in true })
+        store.activate(householdID: "household-1", timeZone: Self.denver, weekStartsOn: .mon)
+        store.setPermissions(canEdit: true, canConfirm: true)
+        await store.load()
+
+        try await store.openInWalmart()
+
+        #expect(store.isReviewingProducts)
+        #expect(store.productReview?.unknown.count == 2)
+        #expect(!server.log.contains { $0.hasSuffix("/handoffs") })
     }
 
     // MARK: Handoff

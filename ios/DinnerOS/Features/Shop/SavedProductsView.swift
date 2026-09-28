@@ -61,6 +61,21 @@ struct SavedProductsView: View {
                 FormErrorLabel(message: refreshError)
             }
             let groups = SavedProductGroups(shopping.preferences)
+            if !groups.needsRechoosing.isEmpty {
+                Section {
+                    ForEach(groups.needsRechoosing) { preference in
+                        row(preference)
+                    }
+                } header: {
+                    Text("Needs Re-choosing (\(groups.needsRechoosing.count))")
+                } footer: {
+                    Text(
+                        shopping.canEdit
+                            ? "These are no longer on Walmart, so they can't go in your cart. Tap one to choose a new product."
+                            : "These are no longer on Walmart, so they can't go in your cart."
+                    )
+                }
+            }
             if !groups.needsPackageSize.isEmpty {
                 Section {
                     ForEach(groups.needsPackageSize) { preference in
@@ -82,12 +97,15 @@ struct SavedProductsView: View {
                         row(preference)
                     }
                 } header: {
-                    if !groups.needsPackageSize.isEmpty {
+                    if !groups.needsPackageSize.isEmpty || !groups.needsRechoosing.isEmpty {
                         Text("Ready")
                     }
                 } footer: {
-                    if shopping.canEdit {
-                        Text("Tap a product to change it, or swipe to remove it.")
+                    VStack(alignment: .leading, spacing: 4) {
+                        if shopping.canEdit {
+                            Text("Tap a product to change it, or swipe to remove it.")
+                        }
+                        Text("We check your saved products on Walmart each time you open Walmart.")
                     }
                 }
             }
@@ -105,7 +123,11 @@ struct SavedProductsView: View {
             } label: {
                 SavedProductRow(preference: preference)
             }
-            .accessibilityHint(preference.packageSize == nil ? "Adds its package size" : "Changes the product")
+            .accessibilityHint(
+                preference.needsRechoosing
+                    ? "Chooses a new product"
+                    : preference.packageSize == nil ? "Adds its package size" : "Changes the product"
+            )
             .swipeActions(edge: .trailing) {
                 Button("Remove", systemImage: "trash", role: .destructive) {
                     remove(preference)
@@ -139,7 +161,12 @@ private struct SavedProductRow: View {
                 Text(preference.displayName)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                if let size = preference.packageSize {
+                    .strikethrough(preference.needsRechoosing)
+                if preference.needsRechoosing {
+                    Label("No longer on Walmart", systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color.orange)
+                } else if let size = preference.packageSize {
                     Text(preference.priceCents.map { "\(size.text) · \(MoneyText.format($0))" } ?? size.text)
                         .font(.footnote)
                         .foregroundStyle(.secondary)

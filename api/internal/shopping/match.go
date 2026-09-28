@@ -81,7 +81,7 @@ func (l HandoffLine) PackageCount() providers.PackageCount {
 }
 
 func validateMatchInput(in MatchInput) (MatchInput, error) {
-	out := MatchInput{}
+	out := MatchInput{Checks: in.Checks}
 	if len(in.Lines) > MaxSelectionKeys || len(in.CheckedOffKeys) > MaxSelectionKeys || len(in.ExcludeKeys) > MaxSelectionKeys {
 		return MatchInput{}, invalid("each key list holds at most %d keys", MaxSelectionKeys)
 	}
@@ -129,6 +129,11 @@ func keySet(keys []string) map[string]bool {
 // buildProposal matches the week's grocery list g to saved products. in
 // must be validated. Lines keep the list's aisle order and are numbered l1,
 // l2, …; the links come from p.
+//
+// A line whose product check blocks it (lineCheck) never becomes a line, so
+// it can never be in a link, whatever the request selected: a gone product,
+// one left out, or one the phone couldn't check without Send Anyway. in.checks
+// must be validated.
 func buildProposal(p providers.GroceryProvider, settings Settings, g planning.GroceryList, prefs []Preference, in MatchInput) (Proposal, error) {
 	out := Proposal{
 		HouseholdID: settings.HouseholdID, Week: g.Week.String(), Provider: p.Key(), AffiliateTracked: p.AffiliateTracked(),
@@ -178,8 +183,35 @@ func buildProposal(p providers.GroceryProvider, settings Settings, g planning.Gr
 			case !hasPref:
 				reason = ExcludedNoProduct
 			}
+			var check *LineCheck
+			if hasPref {
+				check = lineCheck(pref, in.checks)
+			}
+			switch {
+			case check == nil:
+			case reason == ExcludedByMember && (check.Status == ProductGone || check.Status == ProductUnknown):
+				check.Decision = DecisionLeaveOut
+				reason = check.checkExclusion()
+			case reason == "" && check.blocks():
+				reason = check.checkExclusion()
+			case reason == ExcludedNotSelected && item.Status == grocery.StatusToBuy &&
+				(check.Status == ProductGone || check.Status == ProductUnknown):
+				// The app selects the lines it shows as ready, and a line
+				// waiting on a decision isn't one. Left unselected it would
+				// quietly drop out of the order, so the check decides it
+				// instead: a decision is still needed, or it was left out, or
+				// the member chose Send Anyway and it goes in at its count.
+				reason = ""
+				if check.blocks() {
+					reason = check.checkExclusion()
+				}
+			}
 			if reason != "" {
-				out.Excluded = append(out.Excluded, Excluded{LineSource: src, Reason: reason})
+				e := Excluded{LineSource: src, Reason: reason}
+				if reason.ForProductCheck() {
+					e.ProductID, e.ProductName, e.Check = pref.ProductID, pref.DisplayName, check
+				}
+				out.Excluded = append(out.Excluded, e)
 				continue
 			}
 			line := HandoffLine{
@@ -189,6 +221,7 @@ func buildProposal(p providers.GroceryProvider, settings Settings, g planning.Gr
 				// back later recomputes the count it was created with even
 				// if the household changes the rule afterwards.
 				Coverage: coverageFor(pref.Coverage, src.Category),
+				Check:    check,
 			}
 			count := line.PackageCount()
 			line.ComputedPackages, line.Packages = count.Packages, count.Packages

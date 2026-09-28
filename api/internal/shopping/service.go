@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -376,6 +377,9 @@ func (s *Service) match(ctx context.Context, householdID, week, provider string,
 	if in, err = validateMatchInput(in); err != nil {
 		return Proposal{}, nil, nil, err
 	}
+	if in.checks, err = validateChecks(in.Checks, s.now()); err != nil {
+		return Proposal{}, nil, nil, err
+	}
 	settings, err := s.Settings(ctx, householdID)
 	if err != nil {
 		return Proposal{}, nil, nil, err
@@ -446,14 +450,30 @@ const maxSendAttempts = 3
 // is new, the handoff comes back unchanged with no links. created reports
 // whether a handoff was stored. It needs at least one line with a saved
 // product.
+//
+// The app's product checks (in.Checks) are recorded on the saved products
+// first, whatever happens next. A line whose product is gone, or couldn't be
+// checked, and that the member hasn't decided about is a
+// *DecisionNeededError: nothing is stored or sent.
 func (s *Service) CreateHandoff(ctx context.Context, actor households.Membership, week, provider string, in MatchInput) (h Handoff, created bool, err error) {
 	if err := authorize(actor, households.PermShoppingEdit); err != nil {
 		return Handoff{}, false, err
+	}
+	if len(in.Checks) > 0 {
+		if err := s.recordReportedChecks(ctx, actor.HouseholdID, provider, in.Checks); err != nil {
+			return Handoff{}, false, err
+		}
 	}
 	for range maxSendAttempts {
 		proposal, p, current, err := s.match(ctx, actor.HouseholdID, week, provider, in)
 		if err != nil {
 			return Handoff{}, false, err
+		}
+		if lines := proposal.NeedsDecision(); len(lines) > 0 {
+			return Handoff{}, false, &DecisionNeededError{Lines: lines}
+		}
+		if len(proposal.Lines) == 0 && slices.ContainsFunc(proposal.Excluded, func(e Excluded) bool { return e.Reason.ForProductCheck() }) {
+			return Handoff{}, false, invalid("every line with a saved product was left out, so there is nothing to add to the cart")
 		}
 		if len(proposal.Lines) == 0 {
 			return Handoff{}, false, invalid("no grocery line has a saved product to add to the cart")
@@ -501,6 +521,24 @@ func (s *Service) CreateHandoff(ctx context.Context, actor households.Membership
 		return saved, false, nil
 	}
 	return Handoff{}, false, ErrConflict
+}
+
+// recordReportedChecks validates the app's checks and records them on the
+// household's saved products.
+func (s *Service) recordReportedChecks(ctx context.Context, householdID, provider string, reports []ProductCheckReport) error {
+	p, err := s.Provider(provider)
+	if err != nil {
+		return err
+	}
+	checks, err := validateChecks(reports, s.now())
+	if err != nil {
+		return err
+	}
+	prefs, err := s.store.ListPreferences(ctx, householdID, p.Key())
+	if err != nil {
+		return fmt.Errorf("list saved products: %w", err)
+	}
+	return s.recordChecks(ctx, prefs, checks)
 }
 
 // recordSend records shopping.handoff_created for one send: the lines its

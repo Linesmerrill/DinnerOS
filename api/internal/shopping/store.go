@@ -31,6 +31,11 @@ type Store interface {
 	// DeletePreference removes the saved product for one ingredient.
 	DeletePreference(ctx context.Context, householdID string, provider providers.Key, ingredientKey string) error
 
+	// SaveProductCheck writes p.Check on the saved product p.ID, and when
+	// priceChanged also p's PriceCents, PriceSource, and PriceUpdatedAt,
+	// provided its product is still p.ProductID. It reports whether it was.
+	SaveProductCheck(ctx context.Context, p Preference, priceChanged bool) (bool, error)
+
 	// InsertHandoff stores h, assigning its ID, as the week's active handoff
 	// for its provider at revision 1. Another active one for the same week and
 	// provider is ErrDuplicate.

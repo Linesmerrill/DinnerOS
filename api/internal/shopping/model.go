@@ -6,7 +6,8 @@
 //
 // Provider specifics (link formats, product IDs, package math) live in
 // internal/providers. Nothing here fetches provider pages or calls provider
-// APIs.
+// APIs: saved products are checked on the member's phone, which reports what
+// it found with the hand-off (productcheck.go).
 package shopping
 
 import (
@@ -110,10 +111,15 @@ type Preference struct {
 	// entered a price; PriceUpdatedAt is when it was set.
 	PriceCents     *int64
 	PriceUpdatedAt time.Time
-	CreatedBy      string
-	CreatedAt      time.Time
-	UpdatedBy      string
-	UpdatedAt      time.Time
+	// PriceSource says who set PriceCents: the member, or a product check.
+	PriceSource PriceSource
+	// Check is the product's latest check reported by a phone, or nil. Use
+	// CurrentCheck, which ignores a check of a previous product.
+	Check     *ProductCheckState
+	CreatedBy string
+	CreatedAt time.Time
+	UpdatedBy string
+	UpdatedAt time.Time
 
 	// setPrice tells UpsertPreference to write PriceCents (nil clears it);
 	// otherwise the stored price is kept.
@@ -189,7 +195,30 @@ const (
 	// (LineSource.SkipScope). It is reported so the Shop tab can show it
 	// struck through under its meal, and it is never sent.
 	ExcludedSkipped ExclusionReason = "skipped"
+	// ExcludedProductGone: the phone's check (or the saved product's last
+	// one) found the product gone from the provider. It is never sent; no
+	// hand-off is made until the member re-chooses it or leaves it out.
+	ExcludedProductGone ExclusionReason = "product_gone"
+	// ExcludedProductUnverified: the phone couldn't check the product and the
+	// member hasn't chosen Send Anyway or Leave Out. No hand-off until then.
+	ExcludedProductUnverified ExclusionReason = "product_unverified"
+	// ExcludedLeftOutGone and ExcludedLeftOutUnverified: the member knowingly
+	// left out a line whose product is gone or couldn't be checked.
+	ExcludedLeftOutGone       ExclusionReason = "left_out_gone"
+	ExcludedLeftOutUnverified ExclusionReason = "left_out_unverified"
 )
+
+// NeedsDecision reports whether a line excluded for r blocks a hand-off
+// until the member decides about it.
+func (r ExclusionReason) NeedsDecision() bool {
+	return r == ExcludedProductGone || r == ExcludedProductUnverified
+}
+
+// ForProductCheck reports whether the line is excluded because of its
+// product's check.
+func (r ExclusionReason) ForProductCheck() bool {
+	return r.NeedsDecision() || r == ExcludedLeftOutGone || r == ExcludedLeftOutUnverified
+}
 
 // LineStatus is a handoff line's confirmation state.
 type LineStatus string
@@ -290,6 +319,9 @@ type HandoffLine struct {
 	// that handoff already put in the provider's cart for this product. It is
 	// derived on read and never stored.
 	Cart *LineCart
+	// Check is the product check the line was sent with, or nil when the
+	// app reported none.
+	Check *LineCheck
 }
 
 // LineCart compares a match line with what the week's current handoff
@@ -349,6 +381,11 @@ type CartState struct {
 type Excluded struct {
 	LineSource
 	Reason ExclusionReason
+	// ProductID, ProductName, and Check are set on a line excluded because
+	// of its product's check (ExclusionReason.ForProductCheck).
+	ProductID   string
+	ProductName string
+	Check       *LineCheck
 }
 
 // CartLink is one handoff URL.
@@ -376,6 +413,18 @@ type Proposal struct {
 	// Meals are the week's planned recipes in plan order, which every line's
 	// Shares name, so the Shop tab can list lines meal by meal. Not stored.
 	Meals []planning.GroceryMeal
+}
+
+// NeedsDecision returns the excluded lines that block a hand-off: their
+// product is gone or couldn't be checked, and the member hasn't decided.
+func (p Proposal) NeedsDecision() []Excluded {
+	var out []Excluded
+	for _, e := range p.Excluded {
+		if e.Reason.NeedsDecision() {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // CloseReason says why a handoff stopped collecting sends.
@@ -452,7 +501,12 @@ type MatchInput struct {
 	Lines          []LineSelection
 	CheckedOffKeys []string
 	ExcludeKeys    []string
+	// Checks are the app's checks of saved products on the provider's site,
+	// with the member's decisions (productcheck.go).
+	Checks []ProductCheckReport
 
+	// checks is Checks validated, by ingredient key.
+	checks map[string]ProductCheckReport
 	// ordered holds the keys this week's confirmed handoffs bought fresh and
 	// didn't track (ExcludedOrdered). The service fills it.
 	ordered map[string]bool

@@ -265,22 +265,32 @@ type preferenceDoc struct {
 	// reads as "follow the ingredient's category".
 	Coverage string `bson:"coverage,omitempty"`
 	// PriceCents is one package's price, absent until someone enters one.
-	PriceCents     *int64        `bson:"priceCents,omitempty"`
-	PriceUpdatedAt *time.Time    `bson:"priceUpdatedAt,omitempty"`
-	CreatedBy      bson.ObjectID `bson:"createdBy"`
-	CreatedAt      time.Time     `bson:"createdAt"`
-	UpdatedBy      bson.ObjectID `bson:"updatedBy"`
-	UpdatedAt      time.Time     `bson:"updatedAt"`
+	PriceCents     *int64     `bson:"priceCents,omitempty"`
+	PriceUpdatedAt *time.Time `bson:"priceUpdatedAt,omitempty"`
+	// PriceSource is absent on prices written before it existed, all of
+	// which a member entered.
+	PriceSource string `bson:"priceSource,omitempty"`
+	// Check is the latest check a phone reported, absent until the first.
+	Check     *checkDoc     `bson:"check,omitempty"`
+	CreatedBy bson.ObjectID `bson:"createdBy"`
+	CreatedAt time.Time     `bson:"createdAt"`
+	UpdatedBy bson.ObjectID `bson:"updatedBy"`
+	UpdatedAt time.Time     `bson:"updatedAt"`
 }
 
 func (d preferenceDoc) toPreference() Preference {
-	return Preference{
+	p := Preference{
 		ID: d.ID.Hex(), HouseholdID: d.HouseholdID.Hex(), Provider: providers.Key(d.Provider),
 		IngredientKey: d.IngredientKey, IngredientName: d.IngredientName, ProductID: d.ProductID, DisplayName: d.DisplayName,
 		PackageSize: d.PackageSize.packageSize(), Coverage: providers.Coverage(d.Coverage),
-		PriceCents: d.PriceCents, PriceUpdatedAt: timeOrZero(d.PriceUpdatedAt),
+		PriceCents: d.PriceCents, PriceUpdatedAt: timeOrZero(d.PriceUpdatedAt), PriceSource: PriceSource(d.PriceSource),
+		Check:     d.Check.state(),
 		CreatedBy: hexOrEmpty(d.CreatedBy), CreatedAt: d.CreatedAt.UTC(), UpdatedBy: hexOrEmpty(d.UpdatedBy), UpdatedAt: d.UpdatedAt.UTC(),
 	}
+	if p.PriceCents != nil && p.PriceSource == "" {
+		p.PriceSource = PriceFromMember
+	}
+	return p
 }
 
 func preferenceFilter(hid bson.ObjectID, provider providers.Key, key string) bson.D {
@@ -360,9 +370,10 @@ func (s *MongoStore) UpsertPreference(ctx context.Context, p Preference) (Prefer
 	// one is kept.
 	switch {
 	case p.setPrice && p.PriceCents != nil:
-		set = append(set, bson.E{Key: "priceCents", Value: *p.PriceCents}, bson.E{Key: "priceUpdatedAt", Value: p.UpdatedAt})
+		set = append(set, bson.E{Key: "priceCents", Value: *p.PriceCents}, bson.E{Key: "priceUpdatedAt", Value: p.UpdatedAt},
+			bson.E{Key: "priceSource", Value: string(PriceFromMember)})
 	case p.setPrice:
-		unset = append(unset, bson.E{Key: "priceCents", Value: ""}, bson.E{Key: "priceUpdatedAt", Value: ""})
+		unset = append(unset, bson.E{Key: "priceCents", Value: ""}, bson.E{Key: "priceUpdatedAt", Value: ""}, bson.E{Key: "priceSource", Value: ""})
 	}
 	if len(unset) > 0 {
 		update = append(update, bson.E{Key: "$unset", Value: unset})
@@ -435,11 +446,19 @@ type lineDoc struct {
 	PriceCents *int64 `bson:"priceCents,omitempty"`
 	// Pantry is set when the line is confirmed: tracked or not_tracked.
 	Pantry string `bson:"pantry,omitempty"`
+	// Check is the product check the line was sent with, absent when the app
+	// reported none.
+	Check *lineCheckDoc `bson:"check,omitempty"`
 }
 
 type excludedDoc struct {
 	Source sourceDoc `bson:",inline"`
 	Reason string    `bson:"reason"`
+	// ProductID, ProductName, and Check are set on a line left out because
+	// of its product's check.
+	ProductID   string        `bson:"productId,omitempty"`
+	ProductName string        `bson:"productName,omitempty"`
+	Check       *lineCheckDoc `bson:"check,omitempty"`
 }
 
 type linkDoc struct {
@@ -521,7 +540,9 @@ func newHandoffDoc(h Handoff, id, hid bson.ObjectID) (handoffDoc, error) {
 		return handoffDoc{}, err
 	}
 	for _, e := range h.Excluded {
-		d.Excluded = append(d.Excluded, excludedDoc{Source: newSourceDoc(e.LineSource), Reason: string(e.Reason)})
+		d.Excluded = append(d.Excluded, excludedDoc{
+			Source: newSourceDoc(e.LineSource), Reason: string(e.Reason), ProductID: e.ProductID, ProductName: e.ProductName, Check: newLineCheckDoc(e.Check),
+		})
 	}
 	for _, l := range h.Links {
 		d.Links = append(d.Links, linkDoc(l))
@@ -546,7 +567,7 @@ func newLineDocs(lines []HandoffLine) ([]lineDoc, error) {
 			Packages: l.Packages, Reason: string(l.Reason), CoversWeek: l.CoversWeek,
 			Status: string(l.Status), Confirmed: l.ConfirmedPackages, PurchaseID: l.PurchaseID,
 			ConfirmedBy: confirmedBy, ConfirmedAt: timeOrNil(l.ConfirmedAt), SkippedBy: skippedBy, SkippedAt: timeOrNil(l.SkippedAt),
-			PriceCents: l.PriceCents, Pantry: string(l.Pantry),
+			PriceCents: l.PriceCents, Pantry: string(l.Pantry), Check: newLineCheckDoc(l.Check),
 		})
 	}
 	return out, nil
@@ -570,11 +591,13 @@ func (d handoffDoc) toHandoff() Handoff {
 			Reason: providers.Reason(l.Reason), Status: LineStatus(l.Status), ConfirmedPackages: l.Confirmed, PurchaseID: l.PurchaseID,
 			ConfirmedBy: hexOrEmpty(l.ConfirmedBy), ConfirmedAt: timeOrZero(l.ConfirmedAt),
 			SkippedBy: hexOrEmpty(l.SkippedBy), SkippedAt: timeOrZero(l.SkippedAt),
-			PriceCents: l.PriceCents, Pantry: PantryTracking(l.Pantry),
+			PriceCents: l.PriceCents, Pantry: PantryTracking(l.Pantry), Check: l.Check.check(),
 		})
 	}
 	for _, e := range d.Excluded {
-		h.Excluded = append(h.Excluded, Excluded{LineSource: e.Source.source(), Reason: ExclusionReason(e.Reason)})
+		h.Excluded = append(h.Excluded, Excluded{
+			LineSource: e.Source.source(), Reason: ExclusionReason(e.Reason), ProductID: e.ProductID, ProductName: e.ProductName, Check: e.Check.check(),
+		})
 	}
 	for _, l := range d.Links {
 		h.Links = append(h.Links, CartLink(l))

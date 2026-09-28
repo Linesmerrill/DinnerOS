@@ -34,6 +34,11 @@ possible, and record what was bought in the pantry.
 - **No scraping, no browser automation, no signed-in session replay** for any
   provider. The HelloFresh importer's approach (capturing our own signed-in
   pages) is not acceptable here: Walmart's and Instacart's terms forbid it.
+  The one exception is deliberate and narrow (decision #563): right before a
+  hand-off, the **member's own phone** reads the public product page of each
+  item that cart will send, one at a time, so a saved item Walmart retired is
+  never sent as if it were there. The server never fetches Walmart
+  ([Checking saved products](#checking-saved-products)).
 - **AnyList has no API, no URL scheme, and no share extension for items.** Its
   two documented import paths are both bulk: paste one item per line into the
   Add Item field, or let it pull from a Reminders list it created itself.
@@ -303,6 +308,12 @@ saved.
 
 ### Out of stock
 
+What's built ([Checking saved products](#checking-saved-products)): the
+phone's check marks a product `found`, `unavailable` (out of stock for pickup
+and delivery), `gone`, or `unknown`. `unavailable` lines go in the cart with a
+soft note ("It may come back"); `gone` lines never do. The plan below,
+alternates included, waits for the Affiliate API's per-store lookup.
+
 The handoff lookup marks each line `available`, `limited`, or `unavailable`.
 Unavailable lines use the first available alternate, marked as a
 substitution, or are excluded and listed ("Not added: ground pork, out of
@@ -555,8 +566,9 @@ Walmart.
 The API side of 8a is built (decisions #160–168 in
 [architecture.md](architecture.md#decision-log); endpoints in
 [api.md](api.md#shopping); collections in [database.md](database.md#shopping)).
-Nothing fetches Walmart pages, calls a Walmart API, or needs Walmart
-credentials.
+The server fetches no Walmart pages, calls no Walmart API, and needs no
+Walmart credentials. The member's phone reads the saved products' public pages
+before a hand-off ([Checking saved products](#checking-saved-products)).
 
 - **Packages:** `internal/providers` is pure: `GroceryProvider` (key, name,
   handoff kind, `ParseProduct`, `ProductURL`, `NormalizeStoreID`,
@@ -615,6 +627,131 @@ credentials.
 - **Not done yet:** recording that the member opened the links, an
   out-of-stock or alternates flow, and the 8.0 spike's answers (whether the
   `goto.walmart.com` wrapper still opens the app, and the real URL limits).
+
+## Checking saved products
+
+Walmart retires and renumbers items. A saved item ID that no longer exists
+goes into the cart link and is silently not added. The member's rule: **never
+say a product is linked when Walmart doesn't have it, so that it quietly never
+reaches the cart.** Decisions #563–#566 in
+[architecture.md](architecture.md#decision-log).
+
+An earlier design checked from the server, with a daily sweep. Walmart's bot
+wall (a redirect to `/blocked`) refused server requests after a handful of
+calls and then blocked the whole connection, so it was reverted. The checks
+now run on the member's phone, and the server never fetches Walmart.
+
+### What the phone reads
+
+`GET https://www.walmart.com/ip/<itemId>`, measured 2026-09-27:
+
+- A real item redirects to `/ip/<slug>/<itemId>` and answers **200**. The page
+  embeds `<script id="__NEXT_DATA__">`, and
+  `props.pageProps.initialData.data.product` holds `usItemId`, `name`,
+  `availabilityStatus`, `priceInfo.currentPrice.priceString` (`"$0.85"`), and
+  `fulfillmentOptions[]` of `{type: SHIPPING|PICKUP|DELIVERY,
+  availabilityStatus}`.
+- A missing item redirects to `/ip/seort/<itemId>` and answers **404**.
+- A bot challenge redirects to `/blocked?...` and answers **200**.
+
+`WalmartProductPage` (iOS) reads that into a status. A page it can't fully
+understand is **unknown, never found**:
+
+| Status | Needs |
+| --- | --- |
+| `found` | 200 on a walmart.com `/ip/` URL, `__NEXT_DATA__`, a product whose `usItemId` is the item asked for, a name, a `fulfillmentOptions` array, and `PICKUP` or `DELIVERY` at `IN_STOCK`, `LIMITED_STOCK`, or `AVAILABLE` (with neither channel listed, the product's own `availabilityStatus`) |
+| `unavailable` | All of that, but neither pickup nor delivery in stock |
+| `gone` | 404 on a walmart.com `/ip/` URL |
+| `unknown` | Anything else: no answer, `/blocked`, another status, a redirect off the site, no page data, a different item, no `fulfillmentOptions`, or the time ran out |
+
+The price is read only when `priceString` is exactly `$D.CC` (`$1,024.50`
+too). `"$1.24/lb"` or `"From $3"` leaves it unread, and the product is still
+found.
+
+### How the phone checks
+
+`WalmartProductCheck` runs when the member taps **Open in Walmart**:
+
+1. It covers only the products this send adds (lines already in the cart
+   aren't checked again), plus lines waiting on a decision.
+2. One product at a time, **0.4 s** between requests, within a **20 s** total
+   budget. A request gets at most 8 s, the web view at most 10 s, and never
+   more than the budget has left. Products the budget doesn't reach are
+   `unknown`.
+3. Each page is fetched with `URLSession` and the headers Safari on that
+   iPhone sends. Redirects are followed only within walmart.com.
+4. When that request lands on `/blocked` or is otherwise not readable, the
+   same page is loaded **once** in an offscreen `WKWebView` (the default
+   website data store, the engine the member's own Walmart browsing uses),
+   and a script reads only the fields above from `__NEXT_DATA__`. After one
+   block, later pages in the run go straight to the web view. A block there
+   too stops the run: the rest are `unknown`. Nothing solves a challenge.
+5. Conclusive results (`found`, `unavailable`, `gone`) are cached on the phone
+   for **an hour**, so reopening the sheet doesn't fetch again. **Check Again**
+   skips the cache. `unknown` is never cached.
+
+### The hand-off rule
+
+| Status | What happens |
+| --- | --- |
+| `found` | Sent |
+| `unavailable` | Sent, with "Out of stock on Walmart. It may come back." |
+| `gone` | **Never sent.** Re-choose it or Leave Out |
+| `unknown` | Check Again, Re-choose, Leave Out, or **Send Anyway**. Never sent silently |
+
+When any line is gone or unknown and undecided, the app shows **Before
+Opening Walmart** instead of opening anything. Gone lines are under "No
+Longer on Walmart" with Re-choose and Leave Out. Unknown lines are under
+"Couldn't Check" with Re-choose, Leave Out, Send Anyway, and See It on
+Walmart, and a Check Again button. Out-of-stock lines are listed as going in
+anyway. **Open Walmart** stays disabled until every gone and unknown line is
+decided. Send Anyway is for a member who has seen the item on Walmart
+themselves; it is asked again on each send. A left-out line stays left out
+for the week.
+
+The Shop tab shows the same states: a line waiting on a decision sits under
+its meal ("No longer on Walmart" or "Couldn't check it on Walmart") with
+Re-choose and Leave Out, and the bar under Open in Walmart counts them.
+
+### What the server does
+
+The app sends every result and decision with the match and the hand-off
+(`productChecks`, [API](api.md#match-and-hand-off)). The server never fetches
+Walmart. It:
+
+- **enforces the rule on every link it builds.** A `gone` product is never a
+  cart line, even when the request selects it. An `unknown` one is a line only
+  with `send_anyway`. An undecided gone or unknown line is `409
+  products_need_decision`, and nothing is sent. A report for a product the
+  member has since replaced counts as undecided `unknown`.
+- **records** each line's check and decision on the hand-off, and reports
+  left-out lines under Not Included as `left_out_gone` ("Left out. No longer
+  on Walmart.") or `left_out_unverified`.
+- **stores the latest result on the saved product** (status, checked-at,
+  Walmart's name, price in cents). An `unknown` result never replaces a
+  conclusive one. Saved Products lists a product last found gone under
+  "Needs Re-choosing" without fetching anything, and a match without a
+  report still treats that product as gone.
+
+### Prices from checks
+
+A found or unavailable check with a price updates the saved product's price:
+
+- no saved price: Walmart's is saved (`priceSource: provider`);
+- a price from an earlier check: follows Walmart's when it changes;
+- a price the member typed, confirmed, or imported (`priceSource: member`):
+  kept, unless Walmart's own price changed since the previous check. The first
+  check never overrides a member's price.
+
+### What it can't promise
+
+- An item can vanish between the check and checkout. Walmart then shows its
+  own error for that item.
+- The page shows stock at Walmart's default store for the phone, which may
+  not be the household's store. Whether an item exists doesn't depend on the
+  store, and that is what the rule rests on.
+- A changed page reads as `unknown`, so the failure mode is members asked to
+  decide, not dead items sent.
 
 ## Order reminders
 
@@ -1060,7 +1197,13 @@ endpoints in [api.md](api.md#request-a-store), the collection in
   explicit ingredient conversion fact. The UI must make "check amount" lines
   obvious.
 - **Store-level stock** needs extra Walmart approval. ZIP-level stock may say
-  an item is available when the chosen store lacks it.
+  an item is available when the chosen store lacks it. The phone's product
+  checks read Walmart's default store, so their stock is approximate too.
+- **Reading product pages from the phone.** The checks read public
+  walmart.com pages, which the Walmart I/O terms' "don't scrape" line arguably
+  covers. They are few (only what one send adds), one at a time, from the
+  member's own phone as the member shops, and they stop on a block. Replace
+  them with the Affiliate API `items` lookup once keys exist.
 - **Walmart terms are dated 2020 and partly stale.** Get written confirmation
   from Walmart affiliate ops if anything is ambiguous, especially native-app
   use and self-referral.

@@ -3282,6 +3282,18 @@ paths:
         or answering every line closes it, and the next send stores a new
         one. At least one line needs a saved product. Requires
         `shopping.edit`.
+
+        `productChecks` carry what the app found when it checked each saved
+        product on Walmart from the member's phone, and the member's
+        decisions. The server records them on the saved products first,
+        whatever happens next, and never fetches Walmart itself. A `gone`
+        product is never a cart line, even when `lines` selects it. An
+        `unknown` one is sent only with `decision: send_anyway`. Either one
+        left out is reported in `excluded` as `left_out_gone` or
+        `left_out_unverified`. A line whose product is gone or unknown and
+        undecided is `409 products_need_decision`, and nothing is sent.
+        Without a report, a saved product whose last recorded check was
+        `gone` counts as gone.
       operationId: createShoppingHandoff
       tags: [shopping]
       security:
@@ -3314,7 +3326,14 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: |
+            `products_need_decision`: a line's product is gone or couldn't be
+            checked, and the member hasn't decided (the message names the
+            lines). `conflict`: concurrent sends kept colliding; retry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "503":
           $ref: "#/components/responses/ProviderUnavailable"
   /api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs/start-over:
@@ -11640,6 +11659,21 @@ components:
         priceUpdatedAt:
           type: [string, "null"]
           format: date-time
+        priceSource:
+          type: [string, "null"]
+          enum: [member, provider, null]
+          description: |
+            `member`: typed, confirmed after an order, or read from an order
+            screenshot. `provider`: the price Walmart's page showed at a
+            check. Null without a price.
+        check:
+          description: The latest check a phone reported for this product, or null.
+          oneOf:
+            - $ref: "#/components/schemas/ShoppingProductCheck"
+            - type: "null"
+        needsRechoosing:
+          type: boolean
+          description: True when that check found the product gone from Walmart.
         createdBy:
           type: string
         createdAt:
@@ -11650,6 +11684,49 @@ components:
         updatedAt:
           type: string
           format: date-time
+    ShoppingProductCheck:
+      type: object
+      description: |
+        A saved product's latest check on Walmart, as a phone reported it. An
+        `unknown` check never replaces a conclusive one for the same product.
+      required: [status, checkedAt, name, priceCents]
+      properties:
+        status:
+          $ref: "#/components/schemas/ShoppingProductStatus"
+        checkedAt:
+          type: string
+          format: date-time
+        name:
+          type: [string, "null"]
+          description: The product's name on Walmart's page.
+        priceCents:
+          type: [integer, "null"]
+          description: The price Walmart's page showed, in US cents.
+    ShoppingProductStatus:
+      type: string
+      enum: [found, unavailable, gone, unknown]
+      description: |
+        `found`: on Walmart and in stock for pickup or delivery.
+        `unavailable`: on Walmart but out of stock for both; still sent.
+        `gone`: Walmart answered 404; never sent. `unknown`: the check
+        couldn't tell (blocked, timed out, unreadable); never treated as
+        found.
+    ShoppingLineCheck:
+      type: object
+      description: The product check a line or exclusion went with.
+      required: [status, checkedAt, decision, saved]
+      properties:
+        status:
+          $ref: "#/components/schemas/ShoppingProductStatus"
+        checkedAt:
+          type: string
+          format: date-time
+        decision:
+          type: [string, "null"]
+          enum: [send_anyway, leave_out, null]
+        saved:
+          type: boolean
+          description: True when no report came with the request and this is the saved product's last recorded check.
     ShoppingPreferenceList:
       type: object
       required: [items]
@@ -11689,6 +11766,44 @@ components:
           maxItems: 300
           items:
             type: string
+        productChecks:
+          type: [array, "null"]
+          maxItems: 300
+          description: |
+            The app's checks of saved products on Walmart, one per line at
+            most, with the member's decision for a gone or unknown product.
+            A report for a product other than the one saved now counts as
+            `unknown` and undecided.
+          items:
+            type: object
+            required: [ingredientKey, productId, status, checkedAt]
+            properties:
+              ingredientKey:
+                type: string
+              productId:
+                type: string
+                maxLength: 64
+              status:
+                $ref: "#/components/schemas/ShoppingProductStatus"
+              checkedAt:
+                type: string
+                format: date-time
+              name:
+                type: string
+                description: Walmart's name for the product, on found or unavailable.
+              priceCents:
+                type: [integer, "null"]
+                minimum: 0
+                maximum: 1000000
+                description: |
+                  Walmart's price, on found or unavailable. It fills an empty
+                  saved price and keeps a price from an earlier check current;
+                  a member's price is replaced only when Walmart's own price
+                  changed since the previous check.
+              decision:
+                type: [string, "null"]
+                enum: [send_anyway, leave_out, null]
+                description: "`send_anyway` is refused for a `gone` product."
     ShoppingLineConfirmation:
       type: object
       required: [status, packages, purchaseId, confirmedBy, confirmedAt, skippedBy, skippedAt]
@@ -11841,6 +11956,11 @@ components:
             whose leftovers count down. `not_tracked`: bought fresh for the
             week and assumed used up (meat and seafood; other per_week lines
             without a measurable leftover of at least 25%), so no purchase.
+        check:
+          description: The product check the line went with, or null when none was reported.
+          oneOf:
+            - $ref: "#/components/schemas/ShoppingLineCheck"
+            - type: "null"
     ShoppingLineCart:
       type: object
       required: [sentPackages, addPackages, removePackages]
@@ -11934,14 +12054,18 @@ components:
           enum: [toBuy, inPantry, pantryHint, fromFreezer, null]
         reason:
           type: string
-          enum: [in_pantry, pantry_hint, in_freezer, house_made, checked_off, excluded, not_selected, no_product, not_on_list, ordered, skipped]
+          enum: [in_pantry, pantry_hint, in_freezer, house_made, checked_off, excluded, not_selected, no_product, not_on_list, ordered, skipped, product_gone, product_unverified, left_out_gone, left_out_unverified]
           description: |
             `in_freezer`: a frozen pantry item covers it (grocery status
             `fromFreezer`), so the week grabs it instead of buying it again;
             its `text` is "Grab from the freezer". `skipped`: the household
             left it out (`skipScope`); never sent, and shown struck through
             under its meal. With `skipScope: recipe` the same ingredient can
-            also be a line for other meals.
+            also be a line for other meals. `product_gone` and
+            `product_unverified`: the product check found it gone, or
+            couldn't check it and the member hasn't decided (`needsDecision`).
+            `left_out_gone` and `left_out_unverified`: the member left it out
+            for that reason.
         text:
           type: string
           example: Choose a Walmart product
@@ -11963,6 +12087,24 @@ components:
             $ref: "#/components/schemas/GroceryShare"
         skipScope:
           $ref: "#/components/schemas/GrocerySkipScope"
+        needsDecision:
+          type: boolean
+          description: True for `product_gone` and `product_unverified`; no hand-off until decided.
+        product:
+          description: The saved product, on a line excluded because of its check.
+          type: object
+          required: [productId, displayName, productUrl, packageSize]
+          properties:
+            productId:
+              type: string
+            displayName:
+              type: string
+            productUrl:
+              type: string
+            packageSize:
+              type: "null"
+        check:
+          $ref: "#/components/schemas/ShoppingLineCheck"
     ShoppingSearchTerms:
       type: object
       description: |
@@ -12052,6 +12194,9 @@ components:
           description: The week's planned recipes in plan order; every line's `shares` name one. Empty on a stored handoff.
           items:
             $ref: "#/components/schemas/GroceryMeal"
+        needsDecision:
+          type: integer
+          description: Excluded lines that block a hand-off until the member decides.
     ShoppingHandoff:
       allOf:
         - $ref: "#/components/schemas/ShoppingProposal"
