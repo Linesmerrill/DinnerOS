@@ -68,6 +68,11 @@ struct FirstRunRecipesTests {
         #expect(FirstRunRecipes.state(for: emptyLibrary(job: queued)) == .importing(queued))
         #expect(FirstRunRecipes.state(for: emptyLibrary(job: running)) == .importing(running))
         #expect(running.progress == 0.25)
+        // Resting between the server's batches is still importing, with the bar where it was.
+        let resting = MealKitImportJob(
+            id: "job-1", status: "queued", phase: "recipes", recipesFound: 740, recipesDone: 50)
+        #expect(resting.state == .waiting)
+        #expect(FirstRunRecipes.state(for: emptyLibrary(job: resting)) == .importing(resting))
     }
 
     /// Another member's run is this member's progress too: the job belongs to the household.
@@ -78,7 +83,7 @@ struct FirstRunRecipesTests {
         #expect(FirstRunRecipes.state(for: emptyLibrary(job: running)) == .importing(running))
         #expect(detail.hasPrefix("1 of 10 recipes"))
         // …and that it keeps going without them, which is the point of showing it at all.
-        #expect(detail.lowercased().contains("server"))
+        #expect(detail.contains("You can close the app."))
     }
 
     @Test func aStoppedRunSaysWhyAndOffersARetry() {

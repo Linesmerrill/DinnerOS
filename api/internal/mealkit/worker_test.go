@@ -289,8 +289,10 @@ func TestWorkerRecordsRecipesTheImportPipelineRejected(t *testing.T) {
 	if job.Status != JobSucceeded || len(job.Checkpoint.Failures) != 1 {
 		t.Fatalf("job = %q failures %+v", job.Status, job.Checkpoint.Failures)
 	}
-	if job.Checkpoint.Failures[0].Reason != "name is required" {
-		t.Errorf("failure reason = %q; the pipeline's own reason should reach the member", job.Checkpoint.Failures[0].Reason)
+	// The pipeline's own wording ("name is required") is for the log; the
+	// member reads a plain sentence.
+	if got := job.Checkpoint.Failures[0].Reason; got != "This recipe was missing details we need." {
+		t.Errorf("failure reason = %q", got)
 	}
 	if job.Checkpoint.Imported != 1 {
 		t.Errorf("imported = %d, want only the accepted recipe", job.Checkpoint.Imported)
@@ -334,5 +336,152 @@ func TestWorkerTakesOverAJobWhoseLeaseExpired(t *testing.T) {
 	// Only the recipe the dead run had not finished was fetched again.
 	if got := f.source.fetchedIDs(); len(got) != 1 || got[0] != "recipe-01" {
 		t.Errorf("fetched = %v, want only the unfinished recipe", got)
+	}
+}
+
+// Seen in production: "Garlic Bread — matches the same stored recipe as
+// recipes[1]" under Couldn't Import. The same dish arrives on an order
+// history under two recipe ids, the library keeps one recipe for it, and that
+// is a merge, not a failure.
+func TestADishOrderedUnderTwoIdsIsMergedNotReportedAsAFailure(t *testing.T) {
+	history := orders(3)
+	history[2].Weeks = []string{"2026-W41"} // the re-release, delivered another week
+	f := newWorkerFixture(t, history)
+	f.publisher.sameAs = map[string]string{"recipe-02": "recipe-00"}
+
+	report, err := f.worker(t).Run(context.Background())
+	if err != nil || report.Succeeded != 1 {
+		t.Fatalf("Run() = %+v, %v", report, err)
+	}
+	job := f.reload(t)
+	if len(job.Checkpoint.Failures) != 0 || report.Failures != 0 {
+		t.Fatalf("a duplicate was recorded as a failure: %+v", job.Checkpoint.Failures)
+	}
+	// Counted as already in the library, and marked done.
+	if job.Checkpoint.Imported != 2 || job.Checkpoint.Unchanged != 1 || job.RecipesDone() != 3 {
+		t.Errorf("counts = imported %d unchanged %d done %d", job.Checkpoint.Imported, job.Checkpoint.Unchanged, job.RecipesDone())
+	}
+	// Its delivery week landed on the one stored recipe.
+	if got := f.publisher.weeksOf("recipe-00"); !slices.Equal(got, []string{"2026-W30", "2026-W41"}) {
+		t.Errorf("weeks on the stored recipe = %v, want both deliveries", got)
+	}
+	if resp := newJobResponse(job); len(resp.Failures) != 0 {
+		t.Errorf("the status lists %d failures", len(resp.Failures))
+	}
+	for _, n := range f.notifier.sent {
+		if strings.Contains(n.Body, "couldn't") {
+			t.Errorf("the finished notification mentions a failure: %q", n.Body)
+		}
+	}
+}
+
+// Every way a recipe can fail to arrive, and what the member reads for it.
+func TestNoFailureReasonReadsLikeAnInternalMessage(t *testing.T) {
+	history := orders(6)
+	history[5].Weeks = []string{"2026-W41"}
+	f := newWorkerFixture(t, history)
+	f.source.recipeErr = map[string]error{
+		// recipe-00 reads fine first, so these are single recipes, not a
+		// layout change.
+		"recipe-01": &ParseError{Subject: "recipe recipe-01", Detail: "the data embedded in the recipe page is not the JSON this build expects"},
+		"recipe-02": &ParseError{Subject: "the response", Detail: "the meal-kit service answered HTTP 404", Status: 404},
+		"recipe-03": &ParseError{Subject: "recipe recipe-03", Detail: "the request was redirected away from HelloFresh's recipe pages"},
+	}
+	f.publisher.reject = map[string]string{"recipe-04": "servings must be positive; name is required"}
+	f.publisher.sameAs = map[string]string{"recipe-05": "recipe-00"}
+
+	if _, err := f.worker(t, func(o *WorkerOptions) { o.RecipesPerRun = 10 }).Run(context.Background()); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	job := f.reload(t)
+	if len(job.Checkpoint.Failures) != 4 {
+		t.Fatalf("failures = %+v, want the four real ones and not the duplicate", job.Checkpoint.Failures)
+	}
+	want := map[string]string{
+		"recipe-01": "We couldn't read this recipe on HelloFresh.",
+		"recipe-02": "This recipe is no longer on HelloFresh.",
+		"recipe-03": "We couldn't read this recipe on HelloFresh.",
+		"recipe-04": "This recipe was missing details we need.",
+	}
+	for _, fail := range job.Checkpoint.Failures {
+		if fail.Reason != want[fail.SourceRecipeID] {
+			t.Errorf("%s: reason %q, want %q", fail.SourceRecipeID, fail.Reason, want[fail.SourceRecipeID])
+		}
+		assertPlainReason(t, fail.Reason)
+	}
+	for _, fail := range newJobResponse(job).Failures {
+		assertPlainReason(t, fail.Reason)
+	}
+}
+
+// Jobs imported before the plain sentences stored the pipeline's raw wording.
+// The status route cleans them on the way out.
+func TestStoredRawReasonsNeverReachTheMember(t *testing.T) {
+	job := Job{ID: "job-1", Source: SourceHelloFresh, Status: JobSucceeded, Checkpoint: Checkpoint{
+		Phase: PhaseDone,
+		Failures: []FailedRecipe{
+			{SourceRecipeID: "a", Name: "Garlic Bread", Reason: "matches the same stored recipe as recipes[1]"},
+			{SourceRecipeID: "b", Name: "Chicken Sausage Spaghetti Bolognese", Reason: "matches the same stored recipe as recipes[5]"},
+			{SourceRecipeID: "c", Name: "Tacos", Reason: "shares a source ID with recipes[0]"},
+			{SourceRecipeID: "d", Name: "Soup", Reason: "name is required; servings must be positive"},
+			{SourceRecipeID: "e", Name: "Stew", Reason: "the meal-kit service answered HTTP 404"},
+			{SourceRecipeID: "f", Name: "Curry", Reason: "the recipe in the page is not the shape this build expects"},
+		},
+	}}
+
+	resp := newJobResponse(job)
+
+	var names []string
+	for _, fail := range resp.Failures {
+		names = append(names, fail.Name)
+		assertPlainReason(t, fail.Reason)
+	}
+	if !slices.Equal(names, []string{"Soup", "Stew", "Curry"}) {
+		t.Errorf("listed failures = %v; the duplicates are not failures", names)
+	}
+	if resp.Failures[1].Reason != "This recipe is no longer on HelloFresh." {
+		t.Errorf("a 404 reads %q", resp.Failures[1].Reason)
+	}
+}
+
+func assertPlainReason(t *testing.T, reason string) {
+	t.Helper()
+	if reason == "" {
+		t.Error("an empty reason")
+	}
+	for _, internal := range []string{"[", "]", "recipes", "HTTP", "JSON", "required", "must ", "build", "_", ";", "{"} {
+		if strings.Contains(reason, internal) {
+			t.Errorf("reason %q contains %q", reason, internal)
+		}
+	}
+	if strings.ContainsAny(reason, "0123456789") {
+		t.Errorf("reason %q contains a number (an id, an index, or a code)", reason)
+	}
+}
+
+// The job-level messages a member reads are plain too.
+func TestTheStoppedAndRetryMessagesArePlain(t *testing.T) {
+	now := time.Now()
+	for _, err := range []error{
+		ErrBlocked,
+		&ParseError{Subject: "recipe 6512aa11bb22cc33dd44ee55", Detail: "the recipe page no longer embeds the data this build reads"},
+		fmt.Errorf("import fetched recipes: %w", errors.New("write conflict")),
+		errors.New("dial tcp: i/o timeout"),
+	} {
+		// "your recipes" is English here; the ban on "recipes" in a
+		// failure reason is about the pipeline's recipes[n] field name.
+		msg := describe(err, SourceHelloFresh, true, now).Message
+		final := describe(err, SourceHelloFresh, false, now).Message
+		if strings.Contains(final, "try again.") && !strings.Contains(final, "Try again later") {
+			t.Errorf("a job with no attempts left promises another: %q", final)
+		}
+		for _, internal := range []string{"[", "HTTP", "JSON", "build", "_", ";", "—", "tcp", "conflict"} {
+			if strings.Contains(msg, internal) {
+				t.Errorf("message %q contains %q", msg, internal)
+			}
+		}
+		if strings.ContainsAny(msg, "0123456789") {
+			t.Errorf("message %q contains a number", msg)
+		}
 	}
 }

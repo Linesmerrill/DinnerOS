@@ -83,6 +83,11 @@ func TestStartingAnImportQueuesTheHarvestedHistoryAndStatusReportsIt(t *testing.
 	if job.Failures == nil {
 		t.Error("failures should be an empty array, not null")
 	}
+	// A queued run says when it can next be picked up — about now, for one
+	// just queued — so the app never has to show a bare "queued".
+	if !strings.Contains(rec.Body.String(), `"nextRunAt":"`) || job.NextRunAt == nil {
+		t.Errorf("a queued run carries no nextRunAt: %s", rec.Body)
+	}
 
 	rec = f.do(http.MethodGet, statusPath, "", userAda)
 	var status StatusResponse

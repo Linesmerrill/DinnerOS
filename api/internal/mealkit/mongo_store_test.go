@@ -3,6 +3,7 @@ package mealkit
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -94,6 +95,100 @@ func TestIntegrationClaimJobIsExactlyOnceUnderConcurrency(t *testing.T) {
 		if job.Status != JobRunning || job.LeaseOwner != owner || job.Attempts != 1 {
 			t.Errorf("job %s = status %q owner %q attempts %d", id, job.Status, job.LeaseOwner, job.Attempts)
 		}
+	}
+}
+
+// The web process claims the job a member just queued by its ID while Heroku
+// Scheduler's run claims whatever is due. Both are the same find-and-modify,
+// so the job goes to exactly one of them.
+func TestIntegrationClaimByIDRacesTheScheduledClaimExactlyOnce(t *testing.T) {
+	store, ctx := newMongoStore(t)
+	now := time.Now().UTC().Truncate(time.Millisecond)
+
+	for round := range 20 {
+		job := seedJob(t, store, ctx, hhAda, userAda, now.Add(-time.Second))
+		var (
+			wins  []string
+			mu    sync.Mutex
+			start = make(chan struct{})
+			wg    sync.WaitGroup
+		)
+		for i := range 8 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				var (
+					got Job
+					err error
+				)
+				owner := fmt.Sprintf("round%d-", round)
+				if i%2 == 0 {
+					owner += fmt.Sprintf("web-%d", i)
+					got, err = store.ClaimJobByID(ctx, job.ID, owner, now, now.Add(time.Minute))
+				} else {
+					owner += fmt.Sprintf("scheduler-%d", i)
+					got, err = store.ClaimJob(ctx, owner, now, now.Add(time.Minute))
+				}
+				if errors.Is(err, ErrNotFound) {
+					return
+				}
+				if err != nil {
+					t.Errorf("claim error = %v", err)
+					return
+				}
+				if got.ID != job.ID {
+					t.Errorf("claimed %s, want %s", got.ID, job.ID)
+				}
+				mu.Lock()
+				wins = append(wins, owner)
+				mu.Unlock()
+			}()
+		}
+		close(start)
+		wg.Wait()
+		if len(wins) != 1 {
+			t.Fatalf("round %d: the job was claimed %d times: %v", round, len(wins), wins)
+		}
+		stored, _ := store.GetJob(ctx, hhAda, job.ID)
+		if stored.Status != JobRunning || stored.LeaseOwner != wins[0] || stored.Attempts != 1 {
+			t.Fatalf("round %d: job = status %q owner %q attempts %d", round, stored.Status, stored.LeaseOwner, stored.Attempts)
+		}
+		// Finish it so the next round's scheduled claims see only the new job.
+		if err := store.FinishJob(ctx, job.ID, wins[0], JobSucceeded, Checkpoint{Phase: PhaseDone}, nil, now); err != nil {
+			t.Fatalf("FinishJob() error = %v", err)
+		}
+	}
+}
+
+func TestIntegrationClaimByIDOnlyTakesThatJobWhenItIsRunnable(t *testing.T) {
+	store, ctx := newMongoStore(t)
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	resting := seedJob(t, store, ctx, hhAda, userAda, now.Add(time.Minute))
+	due := seedJob(t, store, ctx, hhBob, userBob, now.Add(-time.Minute))
+
+	// Resting between batches: not yet, even though another job is due.
+	if _, err := store.ClaimJobByID(ctx, resting.ID, "web", now, now.Add(time.Minute)); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a resting job was claimed by ID: %v", err)
+	}
+	if _, err := store.ClaimJobByID(ctx, "not-an-id", "web", now, now.Add(time.Minute)); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a malformed ID = %v, want ErrNotFound", err)
+	}
+	got, err := store.ClaimJobByID(ctx, due.ID, "web", now, now.Add(time.Minute))
+	if err != nil || got.ID != due.ID || got.Status != JobRunning || got.LeaseOwner != "web" {
+		t.Fatalf("ClaimJobByID() = %+v, %v", got, err)
+	}
+	// Held: a second claim by ID gets nothing until the lease expires, and
+	// then takes it over, exactly as ClaimJob does.
+	if _, err := store.ClaimJobByID(ctx, due.ID, "scheduler", now, now.Add(time.Minute)); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a leased job was claimed again: %v", err)
+	}
+	taken, err := store.ClaimJobByID(ctx, due.ID, "web-2", now.Add(2*time.Minute), now.Add(3*time.Minute))
+	if err != nil || taken.LeaseOwner != "web-2" || taken.Attempts != 2 {
+		t.Fatalf("takeover = %+v, %v", taken, err)
+	}
+	if err := store.SaveCheckpoint(ctx, due.ID, "web", Checkpoint{Phase: PhaseRecipes}, now); !errors.Is(err, ErrJobGone) {
+		t.Errorf("the displaced owner could still write: %v", err)
 	}
 }
 

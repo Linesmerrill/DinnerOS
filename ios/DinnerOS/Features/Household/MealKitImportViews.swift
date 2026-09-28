@@ -186,7 +186,7 @@ struct MealKitImportStatusView: View {
             Button("Stop Importing", role: .destructive) { Task { await stop() } }
             Button("Keep Going", role: .cancel) {}
         } message: {
-            Text("Recipes already imported stay in your library. You can import again whenever you like.")
+            Text("Recipes already imported stay in your library.")
         }
     }
 
@@ -215,11 +215,6 @@ struct MealKitImportStatusView: View {
             }
         } header: {
             Text("\(service.displayName)")
-        } footer: {
-            Text(
-                "Nothing about your \(service.displayName) account is saved — not your password, not your sign-in. "
-                    + "Importing again reads your orders afresh."
-            )
         }
     }
 
@@ -238,7 +233,7 @@ struct MealKitImportStatusView: View {
         } header: {
             Text("Couldn't Import")
         } footer: {
-            Text("These are still on your \(service.displayName) orders. Importing again will try them once more.")
+            Text("Tap Import Again to try these again.")
         }
     }
 
@@ -259,11 +254,10 @@ struct MealKitImportStatusView: View {
         }
     }
 
-    /// "Import Again" is the wrong promise when the last run left history behind: that run is
-    /// going to be *continued*, not repeated.
+    /// One name for one action: the note about older orders says "Tap Import Again", so the
+    /// button says exactly that. Importing again carries on from where the last read stopped.
     private var importButtonTitle: LocalizedStringKey {
-        if moreHistoryNote != nil { return "Fetch More History" }
-        return mealKit.job == nil ? "Import from \(service.displayName)" : "Import Again"
+        mealKit.job == nil ? "Import from \(service.displayName)" : "Import Again"
     }
 
     private func stop() async {
@@ -342,6 +336,20 @@ private struct MealKitOptionLabel: View {
         enabled: true,
         latestJob: MealKitImportJob(
             id: "job-1", status: "running", phase: "recipes", recipesFound: 48, recipesDone: 12))
+    NavigationStack {
+        MealKitImportStatusView()
+    }
+    .environment(session)
+    .environment(MealKitImportStore.preview(session: session, status: status))
+}
+
+#Preview("Between batches") {
+    let session = HouseholdPreviewData.session()
+    let status = MealKitStatus(
+        enabled: true,
+        latestJob: MealKitImportJob(
+            id: "job-1", status: "queued", phase: "recipes", recipesFound: 740, recipesDone: 50,
+            imported: 50, nextRunAt: .now.addingTimeInterval(55)))
     NavigationStack {
         MealKitImportStatusView()
     }

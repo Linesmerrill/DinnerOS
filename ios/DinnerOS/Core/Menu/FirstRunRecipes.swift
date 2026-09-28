@@ -73,7 +73,7 @@ nonisolated enum FirstRunRecipes {
         // sign-in itself.
         guard let job = input.job else { return .offer }
         switch job.state {
-        case .queued, .running:
+        case .queued, .running, .waiting:
             return .importing(job)
         case .failed:
             return .stopped(detail: job.lastError?.message ?? stoppedDetail)
@@ -91,11 +91,11 @@ nonisolated enum FirstRunRecipes {
     }
 
     private static var expiredDetail: String {
-        String(localized: "Your meal-kit sign-in expired. Sign in again to carry on importing.")
+        String(localized: "Your sign-in expired. Sign in again to keep importing.")
     }
 
     private static var stoppedDetail: String {
-        String(localized: "The import stopped before it finished. Your recipes weren't changed.")
+        String(localized: "The import stopped. Your recipes weren't changed.")
     }
 }
 

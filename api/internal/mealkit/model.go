@@ -28,8 +28,14 @@ var (
 type ParseError struct {
 	// What was being read, e.g. "order history" or "recipe 6512...".
 	Subject string
-	// Detail is safe to show a member: it never contains fetched page content.
+	// Detail is for the log: it never contains fetched page content, but it
+	// is written for an operator. What a member reads comes from the fixed
+	// sentences in reasons.go.
 	Detail string
+	// Status is the HTTP status that caused it, when one did. A 404 or 410
+	// means the recipe is gone from the service, which a member is told in
+	// those words.
+	Status int
 }
 
 func (e *ParseError) Error() string {

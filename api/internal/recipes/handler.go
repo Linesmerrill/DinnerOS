@@ -334,7 +334,9 @@ func newImportResultResponse(res ImportResult) ImportResultResponse {
 		Errors: make([]RecipeErrorResponse, 0, len(res.Errors)),
 	}
 	for _, e := range res.Errors {
-		resp.Errors = append(resp.Errors, RecipeErrorResponse(e))
+		resp.Errors = append(resp.Errors, RecipeErrorResponse{
+			Index: e.Index, SourceRecipeID: e.SourceRecipeID, Name: e.Name, Problems: e.Problems,
+		})
 	}
 	return resp
 }

@@ -142,13 +142,24 @@ func (m *memoryStore) ListJobs(_ context.Context, householdID string, limit int)
 }
 
 func (m *memoryStore) ClaimJob(_ context.Context, owner string, now, leaseUntil time.Time) (Job, error) {
+	return m.claim("", owner, now, leaseUntil)
+}
+
+func (m *memoryStore) ClaimJobByID(_ context.Context, id, owner string, now, leaseUntil time.Time) (Job, error) {
+	if id == "" {
+		return Job{}, ErrNotFound
+	}
+	return m.claim(id, owner, now, leaseUntil)
+}
+
+func (m *memoryStore) claim(id, owner string, now, leaseUntil time.Time) (Job, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	best := -1
 	for i, j := range m.jobs {
 		runnable := (j.Status == JobQueued && !j.AvailableAt.After(now)) ||
 			(j.Status == JobRunning && !j.LeaseExpiresAt.After(now))
-		if !runnable {
+		if !runnable || (id != "" && j.ID != id) {
 			continue
 		}
 		if best < 0 || j.AvailableAt.Before(m.jobs[best].AvailableAt) {
@@ -328,6 +339,12 @@ type fakePublisher struct {
 	// same recipe again is "unchanged", never a duplicate; this fake says the
 	// same thing.
 	seen map[string]bool
+	// sameAs maps a source recipe ID to another that is the same stored
+	// recipe — one dish under two ids. When both are in one file the second
+	// is refused as the real pipeline refuses it: a duplicate of the first.
+	sameAs map[string]string
+	// weeks is every order week each stored recipe has been given.
+	weeks map[string][]string
 }
 
 func (p *fakePublisher) Import(_ context.Context, _ string, file recipes.ImportFile) (recipes.ImportResult, error) {
@@ -338,7 +355,29 @@ func (p *fakePublisher) Import(_ context.Context, _ string, file recipes.ImportF
 	}
 	p.files = append(p.files, file)
 	res := recipes.ImportResult{}
+	at := map[string]int{}
 	for i, r := range file.Recipes {
+		at[r.SourceRecipeID] = i
+	}
+	for i, r := range file.Recipes {
+		if other, ok := p.sameAs[r.SourceRecipeID]; ok {
+			if j, inFile := at[other]; inFile && j != i {
+				res.Errors = append(res.Errors, recipes.RecipeError{
+					Index: i, SourceRecipeID: r.SourceRecipeID, Name: r.Name,
+					Problems:  []string{fmt.Sprintf("matches the same stored recipe as recipes[%d]", j)},
+					Duplicate: true, DuplicateOf: j,
+				})
+				continue
+			}
+		}
+		if p.weeks == nil {
+			p.weeks = map[string][]string{}
+		}
+		for _, w := range r.OrderWeeks {
+			if !slices.Contains(p.weeks[r.SourceRecipeID], w) {
+				p.weeks[r.SourceRecipeID] = append(p.weeks[r.SourceRecipeID], w)
+			}
+		}
 		if reason, bad := p.reject[r.SourceRecipeID]; bad {
 			res.Errors = append(res.Errors, recipes.RecipeError{
 				Index: i, SourceRecipeID: r.SourceRecipeID, Name: r.Name, Problems: []string{reason},
@@ -357,6 +396,12 @@ func (p *fakePublisher) Import(_ context.Context, _ string, file recipes.ImportF
 	}
 	res.ReviewItems = len(file.Review)
 	return res, nil
+}
+
+func (p *fakePublisher) weeksOf(id string) []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Sorted(slices.Values(p.weeks[id]))
 }
 
 func (p *fakePublisher) imported() []string {

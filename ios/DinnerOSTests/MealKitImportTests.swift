@@ -14,16 +14,24 @@ private nonisolated enum MealKitFixtures {
     static func jobJSON(
         status: String = "running", phase: String = "recipes", found: Int = 48, done: Int = 12,
         imported: Int = 10, updated: Int = 2, unchanged: Int = 0, reviewItems: Int = 0,
-        failures: String = "[]", lastError: String = "null", finishedAt: String = "null"
+        failures: String = "[]", lastError: String = "null", finishedAt: String = "null",
+        nextRunAt: String? = nil
     ) -> String {
-        """
-        {"id":"job-1","source":"hellofresh","status":"\(status)","phase":"\(phase)",
-         "recipesFound":\(found),"recipesDone":\(done),"imported":\(imported),"updated":\(updated),
-         "unchanged":\(unchanged),"reviewItems":\(reviewItems),"failures":\(failures),
-         "attempts":1,"maxAttempts":5,"lastError":\(lastError),
-         "createdAt":"2026-09-20T10:00:00Z","updatedAt":"2026-09-20T10:05:00Z","finishedAt":\(finishedAt)}
-        """
+        // `nextRunAt` is left out entirely unless given, which is what a server older than the
+        // in-process runner sends.
+        let next = nextRunAt.map { ",\"nextRunAt\":\($0)" } ?? ""
+        return """
+            {"id":"job-1","source":"hellofresh","status":"\(status)","phase":"\(phase)",
+             "recipesFound":\(found),"recipesDone":\(done),"imported":\(imported),"updated":\(updated),
+             "unchanged":\(unchanged),"reviewItems":\(reviewItems),"failures":\(failures),
+             "attempts":1,"maxAttempts":5,"lastError":\(lastError)\(next),
+             "createdAt":"2026-09-20T10:00:00Z","updatedAt":"2026-09-20T10:05:00Z","finishedAt":\(finishedAt)}
+            """
     }
+
+    /// The moment the fixture's between-batches run is next due, and a clock just before it.
+    static let nextBatchAt = "2026-09-20T10:06:00Z"
+    static let nextBatchDate = Date(timeIntervalSince1970: 1_789_898_760)
 
     /// The measured shape of a real account on 2026-09-21: 740 recipes across 160 delivered
     /// weeks in 40 pages, stopped on the app's page cap with years of history still behind it.
@@ -390,15 +398,18 @@ struct MealKitImportTests {
     // MARK: - Wording
 
     @Test func theSummarySaysWhatIsHappeningForEveryState() {
-        let cases: [(String, MealKitImportJob.State, Bool)] = [
-            ("queued", .queued, false),
-            ("running", .running, false),
-            ("succeeded", .finished, false),
-            ("dead", .failed, true),
-            ("canceled", .canceled, false),
+        let cases: [(String, Int, MealKitImportJob.State, Bool)] = [
+            ("queued", 0, .queued, false),
+            // Queued with recipes already done is resting between batches, not waiting to start.
+            ("queued", 5, .waiting, false),
+            ("running", 5, .running, false),
+            ("succeeded", 10, .finished, false),
+            ("dead", 10, .failed, true),
+            ("canceled", 10, .canceled, false),
         ]
-        for (status, state, needsAttention) in cases {
-            let job = MealKitImportJob(id: "job-1", status: status, recipesFound: 10, recipesDone: 10, imported: 10)
+        for (status, done, state, needsAttention) in cases {
+            let job = MealKitImportJob(
+                id: "job-1", status: status, recipesFound: 10, recipesDone: done, imported: done)
             let summary = MealKitFormatting.summary(for: job, service: .helloFresh)
             #expect(job.state == state)
             #expect(summary.needsAttention == needsAttention, "\(status)")
@@ -414,9 +425,7 @@ struct MealKitImportTests {
         let midway = MealKitImportJob(id: "job-1", status: "running", recipesFound: 40, recipesDone: 10)
         #expect(midway.progress == 0.25)
         let detail = MealKitFormatting.progressDetail(midway, service: .helloFresh)
-        #expect(detail.hasPrefix("10 of 40 recipes"))
-        // It also says the truth a member watching 10 of 740 needs: this continues without them.
-        #expect(detail.lowercased().contains("server"))
+        #expect(detail == "10 of 40 recipes imported. You can close the app.")
     }
 
     @Test func aFinishedRunCountsWhatLandedAndWhatDidNot() {
@@ -429,16 +438,15 @@ struct MealKitImportTests {
 
         #expect(job.recipesAdded == 10)
         #expect(summary.title == "10 recipes added")
-        #expect(summary.detail.contains("1 was already in your library"))
-        #expect(summary.detail.contains("1 couldn't be imported"))
+        #expect(summary.detail == "1 already in your library. 1 couldn't be imported.")
     }
 
     @Test func theExplanationSaysNothingAboutTheAccountIsKept() {
         let text = MealKitFormatting.credentialExplanation(for: .helloFresh)
         #expect(text.contains("HelloFresh"))
-        #expect(text.lowercased().contains("password never reaches"))
+        #expect(text.contains("We never see your password."))
         // It has to say that nothing is stored, because that is now literally true.
-        #expect(text.lowercased().contains("nothing about"))
+        #expect(text.contains("Nothing about your HelloFresh account is saved."))
     }
 
     @Test func aHouseholdThatNeverImportedIsOfferedTheImport() {
@@ -473,6 +481,186 @@ struct MealKitImportTests {
         // `name` is omitempty on the wire; the source ID is the fallback title.
         #expect(job.failures[1].title == "src-2")
         #expect(job.lastError?.code == "blocked")
+    }
+
+    // MARK: - Honest progress while the server works in batches
+
+    @Test func aRunningBatchShowsARealCountAndBar() async throws {
+        let transport = StubTransport { _ in
+            (200, MealKitFixtures.statusJSON(job: MealKitFixtures.jobJSON(found: 740, done: 12)))
+        }
+
+        let status = try await MealKitAPI(client: makeClient(transport))
+            .status(householdID: "household-1", service: .helloFresh, accessToken: "token-1")
+
+        let job = try #require(status.latestJob)
+        #expect(job.state == .running)
+        #expect(job.isWorking)
+        #expect(job.progress == 12.0 / 740.0)
+        let summary = MealKitFormatting.summary(for: job, service: .helloFresh)
+        #expect(summary.title == "Importing your recipes")
+        #expect(summary.detail == "12 of 740 recipes imported. You can close the app.")
+    }
+
+    @Test func betweenBatchesItSaysWhenTheNextBatchIs() async throws {
+        let transport = StubTransport { _ in
+            (
+                200,
+                MealKitFixtures.statusJSON(
+                    job: MealKitFixtures.jobJSON(
+                        status: "queued", found: 740, done: 50, imported: 50, updated: 0,
+                        nextRunAt: "\"\(MealKitFixtures.nextBatchAt)\""))
+            )
+        }
+
+        let status = try await MealKitAPI(client: makeClient(transport))
+            .status(householdID: "household-1", service: .helloFresh, accessToken: "token-1")
+
+        let job = try #require(status.latestJob)
+        #expect(job.nextRunAt == MealKitFixtures.nextBatchDate)
+        #expect(job.state == .waiting)
+        #expect(job.isWorking)
+        // The bar stays where the last batch left it rather than emptying.
+        #expect(job.progress == 50.0 / 740.0)
+        let summary = MealKitFormatting.summary(
+            for: job, service: .helloFresh, now: MealKitFixtures.nextBatchDate.addingTimeInterval(-55))
+        #expect(summary.title == "Importing your recipes")
+        #expect(summary.detail == "50 of 740 recipes imported. Next batch in about a minute.")
+        #expect(!summary.detail.lowercased().contains("queued"))
+        // Once the time has come it says so, rather than counting down past zero.
+        let due = MealKitFormatting.summary(
+            for: job, service: .helloFresh, now: MealKitFixtures.nextBatchDate.addingTimeInterval(20))
+        #expect(due.detail == "50 of 740 recipes imported. Next batch starting now.")
+    }
+
+    @Test func aJustQueuedRunSaysItIsStartingNotThatItIsQueued() {
+        let now = Date(timeIntervalSince1970: 1_790_157_600)
+        let job = MealKitImportJob(id: "job-1", status: "queued", recipesFound: 740, nextRunAt: now)
+
+        let summary = MealKitFormatting.summary(for: job, service: .helloFresh, now: now)
+
+        #expect(job.state == .queued)
+        #expect(job.progress == 0)
+        #expect(summary.title == "Starting your import")
+        #expect(summary.detail == "740 recipes to import. Starting now.")
+        #expect(!summary.title.lowercased().contains("queued"))
+        #expect(!summary.detail.lowercased().contains("queued"))
+    }
+
+    @Test func aRetryAfterAHiccupSaysWhenItTriesAgain() {
+        let now = Date(timeIntervalSince1970: 1_790_157_600)
+        let error = MealKitImportError(
+            code: "network", message: "We could not reach the meal-kit service. The import will be retried.",
+            at: now)
+        let job = MealKitImportJob(
+            id: "job-1", status: "queued", recipesFound: 740, recipesDone: 50, lastError: error,
+            nextRunAt: now.addingTimeInterval(4 * 60))
+
+        let summary = MealKitFormatting.summary(for: job, service: .helloFresh, now: now)
+
+        #expect(job.state == .waiting)
+        #expect(summary.needsAttention == false)
+        #expect(summary.detail == "50 of 740 recipes imported. Trying again in about 4 minutes.")
+    }
+
+    @Test func waitsAreSaidRoughlyNotToTheSecond() {
+        #expect(MealKitFormatting.approximately(30) == "in about a minute")
+        #expect(MealKitFormatting.approximately(85) == "in about a minute")
+        #expect(MealKitFormatting.approximately(4 * 60) == "in about 4 minutes")
+        #expect(MealKitFormatting.approximately(3_600) == "in about an hour")
+        #expect(MealKitFormatting.approximately(2 * 3_600) == "in about 2 hours")
+    }
+
+    @Test func aServerWithoutNextRunAtStillDecodesAndSaysStarting() async throws {
+        let transport = StubTransport { _ in
+            (200, MealKitFixtures.statusJSON(job: MealKitFixtures.jobJSON(status: "queued", done: 0)))
+        }
+
+        let status = try await MealKitAPI(client: makeClient(transport))
+            .status(householdID: "household-1", service: .helloFresh, accessToken: "token-1")
+
+        let job = try #require(status.latestJob)
+        #expect(job.nextRunAt == nil)
+        #expect(job.state == .queued)
+        #expect(MealKitFormatting.nextStep(job) == "Starting now.")
+    }
+
+    @Test func pollingIsQuickWhileABatchWorksAndEasierBetweenBatches() {
+        let running = MealKitImportJob(id: "job-1", status: "running", recipesFound: 740, recipesDone: 12)
+        let starting = MealKitImportJob(id: "job-1", status: "queued", recipesFound: 740)
+        let resting = MealKitImportJob(id: "job-1", status: "queued", recipesFound: 740, recipesDone: 50)
+
+        // A checkpoint lands about every 30 seconds while a batch works; 5-second polls show it.
+        #expect(MealKitImportStore.pollInterval(for: running) == .seconds(5))
+        #expect(MealKitImportStore.pollInterval(for: starting) == .seconds(5))
+        #expect(MealKitImportStore.pollInterval(for: resting) == .seconds(15))
+    }
+
+    @Test func storeKeepsImportingThroughTheRestBetweenBatches() async throws {
+        let counter = Counter()
+        let transport = StubTransport { _ in
+            defer { counter.increment() }
+            let job =
+                counter.value == 0
+                ? MealKitFixtures.jobJSON(found: 740, done: 40)
+                : MealKitFixtures.jobJSON(
+                    status: "queued", found: 740, done: 50, nextRunAt: "\"\(MealKitFixtures.nextBatchAt)\"")
+            return (200, MealKitFixtures.statusJSON(job: job))
+        }
+        let store = try await makeStore(transport)
+
+        await store.load()
+        #expect(store.job?.state == .running)
+        #expect(store.job?.recipesDone == 40)
+
+        await store.refresh()
+        // Resting is still importing: the screen keeps its bar and keeps polling.
+        #expect(store.job?.state == .waiting)
+        #expect(store.job?.recipesDone == 50)
+        #expect(store.isImporting)
+    }
+
+    /// The copy rules, checked rather than eyeballed: short sentences, no dash asides, and no
+    /// line that says the same thing twice.
+    @Test func everyImportLineIsShortAndPlain() {
+        let now = Date(timeIntervalSince1970: 1_790_157_600)
+        let jobs = [
+            MealKitImportJob(id: "j", status: "queued", recipesFound: 740, nextRunAt: now),
+            MealKitImportJob(id: "j", status: "running", recipesFound: 740, recipesDone: 210),
+            MealKitImportJob(
+                id: "j", status: "queued", recipesFound: 740, recipesDone: 250, nextRunAt: now.addingTimeInterval(60)),
+            MealKitImportJob(
+                id: "j", status: "succeeded", recipesFound: 740, recipesDone: 740, imported: 700, unchanged: 30,
+                failures: [
+                    MealKitImportFailure(sourceRecipeID: "s", reason: "We couldn't read this recipe on HelloFresh.")
+                ]),
+            MealKitImportJob(id: "j", status: "dead"),
+            MealKitImportJob(id: "j", status: "canceled"),
+        ]
+        var lines = jobs.flatMap { job -> [String] in
+            let summary = MealKitFormatting.summary(for: job, service: .helloFresh, now: now)
+            return [summary.title, summary.detail]
+        }
+        lines += MealKitFormatting.credentialExplanation(for: .helloFresh).split(separator: "\n").map(String.init)
+        lines.append(
+            MealKitFormatting.moreHistoryNote(
+                for: nil, history: MealKitImportHistory(earliestWeek: "2023-W15", moreToFetch: true),
+                service: .helloFresh) ?? "")
+        #expect(lines.contains("210 of 740 recipes imported. You can close the app."))
+        // The month is written the device's way ("April 2023", or "2023 April"), so compare
+        // against the same formatter.
+        let april = MealKitFormatting.monthAndYear(of: "2023-W15") ?? "?"
+        #expect(lines.contains("Got your HelloFresh orders back to \(april). Tap Import Again for older ones."))
+        #expect(lines.contains("Nothing about your HelloFresh account is saved."))
+        for line in lines {
+            #expect(!line.isEmpty)
+            #expect(!line.contains("—"), "\(line)")
+            #expect(!line.contains(" · "), "\(line)")
+            // One idea per sentence: no sentence runs long.
+            for sentence in line.split(separator: ".") where sentence.split(separator: " ").count > 12 {
+                Issue.record("a long sentence: \(sentence)")
+            }
+        }
     }
 
     @Test func anUnknownStatusIsTreatedAsStillWorking() {
@@ -736,7 +924,7 @@ struct MealKitHarvestResumeTests {
         let summary = MealKitFormatting.summary(for: job, service: .helloFresh)
 
         #expect(summary.detail.contains("740"))
-        #expect(summary.detail.lowercased().contains("close the app"))
+        #expect(summary.detail.contains("Starting"))
     }
 
     @Test func anIsoWeekIsShownAsAMonthAndYear() {

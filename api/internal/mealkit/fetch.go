@@ -139,6 +139,7 @@ func (f *Fetcher) Do(ctx context.Context, req *http.Request) (Response, error) {
 			return Response{}, &ParseError{
 				Subject: "the response",
 				Detail:  fmt.Sprintf("the meal-kit service answered HTTP %d", resp.StatusCode),
+				Status:  resp.StatusCode,
 			}
 		}
 

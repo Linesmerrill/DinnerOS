@@ -1,6 +1,9 @@
 // Command importmealkit runs the meal-kit recipe import worker once and
 // exits. Heroku Scheduler runs it every ten minutes
-// (docs/meal-kit-import.md#operating-the-worker).
+// (docs/meal-kit-import.md#operating-the-worker) as the backstop: the API
+// process starts a queued import itself and carries it on batch by batch
+// (mealkit.Runner), and this command finishes what an Eco web dyno put down
+// when it went to sleep.
 //
 // A run claims runnable jobs with an atomic find-and-modify under a lease,
 // fetches at most MEAL_KIT_RECIPES_PER_RUN recipe pages per job, hands them to

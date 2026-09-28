@@ -173,9 +173,15 @@ type JobResponse struct {
 	Attempts    int               `json:"attempts"`
 	MaxAttempts int               `json:"maxAttempts"`
 	LastError   *JobErrorResponse `json:"lastError"`
-	CreatedAt   time.Time         `json:"createdAt"`
-	UpdatedAt   time.Time         `json:"updatedAt"`
-	FinishedAt  *time.Time        `json:"finishedAt"`
+	// NextRunAt is when a queued job may next be picked up: about now for
+	// one just queued, a minute out for one resting between batches, later
+	// for one backing off after an error. Null unless the job is queued. It
+	// is what lets the app say "next batch in about a minute" rather than
+	// "queued" with nothing moving.
+	NextRunAt  *time.Time `json:"nextRunAt"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	UpdatedAt  time.Time  `json:"updatedAt"`
+	FinishedAt *time.Time `json:"finishedAt"`
 }
 
 // StatusResponse is returned by GET .../meal-kit/{source}.
@@ -210,8 +216,15 @@ func newJobResponse(j Job) *JobResponse {
 		},
 		CreatedAt: j.CreatedAt, UpdatedAt: j.UpdatedAt,
 	}
+	// Every reason goes through the fixed member sentences, so a job stored
+	// before they existed never shows a raw pipeline message, and a recipe
+	// that was only a duplicate of another is not listed as a failure.
 	for _, f := range j.Checkpoint.Failures {
-		out.Failures = append(out.Failures, FailedRecipeResponse(f))
+		reason, ok := memberReason(j.Source, f.Reason)
+		if !ok {
+			continue
+		}
+		out.Failures = append(out.Failures, FailedRecipeResponse{SourceRecipeID: f.SourceRecipeID, Name: f.Name, Reason: reason})
 	}
 	if j.LastError != nil {
 		out.LastError = &JobErrorResponse{Code: j.LastError.Code, Message: j.LastError.Message, At: j.LastError.At}
@@ -219,6 +232,10 @@ func newJobResponse(j Job) *JobResponse {
 	if !j.FinishedAt.IsZero() {
 		finished := j.FinishedAt
 		out.FinishedAt = &finished
+	}
+	if j.Status == JobQueued && !j.AvailableAt.IsZero() {
+		next := j.AvailableAt
+		out.NextRunAt = &next
 	}
 	return out
 }
