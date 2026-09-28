@@ -16,6 +16,8 @@ nonisolated struct CookIngredient: Equatable, Sendable, Identifiable {
     let amountText: String?
     let imageURL: URL?
     let isLeftOut: Bool
+    /// The grocery key its saved product is under, for flagging it; `nil` from an older server.
+    var ingredientKey: String? = nil
     /// Empty unless two or more steps each say how much of it they use.
     let parts: [CookPart]
 }
@@ -36,7 +38,7 @@ nonisolated enum CookChecklist {
             }
             return CookIngredient(
                 id: state.id, name: state.line.name, amountText: state.line.amount, imageURL: state.line.imageURL,
-                isLeftOut: state.isLeftOut, parts: parts.count >= 2 ? parts : [])
+                isLeftOut: state.isLeftOut, ingredientKey: state.ingredientKey, parts: parts.count >= 2 ? parts : [])
         }
     }
 
@@ -126,6 +128,7 @@ nonisolated struct CookStepItem: Equatable, Sendable, Identifiable {
     let prep: String?
     let parts: [String]
     let isLeftOut: Bool
+    var ingredientKey: String? = nil
     func partID(_ index: Int) -> String { "\(id)#\(index)" }
 }
 
@@ -173,13 +176,15 @@ nonisolated extension CookChecklist {
                     let merged = [old.prep, adds].compactMap { $0 }.joined(separator: ", ")
                     items[existing] = CookStepItem(
                         id: old.id, name: old.name, amountText: old.amountText, prep: merged.isEmpty ? nil : merged,
-                        parts: old.parts.isEmpty ? parts : old.parts, isLeftOut: old.isLeftOut)
+                        parts: old.parts.isEmpty ? parts : old.parts, isLeftOut: old.isLeftOut,
+                        ingredientKey: old.ingredientKey)
                 } else {
                     items.append(
                         CookStepItem(
                             id: "\(ingredient.id)@\(step.index)-\(items.count)", name: name,
                             amountText: partWord == nil ? segment.amount?.text : segment.amount?.text,
-                            prep: prep, parts: parts, isLeftOut: ingredient.isLeftOut || segment.leftOut))
+                            prep: prep, parts: parts, isLeftOut: ingredient.isLeftOut || segment.leftOut,
+                            ingredientKey: ingredient.ingredientKey))
                 }
                 clause = ""
             }
@@ -193,7 +198,7 @@ nonisolated extension CookChecklist {
     private static func item(for ingredient: CookIngredient) -> CookStepItem {
         CookStepItem(
             id: "\(ingredient.id)@0", name: ingredient.name, amountText: ingredient.amountText, prep: nil, parts: [],
-            isLeftOut: ingredient.isLeftOut)
+            isLeftOut: ingredient.isLeftOut, ingredientKey: ingredient.ingredientKey)
     }
 
     /// The text since the last sentence or clause break.

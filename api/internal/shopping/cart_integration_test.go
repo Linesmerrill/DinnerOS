@@ -342,3 +342,30 @@ func TestIntegrationOrderingFinalizesTheWeek(t *testing.T) {
 		t.Errorf("plan after unmarking = %s, want still finalized", plan.Status)
 	}
 }
+
+// Flagging a saved product while cooking shows on next week's match, and
+// choosing another product answers the flag.
+func TestIntegrationChangeRequest(t *testing.T) {
+	f := newFixture(t)
+	f.save(t, "Ground Beef", "https://www.walmart.com/ip/Test-Beef/100000001", &PackageSize{Quantity: "16", Unit: "oz"})
+	key := f.keys["Ground Beef"]
+	p, err := f.svc.SetChangeRequest(f.ctx, f.actor, "walmart", key, true)
+	if err != nil || !p.WantsChange() {
+		t.Fatalf("flag = %+v, %v", p.ChangeRequest, err)
+	}
+	m, err := f.svc.Match(f.ctx, testHousehold, testWeek, "walmart", MatchInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if line := lineFor(t, m, "Ground Beef"); !line.ChangeRequested {
+		t.Error("the match line doesn't say the product was flagged")
+	}
+	f.save(t, "Ground Beef", "https://www.walmart.com/ip/Other-Beef/100000002", &PackageSize{Quantity: "16", Unit: "oz"})
+	got, err := f.store.GetPreference(f.ctx, testHousehold, "walmart", key)
+	if err != nil || got.WantsChange() {
+		t.Errorf("after choosing another product, still flagged: %+v, %v", got.ChangeRequest, err)
+	}
+	if _, err := f.svc.SetChangeRequest(f.ctx, f.actor, "walmart", "name:nothing saved", true); !errors.Is(err, ErrNotFound) {
+		t.Errorf("flagging an unsaved ingredient = %v, want ErrNotFound", err)
+	}
+}

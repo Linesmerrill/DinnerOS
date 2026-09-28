@@ -96,6 +96,8 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(view).Get(base+"/{provider}/preferences/{ingredientKey}", h.getPreference)
 		r.With(edit).Put(base+"/{provider}/preferences/{ingredientKey}", h.putPreference)
 		r.With(edit).Delete(base+"/{provider}/preferences/{ingredientKey}", h.deletePreference)
+		r.With(edit).Put(base+"/{provider}/preferences/{ingredientKey}/change-request", h.flagPreference(true))
+		r.With(edit).Delete(base+"/{provider}/preferences/{ingredientKey}/change-request", h.flagPreference(false))
 		const plan = "/households/{householdId}/plans/{week}/shopping/{provider}"
 		r.With(view).Post(plan+"/match", h.match)
 		r.With(edit).Post(plan+"/handoffs", h.createHandoff)
@@ -199,7 +201,10 @@ type PreferenceResponse struct {
 	// Check is the latest check a phone reported for this product, or null.
 	Check *ProductCheckResponse `json:"check"`
 	// NeedsRechoosing is true when that check found the product gone.
-	NeedsRechoosing bool      `json:"needsRechoosing"`
+	NeedsRechoosing bool `json:"needsRechoosing"`
+	// ChangeRequested is true when a member flagged this product to replace
+	// next time.
+	ChangeRequested bool      `json:"changeRequested"`
 	CreatedBy       string    `json:"createdBy"`
 	CreatedAt       time.Time `json:"createdAt"`
 	UpdatedBy       string    `json:"updatedBy"`
@@ -271,10 +276,12 @@ type AmountResponse struct {
 
 // ProductResponse is the product a line hands off.
 type ProductResponse struct {
-	ProductID   string               `json:"productId"`
-	DisplayName string               `json:"displayName"`
-	ProductURL  string               `json:"productUrl"`
-	PackageSize *PackageSizeResponse `json:"packageSize"`
+	// ChangeRequested is true when a member flagged this product to replace.
+	ChangeRequested bool                 `json:"changeRequested,omitempty"`
+	ProductID       string               `json:"productId"`
+	DisplayName     string               `json:"displayName"`
+	ProductURL      string               `json:"productUrl"`
+	PackageSize     *PackageSizeResponse `json:"packageSize"`
 }
 
 // ConfirmationResponse is a handoff line's confirmation state.
@@ -692,7 +699,7 @@ func (h *Handler) preferenceResponse(p Preference) PreferenceResponse {
 		ID: p.ID, Provider: p.Provider, IngredientKey: p.IngredientKey, IngredientID: optionalString(catalogID(p.IngredientKey)),
 		IngredientName: p.IngredientName, ProductID: p.ProductID, ProductURL: h.providerURL(p.Provider, p.ProductID),
 		DisplayName: p.DisplayName, PackageSize: packageSizeResponse(p.PackageSize), Coverage: p.Coverage,
-		PriceCents: p.PriceCents, PriceUpdatedAt: optionalTime(p.PriceUpdatedAt), NeedsRechoosing: p.NeedsRechoosing(),
+		PriceCents: p.PriceCents, PriceUpdatedAt: optionalTime(p.PriceUpdatedAt), NeedsRechoosing: p.NeedsRechoosing(), ChangeRequested: p.WantsChange(),
 		CreatedBy: p.CreatedBy, CreatedAt: p.CreatedAt, UpdatedBy: p.UpdatedBy, UpdatedAt: p.UpdatedAt,
 	}
 	if p.PriceCents != nil && p.PriceSource != "" {
@@ -756,6 +763,7 @@ func (h *Handler) lineResponse(provider providers.Key, l HandoffLine, stored boo
 		Unquantified: l.Unquantified, GroceryStatus: l.GroceryStatus,
 		Product: ProductResponse{
 			ProductID: l.ProductID, DisplayName: l.ProductName, ProductURL: h.providerURL(provider, l.ProductID), PackageSize: packageSizeResponse(l.PackageSize),
+			ChangeRequested: l.ChangeRequested,
 		},
 		ComputedPackages: l.ComputedPackages, Packages: l.Packages, PackagesOverridden: l.Packages != l.ComputedPackages,
 		Check: lineCheckResponse(l.Check),
@@ -1071,6 +1079,18 @@ func (h *Handler) deletePreference(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) flagPreference(flagged bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		actor, _ := households.MembershipFromContext(r.Context())
+		p, err := h.opts.Service.SetChangeRequest(r.Context(), actor, chi.URLParam(r, "provider"), ingredientKeyParam(r), flagged)
+		if err != nil {
+			h.writeError(w, r, "flag saved product failed", err)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, h.preferenceResponse(p))
+	}
 }
 
 func (h *Handler) match(w http.ResponseWriter, r *http.Request) {

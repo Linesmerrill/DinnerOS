@@ -187,6 +187,8 @@ nonisolated struct ShoppingPreference: Decodable, Hashable, Sendable, Identifiab
     var check: ShoppingProductCheckState? = nil
     /// That check found the product gone from Walmart; `nil` from an older server.
     var needsRechoosingFlag: Bool? = nil
+    /// A member flagged it while cooking to pick a different one; `nil` from an older server.
+    var changeRequested: Bool? = nil
 
     /// Gone from Walmart at the last check: it can't go in a cart until it's re-chosen.
     var needsRechoosing: Bool { needsRechoosingFlag ?? false }
@@ -198,7 +200,7 @@ nonisolated struct ShoppingPreference: Decodable, Hashable, Sendable, Identifiab
         case productID = "productId"
         case productURLString = "productUrl"
         case displayName, packageSize, createdBy, createdAt, updatedBy, updatedAt, priceCents, priceUpdatedAt
-        case priceSource, check
+        case priceSource, check, changeRequested
         case needsRechoosingFlag = "needsRechoosing"
     }
 }
@@ -334,12 +336,34 @@ nonisolated struct ShoppingLineProduct: Decodable, Hashable, Sendable {
     let displayName: String
     let productURLString: String
     let packageSize: ShoppingAmount?
+    /// A member flagged this product while cooking: pick a different one. Older servers leave it out.
+    var changeRequested = false
 
     private enum CodingKeys: String, CodingKey {
         case productID = "productId"
         case displayName
         case productURLString = "productUrl"
-        case packageSize
+        case packageSize, changeRequested
+    }
+
+    init(
+        productID: String, displayName: String, productURLString: String, packageSize: ShoppingAmount?,
+        changeRequested: Bool = false
+    ) {
+        self.productID = productID
+        self.displayName = displayName
+        self.productURLString = productURLString
+        self.packageSize = packageSize
+        self.changeRequested = changeRequested
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        productID = try container.decode(String.self, forKey: .productID)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        productURLString = try container.decode(String.self, forKey: .productURLString)
+        packageSize = try container.decodeIfPresent(ShoppingAmount.self, forKey: .packageSize)
+        changeRequested = container.decodeLenientBool(forKey: .changeRequested) ?? false
     }
 }
 

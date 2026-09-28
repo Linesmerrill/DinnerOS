@@ -271,11 +271,13 @@ type preferenceDoc struct {
 	// which a member entered.
 	PriceSource string `bson:"priceSource,omitempty"`
 	// Check is the latest check a phone reported, absent until the first.
-	Check     *checkDoc     `bson:"check,omitempty"`
-	CreatedBy bson.ObjectID `bson:"createdBy"`
-	CreatedAt time.Time     `bson:"createdAt"`
-	UpdatedBy bson.ObjectID `bson:"updatedBy"`
-	UpdatedAt time.Time     `bson:"updatedAt"`
+	Check *checkDoc `bson:"check,omitempty"`
+	// ChangeRequest is absent until a member flags the product.
+	ChangeRequest *changeRequestDoc `bson:"changeRequest,omitempty"`
+	CreatedBy     bson.ObjectID     `bson:"createdBy"`
+	CreatedAt     time.Time         `bson:"createdAt"`
+	UpdatedBy     bson.ObjectID     `bson:"updatedBy"`
+	UpdatedAt     time.Time         `bson:"updatedAt"`
 }
 
 func (d preferenceDoc) toPreference() Preference {
@@ -284,8 +286,9 @@ func (d preferenceDoc) toPreference() Preference {
 		IngredientKey: d.IngredientKey, IngredientName: d.IngredientName, ProductID: d.ProductID, DisplayName: d.DisplayName,
 		PackageSize: d.PackageSize.packageSize(), Coverage: providers.Coverage(d.Coverage),
 		PriceCents: d.PriceCents, PriceUpdatedAt: timeOrZero(d.PriceUpdatedAt), PriceSource: PriceSource(d.PriceSource),
-		Check:     d.Check.state(),
-		CreatedBy: hexOrEmpty(d.CreatedBy), CreatedAt: d.CreatedAt.UTC(), UpdatedBy: hexOrEmpty(d.UpdatedBy), UpdatedAt: d.UpdatedAt.UTC(),
+		Check:         d.Check.state(),
+		ChangeRequest: d.ChangeRequest.request(),
+		CreatedBy:     hexOrEmpty(d.CreatedBy), CreatedAt: d.CreatedAt.UTC(), UpdatedBy: hexOrEmpty(d.UpdatedBy), UpdatedAt: d.UpdatedAt.UTC(),
 	}
 	if p.PriceCents != nil && p.PriceSource == "" {
 		p.PriceSource = PriceFromMember
@@ -385,6 +388,47 @@ func (s *MongoStore) UpsertPreference(ctx context.Context, p Preference) (Prefer
 	}
 	saved, err := s.GetPreference(ctx, p.HouseholdID, p.Provider, p.IngredientKey)
 	return saved, res.UpsertedCount > 0, err
+}
+
+type changeRequestDoc struct {
+	ProductID string        `bson:"productId"`
+	By        bson.ObjectID `bson:"by"`
+	At        time.Time     `bson:"at"`
+}
+
+func (d *changeRequestDoc) request() *ChangeRequest {
+	if d == nil {
+		return nil
+	}
+	return &ChangeRequest{ProductID: d.ProductID, By: hexOrEmpty(d.By), At: d.At.UTC()}
+}
+
+// SetChangeRequest implements Store.
+func (s *MongoStore) SetChangeRequest(
+	ctx context.Context, householdID string, provider providers.Key, ingredientKey string, req *ChangeRequest,
+) error {
+	hid, err := householdOID(householdID)
+	if err != nil {
+		return err
+	}
+	update := bson.D{{Key: "$unset", Value: bson.D{{Key: "changeRequest", Value: ""}}}}
+	if req != nil {
+		by, err := userOID(req.By)
+		if err != nil {
+			return err
+		}
+		update = bson.D{{Key: "$set", Value: bson.D{{Key: "changeRequest", Value: changeRequestDoc{
+			ProductID: req.ProductID, By: by, At: req.At,
+		}}}}}
+	}
+	res, err := s.preferences.UpdateOne(ctx, preferenceFilter(hid, provider, ingredientKey), update)
+	if err != nil {
+		return translate(err)
+	}
+	if res.MatchedCount == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // DeletePreference implements Store.

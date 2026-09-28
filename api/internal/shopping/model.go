@@ -115,15 +115,33 @@ type Preference struct {
 	PriceSource PriceSource
 	// Check is the product's latest check reported by a phone, or nil. Use
 	// CurrentCheck, which ignores a check of a previous product.
-	Check     *ProductCheckState
-	CreatedBy string
-	CreatedAt time.Time
-	UpdatedBy string
-	UpdatedAt time.Time
+	Check *ProductCheckState
+	// ChangeRequest is set when a member flagged this product to replace,
+	// usually while cooking with it. Use WantsChange, which ignores a flag
+	// on a product that has since been replaced.
+	ChangeRequest *ChangeRequest
+	CreatedBy     string
+	CreatedAt     time.Time
+	UpdatedBy     string
+	UpdatedAt     time.Time
 
 	// setPrice tells UpsertPreference to write PriceCents (nil clears it);
 	// otherwise the stored price is kept.
 	setPrice bool
+}
+
+// ChangeRequest is a member's "pick a different product next time".
+type ChangeRequest struct {
+	// ProductID is the product that was flagged; choosing another one
+	// answers the flag without anyone clearing it.
+	ProductID string
+	By        string
+	At        time.Time
+}
+
+// WantsChange reports whether a member flagged the saved product itself.
+func (p Preference) WantsChange() bool {
+	return p.ChangeRequest != nil && p.ChangeRequest.ProductID == p.ProductID
 }
 
 // PreferenceInput saves a product for an ingredient. Exactly one of
@@ -285,7 +303,10 @@ type HandoffLine struct {
 	LineSource
 	ProductID   string
 	ProductName string
-	PackageSize *PackageSize
+	// ChangeRequested is true on a match when a member flagged the saved
+	// product to replace. Not stored.
+	ChangeRequested bool
+	PackageSize     *PackageSize
 	// Coverage is the rule the count was computed under, already resolved
 	// from the saved product and the line's category, so a stored handoff
 	// recomputes the same count later.

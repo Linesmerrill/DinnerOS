@@ -11835,6 +11835,9 @@ components:
             - $ref: "#/components/schemas/ShoppingProductCheck"
             - type: "null"
         needsRechoosing:
+        changeRequested:
+          type: boolean
+          description: A member flagged this product to pick a different one next time. Choosing another product clears it.
           type: boolean
           description: True when that check found the product gone from Walmart.
         createdBy:

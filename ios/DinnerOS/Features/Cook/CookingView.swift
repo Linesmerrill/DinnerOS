@@ -21,6 +21,7 @@ struct CookingView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(RecipeLibrary.self) private var library
     @Environment(HouseholdStore.self) private var households
+    @Environment(ShoppingStore.self) private var shopping
 
     @State private var recipeID: String
     @State private var session = CookSession()
@@ -34,6 +35,9 @@ struct CookingView: View {
     @State private var confirmsLeaving = false
     @State private var showsLayout = false
     @AppStorage("cook.ingredientLayout") private var layout: CookIngredientLayout = .byStep
+    /// The walkthrough shows once, the first time the cooking screen opens.
+    @AppStorage("cook.hasSeenWelcome") private var hasSeenWelcome = false
+    @State private var showsWelcome = false
 
     init(start: CookMeal, meals: [CookMeal]) {
         self.meals = meals.contains { $0.recipeID == start.recipeID } ? meals : [start] + meals
@@ -58,6 +62,14 @@ struct CookingView: View {
                     }
                     ToolbarItem(placement: .topBarLeading) { switcherButton }
                     ToolbarItem(placement: .topBarLeading) { layoutButton }
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            showsWelcome = true
+                        } label: {
+                            Image(systemName: "questionmark.circle")
+                        }
+                        .accessibilityLabel("How the Cooking Screen Works")
+                    }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") {
                             if timers.runningCount > 0 { confirmsLeaving = true } else { dismiss() }
@@ -85,6 +97,12 @@ struct CookingView: View {
                 }
         }
         .task(id: recipeID) { await load() }
+        .onAppear { if !hasSeenWelcome { showsWelcome = true } }
+        .sheet(isPresented: $showsWelcome, onDismiss: { hasSeenWelcome = true }) {
+            CookWelcome { showsWelcome = false }
+        }
+        // The saved products, so an ingredient can be flagged from here.
+        .task { if shopping.preferences.isEmpty { await shopping.loadPreferences() } }
         // The screen stays on while cooking; hands are busy.
         .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
@@ -379,10 +397,13 @@ struct CookIngredientList: View {
                     .frame(width: amountWidth, alignment: .center)
                     .strikethrough(quiet)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(item.name)
-                        .font(.body.weight(.semibold))
-                        .strikethrough(quiet)
-                        .foregroundStyle(quiet ? Color.secondary : Color.primary)
+                    HStack(spacing: 6) {
+                        Text(item.name)
+                            .font(.body.weight(.semibold))
+                            .strikethrough(quiet)
+                            .foregroundStyle(quiet ? Color.secondary : Color.primary)
+                        CookFlagBadge(ingredientKey: item.ingredientKey)
+                    }
                     if let prep = item.prep {
                         Text(prep)
                             .font(.subheadline)
@@ -397,6 +418,7 @@ struct CookIngredientList: View {
         }
         .buttonStyle(.plain)
         .disabled(item.isLeftOut)
+        .modifier(CookFlagMenu(ingredientKey: item.ingredientKey, name: item.name))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text([item.amountText, item.name, item.prep].compactMap { $0 }.joined(separator: " ")))
         .accessibilityAddTraits(isChecked ? [.isButton, .isSelected] : .isButton)
@@ -456,6 +478,7 @@ struct CookIngredientList: View {
         }
         .buttonStyle(.plain)
         .disabled(ingredient.isLeftOut)
+        .modifier(CookFlagMenu(ingredientKey: ingredient.ingredientKey, name: ingredient.name))
         .accessibilityAddTraits(isChecked ? .isSelected : [])
     }
 
@@ -506,6 +529,59 @@ private struct CookBranch: View {
             .stroke(Color.accentColor.opacity(0.55), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
         }
         .accessibilityHidden(true)
+    }
+}
+
+/// Press and hold an ingredient: "Pick a different product next time", for the saved product
+/// that didn't work out. Shown only when there is a saved product to flag.
+private struct CookFlagMenu: ViewModifier {
+    let ingredientKey: String?
+    let name: String
+
+    @Environment(ShoppingStore.self) private var shopping
+    @State private var failed = false
+
+    func body(content: Content) -> some View {
+        if let key = ingredientKey, shopping.hasSavedProduct(ingredientKey: key) {
+            let flagged = shopping.isChangeRequested(ingredientKey: key)
+            content
+                .contextMenu {
+                    Button(
+                        flagged ? "Keep This Product" : "Pick a Different Product Next Time",
+                        systemImage: flagged ? "flag.slash" : "flag"
+                    ) {
+                        Task {
+                            do {
+                                try await shopping.setChangeRequest(ingredientKey: key, flagged: !flagged)
+                            } catch {
+                                failed = true
+                            }
+                        }
+                    }
+                }
+                .alert("Couldn't Save That", isPresented: $failed) {
+                    Button("OK", role: .cancel) {}
+                } message: {
+                    Text("Check your connection and try again.")
+                }
+        } else {
+            content
+        }
+    }
+}
+
+/// A small flag beside an ingredient whose product was flagged.
+private struct CookFlagBadge: View {
+    let ingredientKey: String?
+    @Environment(ShoppingStore.self) private var shopping
+
+    var body: some View {
+        if let key = ingredientKey, shopping.isChangeRequested(ingredientKey: key) {
+            Image(systemName: "flag.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .accessibilityLabel("Flagged to change next time")
+        }
     }
 }
 

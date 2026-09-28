@@ -30,6 +30,9 @@ type Store interface {
 	UpsertPreference(ctx context.Context, p Preference) (Preference, bool, error)
 	// DeletePreference removes the saved product for one ingredient.
 	DeletePreference(ctx context.Context, householdID string, provider providers.Key, ingredientKey string) error
+	// SetChangeRequest flags the saved product for one ingredient, or clears
+	// the flag when req is nil. ErrNotFound when there is no saved product.
+	SetChangeRequest(ctx context.Context, householdID string, provider providers.Key, ingredientKey string, req *ChangeRequest) error
 
 	// SaveProductCheck writes p.Check on the saved product p.ID, and when
 	// priceChanged also p's PriceCents, PriceSource, and PriceUpdatedAt,

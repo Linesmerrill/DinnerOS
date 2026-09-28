@@ -674,6 +674,18 @@ private struct ReadyLineRow: View {
                     CheckAmountBadge(text: line.reasonText, action: nil)
                 }
             }
+            // Flagged while cooking: a reminder, with the fix one tap away.
+            if line.product.changeRequested {
+                Button {
+                    if canEdit { changeProduct() }
+                } label: {
+                    Label("You wanted a different one. Tap to change it.", systemImage: "flag.fill")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.orange)
+                }
+                .buttonStyle(.plain)
+                .disabled(!canEdit)
+            }
             // Softer than a gone product: it still goes in, and may come back.
             if line.mayBeUnavailable {
                 Label(ShoppingText.mayBeUnavailable, systemImage: "exclamationmark.circle")

@@ -217,6 +217,7 @@ func buildProposal(p providers.GroceryProvider, settings Settings, g planning.Gr
 			line := HandoffLine{
 				ID: "l" + strconv.Itoa(len(out.Lines)+1), LineSource: src,
 				ProductID: pref.ProductID, ProductName: pref.DisplayName, PackageSize: pref.PackageSize, Status: LinePending,
+				ChangeRequested: pref.WantsChange(),
 				// Resolved here, and stored on the line, so a handoff read
 				// back later recomputes the count it was created with even
 				// if the household changes the rule afterwards.

@@ -312,6 +312,32 @@ func (s *Service) PutPreference(ctx context.Context, actor households.Membership
 }
 
 // DeletePreference removes the product saved for one ingredient.
+// SetChangeRequest flags the saved product for an ingredient to replace next
+// time, or clears the flag. Flagging is how a member says "not these again"
+// while cooking; choosing another product answers it. ErrNotFound when the
+// ingredient has no saved product.
+func (s *Service) SetChangeRequest(
+	ctx context.Context, actor households.Membership, provider, ingredientKey string, flagged bool,
+) (Preference, error) {
+	if err := authorize(actor, households.PermShoppingEdit); err != nil {
+		return Preference{}, err
+	}
+	key := providers.Key(provider)
+	pref, err := s.store.GetPreference(ctx, actor.HouseholdID, key, ingredientKey)
+	if err != nil {
+		return Preference{}, err
+	}
+	var req *ChangeRequest
+	if flagged {
+		req = &ChangeRequest{ProductID: pref.ProductID, By: actor.UserID, At: s.timestamp()}
+	}
+	if err := s.store.SetChangeRequest(ctx, actor.HouseholdID, key, ingredientKey, req); err != nil {
+		return Preference{}, err
+	}
+	pref.ChangeRequest = req
+	return pref, nil
+}
+
 func (s *Service) DeletePreference(ctx context.Context, actor households.Membership, provider, ingredientKey string) error {
 	if err := authorize(actor, households.PermShoppingEdit); err != nil {
 		return err
