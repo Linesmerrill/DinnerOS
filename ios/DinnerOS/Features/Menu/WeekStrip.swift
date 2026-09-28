@@ -220,9 +220,34 @@ struct WeekStrip: View {
             // A horizontal ScrollView takes all the height it is offered, and as a top
             // safe-area inset that is the whole screen, so pin it to the pills' height.
             .frame(height: pillHeight)
+
+            // A way home after scrolling far away, or after picking another week.
+            if isAwayFromThisWeek {
+                Button {
+                    select(menu.currentWeek)
+                    scrollTo(menu.currentWeek)
+                } label: {
+                    Label("This Week", systemImage: "arrow.uturn.backward")
+                        .font(.footnote.weight(.semibold))
+                        .labelStyle(.titleAndIcon)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(.quaternary, in: .capsule)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.tint)
+                .padding(.trailing, 16)
+                .transition(.opacity)
+            }
         }
+        .animation(.easeOut(duration: 0.2), value: isAwayFromThisWeek)
         // The pills stop growing where `pillHeight` stops, so they always fit what it reserves.
         .dynamicTypeSize(...WeekStripMetrics.largestTypeSize)
+    }
+
+    /// True when the shown week, or the strip's scroll, isn't this week.
+    private var isAwayFromThisWeek: Bool {
+        plans.week != menu.currentWeek || (scrolledWeek != nil && scrolledWeek != menu.currentWeek.description)
     }
 
     private func select(_ week: ISOWeek) {

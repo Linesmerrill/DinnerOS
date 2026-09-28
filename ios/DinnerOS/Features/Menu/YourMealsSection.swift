@@ -104,7 +104,11 @@ struct YourMealsSection: View {
                 LazyHStack(alignment: .top, spacing: 12) {
                     ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                         card(entry)
-                            .containerRelativeFrame(.horizontal) { width, _ in width * 0.84 }
+                            .containerRelativeFrame(.horizontal) { width, _ in
+                                // A phone shows one big card; wider screens show several at a
+                                // readable size instead of one card the width of an iPad.
+                                width < 600 ? width * 0.84 : min(width * 0.84, max(360, (width - 48) / 3))
+                            }
                             .prefetchesPhotos(after: index, in: mealPhotoURLs, pointWidth: MealCard.photoWidth)
                     }
                 }

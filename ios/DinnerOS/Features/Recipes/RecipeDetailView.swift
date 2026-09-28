@@ -96,16 +96,6 @@ struct RecipeDetailView: View {
                         RecipeDetailTabPicker(tabs: availableTabs, selection: tabSelection)
                     }
                     if let recipe, !recipe.steps.isEmpty {
-                        Button {
-                            showsCooking = true
-                        } label: {
-                            Label("Start Cooking", systemImage: "frying.pan")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 6)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .padding(.horizontal, 16)
                         CookingStepsSection(
                             steps: recipe.steps, instructions: instructions,
                             chooseSpecialty: { _ in showsSpecialtySetup = true }, isExpanded: $stepsExpanded
@@ -128,6 +118,23 @@ struct RecipeDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(showsNavigationBar ? .visible : .hidden, for: .navigationBar)
         .toolbar {
+            if recipe?.steps.isEmpty == false {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showsCooking = true
+                    } label: {
+                        // An HStack, not a Label: a toolbar shows a Label's icon alone.
+                        HStack(spacing: 6) {
+                            Image(systemName: "frying.pan")
+                            Text("Start Cooking")
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 4)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityLabel("Start Cooking")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 ShareLink(item: shareURL ?? URL(string: "https://example.com").unsafelyUnwrapped, subject: Text(name)) {
                     Image(systemName: "square.and.arrow.up")
@@ -141,7 +148,8 @@ struct RecipeDetailView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             RecipePlanBar(
                 summary: summary, recipe: recipe, entries: plannedEntries, servings: $servings,
-                selections: customizationSelections)
+                selections: customizationSelections,
+                startCooking: recipe?.steps.isEmpty == false ? { showsCooking = true } : nil)
         }
         .overlay(alignment: .bottom) { toast }
         .fullScreenCover(isPresented: $showsCooking) {

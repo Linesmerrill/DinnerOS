@@ -15,6 +15,7 @@ import (
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
+	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
 )
 
 // linkItems returns the items= part of every link, joined by "|".
@@ -319,5 +320,25 @@ func TestIntegrationSendAgainHTTP(t *testing.T) {
 	}
 	if code, body := do(http.MethodPost, "/handoffs", `{}`, testUser); code != http.StatusCreated || !strings.Contains(body, "100000001_3") {
 		t.Errorf("send after starting over = %d %s", code, body)
+	}
+}
+
+// Marking the groceries ordered finalizes the week's plan: the food is
+// bought, so the meals are set. Taking the mark back leaves it finalized.
+func TestIntegrationOrderingFinalizesTheWeek(t *testing.T) {
+	f := newFixture(t)
+	f.svc.plans = f.plans
+	if _, err := f.svc.SetWeekOrdered(f.ctx, f.actor, testWeek, true); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := f.plans.Get(f.ctx, testHousehold, testWeek)
+	if err != nil || plan.Status != planning.StatusFinalized {
+		t.Fatalf("plan after ordering = %s, %v; want finalized", plan.Status, err)
+	}
+	if _, err := f.svc.SetWeekOrdered(f.ctx, f.actor, testWeek, false); err != nil {
+		t.Fatal(err)
+	}
+	if plan, _ = f.plans.Get(f.ctx, testHousehold, testWeek); plan.Status != planning.StatusFinalized {
+		t.Errorf("plan after unmarking = %s, want still finalized", plan.Status)
 	}
 }

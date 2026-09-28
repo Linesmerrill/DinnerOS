@@ -136,6 +136,7 @@ func (s *Service) SetWeekOrdered(
 		// mark back deliberately leaves it read: they did see it, and an
 		// unread badge reappearing would be its own kind of nagging.
 		s.markReminderRead(ctx, actor, w.String())
+		s.finalizeOrderedWeek(ctx, actor.HouseholdID, w.String())
 	} else {
 		if err := s.store.UnmarkWeekOrdered(ctx, actor.HouseholdID, w.String()); err != nil && !errors.Is(err, ErrNotFound) {
 			return OrderReminder{}, fmt.Errorf("unmark week ordered: %w", err)
@@ -280,4 +281,28 @@ func orderReminderBody(r OrderReminder) string {
 	return fmt.Sprintf(
 		"%s is your order day. Tap to send your list. Mark the week ordered to stop this reminder.",
 		day)
+}
+
+// WeekFinalizer finalizes a week's plan. *planning.Service implements it.
+type WeekFinalizer interface {
+	SetStatus(ctx context.Context, householdID, week, status string) (planning.Plan, error)
+}
+
+// finalizeOrderedWeek finalizes a draft plan once its groceries are ordered:
+// changing meals after the food is bought would leave a list that no longer
+// matches the fridge. Taking the order mark back leaves the plan finalized;
+// reopening it stays a deliberate step. A failure is logged, not returned:
+// the order mark is what the member asked for.
+func (s *Service) finalizeOrderedWeek(ctx context.Context, householdID, week string) {
+	f, ok := s.plans.(WeekFinalizer)
+	if !ok || s.plans == nil {
+		return
+	}
+	plan, err := s.plans.Get(ctx, householdID, week)
+	if err != nil || plan.Status != planning.StatusDraft || len(plan.Entries) == 0 {
+		return
+	}
+	if _, err := f.SetStatus(ctx, householdID, week, string(planning.StatusFinalized)); err != nil {
+		s.logger.WarnContext(ctx, "finalize ordered week failed", "householdId", householdID, "week", week, "error", err)
+	}
 }

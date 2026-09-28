@@ -12,6 +12,8 @@ struct RecipePlanBar: View {
     let entries: [PlanEntry]
     @Binding var servings: Int?
     let selections: [PlanCustomizationRequest.Selection]
+    /// Opens the cooking screen.
+    var startCooking: (() -> Void)?
 
     @Environment(PlanStore.self) private var plans
     @Environment(MenuStore.self) private var menu
@@ -39,7 +41,20 @@ struct RecipePlanBar: View {
     }
 
     var body: some View {
-        if canEdit {
+        if let startCooking, entry != nil, !plans.isDraft, !isPastWeek {
+            // The week is set: nothing to plan here, so the bar is for cooking.
+            Button(action: startCooking) {
+                Label("Start Cooking", systemImage: "frying.pan")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+            }
+            .buttonStyle(.borderedProminent)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.bar)
+            .overlay(alignment: .top) { Divider() }
+        } else if canEdit {
             VStack(alignment: .leading, spacing: 8) {
                 if let entry {
                     plannedBar(entry)

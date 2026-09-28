@@ -1124,6 +1124,7 @@ private struct OrderReminderBanner: View {
 
     @Environment(ShoppingStore.self) private var shopping
     @Environment(HouseholdStore.self) private var households
+    @Environment(PlanStore.self) private var plans
     /// Optional so previews needn't supply one.
     @Environment(PushNotificationStore.self) private var push: PushNotificationStore?
 
@@ -1197,6 +1198,8 @@ private struct OrderReminderBanner: View {
             errorMessage = nil
             do {
                 try await shopping.setWeekOrdered(ordered)
+                // Ordering finalizes the week on the server; show it.
+                if ordered { await plans.reload() }
             } catch is CancellationError {
                 return
             } catch {

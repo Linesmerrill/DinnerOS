@@ -18,17 +18,42 @@ struct InstructionStepText: View {
     var showsTimers = false
 
     var body: some View {
-        composed
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityLabel(Text(step.spokenText))
+        // A step that is really several ("Heat the oil. \n Stir in the garlic.") reads as
+        // separate paragraphs with space between them, not one block.
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                composed(paragraph)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(step.spokenText))
+    }
+
+    /// The step's segments split at line breaks, blank paragraphs dropped.
+    private var paragraphs: [[InstructionSegment]] {
+        let segments = step.segments.isEmpty ? [InstructionSegment(kind: .text, text: step.text)] : step.segments
+        var out: [[InstructionSegment]] = [[]]
+        for segment in segments {
+            guard !segment.isIngredient, segment.text.contains("\n") else {
+                out[out.count - 1].append(segment)
+                continue
+            }
+            let pieces = segment.text.components(separatedBy: "\n")
+            for (i, piece) in pieces.enumerated() {
+                if i > 0 { out.append([]) }
+                let text = i > 0 ? String(piece.drop { $0 == " " }) : piece
+                if !text.isEmpty { out[out.count - 1].append(InstructionSegment(kind: .text, text: text)) }
+            }
+        }
+        return out.filter { paragraph in
+            paragraph.contains { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
+        }
     }
 
     /// `Text` concatenation keeps one paragraph that wraps and scales with Dynamic Type.
-    private var composed: Text {
-        guard !step.segments.isEmpty else {
-            return showsTimers ? CookTimerText.text(step.text, step: step.index) : Text(verbatim: step.text)
-        }
-        return step.segments.reduce(Text(verbatim: "")) { partial, segment in
+    private func composed(_ segments: [InstructionSegment]) -> Text {
+        segments.reduce(Text(verbatim: "")) { partial, segment in
             if showsTimers, !segment.isIngredient {
                 return partial + CookTimerText.text(segment.text, step: step.index)
             }
