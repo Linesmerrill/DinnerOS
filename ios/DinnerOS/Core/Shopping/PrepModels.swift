@@ -88,6 +88,9 @@ nonisolated struct PrepCard: Decodable, Equatable, Sendable, Identifiable {
     /// The card's one line of guidance, ready to show.
     let instruction: String
     let reminderText: String
+    /// What to write on each bag, one line each: "Ground Pork, 10 oz", "Frozen Sep 27",
+    /// "Best by Dec 27, 2026". Older servers leave it out; empty when nothing is frozen.
+    let bagLabel: [String]?
     /// The planned meals the reserved amount is for, in day order.
     let meals: [PrepMeal]
     /// Null for a card with nothing to freeze.
@@ -113,7 +116,7 @@ nonisolated struct PrepCard: Decodable, Equatable, Sendable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case id, name, category, unit, bought, boughtValue, boughtText, needed, neededValue,
             neededText, surplus, surplusValue, surplusPercent, surplusText, freezable, frozen,
-            instruction, reminderText, meals, portions, frozenPortions, answeredAt, suggestions
+            instruction, reminderText, bagLabel, meals, portions, frozenPortions, answeredAt, suggestions
         case imageURLString = "imageUrl"
         case handoffID = "handoffId"
         case lineID = "lineId"

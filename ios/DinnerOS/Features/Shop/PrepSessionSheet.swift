@@ -178,6 +178,9 @@ struct PrepCardContent: View {
             PrepThisWeekCard(presentation: presentation)
             if presentation.hasBags {
                 PrepFreezerBags(presentation: presentation, canEdit: canEdit, isBusy: isBusy, setBags: setBags)
+                if let label = card.bagLabel, !label.isEmpty {
+                    PrepBagLabel(lines: label)
+                }
             }
             if let leftover = presentation.leftoverLine {
                 Text(leftover)
@@ -561,6 +564,38 @@ struct PrepIngredientTile: View {
         case "bakery", "pantry", "deli", "condiments": "basket"
         default: "fork.knife"
         }
+    }
+}
+
+// MARK: - Bag label
+
+/// What to write on each bag, drawn like a strip of freezer tape, so three kinds of meat in the
+/// freezer can be told apart and the thaw reminder's "the Ground Pork bag dated Sep 27" matches.
+struct PrepBagLabel: View {
+    let lines: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Write on each bag", systemImage: "pencil.and.scribble")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
+                    Text(line)
+                        .font(index == 0 ? .body.weight(.semibold) : .subheadline)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(PrepStyle.ice.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(PrepStyle.ice.opacity(0.55), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+            )
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Write on each bag: \(lines.joined(separator: ", "))"))
     }
 }
 

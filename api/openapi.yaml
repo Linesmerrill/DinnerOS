@@ -12688,6 +12688,11 @@ components:
         reminderText:
           type: string
           description: Empty for `none`.
+        bagLabel:
+          type: array
+          items:
+            type: string
+          description: What to write on each bag, one line each ("Ground Pork, 10 oz", "Frozen Sep 27", "Best by Dec 27, 2026"). Empty when nothing is being frozen or the card is answered.
         meals:
           type: array
           description: The planned meals the reserved amount is for, in day order. Never null.

@@ -424,6 +424,12 @@ func TestIntegrationPrepSmallMeatSurplus(t *testing.T) {
 		t.Fatalf("6 oz bags = %d × %q, %q left; want 2 × 6 oz", card.Portions.Portions,
 			card.Portions.PortionSize, card.Portions.Leftover)
 	}
+	// The label says what's in the bag and when it went in, so it can be told
+	// apart from the other meat in the freezer.
+	if len(card.BagLabel) != 3 || card.BagLabel[0] != "Ground Beef, 6 oz" ||
+		!strings.HasPrefix(card.BagLabel[1], "Frozen ") || !strings.HasPrefix(card.BagLabel[2], "Best by ") {
+		t.Errorf("bag label = %q", card.BagLabel)
+	}
 	_, done, err := f.svc.CompletePrepCard(f.ctx, f.actor, testWeek, card.ID, PrepInput{})
 	if err != nil {
 		t.Fatalf("CompletePrepCard: %v", err)
@@ -431,6 +437,9 @@ func TestIntegrationPrepSmallMeatSurplus(t *testing.T) {
 	stock, err := f.pantry.FrozenStock(f.ctx, testHousehold)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(done.BagLabel) != 0 {
+		t.Errorf("a finished card still asks for a label: %q", done.BagLabel)
 	}
 	if done.FrozenPortions != 2 || len(stock) != 1 || stock[0].Item.Quantity != "12" || stock[0].Item.Portions != 2 {
 		t.Fatalf("freezer = %+v, want one 12 oz item in two bags", stock)

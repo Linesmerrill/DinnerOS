@@ -211,6 +211,10 @@ type PrepCard struct {
 	ReminderText string
 	// Instruction is the card's one line of guidance, ready to show.
 	Instruction string
+	// BagLabel is what to write on each bag, one line each: "Ground Pork,
+	// 10 oz", "Frozen Sep 27", "Best by Dec 27". Empty when nothing is
+	// being frozen or the card is already answered.
+	BagLabel []string
 	// FrozenItemID, FrozenPortions, and FrozenAt describe what finishing it
 	// recorded, when it froze something.
 	FrozenItemID   string
@@ -312,6 +316,9 @@ func (s *Service) prepSession(ctx context.Context, householdID, week string) (Pr
 		// checklist must not do.
 		if p.pack.Frozen && card.Status == PrepPending {
 			card.Status = PrepDone
+		}
+		if card.Status == PrepPending {
+			card.BagLabel = bagLabel(card, today)
 		}
 		if card.AnsweredAt.After(out.UpdatedAt) {
 			out.UpdatedAt = card.AnsweredAt
@@ -695,6 +702,27 @@ func prepInstruction(card PrepCard) string {
 	default:
 		return fmt.Sprintf("%s, then freeze %d bags of %s, one per future dinner.%s", keep, n, each, leftover)
 	}
+}
+
+// bagLabel is what to write on each bag frozen today, so a freezer with
+// three kinds of meat in it says which is which, and the thaw reminder's
+// "the Ground Pork bag dated Sep 27" matches what's on the bag.
+func bagLabel(card PrepCard, today string) []string {
+	if card.Portions.Portions <= 0 {
+		return nil
+	}
+	out := []string{
+		fmt.Sprintf("%s, %s", card.Pack.Name, amountText(card.Portions.PortionSize, card.Pack.Unit)),
+	}
+	if frozen, err := time.Parse(time.DateOnly, today); err == nil {
+		out = append(out, "Frozen "+frozen.Format("Jan 2"))
+	}
+	if best := pantry.BestBy(today, card.Pack.Name, card.Pack.Category); best != "" {
+		if t, err := time.Parse(time.DateOnly, best); err == nil {
+			out = append(out, "Best by "+t.Format("Jan 2, 2006"))
+		}
+	}
+	return out
 }
 
 // leftoverAdvice is what to do with less than a bag.

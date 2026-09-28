@@ -68,6 +68,9 @@ func (s *Service) WithFreezer(source FrozenSource, hh HouseholdSource, notifier 
 type ThawItem struct {
 	ItemID string
 	Name   string
+	// FrozenOn is the date on the bag's label ("2026-09-27"), or "" for an
+	// item frozen before labels were suggested.
+	FrozenOn string
 	// Date is the calendar date of the meal, in the household's time zone.
 	Date string
 	// Recipes are the planned meals that need it, by name.
@@ -139,9 +142,14 @@ func (s *Service) ThawDue(ctx context.Context, householdID string) (ThawDue, err
 	if err != nil {
 		return ThawDue{}, err
 	}
+	// With two bags of the same meat, the oldest one is the one to thaw:
+	// first in, first out, and the one the member's label says to grab.
 	byKey := map[string]pantry.FrozenItem{}
 	for _, f := range stock {
 		for _, key := range f.Keys {
+			if have, ok := byKey[key]; ok && have.Item.FrozenOn <= f.Item.FrozenOn {
+				continue
+			}
 			byKey[key] = f
 		}
 	}
@@ -192,7 +200,7 @@ func thawKey(ingredientID, name string) string {
 
 func newThawItem(f pantry.FrozenItem, date string, now time.Time) *ThawItem {
 	item := &ThawItem{
-		ItemID: f.Item.ID, Name: f.Item.DisplayName, Date: date,
+		ItemID: f.Item.ID, Name: f.Item.DisplayName, FrozenOn: f.Item.FrozenOn, Date: date,
 		Hours: f.Thaw.Hours, Measured: f.Thaw.Measured,
 	}
 	moveBy := time.Date(now.Year(), now.Month(), now.Day(), DinnerHour, 0, 0, 0, now.Location()).
@@ -202,13 +210,29 @@ func newThawItem(f pantry.FrozenItem, date string, now time.Time) *ThawItem {
 	return item
 }
 
+// labelDate is a bag label's date as written on it, "Sep 27", or "".
+func labelDate(date string) string {
+	t, err := time.Parse(pantry.DateLayout, date)
+	if err != nil {
+		return ""
+	}
+	return t.Format("Jan 2")
+}
+
 // thawSummary is what a member reads, one idea per sentence: what it's for,
 // how long it takes, and when to move it. When the clock has already passed
 // the move-by time it says to do it this morning, rather than pretending the
 // deadline is still ahead.
 func thawSummary(item ThawItem) string {
 	var b strings.Builder
-	if len(item.Recipes) > 0 {
+	label := labelDate(item.FrozenOn)
+	switch {
+	case label != "" && len(item.Recipes) > 0:
+		fmt.Fprintf(&b, "Grab the %s bag dated %s. It's for %s tonight. ",
+			item.Name, label, strings.Join(item.Recipes, " and "))
+	case label != "":
+		fmt.Fprintf(&b, "Grab the %s bag dated %s. ", item.Name, label)
+	case len(item.Recipes) > 0:
 		fmt.Fprintf(&b, "%s is for %s tonight. ", item.Name, strings.Join(item.Recipes, " and "))
 	}
 	fmt.Fprintf(&b, "It takes %s to thaw in the fridge.", hoursText(item.Hours))

@@ -66,6 +66,9 @@ type PrepCardResponse struct {
 	// Reminder is none, thaw, or list: which reminder the app may promise.
 	Reminder     string `json:"reminder"`
 	ReminderText string `json:"reminderText"`
+	// BagLabel is what to write on each bag, one line each; empty when
+	// nothing is being frozen.
+	BagLabel []string `json:"bagLabel"`
 	// Meals are the planned meals the reserved amount is for, never null.
 	Meals []PrepMealResponse `json:"meals"`
 	// Portions is null for a card with nothing to freeze.
@@ -176,7 +179,8 @@ func prepCardResponse(c PrepCard) PrepCardResponse {
 		Bought: p.Bought, Needed: p.Needed, Surplus: p.Surplus, SurplusPercent: p.SurplusPercent,
 		SurplusText: surplusText(p), Freezable: p.Freezable, Frozen: p.Frozen,
 		Instruction: c.Instruction, Reminder: string(c.Reminder), ReminderText: c.ReminderText,
-		Meals: make([]PrepMealResponse, 0, len(c.Meals)), FrozenPortions: c.FrozenPortions,
+		BagLabel: nonNil(c.BagLabel),
+		Meals:    make([]PrepMealResponse, 0, len(c.Meals)), FrozenPortions: c.FrozenPortions,
 		Suggestions: bulkPackResponse(p).Suggestions,
 	}
 	out.BoughtValue, out.NeededValue, out.SurplusValue = exactValue(p.Bought), exactValue(p.Needed), exactValue(p.Surplus)
@@ -277,4 +281,12 @@ func (h *Handler) skipPrepCard(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, PrepCardResultResponse{
 		Card: prepCardResponse(card), Session: prepSessionResponse(session),
 	})
+}
+
+// nonNil renders a missing list as [] rather than null.
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

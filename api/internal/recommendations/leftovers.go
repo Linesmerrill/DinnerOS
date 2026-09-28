@@ -1,6 +1,7 @@
 package recommendations
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -113,41 +114,69 @@ func (s *Service) LeftoverPicks(
 		// The member can still plan one by hand; this just has nothing to add.
 		return nil, nil
 	}
-	if len(days) > limit {
-		days = days[:limit]
+	if len(in.Preferences.PlanDays) > 0 {
+		// Only the days the household plans dinner on.
+		days = slices.DeleteFunc(days, func(d autopilot.Day) bool { return !slices.Contains(in.Preferences.PlanDays, d) })
+		if len(days) == 0 {
+			return nil, nil
+		}
 	}
-	// Rank for each open day, then take the days in turn, each its best
-	// recipe not already picked: three picks land on three different days
-	// when there are three to land on, instead of all on the first one.
-	ranked := make([][]autopilot.Recommendation, len(days))
-	for i, day := range days {
-		res, err := s.provider.RankMeals(ctx, autopilot.RankRequest{Input: in, Day: day, Limit: limit})
+	// Autopilot scores every candidate for every open day, with the day's
+	// weekday rules, cook-time limits, and the week's variety. Then each
+	// recipe goes on the day it fits best: taco night's tacos land on taco
+	// night, not on whichever open day happened to come first. Best pairs
+	// first, one recipe per day while there are days to spare.
+	ranked := make(map[autopilot.Day][]autopilot.Recommendation, len(days))
+	for _, day := range days {
+		res, err := s.provider.RankMeals(ctx, autopilot.RankRequest{Input: in, Day: day, Limit: autopilot.MaxRankLimit})
 		if err != nil {
 			return nil, fmt.Errorf("rank meals: %w", err)
 		}
-		ranked[i] = res.Items
+		ranked[day] = res.Items
 	}
 	out := make([]LeftoverPick, 0, limit)
-	picked := map[string]bool{}
-	for progress := true; progress && len(out) < limit; {
-		progress = false
-		for i, day := range days {
+	for _, p := range placePicks(days, ranked, limit) {
+		out = append(out, leftoverPick(data.byID[p.item.ItemID], p.item, p.day))
+	}
+	return out, nil
+}
+
+type placedPick struct {
+	day  autopilot.Day
+	item autopilot.Recommendation
+}
+
+// placePicks puts each recipe on the open day it scores best on, best pairs
+// first and one recipe per day while there are days to spare, so taco
+// night's tacos land on taco night rather than on the first open day. The
+// picks come back in the week's day order.
+func placePicks(days []autopilot.Day, ranked map[autopilot.Day][]autopilot.Recommendation, limit int) []placedPick {
+	var options []placedPick
+	for _, day := range days {
+		for _, item := range ranked[day] {
+			options = append(options, placedPick{day: day, item: item})
+		}
+	}
+	slices.SortStableFunc(options, func(a, b placedPick) int { return cmp.Compare(b.item.Score, a.item.Score) })
+	var out []placedPick
+	picked, used := map[string]bool{}, map[autopilot.Day]int{}
+	for perDay := 1; len(out) < limit && perDay <= limit; perDay++ {
+		for _, o := range options {
 			if len(out) == limit {
 				break
 			}
-			for len(ranked[i]) > 0 && picked[ranked[i][0].ItemID] {
-				ranked[i] = ranked[i][1:]
-			}
-			if len(ranked[i]) == 0 {
+			if picked[o.item.ItemID] || used[o.day] >= perDay {
 				continue
 			}
-			item := ranked[i][0]
-			ranked[i] = ranked[i][1:]
-			picked[item.ItemID], progress = true, true
-			out = append(out, leftoverPick(data.byID[item.ItemID], item, day))
+			picked[o.item.ItemID] = true
+			used[o.day]++
+			out = append(out, o)
 		}
 	}
-	return out, nil
+	slices.SortStableFunc(out, func(a, b placedPick) int {
+		return cmp.Compare(slices.Index(days, a.day), slices.Index(days, b.day))
+	})
+	return out
 }
 
 func leftoverPick(r recipes.Recipe, item autopilot.Recommendation, day autopilot.Day) LeftoverPick {

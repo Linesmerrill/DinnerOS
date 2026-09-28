@@ -72,6 +72,7 @@ enum PrepPreviewData {
             """
         }
         let image = photo ? "https://images.example.com/ingredients/\(id).png" : ""
+        let label = suggested > 0 ? #"["\#(name), \#(size.1)","Frozen Sep 27","Best by Dec 27, 2026"]"# : "[]"
         return """
             {"id":"handoff-1:\(id)","kind":"bulk_pack","handoffId":"handoff-1","lineId":"\(id)",
              "status":"pending","ingredientKey":"ingredient-\(id)","ingredientId":"ingredient-\(id)",
@@ -81,7 +82,8 @@ enum PrepPreviewData {
              "needed":"\(needed.0)","neededValue":\(needed.0),"neededText":"\(needed.1)",
              "surplus":"0","surplusValue":0,"surplusPercent":50,"surplusText":"",
              "freezable":true,"frozen":false,"instruction":"","reminder":"thaw",
-             "reminderText":"We'll remind you the morning a planned meal needs it — one bag takes about 3 hours in the fridge.",
+             "reminderText":"We'll remind you Tuesday morning to move a bag to the fridge. It takes about 3 hours to thaw.",
+             "bagLabel":\(label),
              "meals":[\(mealsJSON.joined(separator: ","))],
              "portions":{"unit":"oz","reserved":"\(needed.0)","reservedValue":\(needed.0),
                          "reservedText":"\(needed.1)","surplus":"0","surplusValue":0,"meals":\(meals.count),
