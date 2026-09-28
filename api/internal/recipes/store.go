@@ -75,4 +75,9 @@ type Store interface {
 	// with the given status, oldest first. An empty status returns every
 	// item. Records carry no RecipeID; the service resolves it.
 	ListReviewItems(ctx context.Context, householdID, status string, limit int) ([]ReviewRecord, error)
+	// ResolveReviewItems marks the household's open items with the given IDs
+	// resolved and returns how many it changed. With onlyField set, only items
+	// with that field are touched. Unknown, already resolved, and other
+	// households' IDs are skipped.
+	ResolveReviewItems(ctx context.Context, householdID string, ids []string, onlyField string, res ReviewResolution) (int, error)
 }

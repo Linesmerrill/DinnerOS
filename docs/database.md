@@ -89,7 +89,7 @@ Implemented in Phase 4 (`internal/recipes`; categories and units from `internal/
 | --- | --- | --- |
 | `recipes` | householdId, source, sourceRecipeId, sourceAliases[], sourceUrl, name, headline, description, imageUrl, isAddon, servings[], prepMinutes, totalMinutes, difficulty, cuisines[], tags[], utensils[], allergens[], nutritionPerServing[], ingredients[] (ingredientId, name, pantryStaple, amounts[]: servings, quantity, quantityValue, unit, sourceUnit, rawText), steps[], orderWeeks[], timesOrdered, lastOrderedWeek, sharedToCatalog, catalogKey, createdAt, updatedAt | **unique** `{householdId, source, sourceRecipeId}`; `{householdId, source, sourceAliases}`; `{householdId, catalogKey}`; with collation `en`/strength 2: `{householdId, name, _id}`, `{householdId, lastOrderedWeek: -1, name, _id}`, `{householdId, timesOrdered: -1, name, _id}`, `{householdId, tags}`, `{householdId, cuisines}` |
 | `ingredients` | key, name, category, categoryConfident, sourceRefs[] (source, sourceIngredientId), imageUrl, createdAt, updatedAt | **unique** `{key}`; `{sourceRefs.source, sourceRefs.sourceIngredientId}`; `{categoryConfident, key}` |
-| `import_reviews` | householdId, key, source, sourceRecipeId, recipeName, field, value, reason, status (`open`), createdAt, updatedAt | **unique** `{householdId, key}`; `{householdId, status, createdAt}` |
+| `import_reviews` | householdId, key, source, sourceRecipeId, recipeName, field, value, reason, status (`open`, `resolved`), resolution, linkedRecipeId, resolvedBy, resolvedAt, createdAt, updatedAt | **unique** `{householdId, key}`; `{householdId, status, createdAt}` |
 
 A new household's `recipes` may be copies of the starter household's
 (`STARTER_RECIPES_HOUSEHOLD_ID`, #487): new `_id`s and `householdId`, the
@@ -154,7 +154,10 @@ publishing a recipe of its own; it is absent until a member turns it on.
   household.
 - `import_reviews` keeps importer review items per household. `key` is the hex
   SHA-256 of source, sourceRecipeId, field, value, and reason. Re-imports use
-  `$setOnInsert`, so an item's status is never reset. No endpoint reads them yet.
+  `$setOnInsert`, so an item's status is never reset and a resolved item stays
+  resolved. `key` is the item's `id` on the wire. Read with `GET .../import-reviews`,
+  resolved with `POST .../import-reviews/resolve` (one `updateMany` on the unique
+  index, open items only).
 
 Ownership: recipes imported from our personal history belong to a household
 (`householdId`). The global catalog does not overload `householdId`; it is a

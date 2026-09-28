@@ -368,7 +368,10 @@ func TestImportReviewsEndpoint(t *testing.T) {
 	if all := decodeBody[ImportReviewListResponse](t, srv.do(t, http.MethodGet, reviewsPath+"?status=all", "", userAda)); len(all.Items) != 1 {
 		t.Errorf("status=all items = %d, want 1", len(all.Items))
 	}
-	wantError(t, srv.do(t, http.MethodGet, reviewsPath+"?status=resolved", "", userAda), http.StatusBadRequest, "validation_failed")
+	if resolved := decodeBody[ImportReviewListResponse](t, srv.do(t, http.MethodGet, reviewsPath+"?status=resolved", "", userAda)); len(resolved.Items) != 0 {
+		t.Errorf("status=resolved items = %d, want 0", len(resolved.Items))
+	}
+	wantError(t, srv.do(t, http.MethodGet, reviewsPath+"?status=closed", "", userAda), http.StatusBadRequest, "validation_failed")
 	wantError(t, srv.do(t, http.MethodGet, reviewsPath+"?limit=0", "", userAda), http.StatusBadRequest, "validation_failed")
 
 	// Review items are import bookkeeping: viewing the household is not enough.

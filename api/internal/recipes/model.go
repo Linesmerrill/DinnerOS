@@ -17,6 +17,9 @@ var (
 	ErrInvalidImport = errors.New("recipes: invalid import file")
 	// ErrInvalidQuery means list parameters, including the cursor, are invalid.
 	ErrInvalidQuery = errors.New("recipes: invalid query")
+	// ErrInvalidResolution means a request to resolve review items is
+	// unusable: no IDs, too many, or an unknown resolution.
+	ErrInvalidResolution = errors.New("recipes: invalid resolution")
 
 	errHouseholdRequired = errors.New("recipes: household id is required")
 )
@@ -208,16 +211,69 @@ type ReviewItem struct {
 
 // Review item statuses. An item is Open until a person resolves it; nothing
 // closes one automatically, because only a person can say what the box held.
+// A resolved item stays resolved: a re-import that flags the same thing again
+// does not reopen it.
 const (
-	ReviewStatusOpen = "open"
+	ReviewStatusOpen     = "open"
+	ReviewStatusResolved = "resolved"
 )
+
+// Resolution is what a person decided about a review item.
+type Resolution string
+
+// Resolutions. SameRecipe and DifferentRecipe apply only to variant items
+// (field "variant"), because they answer "was the box the stored recipe?".
+const (
+	// ResolutionSameRecipe: the delivered variant is the stored recipe. The
+	// import already counted that delivery toward it, so nothing else changes.
+	ResolutionSameRecipe Resolution = "same_recipe"
+	// ResolutionDifferentRecipe: the delivered variant is its own dish. The
+	// stored recipe is left as it is. LinkedRecipeID names the household
+	// recipe the member added for the delivered variant, when they did.
+	ResolutionDifferentRecipe Resolution = "different_recipe"
+	// ResolutionDismissed: nothing to do, for any kind of item.
+	ResolutionDismissed Resolution = "dismissed"
+)
+
+// Valid reports whether r is a known resolution.
+func (r Resolution) Valid() bool {
+	switch r {
+	case ResolutionSameRecipe, ResolutionDifferentRecipe, ResolutionDismissed:
+		return true
+	}
+	return false
+}
+
+// VariantOnly reports whether r applies only to variant items.
+func (r Resolution) VariantOnly() bool {
+	return r == ResolutionSameRecipe || r == ResolutionDifferentRecipe
+}
+
+// ReviewFieldVariant is the field of an item that says the delivered menu
+// variant differed from the stored recipe page.
+const ReviewFieldVariant = "variant"
+
+// ReviewResolution is a person's decision, as the store records it.
+type ReviewResolution struct {
+	Resolution     Resolution
+	LinkedRecipeID string
+	ResolvedBy     string
+	ResolvedAt     time.Time
+}
 
 // ReviewRecord is a stored ReviewItem with the bookkeeping the store adds.
 // RecipeID is the household recipe the item is about, empty when the import
 // that recorded it no longer matches a stored recipe.
 type ReviewRecord struct {
 	ReviewItem
-	RecipeID  string
-	Status    string
-	CreatedAt time.Time
+	// ID identifies the item within its household. It is the review key, so
+	// it is stable across re-imports.
+	ID       string
+	RecipeID string
+	// RecipeImageURL is that recipe's photo, empty when it has none.
+	RecipeImageURL string
+	Status         string
+	CreatedAt      time.Time
+	// Resolved is set once a person resolved the item.
+	Resolved *ReviewResolution
 }

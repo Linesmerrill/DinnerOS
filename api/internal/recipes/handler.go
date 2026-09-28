@@ -108,6 +108,7 @@ func (h *Handler) Mount(r chi.Router) {
 		// Review items are import bookkeeping, so whoever may import may read
 		// them. The static path wins over /{recipeId} in chi.
 		r.With(imports).Get("/households/{householdId}/recipes/import-reviews", h.importReviews)
+		r.With(imports).Post("/households/{householdId}/recipes/import-reviews/resolve", h.resolveImportReviews)
 		// The larger import body limit applies only after the caller is
 		// authenticated and authorized to import.
 		r.With(
@@ -343,9 +344,13 @@ func newImportResultResponse(res ImportResult) ImportResultResponse {
 
 // ImportReviewResponse is one thing the importer could not map confidently.
 type ImportReviewResponse struct {
+	// ID identifies the item within the household, for resolving it.
+	ID string `json:"id"`
 	// RecipeID is the household recipe the item is about, omitted when no
 	// stored recipe carries the source ID any more.
-	RecipeID       string `json:"recipeId,omitempty"`
+	RecipeID string `json:"recipeId,omitempty"`
+	// RecipeImageURL is that recipe's photo, omitted when it has none.
+	RecipeImageURL string `json:"recipeImageUrl,omitempty"`
 	RecipeName     string `json:"recipeName"`
 	Source         string `json:"source"`
 	SourceRecipeID string `json:"sourceRecipeId"`
@@ -357,6 +362,11 @@ type ImportReviewResponse struct {
 	Reason    string    `json:"reason"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"createdAt"`
+	// Resolution, LinkedRecipeID, and ResolvedAt are set once a person
+	// resolved the item.
+	Resolution     string     `json:"resolution,omitempty"`
+	LinkedRecipeID string     `json:"linkedRecipeId,omitempty"`
+	ResolvedAt     *time.Time `json:"resolvedAt,omitempty"`
 }
 
 // ImportReviewListResponse is a page of review items.
@@ -364,12 +374,31 @@ type ImportReviewListResponse struct {
 	Items []ImportReviewResponse `json:"items"`
 }
 
+// ResolveImportReviewsRequest is the body of POST .../import-reviews/resolve.
+type ResolveImportReviewsRequest struct {
+	IDs        []string `json:"ids"`
+	Resolution string   `json:"resolution"`
+	// RecipeID links the recipe the member added for a delivered variant.
+	// Only with different_recipe.
+	RecipeID string `json:"recipeId,omitempty"`
+}
+
+// ResolveImportReviewsResponse says how many open items were resolved.
+type ResolveImportReviewsResponse struct {
+	Resolved int `json:"resolved"`
+}
+
 func newImportReviewResponse(r ReviewRecord) ImportReviewResponse {
-	return ImportReviewResponse{
-		RecipeID: r.RecipeID, RecipeName: r.RecipeName, Source: r.Source,
+	out := ImportReviewResponse{
+		ID: r.ID, RecipeID: r.RecipeID, RecipeImageURL: r.RecipeImageURL, RecipeName: r.RecipeName, Source: r.Source,
 		SourceRecipeID: r.SourceRecipeID, Field: r.Field, Value: r.Value,
 		Reason: r.Reason, Status: r.Status, CreatedAt: r.CreatedAt,
 	}
+	if r.Resolved != nil {
+		at := r.Resolved.ResolvedAt
+		out.Resolution, out.LinkedRecipeID, out.ResolvedAt = string(r.Resolved.Resolution), r.Resolved.LinkedRecipeID, &at
+	}
+	return out
 }
 
 // --- Handlers -----------------------------------------------------------------
@@ -460,10 +489,10 @@ func (h *Handler) importReviews(w http.ResponseWriter, r *http.Request) {
 	case "":
 	case "all":
 		status = "" // every status
-	case ReviewStatusOpen:
+	case ReviewStatusOpen, ReviewStatusResolved:
 		status = s
 	default:
-		validationFailed(w, r, "status must be open or all")
+		validationFailed(w, r, "status must be open, resolved, or all")
 		return
 	}
 	limit := 0
@@ -485,6 +514,29 @@ func (h *Handler) importReviews(w http.ResponseWriter, r *http.Request) {
 		resp.Items = append(resp.Items, newImportReviewResponse(it))
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) resolveImportReviews(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	var req ResolveImportReviewsRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	n, err := h.opts.Service.ResolveImportReviews(r.Context(), actor.HouseholdID, actor.UserID, ResolveReviews{
+		IDs: req.IDs, Resolution: Resolution(req.Resolution), LinkedRecipeID: req.RecipeID,
+	})
+	switch {
+	case errors.Is(err, ErrInvalidResolution):
+		validationFailed(w, r, publicMessage(err))
+		return
+	case errors.Is(err, ErrNotFound):
+		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "recipe not found")
+		return
+	case err != nil:
+		h.internalError(w, r, "resolve import reviews failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, ResolveImportReviewsResponse{Resolved: n})
 }
 
 func (h *Handler) importRecipes(w http.ResponseWriter, r *http.Request) {

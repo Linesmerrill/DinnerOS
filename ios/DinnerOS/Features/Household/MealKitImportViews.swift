@@ -146,6 +146,8 @@ struct MealKitImportFlow: View {
 /// is running.
 struct MealKitImportStatusView: View {
     @Environment(MealKitImportStore.self) private var mealKit
+    @Environment(ImportReviewStore.self) private var reviews
+    @Environment(HouseholdStore.self) private var households
     @State private var isSigningIn = false
     @State private var isConfirmingStop = false
     @State private var actionError: String?
@@ -176,7 +178,12 @@ struct MealKitImportStatusView: View {
         .task { await mealKit.load() }
         // Polls only while something is actually in flight, and stops when it isn't.
         .task(id: mealKit.isImporting) { await mealKit.pollWhileImporting() }
-        .refreshable { await mealKit.refresh() }
+        // The backlog grows as batches land, so it is read again whenever the run moves on.
+        .task(id: reviewsKey) { await loadReviews() }
+        .refreshable {
+            await mealKit.refresh()
+            await reviews.refresh()
+        }
         .sheet(isPresented: $isSigningIn) {
             NavigationStack { MealKitImportFlow() }
         }
@@ -205,12 +212,15 @@ struct MealKitImportStatusView: View {
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 2)
             }
-            if let job = mealKit.job, job.reviewItems > 0 {
+            // The household's open backlog, the same number the Household tab shows and the
+            // same rows the screen lists. The job's own `reviewItems` counts what one run
+            // flagged, including items an older import already recorded, so it isn't shown.
+            if reviews.isAvailable, reviews.phase == .loaded, reviews.digest.openCount > 0 {
                 NavigationLink {
                     ImportReviewView()
                 } label: {
                     Label("Import Review", systemImage: "tray.full")
-                        .badge(job.reviewItems)
+                        .badge(reviews.digest.openCount)
                 }
             }
         } header: {
@@ -258,6 +268,19 @@ struct MealKitImportStatusView: View {
     /// button says exactly that. Importing again carries on from where the last read stopped.
     private var importButtonTitle: LocalizedStringKey {
         mealKit.job == nil ? "Import from \(service.displayName)" : "Import Again"
+    }
+
+    /// Changes when the latest run moves on, so the backlog is read again as batches land.
+    private var reviewsKey: String {
+        let job = mealKit.job
+        return
+            "\(households.current?.household.id ?? "")|\(job?.id ?? "")|\(job?.status ?? "")|\(job?.reviewItems ?? 0)"
+    }
+
+    private func loadReviews() async {
+        guard let householdID = households.current?.household.id else { return }
+        reviews.activate(householdID: householdID)
+        await reviews.refresh()
     }
 
     private func stop() async {
@@ -341,6 +364,8 @@ private struct MealKitOptionLabel: View {
     }
     .environment(session)
     .environment(MealKitImportStore.preview(session: session, status: status))
+    .environment(HouseholdPreviewData.store(session: session))
+    .environment(ImportReviewPreviewData.store(session: session))
 }
 
 #Preview("Between batches") {
@@ -355,6 +380,8 @@ private struct MealKitOptionLabel: View {
     }
     .environment(session)
     .environment(MealKitImportStore.preview(session: session, status: status))
+    .environment(HouseholdPreviewData.store(session: session))
+    .environment(ImportReviewPreviewData.store(session: session))
 }
 
 #Preview("Finished with failures") {
@@ -374,4 +401,6 @@ private struct MealKitOptionLabel: View {
     }
     .environment(session)
     .environment(MealKitImportStore.preview(session: session, status: status))
+    .environment(HouseholdPreviewData.store(session: session))
+    .environment(ImportReviewPreviewData.store(session: session))
 }

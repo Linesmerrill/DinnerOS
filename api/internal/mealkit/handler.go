@@ -163,8 +163,9 @@ type JobResponse struct {
 	Imported     int `json:"imported"`
 	Updated      int `json:"updated"`
 	Unchanged    int `json:"unchanged"`
-	// ReviewItems counts things the importer could not map confidently; they
-	// are read through the recipes import-reviews route.
+	// ReviewItems counts what this run flagged, including items an earlier
+	// import already recorded. The household's open backlog, which is what a
+	// screen should count, is the recipes import-reviews route.
 	ReviewItems int                    `json:"reviewItems"`
 	Failures    []FailedRecipeResponse `json:"failures"`
 	// Harvest is where the walk that produced this run's order history

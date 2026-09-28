@@ -2,13 +2,13 @@ import Foundation
 import Observation
 import os
 
-/// The current household's import review backlog: what the importer flagged and nobody has
-/// ever been able to read.
+/// The current household's import review backlog: what the importer flagged, and the member's
+/// decisions on it.
 ///
 /// Main-actor state that lives as long as the app, like `SpecialtyStore`. The backlog is small
-/// and only changes when someone runs an import, so it loads in one page when the Household
-/// tab opens. Nothing here resolves an item: there is no endpoint that closes one, and the
-/// screen says so instead of offering a button that would only pretend.
+/// and only changes when someone runs an import or resolves an item, so it loads in one page
+/// when the Household tab opens. `resolve` removes an item only after the server recorded the
+/// decision, so nothing leaves the list that would come back on the next load.
 @Observable
 final class ImportReviewStore {
     enum Phase: Equatable {
@@ -28,6 +28,8 @@ final class ImportReviewStore {
     /// Cleared by a `404`: this API doesn't have import reviews yet, so the row hides instead
     /// of showing an error for something that isn't built (#421, the store catalog).
     private(set) var isAvailable = true
+    /// True while a decision is being sent, so the screen can't send a second one on top.
+    private(set) var isResolving = false
 
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let api: RecipesAPI?
@@ -115,6 +117,43 @@ final class ImportReviewStore {
             } else {
                 phase = .failed(message)
             }
+        }
+    }
+
+    /// Records `resolution` for `items` and takes them off the list once the server has it.
+    ///
+    /// Items the resolution does not apply to (a "same recipe" on a missing-steps item) are not
+    /// sent and stay on the list, because the server would leave them open too. More than one
+    /// page of ids goes out in several calls; a failure part-way keeps what already landed off
+    /// the list and throws, so a retry sends only the rest. Throws for the screen to show.
+    func resolve(
+        _ items: [ImportReview], as resolution: ImportReviewResolution, linkedRecipeID: String? = nil
+    ) async throws {
+        guard let api, let householdID, !isResolving else { return }
+        let targets = items.filter(resolution.applies(to:))
+        guard !targets.isEmpty else { return }
+        let started = scope
+        isResolving = true
+        defer { isResolving = false }
+
+        var ids = targets.map(\.id)
+        while !ids.isEmpty {
+            let chunk = Array(ids.prefix(RecipesAPI.importReviewLimit))
+            do {
+                _ = try await session.authorized { token in
+                    try await api.resolveImportReviews(
+                        householdID: householdID, ids: chunk, resolution: resolution, recipeID: linkedRecipeID,
+                        accessToken: token)
+                }
+            } catch {
+                Self.logger.notice("Import review resolve failed: \(Self.describe(error), privacy: .public)")
+                throw error
+            }
+            guard started == scope else { return }
+            // Resolved already (by someone else) counts as gone too: either way it isn't open.
+            let done = Set(chunk)
+            self.items.removeAll { done.contains($0.id) }
+            ids.removeFirst(chunk.count)
         }
     }
 

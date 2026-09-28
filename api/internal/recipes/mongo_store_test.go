@@ -233,3 +233,8 @@ func TestIntegrationImportReviews(t *testing.T) {
 		t.Errorf("limit=1 items = %d, %v", len(one), err)
 	}
 }
+
+func TestIntegrationResolveImportReviews(t *testing.T) {
+	svc, _, _ := newTestMongoService(t)
+	runResolveContract(t, svc, bson.NewObjectID().Hex(), bson.NewObjectID().Hex())
+}

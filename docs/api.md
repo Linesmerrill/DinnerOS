@@ -111,7 +111,8 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/recipes` `?q&addons&tag&cuisine&sort&limit&cursor` → `{items, nextCursor}` | `household.view` | 4 | ✅ |
 | GET | `/api/v1/households/{householdId}/recipes/{recipeId}` → recipe | `household.view` | 4 | ✅ |
 | POST | `/api/v1/households/{householdId}/recipes/import` import file → `{created, updated, unchanged, ingredientsCreated, reviewItems, errors}` | `recipes.import` | 4 | ✅ |
-| GET | `/api/v1/households/{householdId}/recipes/import-reviews` `?status=open\|all&limit` → `{items}`, oldest first | `recipes.import` | 4 | ✅ |
+| GET | `/api/v1/households/{householdId}/recipes/import-reviews` `?status=open\|resolved\|all&limit` → `{items}`, oldest first | `recipes.import` | 4 | ✅ |
+| POST | `/api/v1/households/{householdId}/recipes/import-reviews/resolve` `{ids, resolution, recipeId?}` → `{resolved}` (`same_recipe`, `different_recipe`, `dismissed`; up to 500 ids) | `recipes.import` | 4 | ✅ |
 | GET | `/api/v1/households/{householdId}/meal-kit/{source}` → `{source, enabled, latestJob}` | `recipes.import` | — | ✅ |
 | POST | `/api/v1/households/{householdId}/meal-kit/{source}/imports` `{recipes:[{sourceRecipeId, name?, url?, weeks?, isAddon?}]}` → `202` job | `recipes.import` | — | ✅ |
 | DELETE | `/api/v1/households/{householdId}/meal-kit/{source}/imports` → `204` (cancels every run in flight) | `recipes.import` | — | ✅ |
