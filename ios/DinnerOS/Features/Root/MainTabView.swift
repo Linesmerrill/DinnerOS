@@ -5,17 +5,18 @@ struct MainTabView: View {
     @Environment(HouseholdStore.self) private var households
     @Environment(NotificationStore.self) private var notifications
     @Environment(ShoppingStore.self) private var shopping
+    @Environment(PantryStore.self) private var pantry
+    /// Optional so previews needn't supply one.
+    @Environment(MealKitImportStore.self) private var mealKit: MealKitImportStore?
     /// Optional so previews needn't supply one.
     @Environment(PushNotificationStore.self) private var push: PushNotificationStore?
     @Environment(AppIntentRouter.self) private var router: AppIntentRouter?
-    @State private var selection: AppTab = .menu
-    /// A pantry item a tapped push opened; the bell opens the same screen.
-    @State private var pushedPantryItem: PushedPantryItem?
-    /// A tapped push of a type with no screen of its own opens the bell.
-    @State private var showsPushedNotifications = false
+    /// The selected tab and the stacks a notification opens. In the environment of every tab
+    /// and every sheet below, so the bell can switch tabs from wherever it's presented.
+    @State private var tabs = TabRouter()
 
     var body: some View {
-        TabView(selection: $selection) {
+        TabView(selection: $tabs.selection) {
             ForEach(AppTab.allCases) { tab in
                 Tab(value: tab) {
                     switch tab {
@@ -32,12 +33,15 @@ struct MainTabView: View {
                         }
                         .id(households.current?.household.id)
                     case .pantry:
-                        NavigationStack {
+                        NavigationStack(path: $tabs.pantryPath) {
                             PantryView()
                         }
                     case .household:
-                        NavigationStack {
+                        NavigationStack(path: $tabs.householdPath) {
                             HouseholdView()
+                                .navigationDestination(for: RecipeImportRoute.self) { _ in
+                                    MealKitImportStatusView()
+                                }
                         }
                     }
                 } label: {
@@ -45,13 +49,7 @@ struct MainTabView: View {
                 }
             }
         }
-        .environment(
-            \.openShop,
-            OpenShopAction { week in
-                selection = .shop
-                Task { await shopping.show(week: week) }
-            }
-        )
+        .onAppear { configureRouter() }
         // Another household clears the previous one's notifications and badge.
         .task(id: households.current?.household.id) {
             guard let householdID = households.current?.household.id else { return }
@@ -75,7 +73,7 @@ struct MainTabView: View {
         }
         // Siri planned a week: the Menu tab opens its suggestions.
         .onChange(of: router?.autopilotReviewWeek, initial: true) { _, week in
-            if week != nil { selection = .menu }
+            if week != nil { tabs.selection = .menu }
         }
         .sheet(item: confirmationPrompt) { handoff in
             OrderConfirmationSheet(handoff: handoff)
@@ -86,24 +84,51 @@ struct MainTabView: View {
         ) {
             openPendingPush()
         }
-        .sheet(item: $pushedPantryItem) { pushed in
-            NavigationStack {
-                PantryItemDetailView(itemID: pushed.itemID)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Done") { pushedPantryItem = nil }
-                        }
-                    }
-            }
-        }
-        .sheet(isPresented: $showsPushedNotifications) {
+        .sheet(isPresented: $tabs.showsNotifications) {
             NotificationsView()
+        }
+        // Outermost, so the sheets above get it too: an environment value set on the TabView
+        // alone doesn't reach a sheet presented from a modifier outside it.
+        .environment(tabs)
+    }
+
+    /// Gives the router what it needs from the stores: whether a notification's subject still
+    /// exists, and how to show a week in Shop.
+    private func configureRouter() {
+        let households = households
+        let pantry = pantry
+        let mealKit = mealKit
+        let shopping = shopping
+        tabs.check = NotificationSubjectCheck(
+            pantryItemExists: { itemID in
+                guard let householdID = households.current?.household.id else { return false }
+                await pantry.activate(householdID: householdID)
+                if pantry.items.contains(where: { $0.id == itemID }) { return true }
+                // A notification can name an item added after the pantry last loaded.
+                if pantry.phase == .loaded { await pantry.refresh() }
+                return pantry.phase != .loaded || pantry.items.contains { $0.id == itemID }
+            },
+            canOpenRecipeImport: {
+                guard let householdID = households.current?.household.id,
+                    households.access?.can(.recipesImport) == true, let mealKit, mealKit.isAvailable
+                else { return false }
+                // Recipe Import loads the household it was activated for; the Household tab
+                // usually does this, but a notification can open the screen first.
+                mealKit.activate(householdID: householdID)
+                return true
+            })
+        tabs.showWeek = { week in
+            if let current = households.current?.household {
+                shopping.activate(
+                    householdID: current.id, timeZone: current.planningTimeZone, weekStartsOn: current.weekStartsOn)
+            }
+            Task { await shopping.show(week: week) }
         }
     }
 
-    /// Opens a tapped push where its row on the bell leads: a pantry item, or the week in
-    /// Shop. A push for another of the member's households switches to it first; this runs
-    /// again when that household becomes current.
+    /// Opens a tapped push where its row on the bell leads (`NotificationRouting`). A push for
+    /// another of the member's households switches to it first; this runs again when that
+    /// household becomes current.
     private func openPendingPush() {
         guard let push, let route = push.pendingRoute, let current = households.current?.household else { return }
         if route.householdID != current.id {
@@ -119,17 +144,11 @@ struct MainTabView: View {
         }
         let notifications = notifications
         Task { await notifications.markRead(notificationID: route.notificationID, householdID: route.householdID) }
-        if let itemID = route.subject?.pantryItemID {
-            pushedPantryItem = PushedPantryItem(itemID: itemID)
-        } else if let week = route.subject?.shoppingWeek.flatMap(ISOWeek.init) {
-            selection = .shop
-            shopping.activate(
-                householdID: current.id, timeZone: current.planningTimeZone, weekStartsOn: current.weekStartsOn)
-            let shopping = shopping
-            Task { await shopping.show(week: week) }
-        } else {
-            showsPushedNotifications = true
-        }
+        // `.onChange(initial:)` can run before `.onAppear`.
+        configureRouter()
+        let tabs = tabs
+        let destination = NotificationRouting.destination(for: route)
+        Task { await tabs.open(destination) }
         push.finishOpening(route)
     }
 
@@ -148,9 +167,4 @@ struct MainTabView: View {
 private struct PushRouteScope: Equatable {
     let route: PushRoute?
     let householdID: String?
-}
-
-private struct PushedPantryItem: Identifiable {
-    let itemID: String
-    var id: String { itemID }
 }

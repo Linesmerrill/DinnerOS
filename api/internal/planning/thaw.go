@@ -202,20 +202,21 @@ func newThawItem(f pantry.FrozenItem, date string, now time.Time) *ThawItem {
 	return item
 }
 
-// thawSummary is the sentence a member reads. It says how long it takes, when
-// to start, and — when the clock has already passed that point — that doing
-// it now is the answer, rather than pretending the deadline is still ahead.
+// thawSummary is what a member reads, one idea per sentence: what it's for,
+// how long it takes, and when to move it. When the clock has already passed
+// the move-by time it says to do it this morning, rather than pretending the
+// deadline is still ahead.
 func thawSummary(item ThawItem) string {
 	var b strings.Builder
 	if len(item.Recipes) > 0 {
 		fmt.Fprintf(&b, "%s is for %s tonight. ", item.Name, strings.Join(item.Recipes, " and "))
 	}
-	fmt.Fprintf(&b, "This usually takes %s in the fridge", hoursText(item.Hours))
+	fmt.Fprintf(&b, "It takes %s to thaw in the fridge.", hoursText(item.Hours))
 	if item.Overnight {
-		b.WriteString(" — move it over this morning.")
+		b.WriteString(" Move it to the fridge this morning.")
 		return b.String()
 	}
-	fmt.Fprintf(&b, " — put it in the fridge by %s, or this morning if that's easier.", clockText(item.MoveBy))
+	fmt.Fprintf(&b, " Move it to the fridge by %s.", clockText(item.MoveBy))
 	return b.String()
 }
 

@@ -6,14 +6,15 @@ struct MenuBottomBar: View {
     @Environment(PlanStore.self) private var plans
     @Environment(MenuStore.self) private var menu
     @Environment(HouseholdStore.self) private var households
-    @Environment(\.openShop) private var openShop
+    /// `nil` outside the tab shell, where there is no Shop tab to switch to.
+    @Environment(TabRouter.self) private var tabs: TabRouter?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// Main meals and add-ons counted apart, so an add-on never reads as a sixth dinner.
     private var counts: MealCounts { menu.mealCounts(of: plans.plan?.entries ?? []) }
 
     private var canShop: Bool {
-        openShop != nil && households.access?.can(.shoppingEdit) == true
+        tabs != nil && households.access?.can(.shoppingEdit) == true
     }
 
     var body: some View {
@@ -36,7 +37,7 @@ struct MenuBottomBar: View {
             HStack(spacing: 8) {
                 if canShop {
                     Button {
-                        openShop?(plans.week)
+                        tabs?.openShop(plans.week)
                     } label: {
                         Image(systemName: "cart")
                             .frame(minWidth: 30, minHeight: 30)

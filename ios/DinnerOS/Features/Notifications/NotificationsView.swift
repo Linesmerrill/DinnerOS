@@ -1,21 +1,21 @@
 import SwiftUI
 
 /// The household's notifications, newest first, a page at a time. Tapping one marks it read,
-/// and a pantry alert opens its item.
+/// closes the sheet, and opens the screen it's about (`NotificationRouting`), the same one a
+/// tapped push opens.
 ///
-/// Presented as a sheet from the bell on the Pantry and Week screens, because the tab bar
-/// is full.
+/// Presented as a sheet from the bell on the Menu and Pantry screens, because the tab bar
+/// is full, and by the tab shell for a tapped push of an unknown type.
 struct NotificationsView: View {
     @Environment(NotificationStore.self) private var notifications
     @Environment(\.dismiss) private var dismiss
-    /// `nil` outside the tab shell, where there's no Shop tab to open.
-    @Environment(\.openShop) private var openShop
+    /// `nil` outside the tab shell, where there are no tabs to open.
+    @Environment(TabRouter.self) private var tabs: TabRouter?
 
-    @State private var path: [PantryItemRoute] = []
     @State private var actionError: String?
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack {
             content
                 .navigationTitle("Notifications")
                 .navigationBarTitleDisplayMode(.inline)
@@ -27,9 +27,6 @@ struct NotificationsView: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Done") { dismiss() }
                     }
-                }
-                .navigationDestination(for: PantryItemRoute.self) { route in
-                    PantryItemDetailView(itemID: route.itemID)
                 }
                 .alert(
                     "Couldn't Mark Notifications Read",
@@ -130,25 +127,19 @@ struct NotificationsView: View {
         }
     }
 
+    /// Where the row goes, for VoiceOver.
     private func hint(for notification: AppNotification) -> Text {
-        if notification.subject.pantryItemID != nil {
-            return Text("Opens the pantry item.")
-        }
-        if notification.subject.shoppingWeek != nil, openShop != nil {
-            return Text("Opens the week in Shop.")
-        }
-        return Text("")
+        let destination = tabs == nil ? .notifications : NotificationRouting.destination(for: notification)
+        return Text(destination.accessibilityHint)
     }
 
     private func open(_ notification: AppNotification) {
         Task { await notifications.markRead(notification) }
-        if let itemID = notification.subject.pantryItemID {
-            path.append(PantryItemRoute(itemID: itemID))
-        } else if let openShop, let week = notification.subject.shoppingWeek.flatMap(ISOWeek.init) {
-            // The bell is a sheet over another tab, so it closes before switching tabs.
-            dismiss()
-            openShop(week)
-        }
+        let destination = NotificationRouting.destination(for: notification)
+        guard let tabs, destination != .notifications else { return }
+        // The bell is a sheet over a tab, so it closes before the tab changes.
+        dismiss()
+        Task { await tabs.open(destination) }
     }
 
     private func markAllRead() {
@@ -171,13 +162,19 @@ struct NotificationRow: View {
     private var icon: String {
         switch notification.type {
         case .pantryLow: "cabinet"
+        case .pantryThaw: "snowflake"
         case .shoppingOrderDue: "cart"
+        case .recipeImportFinished: "shippingbox"
+        case .recipeImportAttention: "exclamationmark.triangle"
         default: "bell"
         }
     }
 
     private var iconStyle: AnyShapeStyle {
-        notification.type == .pantryLow ? AnyShapeStyle(.orange) : AnyShapeStyle(.tint)
+        switch notification.type {
+        case .pantryLow, .recipeImportAttention: AnyShapeStyle(.orange)
+        default: AnyShapeStyle(.tint)
+        }
     }
 
     var body: some View {

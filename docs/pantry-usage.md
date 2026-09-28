@@ -372,12 +372,11 @@ nobody opened — by the hourly sweep.
   item with the meals that need it named.
 - **`DinnerHour` = 18 local is the only guess in the model,** and the advice is
   anchored to it. The move-by time is dinner less the estimate, so five hours
-  reads: *"Chicken Thighs is for Tuscan Chicken tonight. This usually takes
-  about 5 hours in the fridge — put it in the fridge by 1 PM, or this morning
-  if that's easier."*
+  reads: *"Chicken Thighs is for Tuscan Chicken tonight. It takes about 5
+  hours to thaw in the fridge. Move it to the fridge by 1 PM."*
 - **When the move-by time has already passed** (the usual case for anything
-  longer than a workday) the wording changes to *"— move it over this
-  morning"* rather than pretending the deadline is still ahead.
+  longer than a workday) the last sentence becomes *"Move it to the fridge
+  this morning."* rather than pretending the deadline is still ahead.
 - **The household picks the hour** (`thawReminderHour` on the household, 0–23,
   default `households.DefaultThawReminderHour` = 6). Before that hour nothing
   is created: the errand is theirs to do when they're up, and a reminder that
@@ -510,9 +509,9 @@ apps may build their own text from the numbers.
 | Estimates | Pantry rows (`PantryItemRow`), item edit sheet or detail (`PantryUsageSections`) | Rows with an `estimate` show a ring and "~31% left". The item screen shows the ring, remaining amount, `summary`, recipe use, daily rate, skipped recipes, the threshold in effect and whether it's the item's or the household's, and the 20 most recent purchases. |
 | Status source | `PantryStatusPill` | `statusSource: estimate` with `low` shows an outlined, dashed **Estimated Low** pill; a person's status keeps the filled pill. |
 | Thresholds | Pantry → ⋯ → **Low-Stock Alerts…** (`PantryThresholdSheet`); item edit sheet (`PantryThresholdFields`) | The household's percent used (1–100, default 80), read-only without `pantry.edit`. An item toggles **Use Household Setting** off to set its own, which `PATCH`es an integer; turning it back on sends `null`. |
-| Notifications | Bell in the Pantry and Week toolbars (`NotificationsView`) | Unread badge from `unread-count`. The sheet lists notifications 50 at a time and loads the next page when the last row appears. Tapping a notification marks it read; `pantry.low` opens the item. **Mark All Read** sends `all: true`. |
+| Notifications | Bell in the Menu and Pantry toolbars (`NotificationsView`) | Unread badge from `unread-count`. The sheet lists notifications 50 at a time and loads the next page when the last row appears. Tapping a notification marks it read, closes the sheet, and opens its screen through `NotificationRouting` and the shell's `TabRouter`: `pantry.low` the item on the Pantry tab, `pantry.thaw` the Pantry tab (Take Out to Thaw is its first section), `shopping.order_due` that week in Shop, `recipe_import.*` Household → Recipe Import. An item that's gone opens the Pantry tab; without `recipes.import`, the Household tab. `api/internal/notifications/testdata/routes.json` lists every type and is checked by tests on both sides. **Mark All Read** sends `all: true`. |
 | Cooking | Week → swipe or long-press → **Mark as Cooked** | Sends the queued events right away, then refreshes the pantry and the unread count so the deduction shows. |
-| Push | Lock screen or Notification Center (`AppDelegate`, `PushNotificationStore`, `MainTabView`) | Tapping a push opens what its bell row opens — `pantry.low` the item (in a sheet), `shopping.order_due` that week in Shop, anything else the bell — switching to its household first if another one is shown, and marks it read. A push that arrives while the app is open still shows as a banner and refreshes the badge. |
+| Push | Lock screen or Notification Center (`AppDelegate`, `PushNotificationStore`, `MainTabView`) | Tapping a push opens what its bell row opens, through the same `NotificationRouting` function (an unknown type opens the bell) — switching to its household first if another one is shown, and marks it read. A push that arrives while the app is open still shows as a banner and refreshes the badge. |
 | Push registration | `PushNotificationStore`, `DeviceTokensAPI` | Once alerts are allowed, every sign-in and return to the foreground registers for a token and `PUT`s it (`sandbox` in Debug builds, `production` otherwise) once per launch; a rotated token replaces the old one. Sign-out `DELETE`s it before the session's tokens are cleared, waiting at most 3 s. |
 
 The unread count refreshes when a household is activated, when the app becomes

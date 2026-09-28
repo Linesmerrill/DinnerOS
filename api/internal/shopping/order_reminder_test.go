@@ -272,8 +272,13 @@ func TestRefreshCreatesOneReminderPerWeek(t *testing.T) {
 		n.Subject.Kind != notifications.SubjectShoppingWeek || n.Subject.ID != testWeek {
 		t.Errorf("notification = %+v", n)
 	}
-	if n.Title == "" || n.Body == "" {
-		t.Errorf("notification needs display text: %+v", n)
+	if n.Title != "Time to order this week's groceries" {
+		t.Errorf("title = %q", n.Title)
+	}
+	// Plain and short: one idea per sentence, and "Tap" because tapping
+	// opens the week in Shop.
+	if want := "Wednesday is your order day. Tap to send your list. Mark the week ordered to stop this reminder."; n.Body != want {
+		t.Errorf("body = %q, want %q", n.Body, want)
 	}
 }
 

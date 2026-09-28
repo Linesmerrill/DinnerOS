@@ -1,19 +1,5 @@
 import SwiftUI
 
-/// Switches the tab shell to Shop and shows a week, for example from a grocery list.
-struct OpenShopAction {
-    let action: (ISOWeek) -> Void
-
-    func callAsFunction(_ week: ISOWeek) {
-        action(week)
-    }
-}
-
-extension EnvironmentValues {
-    /// `nil` outside the tab shell, where there's no Shop tab to switch to.
-    @Entry var openShop: OpenShopAction? = nil
-}
-
 enum ShopErrors {
     /// The message to show for a failed shopping change. A `403` means the role changed
     /// elsewhere, so the household reloads and hidden controls match it again.

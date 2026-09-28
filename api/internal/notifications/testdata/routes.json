@@ -1,0 +1,10 @@
+{
+  "about": "Where tapping each notification opens in the app. Read by api/internal/notifications/routes_test.go, which fails when the server can create a type or subject kind missing here, and by ios/DinnerOSTests/NotificationRoutingTests.swift, which fails when the app has no route for a row. Destinations: pantry_item (Pantry tab, the item), pantry_thaw (Pantry tab, Take Out to Thaw), shop_week (Shop tab, that week), recipe_import (Household tab, Recipe Import).",
+  "routes": [
+    { "type": "pantry.low", "subjectKind": "pantry_item", "destination": "pantry_item" },
+    { "type": "pantry.thaw", "subjectKind": "pantry_item", "destination": "pantry_thaw" },
+    { "type": "shopping.order_due", "subjectKind": "shopping_week", "destination": "shop_week" },
+    { "type": "recipe_import.finished", "subjectKind": "recipe_import_job", "destination": "recipe_import" },
+    { "type": "recipe_import.attention", "subjectKind": "recipe_import_job", "destination": "recipe_import" }
+  ]
+}
