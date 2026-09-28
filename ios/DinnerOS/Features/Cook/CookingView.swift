@@ -138,8 +138,8 @@ struct CookingView: View {
         CookStepList(
             dish: dish, session: session, timerRequest: $timerRequest,
             timerLabel: { timerLabel(step: $0, dish: dish) },
-            startTimer: { step, seconds in
-                timers.start(label: timerLabel(step: step, dish: dish), seconds: seconds)
+            startTimer: { request, seconds in
+                timers.start(label: request.subject ?? timerLabel(step: request.step, dish: dish), seconds: seconds)
                 timerRequest = nil
             })
     }
@@ -545,7 +545,7 @@ struct CookStepList: View {
     let session: CookSession
     @Binding var timerRequest: CookTimerRequest?
     var timerLabel: (Int) -> String = { String(localized: "Step \($0)") }
-    var startTimer: (Int, Int) -> Void = { _, _ in }
+    var startTimer: (CookTimerRequest, Int) -> Void = { _, _ in }
 
     var body: some View {
         let current = session.current(recipe: dish.recipe.id)
@@ -613,8 +613,8 @@ struct CookStepList: View {
                 get: { timerRequest?.step == index ? timerRequest : nil },
                 set: { if $0 == nil, timerRequest?.step == index { timerRequest = nil } })
         ) { request in
-            CookTimerSetup(request: request, label: timerLabel(index)) { seconds in
-                startTimer(index, seconds)
+            CookTimerSetup(request: request, label: request.subject ?? timerLabel(index)) { seconds in
+                startTimer(request, seconds)
             }
             .presentationCompactAdaptation(.popover)
         }

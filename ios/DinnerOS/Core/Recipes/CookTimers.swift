@@ -1,4 +1,3 @@
-import AudioToolbox
 import Foundation
 import UIKit
 import UserNotifications
@@ -44,7 +43,7 @@ nonisolated struct CookTimer: Identifiable, Equatable, Sendable {
 final class CookTimers {
     private(set) var timers: [CookTimer] = []
     @ObservationIgnored private var watchers: [UUID: Task<Void, Never>] = [:]
-    @ObservationIgnored private var chimes: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private let alarm = CookAlarm()
     @ObservationIgnored private let now: () -> Date
 
     init(now: @escaping () -> Date = Date.init) {
@@ -92,6 +91,13 @@ final class CookTimers {
         if case .running = timers[i].state { watch(timers[i]) }
     }
 
+    /// Moves a timer to where another one is, for reordering the dock by dragging.
+    func move(_ id: UUID, to target: UUID) {
+        guard id != target, let from = index(id), let to = index(target) else { return }
+        let timer = timers.remove(at: from)
+        timers.insert(timer, at: to)
+    }
+
     /// Stops and removes it, finished or not.
     func remove(_ id: UUID) {
         unwatch(id)
@@ -110,13 +116,7 @@ final class CookTimers {
         timers[i].state = .finished
         watchers[id] = nil
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        chimes[id] = Task { @MainActor in
-            // A chime every few seconds for a minute, or until it's stopped.
-            for _ in 0..<20 {
-                AudioServicesPlaySystemSound(1005)
-                do { try await Task.sleep(for: .seconds(3)) } catch { return }
-            }
-        }
+        alarm.ring()
     }
 
     private func index(_ id: UUID) -> Int? { timers.firstIndex { $0.id == id } }
@@ -141,9 +141,10 @@ final class CookTimers {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id.uuidString])
     }
 
+    /// The alarm is shared: it stops once no finished timer is left to ring for.
     private func stopChime(_ id: UUID) {
-        chimes[id]?.cancel()
-        chimes[id] = nil
+        let stillFinished = timers.contains { $0.id != id && $0.state == .finished }
+        if !stillFinished { alarm.stop() }
     }
 
     /// A local notification for when the app isn't open. It only goes out if the member

@@ -13,6 +13,7 @@ struct CookTimerDock: View {
                 VStack(alignment: .trailing, spacing: 10) {
                     ForEach(timers.timers) { timer in
                         CookTimerChip(timer: timer, timers: timers)
+                            .reorderable(timer, in: timers)
                     }
                 }
                 .padding(20)
@@ -21,6 +22,7 @@ struct CookTimerDock: View {
                     HStack(spacing: 10) {
                         ForEach(timers.timers) { timer in
                             CookTimerChip(timer: timer, timers: timers)
+                                .reorderable(timer, in: timers)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -62,8 +64,11 @@ struct CookTimerChip: View {
                                 .font(.system(.title2, design: .rounded, weight: .heavy).monospacedDigit())
                                 .contentTransition(.numericText(countsDown: true))
                                 .foregroundStyle(clockColor(urgent: urgent))
-                            Text(timer.label)
-                                .font(.caption.weight(.medium))
+                            // "Zucchini  6 min timer": what it's for, and how long it was set for.
+                            (Text(timer.label).fontWeight(.semibold)
+                                + Text(verbatim: "  ")
+                                + Text("\(CookDuration.words(Int(timer.total))) timer"))
+                                .font(.caption)
                                 .foregroundStyle(isFinished ? Color.white.opacity(0.9) : Color.secondary)
                                 .lineLimit(1)
                         }
@@ -244,5 +249,22 @@ struct CookTimerSetup: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+    }
+}
+
+extension View {
+    /// Press and hold a timer to drag it onto another one's place.
+    func reorderable(_ timer: CookTimer, in timers: CookTimers) -> some View {
+        draggable(timer.id.uuidString) {
+            Text(timer.label)
+                .font(.headline)
+                .padding(10)
+                .background(.regularMaterial, in: Capsule())
+        }
+        .dropDestination(for: String.self) { items, _ in
+            guard let id = items.first.flatMap(UUID.init(uuidString:)) else { return false }
+            withAnimation(.snappy(duration: 0.25)) { timers.move(id, to: timer.id) }
+            return true
+        }
     }
 }
