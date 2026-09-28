@@ -14,6 +14,8 @@ extension Color {
 /// One step's text, composed from the server's segments.
 struct InstructionStepText: View {
     let step: InstructionStep
+    /// On the cooking screen, times in the step ("8-10 minutes") are tappable timers.
+    var showsTimers = false
 
     var body: some View {
         composed
@@ -23,9 +25,14 @@ struct InstructionStepText: View {
 
     /// `Text` concatenation keeps one paragraph that wraps and scales with Dynamic Type.
     private var composed: Text {
-        guard !step.segments.isEmpty else { return Text(verbatim: step.text) }
+        guard !step.segments.isEmpty else {
+            return showsTimers ? CookTimerText.text(step.text, step: step.index) : Text(verbatim: step.text)
+        }
         return step.segments.reduce(Text(verbatim: "")) { partial, segment in
-            partial + Self.text(for: segment)
+            if showsTimers, !segment.isIngredient {
+                return partial + CookTimerText.text(segment.text, step: step.index)
+            }
+            return partial + Self.text(for: segment)
         }
     }
 

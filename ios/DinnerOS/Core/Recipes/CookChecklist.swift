@@ -40,7 +40,7 @@ nonisolated enum CookChecklist {
         }
     }
 
-    private static func matches(_ segment: InstructionSegment, _ ingredient: RecipeIngredient) -> Bool {
+    static func matches(_ segment: InstructionSegment, _ ingredient: RecipeIngredient) -> Bool {
         if let id = segment.ingredientID, !id.isEmpty, !ingredient.ingredientID.isEmpty {
             return id == ingredient.ingredientID
         }
@@ -85,10 +85,163 @@ final class CookSession {
         checked[recipe] = set
     }
 
+    /// Ticks a by-step row and its parts together.
+    func toggle(_ item: CookStepItem, recipe: String) {
+        var set = checked[recipe, default: []]
+        let ids = [item.id] + item.parts.indices.map(item.partID)
+        if set.contains(item.id) { set.subtract(ids) } else { set.formUnion(ids) }
+        checked[recipe] = set
+    }
+
+    /// Ticks one part; the row is ticked once every part is.
+    func togglePart(_ index: Int, of item: CookStepItem, recipe: String) {
+        var set = checked[recipe, default: []]
+        let id = item.partID(index)
+        if set.contains(id) { set.remove(id) } else { set.insert(id) }
+        if item.parts.indices.allSatisfy({ set.contains(item.partID($0)) }) {
+            set.insert(item.id)
+        } else {
+            set.remove(item.id)
+        }
+        checked[recipe] = set
+    }
+
     func current(recipe: String) -> Int? { currentStep[recipe] }
 
     /// Tapping the step you're on again clears it.
     func tapStep(_ index: Int, recipe: String) {
         currentStep[recipe] = currentStep[recipe] == index ? nil : index
+    }
+}
+
+// MARK: - By step
+
+/// One ingredient as a step uses it: "2 scallions, sliced", with the parts the step splits it
+/// into ("Scallion whites", "Scallion greens").
+nonisolated struct CookStepItem: Equatable, Sendable, Identifiable {
+    let id: String
+    let name: String
+    let amountText: String?
+    /// "sliced", "peeled, cored, and diced"; `nil` when the step says nothing about it.
+    let prep: String?
+    let parts: [String]
+    let isLeftOut: Bool
+    func partID(_ index: Int) -> String { "\(id)#\(index)" }
+}
+
+/// Everything one step needs. Index 0 holds what no step names (salt, oil).
+nonisolated struct CookStepGroup: Equatable, Sendable, Identifiable {
+    let index: Int
+    let items: [CookStepItem]
+    var id: Int { index }
+}
+
+nonisolated extension CookChecklist {
+    static func byStep(recipe: Recipe, servings: Int, instructions: RecipeInstructions?) -> [CookStepGroup] {
+        let all = make(recipe: recipe, servings: servings, instructions: instructions)
+        guard let steps = instructions?.steps, !steps.isEmpty else {
+            return [CookStepGroup(index: 0, items: all.map(item(for:)))]
+        }
+        var used = Set<String>()
+        var groups: [CookStepGroup] = []
+        for step in steps {
+            var items: [CookStepItem] = []
+            var clause = ""
+            for (i, segment) in step.segments.enumerated() {
+                guard segment.isIngredient else {
+                    clause = lastClause(clause + segment.text)
+                    continue
+                }
+                guard let index = recipe.ingredients.firstIndex(where: { matches(segment, $0) }), index < all.count
+                else { continue }
+                let ingredient = all[index]
+                used.insert(ingredient.id)
+                let after =
+                    i + 1 < step.segments.count && !step.segments[i + 1].isIngredient ? step.segments[i + 1].text : ""
+                let partWord = leadingPart(after)
+                let name = partWord.map { "\(singular(ingredient.name)) \($0)" } ?? ingredient.name
+                let prep = prepWords(in: clause)
+                let parts = splitParts(after, name: ingredient.name)
+                if let existing = items.firstIndex(where: { $0.name == name }) {
+                    // Named again in the same step ("zest the lemon … halve lemon"): add what's done.
+                    let old = items[existing]
+                    let merged = [old.prep, prep].compactMap { $0 }.joined(separator: ", ")
+                    items[existing] = CookStepItem(
+                        id: old.id, name: old.name, amountText: old.amountText, prep: merged.isEmpty ? nil : merged,
+                        parts: old.parts.isEmpty ? parts : old.parts, isLeftOut: old.isLeftOut)
+                } else {
+                    items.append(
+                        CookStepItem(
+                            id: "\(ingredient.id)@\(step.index)-\(items.count)", name: name,
+                            amountText: partWord == nil ? segment.amount?.text : segment.amount?.text,
+                            prep: prep, parts: parts, isLeftOut: ingredient.isLeftOut || segment.leftOut))
+                }
+                clause = ""
+            }
+            if !items.isEmpty { groups.append(CookStepGroup(index: step.index, items: items)) }
+        }
+        let rest = all.filter { !used.contains($0.id) }.map(item(for:))
+        if !rest.isEmpty { groups.insert(CookStepGroup(index: 0, items: rest), at: 0) }
+        return groups
+    }
+
+    private static func item(for ingredient: CookIngredient) -> CookStepItem {
+        CookStepItem(
+            id: "\(ingredient.id)@0", name: ingredient.name, amountText: ingredient.amountText, prep: nil, parts: [],
+            isLeftOut: ingredient.isLeftOut)
+    }
+
+    /// The text since the last sentence or clause break.
+    private static func lastClause(_ text: String) -> String {
+        let breaks: [Character] = [".", ";", "\n", ":"]
+        guard let last = text.lastIndex(where: { breaks.contains($0) }) else { return text }
+        return String(text[text.index(after: last)...])
+    }
+
+    /// Prep verbs, as done to the ingredient: "Trim and slice" → "trimmed and sliced".
+    private static let verbs: [String: String] = [
+        "slice": "sliced", "sliced": "sliced", "dice": "diced", "diced": "diced", "mince": "minced",
+        "minced": "minced", "chop": "chopped", "chopped": "chopped", "quarter": "quartered",
+        "quartered": "quartered", "halve": "halved", "halved": "halved", "zest": "zested", "zested": "zested",
+        "grate": "grated", "grated": "grated", "peel": "peeled", "peeled": "peeled", "core": "cored",
+        "cored": "cored", "trim": "trimmed", "trimmed": "trimmed", "juice": "juiced", "shred": "shredded",
+        "shredded": "shredded", "cube": "cubed", "cubed": "cubed", "crush": "crushed", "crushed": "crushed",
+        "pit": "pitted", "pitted": "pitted", "drain": "drained", "drained": "drained", "rinse": "rinsed",
+        "rinsed": "rinsed", "melt": "melted", "melted": "melted", "soften": "softened", "tear": "torn",
+        "pat": "patted dry", "julienne": "julienned", "smash": "smashed", "wedge": "cut into wedges",
+    ]
+    private static let adverbs: Set<String> = ["thinly", "finely", "roughly", "coarsely", "thickly"]
+
+    static func prepWords(in clause: String) -> String? {
+        let words = clause.lowercased().split { !$0.isLetter }.map(String.init)
+        var out: [String] = []
+        for (i, word) in words.enumerated() {
+            guard let done = verbs[word], !out.contains(where: { $0.hasSuffix(done) }) else { continue }
+            if word == "trim" || word == "trimmed" { continue }  // every herb is trimmed; it's noise
+            out.append(i > 0 && adverbs.contains(words[i - 1]) ? "\(words[i - 1]) \(done)" : done)
+        }
+        guard !out.isEmpty else { return nil }
+        return out.count == 1 ? out[0] : out.formatted(.list(type: .and))
+    }
+
+    /// "greens" in "2 scallion greens".
+    private static func leadingPart(_ text: String) -> String? {
+        // Only a word right after the name ("scallion greens"), never one after a comma.
+        let lower = text.lowercased()
+        for part in ["whites", "greens"] where lower.hasPrefix(" \(part)") { return part }
+        return nil
+    }
+
+    /// "separating whites from greens" → Scallion whites, Scallion greens.
+    private static func splitParts(_ text: String, name: String) -> [String] {
+        let clause = String(text.lowercased().prefix { $0 != "." && $0 != ";" })
+        if clause.contains("white"), clause.contains("green"), clause.contains("separat") || clause.contains(" and ") {
+            return ["\(singular(name)) whites", "\(singular(name)) greens"]
+        }
+        return []
+    }
+
+    private static func singular(_ name: String) -> String {
+        name.hasSuffix("s") && !name.hasSuffix("ss") ? String(name.dropLast()) : name
     }
 }
