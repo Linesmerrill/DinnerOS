@@ -596,12 +596,20 @@ func newMealKitRunner(cfg config.Config, db *mongo.Database, service *mealkit.Se
 	if n := cfg.MealKitImport.RecipesPerRun; n > 0 && n < batch {
 		batch = n
 	}
+	// The runner does most of an import's work, so its progress has to move
+	// the Live Activity too; nil without APNs, like the scheduled worker's.
+	observer, err := liveactivity.NewObserver(cfg.APNs, db, logger)
+	if err != nil {
+		logger.Warn("live activity pushes are off for the web import runner", "error", err)
+		observer = nil
+	}
 	return mealkit.NewRunner(mealkit.RunnerOptions{
 		Worker: mealkit.WorkerOptions{
 			Store:     mealkit.NewMongoStore(db),
 			Service:   service,
 			Publisher: mealkit.ServicePublisher{Service: recipes.NewService(recipes.NewMongoStore(db))},
 			Notifier:  notifier,
+			Observer:  observer,
 			Logger:    logger,
 		},
 		BatchSize: batch,

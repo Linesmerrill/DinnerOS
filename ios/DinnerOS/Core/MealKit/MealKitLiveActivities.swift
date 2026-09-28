@@ -114,7 +114,7 @@ final class MealKitLiveActivities {
         var done = job.recipesDone
         let phase: MealKitImportActivityAttributes.ContentState.Phase
         switch job.state {
-        case .queued: phase = .waiting
+        case .queued, .waiting: phase = .waiting
         case .running: phase = .importing
         case .finished:
             phase = .done
