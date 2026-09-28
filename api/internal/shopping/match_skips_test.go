@@ -44,7 +44,7 @@ func TestBuildProposalBuysASharedIngredientOnceAndRecountsWhenOneMealLeavesItOut
 	w := providers.NewWalmart(providers.WalmartOptions{})
 	settings := Settings{HouseholdID: "h", Provider: providers.KeyWalmart}
 
-	both, err := buildProposal(w, settings, beefWeek(t, nil), testPrefs(), MatchInput{}, matchNow)
+	both, err := buildProposal(w, settings, beefWeek(t, nil), testPrefs(), MatchInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestBuildProposalBuysASharedIngredientOnceAndRecountsWhenOneMealLeavesItOut
 	}
 
 	rules := grocery.SkipRules{Recipes: map[string]map[string]bool{"chili": {beefKey: true}}}
-	one, err := buildProposal(w, settings, beefWeek(t, rules), testPrefs(), MatchInput{}, matchNow)
+	one, err := buildProposal(w, settings, beefWeek(t, rules), testPrefs(), MatchInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestBuildProposalBuysASharedIngredientOnceAndRecountsWhenOneMealLeavesItOut
 func TestBuildProposalLeavesAWhollySkippedIngredientOutOfTheCart(t *testing.T) {
 	w := providers.NewWalmart(providers.WalmartOptions{})
 	rules := grocery.SkipRules{Ingredients: grocery.SkipSet{beefKey: grocery.SkipAlways}}
-	p, err := buildProposal(w, Settings{HouseholdID: "h", Provider: providers.KeyWalmart}, beefWeek(t, rules), testPrefs(), MatchInput{}, matchNow)
+	p, err := buildProposal(w, Settings{HouseholdID: "h", Provider: providers.KeyWalmart}, beefWeek(t, rules), testPrefs(), MatchInput{})
 	if err != nil {
 		t.Fatal(err)
 	}

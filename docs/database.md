@@ -473,9 +473,8 @@ Implemented in `internal/shopping` (Phase 8a, [shopping-providers.md](shopping-p
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
 | `shopping_settings` | householdId, provider (`walmart`), storeId, updatedBy, updatedAt | **unique** `{householdId}` |
-| `shopping_product_preferences` | householdId, provider, ingredientKey, ingredientName, productId, displayName, packageSize{quantity, quantityValue, unit}, coverage, priceCents, priceUpdatedAt, priceSource (`member`/`provider`), productChosenAt, check{productId, status, detail, checkedAt, verifiedStatus, verifiedAt, verifiedSince, name, priceCents, pickup, delivery, store}, createdBy, createdAt, updatedBy, updatedAt | **unique** `{householdId, provider, ingredientKey}`; `{provider, check.checkedAt, _id}` (the product-check sweep) |
-| `shopping_check_pauses` | `_id` (provider key), until, reason (`blocked`/`throttled`), at | `_id` |
-| `shopping_handoffs` | householdId, week, provider, storeId, lines[{id, ingredientKey, name, category, amounts[{quantity, quantityValue, unit}], unquantified, groceryStatus, productId, productName, packageSize{}, computedPackages, packages, reason, status (`pending`/`confirmed`/`skipped`), claimedAt, confirmedPackages, purchaseId, confirmedBy, confirmedAt, skippedBy, skippedAt, priceCents, pantry (`tracked`/`not_tracked`)}], excluded[{ingredientKey, name, category, amounts[], unquantified, groceryStatus, reason, productId, productName (on `left_out_gone`/`left_out_unverified`)}], links[{url, lineIds[], itemCount}] (the latest send), affiliateTracked, active (only while true), closedAt, closedReason (`ordered`/`started_over`/`confirmed`), revision, createdBy, createdAt, updatedAt | `{householdId, createdAt: -1}`; `{householdId, week, createdAt: -1}`; **unique** `{householdId, week, provider}` where `active: true` (one current handoff per week, #495) |
+| `shopping_product_preferences` | householdId, provider, ingredientKey, ingredientName, productId, displayName, packageSize{quantity, quantityValue, unit}, coverage, priceCents, priceUpdatedAt, createdBy, createdAt, updatedBy, updatedAt | **unique** `{householdId, provider, ingredientKey}` |
+| `shopping_handoffs` | householdId, week, provider, storeId, lines[{id, ingredientKey, name, category, amounts[{quantity, quantityValue, unit}], unquantified, groceryStatus, productId, productName, packageSize{}, computedPackages, packages, reason, status (`pending`/`confirmed`/`skipped`), claimedAt, confirmedPackages, purchaseId, confirmedBy, confirmedAt, skippedBy, skippedAt, priceCents, pantry (`tracked`/`not_tracked`)}], excluded[{ingredientKey, name, category, amounts[], unquantified, groceryStatus, reason}], links[{url, lineIds[], itemCount}] (the latest send), affiliateTracked, active (only while true), closedAt, closedReason (`ordered`/`started_over`/`confirmed`), revision, createdBy, createdAt, updatedAt | `{householdId, createdAt: -1}`; `{householdId, week, createdAt: -1}`; **unique** `{householdId, week, provider}` where `active: true` (one current handoff per week, #495) |
 | `shopping_store_requests` | householdId, key, name, note, requestedBy, requestedAt, updatedAt | **unique** `{householdId, key}`; `{householdId, requestedAt: -1}`; `{key}` |
 | `shopping_order_weeks` | householdId, week, orderedBy, orderedAt | **unique** `{householdId, week}` |
 | `shopping_week_spend` | householdId, week, orderTotalCents, updatedBy, updatedAt | **unique** `{householdId, week}` |
@@ -497,16 +496,6 @@ Implemented in `internal/shopping` (Phase 8a, [shopping-providers.md](shopping-p
   the Walmart item ID read from a pasted link; the link itself isn't stored.
   At most 1,000 per household and provider. `packageSize` is absent when the
   member didn't give one, and `quantity` is exact like elsewhere.
-- **Product checks** ([shopping-providers.md](shopping-providers.md#checking-saved-products))
-  live on the saved product as `check`, written with `$set` filtered on `_id`
-  **and** `productId`, so a result for a product the member replaced meanwhile
-  is dropped. Choosing a different `productId` sets `productChosenAt` and
-  unsets `check`, which is also what sorts it first for the sweep (a missing
-  `check.checkedAt` sorts before any date). `priceSource` is absent on prices
-  written before it existed, all of which a member entered; a check writes
-  `priceCents`, `priceSource: provider`, and `priceUpdatedAt` together.
-  `shopping_check_pauses` holds one document per provider while checks are
-  paused after a refusal (24 hours) or a throttle (6 hours).
 - **Handoffs** are a snapshot of the match when the member handed off, so a
   later plan or pantry change doesn't alter what's confirmed. Lines are
   bounded by the week's list. Line IDs (`l1`, `l2`, …) are unique within a

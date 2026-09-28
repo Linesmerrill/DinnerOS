@@ -3,7 +3,6 @@ package shopping
 import (
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
@@ -130,11 +129,7 @@ func keySet(keys []string) map[string]bool {
 // buildProposal matches the week's grocery list g to saved products. in
 // must be validated. Lines keep the list's aisle order and are numbered l1,
 // l2, …; the links come from p.
-//
-// A saved product whose health at now is gone or unverified never becomes a
-// line, so it can never be in a link: the line is excluded as needing a
-// decision, or as left out when the member excluded it (productcheck.go).
-func buildProposal(p providers.GroceryProvider, settings Settings, g planning.GroceryList, prefs []Preference, in MatchInput, now time.Time) (Proposal, error) {
+func buildProposal(p providers.GroceryProvider, settings Settings, g planning.GroceryList, prefs []Preference, in MatchInput) (Proposal, error) {
 	out := Proposal{
 		HouseholdID: settings.HouseholdID, Week: g.Week.String(), Provider: p.Key(), AffiliateTracked: p.AffiliateTracked(),
 		Lines: []HandoffLine{}, Excluded: []Excluded{}, Links: []CartLink{}, Meals: g.Meals,
@@ -162,30 +157,14 @@ func buildProposal(p providers.GroceryProvider, settings Settings, g planning.Gr
 			src := lineSource(category.Category, item)
 			sel, isSelected := selected[item.IngredientKey]
 			pref, hasPref := byKey[item.IngredientKey]
-			health := HealthOK
-			if hasPref {
-				health = pref.Health(now)
-			}
 			reason := ExclusionReason("")
 			switch {
 			case checkedOff[item.IngredientKey]:
 				reason = ExcludedCheckedOff
-			case excluded[item.IngredientKey] && hasPref && health == HealthGone:
-				reason = ExcludedLeftOutGone
-			case excluded[item.IngredientKey] && hasPref && health == HealthUnverified:
-				reason = ExcludedLeftOutUnverified
 			case excluded[item.IngredientKey]:
 				reason = ExcludedByMember
 			case item.Specialty != nil && item.Specialty.HouseMade:
 				reason = ExcludedHouseMade
-			case selected != nil && !isSelected && hasPref && health.Blocking() && item.Status == grocery.StatusToBuy:
-				// The app selects every line it shows as ready, which never
-				// includes one whose product is gone. Left unselected, it would
-				// quietly drop out of the order; it needs a decision instead.
-				reason = ExcludedProductGone
-				if health == HealthUnverified {
-					reason = ExcludedProductUnverified
-				}
 			case selected != nil && !isSelected:
 				reason = ExcludedNotSelected
 			case selected == nil && in.ordered[item.IngredientKey]:
@@ -198,17 +177,9 @@ func buildProposal(p providers.GroceryProvider, settings Settings, g planning.Gr
 				reason = ExcludedPantryHint
 			case !hasPref:
 				reason = ExcludedNoProduct
-			case health == HealthGone:
-				reason = ExcludedProductGone
-			case health == HealthUnverified:
-				reason = ExcludedProductUnverified
 			}
 			if reason != "" {
-				e := Excluded{LineSource: src, Reason: reason}
-				if reason.NeedsDecision() || reason.LeftOutForProduct() {
-					e.ProductID, e.ProductName, e.Check = pref.ProductID, pref.DisplayName, pref.CurrentCheck()
-				}
-				out.Excluded = append(out.Excluded, e)
+				out.Excluded = append(out.Excluded, Excluded{LineSource: src, Reason: reason})
 				continue
 			}
 			line := HandoffLine{
@@ -218,7 +189,6 @@ func buildProposal(p providers.GroceryProvider, settings Settings, g planning.Gr
 				// back later recomputes the count it was created with even
 				// if the household changes the rule afterwards.
 				Coverage: coverageFor(pref.Coverage, src.Category),
-				Health:   health, Check: pref.CurrentCheck(),
 			}
 			count := line.PackageCount()
 			line.ComputedPackages, line.Packages = count.Packages, count.Packages

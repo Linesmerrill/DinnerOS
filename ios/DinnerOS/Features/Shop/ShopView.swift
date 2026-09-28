@@ -49,20 +49,6 @@ struct ShopView: View {
             .sheet(isPresented: $isShowingPrep) {
                 PrepSessionSheet()
             }
-            // Held at the screen root like the others: the bar that triggers it comes and goes.
-            .sheet(
-                isPresented: Binding(
-                    get: { shopping.decisionPrompt != nil },
-                    set: { if !$0 { shopping.dismissDecision() } })
-            ) {
-                ProductDecisionSheet()
-            }
-            // A "no longer on Walmart" notice opens the products to re-choose.
-            .onChange(of: shopping.wantsSavedProducts, initial: true) { _, wants in
-                guard wants else { return }
-                isShowingSavedProducts = true
-                shopping.didShowSavedProducts()
-            }
             // A meal kit saved in Household changes every comparison. Watched here rather than
             // on the card, which isn't on screen for every week that has a cost to reload.
             .onChange(of: household?.mealKit) {
@@ -382,15 +368,6 @@ private struct ShopWeekList: View {
                 SharedLineRow(
                     row: row, detail: ShopMealText.boughtWith(row, packages: nil),
                     isWorking: working.contains(row.id), remove: options)
-            case .needsDecision(let line) where row.isPrimary:
-                NeedsDecisionRow(
-                    line: line, canChoose: shopping.canEdit, mealNote: ShopMealText.note(for: row), remove: options,
-                    rechoose: { choose(ProductChoice(rechoosing: line)) },
-                    leaveOut: { Task { await shopping.leaveOutOfCart(line.ingredientKey) } })
-            case .needsDecision:
-                SharedLineRow(
-                    row: row, detail: ShopMealText.rechooseUnder(row),
-                    isWorking: working.contains(row.id), remove: options)
             case .leftOut(let line):
                 LeftOutShopRow(
                     row: row, text: line.text, canPutBack: canLeaveOut && !inComponent,
@@ -673,12 +650,6 @@ private struct ReadyLineRow: View {
                     .font(.footnote)
                     .foregroundStyle(.tint)
             }
-            // A softer warning than a gone product: it's still sent, and may come back.
-            if line.product.health == .unavailable {
-                Label(ShoppingText.mayBeUnavailable, systemImage: "exclamationmark.circle")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-            }
         }
         .accessibilityElement(children: .combine)
     }
@@ -841,7 +812,7 @@ private struct ShopRemoveMenuItems: View {
     }
 }
 
-struct ShopRemoveMenu: View {
+private struct ShopRemoveMenu: View {
     let options: ShopRemoveOptions
 
     var body: some View {
@@ -1240,14 +1211,6 @@ private struct ShopHandoffBar: View {
                 Text(summary)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                if !proposal.needsDecision.isEmpty {
-                    Label(
-                        ShoppingText.needsDecision(proposal.needsDecision.count),
-                        systemImage: "exclamationmark.triangle"
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-                }
             }
             if proposal.affiliateTracked {
                 Text("\(configuration.displayName) may earn a commission on Walmart purchases.")

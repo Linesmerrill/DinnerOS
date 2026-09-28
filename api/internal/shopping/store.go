@@ -31,19 +31,6 @@ type Store interface {
 	// DeletePreference removes the saved product for one ingredient.
 	DeletePreference(ctx context.Context, householdID string, provider providers.Key, ingredientKey string) error
 
-	// SaveProductCheck writes p.Check on the saved product p.ID — and, when
-	// priceChanged, p's PriceCents, PriceSource, and PriceUpdatedAt — provided
-	// its product is still p.ProductID. It reports whether it was.
-	SaveProductCheck(ctx context.Context, p Preference, priceChanged bool) (bool, error)
-	// ListPreferencesToCheck returns every household's saved products for a
-	// provider whose last check was before before, or that were never
-	// checked: never-checked first, then oldest check first, at most limit.
-	ListPreferencesToCheck(ctx context.Context, provider providers.Key, before time.Time, limit int) ([]Preference, error)
-	// GetCheckPause returns the provider's check pause, or ErrNotFound.
-	GetCheckPause(ctx context.Context, provider providers.Key) (CheckPause, error)
-	// SetCheckPause creates or replaces the provider's check pause.
-	SetCheckPause(ctx context.Context, p CheckPause) error
-
 	// InsertHandoff stores h, assigning its ID, as the week's active handoff
 	// for its provider at revision 1. Another active one for the same week and
 	// provider is ErrDuplicate.

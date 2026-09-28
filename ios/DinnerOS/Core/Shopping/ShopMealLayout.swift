@@ -16,9 +16,6 @@ nonisolated struct ShopMealLayout: Equatable, Sendable {
         case line(ShoppingHandoffLine)
         /// A line without a saved product yet.
         case needsProduct(ShoppingExcludedLine)
-        /// A line whose saved product Walmart no longer lists, or that couldn't be confirmed:
-        /// it needs re-choosing or leaving out before anything opens in Walmart.
-        case needsDecision(ShoppingExcludedLine)
         /// Left out on purpose: struck through, with a way to put it back.
         case leftOut(ShoppingExcludedLine)
     }
@@ -55,7 +52,7 @@ nonisolated struct ShopMealLayout: Equatable, Sendable {
             if let share, !share.quantityText.isEmpty { return share.quantityText }
             switch kind {
             case .line(let line): return line.quantityText
-            case .needsProduct(let line), .needsDecision(let line), .leftOut(let line): return line.quantityText
+            case .needsProduct(let line), .leftOut(let line): return line.quantityText
             }
         }
     }
@@ -115,7 +112,6 @@ nonisolated struct ShopMealLayout: Equatable, Sendable {
         let entries: [(kind: Kind, key: String, name: String, shares: [GroceryShare])] =
             proposal.linesToSend.map { (.line($0), $0.ingredientKey, $0.name, $0.shares) }
             + proposal.needsProduct.map { (.needsProduct($0), $0.ingredientKey, $0.name, $0.shares) }
-            + proposal.needsDecision.map { (.needsDecision($0), $0.ingredientKey, $0.name, $0.shares) }
             + proposal.leftOut.map { (.leftOut($0), $0.ingredientKey, $0.name, $0.shares) }
 
         // Meals in plan order, then any recipe a share names that the plan list didn't.
@@ -146,7 +142,6 @@ nonisolated struct ShopMealLayout: Equatable, Sendable {
             switch entry.kind {
             case .line: kindTag = "line"
             case .needsProduct: kindTag = "needs"
-            case .needsDecision: kindTag = "decide"
             case .leftOut(let line): kindTag = "left:\(line.skipScope?.rawValue ?? "")"
             }
             guard !entry.shares.isEmpty else {
@@ -238,12 +233,6 @@ nonisolated enum ShopMealText {
         let also = String(localized: "Also in \(row.alsoIn.formatted(.list(type: .and)))")
         guard let amount = row.share?.quantityText, !amount.isEmpty else { return also }
         return String(localized: "\(amount) for this meal · \(also)")
-    }
-
-    /// Under a meal that shares a line whose product needs re-choosing under another meal.
-    static func rechooseUnder(_ row: ShopMealLayout.Row) -> String {
-        let meal = row.boughtWith ?? String(localized: "another meal")
-        return String(localized: "Re-choose its product under \(meal)")
     }
 
     /// Under a meal that shares a purchase listed with another meal: where it's bought, and the

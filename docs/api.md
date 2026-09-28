@@ -1618,12 +1618,10 @@ records a batch made and returns `201 {purchase, item, option}`:
 ## Shopping
 
 Phase 8a hands the week's grocery list to Walmart as add-to-cart links, with
-no Walmart account connection, API keys, or approval. The one thing the API
-reads from Walmart is a saved product's own public page, to check it still
-exists ([Product checks](#product-checks),
-[shopping-providers.md](shopping-providers.md#checking-saved-products)). The
-flow: store setup, save a product per ingredient, match, preflight, create a
-handoff and open its links, then confirm what was ordered.
+no Walmart account connection, API keys, or approval. The API never fetches
+Walmart pages ([shopping-providers.md](shopping-providers.md)). The flow:
+store setup, save a product per ingredient, match, create a handoff and open
+its links, then confirm what was ordered.
 
 `{provider}` is `walmart`. A planned provider that isn't enabled
 (`instacart`, `kroger`) returns `503 provider_unavailable`; any other value
@@ -1709,11 +1707,10 @@ percent-encoded (`name:red%20onion`).
 - `productUrl` in responses is rebuilt from the ID.
 - `displayName` (at most 100 characters) is read from the link's own slug
   when it's omitted or empty: `/ip/Garlic-Bulb-Fresh-Whole-Each/123` saves
-  `Garlic Bulb Fresh Whole Each`, trimmed to 100 characters. The name is only
-  as good as the slug, and a link with no slug (or a bare `productId`) still
-  requires `displayName`. Hyphens in the slug become spaces, so the original
-  punctuation doesn't survive. The [product check](#product-checks) shows
-  Walmart's own title as `check.name`, but never replaces the member's name.
+  `Garlic Bulb Fresh Whole Each`, trimmed to 100 characters. The page is
+  never fetched, so the name is only as good as the slug, and a link with no
+  slug (or a bare `productId`) still requires `displayName`. Hyphens in the
+  slug become spaces, so the original punctuation doesn't survive.
 - `packageSize` is optional: a positive exact quantity and a unit code
   (`oz`, `floz`, `lb`, `g`, `ml`, `count`, `can`, …). When it's `null` or
   omitted, an unambiguous size is read from the slug — a trailing `-15-oz`,
@@ -1728,61 +1725,6 @@ percent-encoded (`name:red%20onion`).
   normalized name after `name:`.
 - `201` creates, `200` replaces (keeping `id`, `createdBy`, `createdAt`). At
   most 1,000 saved products per store.
-- A newly chosen product (a new saved product, or a different item ID) is
-  checked on Walmart before the response, within 10 seconds, so `health` and
-  `check` already say whether it's there. A failed check doesn't fail the
-  save.
-
-### Product checks
-
-Walmart retires and renumbers items. Every saved product carries its last
-check, and the response adds:
-
-```json
-{
-  "priceCents": 85,
-  "priceSource": "provider",
-  "productChosenAt": "2026-09-27T09:00:00Z",
-  "health": "ok",
-  "healthText": null,
-  "check": {
-    "status": "found", "detail": null, "checkedAt": "2026-09-27T09:00:01Z",
-    "verifiedStatus": "found", "verifiedAt": "2026-09-27T09:00:01Z",
-    "name": "Fresh Whole Red Onion, Each", "priceCents": 85,
-    "pickup": "IN_STOCK", "delivery": "IN_STOCK",
-    "store": "Example Supercenter", "storeApproximate": true
-  }
-}
-```
-
-- `check.status` is the latest attempt: `found` (in stock for pickup or
-  delivery), `unavailable` (listed, but neither pickup nor delivery has it),
-  `gone` (Walmart answers 404), or `unknown` (network error, refusal, or a page
-  that couldn't be read — never treated as good or gone). `detail` says why
-  an attempt was `unknown`. `verifiedStatus`/`verifiedAt` are the latest
-  conclusive answer, which an `unknown` attempt doesn't replace. `check` is
-  `null` until the product's first check, and a check of a replaced product is
-  never shown.
-- `health` is what that means for a hand-off: `ok`, `unavailable` (sent, with
-  a warning), `gone` (never sent), or `unverified` (no conclusive answer, and
-  no member choosing it, within 72 hours; never sent without a decision). A
-  `gone` product stays gone through later `unknown` attempts until a
-  conclusive answer replaces it.
-- Availability is read at Walmart's default store for the request, not the
-  household's `storeId` (Walmart takes no store parameter a server can send),
-  so `storeApproximate` is always `true`.
-- `priceSource` is `member` (typed, confirmed, or imported) or `provider` (a
-  check's listed price). A check fills an empty price, follows the listed
-  price once it set it, and replaces a member's price only when Walmart's own
-  price changed since the previous check.
-
-`POST .../plans/{week}/shopping/{provider}/preflight` (`shopping.edit`) takes
-the match body below and returns a match, after re-checking — at most 8
-products, within 15 seconds, one request at a time — the saved products the
-hand-off would send whose last answer is older than 24 hours. Call it when the
-member taps "Open in Walmart" and show `needsDecision` lines before opening
-anything. If Walmart refused a check recently (403, bot wall, or 429), checks
-pause for 24 or 6 hours and the match says `"checksPaused": true`.
 
 ### Match and hand off
 
@@ -1802,20 +1744,6 @@ Every field is optional; send `{}` for the defaults. Without `lines`, the
 candidates are the list's `toBuy` lines. With `lines`, exactly those lines
 are candidates, whatever their status, and `packages` (1–99) overrides the
 computed count. `checkedOffKeys` and `excludeKeys` are left out.
-
-**A gone or unverified product is never sent.** Its line is excluded as
-`product_gone` or `product_unverified` with `needsDecision: true` and the
-saved `product` (with its `health` and `check`), so it can't be in a cart
-link — not in a match's links either. `POST .../handoffs` first re-checks
-stale products as preflight does, and answers `409 products_need_decision`
-(naming the lines) while any such line remains: the member re-chooses the
-product, or leaves the line out by sending its key in `excludeKeys`, which
-reports it as `left_out_gone` or `left_out_unverified` on the stored handoff.
-With `lines` sent, a `toBuy` line whose product needs a decision is reported
-the same way rather than as `not_selected`. Match and preflight also carry
-`needsDecision` (the count) and `checksPaused`. A line whose product is
-`unavailable` is sent, with `product.health: "unavailable"` and a
-`healthText` to show.
 
 ```json
 {
@@ -1950,9 +1878,6 @@ created with even if the household changes the rule afterwards.
 | `not_on_list` | A `lines` key that isn't on the week's list (only `ingredientKey` is set) |
 | `ordered` | A confirmed line of this week's handoffs bought it fresh and didn't put it in the pantry (`pantry: not_tracked`), and `lines` didn't select it: "Ordered this week" |
 | `skipped` | The household left it out ([Skipped ingredients](#skipped-ingredients)); `skipScope` says how, and `text` says so: "Skipped this week", "Never buying this", "Left out of Chili". Never sent. With `skipScope: recipe` it is only the left-out meals' part and the same ingredient can also be a line. Already in the cart and now left out entirely, it is `not_on_list` in `cart.other`, to remove |
-| `product_gone` | The saved product is no longer on Walmart: "No longer on Walmart: re-choose or leave out". `needsDecision: true`; blocks a hand-off |
-| `product_unverified` | No check confirmed the saved product within 72 hours: "Couldn't confirm it's still on Walmart: check again, re-choose, or leave out". `needsDecision: true`; blocks a hand-off |
-| `left_out_gone`, `left_out_unverified` | Either of the above, listed in `excludeKeys`: "Left out: no longer on Walmart" |
 
 **Cart links**: `https://www.walmart.com/sc/cart/addToCart?items=ID_QTY,ID&storeId=N`.
 A quantity of 1 has no suffix, lines that share a product are merged into one
@@ -2438,10 +2363,7 @@ marking notifications never depends on push.
   pantry item ID.
 - `type` is stable. `pantry.low` and `shopping.order_due` exist today; show
   unknown types with their title and body. A `shopping.order_due` subject is
-  `{kind: "shopping_week", id: "2026-W38"}`: the week to open in Shop. A
-  `shopping.product_gone` notice (the daily product check found saved products
-  Walmart no longer lists) has subject `{kind: "shopping_products", id:
-  "walmart"}`: open Saved Products.
+  `{kind: "shopping_week", id: "2026-W38"}`: the week to open in Shop.
 
 `GET .../notifications/unread-count` returns `{"unreadCount": 3}`.
 

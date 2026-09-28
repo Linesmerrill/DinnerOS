@@ -31,31 +31,17 @@ nonisolated enum ShoppingFixtures {
     }
 
     static func preferenceJSON(
-        key: String, ingredientName: String, productID: String, displayName: String, size: String? = nil,
-        health: String = "ok"
+        key: String, ingredientName: String, productID: String, displayName: String, size: String? = nil
     ) -> String {
         let ingredientID = key.hasPrefix("name:") ? "null" : #""\#(key)""#
-        let healthText =
-            health == "gone" ? #""No longer on Walmart. Re-choose it, or leave it out of the cart.""# : "null"
         return #"""
             {"id":"pref-\#(productID)","provider":"walmart","ingredientKey":"\#(key)","ingredientId":\#(ingredientID),
              "ingredientName":"\#(ingredientName)","productId":"\#(productID)",
              "productUrl":"https://www.walmart.com/ip/\#(productID)","displayName":"\#(displayName)",
              "packageSize":\#(size ?? "null"),"createdBy":"\#(Fixtures.user.id)",
              "createdAt":"2026-09-15T19:04:46.269Z","updatedBy":"\#(Fixtures.user.id)",
-             "updatedAt":"2026-09-15T19:04:46.269Z","health":"\#(health)","healthText":\#(healthText),
-             "check":{"status":"\#(health == "gone" ? "gone" : "found")","checkedAt":"2026-09-16T08:00:00Z"}}
+             "updatedAt":"2026-09-15T19:04:46.269Z"}
             """#
-    }
-
-    /// The product on a line excluded because Walmart no longer lists it.
-    static func goneProductJSON(productID: String, displayName: String) -> String {
-        #"""
-        {"productId":"\#(productID)","displayName":"\#(displayName)",
-         "productUrl":"https://www.walmart.com/ip/\#(productID)","packageSize":null,"health":"gone",
-         "healthText":"No longer on Walmart. Re-choose it, or leave it out of the cart.",
-         "check":{"status":"gone","checkedAt":"2026-09-16T08:00:00Z","verifiedStatus":"gone"}}
-        """#
     }
 
     /// The search the API suggests for a line. Produce is the interesting case: the bare
@@ -116,15 +102,14 @@ nonisolated enum ShoppingFixtures {
 
     static func excludedJSON(
         key: String, name: String, reason: String, text: String, category: String = "produce",
-        groceryStatus: String? = "toBuy", searchTerms: String? = nil, product: String? = nil
+        groceryStatus: String? = "toBuy", searchTerms: String? = nil
     ) -> String {
         let ingredientID = key.hasPrefix("name:") ? "null" : #""\#(key)""#
-        let needsDecision = reason == "product_gone" || reason == "product_unverified"
         return #"""
             {"ingredientKey":"\#(key)","ingredientId":\#(ingredientID),"name":"\#(name)","category":"\#(category)",
              "amounts":[],"quantityText":"","unquantified":false,"groceryStatus":\#(string(groceryStatus)),
-             "reason":"\#(reason)","text":"\#(text)","needsDecision":\#(needsDecision),
-             "searchTerms":\#(searchTerms ?? searchTermsJSON(name))\#(product.map { #","product":\#($0)"# } ?? "")}
+             "reason":"\#(reason)","text":"\#(text)",
+             "searchTerms":\#(searchTerms ?? searchTermsJSON(name))}
             """#
     }
 
@@ -291,8 +276,6 @@ nonisolated final class FakeShoppingServer: Sendable {
         var orderedWeeks: Set<String> = []
         /// The next this many confirmations answer `409 conflict`.
         var conflictsRemaining = 0
-        /// Item IDs Walmart no longer lists: their lines need a decision before a hand-off.
-        var goneProducts: Set<String> = []
         /// `METHOD /path` (percent-encoded as sent) for every request, in order.
         var log: [String] = []
         /// The JSON body of every request that had one, by `METHOD /path`.
@@ -383,8 +366,7 @@ nonisolated final class FakeShoppingServer: Sendable {
                 return (200, ShoppingFixtures.settingsJSON(provider: state.provider, storeID: state.storeID))
             case ("GET", 3) where rest[0] == "shopping" && rest[2] == "preferences":
                 let items = state.products.sorted { $0.value.ingredientName < $1.value.ingredientName }.map {
-                    Self.preferenceJSON(
-                        key: $0.key, product: $0.value, gone: state.goneProducts.contains($0.value.productID))
+                    Self.preferenceJSON(key: $0.key, product: $0.value)
                 }
                 return (200, Data(#"{"items":[\#(items.joined(separator: ","))]}"#.utf8))
             case ("PUT", 4) where rest[0] == "shopping" && rest[2] == "preferences":
@@ -418,16 +400,11 @@ nonisolated final class FakeShoppingServer: Sendable {
                     }
                 }
                 return (200, Self.orderReminderJSON(state, week: week))
-            case ("POST", 5)
-            where rest[0] == "plans" && rest[2] == "shopping" && (rest[4] == "match" || rest[4] == "preflight"):
-                let (lines, excluded, _) = Self.match(body, state: &state, numbering: false)
+            case ("POST", 5) where rest[0] == "plans" && rest[2] == "shopping" && rest[4] == "match":
+                let (lines, excluded) = Self.match(body, state: &state, numbering: false)
                 return (200, Data(Self.proposalJSON(state, week: rest[1], lines: lines, excluded: excluded).utf8))
             case ("POST", 5) where rest[0] == "plans" && rest[2] == "shopping" && rest[4] == "handoffs":
-                let (lines, excluded, needsDecision) = Self.match(body, state: &state, numbering: true)
-                // Like the API: a gone product is never sent without a decision.
-                guard needsDecision == 0 else {
-                    return (409, Fixtures.errorJSON(code: "products_need_decision"))
-                }
+                let (lines, excluded) = Self.match(body, state: &state, numbering: true)
                 guard !lines.isEmpty else {
                     return (400, Fixtures.errorJSON(code: "validation_failed", message: "no line to hand off"))
                 }
@@ -475,10 +452,8 @@ nonisolated final class FakeShoppingServer: Sendable {
     /// Candidates are `toBuy` lines, or exactly the selected lines; checked-off keys are left out.
     private static func match(
         _ body: [String: Any], state: inout State, numbering: Bool
-    ) -> (lines: [Line], excluded: [String], needsDecision: Int) {
+    ) -> (lines: [Line], excluded: [String]) {
         let checked = Set(body["checkedOffKeys"] as? [String] ?? [])
-        let leftOut = Set(body["excludeKeys"] as? [String] ?? [])
-        var needsDecision = 0
         let selection = body["lines"] as? [[String: Any]]
         let selectedKeys = selection.map { Set($0.compactMap { $0["ingredientKey"] as? String }) }
         var overrides: [String: Int] = [:]
@@ -490,44 +465,31 @@ nonisolated final class FakeShoppingServer: Sendable {
         var lines: [Line] = []
         var excluded: [String] = []
         for grocery in state.grocery {
-            let product = state.products[grocery.key]
-            let gone = product.map { state.goneProducts.contains($0.productID) } ?? false
-            let productGone = ("product_gone", "No longer on Walmart: re-choose or leave out")
             let exclusion: (String, String)?
             if checked.contains(grocery.key) {
                 exclusion = ("checked_off", "Checked off")
-            } else if leftOut.contains(grocery.key) {
-                exclusion = gone ? ("left_out_gone", "Left out: no longer on Walmart") : ("excluded", "Left out")
             } else if let selectedKeys, !selectedKeys.contains(grocery.key) {
-                exclusion = gone && grocery.status == "toBuy" ? productGone : ("not_selected", "Not selected")
+                exclusion = ("not_selected", "Not selected")
             } else if selectedKeys == nil, grocery.status == "inPantry" {
                 exclusion = ("in_pantry", "In your pantry")
             } else if selectedKeys == nil, grocery.status == "pantryHint" {
                 exclusion = ("pantry_hint", "Usually on hand")
-            } else if product == nil {
+            } else if state.products[grocery.key] == nil {
                 exclusion = ("no_product", "Choose a Walmart product")
-            } else if gone {
-                exclusion = productGone
             } else {
                 exclusion = nil
             }
             if let (reason, text) = exclusion {
-                if reason == "product_gone" { needsDecision += 1 }
-                let productJSON =
-                    gone && (reason == "product_gone" || reason == "left_out_gone")
-                    ? product.map {
-                        ShoppingFixtures.goneProductJSON(productID: $0.productID, displayName: $0.displayName)
-                    } : nil
                 excluded.append(
                     ShoppingFixtures.excludedJSON(
                         key: grocery.key, name: grocery.name, reason: reason, text: text, category: grocery.category,
-                        groceryStatus: grocery.status, product: productJSON))
+                        groceryStatus: grocery.status))
             } else {
                 let packages = overrides[grocery.key] ?? grocery.computed
                 lines.append(Line(id: "l\(lines.count + 1)", key: grocery.key, packages: packages))
             }
         }
-        return (lines, excluded, needsDecision)
+        return (lines, excluded)
     }
 
     /// The first send of a week stores a hand-off with every line (`201`); later sends add only
@@ -589,8 +551,7 @@ nonisolated final class FakeShoppingServer: Sendable {
             sizeQuantity: size?["quantity"] as? String, sizeUnit: size?["unit"] as? String)
         let created = state.products[key] == nil
         state.products[key] = product
-        let gone = state.goneProducts.contains(productID)
-        return (created ? 201 : 200, Data(preferenceJSON(key: key, product: product, gone: gone).utf8))
+        return (created ? 201 : 200, Data(preferenceJSON(key: key, product: product).utf8))
     }
 
     private static func confirm(
@@ -637,10 +598,10 @@ nonisolated final class FakeShoppingServer: Sendable {
 
     // MARK: - JSON
 
-    private static func preferenceJSON(key: String, product: Product, gone: Bool = false) -> String {
+    private static func preferenceJSON(key: String, product: Product) -> String {
         ShoppingFixtures.preferenceJSON(
             key: key, ingredientName: product.ingredientName, productID: product.productID,
-            displayName: product.displayName, size: sizeJSON(product), health: gone ? "gone" : "ok")
+            displayName: product.displayName, size: sizeJSON(product))
     }
 
     private static func sizeJSON(_ product: Product?) -> String? {

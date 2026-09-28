@@ -92,17 +92,6 @@ nonisolated struct ShoppingAPI: Sendable {
                 .authorized(with: accessToken))
     }
 
-    /// Matches like `match` after checking again, on Walmart, the saved products the hand-off
-    /// would send whose last check is over a day old (a few, within seconds). Lines in
-    /// `needsDecision` block the hand-off until re-chosen or left out.
-    func preflight(
-        householdID: String, week: ISOWeek, provider: String, request: ShoppingMatchRequest, accessToken: String
-    ) async throws -> ShoppingProposal {
-        try await client.send(
-            try APIRequest.post(Self.weekPath(householdID, week, provider) + "/preflight", body: request)
-                .authorized(with: accessToken))
-    }
-
     /// Matches like `match` and sends the result to the week's hand-off: `201` for a new one,
     /// `200` when adding to the current one. Its `cartLinks` add only what isn't in the cart
     /// yet, and are empty when nothing is new.

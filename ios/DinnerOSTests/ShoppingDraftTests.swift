@@ -217,33 +217,6 @@ struct SavedProductDraftTests {
             preference: try preference("i-beef", "Ground Beef", size: ShoppingFixtures.amount("16", "oz")))
         #expect(complete.packageSizeFix == nil)
     }
-
-    private func gonePreference(_ key: String, _ name: String) throws -> ShoppingPreference {
-        let json = ShoppingFixtures.preferenceJSON(
-            key: key, ingredientName: name, productID: "100000077", displayName: "Old \(name)",
-            size: ShoppingFixtures.amount("16", "oz"), health: "gone")
-        return try JSONCoding.makeDecoder().decode(ShoppingPreference.self, from: Data(json.utf8))
-    }
-
-    @Test func productsWalmartNoLongerListsComeFirstAndOpenToReChoose() throws {
-        let gone = try gonePreference("i-rice", "Rice")
-        #expect(gone.needsRechoosing)
-        #expect(gone.check?.status == "gone")
-        let groups = SavedProductGroups([
-            try preference("i-beef", "Ground Beef", size: ShoppingFixtures.amount("16", "oz")), gone,
-        ])
-        #expect(groups.needsRechoosing.map(\.ingredientName) == ["Rice"])
-        #expect(groups.complete.map(\.ingredientName) == ["Ground Beef"])
-        #expect(groups.needsPackageSize.isEmpty)
-
-        // The old link is what's wrong, so the form starts without it and says why.
-        let choice = ProductChoice(preference: gone)
-        #expect(choice.rechooseReason?.contains("No longer on Walmart") == true)
-        #expect(choice.draft.linkText.isEmpty)
-        #expect(!choice.draft.isValid)
-        #expect(choice.draft.hasPackageSize)
-        #expect(choice.packageSizeFix == nil)
-    }
 }
 
 struct OrderConfirmationDraftTests {

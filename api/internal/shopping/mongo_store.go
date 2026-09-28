@@ -104,7 +104,6 @@ func Indexes() []mongodb.IndexSet {
 			}},
 		},
 		weekSpendIndexes(),
-		checkIndexes(),
 	}
 }
 
@@ -117,7 +116,6 @@ type MongoStore struct {
 	orderWeeks    *mongo.Collection
 	weekSpend     *mongo.Collection
 	prepCards     *mongo.Collection
-	checkPauses   *mongo.Collection
 }
 
 var _ Store = (*MongoStore)(nil)
@@ -132,7 +130,6 @@ func NewMongoStore(db *mongo.Database) *MongoStore {
 		orderWeeks:    db.Collection(OrderWeeksCollection),
 		prepCards:     db.Collection(PrepCardsCollection),
 		weekSpend:     db.Collection(WeekSpendCollection),
-		checkPauses:   db.Collection(CheckPausesCollection),
 	}
 }
 
@@ -268,34 +265,22 @@ type preferenceDoc struct {
 	// reads as "follow the ingredient's category".
 	Coverage string `bson:"coverage,omitempty"`
 	// PriceCents is one package's price, absent until someone enters one.
-	PriceCents     *int64     `bson:"priceCents,omitempty"`
-	PriceUpdatedAt *time.Time `bson:"priceUpdatedAt,omitempty"`
-	// PriceSource is absent on prices written before it existed, all of
-	// which a member entered.
-	PriceSource string `bson:"priceSource,omitempty"`
-	// ProductChosenAt is absent on products saved before it existed.
-	ProductChosenAt *time.Time `bson:"productChosenAt,omitempty"`
-	// Check is the last product check, absent until the first one.
-	Check     *checkDoc     `bson:"check,omitempty"`
-	CreatedBy bson.ObjectID `bson:"createdBy"`
-	CreatedAt time.Time     `bson:"createdAt"`
-	UpdatedBy bson.ObjectID `bson:"updatedBy"`
-	UpdatedAt time.Time     `bson:"updatedAt"`
+	PriceCents     *int64        `bson:"priceCents,omitempty"`
+	PriceUpdatedAt *time.Time    `bson:"priceUpdatedAt,omitempty"`
+	CreatedBy      bson.ObjectID `bson:"createdBy"`
+	CreatedAt      time.Time     `bson:"createdAt"`
+	UpdatedBy      bson.ObjectID `bson:"updatedBy"`
+	UpdatedAt      time.Time     `bson:"updatedAt"`
 }
 
 func (d preferenceDoc) toPreference() Preference {
-	p := Preference{
+	return Preference{
 		ID: d.ID.Hex(), HouseholdID: d.HouseholdID.Hex(), Provider: providers.Key(d.Provider),
 		IngredientKey: d.IngredientKey, IngredientName: d.IngredientName, ProductID: d.ProductID, DisplayName: d.DisplayName,
 		PackageSize: d.PackageSize.packageSize(), Coverage: providers.Coverage(d.Coverage),
-		PriceCents: d.PriceCents, PriceUpdatedAt: timeOrZero(d.PriceUpdatedAt), PriceSource: PriceSource(d.PriceSource),
-		ProductChosenAt: timeOrZero(d.ProductChosenAt), Check: d.Check.state(),
+		PriceCents: d.PriceCents, PriceUpdatedAt: timeOrZero(d.PriceUpdatedAt),
 		CreatedBy: hexOrEmpty(d.CreatedBy), CreatedAt: d.CreatedAt.UTC(), UpdatedBy: hexOrEmpty(d.UpdatedBy), UpdatedAt: d.UpdatedAt.UTC(),
 	}
-	if p.PriceCents != nil && p.PriceSource == "" {
-		p.PriceSource = PriceFromMember
-	}
-	return p
 }
 
 func preferenceFilter(hid bson.ObjectID, provider providers.Key, key string) bson.D {
@@ -375,16 +360,9 @@ func (s *MongoStore) UpsertPreference(ctx context.Context, p Preference) (Prefer
 	// one is kept.
 	switch {
 	case p.setPrice && p.PriceCents != nil:
-		set = append(set, bson.E{Key: "priceCents", Value: *p.PriceCents}, bson.E{Key: "priceUpdatedAt", Value: p.UpdatedAt},
-			bson.E{Key: "priceSource", Value: string(PriceFromMember)})
+		set = append(set, bson.E{Key: "priceCents", Value: *p.PriceCents}, bson.E{Key: "priceUpdatedAt", Value: p.UpdatedAt})
 	case p.setPrice:
-		unset = append(unset, bson.E{Key: "priceCents", Value: ""}, bson.E{Key: "priceUpdatedAt", Value: ""}, bson.E{Key: "priceSource", Value: ""})
-	}
-	// A different product starts its checks over; the old product's check
-	// says nothing about the new one.
-	if p.newProduct {
-		set = append(set, bson.E{Key: "productChosenAt", Value: p.ProductChosenAt})
-		unset = append(unset, bson.E{Key: "check", Value: ""})
+		unset = append(unset, bson.E{Key: "priceCents", Value: ""}, bson.E{Key: "priceUpdatedAt", Value: ""})
 	}
 	if len(unset) > 0 {
 		update = append(update, bson.E{Key: "$unset", Value: unset})
@@ -462,10 +440,6 @@ type lineDoc struct {
 type excludedDoc struct {
 	Source sourceDoc `bson:",inline"`
 	Reason string    `bson:"reason"`
-	// ProductID and ProductName are set on a line left out because of its
-	// product's check.
-	ProductID   string `bson:"productId,omitempty"`
-	ProductName string `bson:"productName,omitempty"`
 }
 
 type linkDoc struct {
@@ -547,7 +521,7 @@ func newHandoffDoc(h Handoff, id, hid bson.ObjectID) (handoffDoc, error) {
 		return handoffDoc{}, err
 	}
 	for _, e := range h.Excluded {
-		d.Excluded = append(d.Excluded, excludedDoc{Source: newSourceDoc(e.LineSource), Reason: string(e.Reason), ProductID: e.ProductID, ProductName: e.ProductName})
+		d.Excluded = append(d.Excluded, excludedDoc{Source: newSourceDoc(e.LineSource), Reason: string(e.Reason)})
 	}
 	for _, l := range h.Links {
 		d.Links = append(d.Links, linkDoc(l))
@@ -600,7 +574,7 @@ func (d handoffDoc) toHandoff() Handoff {
 		})
 	}
 	for _, e := range d.Excluded {
-		h.Excluded = append(h.Excluded, Excluded{LineSource: e.Source.source(), Reason: ExclusionReason(e.Reason), ProductID: e.ProductID, ProductName: e.ProductName})
+		h.Excluded = append(h.Excluded, Excluded{LineSource: e.Source.source(), Reason: ExclusionReason(e.Reason)})
 	}
 	for _, l := range d.Links {
 		h.Links = append(h.Links, CartLink(l))

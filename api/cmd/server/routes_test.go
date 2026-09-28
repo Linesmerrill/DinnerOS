@@ -118,7 +118,6 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		"PUT /api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}",
 		"DELETE /api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}",
 		"POST /api/v1/households/{householdId}/plans/{week}/shopping/{provider}/match",
-		"POST /api/v1/households/{householdId}/plans/{week}/shopping/{provider}/preflight",
 		"POST /api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs",
 		"GET /api/v1/households/{householdId}/shopping/handoffs",
 		"GET /api/v1/households/{householdId}/shopping/handoffs/{handoffId}",

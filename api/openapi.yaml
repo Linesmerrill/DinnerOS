@@ -3194,48 +3194,6 @@ paths:
           $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/ProviderUnavailable"
-  /api/v1/households/{householdId}/plans/{week}/shopping/{provider}/preflight:
-    parameters:
-      - $ref: "#/components/parameters/HouseholdID"
-      - $ref: "#/components/parameters/Week"
-      - $ref: "#/components/parameters/ShoppingProvider"
-    post:
-      summary: Check saved products, then match
-      description: |
-        Matches like `.../match` after re-checking on Walmart the saved
-        products the hand-off would send whose last answer is older than 24
-        hours: oldest first, at most 8, within 15 seconds, one request at a
-        time. Excluded lines with `needsDecision: true` (`product_gone`,
-        `product_unverified`) block a hand-off until the product is
-        re-chosen or the line is sent in `excludeKeys`. Requires
-        `shopping.edit` (docs/shopping-providers.md#checking-saved-products).
-      operationId: preflightShoppingList
-      tags: [shopping]
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ShoppingMatchRequest"
-      responses:
-        "200":
-          description: The proposal, with fresh product checks.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ShoppingProposal"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthenticated"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "503":
-          $ref: "#/components/responses/ProviderUnavailable"
   /api/v1/households/{householdId}/plans/{week}/shopping/{provider}/handoffs:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -3257,11 +3215,6 @@ paths:
         or answering every line closes it, and the next send stores a new
         one. At least one line needs a saved product. Requires
         `shopping.edit`.
-
-        Stale saved products are re-checked first (as `.../preflight`), and
-        while any line's product is gone or unverified and not listed in
-        `excludeKeys` the answer is `409` with code
-        `products_need_decision`: a gone item is never sent.
       operationId: createShoppingHandoff
       tags: [shopping]
       security:
@@ -8588,7 +8541,7 @@ components:
         subject:
           type: object
           required: [kind, id]
-          description: What to open. `pantry_item` is a pantry item ID; `shopping_week` is an ISO week to open in Shop; `shopping_products` is a provider key whose Saved Products to open (`shopping.product_gone`).
+          description: What to open. `pantry_item` is a pantry item ID; `shopping_week` is an ISO week to open in Shop.
           properties:
             kind:
               type: string
@@ -11568,21 +11521,6 @@ components:
         priceUpdatedAt:
           type: [string, "null"]
           format: date-time
-        priceSource:
-          type: [string, "null"]
-          enum: [member, provider, null]
-          description: Who set `priceCents`; null without a price.
-        productChosenAt:
-          type: [string, "null"]
-          format: date-time
-        health:
-          $ref: "#/components/schemas/ShoppingProductHealth"
-        healthText:
-          type: [string, "null"]
-        check:
-          oneOf:
-            - $ref: "#/components/schemas/ShoppingProductCheck"
-            - type: "null"
         createdBy:
           type: string
         createdAt:
@@ -11593,50 +11531,6 @@ components:
         updatedAt:
           type: string
           format: date-time
-    ShoppingProductHealth:
-      type: string
-      enum: [ok, unavailable, gone, unverified]
-      description: |
-        What a saved product's checks mean for a hand-off. `gone` and
-        `unverified` (nothing confirmed it within 72 hours) are never sent;
-        `unavailable` is sent with a warning.
-    ShoppingProductCheck:
-      type: object
-      required: [status, detail, checkedAt, verifiedStatus, verifiedAt, name, priceCents, pickup, delivery, store, storeApproximate]
-      properties:
-        status:
-          type: string
-          enum: [found, unavailable, gone, unknown]
-          description: The latest attempt.
-        detail:
-          type: [string, "null"]
-          description: Why an attempt was unknown (network, blocked, throttled, no_page_data, …).
-        checkedAt:
-          type: string
-          format: date-time
-        verifiedStatus:
-          type: [string, "null"]
-          enum: [found, unavailable, gone, null]
-          description: The latest conclusive answer; an unknown attempt never replaces it.
-        verifiedAt:
-          type: [string, "null"]
-          format: date-time
-        name:
-          type: [string, "null"]
-          description: The product's title as Walmart shows it now.
-        priceCents:
-          type: [integer, "null"]
-        pickup:
-          type: [string, "null"]
-          example: IN_STOCK
-        delivery:
-          type: [string, "null"]
-          example: IN_STOCK
-        store:
-          type: [string, "null"]
-          description: The pickup store Walmart read the page for (its default, not necessarily the household's).
-        storeApproximate:
-          type: boolean
     ShoppingPreferenceList:
       type: object
       required: [items]
@@ -11740,14 +11634,6 @@ components:
             packageSize:
               oneOf:
                 - $ref: "#/components/schemas/ShoppingAmount"
-                - type: "null"
-            health:
-              $ref: "#/components/schemas/ShoppingProductHealth"
-            healthText:
-              type: [string, "null"]
-            check:
-              oneOf:
-                - $ref: "#/components/schemas/ShoppingProductCheck"
                 - type: "null"
         computedPackages:
           type: integer
@@ -11929,41 +11815,17 @@ components:
           enum: [toBuy, inPantry, pantryHint, fromFreezer, null]
         reason:
           type: string
-          enum: [in_pantry, pantry_hint, in_freezer, house_made, checked_off, excluded, not_selected, no_product, not_on_list, ordered, skipped, product_gone, product_unverified, left_out_gone, left_out_unverified]
+          enum: [in_pantry, pantry_hint, in_freezer, house_made, checked_off, excluded, not_selected, no_product, not_on_list, ordered, skipped]
           description: |
             `in_freezer`: a frozen pantry item covers it (grocery status
             `fromFreezer`), so the week grabs it instead of buying it again;
             its `text` is "Grab from the freezer". `skipped`: the household
             left it out (`skipScope`); never sent, and shown struck through
             under its meal. With `skipScope: recipe` the same ingredient can
-            also be a line for other meals. `product_gone` /
-            `product_unverified`: the saved product is no longer on Walmart,
-            or nothing confirmed it within 72 hours; `needsDecision` is true
-            and a hand-off is refused until it's re-chosen or left out
-            (`left_out_gone` / `left_out_unverified`).
+            also be a line for other meals.
         text:
           type: string
           example: Choose a Walmart product
-        needsDecision:
-          type: boolean
-        product:
-          type: object
-          description: The saved product, on the four product-check reasons.
-          properties:
-            productId:
-              type: string
-            displayName:
-              type: string
-            productUrl:
-              type: string
-            health:
-              $ref: "#/components/schemas/ShoppingProductHealth"
-            healthText:
-              type: [string, "null"]
-            check:
-              oneOf:
-                - $ref: "#/components/schemas/ShoppingProductCheck"
-                - type: "null"
         searchTerms:
           $ref: "#/components/schemas/ShoppingSearchTerms"
         recipes:
@@ -12071,12 +11933,6 @@ components:
           description: The week's planned recipes in plan order; every line's `shares` name one. Empty on a stored handoff.
           items:
             $ref: "#/components/schemas/GroceryMeal"
-        needsDecision:
-          type: integer
-          description: Excluded lines that block a hand-off (`needsDecision`).
-        checksPaused:
-          type: boolean
-          description: Walmart refused a product check recently, so checks are paused.
     ShoppingHandoff:
       allOf:
         - $ref: "#/components/schemas/ShoppingProposal"

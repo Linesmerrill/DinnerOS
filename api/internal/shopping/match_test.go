@@ -4,7 +4,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
@@ -57,22 +56,14 @@ func testList(t *testing.T) planning.GroceryList {
 	}}
 }
 
-// matchNow is the time pure matching tests run at. testPrefs were chosen at
-// that moment, so their products are fresh.
-var matchNow = time.Date(2026, 9, 15, 18, 0, 0, 0, time.UTC)
-
 func testPrefs() []Preference {
-	prefs := []Preference{
+	return []Preference{
 		{IngredientKey: beefKey, ProductID: "100000001", DisplayName: "Beef 16 oz", PackageSize: &PackageSize{Quantity: "16", Unit: "oz"}},
 		{IngredientKey: onionKey, ProductID: "100000002", DisplayName: "Onions 3 ct", PackageSize: &PackageSize{Quantity: "3", Unit: "count"}},
 		{IngredientKey: pasteKey, ProductID: "100000003", DisplayName: "Paste"},
 		{IngredientKey: hintKey, ProductID: "100000004", DisplayName: "Oil"},
 		{IngredientKey: blendKey, ProductID: "100000005", DisplayName: "Blend"},
 	}
-	for i := range prefs {
-		prefs[i].ProductChosenAt = matchNow
-	}
-	return prefs
 }
 
 func reasons(p Proposal) map[string]ExclusionReason {
@@ -86,7 +77,7 @@ func reasons(p Proposal) map[string]ExclusionReason {
 func TestBuildProposalDefaults(t *testing.T) {
 	w := providers.NewWalmart(providers.WalmartOptions{})
 	settings := Settings{HouseholdID: "h", Provider: providers.KeyWalmart, StoreID: "5435"}
-	p, err := buildProposal(w, settings, testList(t), testPrefs(), MatchInput{}, matchNow)
+	p, err := buildProposal(w, settings, testList(t), testPrefs(), MatchInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +106,7 @@ func TestBuildProposalDefaults(t *testing.T) {
 	}
 
 	// A store saved for another provider isn't used.
-	p, _ = buildProposal(w, Settings{Provider: "kroger", StoreID: "5435"}, testList(t), testPrefs(), MatchInput{}, matchNow)
+	p, _ = buildProposal(w, Settings{Provider: "kroger", StoreID: "5435"}, testList(t), testPrefs(), MatchInput{})
 	if p.StoreID != "" || strings.Contains(p.Links[0].URL, "storeId") {
 		t.Errorf("store from another provider: %+v", p.Links)
 	}
@@ -136,7 +127,7 @@ func TestBuildProposalSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := buildProposal(w, Settings{}, testList(t), testPrefs(), in, matchNow)
+	p, err := buildProposal(w, Settings{}, testList(t), testPrefs(), in)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +152,7 @@ func TestBuildProposalSelection(t *testing.T) {
 	}
 
 	// An empty selection selects nothing.
-	p, _ = buildProposal(w, Settings{}, testList(t), testPrefs(), MatchInput{Lines: []LineSelection{}}, matchNow)
+	p, _ = buildProposal(w, Settings{}, testList(t), testPrefs(), MatchInput{Lines: []LineSelection{}})
 	if len(p.Lines) != 0 || len(p.Links) != 0 {
 		t.Errorf("empty selection = %+v", p)
 	}

@@ -104,9 +104,3 @@ Phases 0–11 are done. Phase 12 (Autopilot as a private service) is the next bi
   weighing a chicken demi-glace packet; a sanity check of the Autopilot weights.
 - Walmart order confirmation emails contain no item prices, which is
   why prices come from screenshots.
-- **Saved-product checks** (decisions #549–#554): after deploying, add the
-  daily `/checkproducts` Scheduler job and run it once by hand
-  ([deployment.md](deployment.md#product-checks)); until it runs, products saved
-  earlier have never been checked, so a hand-off checks at most 8 of them and
-  asks the member about the rest ("Check Again" checks 8 more). Reading walmart.com product pages is an accepted terms risk until
-  walmart.io keys make the Affiliate API lookup the source.

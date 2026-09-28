@@ -76,13 +76,7 @@ type ServiceOptions struct {
 	// Events, when set, records shopping.handoff_created and
 	// shopping.order_confirmed (best effort).
 	Events events.Recorder
-	// Checker, when set, checks saved products on the provider's site: when
-	// one is saved, before a hand-off, and in the scheduled sweep
-	// (productcheck.go). Without it nothing is fetched; products still carry
-	// their stored checks, and a product nobody has confirmed within
-	// ProductFreshness still needs a decision before a hand-off.
-	Checker ProductChecker
-	Logger  *slog.Logger
+	Logger *slog.Logger
 }
 
 // Service implements shopping handoffs. Reads take a household ID (routes
@@ -102,7 +96,6 @@ type Service struct {
 	households HouseholdSource
 	notifier   Notifier
 	events     events.Recorder
-	checker    ProductChecker
 	logger     *slog.Logger
 	now        func() time.Time
 }
@@ -116,7 +109,7 @@ func NewService(o ServiceOptions) *Service {
 	return &Service{
 		store: o.Store, providers: o.Providers, grocery: o.Grocery, catalog: o.Catalog, pantry: o.Pantry,
 		frozen: o.Frozen, freezer: o.Freezer, leftovers: o.Leftovers, plans: o.Plans,
-		households: o.Households, notifier: o.Notifier, events: o.Events, checker: o.Checker, logger: logger, now: time.Now,
+		households: o.Households, notifier: o.Notifier, events: o.Events, logger: logger, now: time.Now,
 	}
 }
 
@@ -223,10 +216,8 @@ func (s *Service) GetPreference(ctx context.Context, householdID, provider, ingr
 }
 
 // PutPreference saves the product a household buys for an ingredient from a
-// pasted product link or product ID, read from the text. It reports whether
-// the preference was created. A newly chosen product is then checked on the
-// provider's site once, within SaveCheckBudget, so the response already says
-// whether it is there; a failed check doesn't fail the save.
+// pasted product link or product ID, read without fetching anything. It
+// reports whether the preference was created.
 func (s *Service) PutPreference(ctx context.Context, actor households.Membership, provider, ingredientKey string, in PreferenceInput) (Preference, bool, error) {
 	if err := authorize(actor, households.PermShoppingEdit); err != nil {
 		return Preference{}, false, err
@@ -305,13 +296,7 @@ func (s *Service) PutPreference(ctx context.Context, actor households.Membership
 		pref.IngredientName = strings.TrimPrefix(key, unnamedKeyPrefix)
 	}
 
-	existing, err := s.store.GetPreference(ctx, actor.HouseholdID, p.Key(), key)
-	if errors.Is(err, ErrNotFound) || (err == nil && existing.ProductID != pref.ProductID) {
-		// A different product is a new choice: its check starts over, and the
-		// member choosing it counts as seeing it on the site now.
-		pref.newProduct, pref.ProductChosenAt = true, pref.UpdatedAt
-	}
-	if errors.Is(err, ErrNotFound) {
+	if _, err := s.store.GetPreference(ctx, actor.HouseholdID, p.Key(), key); errors.Is(err, ErrNotFound) {
 		n, err := s.store.CountPreferences(ctx, actor.HouseholdID, p.Key())
 		if err != nil {
 			return Preference{}, false, fmt.Errorf("count saved products: %w", err)
@@ -322,14 +307,7 @@ func (s *Service) PutPreference(ctx context.Context, actor households.Membership
 	} else if err != nil {
 		return Preference{}, false, fmt.Errorf("get saved product: %w", err)
 	}
-	saved, created, err := s.store.UpsertPreference(ctx, pref)
-	if err != nil {
-		return Preference{}, false, err
-	}
-	if pref.newProduct {
-		saved = s.checkSaved(ctx, saved)
-	}
-	return saved, created, nil
+	return s.store.UpsertPreference(ctx, pref)
 }
 
 // DeletePreference removes the product saved for one ingredient.
@@ -383,44 +361,11 @@ func normalizePackageSize(size *PackageSize) (*PackageSize, error) {
 // lists sent products that aren't lines, and the links add only what isn't
 // in the cart yet.
 func (s *Service) Match(ctx context.Context, householdID, week, provider string, in MatchInput) (Proposal, error) {
-	proposal, _, _, err := s.match(ctx, householdID, week, provider, in, false)
+	proposal, _, _, err := s.match(ctx, householdID, week, provider, in)
 	return proposal, err
 }
 
-// Preflight is Match after checking again, within the hand-off budget, the
-// saved products the hand-off would send whose last answer is older than
-// HandoffRecheckAge. The app calls it when a member taps "Open in Walmart":
-// lines that still need a decision (NeedsDecision) are shown before anything
-// opens. It needs shopping.edit, like the hand-off it precedes.
-func (s *Service) Preflight(ctx context.Context, actor households.Membership, week, provider string, in MatchInput) (Proposal, error) {
-	if err := authorize(actor, households.PermShoppingEdit); err != nil {
-		return Proposal{}, err
-	}
-	proposal, _, _, err := s.match(ctx, actor.HouseholdID, week, provider, in, true)
-	return proposal, err
-}
-
-// DecisionNeededError is returned by CreateHandoff when some line's saved
-// product is gone or unverified and the member hasn't left it out. Nothing
-// is stored or sent.
-type DecisionNeededError struct {
-	Lines []Excluded
-}
-
-func (e *DecisionNeededError) Error() string {
-	return "shopping: re-choose or leave out before sending: " + e.Names()
-}
-
-// Names lists the lines' names, comma separated.
-func (e *DecisionNeededError) Names() string {
-	names := make([]string, 0, len(e.Lines))
-	for _, l := range e.Lines {
-		names = append(names, l.Name)
-	}
-	return strings.Join(names, ", ")
-}
-
-func (s *Service) match(ctx context.Context, householdID, week, provider string, in MatchInput, recheck bool) (Proposal, providers.GroceryProvider, *Handoff, error) {
+func (s *Service) match(ctx context.Context, householdID, week, provider string, in MatchInput) (Proposal, providers.GroceryProvider, *Handoff, error) {
 	if householdID == "" {
 		return Proposal{}, nil, nil, errHouseholdRequired
 	}
@@ -448,20 +393,8 @@ func (s *Service) match(ctx context.Context, householdID, week, provider string,
 			return Proposal{}, nil, nil, err
 		}
 	}
-	proposal, err := buildProposal(p, settings, g, prefs, in, s.now())
+	proposal, err := buildProposal(p, settings, g, prefs, in)
 	if err != nil {
-		return Proposal{}, nil, nil, err
-	}
-	if recheck {
-		checked, err := s.recheckForHandoff(ctx, p.Key(), prefs, proposal)
-		if err != nil {
-			return Proposal{}, nil, nil, err
-		}
-		if proposal, err = buildProposal(p, settings, g, checked, in, s.now()); err != nil {
-			return Proposal{}, nil, nil, err
-		}
-	}
-	if proposal.ChecksPaused, err = s.checksPaused(ctx, p.Key()); err != nil {
 		return Proposal{}, nil, nil, err
 	}
 	current, err := s.currentHandoff(ctx, householdID, proposal.Week, p.Key())
@@ -513,25 +446,14 @@ const maxSendAttempts = 3
 // is new, the handoff comes back unchanged with no links. created reports
 // whether a handoff was stored. It needs at least one line with a saved
 // product.
-//
-// Before anything is stored, stale saved products are checked again (as
-// Preflight does), and if any line's product is gone or unverified and the
-// member hasn't left it out, it returns a *DecisionNeededError: a hand-off
-// never sends an item DinnerOS knows is gone, or one it can't vouch for,
-// without the member deciding.
 func (s *Service) CreateHandoff(ctx context.Context, actor households.Membership, week, provider string, in MatchInput) (h Handoff, created bool, err error) {
 	if err := authorize(actor, households.PermShoppingEdit); err != nil {
 		return Handoff{}, false, err
 	}
-	for attempt := range maxSendAttempts {
-		// Checks run once; a retry after a concurrent send uses what they
-		// saved.
-		proposal, p, current, err := s.match(ctx, actor.HouseholdID, week, provider, in, attempt == 0)
+	for range maxSendAttempts {
+		proposal, p, current, err := s.match(ctx, actor.HouseholdID, week, provider, in)
 		if err != nil {
 			return Handoff{}, false, err
-		}
-		if lines := proposal.NeedsDecision(); len(lines) > 0 {
-			return Handoff{}, false, &DecisionNeededError{Lines: lines}
 		}
 		if len(proposal.Lines) == 0 {
 			return Handoff{}, false, invalid("no grocery line has a saved product to add to the cart")

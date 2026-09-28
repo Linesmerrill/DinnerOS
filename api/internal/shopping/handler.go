@@ -98,7 +98,6 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(edit).Delete(base+"/{provider}/preferences/{ingredientKey}", h.deletePreference)
 		const plan = "/households/{householdId}/plans/{week}/shopping/{provider}"
 		r.With(view).Post(plan+"/match", h.match)
-		r.With(edit).Post(plan+"/preflight", h.preflight)
 		r.With(edit).Post(plan+"/handoffs", h.createHandoff)
 		r.With(edit).Post(plan+"/handoffs/start-over", h.startOver)
 		r.With(edit).Post(plan+"/handoffs/send-again", h.sendAgain)
@@ -194,49 +193,10 @@ type PreferenceResponse struct {
 	// PriceCents is one package's price, or null when none was entered.
 	PriceCents     *int64     `json:"priceCents"`
 	PriceUpdatedAt *time.Time `json:"priceUpdatedAt"`
-	// PriceSource is member (typed, confirmed, or imported) or provider (read
-	// by a product check), or null without a price.
-	PriceSource *PriceSource `json:"priceSource"`
-	// ProductChosenAt is when this product was chosen, or null for products
-	// saved before it was recorded.
-	ProductChosenAt *time.Time `json:"productChosenAt"`
-	// Health is what the product's checks mean for a hand-off: ok,
-	// unavailable, gone, or unverified. HealthText says it in a sentence, or
-	// is null when ok.
-	Health     ProductHealth `json:"health"`
-	HealthText *string       `json:"healthText"`
-	// Check is the product's last check, or null when it was never checked.
-	Check     *ProductCheckResponse `json:"check"`
-	CreatedBy string                `json:"createdBy"`
-	CreatedAt time.Time             `json:"createdAt"`
-	UpdatedBy string                `json:"updatedBy"`
-	UpdatedAt time.Time             `json:"updatedAt"`
-}
-
-// ProductCheckResponse is a saved product's last check on the provider's
-// site.
-type ProductCheckResponse struct {
-	// Status is the latest attempt: found, unavailable, gone, or unknown.
-	Status providers.ProductStatus `json:"status"`
-	// Detail says why an attempt was unknown, or null.
-	Detail    *string   `json:"detail"`
-	CheckedAt time.Time `json:"checkedAt"`
-	// VerifiedStatus and VerifiedAt are the latest conclusive answer, which
-	// an unknown attempt doesn't replace; null until there is one.
-	VerifiedStatus *providers.ProductStatus `json:"verifiedStatus"`
-	VerifiedAt     *time.Time               `json:"verifiedAt"`
-	// Name and PriceCents are what the provider showed at the last found or
-	// unavailable answer.
-	Name       *string `json:"name"`
-	PriceCents *int64  `json:"priceCents"`
-	// Pickup and Delivery are the provider's availability per channel.
-	Pickup   *string `json:"pickup"`
-	Delivery *string `json:"delivery"`
-	// Store is the pickup store the page was read for. It is the provider's
-	// default for DinnerOS's server, not necessarily the household's store,
-	// which is why StoreApproximate is true.
-	Store            *string `json:"store"`
-	StoreApproximate bool    `json:"storeApproximate"`
+	CreatedBy      string     `json:"createdBy"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedBy      string     `json:"updatedBy"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
 }
 
 // PreferenceListResponse is returned by GET .../preferences.
@@ -271,11 +231,6 @@ type ProductResponse struct {
 	DisplayName string               `json:"displayName"`
 	ProductURL  string               `json:"productUrl"`
 	PackageSize *PackageSizeResponse `json:"packageSize"`
-	// Health, HealthText, and Check are the saved product's check on a
-	// match or preflight; null on a stored handoff.
-	Health     *ProductHealth        `json:"health,omitempty"`
-	HealthText *string               `json:"healthText,omitempty"`
-	Check      *ProductCheckResponse `json:"check,omitempty"`
 }
 
 // ConfirmationResponse is a handoff line's confirmation state.
@@ -411,14 +366,6 @@ type ExcludedResponse struct {
 	// otherwise. A recipe-scoped line holds only the left-out meals' part;
 	// the same ingredient can also be a line for other meals.
 	SkipScope grocery.SkipScope `json:"skipScope,omitempty"`
-	// NeedsDecision is true for product_gone and product_unverified: no
-	// hand-off is made until the member re-chooses the product or leaves the
-	// line out (excludeKeys).
-	NeedsDecision bool `json:"needsDecision"`
-	// Product is the saved product on a line excluded because of its check
-	// (product_gone, product_unverified, left_out_gone,
-	// left_out_unverified), else absent.
-	Product *ProductResponse `json:"product,omitempty"`
 }
 
 // CartLinkResponse is one handoff URL.
@@ -443,11 +390,6 @@ type ProposalResponse struct {
 	// Meals are the week's planned recipes in plan order; every line's and
 	// excluded line's shares name one of them. Empty on a stored handoff.
 	Meals []planning.GroceryMealResponse `json:"meals"`
-	// NeedsDecision counts the excluded lines that block a hand-off.
-	NeedsDecision int `json:"needsDecision"`
-	// ChecksPaused is true when the provider refused product checks recently,
-	// so none are being made and unverified products can't be confirmed.
-	ChecksPaused bool `json:"checksPaused"`
 }
 
 // HandoffResponse is a stored handoff.
@@ -689,59 +631,13 @@ func (h *Handler) providerName(key providers.Key) string {
 }
 
 func (h *Handler) preferenceResponse(p Preference) PreferenceResponse {
-	health := p.Health(h.opts.Service.now())
-	resp := PreferenceResponse{
+	return PreferenceResponse{
 		ID: p.ID, Provider: p.Provider, IngredientKey: p.IngredientKey, IngredientID: optionalString(catalogID(p.IngredientKey)),
 		IngredientName: p.IngredientName, ProductID: p.ProductID, ProductURL: h.providerURL(p.Provider, p.ProductID),
 		DisplayName: p.DisplayName, PackageSize: packageSizeResponse(p.PackageSize), Coverage: p.Coverage,
-		PriceCents: p.PriceCents, PriceUpdatedAt: optionalTime(p.PriceUpdatedAt), ProductChosenAt: optionalTime(p.ProductChosenAt),
-		Health: health, HealthText: optionalString(h.healthText(p.Provider, health)), Check: productCheckResponse(p.CurrentCheck()),
+		PriceCents: p.PriceCents, PriceUpdatedAt: optionalTime(p.PriceUpdatedAt),
 		CreatedBy: p.CreatedBy, CreatedAt: p.CreatedAt, UpdatedBy: p.UpdatedBy, UpdatedAt: p.UpdatedAt,
 	}
-	if p.PriceCents != nil && p.PriceSource != "" {
-		source := p.PriceSource
-		resp.PriceSource = &source
-	}
-	return resp
-}
-
-func productCheckResponse(c *ProductCheckState) *ProductCheckResponse {
-	if c == nil {
-		return nil
-	}
-	resp := &ProductCheckResponse{
-		Status: c.Status, Detail: optionalString(c.Detail), CheckedAt: c.CheckedAt, VerifiedAt: optionalTime(c.VerifiedAt),
-		Name: optionalString(c.Name), PriceCents: c.PriceCents, Pickup: optionalString(c.Pickup), Delivery: optionalString(c.Delivery),
-		Store: optionalString(c.Store), StoreApproximate: true,
-	}
-	if c.VerifiedStatus != "" {
-		status := c.VerifiedStatus
-		resp.VerifiedStatus = &status
-	}
-	return resp
-}
-
-// healthText says what a product's health means, or "" when it is fine.
-func (h *Handler) healthText(provider providers.Key, health ProductHealth) string {
-	name := h.providerName(provider)
-	switch health {
-	case HealthGone:
-		return "No longer on " + name + ". Re-choose it, or leave it out of the cart."
-	case HealthUnverified:
-		return "DinnerOS couldn't confirm it's still on " + name + " lately."
-	case HealthUnavailable:
-		return "Out of stock for pickup and delivery when last checked. It may come back."
-	}
-	return ""
-}
-
-// productHealth renders a saved product's check on a match line or an
-// excluded line.
-func (h *Handler) productHealth(provider providers.Key, resp *ProductResponse, health ProductHealth, check *ProductCheckState) {
-	if health == "" {
-		return
-	}
-	resp.Health, resp.HealthText, resp.Check = &health, optionalString(h.healthText(provider, health)), productCheckResponse(check)
 }
 
 // amounts renders amounts as the grocery list does: "1 ½ cups", "2 cloves",
@@ -786,7 +682,6 @@ func (h *Handler) lineResponse(provider providers.Key, l HandoffLine, stored boo
 		},
 		ComputedPackages: l.ComputedPackages, Packages: l.Packages, PackagesOverridden: l.Packages != l.ComputedPackages,
 	}
-	h.productHealth(provider, &resp.Product, l.Health, l.Check)
 	resp.Amounts, resp.QuantityText = amounts(l.Amounts)
 	count, size := l.PackageCount(), amountFromSize(l.PackageSize)
 	count.Packages = l.Packages
@@ -883,14 +778,6 @@ func (h *Handler) exclusionText(provider providers.Key, reason ExclusionReason) 
 		return "No longer on this week's list"
 	case ExcludedOrdered:
 		return "Ordered this week"
-	case ExcludedProductGone:
-		return "No longer on " + h.providerName(provider) + ": re-choose or leave out"
-	case ExcludedProductUnverified:
-		return "Couldn't confirm it's still on " + h.providerName(provider) + ": check again, re-choose, or leave out"
-	case ExcludedLeftOutGone:
-		return "Left out: no longer on " + h.providerName(provider)
-	case ExcludedLeftOutUnverified:
-		return "Left out: couldn't confirm it's on " + h.providerName(provider)
 	}
 	return ""
 }
@@ -898,11 +785,10 @@ func (h *Handler) exclusionText(provider providers.Key, reason ExclusionReason) 
 func (h *Handler) proposalResponse(p Proposal, stored bool) ProposalResponse {
 	resp := ProposalResponse{
 		Provider: p.Provider, Week: p.Week, StoreID: optionalString(p.StoreID), AffiliateTracked: p.AffiliateTracked,
-		Lines:         make([]HandoffLineResponse, 0, len(p.Lines)),
-		Excluded:      make([]ExcludedResponse, 0, len(p.Excluded)),
-		CartLinks:     make([]CartLinkResponse, 0, len(p.Links)),
-		Meals:         planning.GroceryMeals(p.Meals),
-		NeedsDecision: len(p.NeedsDecision()), ChecksPaused: p.ChecksPaused,
+		Lines:     make([]HandoffLineResponse, 0, len(p.Lines)),
+		Excluded:  make([]ExcludedResponse, 0, len(p.Excluded)),
+		CartLinks: make([]CartLinkResponse, 0, len(p.Links)),
+		Meals:     planning.GroceryMeals(p.Meals),
 	}
 	for _, l := range p.Lines {
 		resp.Lines = append(resp.Lines, h.lineResponse(p.Provider, l, stored))
@@ -916,18 +802,6 @@ func (h *Handler) proposalResponse(p Proposal, stored bool) ProposalResponse {
 		}
 		if e.Reason == ExcludedSkipped {
 			er.Text = skippedText(e)
-		}
-		er.NeedsDecision = e.Reason.NeedsDecision()
-		if e.ProductID != "" {
-			product := &ProductResponse{ProductID: e.ProductID, DisplayName: e.ProductName, ProductURL: h.providerURL(p.Provider, e.ProductID)}
-			if !stored {
-				health := HealthGone
-				if e.Reason == ExcludedProductUnverified || e.Reason == ExcludedLeftOutUnverified {
-					health = HealthUnverified
-				}
-				h.productHealth(p.Provider, product, health, e.Check)
-			}
-			er.Product = product
 		}
 		er.Amounts, er.QuantityText = amounts(e.Amounts)
 		if e.GroceryStatus != "" {
@@ -1113,20 +987,6 @@ func (h *Handler) match(w http.ResponseWriter, r *http.Request) {
 	p, err := h.opts.Service.Match(r.Context(), actor.HouseholdID, chi.URLParam(r, "week"), chi.URLParam(r, "provider"), req.input())
 	if err != nil {
 		h.writeError(w, r, "match grocery list failed", err)
-		return
-	}
-	httpx.WriteJSON(w, http.StatusOK, h.proposalResponse(p, false))
-}
-
-func (h *Handler) preflight(w http.ResponseWriter, r *http.Request) {
-	actor, _ := households.MembershipFromContext(r.Context())
-	var req MatchRequest
-	if !httpx.DecodeJSON(w, r, &req) {
-		return
-	}
-	p, err := h.opts.Service.Preflight(r.Context(), actor, chi.URLParam(r, "week"), chi.URLParam(r, "provider"), req.input())
-	if err != nil {
-		h.writeError(w, r, "preflight grocery list failed", err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, h.proposalResponse(p, false))
@@ -1484,12 +1344,7 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 	var validation *ValidationError
 	var providerValidation *providers.ValidationError
 	var pantryValidation *pantry.ValidationError
-	var decision *DecisionNeededError
 	switch {
-	case errors.As(err, &decision):
-		httpx.WriteError(w, r, http.StatusConflict, "products_need_decision",
-			"These lines' saved products are no longer listed or couldn't be confirmed: "+decision.Names()+
-				". Re-choose each product or leave the line out, then send again.")
 	case errors.As(err, &validation):
 		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", validation.Message)
 	case errors.As(err, &providerValidation):
