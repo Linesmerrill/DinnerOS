@@ -160,12 +160,17 @@ nonisolated extension CookChecklist {
                     i + 1 < step.segments.count && !step.segments[i + 1].isIngredient ? step.segments[i + 1].text : ""
                 let partWord = leadingPart(after)
                 let name = partWord.map { "\(singular(ingredient.name)) \($0)" } ?? ingredient.name
-                let prep = prepWords(in: clause)
+                // "Crushed Tomatoes, crushed" says nothing.
+                let prep = prepWords(in: clause).flatMap { words in
+                    ingredient.name.lowercased().contains(words) ? nil : words
+                }
                 let parts = splitParts(after, name: ingredient.name)
                 if let existing = items.firstIndex(where: { $0.name == name }) {
                     // Named again in the same step ("zest the lemon … halve lemon"): add what's done.
                     let old = items[existing]
-                    let merged = [old.prep, prep].compactMap { $0 }.joined(separator: ", ")
+                    // Only what's new: "grate 1 zucchini … place grated zucchini" is grated once.
+                    let adds = prep.flatMap { new in old.prep?.contains(new) == true ? nil : new }
+                    let merged = [old.prep, adds].compactMap { $0 }.joined(separator: ", ")
                     items[existing] = CookStepItem(
                         id: old.id, name: old.name, amountText: old.amountText, prep: merged.isEmpty ? nil : merged,
                         parts: old.parts.isEmpty ? parts : old.parts, isLeftOut: old.isLeftOut)
@@ -208,20 +213,78 @@ nonisolated extension CookChecklist {
         "shredded": "shredded", "cube": "cubed", "cubed": "cubed", "crush": "crushed", "crushed": "crushed",
         "pit": "pitted", "pitted": "pitted", "drain": "drained", "drained": "drained", "rinse": "rinsed",
         "rinsed": "rinsed", "melt": "melted", "melted": "melted", "soften": "softened", "tear": "torn",
-        "pat": "patted dry", "julienne": "julienned", "smash": "smashed", "wedge": "cut into wedges",
+        "pat": "patted dry", "julienne": "julienned", "smash": "smashed",
     ]
     private static let adverbs: Set<String> = ["thinly", "finely", "roughly", "coarsely", "thickly"]
 
+    /// Words allowed between prep verbs and the ingredient they apply to: "Halve, peel, and
+    /// finely dice 1 shallot", "juice from half 1 lime". Anything else ends the run, so a word
+    /// that belongs to something earlier in the sentence ("Stir drained rigatoni, half the
+    /// Parmesan, and 1 tbsp butter") never lands on the wrong ingredient.
+    private static let fillers: Set<String> = [
+        "and", "or", "the", "a", "an", "then", "from", "half", "of", "your", "remaining",
+        "tsp", "tbsp", "cup", "cups", "oz", "clove", "cloves", "lb", "g", "can", "cans",
+    ]
+
+    /// What may sit between a participle and its ingredient: "diced 1 tbsp butter", "the chopped".
+    private static let closeFillers: Set<String> = [
+        "the", "a", "an", "half", "of", "your", "remaining", "tsp", "tbsp", "cup", "cups", "oz", "clove",
+        "cloves", "lb", "g",
+    ]
+    private static let citrus: Set<String> = ["lime", "lemon", "orange", "pineapple", "apple", "grapefruit"]
+
     static func prepWords(in clause: String) -> String? {
-        let words = clause.lowercased().split { !$0.isLetter }.map(String.init)
+        // Words from the end of the clause back to the first one that isn't a prep verb, an
+        // adverb for one, a filler, or a number.
+        let words = clause.lowercased().split { !$0.isLetter && !$0.isNumber && !"½¼¾⅓⅔/⁄".contains($0) }
+            .map(String.init)
+        var run: [String] = []
+        var wordBeforeRun: String?
+        for word in words.reversed() {
+            let isNumber = word.allSatisfy { $0.isNumber || "½¼¾⅓⅔/⁄".contains($0) }
+            guard verbs[word] != nil || adverbs.contains(word) || fillers.contains(word) || isNumber else {
+                wordBeforeRun = word
+                break
+            }
+            run.insert(word, at: 0)
+        }
+        // "lime zest", "pineapple juice": a noun, not something done to the next ingredient.
+        if let first = run.first(where: { verbs[$0] != nil }), ["zest", "juice"].contains(first),
+            let noun = wordBeforeRun, citrus.contains(noun)
+        {
+            return nil
+        }
+        // A participle only counts right before the ingredient ("add diced butter"); a verb
+        // counts anywhere in the run ("peel, core, and dice").
         var out: [String] = []
-        for (i, word) in words.enumerated() {
-            guard let done = verbs[word], !out.contains(where: { $0.hasSuffix(done) }) else { continue }
-            if word == "trim" || word == "trimmed" { continue }  // every herb is trimmed; it's noise
-            out.append(i > 0 && adverbs.contains(words[i - 1]) ? "\(words[i - 1]) \(done)" : done)
+        var joinedByOr: Set<Int> = []
+        for (i, word) in run.enumerated() {
+            guard let done = verbs[word], word != "trim", word != "trimmed" else { continue }
+            let isParticiple = done == word
+            // Only amounts and articles may sit between it and the ingredient: in "butter has
+            // melted and Worcestershire", melted isn't about the Worcestershire.
+            if isParticiple,
+                run[(i + 1)...].contains(where: { !closeFillers.contains($0) && !$0.allSatisfy(\.isNumber) })
+            {
+                continue
+            }
+            guard !out.contains(where: { $0.hasSuffix(done) }) else { continue }
+            if i > 0, run[i - 1] == "or" { joinedByOr.insert(out.count) }
+            out.append(i > 0 && adverbs.contains(run[i - 1]) ? "\(run[i - 1]) \(done)" : done)
         }
         guard !out.isEmpty else { return nil }
-        return out.count == 1 ? out[0] : out.formatted(.list(type: .and))
+        // "minced or grated", "peeled, cored, and diced".
+        var text = out[0]
+        for index in out.indices.dropFirst() {
+            let isLast = index == out.count - 1
+            let joiner = joinedByOr.contains(index) ? "or" : "and"
+            if isLast {
+                text += out.count > 2 ? ", \(joiner) \(out[index])" : " \(joiner) \(out[index])"
+            } else {
+                text += ", \(out[index])"
+            }
+        }
+        return text
     }
 
     /// "greens" in "2 scallion greens".

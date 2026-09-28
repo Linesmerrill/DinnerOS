@@ -49,6 +49,13 @@ struct CookingView: View {
                 .navigationTitle(dish?.recipe.name ?? meal?.name ?? "")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
+                    // Centered over the whole screen: the iPad draws a plain inline title at
+                    // the leading edge of the detail column.
+                    ToolbarItem(placement: .principal) {
+                        Text(dish?.recipe.name ?? meal?.name ?? "")
+                            .font(.headline)
+                            .lineLimit(1)
+                    }
                     ToolbarItem(placement: .topBarLeading) { switcherButton }
                     ToolbarItem(placement: .topBarLeading) { layoutButton }
                     ToolbarItem(placement: .confirmationAction) {
