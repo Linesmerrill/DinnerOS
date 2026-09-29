@@ -13,7 +13,7 @@ Ready in 30 minutes, serves 4.
 
 Ingredients
 - 1 1/2 lbs chicken thighs
-- 2 tbsp harissa paste
+- 2 Tbsp harissa paste
 * ½ cup couscous
 - salt
 
@@ -138,7 +138,7 @@ const jsonLDPage = `<!doctype html><html><head>
   "recipeYield":"4 servings","prepTime":"PT10M","totalTime":"PT35M",
   "recipeCuisine":"Italian","recipeCategory":["Dinner"],
   "image":[{"@type":"ImageObject","url":"https://example.com/g.jpg"}],
-  "recipeIngredient":["1 lb potato gnocchi","2 tbsp olive oil","1 pint cherry tomatoes"],
+  "recipeIngredient":["1 lb potato gnocchi","2 Tbsp olive oil","1 pint cherry tomatoes"],
   "recipeInstructions":[{"@type":"HowToStep","text":"Heat the oven."},{"@type":"HowToStep","text":"Roast everything."}]}
 ]}
 </script></head><body>ignore me</body></html>`

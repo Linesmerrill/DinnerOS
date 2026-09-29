@@ -17,9 +17,9 @@ func TestCountPackagesForEstimatesVolumeAgainstWeight(t *testing.T) {
 		coverage       string
 	}{
 		// The owner's four.
-		{name: "Chili Powder", category: ingredients.CategorySpices, need: [2]string{"5/3", "tbsp"}, size: [2]string{"19/20", "oz"}, packages: 1, coverage: "1 × 0.95 oz covers 1.67 tbsp"},
+		{name: "Chili Powder", category: ingredients.CategorySpices, need: [2]string{"5/3", "tbsp"}, size: [2]string{"19/20", "oz"}, packages: 1, coverage: "1 × 0.95 oz covers 1.67 Tbsp"},
 		{name: "Paprika", category: ingredients.CategorySpices, need: [2]string{"3/2", "tsp"}, size: [2]string{"5/2", "oz"}, packages: 1, coverage: "1 × 2 ½ oz covers 1 ½ tsp"},
-		{name: "Apricot Jam", category: ingredients.CategoryCondiments, need: [2]string{"2", "tbsp"}, size: [2]string{"18", "oz"}, packages: 1, coverage: "1 × 18 oz covers 2 tbsp"},
+		{name: "Apricot Jam", category: ingredients.CategoryCondiments, need: [2]string{"2", "tbsp"}, size: [2]string{"18", "oz"}, packages: 1, coverage: "1 × 18 oz covers 2 Tbsp"},
 		{name: "Balsamic Vinegar", category: ingredients.CategoryCondiments, need: [2]string{"5", "tsp"}, size: [2]string{"17/2", "oz"}, packages: 1, coverage: "1 × 8 ½ oz covers 5 tsp"},
 		// A large need gets a real count: 2 cups of honey is about 23 oz.
 		{name: "Honey", category: ingredients.CategoryCondiments, need: [2]string{"2", "cup"}, size: [2]string{"12", "oz"}, packages: 2, coverage: "2 × 12 oz covers 2 cups"},

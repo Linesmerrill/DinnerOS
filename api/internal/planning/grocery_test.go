@@ -56,7 +56,7 @@ func TestGroceryListAggregatesOverlappingRecipes(t *testing.T) {
 		// A count and a weight of onion can't combine, so they stay separate.
 		{"produce", "Yellow Onion", []string{"1 count", "8 oz"}, false, grocery.StatusToBuy, []string{"Beef Tacos", "Chicken Salad", "Onion Soup"}},
 		{"meat-seafood", "Chicken Breast", []string{"10 oz"}, false, grocery.StatusToBuy, []string{"Chicken Salad"}},
-		// 2 tbsp + ¼ cup = 6 tbsp, less than a cup, so it shows in tbsp.
+		// 2 Tbsp + ¼ cup = 6 Tbsp, less than a cup, so it shows in Tbsp.
 		{"dairy-eggs", "Sour Cream", []string{"6 tbsp"}, false, grocery.StatusToBuy, []string{"Beef Tacos", "Onion Soup"}},
 		// Every source marks olive oil as a staple, and there is no pantry yet.
 		{"pantry", "Olive Oil", []string{"1 tbsp"}, false, grocery.StatusPantryHint, []string{"Onion Soup"}},

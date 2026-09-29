@@ -275,7 +275,7 @@ func TestIntegrationGroceryAndBatchDeduction(t *testing.T) {
 	if _, ok := items["Tex-Mex Paste"]; ok {
 		t.Error("Tex-Mex Paste is still listed")
 	}
-	// 2 tbsp of paste is 2 tsp of tomato paste, plus the bowls' own 1 tbsp.
+	// 2 Tbsp of paste is 2 tsp of tomato paste, plus the bowls' own 1 Tbsp.
 	if paste := items["Tomato Paste"]; len(paste.Amounts) != 1 || amountsOf(paste)[0] != "5/3 tbsp" || len(paste.Via) != 1 || len(paste.Sources) != 2 {
 		t.Errorf("tomato paste = %+v", paste)
 	}
@@ -288,7 +288,7 @@ func TestIntegrationGroceryAndBatchDeduction(t *testing.T) {
 		t.Errorf("batch plan = %+v", b)
 	}
 
-	// Make a batch: a house_made purchase starts a 4 tbsp cycle.
+	// Make a batch: a house_made purchase starts a 4 Tbsp cycle.
 	res, err := svc.RecordBatch(ctx, actor, "southwest-spice-blend", BatchInput{ClientPurchaseID: "b1"})
 	if err != nil || !res.Created {
 		t.Fatalf("RecordBatch() = %+v, %v", res, err)
@@ -320,7 +320,7 @@ func TestIntegrationGroceryAndBatchDeduction(t *testing.T) {
 		t.Errorf("cumin with a batch in the pantry = %+v, want it off the list", cumin)
 	}
 
-	// Cooking deducts: 1 packet (1 tbsp) for the tacos, and 1 tbsp named by the
+	// Cooking deducts: 1 packet (1 Tbsp) for the tacos, and 1 Tbsp named by the
 	// alias for the bowls.
 	for name, entry := range entries {
 		u, applied, err := pantrySvc.ApplyCooked(ctx, pantry.CookedMeal{

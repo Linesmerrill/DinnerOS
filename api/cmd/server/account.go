@@ -7,6 +7,7 @@ import (
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/account"
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
+	"github.com/Linesmerrill/DinnerOS/api/internal/cooking"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
@@ -49,6 +50,7 @@ func newAccountService(db *mongo.Database, householdService *households.Service,
 			eventStore,
 			recommendations.NewMongoStore(db),
 			mealKitStore,
+			cooking.NewStore(db),
 		},
 		UserData: []account.UserPurger{
 			ratingStore,

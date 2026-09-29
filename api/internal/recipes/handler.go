@@ -313,6 +313,7 @@ func newRecipeResponse(r Recipe, bands autopilot.TimeBands) RecipeResponse {
 		resp.Nutrition = append(resp.Nutrition, NutrientResponse(n))
 	}
 	for _, s := range r.Steps {
+		s.Text = CleanStepText(s.Text)
 		resp.Steps = append(resp.Steps, StepResponse(s))
 	}
 	for _, line := range r.Ingredients {

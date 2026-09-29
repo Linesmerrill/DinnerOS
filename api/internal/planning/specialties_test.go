@@ -111,15 +111,15 @@ func TestGroceryListAppliesSpecialties(t *testing.T) {
 	if _, ok := items["Tex-Mex Paste"]; ok {
 		t.Error("Tex-Mex Paste is still listed")
 	}
-	// 1 packet = 2 tbsp of paste → 4 tsp of tomato paste.
+	// 1 packet = 2 Tbsp of paste → 4 tsp of tomato paste.
 	paste := items["Tomato Paste"]
 	if paste.QuantityText != "4 tsp" || paste.Specialty || len(paste.Via) != 1 || paste.Via[0].Text != "for Tex-Mex Paste in Smoky Pork Tacos" ||
 		paste.Via[0].Kind != grocery.ViaStoreAlternative || paste.Via[0].Yield != nil || paste.Via[0].Batches != nil {
 		t.Errorf("tomato paste = %+v", paste)
 	}
 	cumin := items["Ground Cumin"]
-	if cumin.QuantityText != "2 tbsp" || len(cumin.Via) != 1 || cumin.Via[0].Text != "to make Southwest Spice Blend (makes about 12 tbsp)" ||
-		cumin.Via[0].Batches == nil || *cumin.Via[0].Batches != 1 || cumin.Via[0].Yield.Text != "12 tbsp" ||
+	if cumin.QuantityText != "2 Tbsp" || len(cumin.Via) != 1 || cumin.Via[0].Text != "to make Southwest Spice Blend (makes about 12 Tbsp)" ||
+		cumin.Via[0].Batches == nil || *cumin.Via[0].Batches != 1 || cumin.Via[0].Yield.Text != "12 Tbsp" ||
 		len(cumin.Recipes) != 1 || cumin.Recipes[0].Name != "Smoky Pork Tacos" {
 		t.Errorf("cumin = %+v", cumin)
 	}
@@ -133,7 +133,7 @@ func TestGroceryListAppliesSpecialties(t *testing.T) {
 	}
 	b := resp.Batches[0]
 	if b.SpecialtyID != "southwest-spice-blend" || b.Status != grocery.BatchMake || b.Reason != grocery.BatchMissing || b.Batches != 1 ||
-		b.PantryItemID != nil || b.Needed == nil || b.Needed.Text != "1 tbsp" || b.Text != "Make a batch (makes about 12 tbsp)" ||
+		b.PantryItemID != nil || b.Needed == nil || b.Needed.Text != "1 Tbsp" || b.Text != "Make a batch (makes about 12 Tbsp)" ||
 		!slices.Equal([]string{b.Recipes[0].Name}, []string{"Smoky Pork Tacos"}) {
 		t.Errorf("batch = %+v", b)
 	}
@@ -159,7 +159,7 @@ func TestGroceryListAppliesSpecialties(t *testing.T) {
 		blend.IngredientKey != "name:southwest spice blend" {
 		t.Errorf("house-made item = %+v", blend)
 	}
-	if rb := resp.Batches[0]; rb.Status != grocery.BatchInPantry || rb.Text != "In pantry (house-made)" || rb.PantryItemID == nil || rb.Remaining.Text != "9 tbsp" {
+	if rb := resp.Batches[0]; rb.Status != grocery.BatchInPantry || rb.Text != "In pantry (house-made)" || rb.PantryItemID == nil || rb.Remaining.Text != "9 Tbsp" {
 		t.Errorf("in-pantry batch = %+v", rb)
 	}
 

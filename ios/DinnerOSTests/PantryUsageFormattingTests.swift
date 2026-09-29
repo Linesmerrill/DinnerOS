@@ -9,9 +9,9 @@ struct PantryUsageFormattingTests {
     @Test func remainingTextForRowsVoiceOverAndDetail() {
         let estimate = PantryFixtures.estimate()
 
-        #expect(PantryUsageFormat.remainingShort(estimate, locale: locale) == "~31% left (5 tbsp)")
-        #expect(PantryUsageFormat.remainingSpoken(estimate, locale: locale) == "About 31% left, about 5 tbsp")
-        #expect(PantryUsageFormat.remainingAmount(estimate, locale: locale) == "5 tbsp of 16 tbsp")
+        #expect(PantryUsageFormat.remainingShort(estimate, locale: locale) == "~31% left (5 Tbsp)")
+        #expect(PantryUsageFormat.remainingSpoken(estimate, locale: locale) == "About 31% left, about 5 Tbsp")
+        #expect(PantryUsageFormat.remainingAmount(estimate, locale: locale) == "5 Tbsp of 16 Tbsp")
     }
 
     /// A package of cream cheese is tracked in ounces, so the row says how much is in it
@@ -40,27 +40,27 @@ struct PantryUsageFormattingTests {
                 == "No cooked recipes yet")
         #expect(
             PantryUsageFormat.recipeUse(PantryFixtures.estimate(recipeCount: 1), locale: locale)
-                == "1 recipe used 3 tbsp")
+                == "1 recipe used 3 Tbsp")
         #expect(
             PantryUsageFormat.recipeUse(PantryFixtures.estimate(recipeCount: 2), locale: locale)
-                == "2 recipes used 6 tbsp")
+                == "2 recipes used 6 Tbsp")
     }
 
     @Test func dailyRateNeedsHistory() {
         let learned = PantryFixtures.estimate()
         let unlearned = PantryFixtures.estimate(dailyRate: nil)
 
-        #expect(PantryUsageFormat.dailyRate(learned, locale: locale) == "About 1 tbsp a day")
+        #expect(PantryUsageFormat.dailyRate(learned, locale: locale) == "About 1 Tbsp a day")
         #expect(PantryUsageFormat.dailyRate(unlearned, locale: locale) == "Not enough history yet")
     }
 
     /// The Other Use row counts what non-recipe use has actually been applied this cycle.
-    /// It used to show `dailyRate` — the rate, not the amount — so an item 5 tbsp down read
-    /// "About 1 tbsp a day" and the decoded `otherUse` was never shown anywhere.
+    /// It used to show `dailyRate` — the rate, not the amount — so an item 5 Tbsp down read
+    /// "About 1 Tbsp a day" and the decoded `otherUse` was never shown anywhere.
     @Test func otherUseIsTheAmountAppliedNotTheRate() {
         let estimate = PantryFixtures.estimate()
 
-        #expect(PantryUsageFormat.otherUse(estimate, locale: locale) == "5 tbsp")
+        #expect(PantryUsageFormat.otherUse(estimate, locale: locale) == "5 Tbsp")
         #expect(
             PantryUsageFormat.otherUse(estimate, locale: locale)
                 != PantryUsageFormat.dailyRate(estimate, locale: locale))

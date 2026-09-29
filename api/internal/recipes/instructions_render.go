@@ -143,6 +143,8 @@ type stepAmounts struct {
 }
 
 func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionStep {
+	// Recipes imported before HTML was cleaned still read as plain text.
+	step.Text = CleanStepText(step.Text)
 	out := InstructionStep{Index: step.Index, Text: step.Text, ImageURL: step.ImageURL}
 	candidates := make([]candidate, 0, len(mentions)*3)
 	for i, m := range mentions {
@@ -220,6 +222,11 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		} else if amounts.stated[hit] && !shownBefore {
 			// Another step wrote its own share of this ingredient, so the
 			// total would be wrong here ("the remaining butter").
+			amount = nil
+		}
+		if i > 0 && runes[i-1] == '-' {
+			// Part of a compound word ("soy-sriracha sauce"): mark it, but an
+			// amount there would read "soy-1 tsp sriracha".
 			amount = nil
 		}
 		if m.leftOut {

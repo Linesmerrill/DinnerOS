@@ -18,3 +18,13 @@ struct CookStepChecklistTests {
         #expect(CookChecklist.prepWords(in: "Dice the onion, then add the ") == nil)
     }
 }
+
+struct CookAheadTests {
+    @Test func butterAndCreamCheeseGetReadyAhead() {
+        #expect(CookChecklist.aheadNote("Butter", step: 4) == "cut into pieces, for step 4")
+        #expect(CookChecklist.aheadNote("Unsalted Butter", step: 3) == "cut into pieces, for step 3")
+        #expect(CookChecklist.aheadNote("Peanut Butter", step: 3) == nil)
+        #expect(CookChecklist.aheadNote("Cream Cheese", step: 3) == "let soften, for step 3")
+        #expect(CookChecklist.aheadNote("Shallot", step: 2) == nil)
+    }
+}

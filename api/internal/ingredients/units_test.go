@@ -162,11 +162,11 @@ func TestAmountAddAndScale(t *testing.T) {
 		t.Errorf("½ onion + ½ onion = %s, %v; want 1", sum.Quantity, err)
 	}
 
-	tbsp := Amount{Quantity: NewQuantity(1, 1), Unit: mustUnit(t, "tbsp")}
+	Tbsp := Amount{Quantity: NewQuantity(1, 1), Unit: mustUnit(t, "tbsp")}
 	tsp := Amount{Quantity: NewQuantity(3, 1), Unit: mustUnit(t, "tsp")}
-	got, err := tbsp.Add(tsp)
+	got, err := Tbsp.Add(tsp)
 	if err != nil || !got.Quantity.Equal(NewQuantity(2, 1)) || got.Unit.Code != "tbsp" {
-		t.Errorf("1 tbsp + 3 tsp = %s %s, %v; want 2 tbsp", got.Quantity, got.Unit.Code, err)
+		t.Errorf("1 Tbsp + 3 tsp = %s %s, %v; want 2 Tbsp", got.Quantity, got.Unit.Code, err)
 	}
 
 	onion := Amount{Quantity: NewQuantity(1, 1), Unit: mustUnit(t, "count")}
@@ -175,7 +175,7 @@ func TestAmountAddAndScale(t *testing.T) {
 		t.Errorf("1 onion + 8 oz onion error = %v, want ErrIncompatibleUnits", err)
 	}
 
-	if scaled := tbsp.Scale(NewQuantity(2, 1)); !scaled.Quantity.Equal(NewQuantity(2, 1)) {
+	if scaled := Tbsp.Scale(NewQuantity(2, 1)); !scaled.Quantity.Equal(NewQuantity(2, 1)) {
 		t.Errorf("scale = %s", scaled.Quantity)
 	}
 }

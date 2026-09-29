@@ -141,7 +141,7 @@ nonisolated enum RecipeFormat {
         case "thumb": plural ? String(localized: "thumbs") : String(localized: "thumb")
         case "cup": plural ? String(localized: "cups") : String(localized: "cup")
         case "tsp": String(localized: "tsp")
-        case "tbsp": String(localized: "tbsp")
+        case "tbsp": String(localized: "Tbsp")
         case "floz": String(localized: "fl oz")
         case "oz": String(localized: "oz")
         case "lb": String(localized: "lb")

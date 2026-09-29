@@ -35,6 +35,9 @@ const (
 type Measure struct {
 	Quantity ingredients.Quantity
 	Unit     string
+	// Or is another way to measure it, one per unit ("bouillon cube"), shown
+	// in parentheses: "2 tsp (or 2 bouillon cubes)". Empty for most.
+	Or string
 }
 
 // Text renders the measure for people: "1 ½ cups", "2 cloves", "3".
@@ -45,7 +48,33 @@ func (m Measure) Text() string {
 			text += " " + label
 		}
 	}
+	if m.Or != "" {
+		or := m.Or
+		if m.Quantity.Cmp(ingredients.NewQuantity(1, 1)) > 0 {
+			or += "s"
+		}
+		text += " (or " + m.Quantity.Format() + " " + or + ")"
+	}
 	return text
+}
+
+// kitchenMeasure turns a packet count into what to scoop ("1 tomato paste" is
+// 2 Tbsp), for an ingredient the household measures instead of opening a
+// packet. Anything else comes back as it was.
+func kitchenMeasure(name string, m *Measure) *Measure {
+	if m == nil {
+		return nil
+	}
+	km, ok := ingredients.KitchenMeasureFor(name, m.Unit)
+	if !ok {
+		return m
+	}
+	q := m.Quantity.MulRat(km.PerPacket)
+	out := Measure{Quantity: q, Unit: km.Unit}
+	if km.Or != "" {
+		out.Or = km.Or
+	}
+	return &out
 }
 
 // Segment is one run of a rendered step. Joining every Text in order gives
@@ -131,6 +160,9 @@ type IngredientState struct {
 	// catalog ID, or "name:" and the normalized name.
 	IngredientKey string
 	Name          string
+	// Amount is the ingredient's amount for the servings, as the cooking
+	// screens show it: a packet reads as a kitchen measure ("2 Tbsp").
+	Amount *Measure
 	// LeftOut is set when the household leaves it out of this recipe.
 	LeftOut *grocery.LeftOut
 	// Component is set when the ingredient is a specialty ingredient the
@@ -308,6 +340,8 @@ func AnnotateWith(r Recipe, servings int, specs grocery.Specialties, applied boo
 		if a, ok := amountAt(ing, smallest(r.Servings)); ok {
 			m.baseAmount = &a
 		}
+		m.amount, m.baseAmount = kitchenMeasure(ing.Name, m.amount), kitchenMeasure(ing.Name, m.baseAmount)
+		state.Amount = m.amount
 		if lo, ok := leftOut.Lookup(key, "name:"+ingredients.NormalizeName(ing.Name)); ok {
 			m.leftOut = true
 			state.LeftOut = &lo
@@ -540,6 +574,10 @@ func nameForms(name string, spec *grocery.Specialty) []string {
 		}
 		seen[strings.ToLower(s)] = true
 		forms = append(forms, s)
+	}
+	// Cards call "Beef Stock Concentrate" just "stock concentrate" in the steps.
+	if lower := strings.ToLower(name); strings.HasSuffix(lower, " stock concentrate") {
+		seeds = append(seeds, "stock concentrate")
 	}
 	for _, seed := range seeds {
 		for _, base := range []string{seed, trimQualifiers(seed)} {

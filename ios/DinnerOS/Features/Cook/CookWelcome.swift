@@ -12,7 +12,7 @@ struct CookWelcome: View {
         CookWelcomePage(
             title: "Welcome to cooking with DinnerOS",
             lines: [
-                "Your ingredients are on the left, grouped by the step that uses them.",
+                "Your ingredients are grouped by the step that uses them.",
                 "Check them off as they go in.",
                 "Press and hold one to flag its product, so you pick a different one next time.",
             ],

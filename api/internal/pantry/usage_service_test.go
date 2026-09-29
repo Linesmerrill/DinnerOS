@@ -135,7 +135,7 @@ func (f *usageFixture) item(t *testing.T, id string) Item {
 func TestPurchaseCookAndAlertFlow(t *testing.T) {
 	f := newUsageFixture(t)
 
-	// Checked off the grocery list and confirmed: 1 cup (16 tbsp) of butter.
+	// Checked off the grocery list and confirmed: 1 cup (16 Tbsp) of butter.
 	res, err := f.svc.RecordPurchase(f.ctx, f.actor, PurchaseInput{
 		Name: "Butter", Source: PurchaseGroceryList, Quantity: "1", Unit: "cup", Week: "2026-W38", ClientPurchaseID: "p1",
 	})
@@ -157,7 +157,7 @@ func TestPurchaseCookAndAlertFlow(t *testing.T) {
 
 	salt := mustAdd(t, f.svc, testHousehold, AddInput{Name: "Salt"}) // have some: not tracked
 
-	// Cooked for 4: 4 tbsp of butter.
+	// Cooked for 4: 4 Tbsp of butter.
 	f.advance(24 * time.Hour)
 	u, applied := f.cook(t, "entry1", 4)
 	if !applied || u.SourceKey != "entry:entry1" || u.ScaledFrom != 0 || len(u.Lines) != 2 {
@@ -182,7 +182,7 @@ func TestPurchaseCookAndAlertFlow(t *testing.T) {
 		t.Errorf("after repeat = %+v", got)
 	}
 
-	// 4 more tbsp, then 3 servings (scaled from the 2-serving 2 tbsp): 11/16.
+	// 4 more Tbsp, then 3 servings (scaled from the 2-serving 2 Tbsp): 11/16.
 	f.cook(t, "entry2", 4)
 	u, _ = f.cook(t, "entry3", 3)
 	if u.ScaledFrom != 2 {
@@ -193,7 +193,7 @@ func TestPurchaseCookAndAlertFlow(t *testing.T) {
 		t.Fatalf("at 69%% used = %+v, notifications %v", got.Tracking, f.notifier.all())
 	}
 
-	// 2 more tbsp crosses 80%: marked low by the estimate, with one alert.
+	// 2 more Tbsp crosses 80%: marked low by the estimate, with one alert.
 	f.cook(t, "entry4", 2)
 	got = f.item(t, butter.ID)
 	if got.Status != StatusLow || got.StatusSource != StatusSourceEstimate || got.LowAlertCycleID != res.Purchase.ID {
@@ -254,7 +254,7 @@ func TestTimeDecayAlertsOnRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f.advance(12 * 24 * time.Hour) // 12 of 16 tbsp: 75%
+	f.advance(12 * 24 * time.Hour) // 12 of 16 Tbsp: 75%
 	items, err := f.svc.List(f.ctx, testHousehold, ListQuery{})
 	if err != nil || items[0].Status != StatusInStock {
 		t.Fatalf("List() at 75%% = %+v, %v", items, err)

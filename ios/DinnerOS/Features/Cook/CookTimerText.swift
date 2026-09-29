@@ -6,7 +6,7 @@ enum CookTimerText {
     static let scheme = "dinneros-timer"
 
     /// `subject` is what the step is cooking by then ("Zucchini"), which names the timer.
-    static func text(_ string: String, step: Int, subject: String? = nil) -> Text {
+    static func text(_ string: String, step: Int, subject: (String) -> String? = { _ in nil }) -> Text {
         let durations = CookDurations.find(in: string)
         guard !durations.isEmpty else { return Text(verbatim: string) }
         var out = Text(verbatim: "")
@@ -15,7 +15,7 @@ enum CookTimerText {
             out = out + Text(verbatim: String(string[cursor..<duration.range.lowerBound]))
             var link = AttributedString(String(string[duration.range]))
             let before = String(string[string.startIndex..<duration.range.lowerBound])
-            link.link = url(step: step, duration: duration, subject: CookTimerSubject.noun(in: before) ?? subject)
+            link.link = url(step: step, duration: duration, subject: subject(before))
             link.foregroundColor = .accentColor
             link.font = .body.bold()
             out =
@@ -73,6 +73,43 @@ enum CookTimerSubject {
         "chicken", "beef", "pork", "steak", "salmon", "fish", "shrimp", "bread", "croutons", "eggs",
         "onion", "onions", "broccoli", "carrots", "green beans", "peppers", "mushrooms", "couscous",
     ]
+
+    /// Seasonings and liquids a step adds along the way; never what a timer is for.
+    private static let seasonings: Set<String> = [
+        "salt", "pepper", "black pepper", "kosher salt", "oil", "olive oil", "cooking oil", "vegetable oil",
+        "water", "sugar", "garlic powder", "chili flakes",
+    ]
+    private static let proteins = ["beef", "pork", "chicken", "turkey", "sausage", "lamb", "steak", "shrimp", "salmon"]
+
+    /// What a timer is for, from the sentence up to the time and the step's ingredients:
+    /// something the sentence cooks ("pasta", "meat" as the step's meat), else the last
+    /// ingredient the sentence names that isn't a seasoning, else the step's last such one.
+    static func pick(sentence text: String, ingredients: [String]) -> String? {
+        let sentence = text.split(whereSeparator: { ".;\n".contains($0) }).last.map(String.init) ?? text
+        let lower = sentence.lowercased()
+        let cooking = ingredients.filter { !seasonings.contains($0.lowercased()) }
+        if lower.range(of: #"\bmeat\b"#, options: .regularExpression) != nil {
+            let meat = cooking.last { name in proteins.contains { name.lowercased().contains($0) } }
+            return meat.map(capitalized) ?? "Meat"
+        }
+        if let noun = noun(in: sentence) { return noun }
+        // The last ingredient named before the time: in this sentence first, else earlier in
+        // the step ("…add rigatoni to pot. Cook until al dente, 9-11 minutes" is Rigatoni).
+        func lastNamed(in text: String) -> String? {
+            let lower = text.lowercased()
+            let found = cooking.compactMap { name -> (String, String.Index)? in
+                let forms = [name.lowercased()] + name.lowercased().split(separator: " ").map(String.init)
+                let ranges = forms.filter { $0.count > 3 }.compactMap { lower.range(of: $0, options: .backwards) }
+                return ranges.map(\.lowerBound).max().map { (name, $0) }
+            }
+            return found.max(by: { $0.1 < $1.1 }).map { capitalized($0.0) }
+        }
+        return lastNamed(in: sentence) ?? lastNamed(in: text)
+    }
+
+    private static func capitalized(_ name: String) -> String {
+        name.split(separator: " ").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
+    }
 
     /// The last of those in the sentence before the time, capitalized, or `nil`.
     static func noun(in text: String) -> String? {

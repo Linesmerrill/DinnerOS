@@ -50,6 +50,75 @@ final class CookTimers {
         self.now = now
     }
 
+    // MARK: Sharing with the household's other devices
+
+    /// Told when this device starts, changes, or removes a timer.
+    @ObservationIgnored var onChange: ((CookSyncTimer, String) -> Void)?
+    @ObservationIgnored var onRemove: ((String, String) -> Void)?
+    /// The dish the changes are sent under (timers are the kitchen's, not the dish's).
+    @ObservationIgnored var recipe = ""
+    @ObservationIgnored private var createdAt: [UUID: Date] = [:]
+
+    private func shared(_ id: UUID) {
+        guard let timer = timers.first(where: { $0.id == id }) else { return }
+        onChange?(Self.syncTimer(timer), recipe)
+    }
+
+    static func syncTimer(_ timer: CookTimer) -> CookSyncTimer {
+        switch timer.state {
+        case .running(let end):
+            CookSyncTimer(
+                id: timer.id.uuidString, label: timer.label, totalSeconds: Int(timer.total), endsAt: end,
+                remainingSeconds: nil, finished: false)
+        case .paused(let remaining):
+            CookSyncTimer(
+                id: timer.id.uuidString, label: timer.label, totalSeconds: Int(timer.total), endsAt: nil,
+                remainingSeconds: Int(remaining.rounded()), finished: false)
+        case .finished:
+            CookSyncTimer(
+                id: timer.id.uuidString, label: timer.label, totalSeconds: Int(timer.total), endsAt: nil,
+                remainingSeconds: nil, finished: true)
+        }
+    }
+
+    /// Takes the kitchen's timers from another device: adds the new ones, follows changes, and
+    /// drops ones stopped elsewhere. A timer this device only just started is left alone until
+    /// its own change has reached the server.
+    func reconcile(_ remote: [CookSyncTimer], recipe _: String) {
+        let byID = Dictionary(
+            remote.compactMap { t in UUID(uuidString: t.id).map { ($0, t) } }, uniquingKeysWith: { a, _ in a })
+        for local in timers where byID[local.id] == nil {
+            if let made = createdAt[local.id], now().timeIntervalSince(made) < 10 { continue }
+            unwatch(local.id)
+            timers.removeAll { $0.id == local.id }
+            stopChime(local.id)
+        }
+        for (id, t) in byID {
+            let state: CookTimer.State
+            if t.finished {
+                state = .finished
+            } else if let end = t.endsAt {
+                state = .running(endsAt: end)
+            } else {
+                state = .paused(remaining: TimeInterval(t.remainingSeconds ?? 0))
+            }
+            if let i = index(id) {
+                guard timers[i].state != state else { continue }
+                if state == .finished {
+                    finish(id, announce: false)
+                } else {
+                    timers[i].state = state
+                    stopChime(id)
+                    if case .running = state { watch(timers[i]) } else { unwatch(id) }
+                }
+            } else {
+                let timer = CookTimer(id: id, label: t.label, total: TimeInterval(t.totalSeconds), state: state)
+                timers.append(timer)
+                if case .running = state { watch(timer) }
+            }
+        }
+    }
+
     var runningCount: Int {
         timers.filter { if case .finished = $0.state { false } else { true } }.count
     }
@@ -60,7 +129,9 @@ final class CookTimers {
             id: UUID(), label: label, total: TimeInterval(seconds),
             state: .running(endsAt: now().addingTimeInterval(TimeInterval(seconds))))
         timers.append(timer)
+        createdAt[timer.id] = now()
         watch(timer)
+        shared(timer.id)
         return timer
     }
 
@@ -68,12 +139,14 @@ final class CookTimers {
         guard let i = index(id), case .running = timers[i].state else { return }
         timers[i].state = .paused(remaining: timers[i].remaining(at: now()))
         unwatch(id)
+        shared(id)
     }
 
     func resume(_ id: UUID) {
         guard let i = index(id), case .paused(let remaining) = timers[i].state else { return }
         timers[i].state = .running(endsAt: now().addingTimeInterval(remaining))
         watch(timers[i])
+        shared(id)
     }
 
     /// Adds a minute, bringing a finished timer back.
@@ -89,6 +162,7 @@ final class CookTimers {
             }())
         stopChime(id)
         if case .running = timers[i].state { watch(timers[i]) }
+        shared(id)
     }
 
     /// Moves a timer to where another one is, for reordering the dock by dragging.
@@ -102,7 +176,9 @@ final class CookTimers {
     func remove(_ id: UUID) {
         unwatch(id)
         stopChime(id)
+        let existed = timers.contains { $0.id == id }
         timers.removeAll { $0.id == id }
+        if existed { onRemove?(id.uuidString, recipe) }
     }
 
     func removeAll() {
@@ -111,12 +187,17 @@ final class CookTimers {
 
     /// Marks it finished now (the watcher calls this when time's up).
     func finish(_ id: UUID) {
+        finish(id, announce: true)
+    }
+
+    private func finish(_ id: UUID, announce: Bool) {
         guard let i = index(id) else { return }
         if case .finished = timers[i].state { return }
         timers[i].state = .finished
         watchers[id] = nil
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         alarm.ring()
+        if announce { shared(id) }
     }
 
     private func index(_ id: UUID) -> Int? { timers.firstIndex { $0.id == id } }

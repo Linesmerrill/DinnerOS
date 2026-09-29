@@ -10,6 +10,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/account"
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
 	"github.com/Linesmerrill/DinnerOS/api/internal/catalog"
+	"github.com/Linesmerrill/DinnerOS/api/internal/cooking"
 	"github.com/Linesmerrill/DinnerOS/api/internal/customize"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/liveactivity"
@@ -42,6 +43,7 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		notifications.NewHandler(notifications.HandlerOptions{}).Mount(r)
 		recommendations.NewHandler(recommendations.HandlerOptions{}).Mount(r)
 		ratings.NewHandler(ratings.HandlerOptions{}).Mount(r)
+		cooking.NewHandler(nil, nil, nil, nil).Mount(r)
 		events.NewHandler(events.HandlerOptions{}).Mount(r)
 		menu.NewHandler(menu.HandlerOptions{}).Mount(r)
 		auth.NewHandler(auth.HandlerOptions{}).Mount(r)
@@ -70,6 +72,8 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		"PUT /api/v1/households/{householdId}/recipes/{recipeId}/rating",
 		"DELETE /api/v1/households/{householdId}/recipes/{recipeId}/rating",
 		"GET /api/v1/households/{householdId}/recipes/{recipeId}/ratings",
+		"GET /api/v1/households/{householdId}/cook-sessions/{recipeId}",
+		"POST /api/v1/households/{householdId}/cook-sessions/{recipeId}/ops",
 		"POST /api/v1/households/{householdId}/events",
 		"PATCH /api/v1/households/{householdId}/pantry/{itemId}",
 		"POST /api/v1/households/{householdId}/pantry/purchases",

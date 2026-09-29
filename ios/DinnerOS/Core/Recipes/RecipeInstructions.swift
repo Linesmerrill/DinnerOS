@@ -54,12 +54,15 @@ nonisolated struct InstructionIngredient: Decodable, Equatable, Sendable, Identi
     var leftOut: InstructionLeftOut? = nil
     /// Set when it is a specialty ingredient the household makes from store ingredients.
     var component: InstructionComponent? = nil
+    /// The amount to show, a packet read as a kitchen measure ("2 Tbsp"); `nil` from an older
+    /// server or when there's no amount.
+    var amountText: String? = nil
 
     var id: Int { index }
     var isLeftOut: Bool { leftOut != nil }
 
     private enum CodingKeys: String, CodingKey {
-        case index, ingredientKey, name, leftOut, component
+        case index, ingredientKey, name, leftOut, component, amountText
     }
 
     init(
@@ -81,6 +84,7 @@ nonisolated struct InstructionIngredient: Decodable, Equatable, Sendable, Identi
             name: (try? container.decode(String.self, forKey: .name)) ?? "",
             leftOut: container.decodeLenient(InstructionLeftOut.self, forKey: .leftOut),
             component: container.decodeLenient(InstructionComponent.self, forKey: .component))
+        amountText = container.decodeLenient(String.self, forKey: .amountText)
     }
 }
 

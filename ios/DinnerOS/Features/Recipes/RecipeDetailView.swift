@@ -169,8 +169,14 @@ struct RecipeDetailView: View {
         .onChange(of: grocerySkips.revision) {
             Task { await loadInstructions() }
         }
-        .task { await load(reload: false) }
-        .task(id: summary.id) { await loadExtras() }
+        // Keyed by the household, so a recipe opened from a widget before the app has loaded
+        // the household (a cold start) loads once it has.
+        .task(id: library.householdID) {
+            guard library.householdID != nil else { return }
+            await load(reload: false)
+            await loadInstructions()
+        }
+        .task(id: "\(summary.id)|\(library.householdID ?? "")") { await loadExtras() }
         // The rendered steps depend on the serving size and on choices that can change
         // elsewhere, so they reload rather than being cached with the recipe.
         .task(id: InstructionsKey(recipeID: summary.id, servings: servings)) { await loadInstructions() }

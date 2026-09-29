@@ -34,7 +34,7 @@ struct CookChecklistTests {
     @Test func anIngredientSplitAcrossStepsGetsASubList() throws {
         let list = try checklist()
         let oil = try #require(list.first { $0.name == "Olive Oil" })
-        #expect(oil.amountText == "1 tbsp")
+        #expect(oil.amountText == "1 Tbsp")
         #expect(oil.parts.map(\.amountText) == ["½ tbsp", "½ tbsp"])
         #expect(oil.parts.map(\.stepIndex) == [1, 2])
         // Named once, with the whole amount: no sub-list.

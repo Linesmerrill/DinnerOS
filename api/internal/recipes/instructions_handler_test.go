@@ -39,12 +39,12 @@ func instructionsFixture() ImportFile {
 	r := testRecipe("r-bowl", "Gochujang Bowl")
 	r.Ingredients = append(r.Ingredients,
 		ImportIngredient{SourceIngredientID: "ing-gochujang", Name: "Gochujang", Amounts: []ImportAmount{
-			{Servings: 2, Quantity: qty(1), Unit: "tbsp", SourceUnit: "tablespoon", RawText: "1 tbsp Gochujang"},
-			{Servings: 4, Quantity: qty(2), Unit: "tbsp", SourceUnit: "tablespoon", RawText: "2 tbsp Gochujang"},
+			{Servings: 2, Quantity: qty(1), Unit: "tbsp", SourceUnit: "tablespoon", RawText: "1 Tbsp Gochujang"},
+			{Servings: 4, Quantity: qty(2), Unit: "tbsp", SourceUnit: "tablespoon", RawText: "2 Tbsp Gochujang"},
 		}},
 		ImportIngredient{SourceIngredientID: "ing-texmex", Name: "Tex-Mex Paste", Amounts: []ImportAmount{
-			{Servings: 2, Quantity: qty(1), Unit: "tbsp", SourceUnit: "tablespoon", RawText: "1 tbsp Tex-Mex Paste"},
-			{Servings: 4, Quantity: qty(2), Unit: "tbsp", SourceUnit: "tablespoon", RawText: "2 tbsp Tex-Mex Paste"},
+			{Servings: 2, Quantity: qty(1), Unit: "tbsp", SourceUnit: "tablespoon", RawText: "1 Tbsp Tex-Mex Paste"},
+			{Servings: 4, Quantity: qty(2), Unit: "tbsp", SourceUnit: "tablespoon", RawText: "2 Tbsp Tex-Mex Paste"},
 		}})
 	r.Steps = []ImportStep{{Index: 1, Text: "Whisk the gochujang with the Tex-Mex Paste."}}
 	return testFile(r)
@@ -96,7 +96,7 @@ func TestInstructionsAppliesSpecialtyChoicesAndScalesAmounts(t *testing.T) {
 	if resp.Servings != 4 || !resp.SpecialtiesApplied || len(resp.Steps) != 1 {
 		t.Fatalf("response = %+v", resp)
 	}
-	if want := "Whisk 2 tbsp gochujang with 2 tbsp Tomato Paste."; resp.Steps[0].Text != want {
+	if want := "Whisk 2 Tbsp gochujang with 2 Tbsp Tomato Paste."; resp.Steps[0].Text != want {
 		t.Errorf("step text = %q, want %q", resp.Steps[0].Text, want)
 	}
 	if resp.Steps[0].OriginalText == "" {

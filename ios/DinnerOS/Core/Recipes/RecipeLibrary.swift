@@ -263,6 +263,23 @@ final class RecipeLibrary {
         }
     }
 
+    // MARK: - Cooking sync
+
+    func cookSession(recipeID: String, date: String) async throws -> CookSyncState {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        return try await session.authorized { token in
+            try await api.cookSession(householdID: householdID, recipeID: recipeID, date: date, accessToken: token)
+        }
+    }
+
+    func applyCookOps(recipeID: String, date: String, ops: [CookSyncOp]) async throws -> CookSyncState {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        return try await session.authorized { token in
+            try await api.applyCookOps(
+                householdID: householdID, recipeID: recipeID, date: date, ops: ops, accessToken: token)
+        }
+    }
+
     // MARK: - Notes
 
     /// The member's own note on a recipe, empty when there is none.

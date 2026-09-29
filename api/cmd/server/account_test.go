@@ -13,6 +13,7 @@ import (
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
 	"github.com/Linesmerrill/DinnerOS/api/internal/catalog"
+	"github.com/Linesmerrill/DinnerOS/api/internal/cooking"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
@@ -54,6 +55,7 @@ var accountDeletionKinds = map[string]collectionKind{
 	push.Collection:                        userOnly,
 	invitations.InvitationsCollection:      householdData,
 	recipes.RecipesCollection:              householdData,
+	cooking.Collection:                     householdData,
 	recipes.ImportReviewsCollection:        householdData,
 	recipes.IngredientsCollection:          global,
 	catalog.RecipesCollection:              global,

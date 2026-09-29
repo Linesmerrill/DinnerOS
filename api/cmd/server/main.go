@@ -22,6 +22,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot/baseline"
 	"github.com/Linesmerrill/DinnerOS/api/internal/catalog"
 	"github.com/Linesmerrill/DinnerOS/api/internal/config"
+	"github.com/Linesmerrill/DinnerOS/api/internal/cooking"
 	"github.com/Linesmerrill/DinnerOS/api/internal/customize"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/httpapi"
@@ -422,6 +423,7 @@ func run() error {
 				liveActivityHandler.Mount(r)
 				accountHandler.Mount(r)
 				behavior.ratingHandler.Mount(r)
+				cooking.NewHandler(cooking.NewStore(db.Database()), householdService, tokens, logger).Mount(r)
 				behavior.eventHandler.Mount(r)
 			},
 		}),
@@ -473,6 +475,7 @@ func indexSets() []mongodb.IndexSet {
 	return slices.Concat(
 		users.Indexes(),
 		auth.Indexes(),
+		cooking.Indexes(),
 		households.Indexes(),
 		invitations.Indexes(),
 		recipes.Indexes(),

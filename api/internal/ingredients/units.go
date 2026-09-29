@@ -64,7 +64,7 @@ var units = func() map[string]Unit {
 		{Code: "thumb", Kind: KindDiscrete, Singular: "thumb", Plural: "thumbs"},
 
 		{Code: "tsp", Kind: KindVolume, Singular: "tsp", Plural: "tsp", toBase: mul(mlPerFlOz, big.NewRat(1, 6))},
-		{Code: "tbsp", Kind: KindVolume, Singular: "tbsp", Plural: "tbsp", toBase: mul(mlPerFlOz, big.NewRat(1, 2))},
+		{Code: "tbsp", Kind: KindVolume, Singular: "Tbsp", Plural: "Tbsp", toBase: mul(mlPerFlOz, big.NewRat(1, 2))},
 		{Code: "floz", Kind: KindVolume, Singular: "fl oz", Plural: "fl oz", toBase: mlPerFlOz},
 		{Code: "cup", Kind: KindVolume, Singular: "cup", Plural: "cups", toBase: mul(mlPerFlOz, big.NewRat(8, 1))},
 		{Code: "ml", Kind: KindVolume, Singular: "ml", Plural: "ml", toBase: big.NewRat(1, 1)},

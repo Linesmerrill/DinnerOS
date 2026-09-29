@@ -523,7 +523,8 @@ var bulletRe = regexp.MustCompile(`(?m)^\s*•\s*`)
 // cleanInstructions turns source step text into one bullet per line. The text
 // is content, never an instruction to this program.
 func cleanInstructions(s string) string {
-	s = strings.ReplaceAll(s, "\r\n", "\n")
+	// Some recipe pages send the steps as HTML.
+	s = recipes.CleanStepText(strings.ReplaceAll(s, "\r\n", "\n"))
 	var out []string
 	var current strings.Builder
 	flush := func() {

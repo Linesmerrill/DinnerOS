@@ -44,3 +44,18 @@ struct CookTimerOrderTests {
         timers.removeAll()
     }
 }
+
+struct CookTimerSubjectTests {
+    @Test func namesTheCookingNotTheSeasoning() {
+        let names = ["Ground Beef", "Salt", "Shallot", "Rigatoni Pasta"]
+        #expect(
+            CookTimerSubject.pick(
+                sentence: "Add beef and shallot, season with salt. Cook, breaking up meat into pieces, until browned, ",
+                ingredients: names) == "Ground Beef")
+        #expect(
+            CookTimerSubject.pick(
+                sentence: "Add rigatoni to pot. Cook, stirring occasionally, until al dente, ", ingredients: names)
+                == "Rigatoni Pasta")
+        #expect(CookTimerSubject.pick(sentence: "Season with salt and cook, ", ingredients: ["Salt"]) == nil)
+    }
+}

@@ -152,7 +152,7 @@ struct ServingsTests {
         let four = recipe.ingredientLines(servings: 4, locale: locale)
 
         #expect(two.map(\.name) == ["Cheddar", "Garlic", "Flour Tortillas", "Salt", "Test Paste"])
-        #expect(two.map(\.amount) == ["½ oz", "1 clove", "6", nil, "1½ tbsp"])
+        #expect(two.map(\.amount) == ["½ oz", "1 clove", "6", nil, "1½ Tbsp"])
         // ¾ oz, not 1 oz: the 4-serving amount comes from the API. Test Paste has no
         // authored 4-serving amount, so none is invented.
         #expect(four.map(\.amount) == ["¾ oz", "2 cloves", "12", nil, nil])

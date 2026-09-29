@@ -50,7 +50,7 @@ func TestLearnRate(t *testing.T) {
 		return Segment{StartedAt: day(startDay), EndedAt: day(endDay), Unit: unit, Start: start, RecipeUsed: used, Remaining: left}
 	}
 	history := []Segment{
-		seg(0, 6, "tbsp", "16", "4", "0"),   // 12 tbsp over 6 days: 2/day
+		seg(0, 6, "tbsp", "16", "4", "0"),   // 12 Tbsp over 6 days: 2/day
 		seg(6, 6.5, "tbsp", "16", "0", "0"), // under a day: ignored
 	}
 	if r := learnRate(history, "tbsp", nil, testNow); r != nil {
@@ -58,13 +58,13 @@ func TestLearnRate(t *testing.T) {
 	}
 	history = append(history,
 		seg(7, 10, "tbsp", "16", "6", "4"),  // 6 over 3 days: 2/day
-		seg(10, 18, "cup", "1", "0", "0"),   // 16 tbsp over 8 days: 2/day
+		seg(10, 18, "cup", "1", "0", "0"),   // 16 Tbsp over 8 days: 2/day
 		seg(18, 22, "tbsp", "16", "0", "0"), // 4/day
 		seg(22, 24, "oz", "8", "0", "0"),    // doesn't convert: ignored
 	)
 	r := learnRate(history, "tbsp", nil, testNow)
 	if r == nil || r.PerDay != "2" || r.Unit != "tbsp" || r.Segments != 4 || !r.ComputedAt.Equal(testNow) {
-		t.Fatalf("rate = %+v, want 2 tbsp/day from 4 segments", r)
+		t.Fatalf("rate = %+v, want 2 Tbsp/day from 4 segments", r)
 	}
 	// An even count takes the mean of the middle two; recipe use beyond the
 	// start never makes the rate negative.
@@ -96,7 +96,7 @@ func TestEstimateExplainsRecipeAndOtherUse(t *testing.T) {
 	if e.PercentRemaining != 31 || e.PercentUsed != 69 || e.BelowThreshold || e.ThresholdPct != 80 || e.ThresholdItem || e.RateSegments != 3 {
 		t.Errorf("estimate = %+v", e)
 	}
-	if want := "About 31% left: 2 recipes used 6 tbsp, plus about 1 tbsp a day of other use."; e.Summary != want {
+	if want := "About 31% left: 2 recipes used 6 Tbsp, plus about 1 Tbsp a day of other use."; e.Summary != want {
 		t.Errorf("summary = %q\nwant %q", e.Summary, want)
 	}
 

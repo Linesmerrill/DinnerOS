@@ -68,7 +68,7 @@ final class CookSession {
         } else {
             set.formUnion(ids)
         }
-        checked[recipe] = set
+        commit(set, recipe: recipe)
     }
 
     /// Ticks one share; the ingredient is ticked once every share is.
@@ -84,7 +84,7 @@ final class CookSession {
         } else {
             set.remove(ingredient.id)
         }
-        checked[recipe] = set
+        commit(set, recipe: recipe)
     }
 
     /// Ticks a by-step row and its parts together.
@@ -92,7 +92,7 @@ final class CookSession {
         var set = checked[recipe, default: []]
         let ids = [item.id] + item.parts.indices.map(item.partID)
         if set.contains(item.id) { set.subtract(ids) } else { set.formUnion(ids) }
-        checked[recipe] = set
+        commit(set, recipe: recipe)
     }
 
     /// Ticks one part; the row is ticked once every part is.
@@ -105,7 +105,7 @@ final class CookSession {
         } else {
             set.remove(item.id)
         }
-        checked[recipe] = set
+        commit(set, recipe: recipe)
     }
 
     func current(recipe: String) -> Int? { currentStep[recipe] }
@@ -113,6 +113,26 @@ final class CookSession {
     /// Tapping the step you're on again clears it.
     func tapStep(_ index: Int, recipe: String) {
         currentStep[recipe] = currentStep[recipe] == index ? nil : index
+        onChange?(recipe, [.step(currentStep[recipe])])
+    }
+
+    /// Told about every change this device makes, to send to the household's other devices.
+    @ObservationIgnored var onChange: ((String, [CookSyncOp]) -> Void)?
+
+    /// Takes the household's shared state for a dish, from another device.
+    func apply(checked remote: Set<String>, step: Int?, recipe: String) {
+        if checked[recipe, default: []] != remote { checked[recipe] = remote }
+        if currentStep[recipe] != step { currentStep[recipe] = step }
+    }
+
+    private func commit(_ set: Set<String>, recipe: String) {
+        let old = checked[recipe, default: []]
+        checked[recipe] = set
+        var ops: [CookSyncOp] = []
+        let added = set.subtracting(old), removed = old.subtracting(set)
+        if !added.isEmpty { ops.append(.check(Array(added))) }
+        if !removed.isEmpty { ops.append(.uncheck(Array(removed))) }
+        if !ops.isEmpty { onChange?(recipe, ops) }
     }
 }
 
@@ -190,9 +210,32 @@ nonisolated extension CookChecklist {
             }
             if !items.isEmpty { groups.append(CookStepGroup(index: step.index, items: items)) }
         }
-        let rest = all.filter { !used.contains($0.id) }.map(item(for:))
-        if !rest.isEmpty { groups.insert(CookStepGroup(index: 0, items: rest), at: 0) }
+        var ready = all.filter { !used.contains($0.id) }.map(item(for:))
+        // Things to get ready before the cooking starts, for a later step: butter cut up, cream
+        // cheese softening. They stay in their own step too, to check off when they go in.
+        for group in groups where group.index > 1 {
+            for item in group.items where !item.isLeftOut {
+                guard let note = aheadNote(item.name, step: group.index) else { continue }
+                ready.append(
+                    CookStepItem(
+                        id: "\(item.id)@ahead", name: item.name, amountText: item.amountText, prep: note, parts: [],
+                        isLeftOut: false, ingredientKey: item.ingredientKey))
+            }
+        }
+        if !ready.isEmpty { groups.insert(CookStepGroup(index: 0, items: ready), at: 0) }
         return groups
+    }
+
+    /// What to do ahead with an ingredient a later step uses, or `nil`.
+    static func aheadNote(_ name: String, step: Int) -> String? {
+        let lower = name.lowercased()
+        if lower == "butter" || lower.hasSuffix(" butter") && !lower.contains("peanut") {
+            return String(localized: "cut into pieces, for step \(step)")
+        }
+        if lower.contains("cream cheese") {
+            return String(localized: "let soften, for step \(step)")
+        }
+        return nil
     }
 
     private static func item(for ingredient: CookIngredient) -> CookStepItem {

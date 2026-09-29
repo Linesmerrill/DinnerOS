@@ -52,8 +52,15 @@ nonisolated enum RecipeIngredientStates {
             guard let state = instructions?.ingredient(at: index), state.name == line.name else {
                 return RecipeIngredientState(line: line, ingredientKey: nil, leftOut: nil, component: nil)
             }
+            // The server's amount reads a packet as a kitchen measure ("2 Tbsp" of tomato paste).
+            var shown = line
+            if let text = state.amountText, !text.isEmpty {
+                shown = IngredientLine(
+                    id: line.id, name: line.name, amount: text, isPantryStaple: line.isPantryStaple,
+                    category: line.category, imageURL: line.imageURL, allergens: line.allergens)
+            }
             return RecipeIngredientState(
-                line: line, ingredientKey: state.ingredientKey, leftOut: state.leftOut, component: state.component)
+                line: shown, ingredientKey: state.ingredientKey, leftOut: state.leftOut, component: state.component)
         }
     }
 }

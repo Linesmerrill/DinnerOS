@@ -283,7 +283,7 @@ func TestWeightTextRoundsToTheOunce(t *testing.T) {
 		{"4", "lb", "4 lb"},
 		{"54", "oz", "3 lb 6 oz"},
 		{"283", "g", "10 oz"},
-		{"2", "tbsp", "2 tbsp"}, // not a weight: left to the unit's own label
+		{"2", "tbsp", "2 Tbsp"}, // not a weight: left to the unit's own label
 	}
 	for _, c := range cases {
 		if got := amountText(c.exact, c.unit); got != c.want {

@@ -82,7 +82,7 @@ func TestRecordHouseMadeAndCookDeduction(t *testing.T) {
 		return u
 	}
 
-	// Without a resolver only the exact name matches: 1 count = 1 tbsp.
+	// Without a resolver only the exact name matches: 1 count = 1 Tbsp.
 	if u := cook("e1"); len(u.Lines) != 1 || u.Lines[0].Deducted != "1" {
 		t.Fatalf("cook without resolver = %+v", u)
 	}

@@ -65,6 +65,9 @@ type IngredientStateResponse struct {
 	Index         int    `json:"index"`
 	IngredientKey string `json:"ingredientKey"`
 	Name          string `json:"name"`
+	// AmountText is the amount to show for the servings, a packet read as a
+	// kitchen measure ("2 Tbsp"); omitted when there is none.
+	AmountText string `json:"amountText,omitempty"`
 	// LeftOut is set when the household leaves it out of this recipe: by a
 	// skip for this recipe (scope recipe) or for every recipe (always).
 	LeftOut *LeftOutResponse `json:"leftOut"`
@@ -187,6 +190,9 @@ func newInstructionsResponse(in Instructions) InstructionsResponse {
 	}
 	for _, st := range in.Ingredients {
 		sr := IngredientStateResponse{Index: st.Index, IngredientKey: st.IngredientKey, Name: st.Name}
+		if st.Amount != nil {
+			sr.AmountText = st.Amount.Text()
+		}
 		if lo := st.LeftOut; lo != nil {
 			sr.LeftOut = &LeftOutResponse{SkipID: lo.SkipID, Scope: lo.Scope}
 		}

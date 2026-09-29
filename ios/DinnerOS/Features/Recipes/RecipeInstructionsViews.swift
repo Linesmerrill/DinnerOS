@@ -54,18 +54,24 @@ struct InstructionStepText: View {
     /// `Text` concatenation keeps one paragraph that wraps and scales with Dynamic Type.
     private func composed(_ segments: [InstructionSegment]) -> Text {
         var text = Text(verbatim: "")
-        var lastIngredient: String?
+        var soFar = ""
+        let names = step.segments.filter(\.isIngredient).map { $0.name ?? $0.text }
         for segment in segments {
             if segment.isIngredient {
-                lastIngredient = segment.name ?? segment.text
                 text = text + Self.text(for: segment)
             } else if showsTimers {
-                // A time names its timer after what was just added: "…until zucchini is tender,
-                // 2-3 minutes" is a Zucchini timer.
-                text = text + CookTimerText.text(segment.text, step: step.index, subject: lastIngredient)
+                // A time is named for what the sentence is cooking: "…breaking up meat, until
+                // browned, 4-6 minutes" is a Beef timer, never the salt added along the way.
+                let before = soFar
+                text =
+                    text
+                    + CookTimerText.text(segment.text, step: step.index) { inSegment in
+                        CookTimerSubject.pick(sentence: before + inSegment, ingredients: names)
+                    }
             } else {
                 text = text + Self.text(for: segment)
             }
+            soFar += segment.text
         }
         return text
     }

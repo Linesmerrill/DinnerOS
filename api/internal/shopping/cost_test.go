@@ -76,7 +76,7 @@ func TestComputeWeekCost(t *testing.T) {
 	for _, it := range c.Items {
 		items[it.LineID] = it
 	}
-	// 2 tbsp of sour cream ≈ 1.1 oz of 16 oz: about 7% of $2.48.
+	// 2 Tbsp of sour cream ≈ 1.1 oz of 16 oz: about 7% of $2.48.
 	if it := items["l1"]; *it.UsedCents != 17 || *it.StockedCents != 231 || it.Usage != UsageMeasured || it.Pantry != PantryTracked {
 		t.Errorf("sour cream = %+v used %d stocked %d", it, *it.UsedCents, *it.StockedCents)
 	}

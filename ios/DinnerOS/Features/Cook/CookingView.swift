@@ -30,6 +30,8 @@ struct CookingView: View {
     @State private var tab: CookTab = .ingredients
     @State private var showsSwitcher = false
     @State private var timers = CookTimers()
+    /// Shares ticks, the current step, and timers with the household's other devices.
+    @State private var sync: CookSync?
     /// A time tapped in a step, waiting to be adjusted and started.
     @State private var timerRequest: CookTimerRequest?
     @State private var confirmsLeaving = false
@@ -96,7 +98,11 @@ struct CookingView: View {
                     Button("Keep Cooking", role: .cancel) {}
                 }
         }
-        .task(id: recipeID) { await load() }
+        .task(id: recipeID) {
+            if sync == nil { sync = CookSync(library: library, session: session, timers: timers) }
+            sync?.follow(recipe: recipeID)
+            await load()
+        }
         .onAppear { if !hasSeenWelcome { showsWelcome = true } }
         .sheet(isPresented: $showsWelcome, onDismiss: { hasSeenWelcome = true }) {
             CookWelcome { showsWelcome = false }
@@ -105,7 +111,10 @@ struct CookingView: View {
         .task { if shopping.preferences.isEmpty { await shopping.loadPreferences() } }
         // The screen stays on while cooking; hands are busy.
         .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
-        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+        .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
+            sync?.stop()
+        }
     }
 
     @ViewBuilder
@@ -699,7 +708,9 @@ struct CookStepList: View {
             CookTimerSetup(request: request, label: request.subject ?? timerLabel(index)) { seconds in
                 startTimer(request, seconds)
             }
-            .presentationCompactAdaptation(.popover)
+            // A popover on a phone can open off the top of the screen; a short sheet always fits.
+            .presentationCompactAdaptation(.sheet)
+            .presentationDetents([.height(320)])
         }
     }
 }

@@ -43,7 +43,7 @@ func TestCookDeductsCustomizedMeal(t *testing.T) {
 	adjuster := &fakeAdjuster{entryID: "entry-customized"}
 	f.svc.SetCookAdjuster(adjuster)
 
-	// The recipe asks for 2 tbsp of butter; doubled it is 4 tbsp of 16 (1/4 cup).
+	// The recipe asks for 2 Tbsp of butter; doubled it is 4 Tbsp of 16 (1/4 cup).
 	if _, applied := f.cook(t, "entry-customized", 2); !applied {
 		t.Fatal("customized meal not deducted")
 	}

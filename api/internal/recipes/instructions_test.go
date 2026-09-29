@@ -90,8 +90,8 @@ func TestAnnotateHighlightsIngredientsWithScaledAmounts(t *testing.T) {
 		servings int
 		want     string
 	}{
-		{2, "Add 1 tbsp gochujang, then 2 scallions."},
-		{4, "Add 2 tbsp gochujang, then 4 scallions."},
+		{2, "Add 1 Tbsp gochujang, then 2 scallions."},
+		{4, "Add 2 Tbsp gochujang, then 4 scallions."},
 	} {
 		in := Annotate(r, tc.servings, nil, true)
 		if got := joined(in.Steps[0]); got != tc.want {
@@ -105,8 +105,8 @@ func TestAnnotateHighlightsIngredientsWithScaledAmounts(t *testing.T) {
 	if len(segs) != 2 || segs[0].Name != "Gochujang" || !segs[0].Spicy || segs[1].Spicy {
 		t.Fatalf("segments = %+v, want gochujang spicy and scallion not", segs)
 	}
-	if segs[0].Amount == nil || segs[0].Amount.Text() != "1 tbsp" {
-		t.Errorf("gochujang amount = %+v, want 1 tbsp", segs[0].Amount)
+	if segs[0].Amount == nil || segs[0].Amount.Text() != "1 Tbsp" {
+		t.Errorf("gochujang amount = %+v, want 1 Tbsp", segs[0].Amount)
 	}
 }
 
@@ -137,7 +137,7 @@ func TestAnnotateSameIngredientTwiceInOneStepShowsTheAmountOnce(t *testing.T) {
 	if first[0].Amount == nil || first[1].Amount != nil {
 		t.Errorf("amounts = %+v / %+v, want only the first to carry one", first[0].Amount, first[1].Amount)
 	}
-	if got, want := joined(in.Steps[0]), "Melt 2 tbsp butter, then brush with butter."; got != want {
+	if got, want := joined(in.Steps[0]), "Melt 2 Tbsp butter, then brush with butter."; got != want {
 		t.Errorf("text = %q, want %q", got, want)
 	}
 	// A new step starts over: the amount is shown again.
@@ -163,8 +163,8 @@ func TestAnnotateIgnoresIngredientsTheRecipeDoesNotList(t *testing.T) {
 func TestAnnotateReplacesAnAmountTheStepAlreadyWrote(t *testing.T) {
 	r := instructionRecipe(
 		[]RecipeIngredient{instructionLine("ing-gochujang", "Gochujang", "1", "tbsp")},
-		"Whisk 1 tbsp gochujang into the sauce.")
-	if got, want := joined(Annotate(r, 4, nil, true).Steps[0]), "Whisk 2 tbsp gochujang into the sauce."; got != want {
+		"Whisk 1 Tbsp gochujang into the sauce.")
+	if got, want := joined(Annotate(r, 4, nil, true).Steps[0]), "Whisk 2 Tbsp gochujang into the sauce."; got != want {
 		t.Errorf("text = %q, want %q", got, want)
 	}
 }
@@ -211,7 +211,7 @@ func TestAnnotateStoreAlternativeWithOneIngredientSwapsTheNameAndAmount(t *testi
 		[]RecipeIngredient{instructionLine("ing-texmex", "Tex-Mex Paste", "3", "tbsp")},
 		"Stir in the Tex-Mex Paste.")
 	in := Annotate(r, 2, grocery.Specialties{"ing-texmex": spec}, true)
-	if got, want := joined(in.Steps[0]), "Stir in 2 tbsp Tomato Paste."; got != want {
+	if got, want := joined(in.Steps[0]), "Stir in 2 Tbsp Tomato Paste."; got != want {
 		t.Fatalf("text = %q, want %q", got, want)
 	}
 	seg := ingredientSegments(in.Steps[0])[0]
@@ -236,7 +236,7 @@ func TestAnnotateStoreAlternativeWithSeveralIngredientsExplainsItself(t *testing
 		"Stir in the Tex-Mex Paste.")
 	in := Annotate(r, 2, grocery.Specialties{"ing-texmex": spec}, true)
 	step := in.Steps[0]
-	if got, want := joined(step), "Stir in 2 tbsp Tex-Mex Paste."; got != want {
+	if got, want := joined(step), "Stir in 2 Tbsp Tex-Mex Paste."; got != want {
 		t.Fatalf("text = %q, want the original name kept: %q", got, want)
 	}
 	if len(step.Notes) != 1 || !strings.Contains(step.Notes[0].Text, "4 tsp Tomato Paste") ||
@@ -254,7 +254,7 @@ func TestAnnotateStoreAlternativeWithSeveralIngredientsExplainsItself(t *testing
 func TestAnnotateStoreAlternativeWithoutAConvertibleAmount(t *testing.T) {
 	spec := storeSpecialty(t, grocery.Component{Name: "Tomato Paste", Quantity: quantityPtr(t, "2"), Unit: "tsp"})
 	// The recipe measures the packet in ounces; the specialty only knows
-	// "1 count = 1 tbsp", so no exact conversion exists.
+	// "1 count = 1 Tbsp", so no exact conversion exists.
 	r := instructionRecipe(
 		[]RecipeIngredient{instructionLine("ing-texmex", "Tex-Mex Paste", "1", "oz")},
 		"Stir in the Tex-Mex Paste.")
@@ -280,7 +280,7 @@ func TestAnnotateHouseMadeBatchConvertsThePacketAndSaysSo(t *testing.T) {
 		[]RecipeIngredient{instructionLine("ing-sw", "Southwest Spice Blend", "1", "count")},
 		"Toss with the Southwest Spice Blend.")
 	in := Annotate(r, 2, grocery.Specialties{"ing-sw": spec}, true)
-	if got, want := joined(in.Steps[0]), "Toss with 1 tbsp Southwest Spice Blend."; got != want {
+	if got, want := joined(in.Steps[0]), "Toss with 1 Tbsp Southwest Spice Blend."; got != want {
 		t.Fatalf("text = %q, want %q", got, want)
 	}
 	if len(in.Steps[0].Notes) != 1 || !strings.Contains(in.Steps[0].Notes[0].Text, "house-made") {
@@ -316,7 +316,7 @@ func TestAnnotateWithoutAChoiceLeavesTheStepAloneAndReportsIt(t *testing.T) {
 		[]RecipeIngredient{instructionLine("ing-texmex", "Tex-Mex Paste", "1", "tbsp")},
 		"Stir in the Tex-Mex Paste.")
 	in := Annotate(r, 2, grocery.Specialties{"ing-texmex": spec}, true)
-	if got, want := joined(in.Steps[0]), "Stir in 1 tbsp Tex-Mex Paste."; got != want {
+	if got, want := joined(in.Steps[0]), "Stir in 1 Tbsp Tex-Mex Paste."; got != want {
 		t.Errorf("text = %q, want the card's own ingredient: %q", got, want)
 	}
 	seg := ingredientSegments(in.Steps[0])[0]
@@ -383,7 +383,7 @@ func TestSegmentTextsJoinToTheStep(t *testing.T) {
 
 // A card that splits an ingredient across steps writes each step's share,
 // with the other box size in parentheses. The step shows its share for the
-// size being cooked, not the recipe's total: "Melt 7 tbsp butter" twice was
+// size being cooked, not the recipe's total: "Melt 7 Tbsp butter" twice was
 // the bug. A later "remaining butter" gets no amount rather than the total.
 func TestAnnotateKeepsEachStepsShare(t *testing.T) {
 	r := instructionRecipe(
@@ -393,8 +393,8 @@ func TestAnnotateKeepsEachStepsShare(t *testing.T) {
 		"Top with the remaining butter.")
 	two := Annotate(r, 2, nil, true)
 	for i, want := range []string{
-		"Melt 1 tbsp butter in a large pan.",
-		"Stir in 2 tbsp butter until glossy.",
+		"Melt 1 Tbsp butter in a large pan.",
+		"Stir in 2 Tbsp butter until glossy.",
 		"Top with the remaining butter.",
 	} {
 		if got := joined(two.Steps[i]); got != want {
@@ -402,18 +402,18 @@ func TestAnnotateKeepsEachStepsShare(t *testing.T) {
 		}
 	}
 	first := ingredientSegments(two.Steps[0])
-	if len(first) != 1 || !first[0].Part || first[0].Amount == nil || first[0].Amount.Text() != "1 tbsp" {
-		t.Errorf("step 1 segment = %+v, want a 1 tbsp share", first)
+	if len(first) != 1 || !first[0].Part || first[0].Amount == nil || first[0].Amount.Text() != "1 Tbsp" {
+		t.Errorf("step 1 segment = %+v, want a 1 Tbsp share", first)
 	}
 	if last := ingredientSegments(two.Steps[2]); len(last) != 1 || last[0].Amount != nil {
 		t.Errorf("remaining butter = %+v, want no amount", last)
 	}
 
 	four := Annotate(r, 4, nil, true)
-	if got, want := joined(four.Steps[0]), "Melt 2 tbsp butter in a large pan."; got != want {
+	if got, want := joined(four.Steps[0]), "Melt 2 Tbsp butter in a large pan."; got != want {
 		t.Errorf("4 servings, step 1 = %q, want %q", got, want)
 	}
-	if got, want := joined(four.Steps[1]), "Stir in 4 tbsp butter until glossy."; got != want {
+	if got, want := joined(four.Steps[1]), "Stir in 4 Tbsp butter until glossy."; got != want {
 		t.Errorf("4 servings, step 2 = %q, want %q", got, want)
 	}
 }
@@ -426,13 +426,13 @@ func TestAnnotateScalesAShareByTheRecipesOwnAmounts(t *testing.T) {
 		"Dice 6 TBSP butter into pieces.",
 		"Grease a baking dish with 1 TBSP butter.")
 	two := Annotate(r, 2, nil, true)
-	if got, want := joined(two.Steps[0]), "Dice 6 tbsp butter into pieces."; got != want {
+	if got, want := joined(two.Steps[0]), "Dice 6 Tbsp butter into pieces."; got != want {
 		t.Errorf("step 1 = %q, want %q", got, want)
 	}
-	if got, want := joined(two.Steps[1]), "Grease a baking dish with 1 tbsp butter."; got != want {
+	if got, want := joined(two.Steps[1]), "Grease a baking dish with 1 Tbsp butter."; got != want {
 		t.Errorf("step 2 = %q, want %q", got, want)
 	}
-	if got, want := joined(Annotate(r, 4, nil, true).Steps[1]), "Grease a baking dish with 2 tbsp butter."; got != want {
+	if got, want := joined(Annotate(r, 4, nil, true).Steps[1]), "Grease a baking dish with 2 Tbsp butter."; got != want {
 		t.Errorf("4 servings, step 2 = %q, want %q", got, want)
 	}
 }
@@ -447,5 +447,37 @@ func TestAnnotateReadsTheFractionSlash(t *testing.T) {
 	}
 	if got, want := joined(Annotate(r, 4, nil, true).Steps[0]), "Combine coleslaw, ½ tsp sugar, and salt."; got != want {
 		t.Errorf("4 servings = %q, want %q", got, want)
+	}
+}
+
+// Packets read as kitchen measures: tomato paste is 2 Tbsp a packet, stock
+// concentrate 1 tsp (or a bouillon cube), in the steps and the ingredient list.
+func TestAnnotateReadsPacketsAsKitchenMeasures(t *testing.T) {
+	r := instructionRecipe(
+		[]RecipeIngredient{
+			instructionLine("ing-paste", "Tomato Paste", "1", "count"),
+			instructionLine("ing-stock", "Beef Stock Concentrate", "1", "count"),
+		},
+		"Add tomato paste to the pan. Stir in stock concentrate.")
+	two := Annotate(r, 2, nil, true)
+	if got, want := joined(two.Steps[0]), "Add 2 Tbsp tomato paste to the pan. Stir in 1 tsp (or 1 bouillon cube) stock concentrate."; got != want {
+		t.Errorf("2 servings = %q, want %q", got, want)
+	}
+	if got := two.Ingredients[0].Amount.Text(); got != "2 Tbsp" {
+		t.Errorf("tomato paste amount = %q, want 2 Tbsp", got)
+	}
+	four := Annotate(r, 4, nil, true)
+	if got := four.Ingredients[1].Amount.Text(); got != "2 tsp (or 2 bouillon cubes)" {
+		t.Errorf("4 servings stock = %q", got)
+	}
+}
+
+// A mention inside a hyphenated word gets no amount written into it.
+func TestAnnotateLeavesCompoundWordsWhole(t *testing.T) {
+	r := instructionRecipe(
+		[]RecipeIngredient{instructionLine("ing-sriracha", "Sriracha", "1", "tsp")},
+		"Add drained noodles and soy-sriracha sauce.")
+	if got, want := joined(Annotate(r, 2, nil, true).Steps[0]), "Add drained noodles and soy-sriracha sauce."; got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
