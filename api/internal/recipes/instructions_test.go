@@ -500,3 +500,51 @@ func TestAnnotateStockConcentrateSubstituteKeepsTheKitchenMeasure(t *testing.T) 
 		t.Errorf("ingredient amount = %q, want 1 tsp", got)
 	}
 }
+
+// "A squeeze of lime juice" is one wedge of a lime the card already quartered.
+func TestAnnotateSqueezeIsOneWedge(t *testing.T) {
+	r := instructionRecipe(
+		[]RecipeIngredient{instructionLine("ing-lime", "Lime", "1", "count"), instructionLine("ing-orange", "Orange", "1", "count")},
+		"Stir in juice from orange and a squeeze of lime juice. Bring to a simmer.")
+	if got, want := joined(Annotate(r, 2, nil, true).Steps[0]), "Stir in juice from 1 orange and a squeeze of 1 lime wedge. Bring to a simmer."; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// Nothing chosen for a specialty yet: its packet reads as what it holds, and
+// the step says how to make that much.
+func TestAnnotateUnchosenSpecialtyGivesAmountAndRecipe(t *testing.T) {
+	q := func(s string) *ingredients.Quantity { return quantityPtr(t, s) }
+	spec := &grocery.Specialty{
+		ID: "tex-mex-paste", Key: "tex mex paste", Name: "Tex-Mex Paste",
+		UnitSizes: []grocery.UnitSize{{Unit: "count", Quantity: *q("2"), SizeUnit: "tbsp"}},
+		HowToMake: &grocery.HowToMake{
+			Yield: grocery.Measure{Quantity: *q("8"), Unit: "tbsp"},
+			Components: []grocery.Component{
+				{Name: "Tomato Paste", Quantity: q("8"), Unit: "tbsp"},
+				{Name: "Adobo Sauce", Quantity: q("1"), Unit: "tbsp"},
+				{Name: "Ground Cumin", Quantity: q("2"), Unit: "tsp"},
+			},
+		},
+	}
+	r := instructionRecipe(
+		[]RecipeIngredient{instructionLine("ing-texmex", "Tex-Mex Paste", "1", "count")},
+		"Stir in Tex-Mex paste.")
+	in := Annotate(r, 2, grocery.Specialties{"ing-texmex": spec}, true)
+	if got, want := joined(in.Steps[0]), "Stir in 2 Tbsp Tex-Mex paste."; got != want {
+		t.Errorf("step = %q, want %q", got, want)
+	}
+	want := "To make 2 Tbsp Tex-Mex Paste, stir together 2 Tbsp tomato paste, ¾ tsp adobo sauce, and ½ tsp ground cumin."
+	if len(in.Steps[0].Notes) != 1 || in.Steps[0].Notes[0].Text != want {
+		t.Errorf("notes = %+v, want %q", in.Steps[0].Notes, want)
+	}
+}
+
+func TestAnnotateSqueezeWithNonBreakingSpace(t *testing.T) {
+	r := instructionRecipe(
+		[]RecipeIngredient{instructionLine("ing-lime", "Lime", "1", "count")},
+		"Add a squeeze of lime juice.")
+	if got := joined(Annotate(r, 2, nil, true).Steps[0]); got != "Add a squeeze of 1 lime wedge." {
+		t.Errorf("got %q", got)
+	}
+}

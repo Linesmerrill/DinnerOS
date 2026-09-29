@@ -762,6 +762,20 @@ func (s *Service) GrocerySpecialties(ctx context.Context, householdID string, li
 
 func (s *Service) grocerySpecialty(sp Specialty, householdOptions []Option, resolutions map[string]Resolution, catalog map[string]recipes.Ingredient, levels map[string]pantry.StockLevel) *grocery.Specialty {
 	gs := &grocery.Specialty{ID: sp.ID, Key: sp.Key, Name: sp.Name, Aliases: slices.Clone(sp.Aliases), UnitSizes: groceryUnitSizes(sp.UnitSizes)}
+	for _, o := range sp.Options {
+		if o.Type != TypeHouseMadeBatch || o.Yield == nil || gs.HowToMake != nil {
+			continue
+		}
+		how := &grocery.HowToMake{Yield: groceryMeasure(o.Yield)}
+		for _, c := range o.Ingredients {
+			comp := grocery.Component{Name: c.Name, Unit: c.Unit}
+			if q, err := ingredients.ParseQuantity(c.Quantity); c.Quantity != "" && err == nil {
+				comp.Quantity = &q
+			}
+			how.Components = append(how.Components, comp)
+		}
+		gs.HowToMake = how
+	}
 	for _, o := range append(slices.Clone(sp.Options), householdOptions...) {
 		if o.SpecialtyID == sp.ID {
 			gs.Suggestions = append(gs.Suggestions, grocery.OptionRef{ID: o.ID, Type: grocery.ChoiceType(o.Type), Name: o.Name, IsDefault: o.ID == sp.DefaultOptionID})

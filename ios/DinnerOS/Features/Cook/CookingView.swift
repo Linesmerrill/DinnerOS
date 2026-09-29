@@ -649,8 +649,14 @@ struct CookStepList: View {
             if let steps = dish.instructions?.steps, !steps.isEmpty {
                 ForEach(steps) { step in
                     stepCard(index: step.index, imageURL: step.imageURL, current: current) {
-                        InstructionStepText(step: step, showsTimers: true)
-                            .font(.title3)
+                        VStack(alignment: .leading, spacing: 10) {
+                            InstructionStepText(step: step, showsTimers: true)
+                                .font(.title3)
+                            // How to make a specialty, or what to use instead.
+                            ForEach(step.notes) { note in
+                                InstructionNoteLabel(note: note)
+                            }
+                        }
                     }
                 }
             } else {

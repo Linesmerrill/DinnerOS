@@ -58,6 +58,53 @@ func (m Measure) Text() string {
 	return text
 }
 
+// packetContents is what a packet of a specialty holds, from its unit sizes
+// ("1 count = 2 tbsp"), or nil when the amount isn't counted in packets.
+func packetContents(m *Measure, spec *grocery.Specialty) *Measure {
+	if m == nil || (m.Unit != "count" && m.Unit != "package") {
+		return nil
+	}
+	for _, size := range spec.UnitSizes {
+		if size.Unit == m.Unit {
+			return &Measure{Quantity: m.Quantity.Mul(size.Quantity), Unit: size.SizeUnit}
+		}
+	}
+	return nil
+}
+
+// howToMake is the sentence that makes amount of a specialty from its house
+// recipe: "To make 2 Tbsp Tex-Mex Paste, stir together 2 Tbsp Tomato Paste,
+// …". Empty when there's no recipe or the amounts don't convert.
+func howToMake(amount *Measure, spec *grocery.Specialty) string {
+	how := spec.HowToMake
+	if how == nil || how.Yield.Quantity.IsZero() {
+		return ""
+	}
+	inYield, ok := grocery.ConvertMeasure(amount.Quantity.Rat(), amount.Unit, how.Yield.Unit, spec.UnitSizes)
+	if !ok {
+		return ""
+	}
+	ratio := inYield.Quo(inYield, how.Yield.Quantity.Rat())
+	parts := make([]string, 0, len(how.Components))
+	for _, c := range how.Components {
+		scaled := scaledComponent(c, ratio)
+		if scaled == nil {
+			parts = append(parts, c.Name)
+			continue
+		}
+		parts = append(parts, kitchenSpoon(*scaled).Text()+" "+strings.ToLower(c.Name))
+	}
+	return "To make " + amount.Text() + " " + spec.Name + ", stir together " + joinList(parts) + "."
+}
+
+// kitchenSpoon writes less than a tablespoon in teaspoons: "¾ tsp", not "¼ Tbsp".
+func kitchenSpoon(m Measure) Measure {
+	if m.Unit == "tbsp" && m.Quantity.Cmp(ingredients.NewQuantity(1, 1)) < 0 {
+		return Measure{Quantity: m.Quantity.Mul(ingredients.NewQuantity(3, 1)), Unit: "tsp"}
+	}
+	return m
+}
+
 func unitOf(m *Measure) string {
 	if m == nil {
 		return ""
@@ -377,10 +424,25 @@ func AnnotateWith(r Recipe, servings int, specs grocery.Specialties, applied boo
 				if !seenSpecialty[spec.ID] {
 					out.Unchosen = append(out.Unchosen, ref)
 				}
+				// Nothing chosen yet: a packet reads as what it holds ("2 Tbsp"),
+				// and the step says how to make that much from scratch.
+				if held := packetContents(m.amount, spec); held != nil {
+					m.amount = held
+					m.baseAmount = packetContents(m.baseAmount, spec)
+					state.Amount = held
+					out.Ingredients[len(out.Ingredients)-1].Amount = held
+					m.note = howToMake(held, spec)
+				}
 			case spec.Choice.Type == grocery.ChoiceAsIs:
 				// The household buys it under its own name: nothing changes.
 			default:
 				sub := applySubstitute(&m, spec)
+				// A packet named by its own name reads as what it holds in the list too.
+				if m.display == m.name {
+					if held := packetContents(packets, spec); held != nil {
+						out.Ingredients[len(out.Ingredients)-1].Amount = held
+					}
+				}
 				// The household's own measure for a packet wins over the option's:
 				// a stock concentrate packet is 1 tsp of whatever base they use.
 				if km, ok := ingredients.KitchenMeasureFor(ing.Name, unitOf(packets)); ok && m.display != m.name {
@@ -473,8 +535,12 @@ func applySubstitute(m *mention, spec *grocery.Specialty) *Substitution {
 		}
 		// More than one ingredient, or an amount that doesn't convert: the
 		// method changes, so the step keeps the original name and says what
-		// to use instead rather than swapping a word silently.
-		m.note = "Instead of " + amountAndName(m.amount, spec.Name) + ", use " + joinList(parts) + "."
+		// to use instead rather than swapping a word silently. A packet reads
+		// as what it holds ("2 Tbsp"), so the step has a real amount.
+		if held := packetContents(m.amount, spec); held != nil {
+			m.amount = held
+		}
+		m.note = "Instead of " + amountAndName(m.amount, spec.Name) + ", mix " + joinList(parts) + "."
 		m.spicy = m.spicy || anySpicy(choice.Components)
 	case grocery.ChoiceHouseMadeBatch:
 		sub.Text = spec.Name + " → your house-made batch (" + choice.OptionName + ")"

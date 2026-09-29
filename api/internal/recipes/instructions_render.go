@@ -131,6 +131,15 @@ func otherServings(text []rune) (m Measure, servings, length int, ok bool) {
 }
 
 // renderStep annotates one step against the recipe's ingredients.
+// wedgeCitrus is "lime" or "lemon" for those ingredients, else "".
+func wedgeCitrus(name string) string {
+	switch n := strings.ToLower(name); n {
+	case "lime", "lemon":
+		return n
+	}
+	return ""
+}
+
 // stepAmounts carries what renderStep needs to read the amounts a step
 // wrote itself: the size being cooked, the size the card's own numbers are for
 // (its smallest), and which ingredients have an amount written in some step.
@@ -179,6 +188,9 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		m := mentions[hit]
 		amount := m.amount
 		shownBefore := amountShown[hit]
+		before := strings.TrimRightFunc(string(plain), unicode.IsSpace)
+		squeeze := wedgeCitrus(m.name) != "" && len(before) < len(string(plain)) &&
+			strings.HasSuffix(strings.ToLower(before), "squeeze of")
 		part := false
 		skipAfter := 0
 		// The card wrote this step's share ("1 TBSP butter (2 TBSP for 4
@@ -224,6 +236,9 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			// total would be wrong here ("the remaining butter").
 			amount = nil
 		}
+		if squeeze {
+			amount = nil
+		}
 		if i > 0 && runes[i-1] == '-' {
 			// Part of a compound word ("soy-sriracha sauce"): mark it, but an
 			// amount there would read "soy-1 tsp sriracha".
@@ -247,6 +262,14 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		surface := string(runes[i : i+length])
 		if m.substituted {
 			surface = m.display
+		}
+		// "a squeeze of lime juice" is one wedge, not the whole lime: the
+		// card quartered it earlier. It reads "a squeeze of 1 lime wedge".
+		if wedge := wedgeCitrus(m.name); squeeze {
+			surface = "1 " + wedge + " wedge"
+			if rest := strings.ToLower(string(runes[i+length:])); strings.HasPrefix(rest, " juice") {
+				skipAfter = len(" juice")
+			}
 		}
 		text := surface
 		if amount != nil {

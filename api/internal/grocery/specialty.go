@@ -177,6 +177,15 @@ type Specialty struct {
 	Choice *Choice
 	// Suggestions are the options offered when Choice is nil.
 	Suggestions []OptionRef
+	// HowToMake is the house-made batch recipe, whatever the household
+	// chose, so a step can say how to make it; nil when there is none.
+	HowToMake *HowToMake
+}
+
+// HowToMake is a batch recipe: Components make Yield.
+type HowToMake struct {
+	Yield      Measure
+	Components []Component
 }
 
 // Specialties maps Line.IngredientKey to the specialty ingredient it is.
