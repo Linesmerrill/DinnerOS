@@ -58,6 +58,13 @@ func (m Measure) Text() string {
 	return text
 }
 
+func unitOf(m *Measure) string {
+	if m == nil {
+		return ""
+	}
+	return m.Unit
+}
+
 // kitchenMeasure turns a packet count into what to scoop ("1 tomato paste" is
 // 2 Tbsp), for an ingredient the household measures instead of opening a
 // packet. Anything else comes back as it was.
@@ -340,8 +347,10 @@ func AnnotateWith(r Recipe, servings int, specs grocery.Specialties, applied boo
 		if a, ok := amountAt(ing, smallest(r.Servings)); ok {
 			m.baseAmount = &a
 		}
-		m.amount, m.baseAmount = kitchenMeasure(ing.Name, m.amount), kitchenMeasure(ing.Name, m.baseAmount)
-		state.Amount = m.amount
+		// The packet count, before it reads as a kitchen measure: a substitute's
+		// amount is worked out from packets.
+		packets, basePackets := m.amount, m.baseAmount
+		state.Amount = kitchenMeasure(ing.Name, m.amount)
 		if lo, ok := leftOut.Lookup(key, "name:"+ingredients.NormalizeName(ing.Name)); ok {
 			m.leftOut = true
 			state.LeftOut = &lo
@@ -349,6 +358,9 @@ func AnnotateWith(r Recipe, servings int, specs grocery.Specialties, applied boo
 		spec := specs[key]
 		if spec != nil {
 			state.Component = componentOf(spec, m.amount)
+		}
+		if spec == nil || spec.Choice == nil || spec.Choice.Type == grocery.ChoiceAsIs || m.leftOut {
+			m.amount, m.baseAmount = kitchenMeasure(ing.Name, packets), kitchenMeasure(ing.Name, basePackets)
 		}
 		out.Ingredients = append(out.Ingredients, state)
 		if spec != nil && m.leftOut {
@@ -369,6 +381,16 @@ func AnnotateWith(r Recipe, servings int, specs grocery.Specialties, applied boo
 				// The household buys it under its own name: nothing changes.
 			default:
 				sub := applySubstitute(&m, spec)
+				// The household's own measure for a packet wins over the option's:
+				// a stock concentrate packet is 1 tsp of whatever base they use.
+				if km, ok := ingredients.KitchenMeasureFor(ing.Name, unitOf(packets)); ok && m.display != m.name {
+					m.amount = &Measure{Quantity: packets.Quantity.MulRat(km.PerPacket), Unit: km.Unit}
+					if basePackets != nil {
+						m.baseAmount = &Measure{Quantity: basePackets.Quantity.MulRat(km.PerPacket), Unit: km.Unit}
+					}
+					state.Amount = m.amount
+					out.Ingredients[len(out.Ingredients)-1].Amount = m.amount
+				}
 				if sub != nil && !seenSpecialty[spec.ID] {
 					sub.SpecialtyRef = ref
 					out.Substitutions = append(out.Substitutions, *sub)

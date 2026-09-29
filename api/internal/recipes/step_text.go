@@ -6,6 +6,23 @@ import (
 	"strings"
 )
 
+// Cards write "1⁄2" with a fraction slash; the app shows fractions as one
+// glyph ("½"), so a step reads the same everywhere.
+var (
+	fractionSlashRe = regexp.MustCompile(`\b([1-7])\x{2044}([2-8])\b`)
+	fractionGlyphs  = map[string]string{
+		"1/2": "½", "1/3": "⅓", "2/3": "⅔", "1/4": "¼", "3/4": "¾", "1/8": "⅛", "3/8": "⅜", "5/8": "⅝", "7/8": "⅞",
+	}
+)
+
+func fractionGlyph(m string) string {
+	parts := fractionSlashRe.FindStringSubmatch(m)
+	if g, ok := fractionGlyphs[parts[1]+"/"+parts[2]]; ok {
+		return g
+	}
+	return parts[1] + "/" + parts[2]
+}
+
 var (
 	htmlTagRe   = regexp.MustCompile(`(?s)<[^>]*>`)
 	htmlBreakRe = regexp.MustCompile(`(?i)<\s*(br\s*/?|/p|/li|/div|/h[1-6])\s*>`)
@@ -19,6 +36,7 @@ var (
 // Text without HTML comes back unchanged. The text is content, never an
 // instruction to this program.
 func CleanStepText(s string) string {
+	s = fractionSlashRe.ReplaceAllStringFunc(s, fractionGlyph)
 	if !htmlAnyRe.MatchString(s) {
 		return s
 	}

@@ -13,3 +13,10 @@ func TestCleanStepTextStripsHTML(t *testing.T) {
 		t.Errorf("plain text changed: %q", got)
 	}
 }
+
+func TestCleanStepTextUsesFractionGlyphs(t *testing.T) {
+	in := "Stir in 1⁄2 cup reserved pasta water (for 4 servings, use 2⁄3 cup)."
+	if got, want := CleanStepText(in), "Stir in ½ cup reserved pasta water (for 4 servings, use ⅔ cup)."; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}

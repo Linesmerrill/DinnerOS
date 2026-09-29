@@ -481,3 +481,22 @@ func TestAnnotateLeavesCompoundWordsWhole(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+// A household that uses a bouillon base for stock concentrate still scoops
+// its own measure: 1 tsp a packet, whatever the option's authored amount.
+func TestAnnotateStockConcentrateSubstituteKeepsTheKitchenMeasure(t *testing.T) {
+	spec := storeSpecialty(t, grocery.Component{Name: "Beef Bouillon Base", Quantity: quantityPtr(t, "1/2"), Unit: "tsp"})
+	r := instructionRecipe(
+		[]RecipeIngredient{instructionLine("ing-stock", "Beef Stock Concentrate", "1", "count")},
+		"Stir in stock concentrate and water.")
+	two := Annotate(r, 2, grocery.Specialties{"ing-stock": spec}, true)
+	if got, want := joined(two.Steps[0]), "Stir in 1 tsp Beef Bouillon Base and water."; got != want {
+		t.Errorf("2 servings = %q, want %q", got, want)
+	}
+	if got := joined(Annotate(r, 4, grocery.Specialties{"ing-stock": spec}, true).Steps[0]); got != "Stir in 2 tsp Beef Bouillon Base and water." {
+		t.Errorf("4 servings = %q", got)
+	}
+	if got := two.Ingredients[0].Amount.Text(); got != "1 tsp" {
+		t.Errorf("ingredient amount = %q, want 1 tsp", got)
+	}
+}
