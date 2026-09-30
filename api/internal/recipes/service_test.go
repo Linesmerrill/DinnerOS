@@ -638,3 +638,31 @@ func TestListQueryLimits(t *testing.T) {
 		}
 	}
 }
+
+func TestSameRecipeInFindsAnotherHouseholdsCopy(t *testing.T) {
+	store := newMemoryStore()
+	ctx := context.Background()
+	rigatoni := Recipe{Source: "hellofresh", SourceRecipeID: "hf-rigatoni", Name: "Rigatoni"}
+	if err := store.SaveRecipes(ctx, "hh1", []Recipe{rigatoni}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveRecipes(ctx, "hh2", []Recipe{rigatoni, {Source: "hellofresh", SourceRecipeID: "hf-tacos", Name: "Tacos"}}); err != nil {
+		t.Fatal(err)
+	}
+	var fromID, wantID string
+	for _, r := range store.recipes {
+		switch {
+		case r.HouseholdID == "hh1":
+			fromID = r.ID
+		case r.HouseholdID == "hh2" && r.SourceRecipeID == "hf-rigatoni":
+			wantID = r.ID
+		}
+	}
+	svc := NewService(store)
+	if got, err := svc.SameRecipeIn(ctx, "hh1", fromID, "hh2"); err != nil || got != wantID {
+		t.Errorf("SameRecipeIn() = %q, %v; want %q", got, err, wantID)
+	}
+	if got, _ := svc.SameRecipeIn(ctx, "hh1", fromID, "hh3"); got != "" {
+		t.Errorf("a household without the dish = %q, want none", got)
+	}
+}

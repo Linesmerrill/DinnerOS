@@ -32,7 +32,12 @@ type ServiceOptions struct {
 	Users   UserDirectory
 	// Events records recipe.rated and recipe.unrated. Optional.
 	Events events.Recorder
-	Logger *slog.Logger
+	// Memberships and Matcher copy a member's rating to the same recipe in
+	// their other households. Optional; without both, ratings stay in the
+	// household they were made in.
+	Memberships MembershipLister
+	Matcher     RecipeMatcher
+	Logger      *slog.Logger
 	// Now is the clock. Default time.Now.
 	Now func() time.Time
 }
@@ -45,12 +50,18 @@ type Service struct {
 	users   UserDirectory
 	events  events.Recorder
 	logger  *slog.Logger
-	now     func() time.Time
+
+	memberships MembershipLister
+	matcher     RecipeMatcher
+	now         func() time.Time
 }
 
 // NewService returns a Service.
 func NewService(opts ServiceOptions) *Service {
-	s := &Service{store: opts.Store, notes: opts.Notes, recipes: opts.Recipes, users: opts.Users, events: opts.Events, logger: opts.Logger, now: opts.Now}
+	s := &Service{
+		store: opts.Store, notes: opts.Notes, recipes: opts.Recipes, users: opts.Users, events: opts.Events, logger: opts.Logger, now: opts.Now,
+		memberships: opts.Memberships, matcher: opts.Matcher,
+	}
 	if s.logger == nil {
 		s.logger = slog.New(slog.DiscardHandler)
 	}
@@ -96,6 +107,16 @@ func (s *Service) Rate(ctx context.Context, actor households.Membership, recipeI
 		HouseholdID: actor.HouseholdID, UserID: actor.UserID, Type: events.TypeRecipeRated,
 		RecipeID: recipeID, OccurredAt: now, Payload: payload,
 	})
+	// The same score on the same dish in the member's other households. No
+	// event there: the member rated it once.
+	for _, t := range s.twins(ctx, actor, recipeID) {
+		if _, _, err := s.store.Upsert(ctx, Rating{
+			HouseholdID: t.householdID, RecipeID: t.recipeID, UserID: actor.UserID,
+			Score: saved.Score, Comment: saved.Comment, Tags: saved.Tags, CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			s.logger.WarnContext(ctx, "sync rating", "household", t.householdID, "error", err)
+		}
+	}
 	return saved, nil
 }
 
@@ -110,6 +131,13 @@ func (s *Service) Remove(ctx context.Context, actor households.Membership, recip
 		return err
 	}
 	deleted, err := s.store.Delete(ctx, actor.HouseholdID, recipeID, actor.UserID)
+	if err == nil || errors.Is(err, ErrNotFound) {
+		for _, t := range s.twins(ctx, actor, recipeID) {
+			if _, err := s.store.Delete(ctx, t.householdID, t.recipeID, actor.UserID); err != nil && !errors.Is(err, ErrNotFound) {
+				s.logger.WarnContext(ctx, "sync rating removal", "household", t.householdID, "error", err)
+			}
+		}
+	}
 	switch {
 	case errors.Is(err, ErrNotFound):
 		return nil

@@ -91,6 +91,17 @@ func TestNotificationHandlers(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `"read":true`) {
 		t.Errorf("list after read = %s", rec.Body.String())
 	}
+	// userA swipes the newer one away: gone for them, still there for userB.
+	rec = do(http.MethodPost, base+"/dismiss", `{"ids":["`+newer.ID+`"]}`, userA)
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `{"unreadCount":0}` {
+		t.Fatalf("dismiss = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec = do(http.MethodGet, base, "", userA); strings.Contains(rec.Body.String(), newer.ID) {
+		t.Errorf("dismissed notification still listed for userA: %s", rec.Body.String())
+	}
+	if rec = do(http.MethodGet, base, "", userB); !strings.Contains(rec.Body.String(), newer.ID) {
+		t.Errorf("dismiss hid the notification from userB: %s", rec.Body.String())
+	}
 	rec = do(http.MethodPost, base+"/read", `{"all":true}`, userB)
 	if strings.TrimSpace(rec.Body.String()) != `{"unreadCount":0}` {
 		t.Errorf("read all = %s", rec.Body.String())
@@ -108,6 +119,7 @@ func TestNotificationHandlers(t *testing.T) {
 		{http.MethodGet, base + "?limit=x", "", userA, http.StatusBadRequest, "validation_failed"},
 		{http.MethodPost, base + "/read", `{}`, userA, http.StatusBadRequest, "validation_failed"},
 		{http.MethodPost, base + "/read", `{"ids":"x"}`, userA, http.StatusBadRequest, "invalid_request"},
+		{http.MethodPost, base + "/dismiss", `{}`, userA, http.StatusBadRequest, "validation_failed"},
 	} {
 		rec := do(tc.method, tc.path, tc.body, tc.user)
 		var resp httpx.ErrorResponse

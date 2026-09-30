@@ -67,6 +67,23 @@ func (s *snapshot) card(it *item, reason, suppress, promote string) Card {
 	}
 }
 
+// planned returns a card for each recipe in the week's plan, in plan order,
+// so the app always has the rating and summary of a planned meal even when
+// no section shows it.
+func (s *snapshot) planned() []Card {
+	out := []Card{}
+	seen := map[string]bool{}
+	for _, e := range s.in.Plan.Entries {
+		it := s.byID[e.RecipeID]
+		if it == nil || seen[e.RecipeID] {
+			continue
+		}
+		seen[e.RecipeID] = true
+		out = append(out, s.card(it, "", "", ""))
+	}
+	return out
+}
+
 // sections returns the week's non-empty sections in display order.
 func (s *snapshot) sections(timing Timing) []Section {
 	var out []Section

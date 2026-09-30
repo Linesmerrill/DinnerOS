@@ -75,6 +75,7 @@ type notificationDoc struct {
 	Subject     subjectDoc      `bson:"subject"`
 	DedupeKey   string          `bson:"dedupeKey"`
 	ReadBy      []bson.ObjectID `bson:"readBy"`
+	DismissedBy []bson.ObjectID `bson:"dismissedBy,omitempty"`
 	Push        pushDoc         `bson:"push"`
 	CreatedAt   time.Time       `bson:"createdAt"`
 }
@@ -96,6 +97,9 @@ func (d notificationDoc) toNotification() Notification {
 	}
 	for _, id := range d.ReadBy {
 		n.ReadBy = append(n.ReadBy, id.Hex())
+	}
+	for _, id := range d.DismissedBy {
+		n.DismissedBy = append(n.DismissedBy, id.Hex())
 	}
 	if d.Push.LastAttemptAt != nil {
 		n.Push.LastAttemptAt = d.Push.LastAttemptAt.UTC()
@@ -170,6 +174,13 @@ func (s *MongoStore) List(ctx context.Context, householdID string, f ListFilter)
 		}
 		filter = append(filter, bson.E{Key: "readBy", Value: bson.D{{Key: "$ne", Value: uid}}})
 	}
+	if f.Viewer != "" {
+		uid, err := mongodb.ParseID(f.Viewer)
+		if err != nil {
+			return nil, fmt.Errorf("notifications: user id: %w", err)
+		}
+		filter = append(filter, bson.E{Key: "dismissedBy", Value: bson.D{{Key: "$ne", Value: uid}}})
+	}
 	if f.Before != "" {
 		before, err := mongodb.ParseID(f.Before)
 		if err != nil {
@@ -234,6 +245,31 @@ func (s *MongoStore) MarkRead(ctx context.Context, householdID, userID string, i
 		filter = append(filter, bson.E{Key: "_id", Value: bson.D{{Key: "$in", Value: oids}}})
 	}
 	_, err = s.notifications.UpdateMany(ctx, filter, bson.D{{Key: "$addToSet", Value: bson.D{{Key: "readBy", Value: uid}}}})
+	return translate(err)
+}
+
+// Dismiss implements Store with one updateMany.
+func (s *MongoStore) Dismiss(ctx context.Context, householdID, userID string, ids []string) error {
+	hid, err := householdOID(householdID)
+	if err != nil {
+		return err
+	}
+	uid, err := mongodb.ParseID(userID)
+	if err != nil {
+		return fmt.Errorf("notifications: user id: %w", err)
+	}
+	oids := make([]bson.ObjectID, 0, len(ids))
+	for _, id := range ids {
+		if oid, err := mongodb.ParseID(id); err == nil {
+			oids = append(oids, oid)
+		}
+	}
+	if len(oids) == 0 {
+		return nil
+	}
+	_, err = s.notifications.UpdateMany(ctx,
+		bson.D{{Key: "householdId", Value: hid}, {Key: "_id", Value: bson.D{{Key: "$in", Value: oids}}}},
+		bson.D{{Key: "$addToSet", Value: bson.D{{Key: "readBy", Value: uid}, {Key: "dismissedBy", Value: uid}}}})
 	return translate(err)
 }
 

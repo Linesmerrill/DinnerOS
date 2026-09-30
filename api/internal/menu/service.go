@@ -125,6 +125,8 @@ type Menu struct {
 	Proposal *recommendations.Proposal
 	// Sections are non-empty, in display order.
 	Sections []Section
+	// Planned are cards for the recipes in the week's plan, in plan order.
+	Planned []Card
 	// Bands are the household's cook-time bands, for recipe summaries.
 	Bands autopilot.TimeBands
 }
@@ -147,7 +149,7 @@ func (s *Service) Menu(ctx context.Context, householdID, userID, week string) (M
 	snap := newSnapshot(in)
 	m := Menu{
 		Week: w, CurrentWeek: current, FirstDay: first, Timing: timingOf(w, current), Proposal: in.Proposal,
-		Sections: snap.sections(timingOf(w, current)), Bands: snap.bands,
+		Sections: snap.sections(timingOf(w, current)), Planned: snap.planned(), Bands: snap.bands,
 	}
 	if !in.Plan.CreatedAt.IsZero() {
 		plan := in.Plan

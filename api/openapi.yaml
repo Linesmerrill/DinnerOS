@@ -4379,6 +4379,46 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/notifications/dismiss:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    post:
+      summary: Dismiss notifications
+      description: |
+        Hides the given notifications from the caller (a swipe to delete)
+        and marks them read. Other members still see them. Unknown IDs are
+        ignored. Requires `household.view`.
+      operationId: dismissNotifications
+      tags: [notifications]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: The caller's unread count afterwards.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationUnreadCount"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/autopilot/profile:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -5522,7 +5562,7 @@ components:
         the cook time is unknown.
     MenuResponse:
       type: object
-      required: [week, weekStart, weekEnd, currentWeek, timing, plan, proposal, sections]
+      required: [week, weekStart, weekEnd, currentWeek, timing, plan, proposal, sections, planned]
       properties:
         week:
           type: string
@@ -5556,6 +5596,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MenuSection"
+        planned:
+          type: array
+          description: |
+            A card for each recipe in the week's plan, once, in plan order,
+            whether or not a section shows it, so every planned meal has its
+            summary and ratings (the meal cards ask "How was it?" from these).
+          items:
+            $ref: "#/components/schemas/MenuCard"
     MenuProposalSummary:
       type: object
       required: [id, status, version, plannedMeals]

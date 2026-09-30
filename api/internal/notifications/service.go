@@ -151,7 +151,7 @@ func (s *Service) List(ctx context.Context, actor households.Membership, q ListQ
 		return Page{}, invalid("before must be a cursor from a previous page")
 	}
 	s.refresh(ctx, actor.HouseholdID)
-	f := ListFilter{Before: q.Before, Limit: limit + 1}
+	f := ListFilter{Before: q.Before, Limit: limit + 1, Viewer: actor.UserID}
 	if q.UnreadOnly {
 		f.UnreadBy = actor.UserID
 	}
@@ -206,6 +206,33 @@ func (s *Service) MarkRead(ctx context.Context, actor households.Membership, ids
 	}
 	if err := s.store.MarkRead(ctx, actor.HouseholdID, actor.UserID, scope); err != nil {
 		return 0, fmt.Errorf("mark notifications read: %w", err)
+	}
+	n, err := s.store.CountUnread(ctx, actor.HouseholdID, actor.UserID)
+	if err != nil {
+		return 0, fmt.Errorf("count unread notifications: %w", err)
+	}
+	return n, nil
+}
+
+// Dismiss hides the given notifications from the actor (the rest of the
+// household still sees them) and returns the actor's new unread count.
+func (s *Service) Dismiss(ctx context.Context, actor households.Membership, ids []string) (int, error) {
+	if err := authorizeView(actor); err != nil {
+		return 0, err
+	}
+	switch {
+	case len(ids) == 0:
+		return 0, invalid("ids must not be empty")
+	case len(ids) > MaxMarkRead:
+		return 0, invalid("ids must have at most %d entries", MaxMarkRead)
+	}
+	for i, id := range ids {
+		if strings.TrimSpace(id) == "" {
+			return 0, invalid("ids[%d] is empty", i)
+		}
+	}
+	if err := s.store.Dismiss(ctx, actor.HouseholdID, actor.UserID, ids); err != nil {
+		return 0, fmt.Errorf("dismiss notifications: %w", err)
 	}
 	n, err := s.store.CountUnread(ctx, actor.HouseholdID, actor.UserID)
 	if err != nil {

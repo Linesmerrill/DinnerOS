@@ -71,6 +71,7 @@ func (m *memoryStore) List(_ context.Context, householdID string, f ListFilter) 
 		switch {
 		case n.HouseholdID != householdID,
 			f.UnreadBy != "" && n.ReadByUser(f.UnreadBy),
+			f.Viewer != "" && slices.Contains(n.DismissedBy, f.Viewer),
 			f.Before != "" && n.ID >= f.Before:
 			continue
 		}
@@ -103,6 +104,23 @@ func (m *memoryStore) MarkRead(_ context.Context, householdID, userID string, id
 			continue
 		}
 		m.items[i].ReadBy = append(slices.Clone(n.ReadBy), userID)
+	}
+	return nil
+}
+
+func (m *memoryStore) Dismiss(_ context.Context, householdID, userID string, ids []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, n := range m.items {
+		if n.HouseholdID != householdID || !slices.Contains(ids, n.ID) {
+			continue
+		}
+		if !n.ReadByUser(userID) {
+			m.items[i].ReadBy = append(slices.Clone(n.ReadBy), userID)
+		}
+		if !slices.Contains(n.DismissedBy, userID) {
+			m.items[i].DismissedBy = append(slices.Clone(n.DismissedBy), userID)
+		}
 	}
 	return nil
 }
@@ -191,6 +209,22 @@ func runStoreContract(t *testing.T, store Store) {
 	}
 	if got, _ := store.FindByDedupeKey(ctx, hhA, "k2"); !got.ReadByUser(userA) || got.ReadByUser(userB) {
 		t.Errorf("readBy = %v", got.ReadBy)
+	}
+	// Dismissing hides it from that member only, and counts as read.
+	if err := store.Dismiss(ctx, hhA, userB, []string{third.ID, other.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := store.List(ctx, hhA, ListFilter{Viewer: userB, Limit: 10}); strings.Join(ids(list), ",") != second.ID+","+first.ID {
+		t.Errorf("List(viewer userB) = %v, want the dismissed one gone", ids(list))
+	}
+	if list, _ := store.List(ctx, hhA, ListFilter{Viewer: userA, Limit: 10}); len(list) != 3 {
+		t.Errorf("List(viewer userA) = %v, want all 3: dismissing is per member", ids(list))
+	}
+	if n, _ := store.CountUnread(ctx, hhA, userB); n != 2 {
+		t.Errorf("CountUnread(userB) after dismiss = %d, want 2", n)
+	}
+	if n, _ := store.CountUnread(ctx, hhB, userB); n != 1 {
+		t.Errorf("CountUnread(hhB, userB) = %d, want 1: dismiss must stay in the household", n)
 	}
 	// Marking again doesn't duplicate the reader; nil marks everything.
 	if err := store.MarkRead(ctx, hhA, userA, nil); err != nil {

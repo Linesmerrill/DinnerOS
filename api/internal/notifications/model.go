@@ -113,9 +113,12 @@ type Notification struct {
 	// never alerts twice about the same thing.
 	DedupeKey string
 	// ReadBy lists the members who have read it.
-	ReadBy    []string
-	Push      Push
-	CreatedAt time.Time
+	ReadBy []string
+	// DismissedBy lists the members who swiped it away. It's gone for them
+	// and stays for the rest of the household.
+	DismissedBy []string
+	Push        Push
+	CreatedAt   time.Time
 }
 
 // ReadByUser reports whether userID has read n.
@@ -152,6 +155,8 @@ const (
 type ListFilter struct {
 	// UnreadBy, when set, keeps notifications that user hasn't read.
 	UnreadBy string
+	// Viewer, when set, drops notifications that user dismissed.
+	Viewer string
 	// Before, when set, keeps notifications older than the one with this ID
 	// (the previous page's last ID).
 	Before string

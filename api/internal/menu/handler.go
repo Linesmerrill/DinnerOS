@@ -69,6 +69,9 @@ type MenuResponse struct {
 	Plan     *planning.PlanResponse   `json:"plan"`
 	Proposal *ProposalSummaryResponse `json:"proposal"`
 	Sections []SectionResponse        `json:"sections"`
+	// Planned are cards for the recipes in the week's plan, so every planned
+	// meal has its summary and ratings whether or not a section shows it.
+	Planned []CardResponse `json:"planned"`
 }
 
 // ProposalSummaryResponse summarizes the week's Autopilot proposal.
@@ -193,6 +196,7 @@ func (h *Handler) menu(w http.ResponseWriter, r *http.Request) {
 	resp := MenuResponse{
 		Week: m.Week.String(), WeekStart: m.Week.StartDateOn(m.FirstDay), WeekEnd: m.Week.EndDateOn(m.FirstDay),
 		CurrentWeek: m.CurrentWeek.String(), Timing: m.Timing, Sections: make([]SectionResponse, 0, len(m.Sections)),
+		Planned: newCardResponses(m.Planned, m.Bands),
 	}
 	if m.Plan != nil {
 		plan := planning.NewPlanResponse(*m.Plan)

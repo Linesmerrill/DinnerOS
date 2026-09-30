@@ -55,6 +55,9 @@ func newBehavior(db *mongodb.Client, recipeService *recipes.Service, userService
 		Users:   userService,
 		Events:  eventService,
 		Logger:  logger,
+		// A member's rating follows the dish into their other households.
+		Memberships: householdService,
+		Matcher:     recipeService,
 	})
 	return behavior{
 		events:  eventService,

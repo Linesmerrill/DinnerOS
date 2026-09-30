@@ -46,6 +46,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Get(base, h.list)
 		r.Get(base+"/unread-count", h.unreadCount)
 		r.Post(base+"/read", h.markRead)
+		r.Post(base+"/dismiss", h.dismiss)
 	})
 }
 
@@ -153,6 +154,27 @@ func (h *Handler) markRead(w http.ResponseWriter, r *http.Request) {
 	n, err := h.opts.Service.MarkRead(r.Context(), actor, req.IDs, req.All)
 	if err != nil {
 		h.writeError(w, r, "mark notifications read failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, UnreadCountResponse{UnreadCount: n})
+}
+
+// DismissRequest is the body of POST .../notifications/dismiss.
+type DismissRequest struct {
+	IDs []string `json:"ids"`
+}
+
+// dismiss hides notifications from the caller only; the response is their
+// new unread count.
+func (h *Handler) dismiss(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	var req DismissRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	n, err := h.opts.Service.Dismiss(r.Context(), actor, req.IDs)
+	if err != nil {
+		h.writeError(w, r, "dismiss notifications failed", err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, UnreadCountResponse{UnreadCount: n})

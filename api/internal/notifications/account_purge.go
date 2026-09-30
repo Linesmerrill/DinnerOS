@@ -24,8 +24,8 @@ func (s *MongoStore) PurgeUser(ctx context.Context, userID string) error {
 		return nil
 	}
 	_, err = s.notifications.UpdateMany(ctx,
-		bson.D{{Key: "readBy", Value: uid}},
-		bson.D{{Key: "$pull", Value: bson.D{{Key: "readBy", Value: uid}}}})
+		bson.D{{Key: "$or", Value: bson.A{bson.D{{Key: "readBy", Value: uid}}, bson.D{{Key: "dismissedBy", Value: uid}}}}},
+		bson.D{{Key: "$pull", Value: bson.D{{Key: "readBy", Value: uid}, {Key: "dismissedBy", Value: uid}}}})
 	if err != nil {
 		return fmt.Errorf("notifications: pull readBy: %w", err)
 	}

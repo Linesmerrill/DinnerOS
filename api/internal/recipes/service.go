@@ -776,6 +776,25 @@ func (s *Service) ExistingRecipeIDs(ctx context.Context, householdID string, ids
 	return s.store.ExistingRecipeIDs(ctx, householdID, ids)
 }
 
+// SameRecipeIn returns the household's copy of recipe recipeID from another
+// household (matched by catalog key), or "" when it has none. Ratings use it
+// to follow a member's rating across the households they belong to.
+func (s *Service) SameRecipeIn(ctx context.Context, fromHouseholdID, recipeID, householdID string) (string, error) {
+	r, err := s.store.GetRecipe(ctx, fromHouseholdID, recipeID)
+	if err != nil {
+		return "", err
+	}
+	key := CatalogKey(r)
+	if key == "" {
+		return "", nil
+	}
+	ids, err := s.store.LibraryCatalogKeys(ctx, householdID, []string{key})
+	if err != nil {
+		return "", err
+	}
+	return ids[key], nil
+}
+
 // --- small helpers ------------------------------------------------------------
 
 // uniqueStrings trims values and drops empties, exclude, and duplicates,

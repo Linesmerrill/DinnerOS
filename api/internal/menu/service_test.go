@@ -45,7 +45,11 @@ func TestMenuWeekTimingPlanAndProposal(t *testing.T) {
 	stored := time.Date(2026, 9, 14, 18, 0, 0, 0, time.UTC)
 	f.plans["2026-W38"] = planning.Plan{
 		HouseholdID: "hh", Week: current, Status: planning.StatusDraft, CreatedAt: stored, UpdatedAt: stored,
-		Entries: []planning.Entry{{ID: "e1", RecipeID: "r01", Day: planning.Tuesday, Servings: 2}},
+		Entries: []planning.Entry{
+			{ID: "e1", RecipeID: "r01", Day: planning.Tuesday, Servings: 2},
+			{ID: "e2", RecipeID: "r02", Day: planning.Thursday, Servings: 2},
+			{ID: "e3", RecipeID: "r01", Day: planning.Saturday, Servings: 4},
+		},
 	}
 	f.proposals["2026-W39"] = recommendations.Proposal{ID: "p1", Status: recommendations.StatusProposed, Version: 3, Planned: 5}
 	svc := NewService(f.options(time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)))
@@ -55,20 +59,27 @@ func TestMenuWeekTimingPlanAndProposal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.Plan == nil || len(m.Plan.Entries) != 1 || m.Proposal != nil {
+	if m.Plan == nil || len(m.Plan.Entries) != 3 || m.Proposal != nil {
 		t.Errorf("current week = plan %+v, proposal %+v", m.Plan, m.Proposal)
 	}
 	// The week's plan decides inPlan and planEntryIds.
 	favorites, ok := findSection(m.Sections, SectionFavorites)
-	if !ok || !favorites.Cards[0].InPlan || len(favorites.Cards[0].PlanEntryIDs) != 1 {
+	if !ok || !favorites.Cards[0].InPlan || len(favorites.Cards[0].PlanEntryIDs) != 2 {
 		t.Errorf("favorites card = %+v", favorites.Cards)
+	}
+
+	// Every planned recipe has a card, once, in plan order, whatever the
+	// sections show: the week's cards read their ratings from it.
+	if len(m.Planned) != 2 || m.Planned[0].Recipe.ID != "r01" || m.Planned[1].Recipe.ID != "r02" ||
+		len(m.Planned[0].PlanEntryIDs) != 2 {
+		t.Errorf("planned = %+v", m.Planned)
 	}
 
 	next, err := svc.Menu(ctx, "hh", "me", "2026-W39")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if next.Timing != TimingUpcoming || next.Plan != nil {
+	if next.Timing != TimingUpcoming || next.Plan != nil || len(next.Planned) != 0 {
 		t.Errorf("2026-W39 = timing %s, plan %+v; want upcoming with no stored plan", next.Timing, next.Plan)
 	}
 	if p := next.Proposal; p == nil || p.ID != "p1" || p.Version != 3 || p.Planned != 5 {
