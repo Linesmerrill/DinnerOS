@@ -319,6 +319,8 @@ struct ServingsStepper: View {
     }
 
     let label: String
+    /// What the label shortens to when it doesn't fit ("2 servings"), instead of being cut off.
+    var shortLabel: String?
     var style: Style = .card
     var isBusy = false
     var canIncrease = true
@@ -332,6 +334,14 @@ struct ServingsStepper: View {
     /// minus and a plus eight points apart.
     static let minimumTapTarget: CGFloat = 44
 
+    private func stepperText(_ text: String) -> some View {
+        Text(text)
+            .font(style == .bar ? .headline : .footnote.weight(.semibold))
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(shortLabel == nil ? 0.7 : 0.9)
+    }
+
     var body: some View {
         HStack(spacing: style == .bar ? 12 : 8) {
             button(systemImage: "minus", label: String(localized: "Fewer servings"), action: decrease)
@@ -340,11 +350,12 @@ struct ServingsStepper: View {
                     ProgressView()
                         .tint(foreground)
                 } else {
-                    Text(label)
-                        .font(style == .bar ? .headline : .footnote.weight(.semibold))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                    ViewThatFits(in: .horizontal) {
+                        stepperText(label)
+                        if let shortLabel {
+                            stepperText(shortLabel)
+                        }
+                    }
                 }
             }
             .frame(maxWidth: style == .bar ? .infinity : nil)

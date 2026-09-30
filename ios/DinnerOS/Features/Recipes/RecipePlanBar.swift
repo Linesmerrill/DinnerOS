@@ -171,7 +171,8 @@ struct RecipePlanBar: View {
             .disabled(!plans.isDraft)
             .accessibilityLabel("Day")
             ServingsStepper(
-                label: MenuFormat.planCount(entries.count, servings: entry.servings), style: .bar, isBusy: isBusy,
+                label: MenuFormat.planCount(entries.count, servings: entry.servings),
+                shortLabel: MenuFormat.servings(entry.servings), style: .bar, isBusy: isBusy,
                 canIncrease: ServingSizes.step(from: entry.servings, options: options, by: 1) != nil,
                 decrease: { change(entry, by: -1) },
                 increase: { change(entry, by: 1) }

@@ -11,13 +11,15 @@ list, and keep track of what's already in the pantry.
 
 ## What to Test
 
-- Sign in with Apple, create a household, and invite someone (Household →
-  Invite Someone).
-- Plan a few dinners for this week and check the grocery list makes sense.
-- Mark items in the pantry and see them drop off the list.
-- Try Autopilot's suggested week and swap a meal you don't like.
-- Anything confusing, broken, or slow: use TestFlight's screenshot feedback or
-  email us.
+- Sign in, create a household, and look around from the welcome screen.
+- Add a recipe: import from HelloFresh, browse Shared Recipes, or paste a link
+  to any recipe online.
+- Plan a few dinners for this week (or let Autopilot suggest a week) and check
+  the grocery list makes sense.
+- Cook one with the cooking screen: are the amounts and steps right?
+- Invite someone to your household (Household → Invite Someone).
+- Anything confusing, broken, or slow: take a screenshot and tap Share Beta
+  Feedback. Household → Feedback & Bugs explains how.
 
 ## Feedback Email
 
