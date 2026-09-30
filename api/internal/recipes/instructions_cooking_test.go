@@ -196,6 +196,9 @@ func TestMeasureTextTidiesBigSpoonCounts(t *testing.T) {
 		{"2", "tsp", "2 tsp"},
 		{"4", "tsp", "4 tsp"},
 		{"12", "tbsp", "¾ cup"},
+		{"10", "tsp", "3 Tbsp + 1 tsp"},
+		{"15/2", "tsp", "2 ½ Tbsp"},
+		{"13/2", "tsp", "2 Tbsp + ½ tsp"},
 		{"4", "tbsp", "4 Tbsp"},
 	} {
 		if got := (Measure{Quantity: *quantityPtr(t, tc.q), Unit: tc.unit}).Text(); got != tc.want {
@@ -271,5 +274,34 @@ func TestBouillonBaseStaysInTeaspoons(t *testing.T) {
 	paste := grocery.Component{Name: "Tomato Paste", Quantity: quantityPtr(t, "5"), Unit: "tsp"}
 	if got := scaledComponent(paste, big.NewRat(3, 1)).Text(); got != "5 Tbsp" {
 		t.Errorf("tomato paste = %q, want 5 Tbsp", got)
+	}
+}
+
+// Two packets of Tex-Mex Paste: 4 Tbsp of paste, made from 2 tsp of the
+// chipotle base (1 a packet) and 10 tsp of tomato paste, which reads as
+// something you can measure.
+func TestTwoPacketsOfTexMexPaste(t *testing.T) {
+	spec := &grocery.Specialty{
+		ID: "tex-mex-paste", Key: "tex mex paste", Name: "Tex-Mex Paste",
+		UnitSizes: []grocery.UnitSize{{Unit: "count", Quantity: *quantityPtr(t, "2"), SizeUnit: "tbsp"}},
+		Choice: &grocery.Choice{
+			Type: grocery.ChoiceStoreAlternative, OptionID: "tex-mex-paste.store", OptionName: "Chipotle base",
+			Per: grocery.Measure{Quantity: *quantityPtr(t, "1"), Unit: "count"},
+			Components: []grocery.Component{
+				{Name: "Smoky Chipotle Bouillon Base", Quantity: quantityPtr(t, "1"), Unit: "tsp"},
+				{Name: "Tomato Paste", Quantity: quantityPtr(t, "5"), Unit: "tsp"},
+			},
+		},
+	}
+	r := tacoRecipe(
+		[]RecipeIngredient{tacoLine("ing-texmex", "Tex-Mex Paste", "2", "3", "count")},
+		"Stir in Tex-Mex paste.")
+	in := Annotate(r, 2, grocery.Specialties{"ing-texmex": spec}, true)
+	want := "Instead of 4 Tbsp Tex-Mex Paste, mix 2 tsp Smoky Chipotle Bouillon Base and 3 Tbsp + 1 tsp Tomato Paste."
+	if n := in.Steps[0].Notes; len(n) != 1 || n[0].Text != want {
+		t.Errorf("note = %+v, want %q", n, want)
+	}
+	if c := in.Ingredients[0].Component; c == nil || strings.Join(c.Parts, " | ") != "2 tsp Smoky Chipotle Bouillon Base | 3 Tbsp + 1 tsp Tomato Paste" {
+		t.Errorf("parts = %+v", c)
 	}
 }

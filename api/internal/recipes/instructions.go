@@ -50,6 +50,10 @@ type Measure struct {
 func (m Measure) Text() string {
 	if m.Or == "" && !m.Exact {
 		m = tidySpoons(m)
+		// "10 tsp" measures as "3 Tbsp + 1 tsp".
+		if mixed := spoonsMixed(m); mixed != "" {
+			return mixed
+		}
 	}
 	text := m.Quantity.Format()
 	if u, err := ingredients.LookupUnit(m.Unit); err == nil {
@@ -65,6 +69,24 @@ func (m Measure) Text() string {
 		text += " (or " + m.Quantity.Format() + " " + or + ")"
 	}
 	return text
+}
+
+// spoonsMixed writes 6 tsp or more that didn't tidy to whole or half
+// tablespoons as tablespoons plus teaspoons: "3 Tbsp + 1 tsp", not "10 tsp".
+// It is "" for anything else.
+func spoonsMixed(m Measure) string {
+	if m.Unit != "tsp" || m.Quantity.Cmp(ingredients.NewQuantity(6, 1)) < 0 {
+		return ""
+	}
+	r := m.Quantity.Rat()
+	tbsp := new(big.Int).Quo(r.Num(), new(big.Int).Mul(r.Denom(), big.NewInt(3)))
+	rest := new(big.Rat).Sub(r, new(big.Rat).SetInt(new(big.Int).Mul(tbsp, big.NewInt(3))))
+	whole := Measure{Quantity: ingredients.NewQuantity(tbsp.Int64(), 1), Unit: "tbsp", Exact: true}
+	if rest.Sign() == 0 {
+		return whole.Text()
+	}
+	part := Measure{Quantity: ingredients.NewQuantity(1, 1).MulRat(rest), Unit: "tsp", Exact: true}
+	return whole.Text() + " + " + part.Text()
 }
 
 // tidySpoons moves 3 tsp or more up to tablespoons, and 8 Tbsp or more up to
