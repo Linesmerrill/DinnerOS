@@ -75,7 +75,7 @@ struct SuggestedMealsRow: View {
             .padding(.horizontal, 16)
         } else {
             ScrollView(.horizontal) {
-                LazyHStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
                     ForEach(slots) { slot in
                         card(slot)
                             .containerRelativeFrame(.horizontal) { width, _ in

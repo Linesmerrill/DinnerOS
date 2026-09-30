@@ -140,7 +140,10 @@ struct YourMealsSection: View {
             .padding(.horizontal, 16)
         } else {
             ScrollView(.horizontal) {
-                LazyHStack(alignment: .top, spacing: 12) {
+                // Not lazy: a week has a handful of meals, and a lazy row takes its height from
+                // the cards it has laid out so far, so a later card's Cooked/Skip and rating rows
+                // spilled under the next section.
+                HStack(alignment: .top, spacing: 12) {
                     ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                         card(entry)
                             .containerRelativeFrame(.horizontal) { width, _ in
