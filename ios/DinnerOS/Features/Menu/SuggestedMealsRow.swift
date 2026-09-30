@@ -121,6 +121,10 @@ struct SuggestedMealsRow: View {
                         }
                     }
                 }
+            } preview: {
+                // A solid card of its own, not the lifted dashed card: that one has no fill, so
+                // its text ran over the page behind it.
+                SuggestedMealPreview(slot: slot)
             }
             .accessibilityAction(named: Text("Shuffle")) { shuffle(slot) }
     }
@@ -238,6 +242,10 @@ struct SuggestedMealCard: View {
             .padding(8)
             .background(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color(.systemBackground))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .strokeBorder(
                         Color.accentColor.opacity(isSkipped ? 0.3 : 0.8),
                         style: StrokeStyle(lineWidth: 2, dash: [7, 5]))
@@ -255,5 +263,114 @@ struct SuggestedMealCard: View {
                         + slot.badges.map { " \($0.detail)" }.joined())
         )
         .accessibilityHint(Text("Opens the recipe. Actions: shuffle, or leave this day open."))
+    }
+}
+
+/// What pressing and holding a suggestion shows above Shuffle and Leave This Day Open: the meal
+/// on a solid card, with each reason on its own line instead of one run-on sentence, and the
+/// weather explained when the forecast helped pick it.
+struct SuggestedMealPreview: View {
+    let slot: AutopilotSlot
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            RecipePhoto(url: slot.recipe.imageURL, aspectRatio: 16.0 / 10.0, pointWidth: 340, cornerRadius: 0)
+                .overlay(alignment: .top) {
+                    SuggestedCardLabels(slot: slot)
+                        .padding(12)
+                }
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(slot.recipe.name)
+                        .font(.title3.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    facts
+                }
+                if !reasons.isEmpty {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in
+                            ReasonLine(reason: reason, badge: slot.badges.first)
+                        }
+                    }
+                }
+                if let badge = slot.badges.first, !badge.detail.isEmpty {
+                    Label {
+                        Text(badge.detail)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: badge.symbol.isEmpty ? "cloud.sun" : badge.symbol)
+                            .symbolRenderingMode(.multicolor)
+                    }
+                    .font(.subheadline)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.accentColor.opacity(0.1), in: .rect(cornerRadius: 12))
+                }
+            }
+            .padding(16)
+        }
+        .frame(width: dynamicTypeSize.isAccessibilitySize ? 360 : 330)
+        .background(Color(.systemBackground))
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The reasons, less the fallback "Ready in 35 min" when the cook time is already shown
+    /// just above them.
+    private var reasons: [AutopilotText] {
+        slot.reasons.filter { !($0.code == "fit" && slot.cookMinutes != nil) }
+    }
+
+    private var facts: some View {
+        HStack(spacing: 8) {
+            Label(AutopilotFormat.cookTime(slot.cookMinutes), systemImage: "clock")
+                .labelStyle(.titleAndIcon)
+            TimeBandBadge(band: slot.timeBand)
+            Text("\(slot.servings) servings")
+        }
+        .font(.subheadline)
+        .foregroundStyle(Color.secondary)
+        .lineLimit(1)
+    }
+}
+
+/// One reason with an icon for what kind it is, so a list of them scans at a glance.
+private struct ReasonLine: View {
+    let reason: AutopilotText
+    let badge: AutopilotBadge?
+
+    var body: some View {
+        Label {
+            Text(reason.text)
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: symbol)
+                .foregroundStyle(.tint)
+                .frame(width: 20)
+        }
+        .font(.subheadline)
+    }
+
+    /// The server's reason codes; anything new falls back to the sparkle.
+    private var symbol: String {
+        switch reason.code {
+        case "weather": badge.map(\.symbol).flatMap { $0.isEmpty ? nil : $0 } ?? "cloud.sun"
+        case "season": "leaf"
+        case "rating", "feedback": "star"
+        case "calendar", "busyWeek", "dayLimit", "weeknight", "quick", "fit": "clock"
+        case "pantry": "refrigerator"
+        case "holiday": "gift"
+        case "orderDate": "shippingbox"
+        case "familiar", "conversion": "arrow.clockwise"
+        case "learnedMeal", "learnedTaste", "busySkips": "arrow.triangle.2.circlepath"
+        case "taste": "heart"
+        case "rule", "weekday": "calendar"
+        case "guests": "person.2"
+        case "new": "sparkle"
+        case "notRecently": "clock.arrow.circlepath"
+        default: "sparkles"
+        }
     }
 }
