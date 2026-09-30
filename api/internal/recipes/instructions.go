@@ -256,6 +256,10 @@ type Segment struct {
 	// recipe. The mention stays in the step, without an amount, so the step
 	// still reads as written and the client can strike it through.
 	LeftOut bool
+	// Prep is how the step readies it when those words moved after the
+	// amount into Text ("melted" in "⅓ cup melted butter"), so the checklist
+	// still finds them.
+	Prep string
 }
 
 // StepNoteKind says why a step carries a note.
@@ -468,6 +472,9 @@ type mention struct {
 	packaged bool
 	// forms are the spellings to look for, longest first.
 	forms []string
+	// twins are later lines with the same name ("brown sugar" for the rub
+	// and again for the sauce), which a later step's mention stands for.
+	twins []int
 }
 
 // Swap is a protein the meal cooks in place of the recipe's: its name, and how
@@ -514,10 +521,10 @@ func AnnotateMeal(r Recipe, servings int, specs grocery.Specialties, applied boo
 		state := IngredientState{Index: index, IngredientKey: key, Name: ing.Name}
 		m := mention{ingredientID: ing.IngredientID, name: ing.Name, display: ing.Name, spicy: ingredients.Spicy(ing.Name)}
 		if a, ok := cookAmountAt(r, ing, servings); ok {
-			m.amount = &a
+			m.amount = homeCount(a, ing.Name)
 		}
 		if a, ok := amountAt(ing, smallest(r.Servings)); ok {
-			m.baseAmount = &a
+			m.baseAmount = homeCount(a, ing.Name)
 		}
 		if sw, ok := swaps[key]; ok {
 			if sw.Factor != nil {
@@ -600,7 +607,16 @@ func AnnotateMeal(r Recipe, servings int, specs grocery.Specialties, applied boo
 			}
 			seenSpecialty[spec.ID] = true
 		}
-		m.forms = nameForms(m.name, specs[key])
+		// "For the sauce:" heads a group of lines; it's nothing to find.
+		if !ingredientHeading(ing.Name) {
+			m.forms = nameForms(m.name, specs[key])
+		}
+		for j := range mentions {
+			if strings.EqualFold(trimQualifiers(mentions[j].name), trimQualifiers(m.name)) && !ingredientHeading(ing.Name) {
+				mentions[j].twins = append(mentions[j].twins, index)
+				break
+			}
+		}
 		mentions = append(mentions, m)
 	}
 	dedupeForms(mentions)
@@ -919,7 +935,13 @@ func nameForms(name string, spec *grocery.Specialty) []string {
 		seeds = append(seeds, "stock concentrate")
 	}
 	for _, seed := range seeds {
-		for _, base := range append([]string{seed, trimQualifiers(seed)}, headForms(trimQualifiers(seed))...) {
+		bases := []string{seed}
+		// "salt and pepper to taste" is found as "salt and pepper", so "to
+		// taste" in the step stays the step's own words.
+		if trimNameTail(seed) != seed {
+			bases = nil
+		}
+		for _, base := range append(append(bases, trimQualifiers(seed)), headForms(trimQualifiers(seed))...) {
 			add(base)
 			add(pluralize(base))
 			add(singularize(base))
@@ -941,6 +963,9 @@ var descriptors = map[string]bool{
 	"small": true, "medium": true, "whole": true, "dried": true, "shredded": true, "grated": true, "minced": true,
 	"sliced": true, "chopped": true, "diced": true, "crushed": true, "plain": true, "unsalted": true,
 	"salted": true, "extra": true, "virgin": true, "light": true, "neutral": true,
+	// Home recipes: "warm the oil" for extra-virgin olive oil, "chicken
+	// thighs" for bone-in chicken thighs.
+	"olive": true, "extra-virgin": true, "bone-in": true, "skin-on": true, "ripe": true,
 }
 
 // headForms are the shorter names a step uses for name: leading descriptors
@@ -1008,6 +1033,17 @@ func headForms(name string) []string {
 	// Names a card uses for the same thing: HelloFresh sends a long green
 	// pepper for a poblano and calls it poblano in the steps.
 	out = append(out, otherNames[strings.ToLower(name)]...)
+	// "Pour in the broth" for Beef Broth, "most of the cheese" for Shredded
+	// Cheddar: the plain word, when no other line shares it (dedupeForms).
+	if n := len(words); n > 1 && (strings.EqualFold(words[n-1], "broth") || strings.EqualFold(words[n-1], "stock")) {
+		out = append(out, words[n-1])
+	}
+	for _, w := range strings.Fields(strings.ToLower(name)) {
+		if cheeseKinds[w] {
+			out = append(out, "cheese")
+			break
+		}
+	}
 	// "mushrooms" for Button Mushrooms, "couscous" for Israeli Couscous: the
 	// last word is the food, unless it's a word every recipe uses for
 	// something ("sauce", "oil", "pepper").
@@ -1037,7 +1073,7 @@ func packagingName(name string) bool {
 // droppedTails are last words a step leaves off ("Parmesan", "panko").
 var droppedTails = map[string]bool{
 	"cheese": true, "pasta": true, "noodles": true, "breadcrumbs": true, "mix": true, "jam": true, "crumbles": true,
-	"mustard": true,
+	"mustard": true, "florets": true,
 	// Packaging: "Marinara Cup" is marinara.
 	"cup": true, "cups": true, "can": true, "packet": true, "pack": true, "container": true, "jar": true, "tub": true,
 }
@@ -1083,6 +1119,17 @@ var genericTails = map[string]bool{
 // ("chili sauce", "curry paste").
 var condiments = map[string]bool{"sauce": true, "paste": true, "powder": true, "flakes": true, "vinegar": true}
 
+// cheeseKinds are cheeses a step may call just "cheese".
+var cheeseKinds = map[string]bool{
+	"cheddar": true, "mozzarella": true, "parmesan": true, "parmigiano": true, "pecorino": true, "feta": true,
+	"gouda": true, "swiss": true, "provolone": true, "monterey": true, "colby": true, "gruyère": true,
+	"gruyere": true, "havarti": true, "fontina": true, "asiago": true,
+}
+
+// plainForms are the plain words headForms gives more than one kind of
+// thing: with two cheeses, "the cheese" is neither.
+var plainForms = map[string]bool{"cheese": true, "broth": true, "stock": true}
+
 // chiliNames are the words before "Pepper" that name a chili.
 var chiliNames = map[string]bool{
 	"chili": true, "chile": true, "jalapeño": true, "jalapeno": true, "serrano": true, "habanero": true,
@@ -1094,6 +1141,7 @@ var cuts = map[string]bool{
 	"breast": true, "breasts": true, "thigh": true, "thighs": true, "cutlet": true, "cutlets": true,
 	"chop": true, "chops": true, "tenderloin": true, "tenderloins": true, "fillet": true, "fillets": true,
 	"filet": true, "filets": true, "loin": true, "tenders": true, "strips": true,
+	"shoulder": true, "butt": true,
 }
 
 // dedupeForms gives a spelling two ingredients share to one of them: the one
@@ -1109,6 +1157,21 @@ func dedupeForms(mentions []mention) {
 			}
 		}
 		return false
+	}
+	// A plain word two lines both answer to, and neither is named, is
+	// neither's: "the cheese" with cheddar and mozzarella stays plain.
+	claims := map[string]int{}
+	for _, m := range mentions {
+		for _, f := range m.forms {
+			if k := strings.ToLower(f); plainForms[k] && !own(m, f) {
+				claims[k]++
+			}
+		}
+	}
+	for i := range mentions {
+		mentions[i].forms = slices.DeleteFunc(mentions[i].forms, func(f string) bool {
+			return claims[strings.ToLower(f)] > 1 && !own(mentions[i], f)
+		})
 	}
 	owner := map[string]int{}
 	for i, m := range mentions {
@@ -1139,13 +1202,17 @@ func dedupeForms(mentions []mention) {
 // trimQualifiers drops a parenthesis or a trailing clause: "Chili Flakes
 // (optional)" and "Scallions, thinly sliced" both become their head.
 func trimQualifiers(name string) string {
+	// "(14.5 oz) can diced tomatoes" is diced tomatoes.
+	if loc := leadingContainerRe.FindStringIndex(name); loc != nil && loc[1] < len(name) {
+		name = name[loc[1]:]
+	}
 	if i := strings.IndexByte(name, '('); i > 0 {
 		name = name[:i]
 	}
 	if i := strings.IndexByte(name, ','); i > 0 {
 		name = name[:i]
 	}
-	return strings.TrimSpace(name)
+	return trimNameTail(strings.TrimSpace(name))
 }
 
 // pluralize and singularize change the last word only, with the rules that

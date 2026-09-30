@@ -195,7 +195,11 @@ var (
 	// The mixed number ("1 1/2") and the bare fraction ("1/2") come first:
 	// Go's alternation is leftmost-first, so a plain integer listed earlier
 	// would match the "1" of "1/2" and leave "/2" in the name.
-	leadAmountRe  = regexp.MustCompile(`^\s*([0-9]+\s+[0-9]+/[0-9]+|[0-9]+/[0-9]+|[0-9]+(?:\.[0-9]+)?)\s*(.*)$`)
+	leadAmountRe = regexp.MustCompile(`^\s*([0-9]+\s+[0-9]+/[0-9]+|[0-9]+/[0-9]+|[0-9]+(?:\.[0-9]+)?)\s*(.*)$`)
+	// The rest of a range after its first amount: "-3 cloves", " to 4 cups".
+	rangeRestRe = regexp.MustCompile(`^\s*(?:-|–|to)\s*([0-9]+\s+[0-9]+/[0-9]+|[0-9]+/[0-9]+|[0-9]+(?:\.[0-9]+)?)\s*(.*)$`)
+	// A package size right after the amount: "(14.5 oz) ".
+	sizeNoteRe    = regexp.MustCompile(`^\([^()]*\)\s*`)
 	whitespaceRe  = regexp.MustCompile(`[ \t\x{00a0}]+`)
 	controlCharRe = regexp.MustCompile(`[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]`)
 )
@@ -265,7 +269,8 @@ func ParseText(text string) Draft {
 			}
 			intro = append(intro, line)
 		case "ingredients":
-			if len(d.Ingredients) >= maxDraftIngredients {
+			// "For the sauce:" heads the lines under it and isn't one.
+			if len(d.Ingredients) >= maxDraftIngredients || ingredientHeading(bulletRe.ReplaceAllString(line, "")) {
 				continue
 			}
 			d.Ingredients = append(d.Ingredients, parseIngredientLine(line))
@@ -321,6 +326,19 @@ func parseIngredientLine(line string) DraftIngredient {
 		if _, ok := parseQuantity(m[1]); ok {
 			out.Quantity = strings.TrimSpace(m[1])
 			rest = m[2]
+		}
+		// "2-3 cloves garlic": the larger amount, so there's enough on hand.
+		// RawText keeps the range.
+		if r := rangeRestRe.FindStringSubmatch(rest); r != nil {
+			if _, ok := parseQuantity(r[1]); ok {
+				out.Quantity = strings.TrimSpace(r[1])
+				rest = r[2]
+			}
+		}
+		// "1 (14.5 oz) can diced tomatoes": the size is the can's, and the
+		// line is a can of diced tomatoes.
+		if loc := sizeNoteRe.FindStringIndex(rest); loc != nil {
+			rest = rest[loc[1]:]
 		}
 	}
 	fields := strings.Fields(rest)

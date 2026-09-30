@@ -4,6 +4,7 @@ import (
 	"html"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // Cards write "1⁄2" with a fraction slash; the app shows fractions as one
@@ -38,6 +39,25 @@ var (
 	tspRe  = regexp.MustCompile(`\bTSP\b`)
 )
 
+// stepNumberRe is the number a pasted step starts with: "1. ", "2) ",
+// "Step 3: ".
+var stepNumberRe = regexp.MustCompile(`(?i)^\s*(?:step\s*)?\d{1,2}\s*[.):]\s+`)
+
+// stepNumber drops the number a pasted step starts with, since the app
+// numbers steps itself. Only before a capital letter: "2. Whisk" is a
+// number, "2 eggs" and "1.5 cups" aren't.
+func stepNumber(s string) string {
+	loc := stepNumberRe.FindStringIndex(s)
+	if loc == nil {
+		return s
+	}
+	rest := []rune(s[loc[1]:])
+	if len(rest) > 0 && unicode.IsUpper(rest[0]) {
+		return string(rest)
+	}
+	return s
+}
+
 // CleanStepText turns a step a source wrote in HTML ("<ul><li><p>Add
 // <strong>water</strong>…") into plain lines, one per paragraph or bullet,
 // drops the card's stars, writes "Tbsp", and closes up double spaces. The
@@ -49,6 +69,7 @@ func CleanStepText(s string) string {
 	s = starsRe.ReplaceAllString(s, "")
 	s = tbspRe.ReplaceAllString(s, "Tbsp")
 	s = tspRe.ReplaceAllString(s, "tsp")
+	s = stepNumber(s)
 	if !htmlAnyRe.MatchString(s) {
 		return strings.TrimSpace(doubleRe.ReplaceAllString(s, " "))
 	}

@@ -135,7 +135,8 @@ func CheckSteps(in Instructions) []Finding {
 		}
 	}
 	for _, ing := range in.Ingredients {
-		if !named[ing.Index] && !alwaysOptional[strings.ToLower(ing.Name)] && ing.Name != "" {
+		// A heading ("For the sauce:") names no ingredient.
+		if !named[ing.Index] && !alwaysOptional[strings.ToLower(trimNameTail(ing.Name))] && ing.Name != "" && !ingredientHeading(ing.Name) {
 			out = append(out, Finding{Code: FindingUnusedIngredient, Detail: ing.Name})
 		}
 	}

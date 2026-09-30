@@ -18,6 +18,7 @@ func TestPrepWordsReadAsDone(t *testing.T) {
 		"Stir drained rigatoni, half the Parmesan, and ": "",
 		"Peel and mince or grate ":                       "peeled, minced, or grated",
 		"Add diced ":                                     "diced",
+		"Add peeled and diced ":                          "peeled and diced",
 		"juice from half ":                               "juiced",
 		"Dice the onion, then add the ":                  "",
 		"Combine lime ":                                  "",

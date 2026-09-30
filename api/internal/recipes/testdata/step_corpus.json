@@ -83,6 +83,222 @@
       "expect": {
         "2": {"1": ["4 Tbsp BBQ sauce", "combine 4 Tbsp BBQ sauce, jam,", "2 Tbsp ponzu"], "2": ["Cut along the tail.", "7 oz lobster tails", "1 Tbsp BBQ glaze"]}
       }
+    },
+    {
+      "name": "Weeknight Pantry Chili",
+      "servings": [6],
+      "ingredients": [
+        {"name": "olive oil", "amounts": {"6": "2 tbsp"}},
+        {"name": "yellow onion", "amounts": {"6": "1"}},
+        {"name": "garlic", "amounts": {"6": "3 clove"}},
+        {"name": "ground beef", "amounts": {"6": "2 lb"}},
+        {"name": "chili powder", "amounts": {"6": "2 tbsp"}},
+        {"name": "ground cumin", "amounts": {"6": "1 tsp"}},
+        {"name": "(14.5 oz) can diced tomatoes", "amounts": {"6": "2"}},
+        {"name": "kidney beans", "amounts": {"6": "1 can"}},
+        {"name": "salt to taste", "amounts": {}},
+        {"name": "shredded cheddar cheese, for serving", "amounts": {"6": "1 cup"}}
+      ],
+      "steps": [
+        "Heat 2 tablespoons olive oil in a large pot over medium-high heat. Add the diced onion and cook until soft, about 5 minutes.",
+        "Stir in the minced garlic and cook 30 seconds, then add the ground beef and brown it, breaking it up as it cooks, 8-10 minutes. Drain off most of the fat.",
+        "Add the chili powder, cumin, 1 teaspoon salt, the tomatoes with their juices, and the drained kidney beans. Stir in 1 cup of water.",
+        "Simmer uncovered for 30 to 40 minutes, stirring now and then. Taste and add more salt if it needs it.",
+        "Serve topped with cheddar."
+      ],
+      "expect": {
+        "6": {"1": ["Heat 2 Tbsp olive oil in", "Add 1 diced onion and"], "2": ["Stir in 3 cloves minced garlic"], "3": ["1 tsp salt", "2 cans tomatoes", "1 can drained kidney beans"], "4": ["Taste and add more salt"]}
+      }
+    },
+    {
+      "name": "Grandma June's Sunday Pot Roast",
+      "servings": [6],
+      "ingredients": [
+        {"name": "chuck roast", "amounts": {"6": "3 lb"}},
+        {"name": "salt", "amounts": {}},
+        {"name": "pepper", "amounts": {}},
+        {"name": "a glug of oil", "amounts": {}},
+        {"name": "carrots", "amounts": {"6": "4"}},
+        {"name": "potatoes", "amounts": {"6": "6"}},
+        {"name": "onion", "amounts": {"6": "1"}},
+        {"name": "beef broth", "amounts": {"6": "2 cup"}},
+        {"name": "Worcestershire sauce", "amounts": {"6": "1 tbsp"}},
+        {"name": "nutmeg", "amounts": {}}
+      ],
+      "steps": [
+        "Heat oven to 325°F. Rub the roast all over with salt and pepper.",
+        "Heat a glug of oil in the dutch oven and brown the roast good on all sides, don't rush it.",
+        "Pile the carrots, potatoes and onion around the meat. Pour in the broth and a couple shakes of Worcestershire.",
+        "Cover and bake 3 to 4 hours till it falls apart with a fork. Mom's secret: a pinch of nutmeg in the gravy!"
+      ],
+      "expect": {
+        "6": {"3": ["Pour in 2 cups broth", "a couple shakes of Worcestershire."], "4": ["a pinch of nutmeg"]}
+      }
+    },
+    {
+      "name": "Lemon Garlic Chicken Thighs",
+      "servings": [4],
+      "ingredients": [
+        {"name": "For the marinade:", "amounts": {}},
+        {"name": "olive oil", "amounts": {"4": "1/4 cup"}},
+        {"name": "lemons", "amounts": {"4": "2"}},
+        {"name": "garlic", "amounts": {"4": "4 clove"}},
+        {"name": "dried oregano", "amounts": {"4": "1 tsp"}},
+        {"name": "kosher salt", "amounts": {"4": "1 tsp"}},
+        {"name": "black pepper", "amounts": {"4": "1/2 tsp"}},
+        {"name": "For the chicken:", "amounts": {}},
+        {"name": "bone-in chicken thighs", "amounts": {"4": "2 lb"}},
+        {"name": "fresh parsley (optional)", "amounts": {}}
+      ],
+      "steps": [
+        "1. Whisk together 1/4 cup olive oil, the juice of 2 lemons, 4 cloves garlic (minced), 1 tsp dried oregano, 1 teaspoon kosher salt and 1/2 tsp pepper.",
+        "2. Put the chicken thighs in a zip-top bag, pour in the marinade, and chill for at least 1 hour or up to overnight.",
+        "3. Heat the oven to 425°F. Lay the thighs skin side up in a baking dish and pour the marinade over. Roast 35-40 minutes, until the skin is crisp and the chicken reads 165°F.",
+        "4. Sprinkle with chopped parsley if you like and serve with the pan juices."
+      ],
+      "expect": {
+        "4": {"1": ["Whisk together ¼ cup olive oil", "4 cloves garlic (minced)", "1 tsp kosher salt and ½ tsp pepper."], "2": ["Put 2 lb chicken thighs in"]}
+      }
+    },
+    {
+      "name": "Aunt Ruth's Banana Bread",
+      "servings": [8],
+      "ingredients": [
+        {"name": "ripe bananas", "amounts": {"8": "3"}},
+        {"name": "butter", "amounts": {"8": "1/3 cup"}},
+        {"name": "sugar", "amounts": {"8": "3/4 cup"}},
+        {"name": "egg", "amounts": {"8": "1"}},
+        {"name": "vanilla", "amounts": {"8": "1 tsp"}},
+        {"name": "baking soda", "amounts": {"8": "1 tsp"}},
+        {"name": "salt", "amounts": {"8": "1 pinch"}},
+        {"name": "all-purpose flour", "amounts": {"8": "3/2 cup"}}
+      ],
+      "steps": [
+        "Preheat oven to 350 and grease a 9x5 loaf pan.",
+        "Mash the bananas in a big bowl with a fork. Stir in the melted butter.",
+        "Mix in the baking soda and salt. Stir in the sugar, beaten egg and vanilla. Mix in the flour last, just till you can't see it.",
+        "Pour into the pan and bake 55-65 min, until a toothpick comes out clean. Cool 10 min before turning it out."
+      ],
+      "expect": {
+        "8": {"2": ["Stir in ⅓ cup melted butter."], "3": ["1 beaten egg", "1 ½ cups flour"]}
+      }
+    },
+    {
+      "name": "Easy Black Bean Soup",
+      "servings": [4],
+      "ingredients": [
+        {"name": "olive oil", "amounts": {"4": "1 tbsp"}},
+        {"name": "onion", "amounts": {"4": "1"}},
+        {"name": "garlic", "amounts": {"4": "3 clove"}},
+        {"name": "ground cumin", "amounts": {"4": "1 tsp"}},
+        {"name": "black beans", "amounts": {"4": "2 can"}},
+        {"name": "vegetable broth", "amounts": {"4": "3 cup"}},
+        {"name": "lime", "amounts": {"4": "1"}},
+        {"name": "salt and pepper to taste", "amounts": {}},
+        {"name": "sour cream", "amounts": {}},
+        {"name": "fresh cilantro (optional)", "amounts": {}}
+      ],
+      "steps": [
+        "In a large pot, heat the olive oil over medium heat. Add onion and cook 5-7 minutes, until soft. Add 2-3 cloves garlic and the cumin and cook 1 minute more.",
+        "Add the beans (with their liquid) and broth. Bring to a boil, then lower the heat and simmer 15 minutes.",
+        "Blend about half the soup with an immersion blender until smooth, leaving the rest chunky.",
+        "Squeeze in the juice of the lime and season with salt and pepper to taste. Top with sour cream and cilantro, if you like."
+      ],
+      "expect": {
+        "4": {"1": ["Add 2-3 cloves garlic and 1 tsp cumin"], "2": ["Add 2 cans beans", "3 cups broth"], "4": ["season with salt and pepper to taste."]}
+      }
+    },
+    {
+      "name": "Mom's Tuna Noodle Casserole",
+      "servings": [6],
+      "ingredients": [
+        {"name": "egg noodles", "amounts": {"6": "12 oz"}},
+        {"name": "cream of mushroom soup", "amounts": {"6": "1 can"}},
+        {"name": "tuna", "amounts": {"6": "2 can"}},
+        {"name": "frozen peas", "amounts": {"6": "1 cup"}},
+        {"name": "milk", "amounts": {"6": "1/2 cup"}},
+        {"name": "shredded cheddar", "amounts": {"6": "1 cup"}},
+        {"name": "a handful of crushed potato chips", "amounts": {}}
+      ],
+      "steps": [
+        "Heat oven to 375. Boil noodles about 6 min and drain. In the same pot stir together a can of soup, the tuna, peas, milk and most of the cheese. Fold in the noodles, dump it all into a greased 9x13 dish, and top with the rest of the cheese and the crushed chips. Bake 20-25 min till bubbly."
+      ],
+      "expect": {
+        "6": {"1": ["a can of soup", "2 cans tuna", "most of the cheese", "the rest of the cheese"]}
+      }
+    },
+    {
+      "name": "Sheet Pan Sausage and Potatoes",
+      "servings": [4],
+      "ingredients": [
+        {"name": "smoked sausage", "amounts": {"4": "1 lb"}},
+        {"name": "baby potatoes", "amounts": {"4": "3/2 lb"}},
+        {"name": "broccoli florets", "amounts": {"4": "2 cup"}},
+        {"name": "olive oil", "amounts": {"4": "3 tbsp"}},
+        {"name": "garlic powder", "amounts": {"4": "1 tsp"}},
+        {"name": "smoked paprika", "amounts": {"4": "1 tsp"}},
+        {"name": "salt", "amounts": {"4": "1 tsp"}},
+        {"name": "black pepper", "amounts": {"4": "1/2 tsp"}},
+        {"name": "grated parmesan", "amounts": {}}
+      ],
+      "steps": [
+        "Preheat the oven to 400 degrees F and line a large sheet pan with foil.",
+        "Toss the potatoes with 1 1/2 tablespoons of the olive oil and half of the garlic powder, paprika, salt and pepper. Roast for 15 minutes.",
+        "Add the sausage and broccoli to the pan, drizzle with the remaining oil, and sprinkle with the rest of the seasonings. Toss and roast another 15-20 minutes, until the potatoes are fork-tender.",
+        "Sprinkle with parmesan and serve."
+      ],
+      "expect": {
+        "4": {"2": ["with 1 ½ Tbsp olive oil and ½ tsp garlic powder, ½ tsp paprika, ½ tsp salt and ¼ tsp pepper."], "3": ["2 cups broccoli", "the remaining oil"]}
+      }
+    },
+    {
+      "name": "Uncle Ray's Slow Cooker Pulled Pork",
+      "servings": [8],
+      "ingredients": [
+        {"name": "For the rub:", "amounts": {}},
+        {"name": "brown sugar", "amounts": {"8": "2 tbsp"}},
+        {"name": "smoked paprika", "amounts": {"8": "1 tbsp"}},
+        {"name": "garlic powder", "amounts": {"8": "1 tsp"}},
+        {"name": "salt", "amounts": {"8": "2 tsp"}},
+        {"name": "pork shoulder", "amounts": {"8": "4 lb"}},
+        {"name": "For the sauce:", "amounts": {}},
+        {"name": "ketchup", "amounts": {"8": "1 cup"}},
+        {"name": "apple cider vinegar", "amounts": {"8": "1/4 cup"}},
+        {"name": "brown sugar", "amounts": {"8": "3 tbsp"}},
+        {"name": "Worcestershire sauce", "amounts": {"8": "1 tbsp"}}
+      ],
+      "steps": [
+        "Mix the brown sugar, paprika, garlic powder and salt, then rub it all over the pork.",
+        "Put the pork in the slow cooker and cook on low 8-10 hours (or high 5-6 hours).",
+        "In a small saucepan, whisk together the ketchup, vinegar, brown sugar and Worcestershire; simmer 10 minutes.",
+        "Shred the pork with two forks, discard the fat, and toss with the sauce."
+      ],
+      "expect": {
+        "8": {"1": ["Mix 2 Tbsp brown sugar", "rub it all over 4 lb pork."], "3": ["3 Tbsp brown sugar"]}
+      }
+    },
+    {
+      "name": "Nonna's Weeknight Marinara",
+      "servings": [4],
+      "ingredients": [
+        {"name": "extra-virgin olive oil", "amounts": {"4": "3 tbsp"}},
+        {"name": "garlic", "amounts": {"4": "4 clove"}},
+        {"name": "red pepper flakes", "amounts": {"4": "1/4 tsp"}},
+        {"name": "crushed tomatoes", "amounts": {"4": "28 oz"}},
+        {"name": "sugar", "amounts": {"4": "1 pinch"}},
+        {"name": "fresh basil", "amounts": {"4": "1 bunch"}},
+        {"name": "spaghetti", "amounts": {"4": "450 g"}},
+        {"name": "grated Parmesan cheese", "amounts": {"4": "1/2 cup"}}
+      ],
+      "steps": [
+        "Warm the oil in a wide pan over low heat. Add the sliced garlic and pepper flakes and cook gently 2 to 3 minutes; don't let the garlic brown.",
+        "Pour in the tomatoes, add a pinch of sugar and half the basil, and simmer 20 minutes while you cook the pasta.",
+        "Cook 450 grams spaghetti in well-salted boiling water until al dente. Save a mug of the pasta water, then drain.",
+        "Toss the spaghetti with the sauce, loosening with a splash of pasta water. Tear in the rest of the basil and pass the Parmesan at the table."
+      ],
+      "expect": {
+        "4": {"1": ["Warm 3 Tbsp oil", "Add 4 cloves sliced garlic"], "2": ["half the basil"], "3": ["Cook 450 g spaghetti in"]}
+      }
     }
   ]
 }

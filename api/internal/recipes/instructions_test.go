@@ -172,8 +172,8 @@ func TestAnnotateReplacesAnAmountTheStepAlreadyWrote(t *testing.T) {
 func TestAnnotateKeepsWordsItCannotRecognizeAsAnAmount(t *testing.T) {
 	r := instructionRecipe(
 		[]RecipeIngredient{instructionLine("ing-rice", "Rice", "1", "cup")},
-		"Fluff the cooked rice.")
-	if got, want := joined(Annotate(r, 2, nil, true).Steps[0]), "Fluff the cooked 1 cup rice."; got != want {
+		"Fluff the leftover rice.")
+	if got, want := joined(Annotate(r, 2, nil, true).Steps[0]), "Fluff the leftover 1 cup rice."; got != want {
 		t.Errorf("text = %q, want %q", got, want)
 	}
 }

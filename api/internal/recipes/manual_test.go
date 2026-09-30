@@ -56,6 +56,29 @@ func TestParseTextReadsAPastedRecipe(t *testing.T) {
 	}
 }
 
+// A blog recipe's lines: a group heading, a range, and a can with its size.
+func TestParseTextReadsGroupsRangesAndCanSizes(t *testing.T) {
+	d := ParseText("Pantry Soup\nIngredients\nFor the soup:\n- 2-3 cloves garlic, minced\n- 1 (14.5 oz) can diced tomatoes\n- 2 (15 oz) cans black beans, drained\n- 1 to 2 cups broth\nSteps\nSimmer it all.")
+	want := []DraftIngredient{
+		{Name: "garlic", Quantity: "3", Unit: "clove"},
+		{Name: "diced tomatoes", Quantity: "1", Unit: "can"},
+		{Name: "black beans", Quantity: "2", Unit: "can"},
+		{Name: "broth", Quantity: "2", Unit: "cup"},
+	}
+	if len(d.Ingredients) != len(want) {
+		t.Fatalf("ingredients = %+v; want %d, and no line for the heading", d.Ingredients, len(want))
+	}
+	for i, w := range want {
+		got := d.Ingredients[i]
+		if got.Name != w.Name || got.Quantity != w.Quantity || got.Unit != w.Unit {
+			t.Errorf("ingredient %d = %+v; want name %q quantity %q unit %q", i, got, w.Name, w.Quantity, w.Unit)
+		}
+	}
+	if d.Ingredients[0].RawText != "- 2-3 cloves garlic, minced" {
+		t.Errorf("raw text = %q; want the range kept as typed", d.Ingredients[0].RawText)
+	}
+}
+
 func TestParseTextWarnsWhenItCannotSplitTheText(t *testing.T) {
 	d := ParseText("Some notes I wrote about dinner\nand a second line")
 	if len(d.Warnings) == 0 {

@@ -294,7 +294,7 @@ func draftFromSchema(obj map[string]any) Draft {
 			break
 		}
 		line := stripTags(raw)
-		if strings.TrimSpace(line) == "" {
+		if strings.TrimSpace(line) == "" || ingredientHeading(line) {
 			continue
 		}
 		d.Ingredients = append(d.Ingredients, parseIngredientLine(line))

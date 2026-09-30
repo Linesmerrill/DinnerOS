@@ -16,7 +16,8 @@ type corpusRecipe struct {
 	Servings    []int  `json:"servings"`
 	Ingredients []struct {
 		Name string `json:"name"`
-		// Amounts are "quantity unit" by serving size ("1/2 cup").
+		// Amounts are "quantity unit" by serving size ("1/2 cup"), or a
+		// bare quantity for a counted line ("1").
 		Amounts map[string]string `json:"amounts"`
 	} `json:"ingredients"`
 	Steps   []string `json:"steps"`
@@ -48,9 +49,10 @@ func (c corpusRecipe) recipe() Recipe {
 		for _, n := range c.Servings {
 			a := Amount{Servings: n}
 			if text, ok := ing.Amounts[strconv.Itoa(n)]; ok {
-				if q, u, found := strings.Cut(text, " "); found {
-					a.Quantity, a.Unit = q, u
-				}
+				// A bare number ("1") is counted with no unit, the way a
+				// pasted "1 onion, diced" imports.
+				q, u, _ := strings.Cut(text, " ")
+				a.Quantity, a.Unit = q, u
 			}
 			line.Amounts = append(line.Amounts, a)
 		}

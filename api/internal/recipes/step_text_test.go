@@ -20,3 +20,18 @@ func TestCleanStepTextUsesFractionGlyphs(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+func TestCleanStepTextDropsAPastedStepNumber(t *testing.T) {
+	for in, want := range map[string]string{
+		"1. Whisk the eggs.":      "Whisk the eggs.",
+		"2) Bake until golden.":   "Bake until golden.",
+		"Step 3: Let it rest.":    "Let it rest.",
+		"2 eggs, beaten.":         "2 eggs, beaten.",
+		"1.5 cups flour, sifted.": "1.5 cups flour, sifted.",
+		"4. cups of flour":        "4. cups of flour",
+	} {
+		if got := CleanStepText(in); got != want {
+			t.Errorf("CleanStepText(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -57,6 +57,12 @@ func buildUnitCodes() map[string]string {
 			}
 		}
 	}
+	// Home recipes spell units out: "2 tablespoons olive oil", "1 lb beef".
+	for w, code := range manualUnitWords {
+		if _, ok := out[w]; !ok {
+			out[w] = code
+		}
+	}
 	return out
 }
 
@@ -69,6 +75,9 @@ func statedAmount(text []rune) (m Measure, length int, ok bool) {
 		return Measure{}, 0, false
 	}
 	end := len(text) - spaces
+	// "1 ½ tablespoons of the olive oil", "1 cup of broth": the amount is
+	// still the step's own, with "of" between.
+	end -= unitOfLen(text[:end])
 	word, start := lastWord(text, end)
 	unit := ""
 	numEnd := end
@@ -88,6 +97,29 @@ func statedAmount(text []rune) (m Measure, length int, ok bool) {
 		return Measure{}, 0, false
 	}
 	return Measure{Quantity: q, Unit: unit}, len(text) - (numEnd - n), true
+}
+
+// unitOfLen is how many runes at the end of text are " of" or " of the"
+// after a unit ("tablespoons of the"), or 0. Only after a unit: "2 of the
+// eggs" and "¼ of the onion" are shares, read elsewhere.
+func unitOfLen(text []rune) int {
+	end := len(text)
+	word, start := lastWord(text, end)
+	if strings.EqualFold(word, "the") {
+		end = start - trailingSpaces(text, start)
+		word, start = lastWord(text, end)
+	}
+	if !strings.EqualFold(word, "of") {
+		return 0
+	}
+	gap := trailingSpaces(text, start)
+	if gap == 0 {
+		return 0
+	}
+	if unit, _ := lastWord(text, start-gap); !unitWords[strings.ToLower(unit)] {
+		return 0
+	}
+	return len(text) - (start - gap)
 }
 
 // otherServings reads the note meal-kit cards put after a mention for the
@@ -213,6 +245,10 @@ var relativeWords = []string{
 	// "Open package of chicken", "one packet of sour cream": the whole pack.
 	"package of", "packet of", "packets of", "container of", "can of", "jar of", "bag of",
 	"layer of", "dollop of", "tops of",
+	// Home cooks measure by eye: "most of the cheese", "a glug of oil", "a
+	// couple shakes of Worcestershire".
+	"most of the", "most of", "some of the", "some", "a little", "a bit of", "a few",
+	"glug of", "shake of", "shakes of", "squeeze of", "spoonful of", "scoop of",
 	// "Wash and dry produce (except green beans)".
 	"except",
 }
@@ -401,11 +437,16 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			i++
 			continue
 		}
-		if _, _, ok := statedAmount(runes[max(0, i-24):i]); ok {
+		head := runes[max(0, i-40):i]
+		head = head[:len(head)-trailingPrepLen(head)]
+		if _, _, ok := statedAmount(head); ok || statedRange(head) {
 			statedLater[hit] = true
 		}
 		i += length
 	}
+	// listShare is the share a list started with ("half of the garlic
+	// powder, paprika, and salt"), carried to each name after it.
+	var listShare *big.Rat
 	for i := 0; i < len(runes); {
 		hit, length := matchAt(lower, i, candidates)
 		// "½ cup pasta cooking water": the water, not the pasta. The card
@@ -423,10 +464,36 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			i++
 			continue
 		}
+		// Two lines of the same name ("brown sugar" in the rub and again in
+		// the sauce): once a step has used the first, the next step's mention
+		// is the second.
+		if amounts.seen != nil {
+			for _, twin := range mentions[hit].twins {
+				if !amounts.seen[hit] || seenHere[hit] {
+					break
+				}
+				hit = twin
+			}
+		}
 		m := mentions[hit]
+		// "the melted butter": the amount goes before how it's prepared
+		// ("⅓ cup melted butter"), so the words before it are read without
+		// them and put back after.
+		prepLen := trailingPrepLen(plain)
+		prep := string(plain[len(plain)-prepLen:])
+		plain = plain[:len(plain)-prepLen]
 		amount := m.amount
 		if _, _, ok := statedAmount(plain); statedLater[hit] && !ok && !amountShown[hit] {
 			amount = nil
+		}
+		// "Add 2-3 cloves garlic": a range is the cook's call, so the step's
+		// own words stand and no amount goes in front.
+		ranged := statedRange(plain)
+		if ranged {
+			amount = nil
+			if amounts.found != nil {
+				amounts.found[hit] = true
+			}
 		}
 		shownBefore := amountShown[hit]
 		before := strings.TrimRightFunc(string(plain), unicode.IsSpace)
@@ -438,7 +505,7 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		// servings)"): that share is the amount here, not the recipe's total,
 		// which belongs on the ingredient list.
 		keepsName := !m.substituted || m.display == m.name
-		if stated, statedLen, ok := statedAmount(plain); ok && !shownBefore && keepsName && !m.swapped {
+		if stated, statedLen, ok := statedAmount(plain); ok && !ranged && !shownBefore && keepsName && !m.swapped {
 			if amounts.found != nil {
 				amounts.found[hit] = true
 			}
@@ -446,6 +513,7 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			if stated.Unit == "" && m.amount != nil {
 				stated.Unit = m.amount.Unit
 			}
+			claim := true
 			switch {
 			case hasOther && amounts.servings == otherSize:
 				stated = other
@@ -459,9 +527,11 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			default:
 				// No way to know this step's share at this size: the step keeps
 				// its words, and no amount is claimed.
-				amount = nil
+				amount, claim = nil, false
 			}
-			if amount != nil {
+			// "1 teaspoon salt" for a "salt to taste" line: the step's amount
+			// is the only one there is.
+			if claim && (m.amount != nil || stated.Unit != "") {
 				amount = &stated
 				part = m.amount == nil || stated.Quantity.Cmp(m.amount.Quantity) != 0 || stated.Unit != m.amount.Unit
 				plain = plain[:len(plain)-statedLen]
@@ -484,7 +554,7 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		}
 		lowerBefore := strings.ToLower(before)
 		for _, w := range relativeWords {
-			if strings.HasSuffix(lowerBefore, w) {
+			if endsWithWord(lowerBefore, w) {
 				amount = nil
 			}
 		}
@@ -492,9 +562,16 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		// "¼ of the onion" is ¼ onion to have ready, and reads as written.
 		inText := true
 		fraction, fractionLen, isFraction := fractionOf(plain)
+		if !isFraction && listShare != nil && listJoinRe.MatchString(string(plain)) {
+			fraction, isFraction = listShare, true
+		}
 		// "half the lemon zest" is half the zest, not half the lemon.
 		if isFraction && strings.HasPrefix(strings.ToLower(string(runes[i+length:])), " zest") {
 			isFraction, amount = false, nil
+		}
+		listShare = nil
+		if isFraction {
+			listShare = fraction
 		}
 		if isFraction {
 			amount = nil
@@ -588,6 +665,11 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			plain = plain[:len(plain)-trailingAmountLen(plain)]
 			amountShown[hit] = true
 		}
+		movePrep := prep != "" && amount != nil && inText && amount.Unit != "wedge"
+		if !movePrep {
+			plain = append(plain, []rune(prep)...)
+			prep = ""
+		}
 		flush()
 		surface := string(runes[i : i+length])
 		switch {
@@ -603,7 +685,7 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		}
 		text := surface
 		if amount != nil && inText {
-			text = amount.Text() + " " + surface
+			text = amount.Text() + " " + prep + surface
 		}
 		// "a squeeze of lime juice" is a wedge, not the whole lime: the card
 		// quartered it earlier. It reads "a squeeze of 1 lime wedge".
@@ -625,6 +707,7 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			Kind: SegmentIngredient, Text: text, IngredientID: m.ingredientID, Ingredient: hit, Name: m.display,
 			Amount: amount, Part: part && amount != nil, Spicy: m.spicy, Substituted: m.substituted,
 			SpecialtyID: m.specialtyID, SpecialtyName: m.specialtyName, LeftOut: m.leftOut,
+			Prep: strings.TrimSpace(prep),
 		})
 		if m.leftOut {
 			note := "You leave out the " + m.name + "."

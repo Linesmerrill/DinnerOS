@@ -79,6 +79,10 @@ func buildChecklist(r Recipe, in Instructions) Checklist {
 func checklistIngredients(r Recipe, in Instructions) []CookIngredient {
 	out := make([]CookIngredient, 0, len(in.Ingredients))
 	for _, st := range in.Ingredients {
+		// "For the sauce:" heads the lines under it; there's nothing to check off.
+		if ingredientHeading(st.Name) {
+			continue
+		}
 		ci := CookIngredient{
 			ID: fmt.Sprintf("%d-%s", st.Index, r.Ingredients[st.Index].IngredientID), Index: st.Index,
 			Name: st.Name, LeftOut: st.LeftOut != nil, IngredientKey: st.IngredientKey,
@@ -165,7 +169,7 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 			}
 			// "Crushed Tomatoes, crushed" says nothing. "lime zest, half the
 			// cilantro": the zest is the lime's, not done to the cilantro.
-			prep := PrepWords(clause)
+			prep := PrepWords(clause + seg.Prep + " ")
 			if i > 1 && step.Segments[i-2].Kind == SegmentIngredient {
 				if lc := strings.ToLower(step.Segments[i-1].Text); strings.HasPrefix(lc, " zest") || strings.HasPrefix(lc, " juice") {
 					prep = ""
@@ -249,7 +253,8 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 			continue
 		}
 		for _, it := range g.Items {
-			if it.LeftOut {
+			// "Stir in the melted butter": the step says how it's readied.
+			if it.LeftOut || strings.Contains(it.Prep, "melted") || strings.Contains(it.Prep, "softened") {
 				continue
 			}
 			if note := AheadNote(it.Name, g.Index); note != "" {
@@ -291,9 +296,11 @@ func AheadNote(name string, step int) string {
 	return ""
 }
 
-// lastClause is the text since the last sentence or clause break.
+// lastClause is the text since the last sentence or clause break. A closing
+// parenthesis ends one too: "4 cloves garlic (minced), 1 tsp oregano" doesn't
+// mince the oregano.
 func lastClause(text string) string {
-	if i := strings.LastIndexAny(text, ".;\n:"); i >= 0 {
+	if i := strings.LastIndexAny(text, ".;\n:)"); i >= 0 {
 		return text[i+1:]
 	}
 	return text
@@ -394,8 +401,11 @@ func PrepWords(clause string) string {
 			continue
 		}
 		// A participle only counts right before the ingredient ("add diced
-		// butter"); only amounts and articles may sit between them.
-		if done == w && slices.ContainsFunc(run[i+1:], func(x string) bool { return !closeFillers[x] && !allNumbers(x) }) {
+		// butter"); only amounts and articles may sit between them, or another
+		// participle ("peeled and diced onion").
+		if done == w && slices.ContainsFunc(run[i+1:], func(x string) bool {
+			return !closeFillers[x] && !allNumbers(x) && x != "and" && prepVerbs[x] != x
+		}) {
 			continue
 		}
 		if slices.ContainsFunc(out, func(o string) bool { return strings.HasSuffix(o, done) }) {
