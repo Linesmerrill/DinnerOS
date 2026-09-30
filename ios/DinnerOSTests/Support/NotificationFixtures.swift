@@ -33,6 +33,7 @@ nonisolated final class FakeNotificationServer: Sendable {
         var log: [String] = []
         /// The body of every mark-read request.
         var readBodies: [String] = []
+        var dismissBodies: [String] = []
     }
 
     private let state: Mutex<State>
@@ -48,6 +49,7 @@ nonisolated final class FakeNotificationServer: Sendable {
 
     var log: [String] { state.withLock { $0.log } }
     var readBodies: [String] { state.withLock { $0.readBodies } }
+    var dismissBodies: [String] { state.withLock { $0.dismissBodies } }
 
     func entries(in householdID: String) -> [Entry] {
         state.withLock { $0.households[householdID] ?? [] }
@@ -111,6 +113,14 @@ nonisolated final class FakeNotificationServer: Sendable {
                 } else {
                     return (400, Fixtures.errorJSON(code: "validation_failed", message: "ids or all"))
                 }
+                return (200, Self.count(entries))
+            case ("POST", ["dismiss"]):
+                let body = request.httpBody.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+                state.dismissBodies.append(body)
+                guard let ids = PantryFixtures.body(of: request)["ids"] as? [String], !ids.isEmpty else {
+                    return (400, Fixtures.errorJSON(code: "validation_failed", message: "ids"))
+                }
+                entries.removeAll { ids.contains($0.id) }
                 return (200, Self.count(entries))
             default:
                 return (404, Fixtures.errorJSON(code: "not_found"))

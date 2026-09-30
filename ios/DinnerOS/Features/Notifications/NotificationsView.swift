@@ -13,6 +13,7 @@ struct NotificationsView: View {
     @Environment(TabRouter.self) private var tabs: TabRouter?
 
     @State private var actionError: String?
+    @State private var actionTitle = String(localized: "Couldn't Mark Notifications Read")
 
     var body: some View {
         NavigationStack {
@@ -29,7 +30,7 @@ struct NotificationsView: View {
                     }
                 }
                 .alert(
-                    "Couldn't Mark Notifications Read",
+                    actionTitle,
                     isPresented: Binding(presenting: $actionError),
                     presenting: actionError
                 ) { _ in
@@ -94,6 +95,11 @@ struct NotificationsView: View {
             NotificationRow(notification: notification)
         }
         .accessibilityHint(hint(for: notification))
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button("Delete", systemImage: "trash", role: .destructive) {
+                delete(notification)
+            }
+        }
         .swipeActions(edge: .leading) {
             if !notification.read {
                 Button("Mark Read", systemImage: "envelope.open") {
@@ -133,6 +139,20 @@ struct NotificationsView: View {
         return Text(destination.accessibilityHint)
     }
 
+    /// Gone from this member's list only; the rest of the household still sees it.
+    private func delete(_ notification: AppNotification) {
+        Task {
+            do {
+                try await notifications.dismiss(notification)
+            } catch is CancellationError {
+                return
+            } catch {
+                actionTitle = String(localized: "Couldn't Delete Notification")
+                actionError = HouseholdStore.message(for: error)
+            }
+        }
+    }
+
     private func open(_ notification: AppNotification) {
         Task { await notifications.markRead(notification) }
         let destination = NotificationRouting.destination(for: notification)
@@ -149,6 +169,7 @@ struct NotificationsView: View {
             } catch is CancellationError {
                 // Nothing to report.
             } catch {
+                actionTitle = String(localized: "Couldn't Mark Notifications Read")
                 actionError = HouseholdStore.message(for: error)
             }
         }

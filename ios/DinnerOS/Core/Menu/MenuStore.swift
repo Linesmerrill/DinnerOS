@@ -343,6 +343,10 @@ final class MenuStore {
 
     /// The card for a recipe from the menu or All Meals, for its badges and facts.
     func card(forRecipeID recipeID: String) -> MenuCard? {
+        // The week's planned cards first: the server sends one for every planned recipe.
+        if let card = menu?.planned.first(where: { $0.recipe.id == recipeID }) {
+            return card
+        }
         if let card = menu?.sections.lazy.flatMap(\.items).first(where: { $0.recipe.id == recipeID }) {
             return card
         }

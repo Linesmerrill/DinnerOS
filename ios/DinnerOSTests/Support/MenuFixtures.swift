@@ -41,13 +41,14 @@ nonisolated enum MenuFixtures {
 
     static func menu(
         week: String = "2026-W38", timing: String = "current", plan: String = "null", proposal: String = "null",
-        sections: [String]
+        sections: [String], planned: [String] = []
     ) -> Data {
         let (start, end) = PlanFixtures.dates(for: week)
         return Data(
             #"""
             {"week":"\#(week)","weekStart":"\#(start)","weekEnd":"\#(end)","timing":"\#(timing)",
-             "plan":\#(plan),"proposal":\#(proposal),"sections":[\#(sections.joined(separator: ","))]}
+             "plan":\#(plan),"proposal":\#(proposal),"sections":[\#(sections.joined(separator: ","))],
+             "planned":[\#(planned.joined(separator: ","))]}
             """#.utf8)
     }
 

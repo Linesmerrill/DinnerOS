@@ -204,6 +204,33 @@ final class NotificationStore {
         }
     }
 
+    /// Removes a notification from this member's list (the rest of the household keeps it). It
+    /// leaves the list at once; a failure puts it back where it was and throws.
+    func dismiss(_ notification: AppNotification) async throws {
+        guard let api else { throw AuthSessionError.notConfigured }
+        guard let householdID else { throw AuthSessionError.signedOut }
+        guard let index = items.firstIndex(where: { $0.id == notification.id }) else { return }
+        let removed = items.remove(at: index)
+        if !removed.read { unreadCount = max(0, unreadCount - 1) }
+        countGeneration += 1
+        let started = (countGeneration, scope)
+        do {
+            let count = try await session.authorized { token in
+                try await api.dismiss(householdID: householdID, ids: [notification.id], accessToken: token)
+            }
+            guard started == (countGeneration, scope) else { return }
+            unreadCount = count
+        } catch is CancellationError {
+            return
+        } catch {
+            guard started.1 == scope else { throw error }
+            Self.logger.notice("Dismiss failed: \(Self.describe(error), privacy: .public)")
+            items.insert(removed, at: min(index, items.count))
+            await refreshUnreadCount()
+            throw error
+        }
+    }
+
     /// Marks a notification read by ID, for a tapped push: it may not be loaded, and may
     /// belong to a household that isn't shown yet. Best effort, like `markRead(_:)`.
     func markRead(notificationID: String, householdID: String) async {

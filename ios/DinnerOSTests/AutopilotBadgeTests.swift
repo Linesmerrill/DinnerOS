@@ -48,3 +48,20 @@ struct PlanDayShortNameTests {
         #expect(names.allSatisfy { !$0.isEmpty && $0.count <= 5 })
     }
 }
+
+struct MenuPlannedCardsTests {
+    @Test func aPlannedMealNoSectionShowsStillHasItsCard() throws {
+        let data = MenuFixtures.menu(
+            sections: [],
+            planned: [MenuFixtures.card(id: "r-rigatoni", name: "Rigatoni", inPlan: true, entryIDs: ["e1"])])
+        let menu = try JSONCoding.makeDecoder().decode(WeekMenu.self, from: data)
+        #expect(menu.planned.map(\.recipe.id) == ["r-rigatoni"])
+    }
+
+    @Test func olderServersSendNoPlannedCards() throws {
+        let data = Data(
+            #"{"week":"2026-W38","weekStart":"2026-09-14","weekEnd":"2026-09-20","timing":"current","plan":null,"proposal":null,"sections":[]}"#
+                .utf8)
+        #expect(try JSONCoding.makeDecoder().decode(WeekMenu.self, from: data).planned.isEmpty)
+    }
+}

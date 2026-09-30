@@ -277,9 +277,12 @@ nonisolated struct WeekMenu: Decodable, Equatable, Sendable {
     var plan: Plan?
     var proposal: MenuProposalSummary?
     var sections: [MenuSection]
+    /// A card for every recipe in the week's plan, whether or not a section shows it, so each
+    /// planned meal can ask how it went. Empty from a server that doesn't send it.
+    var planned: [MenuCard] = []
 
     private enum CodingKeys: String, CodingKey {
-        case week, weekStart, weekEnd, timing, plan, proposal, sections
+        case week, weekStart, weekEnd, timing, plan, proposal, sections, planned
     }
 
     init(
@@ -304,6 +307,7 @@ nonisolated struct WeekMenu: Decodable, Equatable, Sendable {
         plan = container.decodeLenient(Plan.self, forKey: .plan)
         proposal = container.decodeLenient(MenuProposalSummary.self, forKey: .proposal)
         sections = container.decodeLossyArray(MenuSection.self, forKey: .sections)
+        planned = container.decodeLossyArray(MenuCard.self, forKey: .planned)
     }
 
     /// Shows `updated` as the week's plan and recomputes every card's plan state.
@@ -312,6 +316,7 @@ nonisolated struct WeekMenu: Decodable, Equatable, Sendable {
         for index in sections.indices {
             sections[index].items = MenuCard.patching(sections[index].items, with: updated)
         }
+        planned = MenuCard.patching(planned, with: updated)
     }
 
     /// Shows a rating the member just saved on every card for that recipe.
@@ -320,6 +325,7 @@ nonisolated struct WeekMenu: Decodable, Equatable, Sendable {
             sections[index].items = MenuCard.patchingRating(
                 sections[index].items, recipeID: recipeID, mine: mine, household: household)
         }
+        planned = MenuCard.patchingRating(planned, recipeID: recipeID, mine: mine, household: household)
     }
 }
 

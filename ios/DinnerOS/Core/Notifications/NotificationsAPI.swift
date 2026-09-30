@@ -32,6 +32,17 @@ nonisolated struct NotificationsAPI: Sendable {
             accessToken: accessToken)
     }
 
+    /// Hides notifications from this member only (a swipe to delete) and returns the unread
+    /// count afterwards.
+    func dismiss(householdID: String, ids: [String], accessToken: String) async throws -> Int {
+        let response: NotificationUnreadCount = try await client.send(
+            try APIRequest.post(
+                Self.path(householdID) + "/dismiss",
+                body: DismissNotificationsRequest(ids: Array(ids.prefix(Self.maxMarkRead)))
+            ).authorized(with: accessToken))
+        return response.unreadCount
+    }
+
     /// Marks every notification read and returns the unread count afterwards.
     func markAllRead(householdID: String, accessToken: String) async throws -> Int {
         try await markRead(
@@ -61,4 +72,9 @@ nonisolated struct NotificationsAPI: Sendable {
     static func path(_ householdID: String) -> String {
         "/api/v1/households/\(householdID)/notifications"
     }
+}
+
+/// The body of `POST .../notifications/dismiss`.
+nonisolated struct DismissNotificationsRequest: Encodable, Equatable, Sendable {
+    let ids: [String]
 }

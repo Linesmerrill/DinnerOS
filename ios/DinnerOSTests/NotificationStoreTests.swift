@@ -119,6 +119,38 @@ struct NotificationStoreTests {
         #expect(store.unreadCount == 3)
     }
 
+    @Test func deletingOneRemovesItAtOnceAndSendsItsID() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.activate(householdID: "household-1")
+        await store.load()
+        let first = try #require(store.items.first)
+        let count = store.items.count
+
+        try await store.dismiss(first)
+
+        #expect(store.items.count == count - 1)
+        #expect(!store.items.contains { $0.id == first.id })
+        #expect(store.unreadCount == 2)
+        #expect(harness.server.dismissBodies == [#"{"ids":["n-1"]}"#])
+    }
+
+    @Test func aFailedDeletePutsItBackInPlaceAndThrows() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.activate(householdID: "household-1")
+        await store.load()
+        let second = store.items[1]
+        harness.server.failNext()
+
+        await #expect(throws: APIError.self) {
+            try await store.dismiss(second)
+        }
+
+        #expect(store.items[1].id == second.id)
+        #expect(store.unreadCount == 3)
+    }
+
     @Test func markAllReadClearsTheBadge() async throws {
         let harness = try await makeHarness()
         let store = harness.store
