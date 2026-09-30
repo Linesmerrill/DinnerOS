@@ -414,13 +414,13 @@ more than five. The app joins them with " · ".
 | `pantry` | Uses up the cilantro running low |
 | `fit` | fallback: Ready in 30 min |
 | `learnedMeal` | You swapped this out twice recently / You left this out once recently / You kept it when Autopilot suggested it / You've looked at it 3 times lately |
-| `learnedTaste` | Lately you favor Mexican / Lately you pass on long cooks |
+| `learnedTaste` | You've been choosing more Mexican food lately / You've been skipping long cooks lately |
 | `busySkips` | Often skipped on busy weeks |
 | `season` | A warming dinner for winter / A cozy dinner for fall / Grill season / A light dinner for summer |
 | `holiday` | Something special for Thanksgiving / An easy night in Thanksgiving week / A cookout for Labor Day |
 | `weekday` | Sunday has time for a longer cook |
 | `orderDate` | Fresh from Saturday's order / Late in the week after Saturday's order |
-| `calendar` | Quick for your busy Wednesday evening / Fits the 25 min you have free Tuesday / Free Saturday evening, time for a longer cook |
+| `calendar` | Quick for your busy Wednesday evening / Fits the 1 hr 30 min you have free Tuesday evening / Free Saturday evening, time for a longer cook |
 | `weather` | Cold and rainy Tuesday, comfort food / Hot Wednesday, something lighter / Soup on a hot Wednesday |
 
 A pick can also carry **badges** (`badges` on each slot): a short label, an SF
@@ -428,7 +428,7 @@ Symbol, and a sentence the app shows when the badge is tapped. `weather` marks
 a meal the day's forecast favors — comfort food on a cold, rainy, or snowy day
 ("Cold and rainy", "Snowy", "Cold", "Rainy"), something lighter on a hot one
 ("Hot") — whether or not the weather is its strongest reason, so a pick whose
-top reason is "Fits the 240 min you have free" still says it suits a rainy
+top reason is its cook time still says it suits a rainy
 Tuesday. Meals the weather counts against (soup on a hot day, grilling in the
 rain) get no badge. The server writes the words, so they change with an API
 deploy; the app shows the first badge over the card's photo and every badge in
@@ -921,8 +921,8 @@ rating, and reset, and would split the provider's contract into "input" and
   can't bring back an allergen, a diet violation, or a never-again meal.
 - **Explained.** A meal gets up to two learned reasons, always shown, even
   when negative: "You swapped this out twice recently", "You kept it when
-  Autopilot suggested it", "Lately you favor Mexican", "Lately you pass on
-  long cooks", "Often skipped on busy weeks". Components that would move a
+  Autopilot suggested it", "You've been choosing more Mexican food lately",
+  "You've been skipping long cooks lately", "Often skipped on busy weeks". Components that would move a
   score by less than 0.005 are dropped rather than applied unexplained.
 - **Reset.** `DELETE .../autopilot/learning` records `autopilot.learning_reset`;
   the adapter passes its time as `Input.LearningSince`, and interactions before

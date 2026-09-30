@@ -7,6 +7,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot"
@@ -354,11 +355,21 @@ func featureLabel(kind, key string) string {
 	return displayName(key)
 }
 
+// featureText says what the household has been choosing, in plain words:
+// "You've been choosing more pasta lately", "You've been skipping Thai food
+// lately".
 func featureText(kind, key string, value float64) string {
-	if value < 0 {
-		return "Lately you pass on " + featureLabel(kind, key)
+	label := featureLabel(kind, key)
+	switch kind {
+	case autopilot.LearnedCuisine:
+		label += " food"
+	case autopilot.LearnedProtein, autopilot.LearnedMealCategory:
+		label = strings.ToLower(label)
 	}
-	return "Lately you favor " + featureLabel(kind, key)
+	if value < 0 {
+		return "You've been skipping " + label + " lately"
+	}
+	return "You've been choosing more " + label + " lately"
 }
 
 // Learning implements autopilot.LearningReporter.

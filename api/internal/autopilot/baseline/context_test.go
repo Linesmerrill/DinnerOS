@@ -188,8 +188,8 @@ func TestCalendarContext(t *testing.T) {
 		{autopilot.Tuesday, "quick", "Quick for your busy Tuesday evening", true},
 		{autopilot.Tuesday, "roast", "A long cook for your busy Tuesday evening", false},
 		{autopilot.Wednesday, "roast", "Free Wednesday evening, time for a longer cook", true},
-		{autopilot.Thursday, "quick", "Fits the 20 min you have free Thursday", true},
-		{autopilot.Thursday, "plain", "Longer than the 20 min you have free Thursday", false},
+		{autopilot.Thursday, "quick", "Fits the 20 min you have free Thursday evening", true},
+		{autopilot.Thursday, "plain", "Longer than the 20 min you have free Thursday evening", false},
 	} {
 		r := contextReason(t, p, in, tc.day, tc.id)
 		if !hasReason(r.Reasons, tc.text) || (r.Signals[SignalContext] > 0) != tc.positive {
@@ -290,6 +290,37 @@ func TestContextIsSoftAndBounded(t *testing.T) {
 	for _, r := range res.Items {
 		if v := r.Signals[SignalContext]; v < -1 || v > 1 {
 			t.Errorf("%s context = %v", r.ItemID, v)
+		}
+	}
+}
+
+func TestOpenEveningIsNotALimit(t *testing.T) {
+	p := New(Options{})
+	in := contextCatalog()
+	in.Context.Days = []autopilot.DayContext{
+		// Nothing on the calendar from 4 to 8 pm.
+		{Day: autopilot.Tuesday, Signals: autopilot.Signals{autopilot.ContextEveningFreeMinutes: autopilot.Number(240)}},
+		{Day: autopilot.Wednesday, Signals: autopilot.Signals{autopilot.ContextEveningFreeMinutes: autopilot.Number(90)}},
+	}
+	for _, id := range []string{"quick", "plain", "roast"} {
+		for _, r := range contextReason(t, p, in, autopilot.Tuesday, id).Reasons {
+			if strings.Contains(r.Text, "240") || strings.Contains(r.Text, "you have free") {
+				t.Errorf("open evening named as a limit for %s: %q", id, r.Text)
+			}
+		}
+	}
+	if r := contextReason(t, p, in, autopilot.Tuesday, "roast"); !hasReason(r.Reasons, "Free Tuesday evening, time for a longer cook") {
+		t.Errorf("open evening long cook = %v", reasonTexts(r.Reasons))
+	}
+	if r := contextReason(t, p, in, autopilot.Wednesday, "quick"); !hasReason(r.Reasons, "Fits the 1 hr 30 min you have free Wednesday evening") {
+		t.Errorf("limited evening = %v", reasonTexts(r.Reasons))
+	}
+}
+
+func TestSpanText(t *testing.T) {
+	for in, want := range map[int]string{20: "20 min", 60: "1 hr", 90: "1 hr 30 min", 120: "2 hr"} {
+		if got := spanText(in); got != want {
+			t.Errorf("spanText(%d) = %q, want %q", in, got, want)
 		}
 	}
 }

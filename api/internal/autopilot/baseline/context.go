@@ -120,16 +120,22 @@ func (m *model) contextFor(s *slot, it *item) (float64, []reason) {
 		}
 	}
 
-	// Calendar: how much of the evening is free.
+	// Calendar: how much of the evening is free. An evening with (almost)
+	// nothing on the calendar isn't a limit worth naming: it reads as a free
+	// evening, not "fits the 240 min you have free".
 	calendar := sig.freeMinutes > 0 || sig.busyness != ""
+	limited := sig.freeMinutes > 0 && sig.freeMinutes < openEveningMinutes
+	if sig.freeMinutes >= openEveningMinutes {
+		sig.busyness = autopilot.BusynessFree
+	}
 	switch {
-	case sig.freeMinutes > 0 && it.minutes <= 0:
-		add("calendar", -0.2, fmt.Sprintf("Cook time unknown for the %d min you have free %s", sig.freeMinutes, day.Name()))
-	case sig.freeMinutes > 0 && it.minutes <= sig.freeMinutes:
-		add("calendar", 0.5, fmt.Sprintf("Fits the %d min you have free %s", sig.freeMinutes, day.Name()))
-	case sig.freeMinutes > 0:
+	case limited && it.minutes <= 0:
+		add("calendar", -0.2, fmt.Sprintf("Cook time unknown, and you only have %s free %s evening", spanText(sig.freeMinutes), day.Name()))
+	case limited && it.minutes <= sig.freeMinutes:
+		add("calendar", 0.5, fmt.Sprintf("Fits the %s you have free %s evening", spanText(sig.freeMinutes), day.Name()))
+	case limited:
 		add("calendar", -math.Min(1, 2*float64(it.minutes-sig.freeMinutes)/float64(sig.freeMinutes)),
-			fmt.Sprintf("Longer than the %d min you have free %s", sig.freeMinutes, day.Name()))
+			fmt.Sprintf("Longer than the %s you have free %s evening", spanText(sig.freeMinutes), day.Name()))
 	case sig.busyness == autopilot.BusynessBusy && it.minutes <= 0:
 		add("calendar", -0.2, fmt.Sprintf("Cook time unknown for your busy %s evening", day.Name()))
 	case sig.busyness == autopilot.BusynessBusy && it.band == autopilot.BandQuick:
@@ -278,6 +284,23 @@ func (m *model) weatherBadge(s *slot, it *item) (autopilot.Badge, bool) {
 		}, true
 	}
 	return autopilot.Badge{}, false
+}
+
+// openEveningMinutes is free time that doesn't limit dinner: the phone sends
+// at most 240 (4 to 8 pm), and 210 or more means at most half an hour is
+// booked.
+const openEveningMinutes = 210
+
+// spanText says a length of time for people: "45 min", "2 hr", "1 hr 30 min".
+func spanText(minutes int) string {
+	h, m := minutes/60, minutes%60
+	switch {
+	case h == 0:
+		return fmt.Sprintf("%d min", m)
+	case m == 0:
+		return fmt.Sprintf("%d hr", h)
+	}
+	return fmt.Sprintf("%d hr %d min", h, m)
 }
 
 func weatherPhrase(sig daySignals, day autopilot.Day) string {

@@ -3021,7 +3021,7 @@ week. Nothing is stored: they are recomputed from events each time.
     { "kind": "item", "key": "66e5a1f2c3b4a5d6e7f80915", "label": "Beef Tacos", "recipeId": "66e5a1f2c3b4a5d6e7f80915",
       "value": -0.58, "direction": "away", "text": "You swapped this out twice recently", "evidence": 2 },
     { "kind": "cuisine", "key": "mexican", "label": "Mexican", "recipeId": null,
-      "value": 0.31, "direction": "toward", "text": "Lately you favor Mexican", "evidence": 9 }
+      "value": 0.31, "direction": "toward", "text": "You've been choosing more Mexican food lately", "evidence": 9 }
   ],
   "resetAt": null,
   "resetBy": null
