@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -108,7 +109,18 @@ func trailingPrepLen(text []rune) int {
 		}
 		pos = wordStart - gap
 	}
+	// "lightly oil a sheet": an adverb alone describes the verb, not the
+	// ingredient, so there's no prep to put the amount in front of.
+	run := strings.Fields(strings.ToLower(string(text[start:end])))
+	if !slices.ContainsFunc(run, func(w string) bool { return prepWords[w] && !howWords[w] }) {
+		return 0
+	}
 	return end - start
+}
+
+// howWords are the prep words that only say how ("finely chopped").
+var howWords = map[string]bool{
+	"finely": true, "thinly": true, "roughly": true, "coarsely": true, "freshly": true, "lightly": true,
 }
 
 // rangeUnits matches any unit word, longest first.

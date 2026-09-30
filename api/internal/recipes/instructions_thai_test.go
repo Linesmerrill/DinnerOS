@@ -48,7 +48,8 @@ func TestThaiCurryReadsLikeACook(t *testing.T) {
 		{5, "Coconut Milk", "⅔ cup", ""},
 		{5, "Sweet Thai Chili Sauce", "2 Tbsp", ""},
 		{6, "Lime zest", "", ""},
-		{6, "Cilantro", "⅛ oz", ""},
+		// Half of ¼ oz of herbs isn't something to weigh: the card's words stay.
+		{6, "Cilantro", "", ""},
 	}
 	for _, tc := range checks {
 		it := item(t, c, tc.step, tc.name)
@@ -184,5 +185,24 @@ func TestReservedLiquidIsTheLiquidAndGrowsWithTheBox(t *testing.T) {
 		if got := joined(in.Steps[1]); !strings.Contains(got, "Cut along the tail. Add") || !strings.Contains(got, "oz lobster tails") {
 			t.Errorf("%d servings lobster: %q (\"tail\" isn't the lobster)", servings, got)
 		}
+	}
+}
+
+func TestHerbsByTheQuarterOunceAndOilAsAVerbKeepTheirWords(t *testing.T) {
+	r := tacoRecipe(
+		[]RecipeIngredient{
+			tacoLine("ing-rosemary", "Rosemary", "1/4", "1/4", "oz"),
+			tacoLine("ing-oil", "Cooking Oil", "2", "3", "tsp"),
+			tacoLine("ing-parm", "Parmesan Cheese", "3", "9/2", "tbsp"),
+		},
+		"Line a baking sheet with foil and lightly oil. Toss with half the chopped rosemary.",
+		"Stir in half the Parmesan.")
+	in := Annotate(r, 2, nil, true)
+	if got := joined(in.Steps[0]); got != "Line a baking sheet with foil and lightly oil. Toss with half the chopped rosemary." {
+		t.Errorf("step 1 = %q", got)
+	}
+	// A share of something measured by the spoon still gets its amount.
+	if got := joined(in.Steps[1]); got != "Stir in 1 ½ Tbsp Parmesan." {
+		t.Errorf("step 2 = %q", got)
 	}
 }

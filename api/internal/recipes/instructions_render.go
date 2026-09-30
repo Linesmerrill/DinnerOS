@@ -242,6 +242,8 @@ var relativeWords = []string{
 	"remaining", "rest of the", "rest of", "reserved",
 	// "Add more chili flakes if you like": to taste, not a measure.
 	"add more", "more",
+	// "lightly oil a baking sheet": oil as a verb, not an amount of it.
+	"lightly",
 	// "a drizzle of oil": the step says how much, in its own words.
 	"drizzle of", "splash of", "pinch of", "dash of", "sprinkle of", "handful of", "knob of", "pat of",
 	"drizzle of the", "splash of the", "pinch of the",
@@ -283,6 +285,13 @@ func fractionOf(text []rune) (*big.Rat, int, bool) {
 		return nil, 0, false
 	}
 	return q.Rat(), len([]rune(lower)) - start, true
+}
+
+// lightWeight reports an amount of a few grams sold by weight: half of ¼ oz
+// of rosemary isn't something anyone weighs, so "half the rosemary" stays.
+func lightWeight(m Measure) bool {
+	return (m.Unit == "oz" && m.Quantity.Cmp(ingredients.NewQuantity(1, 1)) < 0) ||
+		(m.Unit == "g" && m.Quantity.Cmp(ingredients.NewQuantity(28, 1)) < 0)
 }
 
 // measuredUnits are units a share can be measured in: half of "1 thumb"
@@ -594,7 +603,7 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 				}
 				amount, part = share, true
 				amountShown[hit] = true
-			} else if m.amount != nil && measuredUnits[m.amount.Unit] && !m.leftOut && !shownBefore && !m.swapped {
+			} else if m.amount != nil && measuredUnits[m.amount.Unit] && !lightWeight(*m.amount) && !m.leftOut && !shownBefore && !m.swapped {
 				// "Stir in half the curry powder (all for 4 servings)": this
 				// step's share, as an amount to measure.
 				if n, noteLen, ok := allNote(runes[i+length:]); ok {
