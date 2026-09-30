@@ -34,6 +34,7 @@ struct HouseholdOnboardingView: View {
                 }
                 // Reachable before any household exists, so an account can always be deleted.
                 Section("Account") {
+                    FeedbackLink()
                     PrivacyPolicyLink()
                     DeleteAccountButton()
                 }

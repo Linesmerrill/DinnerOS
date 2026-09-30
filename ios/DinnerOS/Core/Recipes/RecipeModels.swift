@@ -120,6 +120,10 @@ nonisolated struct Recipe: Decodable, Equatable, Sendable, Identifiable {
     var sourceURLString: String? = nil
     /// Per-serving nutrition from a server that sends `nutrition`; empty otherwise.
     var nutrition: [RecipeNutrient] = []
+    /// The household marked this recipe to share with other households (used when it picks
+    /// recipes one by one), and whether others can find it now.
+    var sharedToCatalog = false
+    var inCatalog = false
 
     var imageURL: URL? { imageURLString.flatMap { URL(string: $0) } }
     var sourceURL: URL? { sourceURLString.flatMap { URL(string: $0) } }
@@ -132,7 +136,7 @@ nonisolated struct Recipe: Decodable, Equatable, Sendable, Identifiable {
         case sourceURLString = "sourceUrl"
         case isAddon, servings, prepMinutes, totalMinutes, cookMinutes, difficulty, cuisines, tags, utensils,
             allergens, nutritionPerServing, nutrition, ingredients, steps, orderWeeks, timesOrdered, lastOrderedWeek,
-            createdAt, updatedAt, householdRating, myRating
+            createdAt, updatedAt, householdRating, myRating, sharedToCatalog, inCatalog
     }
 
     /// The time to show: `cookMinutes`, else the larger of prep and total time.
@@ -181,7 +185,9 @@ nonisolated extension Recipe {
             householdRating: try container.decode(HouseholdRating.self, forKey: .householdRating),
             myRating: try container.decodeIfPresent(RecipeRating.self, forKey: .myRating),
             sourceURLString: container.decodeLenient(String.self, forKey: .sourceURLString),
-            nutrition: container.decodeLossyArray(RecipeNutrient.self, forKey: .nutrition))
+            nutrition: container.decodeLossyArray(RecipeNutrient.self, forKey: .nutrition),
+            sharedToCatalog: container.decodeLenientBool(forKey: .sharedToCatalog) ?? false,
+            inCatalog: container.decodeLenientBool(forKey: .inCatalog) ?? false)
     }
 }
 

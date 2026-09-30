@@ -376,6 +376,7 @@ struct HouseholdView: View {
                     }
                 }
             }
+            FeedbackLink()
             PrivacyPolicyLink()
         }
     }

@@ -14,6 +14,10 @@ struct MenuView: View {
     @Environment(MealPlanner.self) private var planner
     @Environment(PairingsStore.self) private var pairings
     @Environment(MealSwapStore.self) private var swaps
+    @Environment(AuthSession.self) private var session
+    /// Optional so previews needn't supply them.
+    @Environment(TabRouter.self) private var tabs: TabRouter?
+    @Environment(MealKitImportStore.self) private var mealKit: MealKitImportStore?
     @Environment(\.appConfiguration) private var configuration
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
@@ -23,6 +27,12 @@ struct MenuView: View {
     @State private var isAddingRecipes = false
     /// The "Add a Recipe" sheet: paste text or a link, review, save.
     @State private var isAddingOwnRecipe = false
+    /// The new-member welcome, what was picked on it (acted on once it closes, so two sheets
+    /// never overlap), and the import it can start.
+    @State private var showsWelcome = false
+    @State private var welcomeChoice: Welcome.Choice?
+    @State private var isImportingFromWelcome = false
+    private let welcomeStorage: any WelcomeStorage = UserDefaultsWelcomeStorage()
     @State private var actionError: String?
 
     /// Whether the week strip is showing its pills, and where the menu is scrolled to.
@@ -45,6 +55,29 @@ struct MenuView: View {
 
     private var household: Household? {
         households.current?.household
+    }
+
+    /// Whether this member still has the welcome to see for this household.
+    private var welcomeDue: Bool {
+        guard let user = session.currentUser, let household else { return false }
+        return Welcome.shouldShow(
+            accountCreated: user.createdAt,
+            seen: welcomeStorage.hasSeen(userID: user.id, householdID: household.id))
+    }
+
+    /// Remembers the welcome was seen, however it closed, then acts on what was picked.
+    private func finishWelcome() {
+        if let user = session.currentUser, let household {
+            welcomeStorage.markSeen(userID: user.id, householdID: household.id)
+        }
+        let choice = welcomeChoice
+        welcomeChoice = nil
+        switch choice {
+        case .importMealKit: isImportingFromWelcome = true
+        case .browseShared: tabs?.menuPath.append(DiscoverRoute())
+        case .addRecipe: isAddingOwnRecipe = true
+        case .startPlanning, nil: break
+        }
     }
 
     private var canEdit: Bool {
@@ -162,7 +195,24 @@ struct MenuView: View {
             } message: {
                 Text(swaps.errorMessage ?? "")
             }
-            .modifier(WeekAutopilotModifier(flow: autopilotFlow, canEdit: canEdit))
+            .modifier(WeekAutopilotModifier(flow: autopilotFlow, canEdit: canEdit, holdsOnboarding: welcomeDue))
+            .task(id: household?.id) {
+                if welcomeDue { showsWelcome = true }
+            }
+            .sheet(isPresented: $showsWelcome, onDismiss: finishWelcome) {
+                WelcomeView(
+                    hasRecipes: !library.items.isEmpty,
+                    canImport: households.access?.can(.recipesImport) == true && mealKit?.isEnabled != false,
+                    canAddRecipe: households.access?.can(.recipesEdit) == true,
+                    serviceName: (mealKit?.service ?? .helloFresh).displayName
+                ) { choice in
+                    welcomeChoice = choice
+                    showsWelcome = false
+                }
+            }
+            .sheet(isPresented: $isImportingFromWelcome) {
+                NavigationStack { MealKitImportFlow() }
+            }
     }
 
     @ViewBuilder

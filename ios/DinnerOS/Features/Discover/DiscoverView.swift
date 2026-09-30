@@ -50,7 +50,7 @@ struct DiscoverView: View {
             }
         }
         .listStyle(.plain)
-        .navigationTitle("Try Something Else")
+        .navigationTitle("Shared Recipes")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: Text("Search every recipe"))
         .refreshable { await discover.refresh() }

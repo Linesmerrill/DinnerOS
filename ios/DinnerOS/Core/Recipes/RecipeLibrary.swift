@@ -218,6 +218,21 @@ final class RecipeLibrary {
         return recipe
     }
 
+    /// Marks a recipe to share with other households, or stops sharing it, and keeps the
+    /// cached copy in step.
+    func setSharing(recipeID: String, shared: Bool) async throws {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        let result = try await session.authorized { token in
+            try await api.setSharing(
+                householdID: householdID, recipeID: recipeID, sharedToCatalog: shared, accessToken: token)
+        }
+        if householdID == self.householdID, var cached = details[recipeID] {
+            cached.sharedToCatalog = result.sharedToCatalog
+            cached.inCatalog = result.inCatalog
+            details[recipeID] = cached
+        }
+    }
+
     // MARK: - Customizations and pairings
 
     /// The recipe's swappable ingredients. Empty when it has none, including a `404` from a

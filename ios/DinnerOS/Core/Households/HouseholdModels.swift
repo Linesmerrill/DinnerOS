@@ -105,10 +105,12 @@ nonisolated struct Household: Decodable, Equatable, Sendable, Identifiable {
     var freezeMinOunces: Int? = nil
     /// How the household freezes raw meat (`FreezerWrap`), which sets a frozen bag's best-by date.
     var freezerWrap: FreezerWrap = .vacuumSealed
+    /// Which of the household's recipes other households can find and add. Off unless chosen.
+    var catalogSharing: CatalogSharing = .off
 
     private enum CodingKeys: String, CodingKey {
         case id, name, defaultServings, timeZone, orderDay, createdBy, createdAt, updatedAt, mealKit, weekStartsOn,
-            thawReminderHour, freezeMinOunces, freezerWrap
+            thawReminderHour, freezeMinOunces, freezerWrap, catalogSharing
     }
 }
 
@@ -131,7 +133,8 @@ nonisolated extension Household {
             thawReminderHour: (try? container.decodeIfPresent(Int.self, forKey: .thawReminderHour))
                 ?? Household.defaultThawReminderHour,
             freezeMinOunces: try? container.decodeIfPresent(Int.self, forKey: .freezeMinOunces),
-            freezerWrap: container.decodeLenient(FreezerWrap.self, forKey: .freezerWrap) ?? .vacuumSealed)
+            freezerWrap: container.decodeLenient(FreezerWrap.self, forKey: .freezerWrap) ?? .vacuumSealed,
+            catalogSharing: container.decodeLenient(CatalogSharing.self, forKey: .catalogSharing) ?? .off)
     }
 
     /// The bag sizes the picker offers, in ounces. 0 stands for one dinner from the recipe.
@@ -304,15 +307,18 @@ nonisolated struct HouseholdChanges: Encodable, Equatable, Sendable {
     var freezeMinOunces: FieldChange<Int> = .keep
     /// How the household freezes meat; `nil` leaves it alone.
     var freezerWrap: FreezerWrap? = nil
+    /// What the household shares with others; `nil` leaves it alone.
+    var catalogSharing: CatalogSharing? = nil
 
     var isEmpty: Bool {
         name == nil && timeZone == nil && defaultServings == nil && orderDay == nil && mealKit == .keep
             && weekStartsOn == nil && thawReminderHour == nil && freezeMinOunces == .keep && freezerWrap == nil
+            && catalogSharing == nil
     }
 
     private enum CodingKeys: String, CodingKey {
         case name, timeZone, defaultServings, orderDay, mealKit, weekStartsOn, thawReminderHour, freezeMinOunces
-        case freezerWrap
+        case freezerWrap, catalogSharing
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -326,6 +332,7 @@ nonisolated struct HouseholdChanges: Encodable, Equatable, Sendable {
         try container.encodeIfPresent(thawReminderHour, forKey: .thawReminderHour)
         try container.encodeChange(freezeMinOunces, forKey: .freezeMinOunces)
         try container.encodeIfPresent(freezerWrap, forKey: .freezerWrap)
+        try container.encodeIfPresent(catalogSharing, forKey: .catalogSharing)
     }
 }
 
@@ -343,6 +350,24 @@ nonisolated enum FreezerWrap: String, Codable, CaseIterable, Identifiable, Senda
         case .vacuumSealed: String(localized: "Vacuum Sealed")
         case .freezerBag: String(localized: "Freezer Bag")
         case .storePackage: String(localized: "Store Package")
+        }
+    }
+}
+
+/// Which of the household's recipes other households can find in shared recipes and add to
+/// their own. Off unless the household opts in; turning it off keeps what's already shared.
+nonisolated enum CatalogSharing: String, Codable, CaseIterable, Identifiable, Sendable {
+    case off
+    case all
+    case chosen
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .off: String(localized: "Off")
+        case .all: String(localized: "All Our Recipes")
+        case .chosen: String(localized: "Ones We Pick")
         }
     }
 }

@@ -102,6 +102,13 @@ struct RecipeDetailView: View {
                         )
                         .padding(.horizontal, 16)
                     }
+                    // Picking recipes to share one by one happens here, on the recipe.
+                    if let recipe, households.current?.household.catalogSharing == .chosen,
+                        households.access?.can(.recipesEdit) == true
+                    {
+                        RecipeSharingRow(recipe: recipe)
+                            .padding(.horizontal, 16)
+                    }
                 }
                 .padding(.bottom, 24)
             }

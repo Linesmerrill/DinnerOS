@@ -38,6 +38,7 @@ struct HouseholdSettingsSections: View {
             weekSection
             orderSection
             thawSection
+            sharingSection
             mealKitSection
         }
         // Modifiers here would be copied onto every section; the screen-wide ones are in
@@ -231,6 +232,39 @@ struct HouseholdSettingsSections: View {
             Text(
                 "We remind you the morning a frozen item needs to thaw.\nLeftover meat gets frozen in bags this size. Less than a bag goes into the meal or gets tossed.\nFrozen raw meat gets a best-by date from the FDA's freezer times. Vacuum sealed keeps longest."
             )
+        }
+    }
+
+    private var sharingSection: some View {
+        Section {
+            if settings.canEdit {
+                Picker("Share With Other Households", selection: binding(\.catalogSharing)) {
+                    ForEach(CatalogSharing.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+            } else {
+                LabeledContent("Share With Other Households", value: saved.catalogSharing.title)
+            }
+        } header: {
+            Text("Recipe Sharing")
+        } footer: {
+            Text(sharingFooter)
+        }
+    }
+
+    private var sharingFooter: String {
+        switch draft.catalogSharing {
+        case .off:
+            String(localized: "Your recipes stay yours. You can still browse and add recipes others share.")
+        case .all:
+            String(
+                localized:
+                    "Other households can find your recipes in Shared Recipes and add a copy. Your notes, ratings, and plans are never shared."
+            )
+        case .chosen:
+            String(
+                localized: "Only recipes you mark as shared can be found by others. Turn it on from a recipe's page.")
         }
     }
 

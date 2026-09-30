@@ -315,6 +315,9 @@ struct WeekAutopilotMenuItems: View {
 struct WeekAutopilotModifier: ViewModifier {
     let flow: WeekAutopilotFlow
     let canEdit: Bool
+    /// While the new-member welcome is due, Autopilot setup waits for a later visit: two
+    /// sheets in a row on day one is the overwhelm the welcome is meant to avoid.
+    var holdsOnboarding = false
 
     @Environment(AutopilotStore.self) private var autopilot
     @Environment(PlanStore.self) private var plans
@@ -355,7 +358,7 @@ struct WeekAutopilotModifier: ViewModifier {
                 guard let householdID = households.current?.household.id else { return }
                 await autopilot.activate(householdID: householdID)
                 // First visit for this household: offer setup once, to members who can plan.
-                if canEdit, autopilot.shouldOfferOnboarding, flow.sheet == nil {
+                if canEdit, !holdsOnboarding, autopilot.shouldOfferOnboarding, flow.sheet == nil {
                     autopilot.markOnboardingOffered()
                     flow.sheet = .onboarding
                 }
