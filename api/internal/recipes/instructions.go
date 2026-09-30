@@ -896,6 +896,8 @@ func nameForms(name string, spec *grocery.Specialty) []string {
 var descriptors = map[string]bool{
 	"red": true, "yellow": true, "white": true, "black": true, "long": true, "ground": true, "cooking": true,
 	"fresh": true, "flour": true, "corn": true, "baby": true, "boneless": true, "skinless": true, "large": true,
+	"jasmine": true, "basmati": true, "arborio": true, "roma": true, "persian": true, "english": true,
+	"yukon": true, "gold": true,
 	"small": true, "medium": true, "whole": true, "dried": true, "shredded": true, "grated": true, "minced": true,
 	"sliced": true, "chopped": true, "diced": true, "crushed": true, "plain": true, "unsalted": true,
 	"salted": true, "extra": true, "virgin": true, "light": true, "neutral": true,

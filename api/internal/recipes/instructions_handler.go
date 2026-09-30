@@ -291,7 +291,7 @@ func newInstructionsResponse(in Instructions) InstructionsResponse {
 		}
 		for _, seg := range step.Segments {
 			var index *int
-			if seg.Kind == SegmentIngredient {
+			if seg.Kind == SegmentIngredient && seg.Ingredient != NoIngredient {
 				index = &seg.Ingredient
 			}
 			sr.Segments = append(sr.Segments, StepSegmentResponse{

@@ -208,6 +208,42 @@ func wedgesOf(n ingredients.Quantity) *Measure {
 	return &Measure{Quantity: n, Unit: "wedge"}
 }
 
+// waterPhrase is an amount of water a step asks for: "¾ cup water", "1 ½ cups
+// hot water", "2 TBSP of water".
+var waterPhrase = regexp.MustCompile(`(?i)(?:\d+(?:[./]\d+)?\s*)?[\d½¼¾⅓⅔⅛]+\s*(?:cups?|tbsp|tablespoons?|tsp|teaspoons?|ml|fl oz|oz|quarts?|qt)\s+(?:of\s+)?(?:(?:hot|warm|cold|boiling|lukewarm)\s+)?water\b`)
+
+// NoIngredient is Segment.Ingredient for a mention that isn't one of the
+// recipe's ingredients (water).
+const NoIngredient = -1
+
+// markWater splits each amount of water out of the text segments as its own
+// mention, named Water and tied to no recipe ingredient.
+func markWater(segments []Segment) []Segment {
+	var out []Segment
+	for _, s := range segments {
+		if s.Kind != SegmentText {
+			out = append(out, s)
+			continue
+		}
+		text := s.Text
+		for {
+			loc := waterPhrase.FindStringIndex(text)
+			if loc == nil {
+				break
+			}
+			if loc[0] > 0 {
+				out = append(out, Segment{Kind: SegmentText, Text: text[:loc[0]]})
+			}
+			out = append(out, Segment{Kind: SegmentIngredient, Text: text[loc[0]:loc[1]], Name: "Water", Ingredient: NoIngredient})
+			text = text[loc[1]:]
+		}
+		if text != "" {
+			out = append(out, Segment{Kind: SegmentText, Text: text})
+		}
+	}
+	return out
+}
+
 func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionStep {
 	// Recipes imported before HTML was cleaned still read as plain text.
 	step.Text = CleanStepText(step.Text)
@@ -448,6 +484,9 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		}
 	}
 	out.LeftOut = named > 0 && left == named
+	// Water isn't on the card's ingredient list, but "¾ cup water" is
+	// something to measure, so it's bold like the rest.
+	out.Segments = markWater(out.Segments)
 	if rendered := b.String(); rendered != step.Text {
 		out.Text, out.Original = rendered, step.Text
 	}
@@ -495,7 +534,8 @@ func boxNotes(text string, servings, base int) string {
 		if useNote {
 			if all := before.FindAllStringSubmatchIndex(prefix, -1); len(all) > 0 {
 				last := all[len(all)-1]
-				prefix = prefix[:last[2]] + strings.TrimSpace(note[1]) + prefix[last[3]:]
+				// The note's own unit too: "1½ cups", not "1½ cup".
+				prefix = prefix[:last[2]] + strings.TrimSpace(note[1]) + " " + matchCase(note[2], strings.TrimSpace(prefix[last[4]:last[5]])) + prefix[last[5]:]
 			} else {
 				// Nothing to swap it into: keep what the note says.
 				text = prefix + " (" + strings.TrimSpace(inner) + ")" + rest

@@ -305,3 +305,31 @@ func TestTwoPacketsOfTexMexPaste(t *testing.T) {
 		t.Errorf("parts = %+v", c)
 	}
 }
+
+func TestRiceAndWaterAreBoldInTheRiceStep(t *testing.T) {
+	r := tacoRecipe(
+		[]RecipeIngredient{
+			tacoLine("ing-rice", "Jasmine Rice", "1/2", "3/4", "cup"),
+			tacoLine("ing-salt", "Salt", "", "", ""),
+		},
+		"In small pot, combine rice, ¾ cup water (1½ cups for 4 servings), and a pinch of salt. Bring to a boil. Cook until rice is tender.")
+	for servings, want := range map[int]string{2: "¾ cup water", 4: "1½ cups water"} {
+		in := Annotate(r, servings, nil, true)
+		var names, texts []string
+		for _, s := range ingredientSegments(in.Steps[0]) {
+			names = append(names, s.Name)
+			texts = append(texts, s.Text)
+		}
+		if got := strings.Join(names, ","); got != "Jasmine Rice,Water,Salt,Jasmine Rice" {
+			t.Errorf("%d servings: names = %s", servings, got)
+		}
+		if len(texts) < 2 || texts[1] != want {
+			t.Errorf("%d servings: water = %q, want %q (all: %q)", servings, texts[min(1, len(texts)-1)], want, texts)
+		}
+		for _, s := range in.Steps[0].Segments {
+			if s.Name == "Water" && s.Ingredient != NoIngredient {
+				t.Errorf("water is tied to recipe ingredient %d", s.Ingredient)
+			}
+		}
+	}
+}
