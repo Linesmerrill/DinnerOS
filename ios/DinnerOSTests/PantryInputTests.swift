@@ -329,3 +329,12 @@ struct IngredientSuggestionsTests {
         #expect(recorder.queries == ["salt", "salt"])
     }
 }
+
+struct PantryShownExpiryTests {
+    @Test func anItemThatIsOutShowsNoDate() {
+        let out = PantryFixtures.item(name: "Lime", status: .out, expiresOn: "2026-10-12")
+        let inStock = PantryFixtures.item(name: "Poblano Pepper", status: .inStock, expiresOn: "2026-10-12")
+        #expect(out.shownExpiry() == nil)
+        #expect(inStock.shownExpiry() != nil)
+    }
+}

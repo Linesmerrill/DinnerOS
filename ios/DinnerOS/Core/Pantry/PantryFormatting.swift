@@ -215,3 +215,12 @@ nonisolated enum PantryList {
         }
     }
 }
+
+extension PantryItem {
+    /// The best-by date to show, or `nil` for an item that's out: nothing left means nothing to
+    /// go bad.
+    nonisolated func shownExpiry(today: Date = .now, timeZone: TimeZone = .autoupdatingCurrent) -> PantryExpiry? {
+        guard status != .out else { return nil }
+        return PantryExpiry(expiresOn: expiresOn, today: today, timeZone: timeZone)
+    }
+}
