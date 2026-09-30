@@ -158,6 +158,12 @@ struct PantryView: View {
                     }
                 }
             }
+            if !visibleSections.isEmpty {
+                Section {
+                } footer: {
+                    PantryBestByDisclaimer()
+                }
+            }
         }
         .listStyle(.insetGrouped)
         .searchable(text: $searchText, prompt: "Search pantry")

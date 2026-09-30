@@ -129,7 +129,9 @@ struct PantryItemDraftTests {
 
         #expect(
             try draft.changes(from: item, timeZone: denver)
-                == PantryItemChanges(quantity: "3/2", unit: "tbsp", isStaple: false, expiresOn: "", note: ""))
+                == PantryItemChanges(
+                    quantity: "3/2", unit: "tbsp", isStaple: false, expiresOn: "", note: "", storage: .pantry,
+                    storedOn: "2026-09-15"))
     }
 
     @Test func clearingTheAmountSendsAnEmptyQuantity() throws {
@@ -175,7 +177,8 @@ struct PantryItemDraftTests {
 
         let item = try draft.newItem(name: "  Za'atar ", ingredientID: nil, timeZone: denver)
 
-        #expect(item == NewPantryItem(name: "Za'atar", status: .inStock))
+        #expect(
+            item == NewPantryItem(name: "Za'atar", status: .inStock, storage: .pantry, storedOn: "2026-09-15"))
     }
 
     @Test func newCatalogItemSendsTheIDAndFields() throws {
@@ -193,7 +196,73 @@ struct PantryItemDraftTests {
             item
                 == NewPantryItem(
                     ingredientID: "i-olive-oil", quantity: "3/2", unit: "cup", status: .low, isStaple: true,
-                    expiresOn: "2026-09-15", note: "tin"))
+                    expiresOn: "2026-09-15", note: "tin", storage: .pantry, storedOn: "2026-09-15"))
+    }
+
+    @Test func newFrozenItemSendsWhereAndWhenSoTheServerDatesIt() throws {
+        var draft = PantryItemDraft(today: try today, timeZone: denver)
+        draft.storage = .freezer
+        draft.storedOn = try today.addingTimeInterval(-86_400)
+
+        let item = try draft.newItem(name: "Ground Pork", ingredientID: nil, timeZone: denver)
+
+        #expect(item.storage == .freezer)
+        #expect(item.storedOn == "2026-09-14")
+        #expect(item.expiresOn == nil)
+    }
+
+    @Test func movingAnItemSendsTheNewStorageAndDay() throws {
+        var item = PantryFixtures.item(name: "Carrots", category: "produce", expiresOn: "2026-09-29")
+        item.storedOn = "2026-09-15"
+        var draft = PantryItemDraft(item: item, today: try today, timeZone: denver)
+        // A date the server recommended isn't the member's own.
+        #expect(!draft.hasExpiry)
+        #expect(try draft.changes(from: item, timeZone: denver).isEmpty)
+
+        draft.storage = .freezer
+        #expect(
+            try draft.changes(from: item, timeZone: denver)
+                == PantryItemChanges(storage: .freezer, storedOn: "2026-09-15"))
+    }
+
+    @Test func turningOffAnOwnDateHandsItBackToTheRecommendation() throws {
+        let item = PantryFixtures.item(name: "Yogurt", expiresOn: "2026-10-01")
+        var draft = PantryItemDraft(item: item, today: try today, timeZone: denver)
+        #expect(draft.hasExpiry)
+        draft.hasExpiry = false
+
+        #expect(
+            try draft.changes(from: item, timeZone: denver)
+                == PantryItemChanges(expiresOn: "", storage: .pantry, storedOn: "2026-09-15"))
+    }
+}
+
+struct ShelfLifeSuggestionTests {
+    @Test func decodesTheLibraryAnswerAndExplainsIt() throws {
+        let json = Data(
+            #"""
+            {"bestBy":"2026-10-14","storedOn":"2026-09-30","storage":"fridge","minDays":14,"maxDays":21,"text":"2–3 weeks",
+             "matched":"Carrots, parsnips","estimate":false,"source":"USDA FoodKeeper","usualStorage":"fridge"}
+            """#.utf8)
+        let suggestion = try JSONDecoder().decode(ShelfLifeSuggestion.self, from: json)
+
+        #expect(suggestion.bestBy == "2026-10-14")
+        #expect(suggestion.storage == .fridge)
+        #expect(suggestion.usualStorage == .fridge)
+        #expect(suggestion.explanation == "2–3 weeks in the fridge, from USDA FoodKeeper.")
+    }
+
+    @Test func anEstimateSaysSo() throws {
+        let json = Data(
+            #"""
+            {"bestBy":"2026-11-30","storedOn":"2026-09-30","storage":"pantry","text":"2 months","estimate":true,
+             "source":"Typical for this kind of food"}
+            """#.utf8)
+        let suggestion = try JSONDecoder().decode(ShelfLifeSuggestion.self, from: json)
+
+        #expect(suggestion.matched == nil)
+        #expect(suggestion.usualStorage == nil)
+        #expect(suggestion.explanation == "About 2 months in the pantry, typical for foods like this.")
     }
 }
 

@@ -68,6 +68,8 @@ nonisolated struct PantryItem: Decodable, Hashable, Sendable, Identifiable {
     let storage: PantryStorage
     /// Set only for a freezer item: when it was sealed, and how long a portion takes to thaw.
     let frozen: PantryFrozen?
+    /// When it was put away where it is (`YYYY-MM-DD`), the start of its best-by date.
+    var storedOn: String? = nil
 
     init(
         id: String, householdID: String, ingredientID: String?, key: String, displayName: String, category: String,
@@ -115,7 +117,7 @@ nonisolated struct PantryItem: Decodable, Hashable, Sendable, Identifiable {
         case householdID = "householdId"
         case ingredientID = "ingredientId"
         case key, displayName, category, quantity, quantityValue, unit, status, isStaple, expiresOn, note, updatedBy,
-            createdAt, updatedAt, statusSource, lowThresholdPercent, unitSize, estimate, storage, frozen
+            createdAt, updatedAt, statusSource, lowThresholdPercent, unitSize, estimate, storage, frozen, storedOn
     }
 
     /// The usage fields are additive, so they're read leniently: a response without them, or
@@ -145,6 +147,7 @@ nonisolated struct PantryItem: Decodable, Hashable, Sendable, Identifiable {
             estimate: try? container.decodeIfPresent(PantryEstimate.self, forKey: .estimate),
             storage: (try? container.decodeIfPresent(PantryStorage.self, forKey: .storage)) ?? .pantry,
             frozen: (try? container.decodeIfPresent(PantryFrozen.self, forKey: .frozen)) ?? nil)
+        storedOn = try? container.decodeIfPresent(String.self, forKey: .storedOn)
     }
 }
 
@@ -167,10 +170,14 @@ nonisolated struct NewPantryItem: Encodable, Equatable, Sendable {
     var isStaple: Bool?
     var expiresOn: String?
     var note: String?
+    /// Where it's kept, and when it was put away. With a storage and no `expiresOn`, the API
+    /// fills in the recommended best-by date.
+    var storage: PantryStorage? = nil
+    var storedOn: String? = nil
 
     private enum CodingKeys: String, CodingKey {
         case ingredientID = "ingredientId"
-        case name, category, quantity, unit, status, isStaple, expiresOn, note
+        case name, category, quantity, unit, status, isStaple, expiresOn, note, storage, storedOn
     }
 }
 
@@ -187,12 +194,16 @@ nonisolated struct PantryItemChanges: Encodable, Equatable, Sendable {
     var note: String?
     /// `.household` sends `null`, which returns the item to the household's threshold.
     var lowThresholdPercent: PantryThresholdChange?
+    /// Moves the item; without `expiresOn` the API gives it the new place's best-by date.
+    var storage: PantryStorage?
+    var storedOn: String?
 
     /// The API rejects a PATCH that changes nothing.
     var isEmpty: Bool { self == PantryItemChanges() }
 
     private enum CodingKeys: String, CodingKey {
         case displayName, category, quantity, unit, status, isStaple, expiresOn, note, lowThresholdPercent
+        case storage, storedOn
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -205,6 +216,8 @@ nonisolated struct PantryItemChanges: Encodable, Equatable, Sendable {
         try container.encodeIfPresent(isStaple, forKey: .isStaple)
         try container.encodeIfPresent(expiresOn, forKey: .expiresOn)
         try container.encodeIfPresent(note, forKey: .note)
+        try container.encodeIfPresent(storage, forKey: .storage)
+        try container.encodeIfPresent(storedOn, forKey: .storedOn)
         switch lowThresholdPercent {
         case .household: try container.encodeNil(forKey: .lowThresholdPercent)
         case .percent(let percent): try container.encode(percent, forKey: .lowThresholdPercent)

@@ -1,8 +1,19 @@
 import SwiftUI
 
-/// The shared form sections for a pantry item's status, amount, staple flag, expiry, and note.
+/// The shared form sections for a pantry item's status, amount, staple flag, where it's kept
+/// and its best-by date, and note.
 struct PantryItemFields: View {
     @Binding var draft: PantryItemDraft
+    /// The food, for its recommended best-by date.
+    var name: String = ""
+    var category: String? = nil
+
+    @Environment(PantryStore.self) private var pantry
+    @State private var suggestion: ShelfLifeSuggestion?
+
+    private var lookupKey: String {
+        "\(name)|\(category ?? "")|\(draft.storage.rawValue)|\(draft.storedOnString())"
+    }
 
     var body: some View {
         Section("Status") {
@@ -46,19 +57,92 @@ struct PantryItemFields: View {
         }
 
         Section {
-            Toggle("Expiration Date", isOn: $draft.hasExpiry.animation())
+            Picker("Kept In", selection: storageBinding) {
+                ForEach(PantryStorage.choices, id: \.self) { storage in
+                    Text(storage.title).tag(storage)
+                }
+            }
+            .pickerStyle(.segmented)
+            DatePicker("Put Away", selection: $draft.storedOn, in: ...Date.now, displayedComponents: .date)
             if draft.hasExpiry {
-                DatePicker("Expires On", selection: $draft.expiryDate, displayedComponents: .date)
+                DatePicker("Best By", selection: $draft.expiryDate, displayedComponents: .date)
+            } else {
+                LabeledContent("Best By") {
+                    if let suggestion,
+                        let date = PantryDate.date(from: suggestion.bestBy, timeZone: .autoupdatingCurrent)
+                    {
+                        Text(date.formatted(date: .abbreviated, time: .omitted))
+                    } else {
+                        Text(name.isEmpty ? "Add a name first" : "…")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Toggle("Pick My Own Date", isOn: $draft.hasExpiry.animation())
+        } header: {
+            Text("Storage")
+        } footer: {
+            if !draft.hasExpiry, let suggestion {
+                Text(suggestion.explanation)
             }
         }
+        .task(id: lookupKey) { await lookUp() }
 
-        Section("Note") {
+        Section {
             TextField("Note", text: $draft.note, prompt: Text("Optional"), axis: .vertical)
                 .lineLimit(1...4)
             if let error = draft.noteError {
                 FormErrorLabel(message: error)
             }
+        } header: {
+            Text("Note")
+        } footer: {
+            PantryBestByDisclaimer()
+                .padding(.top, 12)
         }
+    }
+
+    /// Choosing a place marks it as the member's choice, so a suggestion won't move it.
+    private var storageBinding: Binding<PantryStorage> {
+        Binding(
+            get: { draft.storage },
+            set: {
+                draft.storage = $0
+                draft.storageChosen = true
+            })
+    }
+
+    /// The recommended best-by date for what's typed, where it's kept, and when it went there.
+    /// Until the member picks a place, the food's usual place is used ("Carrots" go in the
+    /// fridge).
+    private func lookUp() async {
+        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else {
+            suggestion = nil
+            return
+        }
+        try? await Task.sleep(for: .milliseconds(350))
+        guard !Task.isCancelled else { return }
+        let found = await pantry.shelfLife(
+            name: name, category: category, storage: draft.storage, storedOn: draft.storedOnString())
+        guard !Task.isCancelled else { return }
+        if let found, !draft.storageChosen, let usual = found.usualStorage, usual != draft.storage {
+            // The next lookup, for the usual place, fills the date in.
+            draft.storage = usual
+            return
+        }
+        suggestion = found
+    }
+}
+
+/// "These are recommended best-by dates. Use your best judgment."
+struct PantryBestByDisclaimer: View {
+    var body: some View {
+        Text(
+            "These are recommended best-by dates from USDA FoodKeeper. Use your best judgment."
+        )
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -104,7 +188,7 @@ struct PantryEditSheet: View {
                 } footer: {
                     Text("Records a purchase. The estimate starts over from the amount you bought.")
                 }
-                PantryItemFields(draft: $draft)
+                PantryItemFields(draft: $draft, name: item.displayName, category: item.category)
                 PantryThresholdFields(draft: $draft, householdPercent: pantry.settings?.lowThresholdPercent)
                 PantryUsageSections(item: current)
                 Section {
@@ -217,6 +301,11 @@ struct PantryAddSheet: View {
             && trimmedName.count >= IngredientSuggestions.minimumQueryLength
     }
 
+    /// The name to date: once it's chosen from the catalog, confirmed, or not being searched.
+    private var nameIsSettled: Bool {
+        selectedIngredient != nil || confirmedName == trimmedName || trimmedName.count >= 3
+    }
+
     private var canSave: Bool {
         !trimmedName.isEmpty && trimmedName.count <= PantryItemDraft.maxNameLength && draft.isValid && !isSaving
     }
@@ -245,7 +334,8 @@ struct PantryAddSheet: View {
                 if showsSuggestions {
                     suggestionsSection
                 }
-                PantryItemFields(draft: $draft)
+                PantryItemFields(
+                    draft: $draft, name: nameIsSettled ? trimmedName : "", category: selectedIngredient?.category)
             }
             .navigationTitle("Add to Pantry")
             .navigationBarTitleDisplayMode(.inline)

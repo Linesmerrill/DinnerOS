@@ -320,6 +320,19 @@ final class PantryStore {
         await load(showingProgress: false)
     }
 
+    // MARK: - Shelf life
+
+    func shelfLifeLookup(name: String, category: String?, storage: PantryStorage, storedOn: String) async throws
+        -> ShelfLifeSuggestion
+    {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        return try await session.authorized { token in
+            try await api.shelfLife(
+                householdID: householdID, name: name, category: category, storage: storage, storedOn: storedOn,
+                accessToken: token)
+        }
+    }
+
     // MARK: - Ingredient catalog
 
     func searchCatalog(_ query: String, limit: Int = IngredientSuggestions.resultLimit) async throws

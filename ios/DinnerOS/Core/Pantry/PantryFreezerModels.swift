@@ -11,8 +11,21 @@ nonisolated struct PantryStorage: RawRepresentable, Codable, Hashable, Sendable 
 
     /// On a shelf. Items written before the freezer existed read as this.
     static let pantry = PantryStorage(rawValue: "pantry")
+    /// In the refrigerator.
+    static let fridge = PantryStorage(rawValue: "fridge")
     /// Portioned, sealed and frozen, usually a bulk pack's remainder.
     static let freezer = PantryStorage(rawValue: "freezer")
+
+    /// The places the pantry forms offer, in the order they're shown.
+    static let choices: [PantryStorage] = [.pantry, .fridge, .freezer]
+
+    var title: String {
+        switch self {
+        case .fridge: String(localized: "Fridge")
+        case .freezer: String(localized: "Freezer")
+        default: String(localized: "Pantry")
+        }
+    }
 }
 
 /// A freezer item's extra facts: when it went in, how it was split, and the thaw estimate.

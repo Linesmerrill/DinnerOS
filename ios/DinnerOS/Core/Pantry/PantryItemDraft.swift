@@ -10,9 +10,18 @@ nonisolated struct PantryItemDraft: Equatable, Sendable {
     var quantityText = ""
     var unit = PantryUnit.defaultCode
     var isStaple = false
+    /// The member picks the best-by date. Off, the server fills in the recommended one for where
+    /// it's kept and when it was put away.
     var hasExpiry = false
     /// Used only while `hasExpiry` is on.
     var expiryDate: Date
+    /// Where it's kept, and when it went there.
+    var storage: PantryStorage = .pantry
+    var storedOn: Date
+    /// The member chose the storage, so a suggestion no longer moves it.
+    var storageChosen = false
+    /// The item had a date of its own when the form opened.
+    private(set) var startedWithOwnDate = false
     var note = ""
     /// Off when the item has its own low-stock threshold.
     var usesHouseholdThreshold = true
@@ -21,6 +30,7 @@ nonisolated struct PantryItemDraft: Equatable, Sendable {
 
     init(today: Date = .now, timeZone: TimeZone = .autoupdatingCurrent) {
         expiryDate = PantryDate.calendar(timeZone: timeZone).startOfDay(for: today)
+        storedOn = expiryDate
     }
 
     init(item: PantryItem, today: Date = .now, timeZone: TimeZone = .autoupdatingCurrent) {
@@ -29,9 +39,17 @@ nonisolated struct PantryItemDraft: Equatable, Sendable {
         quantityText = PantryQuantity.editingText(item.quantity)
         unit = item.unit ?? PantryUnit.defaultCode
         isStaple = item.isStaple
+        storage = item.storage
+        storageChosen = true
+        if let on = item.storedOn ?? item.frozen?.frozenOn, let date = PantryDate.date(from: on, timeZone: timeZone) {
+            storedOn = date
+        }
         if let expiresOn = item.expiresOn, let date = PantryDate.date(from: expiresOn, timeZone: timeZone) {
-            hasExpiry = true
             expiryDate = date
+            // A date the server recommended (the item says when it was put away) reads as the
+            // recommendation, not the member's own.
+            hasExpiry = item.storedOn == nil
+            startedWithOwnDate = hasExpiry
         }
         note = item.note
         if let percent = item.lowThresholdPercent {
@@ -81,7 +99,13 @@ nonisolated struct PantryItemDraft: Equatable, Sendable {
             status: status,
             isStaple: isStaple ? true : nil,
             expiresOn: expiresOn(timeZone: timeZone),
-            note: trimmedNote.isEmpty ? nil : trimmedNote)
+            note: trimmedNote.isEmpty ? nil : trimmedNote,
+            storage: storage,
+            storedOn: storedOnString(timeZone: timeZone))
+    }
+
+    func storedOnString(timeZone: TimeZone = .autoupdatingCurrent) -> String {
+        PantryDate.string(from: storedOn, timeZone: timeZone)
     }
 
     /// Only the fields that differ from `item`. The API clears the amount when an item
@@ -106,9 +130,22 @@ nonisolated struct PantryItemDraft: Equatable, Sendable {
         if isStaple != item.isStaple {
             changes.isStaple = isStaple
         }
-        let expires = expiresOn(timeZone: timeZone)
-        if expires != item.expiresOn {
-            changes.expiresOn = expires ?? ""
+        let stored = storedOnString(timeZone: timeZone)
+        let moved = storage != item.storage || stored != (item.storedOn ?? item.frozen?.frozenOn ?? stored)
+        if hasExpiry {
+            let expires = expiresOn(timeZone: timeZone)
+            if expires != item.expiresOn {
+                changes.expiresOn = expires ?? ""
+            }
+        } else if startedWithOwnDate {
+            // Cleared, so the old date doesn't stay if no recommendation is found.
+            changes.expiresOn = ""
+        }
+        // Moved, put away on another day, or handed back to the recommendation: the server
+        // dates it for where it is now.
+        if moved || (!hasExpiry && startedWithOwnDate) {
+            changes.storage = storage
+            changes.storedOn = stored
         }
         if trimmedNote != item.note {
             changes.note = trimmedNote
