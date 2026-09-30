@@ -231,6 +231,9 @@ type stepAmounts struct {
 	// explained, and seen the ingredients an earlier step already named.
 	notedBefore map[string]bool
 	seen        map[int]bool
+	// home is set for a recipe written for one serving size: one a person
+	// added, not a meal-kit card.
+	home bool
 }
 
 // relativeWords end the text before a mention that is a share of it, not the
@@ -476,6 +479,12 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			}
 		}
 		m := mentions[hit]
+		// Only a bare name right after the shared one takes its share.
+		var carried *big.Rat
+		if listShare != nil && listJoinRe.MatchString(string(plain)) {
+			carried = listShare
+		}
+		listShare = nil
 		// "the melted butter": the amount goes before how it's prepared
 		// ("⅓ cup melted butter"), so the words before it are read without
 		// them and put back after.
@@ -562,15 +571,14 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		// "¼ of the onion" is ¼ onion to have ready, and reads as written.
 		inText := true
 		fraction, fractionLen, isFraction := fractionOf(plain)
-		if !isFraction && listShare != nil && listJoinRe.MatchString(string(plain)) {
-			fraction, isFraction = listShare, true
+		if !isFraction && carried != nil && !amountShown[hit] {
+			fraction, isFraction = carried, true
 		}
 		// "half the lemon zest" is half the zest, not half the lemon.
 		if isFraction && strings.HasPrefix(strings.ToLower(string(runes[i+length:])), " zest") {
 			isFraction, amount = false, nil
 		}
-		listShare = nil
-		if isFraction {
+		if isFraction && (carried != nil || sharedList(amounts.home, runes[i+length:])) {
 			listShare = fraction
 		}
 		if isFraction {

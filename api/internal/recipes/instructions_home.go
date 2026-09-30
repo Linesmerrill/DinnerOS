@@ -19,9 +19,10 @@ var leadingContainerRe = regexp.MustCompile(`(?i)^\([^()]*\)\s*(?:(cans?|package
 
 // homeCount is a counted amount as the steps read it. A pasted "1 onion"
 // imports with no unit, which reads as a count ("half the onion" is ½
-// onion), and a count of "(14.5 oz) can diced tomatoes" is cans.
-func homeCount(m Measure, name string) *Measure {
-	if m.Unit == "" {
+// onion), and a count of "(14.5 oz) can diced tomatoes" is cans. A meal-kit
+// card's lines keep their units as imported.
+func homeCount(m Measure, name string, home bool) *Measure {
+	if m.Unit == "" && home {
 		m.Unit = "count"
 	}
 	if m.Unit == "count" {
@@ -72,8 +73,8 @@ func trimNameTail(name string) string {
 var prepWords = map[string]bool{
 	"diced": true, "minced": true, "chopped": true, "sliced": true, "melted": true, "softened": true,
 	"beaten": true, "drained": true, "rinsed": true, "grated": true, "shredded": true, "crushed": true,
-	"cubed": true, "peeled": true, "halved": true, "quartered": true, "cooked": true, "toasted": true,
-	"thawed": true, "torn": true, "mashed": true, "cooled": true, "whisked": true, "pitted": true,
+	"cubed": true, "peeled": true, "halved": true, "quartered": true, "toasted": true,
+	"thawed": true, "torn": true, "mashed": true, "whisked": true, "pitted": true,
 	"cored": true, "trimmed": true, "julienned": true, "smashed": true,
 	"finely": true, "thinly": true, "roughly": true, "coarsely": true, "freshly": true, "lightly": true,
 }
@@ -132,6 +133,35 @@ func statedRange(text []rune) bool {
 
 // listJoinRe is what joins the names of a list: ", ", " and ", ", and ".
 var listJoinRe = regexp.MustCompile(`^(?:,\s*(?:and\s+|or\s+)?|\s+(?:and|or)\s+)$`)
+
+// sharedList reports whether a share ("half of the garlic powder") goes on
+// to the rest of its sentence: a home recipe's list of bare names joined by
+// "and" ("…, paprika, salt and pepper."), with no amount, note, or other
+// words that could mean the share stops. A meal-kit card's "half the
+// Parmesan, and 1 TBSP butter" is never one: when in doubt, it doesn't.
+func sharedList(home bool, after []rune) bool {
+	if !home {
+		return false
+	}
+	rest := string(after)
+	if end := strings.IndexAny(rest, ".;!\n"); end >= 0 {
+		rest = rest[:end]
+	}
+	if strings.ContainsAny(rest, "()0123456789"+fractionRunes+"⅛⅜⅝⅞") || !strings.HasPrefix(rest, ",") && !strings.HasPrefix(rest, " and ") {
+		return false
+	}
+	items := listSplitRe.Split(strings.TrimSpace(rest), -1)
+	joinedByAnd := strings.Contains(rest, " and ")
+	for _, item := range items {
+		if n := len(strings.Fields(item)); n > 3 {
+			return false
+		}
+	}
+	return joinedByAnd && len(items) > 1
+}
+
+// listSplitRe splits a list into its names.
+var listSplitRe = regexp.MustCompile(`\s*,\s*(?:and\s+)?|\s+and\s+`)
 
 // endsWithWord reports whether s ends in phrase as whole words: "more" ends
 // "add more", not "anymore".

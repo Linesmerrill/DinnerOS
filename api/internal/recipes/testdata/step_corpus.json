@@ -85,6 +85,74 @@
       }
     },
     {
+      "name": "Stock-Glazed Beef Patties",
+      "servings": [2, 4],
+      "ingredients": [
+        {"name": "Ground Beef", "amounts": {"2": "10 oz", "4": "20 oz"}},
+        {"name": "Garlic Powder", "amounts": {"2": "1 tsp", "4": "2 tsp"}},
+        {"name": "Ground Cumin", "amounts": {"2": "1 tsp", "4": "2 tsp"}},
+        {"name": "Panko Breadcrumbs", "amounts": {"2": "1/4 cup", "4": "1/2 cup"}},
+        {"name": "Beef Stock Concentrate", "amounts": {"2": "1 count", "4": "2 count"}},
+        {"name": "Salt", "amounts": {"2": "11 tsp", "4": "22 tsp"}},
+        {"name": "Pepper", "amounts": {}},
+        {"name": "Olive Oil", "amounts": {"2": "1 tbsp", "4": "2 tbsp"}},
+        {"name": "Cooking Oil", "amounts": {"2": "2 tsp", "4": "4 tsp"}},
+        {"name": "Arugula", "amounts": {"2": "2 oz", "4": "4 oz"}}
+      ],
+      "steps": [
+        "In a large bowl, combine beef, garlic powder, cumin, panko, half the stock concentrate, ¾ tsp salt (1¼ tsp for 4 servings), and pepper. Form into patties.",
+        "Heat a drizzle of oil in a large pan over medium-high heat. Cook patties until browned. Stir remaining stock concentrate into pan.",
+        "Toss arugula with olive oil and a pinch of salt."
+      ],
+      "expect": {
+        "2": {"1": ["½ tsp stock concentrate, ¾ tsp salt, and pepper"], "2": ["a drizzle of oil"], "3": ["1 Tbsp olive oil"]},
+        "4": {"1": ["1 ¼ tsp salt, and pepper"]}
+      }
+    },
+    {
+      "name": "Buttery Parmesan Penne",
+      "servings": [2, 4],
+      "ingredients": [
+        {"name": "Penne Pasta", "amounts": {"2": "6 oz", "4": "12 oz"}},
+        {"name": "Parmesan Cheese", "amounts": {"2": "1/4 cup", "4": "1/2 cup"}},
+        {"name": "Butter", "amounts": {"2": "1 tbsp", "4": "2 tbsp"}},
+        {"name": "Yellow Onion", "amounts": {"2": "1 count", "4": "2 count"}},
+        {"name": "Lime", "amounts": {"2": "1 count", "4": "2 count"}},
+        {"name": "Sugar", "amounts": {"2": "1 tsp", "4": "2 tsp"}},
+        {"name": "Salt", "amounts": {}}
+      ],
+      "steps": [
+        "In a small bowl, combine ¼ of the onion, juice from half the lime, ¼ tsp sugar (½ tsp for 4 servings), and a pinch of salt.",
+        "Stir drained penne, half the Parmesan, and 1 TBSP butter (2 TBSP for 4 servings) into pan. Top with remaining Parmesan."
+      ],
+      "expect": {
+        "2": {"1": ["¼ tsp sugar"], "2": ["and 1 Tbsp butter into pan"]},
+        "4": {"1": ["½ tsp sugar"], "2": ["and 2 Tbsp butter into pan"]}
+      }
+    },
+    {
+      "name": "Lemony Linguine with Sprouts",
+      "servings": [2, 3, 4],
+      "ingredients": [
+        {"name": "Linguine", "amounts": {"2": "6 oz", "3": "9 oz", "4": "12 oz"}},
+        {"name": "Brussels Sprouts", "amounts": {"2": "6 oz", "3": "9 oz", "4": "12 oz"}},
+        {"name": "Garlic Herb Butter", "amounts": {"2": "1 tbsp", "4": "2 tbsp"}},
+        {"name": "Butter", "amounts": {"2": "1 tbsp", "4": "2 tbsp"}},
+        {"name": "Parmesan Cheese", "amounts": {"2": "3 tbsp", "4": "6 tbsp"}},
+        {"name": "Scallions", "amounts": {"2": "2 count", "3": "3 count", "4": "4 count"}},
+        {"name": "Lemon", "amounts": {"2": "1 count", "3": "1 count", "4": "2 count"}}
+      ],
+      "steps": [
+        "Zest and quarter lemon. Trim and halve Brussels sprouts. Slice scallions, separating whites from greens. Melt butter in a pan and toss sprouts until the cheese sauce thickens.",
+        "Add drained linguine, Brussels sprouts, garlic herb butter, Parmesan, scallion greens, half the lemon zest, and a big squeeze of lemon juice."
+      ],
+      "expect": {
+        "2": {"2": ["3 Tbsp Parmesan"]},
+        "3": {"2": ["4 ½ Tbsp Parmesan"]},
+        "4": {"2": ["6 Tbsp Parmesan"]}
+      }
+    },
+    {
       "name": "Weeknight Pantry Chili",
       "servings": [6],
       "ingredients": [

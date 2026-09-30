@@ -169,6 +169,68 @@ func TestHomeStepsCarryAShareDownAList(t *testing.T) {
 	wantStep(t, in, 1, "Toss with ½ tsp garlic powder, ½ tsp paprika, ½ tsp salt and ¼ tsp pepper. Add the rest later.")
 }
 
+// A meal-kit card's "half the X, <amount> Y, and Z" halves only X.
+func TestMealKitShareStopsAtTheNextName(t *testing.T) {
+	r := instructionRecipe([]RecipeIngredient{
+		instructionLine("", "Ground Beef", "10", "oz"),
+		instructionLine("", "Beef Stock Concentrate", "1", "count"),
+		instructionLine("", "Salt", "11", "tsp"),
+		instructionLine("", "Pepper", "", ""),
+		instructionLine("", "Penne Pasta", "6", "oz"),
+		instructionLine("", "Parmesan Cheese", "1/4", "cup"),
+		instructionLine("", "Butter", "1", "tbsp"),
+		instructionLine("", "Yellow Onion", "1", "count"),
+		instructionLine("", "Lime", "1", "count"),
+		instructionLine("", "Sugar", "1", "tsp"),
+	},
+		"Combine beef, half the stock concentrate, ¾ tsp salt (1¼ tsp for 4 servings), and pepper.",
+		"Stir drained penne, half the Parmesan, and 1 TBSP butter (2 TBSP for 4 servings) into pan.",
+		"Combine ¼ of the onion, juice from half the lime, ¼ tsp sugar (½ tsp for 4 servings), and a pinch of salt.")
+	for n, want := range map[int][]string{2: {"¾ tsp salt", "1 Tbsp butter", "¼ tsp sugar"}, 4: {"1 ¼ tsp salt", "2 Tbsp butter", "½ tsp sugar"}} {
+		in := Annotate(r, n, nil, true)
+		for i, w := range want {
+			if got := joined(in.Steps[i]); !strings.Contains(got, w) {
+				t.Errorf("for %d, step %d = %q, want it to contain %q", n, i+1, got, w)
+			}
+		}
+	}
+	// A home list with an amount in it doesn't share either.
+	home := homeRecipe([]RecipeIngredient{
+		homeLine("garlic powder", "1", "tsp"),
+		homeLine("smoked paprika", "1", "tsp"),
+		homeLine("salt", "1", "tsp"),
+	}, "Toss with half of the garlic powder, 1 tsp paprika and salt.")
+	wantStep(t, homeSteps(t, home), 1, "Toss with ½ tsp garlic powder, 1 tsp paprika and 1 tsp salt.")
+}
+
+// On a meal-kit card, "the cheese" is never the Parmesan: the card names it.
+func TestMealKitCheeseStaysNamed(t *testing.T) {
+	r := instructionRecipe([]RecipeIngredient{
+		instructionLine("", "Butter", "1", "tbsp"),
+		instructionLine("", "Parmesan Cheese", "3", "tbsp"),
+	},
+		"Melt butter and stir until the cheese sauce thickens.",
+		"Add Parmesan.")
+	in := Annotate(r, 2, nil, true)
+	wantStep(t, in, 1, "Melt 1 Tbsp butter and stir until the cheese sauce thickens.")
+	wantStep(t, in, 2, "Add 3 Tbsp Parmesan.")
+}
+
+// "a drizzle of oil" is the cooking oil when there is one, wherever the
+// olive oil is listed; olive oil answers to "oil" only when it's the only oil.
+func TestPlainOilIsTheCookingOil(t *testing.T) {
+	r := instructionRecipe([]RecipeIngredient{
+		instructionLine("", "Olive Oil", "1", "tbsp"),
+		instructionLine("", "Cooking Oil", "2", "tsp"),
+	}, "Heat a drizzle of oil. Toss greens with olive oil.")
+	in := Annotate(r, 2, nil, true)
+	if segs := ingredientSegments(in.Steps[0]); len(segs) != 2 || segs[0].Name != "Cooking Oil" || segs[1].Name != "Olive Oil" {
+		t.Errorf("segments = %+v, want the cooking oil, then the olive oil", segs)
+	}
+	only := homeRecipe([]RecipeIngredient{homeLine("extra-virgin olive oil", "3", "tbsp")}, "Warm the oil.")
+	wantStep(t, homeSteps(t, only), 1, "Warm 3 Tbsp oil.")
+}
+
 func TestHomeStepsGiveARepeatedLineToTheLaterStep(t *testing.T) {
 	r := homeRecipe([]RecipeIngredient{
 		homeLine("brown sugar", "2", "tbsp"),

@@ -516,15 +516,19 @@ func AnnotateMeal(r Recipe, servings int, specs grocery.Specialties, applied boo
 	}
 	mentions := make([]mention, 0, len(r.Ingredients))
 	seenSpecialty := map[string]bool{}
+	// A recipe written for one serving size is one a person added (a blog
+	// or a family card); some rules for their phrasings only apply there
+	// (instructions_home.go), so meal-kit cards read as they always have.
+	home := len(r.Servings) <= 1
 	for index, ing := range r.Ingredients {
 		key := ingredientKey(ing)
 		state := IngredientState{Index: index, IngredientKey: key, Name: ing.Name}
 		m := mention{ingredientID: ing.IngredientID, name: ing.Name, display: ing.Name, spicy: ingredients.Spicy(ing.Name)}
 		if a, ok := cookAmountAt(r, ing, servings); ok {
-			m.amount = homeCount(a, ing.Name)
+			m.amount = homeCount(a, ing.Name, home)
 		}
 		if a, ok := amountAt(ing, smallest(r.Servings)); ok {
-			m.baseAmount = homeCount(a, ing.Name)
+			m.baseAmount = homeCount(a, ing.Name, home)
 		}
 		if sw, ok := swaps[key]; ok {
 			if sw.Factor != nil {
@@ -611,8 +615,13 @@ func AnnotateMeal(r Recipe, servings int, specs grocery.Specialties, applied boo
 		if !ingredientHeading(ing.Name) {
 			m.forms = nameForms(m.name, specs[key])
 		}
+		if !home {
+			// A meal-kit card names its cheese and broth ("Parmesan"), so a
+			// plain "cheese" there is something else ("until cheese melts").
+			m.forms = slices.DeleteFunc(m.forms, func(f string) bool { return plainForms[strings.ToLower(f)] })
+		}
 		for j := range mentions {
-			if strings.EqualFold(trimQualifiers(mentions[j].name), trimQualifiers(m.name)) && !ingredientHeading(ing.Name) {
+			if home && strings.EqualFold(trimQualifiers(mentions[j].name), trimQualifiers(m.name)) && !ingredientHeading(ing.Name) {
 				mentions[j].twins = append(mentions[j].twins, index)
 				break
 			}
@@ -622,7 +631,7 @@ func AnnotateMeal(r Recipe, servings int, specs grocery.Specialties, applied boo
 	dedupeForms(mentions)
 	amounts := stepAmounts{
 		servings: servings, base: smallest(r.Servings), stated: statedMentions(r.Steps, mentions),
-		notedBefore: map[string]bool{}, seen: map[int]bool{},
+		notedBefore: map[string]bool{}, seen: map[int]bool{}, home: home,
 	}
 	for _, step := range r.Steps {
 		st := renderStep(step, mentions, amounts)
@@ -1183,6 +1192,14 @@ func dedupeForms(mentions []mention) {
 				continue
 			}
 			oi, oj := own(m, f), own(mentions[j], f)
+			// "a drizzle of oil" is the cooking oil when there is one: olive
+			// oil answers to plain "oil" only when it's the only oil.
+			if wi, wj := oliveOil(m.name), oliveOil(mentions[j].name); !oi && !oj && wi != wj {
+				if wj {
+					owner[k] = i
+				}
+				continue
+			}
 			if oi && !oj || oi == oj && len(strings.Fields(m.name)) < len(strings.Fields(mentions[j].name)) {
 				owner[k] = i
 			}
@@ -1198,6 +1215,8 @@ func dedupeForms(mentions []mention) {
 		mentions[i].forms = kept
 	}
 }
+
+func oliveOil(name string) bool { return strings.Contains(strings.ToLower(name), "olive") }
 
 // trimQualifiers drops a parenthesis or a trailing clause: "Chili Flakes
 // (optional)" and "Scallions, thinly sliced" both become their head.
