@@ -77,6 +77,9 @@ type HouseholdResponse struct {
 	// bag's best-by date: vacuum_sealed (the default), freezer_bag, or
 	// store_package.
 	FreezerWrap string `json:"freezerWrap"`
+	// CatalogSharing is which recipes other households can find and add:
+	// off, all, or chosen.
+	CatalogSharing string `json:"catalogSharing"`
 	// WeekStartsOn is the first day of the household's week: "sun" for new
 	// households, "mon" for households that never chose.
 	WeekStartsOn string `json:"weekStartsOn"`
@@ -117,6 +120,7 @@ func NewHouseholdResponse(hh Household) HouseholdResponse {
 		ThawReminderHour: hh.ThawHour(),
 		FreezeMinOunces:  hh.FreezeMinOunces,
 		FreezerWrap:      hh.Wrap(),
+		CatalogSharing:   hh.Sharing(),
 		WeekStartsOn:     hh.FirstDay(),
 		CreatedBy:        hh.CreatedBy,
 		CreatedAt:        hh.CreatedAt.UTC(),
@@ -209,6 +213,8 @@ type updateHouseholdRequest struct {
 	FreezeMinOunces httpx.Optional[int] `json:"freezeMinOunces"`
 	// FreezerWrap changes how the household freezes raw meat.
 	FreezerWrap *string `json:"freezerWrap"`
+	// CatalogSharing changes which recipes other households can find.
+	CatalogSharing *string `json:"catalogSharing"`
 	// WeekStartsOn changes the first day of the week, moving meals whose date
 	// now falls in another week into that week.
 	WeekStartsOn *string `json:"weekStartsOn"`
@@ -287,7 +293,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	in := UpdateInput{Name: req.Name, TimeZone: req.TimeZone, DefaultServings: req.DefaultServings, OrderDay: req.OrderDay, WeekStartsOn: req.WeekStartsOn, SetMealKit: req.MealKit.Set,
 		SetThawReminderHour: req.ThawReminderHour.Set, ThawReminderHour: req.ThawReminderHour.Value,
 		SetFreezeMinOunces: req.FreezeMinOunces.Set, FreezeMinOunces: req.FreezeMinOunces.Value,
-		FreezerWrap: req.FreezerWrap}
+		FreezerWrap: req.FreezerWrap, CatalogSharing: req.CatalogSharing}
 	if v := req.MealKit.Value; v != nil {
 		in.MealKit = &MealKit{WeeklyCents: v.WeeklyCents, Meals: v.Meals}
 	}

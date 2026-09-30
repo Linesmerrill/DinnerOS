@@ -26,6 +26,12 @@ type CreatedListener interface {
 // day of the week changes. *planning.Service implements it: ChangeWeekStart
 // moves scheduled meals whose date now falls in another week into that week
 // (before the new first day is saved), and FinishWeekStart tidies up after.
+// SharingListener publishes a household's recipes when it starts sharing
+// them. *recipes.Service implements it (PublishHousehold).
+type SharingListener interface {
+	PublishHousehold(ctx context.Context, householdID string) error
+}
+
 type WeekStartListener interface {
 	ChangeWeekStart(ctx context.Context, householdID, from, to string) (int, error)
 	FinishWeekStart(ctx context.Context, householdID string) error
@@ -39,6 +45,7 @@ type Service struct {
 	users     UserDirectory
 	onCreated CreatedListener
 	weekStart WeekStartListener
+	sharing   SharingListener
 	now       func() time.Time
 	logger    *slog.Logger
 }
@@ -53,13 +60,16 @@ type ServiceOptions struct {
 	// OnWeekStart, when set, moves meals when the first day of the week
 	// changes. Without it the first day can still change, and nothing moves.
 	OnWeekStart WeekStartListener
+	// OnSharing, when set, publishes the household's recipes when it turns
+	// catalog sharing on. Without it only recipes saved later are shared.
+	OnSharing SharingListener
 	// Now is the clock. Default time.Now.
 	Now func() time.Time
 }
 
 // NewService returns a Service.
 func NewService(opts ServiceOptions) *Service {
-	s := &Service{store: opts.Store, users: opts.Users, onCreated: opts.OnCreated, weekStart: opts.OnWeekStart, now: opts.Now, logger: opts.Logger}
+	s := &Service{store: opts.Store, users: opts.Users, onCreated: opts.OnCreated, weekStart: opts.OnWeekStart, sharing: opts.OnSharing, now: opts.Now, logger: opts.Logger}
 	if s.now == nil {
 		s.now = time.Now
 	}
@@ -205,6 +215,20 @@ func (s *Service) Details(ctx context.Context, actor Membership) (Household, []M
 	return h, members, nil
 }
 
+// SetSharingListener sets what publishes a household's recipes when it turns
+// sharing on, for wiring that builds the recipe service first.
+func (s *Service) SetSharingListener(l SharingListener) { s.sharing = l }
+
+// CatalogSharing reads which of the household's recipes other households
+// can find: off, all, or chosen. It implements recipes.SharingSource.
+func (s *Service) CatalogSharing(ctx context.Context, householdID string) (string, error) {
+	h, err := s.store.GetHousehold(ctx, householdID)
+	if err != nil {
+		return "", err
+	}
+	return h.Sharing(), nil
+}
+
 // Update changes household settings. It requires household.update.
 func (s *Service) Update(ctx context.Context, actor Membership, in UpdateInput) (Household, error) {
 	if !actor.Role.Can(PermHouseholdUpdate) {
@@ -212,9 +236,17 @@ func (s *Service) Update(ctx context.Context, actor Membership, in UpdateInput) 
 	}
 	var patch HouseholdPatch
 	if in.Name == nil && in.TimeZone == nil && in.DefaultServings == nil && in.OrderDay == nil &&
-		in.WeekStartsOn == nil && !in.SetMealKit && !in.SetThawReminderHour && !in.SetFreezeMinOunces && in.FreezerWrap == nil {
+		in.WeekStartsOn == nil && !in.SetMealKit && !in.SetThawReminderHour && !in.SetFreezeMinOunces && in.FreezerWrap == nil &&
+		in.CatalogSharing == nil {
 		return Household{}, invalid(
-			"at least one of name, timeZone, defaultServings, orderDay, weekStartsOn, thawReminderHour, freezeMinOunces, freezerWrap, or mealKit is required")
+			"at least one of name, timeZone, defaultServings, orderDay, weekStartsOn, thawReminderHour, freezeMinOunces, freezerWrap, catalogSharing, or mealKit is required")
+	}
+	if in.CatalogSharing != nil {
+		if err := validateCatalogSharing(*in.CatalogSharing); err != nil {
+			return Household{}, err
+		}
+		mode := *in.CatalogSharing
+		patch.CatalogSharing = &mode
 	}
 	if in.FreezerWrap != nil {
 		if err := validateFreezerWrap(*in.FreezerWrap); err != nil {
@@ -295,6 +327,16 @@ func (s *Service) Update(ctx context.Context, actor Membership, in UpdateInput) 
 	h, err := s.store.UpdateHousehold(ctx, actor.HouseholdID, patch, s.now().UTC())
 	if err != nil {
 		return Household{}, err
+	}
+	// Turning sharing on shares what the household already has, in the
+	// background: publishing hundreds of recipes shouldn't hold up saving a
+	// setting, and a failure only means a thinner catalog until the next save.
+	if in.CatalogSharing != nil && h.Sharing() != CatalogSharingOff && s.sharing != nil {
+		go func(ctx context.Context, householdID string) {
+			if err := s.sharing.PublishHousehold(ctx, householdID); err != nil {
+				s.logger.ErrorContext(ctx, "publish household recipes", "householdId", householdID, "error", err)
+			}
+		}(context.WithoutCancel(ctx), actor.HouseholdID)
 	}
 	if moving {
 		// The marks only guard a retry of this change; leaving them behind

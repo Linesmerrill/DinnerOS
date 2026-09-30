@@ -22,6 +22,10 @@ type Service struct {
 	// catalog publishes public-source recipes into the global recipe catalog
 	// (sharing.go). It is nil until WithCatalog wires one.
 	catalog CatalogPublisher
+	// sharing reads each household's catalog sharing (sharing.go). Without
+	// it, recipes from a public source are shared as before sharing was a
+	// household's choice.
+	sharing SharingSource
 }
 
 // NewService returns a Service backed by store.

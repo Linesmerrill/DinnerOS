@@ -153,6 +153,10 @@ func run() error {
 		logger.Info("STARTER_RECIPES_HOUSEHOLD_ID is not set; new households start with no recipes")
 	}
 	householdService, householdHandler, invitationHandler := newHouseholdHandlers(cfg, db, userService, tokens, starter, logger)
+	// Sharing recipes with other households is each household's choice, off
+	// until it opts in; turning it on shares what it already has.
+	recipeService.WithSharing(householdService)
+	householdService.SetSharingListener(recipeService)
 	// The recipe service is the pantry's view of the global ingredient catalog
 	// and of cooked recipes. The pantry decides grocery list statuses, deducts
 	// cooked recipes (an events listener), and raises low-stock notifications;

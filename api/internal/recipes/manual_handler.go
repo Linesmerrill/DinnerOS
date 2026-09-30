@@ -176,7 +176,7 @@ func (h *Handler) setSharing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, SharingResponse{
-		RecipeID: stored.ID, SharedToCatalog: stored.SharedToCatalog, InCatalog: Publishable(stored),
+		RecipeID: stored.ID, SharedToCatalog: stored.SharedToCatalog, InCatalog: h.opts.Service.InCatalog(r.Context(), stored),
 	})
 }
 

@@ -68,6 +68,8 @@ type householdDoc struct {
 	FreezeMinOunces *int `bson:"freezeMinOunces,omitempty"`
 	// FreezerWrap is absent for a household that never chose (vacuum sealed).
 	FreezerWrap string `bson:"freezerWrap,omitempty"`
+	// CatalogSharing is absent for a household that never chose (off).
+	CatalogSharing string `bson:"catalogSharing,omitempty"`
 	// WeekStartsOn is absent for a household created before the setting
 	// existed, whose weeks start on Monday.
 	WeekStartsOn string `bson:"weekStartsOn,omitempty"`
@@ -100,6 +102,7 @@ func (d householdDoc) toHousehold() Household {
 		ThawReminderHour: d.ThawReminderHour,
 		FreezeMinOunces:  d.FreezeMinOunces,
 		FreezerWrap:      d.FreezerWrap,
+		CatalogSharing:   d.CatalogSharing,
 		WeekStartsOn:     d.WeekStartsOn,
 		CreatedBy:        d.CreatedBy.Hex(),
 		CreatedAt:        d.CreatedAt.UTC(),
@@ -260,6 +263,9 @@ func (s *MongoStore) UpdateHousehold(ctx context.Context, id string, patch House
 		} else {
 			unset = append(unset, bson.E{Key: "freezeMinOunces", Value: ""})
 		}
+	}
+	if patch.CatalogSharing != nil {
+		set = append(set, bson.E{Key: "catalogSharing", Value: *patch.CatalogSharing})
 	}
 	if patch.FreezerWrap != nil {
 		set = append(set, bson.E{Key: "freezerWrap", Value: *patch.FreezerWrap})

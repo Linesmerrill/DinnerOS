@@ -36,16 +36,91 @@ func (s *Service) WithCatalog(p CatalogPublisher) *Service {
 	return s
 }
 
-// PublishToCatalog publishes the publishable subset of rs to the global
-// catalog and returns how many entries were written. It is a no-op without a
-// publisher.
+// Catalog sharing modes, the household's choice (households.CatalogSharing):
+// nothing, every recipe, or the ones it marks one by one.
+const (
+	SharingOff    = "off"
+	SharingAll    = "all"
+	SharingChosen = "chosen"
+	// sharingLegacy is the rule before sharing was a household's choice:
+	// public-source recipes and marked ones. It applies only when no
+	// SharingSource is wired (tools and tests).
+	sharingLegacy = "legacy"
+)
+
+// SharingSource reads a household's catalog sharing.
+// *households.Service implements it.
+type SharingSource interface {
+	CatalogSharing(ctx context.Context, householdID string) (string, error)
+}
+
+// WithSharing makes catalog publishing follow each household's sharing
+// choice and returns s.
+func (s *Service) WithSharing(src SharingSource) *Service {
+	s.sharing = src
+	return s
+}
+
+// sharingMode is the household's catalog sharing. A failed read shares
+// nothing: a thinner catalog beats sharing what a household kept private.
+func (s *Service) sharingMode(ctx context.Context, householdID string) string {
+	if s.sharing == nil {
+		return sharingLegacy
+	}
+	mode, err := s.sharing.CatalogSharing(ctx, householdID)
+	if err != nil {
+		return SharingOff
+	}
+	return mode
+}
+
+// sharedUnder reports whether r is shared under a household's mode.
+func sharedUnder(mode string, r Recipe) bool {
+	if CatalogKey(r) == "" {
+		return false
+	}
+	switch mode {
+	case SharingAll:
+		return true
+	case SharingChosen:
+		return r.SharedToCatalog
+	case sharingLegacy:
+		return Publishable(r)
+	}
+	return false
+}
+
+// InCatalog reports whether other households can find r: its household
+// shares it.
+func (s *Service) InCatalog(ctx context.Context, r Recipe) bool {
+	return sharedUnder(s.sharingMode(ctx, r.HouseholdID), r)
+}
+
+// PublishHousehold shares every recipe the household's sharing covers, for
+// when it turns sharing on. It implements households.SharingListener.
+func (s *Service) PublishHousehold(ctx context.Context, householdID string) error {
+	_, err := s.Backfill(ctx, householdID, true)
+	return err
+}
+
+// PublishToCatalog publishes the recipes their households share to the
+// global catalog and returns how many entries were written. It is a no-op
+// without a publisher.
 func (s *Service) PublishToCatalog(ctx context.Context, rs []Recipe) (int, error) {
 	if s.catalog == nil || len(rs) == 0 {
 		return 0, nil
 	}
+	modes := map[string]string{}
 	publishable := make([]Recipe, 0, len(rs))
 	for _, r := range rs {
-		if Publishable(r) {
+		mode, ok := modes[r.HouseholdID]
+		if !ok {
+			mode = s.sharingMode(ctx, r.HouseholdID)
+			modes[r.HouseholdID] = mode
+		}
+		if sharedUnder(mode, r) {
+			// The household's choice is the opt-in the catalog checks.
+			r.SharedToCatalog = true
 			publishable = append(publishable, r)
 		}
 	}
@@ -102,11 +177,12 @@ func (s *Service) Backfill(ctx context.Context, householdID string, apply bool) 
 		res.Read += len(page)
 
 		var rewrite, publish []Recipe
+		mode := s.sharingMode(ctx, householdID)
 		for _, r := range page {
 			if r.CatalogKey != CatalogKey(r) {
 				rewrite = append(rewrite, r)
 			}
-			if Publishable(r) {
+			if sharedUnder(mode, r) {
 				publish = append(publish, r)
 			}
 		}

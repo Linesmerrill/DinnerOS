@@ -116,6 +116,10 @@ type Household struct {
 	// the best-by date on a frozen bag (pantry.BestByWrapped). Read it
 	// through Wrap.
 	FreezerWrap string
+	// CatalogSharing is what the household shares with other households'
+	// recipe browsing: CatalogSharingOff, CatalogSharingAll, or
+	// CatalogSharingChosen; "" is off. Read it through Sharing.
+	CatalogSharing string
 	// MealKit is what the household spent on meal kits, the baseline the
 	// weekly grocery cost is compared with, or nil when not set.
 	MealKit   *MealKit
@@ -198,6 +202,8 @@ type UpdateInput struct {
 	FreezeMinOunces    *int
 	// FreezerWrap changes how the household freezes meat.
 	FreezerWrap *string
+	// CatalogSharing changes what the household shares with others.
+	CatalogSharing *string
 	// SetMealKit changes the meal kit baseline to MealKit; nil clears it.
 	SetMealKit bool
 	MealKit    *MealKit
@@ -219,6 +225,7 @@ type HouseholdPatch struct {
 	SetFreezeMinOunces bool
 	FreezeMinOunces    *int
 	FreezerWrap        *string
+	CatalogSharing     *string
 	// SetMealKit sets MealKit, or removes it when MealKit is nil.
 	SetMealKit bool
 	MealKit    *MealKit
@@ -288,6 +295,30 @@ func (h Household) Wrap() string {
 		return FreezerWrapVacuum
 	}
 	return h.FreezerWrap
+}
+
+// Catalog sharing: which of the household's recipes other households can
+// find and add. Off unless the household opts in.
+const (
+	CatalogSharingOff    = "off"
+	CatalogSharingAll    = "all"
+	CatalogSharingChosen = "chosen"
+)
+
+// Sharing is the household's catalog sharing, off when never chosen.
+func (h Household) Sharing() string {
+	if h.CatalogSharing == "" {
+		return CatalogSharingOff
+	}
+	return h.CatalogSharing
+}
+
+func validateCatalogSharing(mode string) error {
+	switch mode {
+	case CatalogSharingOff, CatalogSharingAll, CatalogSharingChosen:
+		return nil
+	}
+	return invalid("catalogSharing must be off, all, or chosen")
 }
 
 func validateFreezerWrap(wrap string) error {

@@ -257,3 +257,61 @@ func TestPublishFailureFailsTheImport(t *testing.T) {
 		t.Fatalf("Import error = %v; want a publish failure", err)
 	}
 }
+
+type fakeSharing map[string]string
+
+func (f fakeSharing) CatalogSharing(_ context.Context, householdID string) (string, error) {
+	if mode, ok := f[householdID]; ok {
+		return mode, nil
+	}
+	return SharingOff, nil
+}
+
+func TestPublishingFollowsTheHouseholdsSharingChoice(t *testing.T) {
+	service, store, publisher := newSharingService(t)
+	sharing := fakeSharing{}
+	service.WithSharing(sharing)
+
+	// Off (the default): even a HelloFresh recipe stays out of the catalog.
+	importOne(t, service, hhAda, SourceHelloFresh, "hf-1", "Tacos")
+	if len(publisher.published) != 0 {
+		t.Fatalf("published with sharing off: %v", publisher.names())
+	}
+
+	// All: every recipe the household has, including typed ones, via the
+	// backfill that turning it on runs.
+	typed, err := service.CreateFromDraft(t.Context(), hhAda, ParseText(pastedRecipe), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sharing[hhAda] = SharingAll
+	if err := service.PublishHousehold(t.Context(), hhAda); err != nil {
+		t.Fatal(err)
+	}
+	if got := publisher.names(); !slices.Equal(got, sortedNames(typed.Name, "Tacos")) {
+		t.Errorf("published with all = %v", got)
+	}
+	if !service.InCatalog(t.Context(), typed) {
+		t.Error("InCatalog() = false for a typed recipe with sharing all")
+	}
+
+	// Chosen: only recipes marked one by one.
+	publisher.published = nil
+	sharing[hhAda] = SharingChosen
+	importOne(t, service, hhAda, SourceHelloFresh, "hf-2", "Curry")
+	if len(publisher.published) != 0 {
+		t.Errorf("chosen published an unmarked recipe: %v", publisher.names())
+	}
+	if _, err := service.Share(t.Context(), hhAda, typed.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := publisher.names(); !slices.Equal(got, []string{typed.Name}) {
+		t.Errorf("published with chosen = %v", got)
+	}
+	_ = store
+}
+
+func sortedNames(names ...string) []string {
+	slices.Sort(names)
+	return names
+}

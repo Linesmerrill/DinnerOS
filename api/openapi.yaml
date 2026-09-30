@@ -7283,6 +7283,17 @@ components:
           type: string
           enum: [vacuum_sealed, freezer_bag, store_package]
           description: How the household freezes raw meat. A frozen bag's best-by date is the FDA freezer time for its kind, the long end for vacuum sealed and the short end otherwise. vacuum_sealed for a household that never chose.
+        catalogSharing:
+          type: string
+          enum: [off, all, chosen]
+          description: |
+            Which of the household's recipes other households can find in
+            shared recipes and add a copy of: none (off, the default), every
+            recipe (all), or the ones it marks one by one with
+            PUT .../recipes/{recipeId}/sharing (chosen). Turning it on shares
+            what the household already has; turning it off stops sharing more
+            but leaves copies others already added. Notes, ratings, plans,
+            and order history are never shared.
         weekStartsOn:
           $ref: "#/components/schemas/WeekStartDay"
         mealKit:
@@ -7400,6 +7411,10 @@ components:
           type: string
           enum: [vacuum_sealed, freezer_bag, store_package]
           description: How the household freezes raw meat.
+        catalogSharing:
+          type: string
+          enum: [off, all, chosen]
+          description: Which recipes other households can find (see Household.catalogSharing).
         weekStartsOn:
           $ref: "#/components/schemas/WeekStartDay"
         mealKit:

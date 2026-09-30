@@ -110,6 +110,9 @@ func (m *memoryStore) UpdateHousehold(_ context.Context, id string, patch Househ
 	if patch.FreezerWrap != nil {
 		h.FreezerWrap = *patch.FreezerWrap
 	}
+	if patch.CatalogSharing != nil {
+		h.CatalogSharing = *patch.CatalogSharing
+	}
 	if patch.SetMealKit {
 		h.MealKit = nil
 		if patch.MealKit != nil {
