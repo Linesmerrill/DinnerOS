@@ -689,6 +689,13 @@ func componentOf(spec *grocery.Specialty, amount *Measure) *Component {
 	if choice == nil || (choice.Type != grocery.ChoiceStoreAlternative && choice.Type != grocery.ChoiceHouseMadeBatch) {
 		return nil
 	}
+	// A store alternative that's just the bottle itself ("Toasted Sesame
+	// Dressing" for Sesame Dressing) isn't made from anything: "Made with
+	// Toasted Sesame Dressing" would only repeat the name.
+	if choice.Type == grocery.ChoiceStoreAlternative && len(choice.Components) == 1 &&
+		sameProduct(spec.Name, choice.Components[0].Name) {
+		return nil
+	}
 	c := &Component{SpecialtyID: spec.ID, SpecialtyName: spec.Name, OptionName: choice.OptionName, Type: choice.Type}
 	var ratio *big.Rat
 	if choice.Type == grocery.ChoiceStoreAlternative {
@@ -696,6 +703,19 @@ func componentOf(spec *grocery.Specialty, amount *Measure) *Component {
 	}
 	c.Parts = componentTexts(choice.Components, ratio)
 	return c
+}
+
+// sameProduct reports whether product is the specialty under a longer name:
+// every word of name appears in it ("Sesame Dressing" in "Toasted Sesame
+// Dressing").
+func sameProduct(name, product string) bool {
+	have := strings.Fields(strings.ToLower(product))
+	for _, w := range strings.Fields(strings.ToLower(name)) {
+		if !slices.Contains(have, w) {
+			return false
+		}
+	}
+	return true
 }
 
 // applySubstitute rewrites m to read as the household's chosen option, and

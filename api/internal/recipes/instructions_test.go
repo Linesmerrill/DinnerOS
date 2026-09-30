@@ -548,3 +548,24 @@ func TestAnnotateSqueezeWithNonBreakingSpace(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestBottledStoreAlternativeHasNoMadeWithLine(t *testing.T) {
+	bottle := &grocery.Specialty{ID: "sesame-dressing", Name: "Sesame Dressing", Choice: &grocery.Choice{
+		Type: grocery.ChoiceStoreAlternative, OptionName: "Bottled toasted sesame dressing",
+		Components: []grocery.Component{{Name: "Toasted Sesame Dressing"}},
+	}}
+	if c := componentOf(bottle, nil); c != nil {
+		t.Errorf("bottled dressing component = %+v, want none", c)
+	}
+	// A real store alternative made of other things keeps its parts.
+	ponzu := &grocery.Specialty{ID: "ponzu", Name: "Ponzu Sauce", Choice: &grocery.Choice{
+		Type:       grocery.ChoiceStoreAlternative,
+		Components: []grocery.Component{{Name: "Soy Sauce"}, {Name: "Lemon Juice"}},
+	}}
+	if c := componentOf(ponzu, nil); c == nil || len(c.Parts) != 2 {
+		t.Errorf("ponzu component = %+v", c)
+	}
+	if sameProduct("Sesame Dressing", "Sesame Oil") {
+		t.Error("sesame oil read as sesame dressing")
+	}
+}
