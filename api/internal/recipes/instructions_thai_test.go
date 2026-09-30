@@ -84,3 +84,43 @@ func TestHalfOfAnUnmeasuredUnitKeepsTheCardsWords(t *testing.T) {
 		t.Errorf("step = %q", got)
 	}
 }
+
+// HelloFresh lists salt as the whole recipe's total and says in the step how
+// much of it this step takes: the step shows that share for the size cooked.
+func TestSaltFollowsTheCardsWeUsedNote(t *testing.T) {
+	salt := RecipeIngredient{IngredientID: "ing-salt", Name: "Salt", Amounts: []Amount{
+		{Servings: 2, Quantity: "2", Unit: "tsp"}, {Servings: 3, Quantity: "3", Unit: "tsp"},
+		{Servings: 4, Quantity: "4", Unit: "tsp"}, {Servings: 6, Quantity: "6", Unit: "tsp"},
+	}}
+	r := tacoRecipe(
+		[]RecipeIngredient{tacoLine("ing-beef", "Ground Beef", "10", "15", "oz"), salt},
+		"In a large bowl, combine beef, salt (we used ½ tsp; 1 tsp for 4), and pepper.",
+		"Season all over with salt (we used 1⁄4 tsp salt; 1⁄2 tsp for 4 servings) and pepper.")
+	for servings, want := range map[int][2]string{
+		2: {"½ tsp salt,", "¼ tsp salt and"},
+		3: {"¾ tsp salt,", "⅜ tsp salt and"},
+		4: {"1 tsp salt,", "½ tsp salt and"},
+		6: {"1 ½ tsp salt,", "¾ tsp salt and"},
+	} {
+		in := Annotate(r, servings, nil, true)
+		for k, w := range want {
+			got := joined(in.Steps[k])
+			if !strings.Contains(got, w) || strings.Contains(got, "we used") {
+				t.Errorf("%d servings, step %d = %q, want it to contain %q", servings, k+1, got, w)
+			}
+		}
+	}
+}
+
+func TestOtherStepsDontGetTheTotalOnceACardMeasuresAShare(t *testing.T) {
+	salt := RecipeIngredient{IngredientID: "ing-salt", Name: "Salt", Amounts: []Amount{{Servings: 2, Quantity: "2", Unit: "tsp"}, {Servings: 4, Quantity: "4", Unit: "tsp"}}}
+	r := instructionRecipe([]RecipeIngredient{salt}, "Toss potatoes with salt and pepper.", "Combine beef and salt (we used ½ tsp; 1 tsp for 4).")
+	r.Servings = []int{2, 4}
+	in := Annotate(r, 2, nil, true)
+	if got := joined(in.Steps[0]); got != "Toss potatoes with salt and pepper." {
+		t.Errorf("step 1 = %q, want no amount on the salt", got)
+	}
+	if got := joined(in.Steps[1]); got != "Combine beef and ½ tsp salt." {
+		t.Errorf("step 2 = %q", got)
+	}
+}

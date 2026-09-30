@@ -135,6 +135,47 @@ func otherServings(text []rune) (m Measure, servings, length int, ok bool) {
 	return stated, n, closeAt + 1, true
 }
 
+// weUsedRe is a card's note of how much of a seasoning this step takes,
+// right after the mention: "salt (we used ½ tsp; 1 tsp for 4)", "(we used ¾
+// tsp salt; 1 ½ tsp for 4 servings)".
+var (
+	weUsedRe       = regexp.MustCompile(`(?i)^\s*\(we used ([^;()]+?)(?:[;,]\s*([^()]+?) for (\d+)(?: servings?)?)?\)`)
+	weUsedAmountRe = regexp.MustCompile(`(?i)^\s*([\d½¼¾⅓⅔⅛][\d½¼¾⅓⅔⅛⁄/. ]*?)\s*(tsp|tbsp|teaspoons?|tablespoons?|cups?|oz)\b`)
+)
+
+// weUsed reads that note at the start of text: the amount for the card's
+// smallest box, the amount for the other box and its size when given, and
+// how many runes the note spans.
+func weUsed(text []rune) (base, other Measure, otherSize, length int, ok bool) {
+	m := weUsedRe.FindStringSubmatch(string(text))
+	if m == nil {
+		return Measure{}, Measure{}, 0, 0, false
+	}
+	parse := func(s string) (Measure, bool) {
+		a := weUsedAmountRe.FindStringSubmatch(s)
+		if a == nil {
+			return Measure{}, false
+		}
+		stated, used, ok := statedAmount([]rune(strings.TrimSpace(a[1]) + " " + a[2] + " "))
+		if !ok || used == 0 {
+			return Measure{}, false
+		}
+		return stated, true
+	}
+	base, ok = parse(m[1])
+	if !ok {
+		return Measure{}, Measure{}, 0, 0, false
+	}
+	if m[2] != "" {
+		if o, ok := parse(m[2]); ok {
+			if n, err := strconv.Atoi(m[3]); err == nil {
+				other, otherSize = o, n
+			}
+		}
+	}
+	return base, other, otherSize, len([]rune(m[0])), true
+}
+
 // renderStep annotates one step against the recipe's ingredients.
 // wedgeCitrus is "lime" or "lemon" for those ingredients, else "".
 func wedgeCitrus(name string) string {
@@ -416,6 +457,28 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 				amount, part = &share, fraction.Cmp(big.NewRat(1, 1)) != 0
 				amountShown[hit] = true
 			}
+		}
+		// "salt (we used ½ tsp; 1 tsp for 4)": the card's own measure for this
+		// step, for the size being cooked, in place of the recipe's total.
+		if base, other, otherSize, noteLen, ok := weUsed(runes[i+length:]); ok && !m.leftOut && !shownBefore && !m.swapped {
+			share := base
+			switch {
+			case otherSize > 0 && amounts.servings == otherSize:
+				share = other
+			case otherSize > 0 && amounts.servings > otherSize:
+				share.Quantity = other.Quantity.MulRat(big.NewRat(int64(amounts.servings), int64(otherSize)))
+				share.Unit = other.Unit
+			case amounts.base > 0 && amounts.servings != amounts.base:
+				share.Quantity = base.Quantity.MulRat(big.NewRat(int64(amounts.servings), int64(amounts.base)))
+			}
+			tidy := kitchenSpoon(tidySpoons(share))
+			amount, part, skipAfter = &tidy, true, noteLen
+			// The card measures this step's share, so other steps don't get
+			// the recipe's total ("season with salt" elsewhere stays as is).
+			if amounts.found != nil {
+				amounts.found[hit] = true
+			}
+			amountShown[hit] = true
 		}
 		if squeeze {
 			// One wedge for the card's smallest box, more for a bigger one.
