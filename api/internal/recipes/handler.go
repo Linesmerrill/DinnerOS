@@ -56,6 +56,9 @@ type HandlerOptions struct {
 	// Swaps, when set, reads a meal's protein swaps (the swap query
 	// parameter) so the steps name the protein being cooked.
 	Swaps SwapSource
+	// Findings, when set, records what reads wrong in rendered instructions
+	// (step_findings.go). It never changes the response.
+	Findings FindingRecorder
 	// Fetcher reads a recipe page for manual entry by URL. The default is a
 	// WebFetcher with every guard on (manual_web.go); tests replace it.
 	Fetcher *WebFetcher
@@ -75,8 +78,9 @@ type TimeBandReader interface {
 
 // Handler serves the recipe endpoints.
 type Handler struct {
-	opts   HandlerOptions
-	logger *slog.Logger
+	opts     HandlerOptions
+	logger   *slog.Logger
+	findings *findingLog
 }
 
 // NewHandler returns a Handler.
@@ -88,7 +92,7 @@ func NewHandler(opts HandlerOptions) *Handler {
 	if opts.ImportMaxBytes <= 0 {
 		opts.ImportMaxBytes = DefaultImportMaxBytes
 	}
-	return &Handler{opts: opts, logger: logger}
+	return &Handler{opts: opts, logger: logger, findings: newFindingLog(opts.Findings, logger)}
 }
 
 // Mount registers the routes on r, which is expected to be the /api/v1 router.

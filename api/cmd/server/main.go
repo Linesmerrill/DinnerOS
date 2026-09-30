@@ -270,10 +270,12 @@ func run() error {
 	// Recipe summaries label cook times with the household's Autopilot bands,
 	// and cooking instructions read with the household's specialty choices.
 	recipeHandler := recipes.NewHandler(recipes.HandlerOptions{
-		Service:        recipeService,
-		Specialties:    substitutesService,
-		LeftOut:        skipsService,
-		Swaps:          customizeService,
+		Service:     recipeService,
+		Specialties: substitutesService,
+		LeftOut:     skipsService,
+		Swaps:       customizeService,
+		// What reads wrong in members' recipes is logged to be fixed.
+		Findings:       recipes.NewMongoStore(db.Database()),
 		Ratings:        behavior.ratings,
 		Events:         behavior.events,
 		TimeBands:      autopilotService,

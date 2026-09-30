@@ -205,6 +205,8 @@ type stepAmounts struct {
 // whole amount: "the remaining onion", "the rest of the butter".
 var relativeWords = []string{
 	"remaining", "rest of the", "rest of", "reserved",
+	// "Add more chili flakes if you like": to taste, not a measure.
+	"add more", "more",
 	// "a drizzle of oil": the step says how much, in its own words.
 	"drizzle of", "splash of", "pinch of", "dash of", "sprinkle of", "handful of", "knob of", "pat of",
 	"drizzle of the", "splash of the", "pinch of the",
@@ -247,6 +249,58 @@ func fractionOf(text []rune) (*big.Rat, int, bool) {
 // measuredUnits are units a share can be measured in: half of "1 thumb"
 // ginger isn't an amount anyone measures.
 var measuredUnits = map[string]bool{"tsp": true, "tbsp": true, "cup": true, "oz": true, "fl oz": true, "ml": true, "l": true, "g": true, "kg": true, "lb": true}
+
+// weUsedStartRe is any "(we used" note right after a mention.
+var weUsedStartRe = regexp.MustCompile(`(?i)^\s*\(we used`)
+
+// toTasteNoteRe is "to taste (we used …)" right after a mention.
+var toTasteNoteRe = regexp.MustCompile(`(?i)^\s+(?:to taste|as you like|if desired|or to taste)\s*\(we used`)
+
+// dropForeignNotes removes a card's notes for a box size not being cooked
+// that aren't a single amount ("(2 tsp water and 1½ tsp salt for 4
+// servings)"), before ingredient names are found, so a name inside one
+// doesn't split it and leave it behind. Single amounts stay: the mention
+// they follow reads them (otherServings).
+func dropForeignNotes(text string, servings, base int) string {
+	locs := boxNoteRe.FindAllStringSubmatchIndex(text, -1)
+	for j := len(locs) - 1; j >= 0; j-- {
+		loc := locs[j]
+		inner := strings.TrimSpace(text[loc[2]:loc[3]])
+		n, err := strconv.Atoi(text[loc[4]:loc[5]])
+		if err != nil || n <= 0 || noteAmountRe.MatchString(inner) || strings.HasPrefix(strings.ToLower(inner), "we used") {
+			continue
+		}
+		useNote := servings >= n
+		if base > 0 && base < n {
+			useNote = 2*servings >= base+n
+		}
+		if !useNote {
+			text = text[:loc[0]] + text[loc[1]:]
+		}
+	}
+	return text
+}
+
+// noteAhead reports whether the sentence ahead carries a box-size note,
+// which settles the amount instead ("(1 cup for 4 servings)").
+func noteAhead(text []rune) bool {
+	s := string(text)
+	if end := strings.IndexAny(s, ".;"); end >= 0 {
+		s = s[:end]
+	}
+	return boxNoteRe.MatchString(s)
+}
+
+// describesWater reports whether the text after a name makes it describe
+// water ("pasta cooking water", "noodle water").
+func describesWater(after []rune) bool {
+	s := string(after)
+	return strings.HasPrefix(s, " cooking water") || strings.HasPrefix(s, " water") || strings.HasPrefix(s, " cooking liquid")
+}
+
+// countedUnitWords are units written in the singular that take an "s" after
+// more than one.
+var countedUnitWords = map[string]bool{"cup": true, "clove": true, "can": true, "package": true, "thumb": true, "bunch": true, "slice": true}
 
 // allNoteRe is a card's "(all for 4 servings)" after a share.
 var allNoteRe = regexp.MustCompile(`^\s*\(all for (\d+)(?: servings)?\)`)
@@ -309,6 +363,8 @@ func markWater(segments []Segment) []Segment {
 func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionStep {
 	// Recipes imported before HTML was cleaned still read as plain text.
 	step.Text = CleanStepText(step.Text)
+	original := step.Text
+	step.Text = dropForeignNotes(step.Text, amounts.servings, amounts.base)
 	out := InstructionStep{Index: step.Index, Text: step.Text, ImageURL: step.ImageURL}
 	candidates := make([]candidate, 0, len(mentions)*3)
 	for i, m := range mentions {
@@ -341,7 +397,7 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 	statedLater := map[int]bool{}
 	for i := 0; i < len(runes); {
 		hit, length := matchAt(lower, i, candidates)
-		if hit < 0 {
+		if hit < 0 || describesWater(lower[i+length:]) {
 			i++
 			continue
 		}
@@ -352,6 +408,16 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 	}
 	for i := 0; i < len(runes); {
 		hit, length := matchAt(lower, i, candidates)
+		// "½ cup pasta cooking water": the water, not the pasta. The card
+		// wrote it for its smallest box, so a bigger one reserves more.
+		if hit >= 0 && describesWater(lower[i+length:]) {
+			if st, stLen, ok := statedAmount(plain); ok && st.Unit != "" && amounts.base > 0 &&
+				amounts.servings != amounts.base && !noteAhead(runes[i:]) {
+				scaled := kitchenSpoon(Measure{Quantity: st.Quantity.MulRat(big.NewRat(int64(amounts.servings), int64(amounts.base))), Unit: st.Unit})
+				plain = append(plain[:len(plain)-stLen], []rune(scaled.Text()+" ")...)
+			}
+			hit = -1
+		}
 		if hit < 0 {
 			plain = append(plain, runes[i])
 			i++
@@ -457,6 +523,14 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 				amount, part = &share, fraction.Cmp(big.NewRat(1, 1)) != 0
 				amountShown[hit] = true
 			}
+		}
+		// "chili flakes to taste (we used ⅛ tsp)": the card's words say how
+		// much, so no total goes in front.
+		// "chili flakes (we used ½ tsp; add a pinch more if you like)": a tip
+		// the note keeps, so the card's words stand, with no total in front.
+		if rest := string(runes[i+length:]); toTasteNoteRe.MatchString(rest) ||
+			(weUsedStartRe.MatchString(rest) && !weUsedRe.MatchString(rest)) {
+			amount = nil
 		}
 		// "salt (we used ½ tsp; 1 tsp for 4)": the card's own measure for this
 		// step, for the size being cooked, in place of the recipe's total.
@@ -602,8 +676,8 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 	// Water isn't on the card's ingredient list, but "¾ cup water" is
 	// something to measure, so it's bold like the rest.
 	out.Segments = markWater(out.Segments)
-	if rendered := b.String(); rendered != step.Text {
-		out.Text, out.Original = rendered, step.Text
+	if rendered := b.String(); rendered != original {
+		out.Text, out.Original = rendered, original
 	}
 	return out
 }
@@ -650,7 +724,13 @@ func boxNotes(text string, servings, base int) string {
 			if all := before.FindAllStringSubmatchIndex(prefix, -1); len(all) > 0 {
 				last := all[len(all)-1]
 				// The note's own unit too: "1½ cups", not "1½ cup".
-				prefix = prefix[:last[2]] + strings.TrimSpace(note[1]) + " " + matchCase(note[2], strings.TrimSpace(prefix[last[4]:last[5]])) + prefix[last[5]:]
+				unitWord := matchCase(note[2], strings.TrimSpace(prefix[last[4]:last[5]]))
+				// A card's "(1½ cup for 4)" still reads "1½ cups".
+				if q, err := ingredients.ParseQuantity(strings.ReplaceAll(strings.TrimSpace(note[1]), "\u2044", "/")); err == nil &&
+					q.Cmp(ingredients.NewQuantity(1, 1)) > 0 && countedUnitWords[strings.ToLower(unitWord)] {
+					unitWord += "s"
+				}
+				prefix = prefix[:last[2]] + strings.TrimSpace(note[1]) + " " + unitWord + prefix[last[5]:]
 			} else {
 				// Nothing to swap it into: keep what the note says.
 				text = prefix + " (" + strings.TrimSpace(inner) + ")" + rest

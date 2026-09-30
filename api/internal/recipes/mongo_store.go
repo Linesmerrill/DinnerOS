@@ -19,6 +19,9 @@ const (
 	RecipesCollection       = "recipes"
 	IngredientsCollection   = "ingredients"
 	ImportReviewsCollection = "import_reviews"
+	// FindingsCollection holds what CheckSteps found in members' recipes
+	// (step_findings.go).
+	FindingsCollection = "instruction_findings"
 )
 
 // reviewStatusOpen is the status every newly recorded item gets.
@@ -90,6 +93,24 @@ func Indexes() []mongodb.IndexSet {
 				},
 			},
 		},
+		{
+			Collection: FindingsCollection,
+			Indexes: []mongo.IndexModel{
+				{
+					// One document per finding in a recipe; repeats count up.
+					Keys: bson.D{
+						{Key: "householdId", Value: 1}, {Key: "recipeId", Value: 1}, {Key: "code", Value: 1},
+						{Key: "step", Value: 1}, {Key: "detail", Value: 1},
+					},
+					Options: options.Index().SetUnique(true).SetName("householdId_recipeId_code_step_detail_unique"),
+				},
+				{
+					// Newest first across households, for review.
+					Keys:    bson.D{{Key: "lastSeen", Value: -1}},
+					Options: options.Index().SetName("lastSeen"),
+				},
+			},
+		},
 	}
 }
 
@@ -98,6 +119,7 @@ type MongoStore struct {
 	recipes     *mongo.Collection
 	ingredients *mongo.Collection
 	reviews     *mongo.Collection
+	findings    *mongo.Collection
 }
 
 var _ Store = (*MongoStore)(nil)
@@ -108,6 +130,7 @@ func NewMongoStore(db *mongo.Database) *MongoStore {
 		recipes:     db.Collection(RecipesCollection),
 		ingredients: db.Collection(IngredientsCollection),
 		reviews:     db.Collection(ImportReviewsCollection),
+		findings:    db.Collection(FindingsCollection),
 	}
 }
 

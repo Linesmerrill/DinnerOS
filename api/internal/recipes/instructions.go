@@ -55,6 +55,7 @@ func (m Measure) Text() string {
 			return mixed
 		}
 	}
+	m = kitchenRound(m)
 	text := m.Quantity.Format()
 	if u, err := ingredients.LookupUnit(m.Unit); err == nil {
 		if label := u.Label(m.Quantity); label != "" {
@@ -69,6 +70,43 @@ func (m Measure) Text() string {
 		text += " (or " + m.Quantity.Format() + " " + or + ")"
 	}
 	return text
+}
+
+// kitchenRound rounds a spoon, cup, or small ounce amount with no kitchen
+// fraction (⅛ oz scaled to 3 servings is 0.1875) to the nearest eighth, so it
+// reads "¼ oz", not "0.19 oz". Whole and kitchen amounts are untouched.
+func kitchenRound(m Measure) Measure {
+	if m.Exact || m.Or != "" {
+		return m
+	}
+	switch m.Unit {
+	case "ml":
+		// "12 ml" of vinegar is 2½ tsp to anyone holding measuring spoons.
+		if m.Quantity.Cmp(ingredients.NewQuantity(90, 1)) > 0 {
+			return m
+		}
+		m = tidySpoons(Measure{Quantity: m.Quantity.MulRat(big.NewRat(1, 5)), Unit: "tsp"})
+		return kitchenRound(m)
+	case "tsp", "tbsp", "cup":
+	case "oz":
+		if m.Quantity.Cmp(ingredients.NewQuantity(2, 1)) >= 0 {
+			return m
+		}
+	default:
+		return m
+	}
+	r := m.Quantity.Rat()
+	eighths := new(big.Rat).Mul(r, big.NewRat(8, 1))
+	if eighths.IsInt() || new(big.Rat).Mul(r, big.NewRat(3, 1)).IsInt() {
+		return m
+	}
+	f, _ := eighths.Float64()
+	n := int64(f + 0.5)
+	if n < 1 {
+		n = 1
+	}
+	m.Quantity = ingredients.NewQuantity(n, 8)
+	return m
 }
 
 // spoonsMixed writes 6 tsp or more that didn't tidy to whole or half
@@ -493,7 +531,9 @@ func AnnotateMeal(r Recipe, servings int, specs grocery.Specialties, applied boo
 		}
 		m.wedges = wedgeCitrus(ing.Name) != "" && cutIntoWedges(r.Steps, ing.Name)
 		m.packaged = m.baseAmount != nil && m.baseAmount.Unit == "count" &&
-			m.baseAmount.Quantity.Cmp(ingredients.NewQuantity(1, 1)) <= 0 && singularize(ing.Name) != ing.Name
+			(m.baseAmount.Quantity.Cmp(ingredients.NewQuantity(1, 1)) <= 0 && singularize(ing.Name) != ing.Name ||
+				// "1 Marinara Cup" is the container: "add 1 marinara" would be wrong.
+				packagingName(ing.Name))
 		// The packet count, before it reads as a kitchen measure: a substitute's
 		// amount is worked out from packets.
 		packets, basePackets := m.amount, m.baseAmount
@@ -935,7 +975,108 @@ func headForms(name string) []string {
 	if n := len(words); n > 2 && condiments[strings.ToLower(words[n-1])] {
 		out = append(out, strings.Join(words[n-2:], " "))
 	}
+	// "Parmesan" for Parmesan Cheese, "panko" for Panko Breadcrumbs,
+	// "cavatappi" for Cavatappi Pasta: a step drops the kind of thing it is.
+	if n := len(words); n > 1 && droppedTails[strings.ToLower(words[n-1])] {
+		words = words[:n-1]
+		out = append(out, strings.Join(words, " "))
+	}
+	// "bell pepper" for Green Bell Pepper: a color goes when two words stay.
+	if len(words) > 2 && colors[strings.ToLower(words[0])] {
+		words = words[1:]
+		out = append(out, strings.Join(words, " "))
+	}
+	// "ponzu" for Ponzu Sauce, "hoisin" for Hoisin Sauce.
+	if len(words) == 2 && strings.EqualFold(words[1], "sauce") && !sauceWordsInUse[strings.ToLower(words[0])] {
+		out = append(out, words[0])
+	}
+	// "jam", "noodles", "vinegar", "steak": the kind of food is itself how a
+	// step names it.
+	if n := len(words); n > 1 && selfTails[strings.ToLower(words[n-1])] {
+		out = append(out, words[n-1])
+	}
+	for _, tail := range []string{"noodles", "pasta", "jam"} {
+		if lower := strings.ToLower(name); strings.HasSuffix(lower, " "+tail) && !slices.Contains(out, tail) {
+			out = append(out, tail)
+		}
+	}
+	// "baguette" for Demi-Baguette.
+	if n := len(words); n == 1 && strings.Contains(words[0], "-") {
+		parts := strings.Split(words[0], "-")
+		out = append(out, parts[len(parts)-1])
+	}
+	// Names a card uses for the same thing: HelloFresh sends a long green
+	// pepper for a poblano and calls it poblano in the steps.
+	out = append(out, otherNames[strings.ToLower(name)]...)
+	// "mushrooms" for Button Mushrooms, "couscous" for Israeli Couscous: the
+	// last word is the food, unless it's a word every recipe uses for
+	// something ("sauce", "oil", "pepper").
+	if n := len(words); n > 1 {
+		if last := words[n-1]; !genericTails[strings.ToLower(last)] {
+			out = append(out, last)
+		}
+	}
 	return out
+}
+
+// packagingName reports whether a name ends in the container it comes in.
+func packagingName(name string) bool {
+	words := strings.Fields(strings.ToLower(name))
+	if len(words) < 2 {
+		return false
+	}
+	switch words[len(words)-1] {
+	case "cup", "can", "packet", "pack", "container", "jar", "tub",
+		// Counted in packets: "1 Apricot Jam" is a packet, not "1 jam".
+		"jam", "dressing", "crema", "glaze", "mayonnaise", "mustard", "honey", "syrup", "spread", "vinaigrette":
+		return true
+	}
+	return false
+}
+
+// droppedTails are last words a step leaves off ("Parmesan", "panko").
+var droppedTails = map[string]bool{
+	"cheese": true, "pasta": true, "noodles": true, "breadcrumbs": true, "mix": true, "jam": true, "crumbles": true,
+	"mustard": true,
+	// Packaging: "Marinara Cup" is marinara.
+	"cup": true, "cups": true, "can": true, "packet": true, "pack": true, "container": true, "jar": true, "tub": true,
+}
+
+// sauceWordsInUse are first words of a two-word sauce that mean something
+// else on their own: "BBQ glaze", "a hot pan", "fish fillets".
+var sauceWordsInUse = map[string]bool{
+	"bbq": true, "barbecue": true, "hot": true, "fish": true, "chili": true, "cream": true, "pizza": true,
+	"pasta": true, "steak": true, "garlic": true, "cheese": true, "tomato": true, "sweet": true, "spicy": true,
+	"soy": false, "burger": true, "taco": true, "curry": true, "stir-fry": true, "teriyaki": false,
+}
+
+// selfTails are last words that name the ingredient on their own.
+var selfTails = map[string]bool{"vinegar": true, "steak": true, "baguette": true, "rice": true, "tortillas": true}
+
+// otherNames are names a card's steps use for an ingredient listed under
+// another.
+var otherNames = map[string][]string{"long green pepper": {"poblano", "poblanos", "poblano pepper"}}
+
+// colors are first words a step drops when two words stay.
+var colors = map[string]bool{"green": true, "red": true, "yellow": true, "orange": true}
+
+// genericTails are last words too common to stand for one ingredient: "sauce"
+// is also the dish's own sauce, "pepper" the black pepper.
+var genericTails = map[string]bool{
+	"sauce": true, "oil": true, "vinegar": true, "cheese": true, "powder": true, "seasoning": true, "spice": true,
+	"blend": true, "paste": true, "mix": true, "concentrate": true, "stock": true, "juice": true, "water": true,
+	"pepper": true, "peppers": true, "base": true, "dressing": true, "sugar": true, "salt": true, "flakes": true,
+	"leaves": true, "crema": true, "glaze": true, "cream": true, "butter": true, "milk": true, "seeds": true,
+	"broth": true, "wine": true, "rub": true, "herbs": true,
+	// Parts, not foods: "Lobster Tails" isn't "tails", "Green Beans" isn't
+	// "beans" (a stray "bean" elsewhere would take its amount).
+	"tails": true, "tail": true, "fraîche": true, "fraiche": true, "florets": true, "halves": true,
+	"wedges": true, "strips": true, "rings": true, "cubes": true, "ends": true, "tips": true, "sprigs": true,
+	"stems": true, "beans": true, "mustard": true, "tops": true, "hearts": true, "chunks": true,
+	// Units and packaging never stand for an ingredient.
+	"cup": true, "cups": true, "can": true, "cans": true, "packet": true, "packets": true, "pack": true,
+	"container": true, "jar": true, "bag": true, "bunch": true, "package": true, "tub": true, "oz": true,
+	"slices": true, "slice": true, "pieces": true, "piece": true, "fillets": true, "fillet": true,
 }
 
 // condiments are last words of a name a step shortens to its last two

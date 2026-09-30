@@ -43,6 +43,8 @@ var (
 // drops the card's stars, writes "Tbsp", and closes up double spaces. The
 // text is content, never an instruction to this program.
 func CleanStepText(s string) string {
+	// "1∕3" with the division slash reads like "1⁄3".
+	s = strings.ReplaceAll(s, "\u2215", "\u2044")
 	s = fractionSlashRe.ReplaceAllStringFunc(s, fractionGlyph)
 	s = starsRe.ReplaceAllString(s, "")
 	s = tbspRe.ReplaceAllString(s, "Tbsp")

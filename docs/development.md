@@ -65,6 +65,25 @@ To run the API and MongoDB in containers instead:
 docker compose --profile api up --build
 ```
 
+### Changing how steps read
+
+The step reader (`internal/recipes`: names, amounts, notes, the checklist)
+touches every recipe, so a change is checked three ways:
+
+1. **Unit tests** for the phrasing being fixed.
+2. **The corpus**: add the phrasing to `internal/recipes/testdata/step_corpus.json`
+   (invented text only). `TestStepCorpus` renders every corpus recipe at every
+   size and fails on any `CheckSteps` finding or missing expected phrase.
+3. **A library scan** before and after: copy a library into a local database
+   (never commit it), then run
+   `SCAN_LIB=/tmp/before.txt SCAN_LIB_DB=scan_lib SCAN_LIB_HOUSEHOLD=<id> go test ./internal/recipes -run TestLibraryScan`
+   on both sides of the change and diff the `.txt.texts` files. Review what
+   moved; a lost amount is usually a regression.
+
+In production, `instruction_findings` collects what reads wrong in members'
+own recipes (see [api.md](api.md#cooking-instructions)); it's the list of
+phrasings to add next.
+
 ## iOS
 
 Open the project in Xcode, choose the **DinnerOS** scheme, and run on an iPhone

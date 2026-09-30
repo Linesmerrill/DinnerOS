@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
@@ -208,4 +210,29 @@ func TestInstructionsFailWhenLeftOutCannotBeRead(t *testing.T) {
 	srv.do(t, http.MethodPost, recipesPath(hhAda)+"/import", mustJSON(t, instructionsFixture()), userAda)
 	id := recipeIDFor(t, srv, "Gochujang Bowl")
 	wantError(t, srv.do(t, http.MethodGet, recipesPath(hhAda)+"/"+id+"/instructions", "", userAda), http.StatusInternalServerError, "internal")
+}
+
+func TestInstructionsLogWhatReadsWrongWithoutChangingTheResponse(t *testing.T) {
+	rec := &fakeFindings{done: make(chan struct{}, 2)}
+	srv := newRecipeTestServer(t, func(o *HandlerOptions) { o.Findings = rec })
+	file := instructionsFixture()
+	// An ingredient no step names reads wrong: nothing tells the cook to use it.
+	file.Recipes[0].Ingredients = append(file.Recipes[0].Ingredients, ImportIngredient{Name: "Saffron Threads", Amounts: []ImportAmount{{Servings: 2, Quantity: qty(1), Unit: "count"}}})
+	srv.do(t, http.MethodPost, recipesPath(hhAda)+"/import", mustJSON(t, file), userAda)
+	id := recipeIDFor(t, srv, "Gochujang Bowl")
+
+	resp := srv.do(t, http.MethodGet, recipesPath(hhAda)+"/"+id+"/instructions", "", userAda)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("status = %d", resp.Code)
+	}
+	select {
+	case <-rec.done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("nothing recorded")
+	}
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if !slices.ContainsFunc(rec.got, func(f Finding) bool { return f.Code == FindingUnusedIngredient && f.Detail == "Saffron Threads" }) {
+		t.Errorf("recorded = %+v", rec.got)
+	}
 }

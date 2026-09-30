@@ -387,7 +387,9 @@ func (h *Handler) instructions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	swaps := h.mealSwaps(recipe, servings, r.URL.Query()["swap"])
-	httpx.WriteJSON(w, http.StatusOK, newInstructionsResponse(AnnotateMeal(recipe, servings, specs, applied, leftOut, leftOutApplied, swaps)))
+	in := AnnotateMeal(recipe, servings, specs, applied, leftOut, leftOutApplied, swaps)
+	h.findings.check(r.Context(), actor.HouseholdID, recipe, in)
+	httpx.WriteJSON(w, http.StatusOK, newInstructionsResponse(in))
 }
 
 // mealSwaps reads the swap parameters, each "<ingredientKey>=<choiceId>" as

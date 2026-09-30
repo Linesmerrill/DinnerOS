@@ -1,0 +1,88 @@
+{
+  "about": "Recipes written for the tests, in the phrasings meal-kit cards and home cooks use. Every recipe is rendered at every serving size and must pass CheckSteps with no findings; 'expect' pins how particular steps read. Add a recipe here whenever a new phrasing turns up (from the instruction_findings log or a report). Invented text only: never paste a real card.",
+  "recipes": [
+    {
+      "name": "Coconut Curry Chicken",
+      "servings": [2, 4],
+      "ingredients": [
+        {"name": "Jasmine Rice", "amounts": {"2": "1/2 cup", "4": "1 cup"}},
+        {"name": "Bell Pepper", "amounts": {"2": "1 count", "4": "2 count"}},
+        {"name": "Lime", "amounts": {"2": "1 count", "4": "2 count"}},
+        {"name": "Chili Pepper", "amounts": {"2": "1 count", "4": "1 count"}},
+        {"name": "Chicken Breast Strips", "amounts": {"2": "10 oz", "4": "20 oz"}},
+        {"name": "Curry Powder", "amounts": {"2": "1 tbsp", "4": "2 tbsp"}},
+        {"name": "Coconut Milk", "amounts": {"2": "1 count", "4": "2 count"}},
+        {"name": "Sweet Thai Chili Sauce", "amounts": {"2": "2 tbsp", "4": "4 tbsp"}},
+        {"name": "Vegetable Oil", "amounts": {"2": "2 tsp", "4": "4 tsp"}},
+        {"name": "Salt", "amounts": {}}
+      ],
+      "steps": [
+        "In a small pot, combine rice, ¾ cup water (1½ cups for 4 servings), and a pinch of salt. Bring to a boil, then cover and simmer until tender, 15-18 minutes.",
+        "Dice bell pepper. Zest and quarter lime. Thinly slice chili. Pat chicken* dry.",
+        "Heat a drizzle of oil in a pan. Add chicken and bell pepper; cook until chicken is browned. Stir in half the curry powder (all for 4 servings).",
+        "Shake coconut milk in its container. Stir ⅔ cup coconut milk (1⅓ cups for 4 servings), chili sauce, and juice from half the lime into pan. Simmer until sauce is thickened and chicken is cooked through."
+      ],
+      "leftOut": ["Chili Pepper"],
+      "expect": {
+        "2": {"1": ["½ cup rice", "¾ cup water"], "3": ["1 ½ tsp curry powder"], "4": ["⅔ cup coconut milk", "2 Tbsp chili sauce"]},
+        "4": {"1": ["1½ cups water"], "3": ["2 Tbsp curry powder"], "4": ["1 ⅓ cups coconut milk", "juice from 4 lime wedges"]}
+      }
+    },
+    {
+      "name": "Homestyle Meatballs",
+      "servings": [2, 3, 4, 6],
+      "ingredients": [
+        {"name": "Ground Beef", "amounts": {"2": "10 oz", "3": "15 oz", "4": "20 oz", "6": "30 oz"}},
+        {"name": "Panko Breadcrumbs", "amounts": {"2": "1/4 cup", "3": "3/8 cup", "4": "1/2 cup", "6": "3/4 cup"}},
+        {"name": "Parmesan Cheese", "amounts": {"2": "1/4 cup", "3": "3/8 cup", "4": "1/2 cup", "6": "3/4 cup"}},
+        {"name": "Salt", "amounts": {"2": "2 tsp", "3": "3 tsp", "4": "4 tsp", "6": "6 tsp"}},
+        {"name": "Pepper", "amounts": {}}
+      ],
+      "steps": [
+        "In a large bowl, combine beef, panko, half the Parmesan, 1 TBSP water (2 TBSP for 4 servings), salt (we used ½ tsp; 1 tsp for 4), and pepper.",
+        "Roast until browned. Top with remaining Parmesan and season with salt."
+      ],
+      "expect": {
+        "2": {"1": ["½ tsp salt", "1 Tbsp water"], "2": ["season with salt."]},
+        "4": {"1": ["1 tsp salt", "2 Tbsp water"]},
+        "6": {"1": ["1 ½ tsp salt"]}
+      }
+    },
+    {
+      "name": "Pasta with Reserved Water",
+      "servings": [2, 4],
+      "ingredients": [
+        {"name": "Penne Pasta", "amounts": {"2": "6 oz", "4": "12 oz"}},
+        {"name": "Marinara Cup", "amounts": {"2": "1 count", "4": "2 count"}},
+        {"name": "Button Mushrooms", "amounts": {"2": "4 oz", "4": "8 oz"}},
+        {"name": "Chili Flakes", "amounts": {"2": "1 tsp", "4": "2 tsp"}}
+      ],
+      "steps": [
+        "Slice mushrooms. Once water is boiling, add penne to pot. Reserve ½ cup pasta cooking water, then drain.",
+        "Stir in marinara and chili flakes to taste (we used ¼ tsp). (TIP: Add more chili flakes if you like things spicy!)"
+      ],
+      "expect": {
+        "2": {"1": ["4 oz mushrooms", "6 oz penne", "Reserve ½ cup pasta cooking water"], "2": ["Stir in marinara and chili flakes to taste (we used ¼ tsp)", "Add more chili flakes"]},
+        "4": {"1": ["12 oz penne", "Reserve 1 cup pasta cooking water"]}
+      }
+    },
+    {
+      "name": "Glazed Meatloaves",
+      "servings": [2, 4],
+      "ingredients": [
+        {"name": "BBQ Sauce", "amounts": {"2": "4 tbsp", "4": "8 tbsp"}},
+        {"name": "Apricot Jam", "amounts": {"2": "1 count", "4": "2 count"}},
+        {"name": "Ponzu Sauce", "amounts": {"2": "2 tbsp", "4": "4 tbsp"}},
+        {"name": "Lobster Tails", "amounts": {"2": "7 oz", "4": "14 oz"}},
+        {"name": "Parmesan Cheese", "amounts": {"2": "1/8 oz", "4": "1/4 oz"}}
+      ],
+      "steps": [
+        "In a small bowl, combine BBQ sauce, jam, and ponzu.",
+        "Cut along the tail. Brush lobster tails with 1 Tbsp BBQ glaze each. Sprinkle with Parmesan."
+      ],
+      "expect": {
+        "2": {"1": ["4 Tbsp BBQ sauce", "combine 4 Tbsp BBQ sauce, jam,", "2 Tbsp ponzu"], "2": ["Cut along the tail.", "7 oz lobster tails", "1 Tbsp BBQ glaze"]}
+      }
+    }
+  ]
+}

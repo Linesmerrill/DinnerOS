@@ -3,6 +3,8 @@ package recipes
 import (
 	"strings"
 	"testing"
+
+	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 )
 
 func thaiCurry() Recipe {
@@ -122,5 +124,65 @@ func TestOtherStepsDontGetTheTotalOnceACardMeasuresAShare(t *testing.T) {
 	}
 	if got := joined(in.Steps[1]); got != "Combine beef and ½ tsp salt." {
 		t.Errorf("step 2 = %q", got)
+	}
+}
+
+// Phrasings the library scan turned up, each once.
+func TestLibraryPhrasings(t *testing.T) {
+	flakes := tacoLine("ing-flakes", "Chili Flakes", "1", "3/2", "tsp")
+	for _, tc := range []struct {
+		name  string
+		lines []RecipeIngredient
+		step  string
+		want  string
+	}{
+		{"a tip in the note keeps the card's words", []RecipeIngredient{flakes},
+			"Add tomato and chili flakes (we used ½ tsp; add a pinch more if you like things spicy); cook.",
+			"Add tomato and chili flakes (we used ½ tsp; add a pinch more if you like things spicy); cook."},
+		{"'more' is to taste", []RecipeIngredient{flakes},
+			"Add a pinch of chili flakes. (TIP: Add more chili flakes if you like things spicy!)",
+			"Add a pinch of chili flakes. (TIP: Add more chili flakes if you like things spicy!)"},
+		{"to taste keeps the card's words", []RecipeIngredient{flakes},
+			"Add chili flakes to taste (we used ⅛ tsp).", "Add chili flakes to taste (we used ⅛ tsp)."},
+		{"packaging isn't a name", []RecipeIngredient{tacoLine("ing-marinara", "Marinara Cup", "1", "3/2", "count")},
+			"Add marinara and 2 cups water (4 cups for 4 servings).", "Add marinara and 2 cups water."},
+		{"cheese and breadcrumbs are dropped", []RecipeIngredient{
+			tacoLine("ing-parm", "Parmesan Cheese", "1/4", "3/8", "cup"), tacoLine("ing-panko", "Panko Breadcrumbs", "1/4", "3/8", "cup")},
+			"Combine panko and Parmesan.", "Combine ¼ cup panko and ¼ cup Parmesan."},
+		{"the last word is the food", []RecipeIngredient{tacoLine("ing-mush", "Button Mushrooms", "4", "6", "oz")},
+			"Slice mushrooms.", "Slice 4 oz mushrooms."},
+		{"a note with a name in it for the other box goes", []RecipeIngredient{tacoLine("ing-salt", "Salt", "", "", "")},
+			"Stir in 1 tsp water and ½ tsp salt (2 tsp water and 1½ tsp salt for 4 servings).",
+			"Stir in 1 tsp water and ½ tsp salt."},
+		{"a division slash reads as a fraction", nil,
+			"Add ¼ cup water (1∕3 cup for 4 servings).", "Add ¼ cup water."},
+	} {
+		r := tacoRecipe(tc.lines, tc.step)
+		if got := joined(Annotate(r, 2, nil, true).Steps[0]); got != tc.want {
+			t.Errorf("%s:\n got %q\nwant %q", tc.name, got, tc.want)
+		}
+	}
+	// ⅛ oz for 3 servings is 0.1875: a kitchen measure, not a decimal.
+	if got := (Measure{Quantity: ingredients.NewQuantity(3, 16), Unit: "oz"}).Text(); got != "¼ oz" {
+		t.Errorf("3/16 oz = %q, want ¼ oz", got)
+	}
+	if got := (Measure{Quantity: ingredients.NewQuantity(2, 3), Unit: "cup"}).Text(); got != "⅔ cup" {
+		t.Errorf("2/3 cup = %q", got)
+	}
+}
+
+func TestReservedLiquidIsTheLiquidAndGrowsWithTheBox(t *testing.T) {
+	r := tacoRecipe(
+		[]RecipeIngredient{tacoLine("ing-pot", "Potatoes", "12", "18", "oz"), tacoLine("ing-lob", "Lobster Tails", "7", "10", "oz")},
+		"Dice potatoes. Boil until tender. Reserve ½ cup potato cooking liquid, then drain.",
+		"Cut along the tail. Add lobster tails and a splash of water.")
+	for servings, want := range map[int]string{2: "Reserve ½ cup potato cooking liquid", 4: "Reserve 1 cup potato cooking liquid"} {
+		in := Annotate(r, servings, nil, true)
+		if got := joined(in.Steps[0]); !strings.Contains(got, want) || !strings.HasPrefix(got, "Dice ") || strings.Count(got, " oz") != 1 {
+			t.Errorf("%d servings: %q", servings, got)
+		}
+		if got := joined(in.Steps[1]); !strings.Contains(got, "Cut along the tail. Add") || !strings.Contains(got, "oz lobster tails") {
+			t.Errorf("%d servings lobster: %q (\"tail\" isn't the lobster)", servings, got)
+		}
 	}
 }

@@ -400,6 +400,31 @@ Nothing is stored. The steps are rendered on each read from the recipe as
 imported plus the household's current choices, so changing a choice changes
 every recipe's instructions with no migration (decision 512).
 
+**Checking how steps read.** After rendering, the server runs `CheckSteps`
+(`internal/recipes/step_check.go`) on the result and records anything that
+reads wrong in `instruction_findings`, at most once an hour per recipe and
+size, without changing the response:
+
+| Code | Reads wrong because |
+|---|---|
+| `box_note` | a note for a box size not being cooked is left in ("(2 Tbsp for 4 servings)" at 2) |
+| `double_amount` | an amount in front of the card's own measure ("2 Tbsp salt (we used ½ tsp)") |
+| `amount_before_relative` | an amount after words that already say how much ("half the 1 tsp cumin") |
+| `unit_plural` | a singular unit after more than one ("1½ cup") |
+| `left_out_not_struck` | an ingredient the household leaves out shown as something to add |
+| `unused_ingredient` | an ingredient no step names, so the checklist can't place it |
+| `markup` | card markup left in ("chicken*", "<strong>", "TBSP") |
+| `run_together` | numbers run together ("10-121½-inch") |
+
+Each document is one finding in one recipe (household, recipe, code, step,
+detail) with a `count`, `firstSeen`, `lastSeen`, the serving size, the
+recipe's name and source, and the step's text. It is household data and is
+deleted with the household. Review the newest with
+`db.instruction_findings.find().sort({lastSeen: -1})`; a fix adds the phrasing
+to `internal/recipes/testdata/step_corpus.json`, where every recipe is
+rendered at every size on each test run and must pass the same checks. The
+corpus is invented text in the style of real cards, never a pasted card.
+
 **Segments, not offsets.** Joining every segment's `text` in order gives the
 step's `text` exactly, so no client needs character offsets or an encoding
 rule (decision 513). `originalText` is present only when a substitution
