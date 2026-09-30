@@ -384,14 +384,34 @@ func (m *model) score(s *slot, it *item) cand {
 		c.reasons = append(c.reasons, reason{code: "guests", text: fmt.Sprintf("Serves %d for your guests", c.servings), value: 0.05})
 	}
 
-	// Pantry items running low.
+	// What the household already has: the meal that uses the frozen pork and
+	// the extra poblanos beats one that needs everything bought.
 	var pantry float64
 	var pantryText string
+	var used []onHandItem
+	for _, h := range m.ctx.onHand {
+		for _, name := range it.ingredients {
+			if containsPhrase(name, h.tokens) {
+				pantry += h.weight
+				used = append(used, h)
+				break
+			}
+		}
+	}
+	if len(used) > 0 {
+		slices.SortStableFunc(used, func(a, b onHandItem) int { return cmp.Compare(b.weight, a.weight) })
+		labels := []string{used[0].label}
+		if len(used) > 1 {
+			labels = append(labels, used[1].label)
+		}
+		pantryText = "Uses " + strings.Join(labels, " and ")
+	}
+	// Ingredients running low (an older signal, still honored).
 	matches := 0
 	for _, low := range m.ctx.pantryLow {
 		for _, name := range it.ingredients {
 			if containsPhrase(name, low) {
-				if matches == 0 {
+				if matches == 0 && pantryText == "" {
 					pantryText = "Uses up the " + strings.Join(low, " ") + " running low"
 				}
 				matches++
@@ -399,7 +419,7 @@ func (m *model) score(s *slot, it *item) cand {
 			}
 		}
 	}
-	pantry = math.Min(1, float64(matches)/2)
+	pantry = math.Min(1, pantry+float64(matches)/2)
 	explain("pantry", pantryText, add(SignalPantry, pantry, w.Pantry), false)
 
 	// Caller-requested avoidance (a regenerated proposal's picks).

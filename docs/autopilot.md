@@ -292,6 +292,7 @@ keep today's spelling — the most common one the catalog uses.
 | Learning reset | the latest `autopilot.learning_reset` | `Input.LearningSince` |
 | This week's plan | `weekly_plans` for the week | fixed meals (occupy days, count toward meals and variety) |
 | Pantry running low | pantry items with status `low` | `context.pantryLow` |
+| On hand | in-stock pantry items that aren't staples or spices, weighted: frozen or meat 1, produce 0.7, dairy 0.5, bread 0.4, the rest 0.2, +0.3 when expiring within 5 days | `context.onHand` (the `pantry` signal, weight 0.30, reason "Uses your frozen ground pork and your poblano peppers") |
 
 ## Hard constraints
 

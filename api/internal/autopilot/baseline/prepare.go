@@ -100,6 +100,7 @@ type weekCtx struct {
 	servings   int
 	days       [7]dayCtx
 	pantryLow  [][]string // tokenized names
+	onHand     []onHandItem
 	// season and orderDate are week signals; feast names a feast holiday in
 	// the week (context.go).
 	season    string
@@ -518,7 +519,25 @@ func normalizeContext(in autopilot.WeekContext) (weekCtx, error) {
 			c.pantryLow = append(c.pantryLow, tokens)
 		}
 	}
+	for _, h := range in.OnHand {
+		tokens := tokenize(h.Name)
+		if len(tokens) == 0 || h.Weight <= 0 {
+			continue
+		}
+		label := strings.TrimSpace(h.Label)
+		if label == "" {
+			label = strings.Join(tokens, " ")
+		}
+		c.onHand = append(c.onHand, onHandItem{tokens: tokens, weight: min(h.Weight, 1), label: label})
+	}
 	return c, nil
+}
+
+// onHandItem is an OnHand ingredient ready to match.
+type onHandItem struct {
+	tokens []string
+	weight float64
+	label  string
 }
 
 // --- small helpers ------------------------------------------------------------

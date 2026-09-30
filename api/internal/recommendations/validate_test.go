@@ -149,7 +149,7 @@ func TestProviderConversion(t *testing.T) {
 	if prefs := p.preferences(3); prefs.DefaultServings != 5 || prefs.Weeknights == nil {
 		t.Errorf("an explicit servings value wins, and no weeknights stays empty: %+v", prefs)
 	}
-	c := WeekContext{Busy: true, MaxMinutes: 20, Days: []DayOverride{{Day: "wed", Skip: true}}}.providerContext([]string{"cilantro"})
+	c := WeekContext{Busy: true, MaxMinutes: 20, Days: []DayOverride{{Day: "wed", Skip: true}}}.providerContext([]string{"cilantro"}, nil)
 	if !c.Busy || c.MaxMinutes != 20 || c.Days[0].Day != autopilot.Wednesday || c.PantryLow[0] != "cilantro" {
 		t.Errorf("context = %+v", c)
 	}

@@ -360,6 +360,22 @@ type WeekContext struct {
 	Signals Signals
 	// PantryLow are normalized names of ingredients running low at home.
 	PantryLow []string
+	// OnHand are ingredients the household already has and would like to
+	// cook with: leftover meat in the freezer, extra produce. Meals that use
+	// them score higher, the more for a higher Weight.
+	OnHand []OnHand
+}
+
+// OnHand is one ingredient the household has on hand.
+type OnHand struct {
+	// Name is the ingredient's normalized name, matched against items'
+	// Ingredients.
+	Name string
+	// Weight is how much using it matters, 0..1: frozen leftover meat and
+	// produce that won't keep are near 1, pantry goods lower.
+	Weight float64
+	// Label names it in a reason ("your frozen ground pork"); Name when empty.
+	Label string
 }
 
 // DayContext overrides the week context for one day.

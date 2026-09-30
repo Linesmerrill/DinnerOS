@@ -108,6 +108,16 @@ func TestSignals(t *testing.T) {
 		{"pantry running low", autopilot.Monday, meal("m", ingredients("Fresh Cilantro", "lime")), func(in *autopilot.Input) {
 			in.Context.PantryLow = []string{"cilantro"}
 		}, SignalPantry, 0.5, "Uses up the cilantro running low"},
+		{"uses what's on hand", autopilot.Monday, meal("m", ingredients("Ground Pork", "Poblano Peppers", "rice")), func(in *autopilot.Input) {
+			in.Context.OnHand = []autopilot.OnHand{
+				{Name: "poblano pepper", Weight: 0.7, Label: "your poblano peppers"},
+				{Name: "ground pork", Weight: 1, Label: "your frozen ground pork"},
+				{Name: "sour cream", Weight: 0.5},
+			}
+		}, SignalPantry, 1, "Uses your frozen ground pork and your poblano peppers"},
+		{"one thing on hand", autopilot.Monday, meal("m", ingredients("Sour Cream", "lime")), func(in *autopilot.Input) {
+			in.Context.OnHand = []autopilot.OnHand{{Name: "sour cream", Weight: 0.5, Label: "your sour cream"}}
+		}, SignalPantry, 0.5, "Uses your sour cream"},
 		{"avoid", autopilot.Monday, meal("m"), func(in *autopilot.Input) { in.Avoid = []string{"m"} }, SignalAvoid, -1, ""},
 		{"objective is bounded", autopilot.Monday, meal("m"), func(in *autopilot.Input) {
 			in.Objectives = []autopilot.Objective{{ItemID: "m", Boost: 5}}
@@ -217,5 +227,21 @@ func TestCuisineRegions(t *testing.T) {
 	// region: a partial repeat, not a full one.
 	if res.Score.Variety != -DefaultWeights().CuisineRegionRepeat {
 		t.Errorf("variety = %v; Italian and French share only a region", res.Score.Variety)
+	}
+}
+
+// Two meals alike but for the protein: the one that uses the frozen ground
+// pork gets the day.
+func TestOnHandPicksTheMealThatUsesIt(t *testing.T) {
+	in := input(
+		meal("pork-tacos", ingredients("Ground Pork", "Flour Tortillas")),
+		meal("beef-tacos", ingredients("Ground Beef", "Flour Tortillas")),
+	)
+	in.Preferences.MealsPerWeek = 1
+	in.Preferences.PlanDays = []autopilot.Day{autopilot.Monday}
+	in.Context.OnHand = []autopilot.OnHand{{Name: "ground pork", Weight: 1, Label: "your frozen ground pork"}}
+	res := generate(t, New(Options{}), in)
+	if len(res.Slots) != 1 || res.Slots[0].ItemID != "pork-tacos" {
+		t.Fatalf("slots = %+v, want the pork tacos", res.Slots)
 	}
 }

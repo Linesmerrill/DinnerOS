@@ -530,9 +530,10 @@ func (p Profile) preferences(householdServings int) autopilot.Preferences {
 }
 
 // providerContext converts a week context for the provider.
-func (c WeekContext) providerContext(pantryLow []string) autopilot.WeekContext {
+func (c WeekContext) providerContext(pantryLow []string, onHand []autopilot.OnHand) autopilot.WeekContext {
 	out := autopilot.WeekContext{
 		Skip: c.Skip, Busy: c.Busy, Meals: c.MealsPerWeek, MaxMinutes: c.MaxMinutes, Servings: c.Servings, PantryLow: pantryLow,
+		OnHand: onHand,
 	}
 	for _, d := range c.Days {
 		out.Days = append(out.Days, autopilot.DayContext{Day: autopilot.Day(d.Day), Skip: d.Skip, MaxMinutes: d.MaxMinutes, Servings: d.Servings})

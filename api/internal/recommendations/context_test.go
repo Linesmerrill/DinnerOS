@@ -90,7 +90,7 @@ func TestWeekContextSignals(t *testing.T) {
 	if c.Season != "fall" || c.OrderDate != "2026-11-28" || len(c.Holidays) != 1 || c.Holidays[0] != (Holiday{Day: "thu", Name: "Thanksgiving", Kind: "feast"}) {
 		t.Fatalf("weekContext() = %+v", c)
 	}
-	wc := WeekContext{Days: []DayOverride{{Day: "tue", MaxMinutes: 30}}}.providerContext(nil)
+	wc := WeekContext{Days: []DayOverride{{Day: "tue", MaxMinutes: 30}}}.providerContext(nil, nil)
 	c.apply(&wc)
 	if wc.Signals[autopilot.ContextSeason].Text != "fall" || wc.Signals[autopilot.ContextOrderDate].Text != "2026-11-28" {
 		t.Errorf("week signals = %+v", wc.Signals)

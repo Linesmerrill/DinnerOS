@@ -8,10 +8,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
+	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
@@ -135,7 +137,7 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 		HouseholdID: householdID,
 		Week:        w.String(),
 		Preferences: profile.preferences(household.DefaultServings),
-		Context:     wc.providerContext(s.pantryLow(ctx, householdID)),
+		Context:     wc.providerContext(s.pantryLow(ctx, householdID), s.pantryOnHand(ctx, householdID, s.now().UTC())),
 		WeekStart:   autopilot.Day(first),
 	}
 	data := inputData{byID: make(map[string]recipes.Recipe, len(catalog)), context: weekContext(w, first, household.TimeZone, household.OrderDay, device)}
@@ -282,6 +284,71 @@ func (s *Service) pantryLow(ctx context.Context, householdID string) []string {
 	}
 	slices.Sort(names)
 	return names
+}
+
+// pantryOnHand is what the household has in stock to cook with, weighted by
+// how much using it matters: meat and anything frozen most, then produce,
+// dairy, bread, and the rest. Staples (salt, oil) and spices are left out,
+// since nearly every meal uses them. Something expiring within a few days
+// counts more. Like pantryLow, failures are logged and ignored.
+func (s *Service) pantryOnHand(ctx context.Context, householdID string, now time.Time) []autopilot.OnHand {
+	if s.pantry == nil {
+		return nil
+	}
+	items, err := s.pantry.List(ctx, householdID, pantry.ListQuery{Status: string(pantry.StatusInStock)})
+	if err != nil {
+		s.logger.WarnContext(ctx, "load pantry items for autopilot", "householdId", householdID, "error", err)
+		return nil
+	}
+	return onHandFrom(items, now)
+}
+
+// onHandWeights is how much using an ingredient of each category matters.
+var onHandWeights = map[string]float64{
+	ingredients.CategoryMeatSeafood: 1,
+	ingredients.CategoryProduce:     0.7,
+	ingredients.CategoryDairyEggs:   0.5,
+	ingredients.CategoryBakery:      0.4,
+	ingredients.CategoryDeli:        0.4,
+}
+
+func onHandFrom(items []pantry.Item, now time.Time) []autopilot.OnHand {
+	var out []autopilot.OnHand
+	seen := map[string]bool{}
+	for _, it := range items {
+		name := normalizeValue(it.DisplayName)
+		if name == "" || it.IsStaple || seen[name] ||
+			it.Category == ingredients.CategorySpices || it.Category == ingredients.CategoryBeverages {
+			continue
+		}
+		seen[name] = true
+		weight, ok := onHandWeights[it.Category]
+		if !ok {
+			weight = 0.2
+		}
+		frozen := it.Storage == pantry.StorageFreezer
+		if frozen {
+			weight = 1
+		} else if expires, err := time.Parse(pantry.DateLayout, it.ExpiresOn); err == nil && expires.Sub(now) < 5*24*time.Hour {
+			weight = min(1, weight+0.3)
+		}
+		out = append(out, autopilot.OnHand{Name: name, Weight: weight, Label: onHandLabel(it, frozen)})
+	}
+	slices.SortFunc(out, func(a, b autopilot.OnHand) int { return strings.Compare(a.Name, b.Name) })
+	return out
+}
+
+// onHandLabel names an ingredient in a reason: "your frozen ground pork",
+// "your poblano peppers" (four of them), "your sour cream".
+func onHandLabel(it pantry.Item, frozen bool) string {
+	name := strings.ToLower(strings.TrimSpace(it.DisplayName))
+	if (it.Unit == "count" || it.Unit == "") && it.Quantity != "" && it.Quantity != "1" && !strings.HasSuffix(name, "s") {
+		name += "s"
+	}
+	if frozen {
+		return "your frozen " + name
+	}
+	return "your " + name
 }
 
 // inputsHash fingerprints a provider request: identical inputs, attempt, and

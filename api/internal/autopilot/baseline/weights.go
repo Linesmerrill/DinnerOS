@@ -34,7 +34,8 @@ const (
 	// SignalServingsFit penalizes meals that can't serve enough people,
 	// -1..0.
 	SignalServingsFit = "servingsFit"
-	// SignalPantry favors meals that use ingredients running low, 0..1.
+	// SignalPantry favors meals that use what the household has on hand (and
+	// ingredients running low), 0..1.
 	SignalPantry = "pantry"
 	// SignalAvoid penalizes meals the caller asked to steer away from, -1..0.
 	SignalAvoid = "avoid"
@@ -137,7 +138,7 @@ func DefaultWeights() Weights {
 		TimeFit:             0.20,
 		Novelty:             0.15,
 		ServingsFit:         0.25,
-		Pantry:              0.05,
+		Pantry:              0.30,
 		Avoid:               0.35,
 		Learned:             0.10,
 		Context:             0.15,
