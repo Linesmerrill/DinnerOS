@@ -103,10 +103,12 @@ nonisolated struct Household: Decodable, Equatable, Sendable, Identifiable {
     /// The size of one frozen bag of leftover meat, in ounces. Less is thrown in or tossed.
     /// `nil` means one dinner's worth, as the week's recipe measures it.
     var freezeMinOunces: Int? = nil
+    /// How the household freezes raw meat (`FreezerWrap`), which sets a frozen bag's best-by date.
+    var freezerWrap: FreezerWrap = .vacuumSealed
 
     private enum CodingKeys: String, CodingKey {
         case id, name, defaultServings, timeZone, orderDay, createdBy, createdAt, updatedAt, mealKit, weekStartsOn,
-            thawReminderHour, freezeMinOunces
+            thawReminderHour, freezeMinOunces, freezerWrap
     }
 }
 
@@ -128,7 +130,8 @@ nonisolated extension Household {
             weekStartsOn: container.decodeLenient(PlanDay.self, forKey: .weekStartsOn) ?? PlanDay.isoWeekStart,
             thawReminderHour: (try? container.decodeIfPresent(Int.self, forKey: .thawReminderHour))
                 ?? Household.defaultThawReminderHour,
-            freezeMinOunces: try? container.decodeIfPresent(Int.self, forKey: .freezeMinOunces))
+            freezeMinOunces: try? container.decodeIfPresent(Int.self, forKey: .freezeMinOunces),
+            freezerWrap: container.decodeLenient(FreezerWrap.self, forKey: .freezerWrap) ?? .vacuumSealed)
     }
 
     /// The bag sizes the picker offers, in ounces. 0 stands for one dinner from the recipe.
@@ -299,14 +302,17 @@ nonisolated struct HouseholdChanges: Encodable, Equatable, Sendable {
     var thawReminderHour: Int? = nil
     /// The frozen bag size in ounces: `.clear` returns it to one dinner.
     var freezeMinOunces: FieldChange<Int> = .keep
+    /// How the household freezes meat; `nil` leaves it alone.
+    var freezerWrap: FreezerWrap? = nil
 
     var isEmpty: Bool {
         name == nil && timeZone == nil && defaultServings == nil && orderDay == nil && mealKit == .keep
-            && weekStartsOn == nil && thawReminderHour == nil && freezeMinOunces == .keep
+            && weekStartsOn == nil && thawReminderHour == nil && freezeMinOunces == .keep && freezerWrap == nil
     }
 
     private enum CodingKeys: String, CodingKey {
         case name, timeZone, defaultServings, orderDay, mealKit, weekStartsOn, thawReminderHour, freezeMinOunces
+        case freezerWrap
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -319,6 +325,25 @@ nonisolated struct HouseholdChanges: Encodable, Equatable, Sendable {
         try container.encodeIfPresent(weekStartsOn, forKey: .weekStartsOn)
         try container.encodeIfPresent(thawReminderHour, forKey: .thawReminderHour)
         try container.encodeChange(freezeMinOunces, forKey: .freezeMinOunces)
+        try container.encodeIfPresent(freezerWrap, forKey: .freezerWrap)
+    }
+}
+
+/// How the household freezes raw meat. Vacuum sealed keeps air off the meat, so it gets the long
+/// end of the FDA's freezer time; a freezer bag or the store's package gets the short end.
+nonisolated enum FreezerWrap: String, Codable, CaseIterable, Identifiable, Sendable {
+    case vacuumSealed = "vacuum_sealed"
+    case freezerBag = "freezer_bag"
+    case storePackage = "store_package"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .vacuumSealed: String(localized: "Vacuum Sealed")
+        case .freezerBag: String(localized: "Freezer Bag")
+        case .storePackage: String(localized: "Store Package")
+        }
     }
 }
 

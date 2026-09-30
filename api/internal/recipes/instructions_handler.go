@@ -66,6 +66,61 @@ type InstructionsResponse struct {
 	// cooks them: the key a skip is made with, whether it's left out, and
 	// what a component is made of.
 	Ingredients []IngredientStateResponse `json:"ingredients"`
+	// Checklist is the cooking screen's ingredient checklist, all together
+	// and by step, ready to show.
+	Checklist ChecklistResponse `json:"checklist"`
+}
+
+// ChecklistResponse is the cooking screen's ingredient checklist.
+type ChecklistResponse struct {
+	All    []CookIngredientResponse `json:"all"`
+	ByStep []CookStepGroupResponse  `json:"byStep"`
+}
+
+// CookIngredientResponse is one row of the all-together checklist.
+type CookIngredientResponse struct {
+	ID            string             `json:"id"`
+	Index         int                `json:"index"`
+	Name          string             `json:"name"`
+	AmountText    string             `json:"amountText,omitempty"`
+	LeftOut       bool               `json:"leftOut,omitempty"`
+	IngredientKey string             `json:"ingredientKey"`
+	Parts         []CookPartResponse `json:"parts"`
+	Components    []string           `json:"components"`
+}
+
+// CookPartResponse is one step's share of an ingredient.
+type CookPartResponse struct {
+	ID         string `json:"id"`
+	AmountText string `json:"amountText"`
+	StepIndex  int    `json:"stepIndex"`
+}
+
+// CookStepGroupResponse is what one step needs; index 0 is "Have Ready".
+type CookStepGroupResponse struct {
+	Index int                    `json:"index"`
+	Items []CookStepItemResponse `json:"items"`
+}
+
+// CookStepItemResponse is one ingredient as a step uses it.
+type CookStepItemResponse struct {
+	ID              string   `json:"id"`
+	IngredientIndex int      `json:"ingredientIndex"`
+	Name            string   `json:"name"`
+	AmountText      string   `json:"amountText,omitempty"`
+	Prep            string   `json:"prep,omitempty"`
+	Parts           []string `json:"parts"`
+	LeftOut         bool     `json:"leftOut,omitempty"`
+	IngredientKey   string   `json:"ingredientKey"`
+}
+
+// StepTimerResponse is one cooking time in a step.
+type StepTimerResponse struct {
+	Text         string `json:"text"`
+	LowSeconds   int    `json:"lowSeconds"`
+	HighSeconds  int    `json:"highSeconds"`
+	StartSeconds int    `json:"startSeconds"`
+	Subject      string `json:"subject,omitempty"`
 }
 
 // IngredientStateResponse is one recipe ingredient as the household cooks it.
@@ -113,6 +168,9 @@ type InstructionStepResponse struct {
 	ImageURL     string                    `json:"imageUrl,omitempty"`
 	Segments     []StepSegmentResponse     `json:"segments"`
 	Notes        []InstructionNoteResponse `json:"notes"`
+	// Timers are the step's cooking times in text order, each named for what
+	// it's cooking and with the time to start at.
+	Timers []StepTimerResponse `json:"timers"`
 	// LeftOut is true when every ingredient the step names is left out.
 	LeftOut bool `json:"leftOut,omitempty"`
 }
@@ -127,6 +185,9 @@ type StepSegmentResponse struct {
 	// IngredientID is the catalog ingredient, empty when the catalog doesn't
 	// know it or on a text segment.
 	IngredientID string `json:"ingredientId,omitempty"`
+	// IngredientIndex is the recipe ingredient's position, on an ingredient
+	// segment.
+	IngredientIndex *int `json:"ingredientIndex,omitempty"`
 	// Name is what the segment stands for, after any substitution.
 	Name string `json:"name,omitempty"`
 	// Amount is the amount for `servings`, null when the recipe gave none,
@@ -220,13 +281,21 @@ func newInstructionsResponse(in Instructions) InstructionsResponse {
 			Index: step.Index, Text: step.Text, OriginalText: step.Original, ImageURL: step.ImageURL, LeftOut: step.LeftOut,
 			Segments: make([]StepSegmentResponse, 0, len(step.Segments)),
 			Notes:    make([]InstructionNoteResponse, 0, len(step.Notes)),
+			Timers:   make([]StepTimerResponse, 0, len(step.Timers)),
+		}
+		for _, t := range step.Timers {
+			sr.Timers = append(sr.Timers, StepTimerResponse(t))
 		}
 		if sr.Text == "" {
 			sr.Text = step.Original
 		}
 		for _, seg := range step.Segments {
+			var index *int
+			if seg.Kind == SegmentIngredient {
+				index = &seg.Ingredient
+			}
 			sr.Segments = append(sr.Segments, StepSegmentResponse{
-				Kind: string(seg.Kind), Text: seg.Text, IngredientID: seg.IngredientID, Name: seg.Name,
+				Kind: string(seg.Kind), Text: seg.Text, IngredientID: seg.IngredientID, IngredientIndex: index, Name: seg.Name,
 				Amount: instructionAmount(seg.Amount), Part: seg.Part, Spicy: seg.Spicy, Substituted: seg.Substituted,
 				SpecialtyID: seg.SpecialtyID, SpecialtyName: seg.SpecialtyName, LeftOut: seg.LeftOut,
 			})
@@ -245,7 +314,33 @@ func newInstructionsResponse(in Instructions) InstructionsResponse {
 	for _, s := range in.Unchosen {
 		resp.UnchosenSpecialties = append(resp.UnchosenSpecialties, SpecialtyRefResponse(s))
 	}
+	resp.Checklist = checklistResponse(in.Checklist)
 	return resp
+}
+
+func checklistResponse(c Checklist) ChecklistResponse {
+	out := ChecklistResponse{All: make([]CookIngredientResponse, 0, len(c.All)), ByStep: make([]CookStepGroupResponse, 0, len(c.ByStep))}
+	for _, ci := range c.All {
+		r := CookIngredientResponse{
+			ID: ci.ID, Index: ci.Index, Name: ci.Name, AmountText: ci.AmountText, LeftOut: ci.LeftOut,
+			IngredientKey: ci.IngredientKey, Parts: make([]CookPartResponse, 0, len(ci.Parts)), Components: orEmpty(ci.Components),
+		}
+		for _, p := range ci.Parts {
+			r.Parts = append(r.Parts, CookPartResponse(p))
+		}
+		out.All = append(out.All, r)
+	}
+	for _, g := range c.ByStep {
+		gr := CookStepGroupResponse{Index: g.Index, Items: make([]CookStepItemResponse, 0, len(g.Items))}
+		for _, it := range g.Items {
+			gr.Items = append(gr.Items, CookStepItemResponse{
+				ID: it.ID, IngredientIndex: it.IngredientIndex, Name: it.Name, AmountText: it.AmountText, Prep: it.Prep,
+				Parts: orEmpty(it.Parts), LeftOut: it.LeftOut, IngredientKey: it.IngredientKey,
+			})
+		}
+		out.ByStep = append(out.ByStep, gr)
+	}
+	return out
 }
 
 func instructionAmount(m *Measure) *InstructionAmountResponse {

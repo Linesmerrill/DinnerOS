@@ -168,6 +168,9 @@ type Segment struct {
 	// IngredientID, Name, Amount, and the flags are set on SegmentIngredient.
 	// IngredientID is empty for an ingredient the catalog doesn't know.
 	IngredientID string
+	// Ingredient is the position of the recipe ingredient the segment
+	// stands for, set on SegmentIngredient.
+	Ingredient int
 	// Name is what the segment stands for: the recipe's ingredient, or the
 	// substitute when one replaced it.
 	Name string
@@ -226,6 +229,8 @@ type InstructionStep struct {
 	ImageURL string
 	Segments []Segment
 	Notes    []StepNote
+	// Timers are the step's cooking times, named (timers.go).
+	Timers []StepTimer
 	// LeftOut is true when every ingredient the step names is left out: the
 	// step is there to make something the household doesn't make, and can be
 	// skipped. A step that names nothing is never LeftOut.
@@ -319,6 +324,9 @@ type Instructions struct {
 	// consulted; Ingredients are the recipe's ingredients in order.
 	LeftOutApplied bool
 	Ingredients    []IngredientState
+	// Checklist is the cooking screen's ingredient checklist, built from the
+	// steps above (checklist.go).
+	Checklist Checklist
 }
 
 // GroceryLines returns the recipe's ingredient lines for servings in the form
@@ -539,8 +547,21 @@ func AnnotateMeal(r Recipe, servings int, specs grocery.Specialties, applied boo
 		notedBefore: map[string]bool{}, seen: map[int]bool{},
 	}
 	for _, step := range r.Steps {
-		out.Steps = append(out.Steps, renderStep(step, mentions, amounts))
+		st := renderStep(step, mentions, amounts)
+		var names []string
+		for _, seg := range st.Segments {
+			if seg.Kind == SegmentIngredient {
+				names = append(names, seg.Name)
+			}
+		}
+		text := st.Text
+		if st.Original != "" && text == "" {
+			text = st.Original
+		}
+		st.Timers = stepTimers(text, names)
+		out.Steps = append(out.Steps, st)
 	}
+	out.Checklist = buildChecklist(r, out)
 	sort.SliceStable(out.Substitutions, func(i, j int) bool { return out.Substitutions[i].Name < out.Substitutions[j].Name })
 	sort.SliceStable(out.Unchosen, func(i, j int) bool { return out.Unchosen[i].Name < out.Unchosen[j].Name })
 	return out
@@ -734,7 +755,9 @@ func scaledComponent(c grocery.Component, ratio *big.Rat) *Measure {
 		return nil
 	}
 	q := c.Quantity.MulRat(ratio)
-	return &Measure{Quantity: q, Unit: c.Unit}
+	// A bouillon base is counted a teaspoon per packet (decision 580), so
+	// "3 tsp" stays three packets' worth rather than reading "1 Tbsp".
+	return &Measure{Quantity: q, Unit: c.Unit, Exact: strings.Contains(strings.ToLower(c.Name), "bouillon")}
 }
 
 func quantityOf(r *big.Rat) ingredients.Quantity {

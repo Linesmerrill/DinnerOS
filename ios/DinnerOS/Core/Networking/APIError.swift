@@ -40,6 +40,12 @@ nonisolated enum APIError: Error, Equatable, Sendable {
         return nil
     }
 
+    /// The request never got an HTTP response: offline, or the server couldn't be reached.
+    var isTransport: Bool {
+        if case .transport = self { return true }
+        return false
+    }
+
     /// `401`: the credential was rejected (`token_expired` or `unauthenticated`).
     var isUnauthorized: Bool { status == 401 }
 

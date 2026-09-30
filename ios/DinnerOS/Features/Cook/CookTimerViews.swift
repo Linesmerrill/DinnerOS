@@ -191,7 +191,7 @@ struct CookTimerSetup: View {
         self.request = request
         self.label = label
         self.start = start
-        _seconds = State(initialValue: request.highSeconds)
+        _seconds = State(initialValue: request.startSeconds ?? request.highSeconds)
     }
 
     /// Short times move by 15 seconds; everything else by a minute.

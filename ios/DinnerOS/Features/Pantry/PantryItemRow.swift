@@ -34,9 +34,12 @@ struct PantryItemRow: View {
                         .foregroundStyle(.secondary)
                 }
                 if let expiry = PantryExpiry(expiresOn: item.expiresOn) {
-                    Label(expiry.text(), systemImage: expiry.isExpired ? "exclamationmark.circle" : "calendar")
-                        .font(.footnote)
-                        .foregroundStyle(expiryColor(expiry))
+                    Label(
+                        expiry.text(frozen: item.isFrozen),
+                        systemImage: expiry.isExpired ? "exclamationmark.circle" : "calendar"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(expiryColor(expiry))
                 }
             }
             Spacer(minLength: 8)

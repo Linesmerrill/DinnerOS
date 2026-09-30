@@ -55,8 +55,14 @@ nonisolated struct PantryExpiry: Equatable, Sendable {
     var isExpired: Bool { daysRemaining < 0 }
     var isSoon: Bool { (0...Self.soonDays).contains(daysRemaining) }
 
-    /// "Expired", "Expires today", "Expires in 3 days", or a date for far-off expiries.
-    func text(locale: Locale = .autoupdatingCurrent) -> String {
+    /// "Expired", "Expires today", "Expires in 3 days", or a date for far-off expiries. Frozen
+    /// food stays safe; its date is when it's best by ("Best by Jan 29, 2027").
+    func text(locale: Locale = .autoupdatingCurrent, frozen: Bool = false) -> String {
+        if frozen {
+            let style = Date.FormatStyle(date: .abbreviated, time: .omitted, locale: locale, timeZone: timeZone)
+            return isExpired
+                ? String(localized: "Past its best-by date") : String(localized: "Best by \(date.formatted(style))")
+        }
         switch daysRemaining {
         case ..<0:
             return String(localized: "Expired")

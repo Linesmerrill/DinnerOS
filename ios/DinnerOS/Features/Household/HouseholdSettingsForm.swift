@@ -216,11 +216,20 @@ struct HouseholdSettingsSections: View {
             } else {
                 LabeledContent("Freezer Bag", value: Household.freezeBagText(saved.freezeMinOunces ?? 0))
             }
+            if settings.canEdit {
+                Picker("How You Freeze Meat", selection: binding(\.freezerWrap)) {
+                    ForEach(FreezerWrap.allCases) { wrap in
+                        Text(wrap.title).tag(wrap)
+                    }
+                }
+            } else {
+                LabeledContent("How You Freeze Meat", value: saved.freezerWrap.title)
+            }
         } header: {
             Text("Freezer")
         } footer: {
             Text(
-                "We remind you the morning a frozen item needs to thaw.\nLeftover meat gets frozen in bags this size. Less than a bag goes into the meal or gets tossed."
+                "We remind you the morning a frozen item needs to thaw.\nLeftover meat gets frozen in bags this size. Less than a bag goes into the meal or gets tossed.\nFrozen raw meat gets a best-by date from the FDA's freezer times. Vacuum sealed keeps longest."
             )
         }
     }

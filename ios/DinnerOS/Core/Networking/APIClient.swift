@@ -74,13 +74,20 @@ nonisolated struct APIClient: Sendable {
     let baseURL: URL
     let transport: any HTTPTransport
     let retry: RetryPolicy
+    /// Saved answers to `GET`s, replayed when the network can't be reached; `nil` in tests that
+    /// don't exercise it.
+    let cache: ResponseCache?
 
     /// `retry` defaults to `.standard` for the real network and `.none` for a substituted
     /// transport, so a test stub answers once unless the test asks for retries.
-    init(baseURL: URL, transport: any HTTPTransport = URLSessionTransport(), retry: RetryPolicy? = nil) {
+    init(
+        baseURL: URL, transport: any HTTPTransport = URLSessionTransport(), retry: RetryPolicy? = nil,
+        cache: ResponseCache? = nil
+    ) {
         self.baseURL = baseURL
         self.transport = transport
         self.retry = retry ?? (transport is URLSessionTransport ? .standard : .none)
+        self.cache = cache
     }
 
     /// Sends `request` and decodes a JSON response body.
@@ -141,13 +148,29 @@ nonisolated struct APIClient: Sendable {
 
     /// Sends `request`, retrying the failures that mean the request never reached the API
     /// (`RetryPolicy`). Every attempt reuses one request ID, so the server's logs tie them together.
+    ///
+    /// A `GET`'s answer is saved; when the network can't be reached, the saved answer is returned
+    /// instead of an error (`ResponseCache`), without waiting on retries.
     private func perform(_ request: APIRequest) async throws -> Data {
         let requestID = UUID().uuidString
+        let cacheable = request.method == .get ? cache : nil
+        let key = makeURLRequest(for: request, requestID: "")
         var delays = retry.delays[...]
         while true {
             do {
-                return try await performOnce(request, requestID: requestID)
+                let data = try await performOnce(request, requestID: requestID)
+                if let cacheable {
+                    cacheable.store(data, for: key)
+                    cacheable.onLive()
+                }
+                return data
             } catch let error as APIError {
+                if let cacheable, ResponseCache.shouldReplay(error), let hit = cacheable.load(for: key),
+                    delays.isEmpty || error.isTransport
+                {
+                    cacheable.onReplay(hit.savedAt)
+                    return hit.data
+                }
                 guard let delay = delays.popFirst(), RetryPolicy.isRetryable(error, method: request.method) else {
                     throw error
                 }

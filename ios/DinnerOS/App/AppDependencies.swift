@@ -10,6 +10,12 @@ final class AppDependencies {
     static let shared = AppDependencies()
 
     let configuration: AppConfiguration
+    /// Whether screens are showing saved answers because the network can't be reached.
+    let offline: OfflineStatus
+    /// Every `GET`'s last answer, replayed offline.
+    let responseCache: ResponseCache
+    /// Saves the week ahead for use offline.
+    let prefetch: OfflinePrefetch
     let session: AuthSession
     let households: HouseholdStore
     let recipes: RecipeLibrary
@@ -50,7 +56,14 @@ final class AppDependencies {
         // scrolled back into view would download again; card-sized URLs keep entries small.
         URLCache.shared = URLCache(memoryCapacity: 48 * 1024 * 1024, diskCapacity: 256 * 1024 * 1024)
         let transport = URLSessionTransport()
-        let client = configuration.apiBaseURL.map { APIClient(baseURL: $0, transport: transport) }
+        let offline = OfflineStatus()
+        self.offline = offline
+        let responseCache = OfflineStatus.cache(reportingTo: offline)
+        self.responseCache = responseCache
+        Task.detached(priority: .background) { responseCache.prune() }
+        let client = configuration.apiBaseURL.map {
+            APIClient(baseURL: $0, transport: transport, cache: responseCache)
+        }
         session = AuthSession(api: client.map { AuthAPI(client: $0) }, store: KeychainTokenStore())
         households = HouseholdStore(
             session: session,
@@ -82,7 +95,9 @@ final class AppDependencies {
             api: client.map { PantryAPI(client: $0) },
             ingredientsAPI: client.map { IngredientsAPI(client: $0) })
         self.pantry = pantry
-        thaw = ThawStore(session: session, api: client.map { PantryAPI(client: $0) })
+        let thaw = ThawStore(session: session, api: client.map { PantryAPI(client: $0) })
+        self.thaw = thaw
+        prefetch = OfflinePrefetch(plans: plans, library: recipes, pantry: pantry, thaw: thaw, offline: offline)
         let notifications = NotificationStore(
             session: session, api: client.map { NotificationsAPI(client: $0) })
         self.notifications = notifications

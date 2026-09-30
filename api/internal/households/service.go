@@ -212,9 +212,16 @@ func (s *Service) Update(ctx context.Context, actor Membership, in UpdateInput) 
 	}
 	var patch HouseholdPatch
 	if in.Name == nil && in.TimeZone == nil && in.DefaultServings == nil && in.OrderDay == nil &&
-		in.WeekStartsOn == nil && !in.SetMealKit && !in.SetThawReminderHour && !in.SetFreezeMinOunces {
+		in.WeekStartsOn == nil && !in.SetMealKit && !in.SetThawReminderHour && !in.SetFreezeMinOunces && in.FreezerWrap == nil {
 		return Household{}, invalid(
-			"at least one of name, timeZone, defaultServings, orderDay, weekStartsOn, thawReminderHour, freezeMinOunces, or mealKit is required")
+			"at least one of name, timeZone, defaultServings, orderDay, weekStartsOn, thawReminderHour, freezeMinOunces, freezerWrap, or mealKit is required")
+	}
+	if in.FreezerWrap != nil {
+		if err := validateFreezerWrap(*in.FreezerWrap); err != nil {
+			return Household{}, err
+		}
+		wrap := *in.FreezerWrap
+		patch.FreezerWrap = &wrap
 	}
 	if in.SetFreezeMinOunces {
 		if err := validateFreezeMinOunces(in.FreezeMinOunces); err != nil {

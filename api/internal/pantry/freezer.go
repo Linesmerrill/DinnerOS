@@ -62,6 +62,9 @@ type FreezeInput struct {
 	// KeptOutThrough is the last day of the meals the fresh portion was kept
 	// out for (Item.KeptOutThrough), or empty.
 	KeptOutThrough string
+	// Wrap is how it was frozen (households.Household.Wrap), for its
+	// best-by date; "" is vacuum sealed.
+	Wrap string
 }
 
 // MaxPortions bounds the portions a remainder is split into.
@@ -140,6 +143,8 @@ func (s *Service) Freeze(ctx context.Context, actor households.Membership, in Fr
 		}
 		freezeItem(&item, quantity, unit, in.Portions, note, ref, s.newID(), now)
 		item.KeptOutThrough = in.KeptOutThrough
+		// Raw meat frozen today is best by the FDA's freezer time for its kind.
+		item.ExpiresOn = BestByWrapped(item.FrozenOn, item.DisplayName, item.Category, in.Wrap)
 		item.UpdatedBy, item.UpdatedAt = actor.UserID, now
 
 		var saved Item

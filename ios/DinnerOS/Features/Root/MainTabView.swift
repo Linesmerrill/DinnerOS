@@ -49,6 +49,7 @@ struct MainTabView: View {
                 }
             }
         }
+        .offlineBanner()
         .onAppear { configureRouter() }
         // Another household clears the previous one's notifications and badge.
         .task(id: households.current?.household.id) {

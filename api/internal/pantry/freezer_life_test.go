@@ -3,6 +3,7 @@ package pantry
 import (
 	"testing"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 )
 
@@ -39,5 +40,27 @@ func TestBestByIsTheShortEndOfTheFreezerLife(t *testing.T) {
 	}
 	if got := BestBy("2026-09-27", "Mystery Protein", meat); got != "" {
 		t.Errorf("unknown meat best by = %q, want empty", got)
+	}
+}
+
+// Vacuum sealed raw meat gets the long end of the FDA's freezer range; a
+// freezer bag or the store's package, with air on the meat, the short end.
+func TestBestByWrapped(t *testing.T) {
+	for _, tc := range []struct{ name, wrap, want string }{
+		{"Ground Pork", households.FreezerWrapVacuum, "2027-01-29"},
+		{"Ground Pork", "", "2027-01-29"},
+		{"Ground Pork", households.FreezerWrapBag, "2026-12-29"},
+		{"Ground Pork", households.FreezerWrapPackage, "2026-12-29"},
+		{"Ribeye Steak", households.FreezerWrapVacuum, "2027-09-29"},
+		{"Chicken Breasts", households.FreezerWrapBag, "2027-06-29"},
+		{"Flour Tortillas", households.FreezerWrapVacuum, ""},
+	} {
+		category := ingredients.CategoryMeatSeafood
+		if tc.name == "Flour Tortillas" {
+			category = ingredients.CategoryBakery
+		}
+		if got := BestByWrapped("2026-09-29", tc.name, category, tc.wrap); got != tc.want {
+			t.Errorf("BestByWrapped(%s, %q) = %q, want %q", tc.name, tc.wrap, got, tc.want)
+		}
 	}
 }

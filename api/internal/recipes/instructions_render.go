@@ -397,7 +397,7 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			}
 		}
 		segments = append(segments, Segment{
-			Kind: SegmentIngredient, Text: text, IngredientID: m.ingredientID, Name: m.display,
+			Kind: SegmentIngredient, Text: text, IngredientID: m.ingredientID, Ingredient: hit, Name: m.display,
 			Amount: amount, Part: part && amount != nil, Spicy: m.spicy, Substituted: m.substituted,
 			SpecialtyID: m.specialtyID, SpecialtyName: m.specialtyName, LeftOut: m.leftOut,
 		})

@@ -16,6 +16,8 @@ nonisolated struct HouseholdSettingsDraft: Equatable, Sendable {
     var thawReminderHour: Int
     /// The frozen bag size in ounces, 0 for one dinner from the recipe.
     var freezeBagOunces: Int
+    /// How the household freezes raw meat.
+    var freezerWrap: FreezerWrap
     /// What a week of meal kits cost, as typed; empty turns the comparison off.
     var mealKitAmount: String
     var mealKitMeals: Int
@@ -31,6 +33,7 @@ nonisolated struct HouseholdSettingsDraft: Equatable, Sendable {
         weekStartsOn = household.weekStartsOn
         thawReminderHour = household.thawReminderHour
         freezeBagOunces = household.freezeMinOunces ?? 0
+        freezerWrap = household.freezerWrap
         mealKitAmount = household.mealKit.map { MoneyText.editingText($0.weeklyCents) } ?? ""
         mealKitMeals = household.mealKit?.meals ?? Self.defaultMealKitMeals
     }
@@ -68,7 +71,8 @@ nonisolated struct HouseholdSettingsDraft: Equatable, Sendable {
             weekStartsOn: weekStartsOn == base.weekStartsOn ? nil : weekStartsOn,
             thawReminderHour: thawReminderHour == base.thawReminderHour ? nil : thawReminderHour,
             freezeMinOunces: freezeBagOunces == (base.freezeMinOunces ?? 0)
-                ? .keep : (freezeBagOunces <= 0 ? .clear : .set(freezeBagOunces)))
+                ? .keep : (freezeBagOunces <= 0 ? .clear : .set(freezeBagOunces)),
+            freezerWrap: freezerWrap == base.freezerWrap ? nil : freezerWrap)
     }
 
     /// Brings in what changed on the server between `old` and `new`, field by field, but only
@@ -106,6 +110,9 @@ nonisolated struct HouseholdSettingsDraft: Equatable, Sendable {
         if sent.freezeMinOunces == .keep, (new.freezeMinOunces ?? 0) != oldBag, freezeBagOunces == oldBag {
             freezeBagOunces = new.freezeMinOunces ?? 0
         }
+        if sent.freezerWrap == nil, new.freezerWrap != old.freezerWrap, freezerWrap == old.freezerWrap {
+            freezerWrap = new.freezerWrap
+        }
         if sent.mealKit == .keep, new.mealKit != old.mealKit,
             MealKitForm.change(amountText: mealKitAmount, meals: mealKitMeals, current: old.mealKit) == .keep
         {
@@ -124,6 +131,7 @@ nonisolated struct HouseholdSettingsDraft: Equatable, Sendable {
         if changes.orderDay != nil { names.append(String(localized: "order day")) }
         if changes.thawReminderHour != nil { names.append(String(localized: "thaw reminder time")) }
         if changes.freezeMinOunces != .keep { names.append(String(localized: "freezer bag size")) }
+        if changes.freezerWrap != nil { names.append(String(localized: "how you freeze meat")) }
         if changes.mealKit != .keep { names.append(String(localized: "meal kit comparison")) }
         return names
     }

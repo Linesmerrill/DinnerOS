@@ -35,6 +35,23 @@ struct DinnerOSApp: App {
                 .environment(dependencies.mealSwaps)
                 .environment(dependencies.deviceContext)
                 .environment(dependencies.intentRouter)
+                .environment(dependencies.offline)
+                .task {
+                    // Back online: reload what's on screen so saved answers give way to live ones.
+                    let dependencies = dependencies
+                    dependencies.offline.onReconnect = {
+                        Task {
+                            await dependencies.plans.reload()
+                            await dependencies.menu.reload()
+                            await dependencies.pantry.refresh()
+                            await dependencies.thaw.load()
+                            await dependencies.shopping.reload()
+                            await dependencies.recipes.refresh()
+                            await dependencies.prefetch.run()
+                        }
+                    }
+                    dependencies.offline.start()
+                }
                 .onChange(of: scenePhase, initial: true) { _, phase in
                     let events = dependencies.events
                     switch phase {
@@ -51,6 +68,12 @@ struct DinnerOSApp: App {
                         Task { await shopping.appDidBecomeActive() }
                         // A new day, or someone else's change: keep the widgets current.
                         dependencies.widgets.planChanged()
+                        // Save the week ahead for use offline, once the household has loaded.
+                        let prefetch = dependencies.prefetch
+                        Task {
+                            try? await Task.sleep(for: .seconds(4))
+                            await prefetch.run()
+                        }
                     case .background:
                         BackgroundActivity.run(named: "Send events") {
                             await events.appDidEnterBackground()
@@ -71,7 +94,11 @@ struct DinnerOSApp: App {
                 }
                 // Signed out: the widgets stop showing this household's dinners.
                 .onChange(of: dependencies.session.state) { _, state in
-                    if case .signedOut = state { dependencies.widgets.clear() }
+                    if case .signedOut = state {
+                        dependencies.widgets.clear()
+                        // The next account never sees this one's saved answers.
+                        dependencies.responseCache.clear()
+                    }
                 }
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
                     // Universal links (https://api.tlps.dev/invite#token=...).

@@ -12,6 +12,9 @@ struct YourMealsSection: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var editingEntry: PlanEntry?
+    /// Weeks Autopilot was already asked to suggest for this session, so viewing a week twice
+    /// doesn't plan it twice.
+    @State private var suggestedWeeks: Set<String> = []
 
     private var entries: [PlanEntry] {
         plans.plan?.entriesInDayOrder(weekStartsOn: plans.weekStartsOn) ?? []
@@ -53,7 +56,34 @@ struct YourMealsSection: View {
         .sheet(item: $editingEntry) { entry in
             PlanEntryEditor(entry: entry, week: plans.week)
         }
+        .task(id: suggestionKey) { await suggestIfOpen() }
         .accessibilityElement(children: .contain)
+    }
+
+    /// The pending proposal for the shown week, once Autopilot has loaded it.
+    private var inlineProposal: AutopilotProposal? {
+        guard let proposal = autopilot.pendingProposal, proposal.week == plans.week.description,
+            !proposal.slots.isEmpty
+        else { return nil }
+        return proposal
+    }
+
+    private var suggestionKey: String {
+        "\(plans.week)-\(entries.count)-\(autopilot.proposal?.id ?? "none")-\(autopilot.isLoadingWeek)"
+    }
+
+    /// A coming week with open nights and nothing suggested yet: ask Autopilot for picks, so
+    /// the week shows what it would cook instead of a lone meal. Only once per week per launch,
+    /// and never over a proposal the household already accepted or dismissed.
+    private func suggestIfOpen() async {
+        let week = plans.week
+        guard isEditable, menu.selectedTiming != .past, plans.phase == .loaded, autopilot.isConfigured,
+            !autopilot.isGenerating, !autopilot.isLoadingWeek, autopilot.week == week, autopilot.proposal == nil,
+            autopilot.weekError == nil, !suggestedWeeks.contains(week.description),
+            entries.count < (autopilot.profile?.schedule.mealsPerWeek ?? 4)
+        else { return }
+        suggestedWeeks.insert(week.description)
+        try? await autopilot.generate(week: week)
     }
 
     private var subtitle: String {
@@ -76,15 +106,24 @@ struct YourMealsSection: View {
             }
             .padding(.horizontal, 16)
         case .loaded:
-            if let meals = pendingProposalMeals {
+            if inlineProposal == nil, let meals = pendingProposalMeals {
                 ReviewPicksCard(meals: meals) { flow.sheet = .review }
                     .padding(.horizontal, 16)
             }
             if entries.isEmpty {
-                emptyState(suggestionsPending: pendingProposalMeals != nil)
+                emptyState(suggestionsPending: pendingProposalMeals != nil || autopilot.isGenerating)
                     .padding(.horizontal, 16)
             } else {
                 mealCards
+            }
+            if let proposal = inlineProposal {
+                SuggestedMealsRow(proposal: proposal, isEditable: isEditable) { flow.sheet = .review }
+                    .padding(.top, entries.isEmpty ? 0 : 8)
+            } else if autopilot.isGenerating, autopilot.week == plans.week {
+                Label("Autopilot is picking meals for the open nights…", systemImage: "sparkles")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 16)
             }
         }
     }

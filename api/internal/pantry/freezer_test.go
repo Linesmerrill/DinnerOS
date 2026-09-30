@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
+	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 )
 
@@ -188,5 +189,33 @@ func TestThawForFallsBackWhenTheAmountIsNotAWeight(t *testing.T) {
 	}
 	if e.Summary == "" {
 		t.Error("Summary is empty; it is shown to people even when unmeasured")
+	}
+}
+
+// A frozen bag of raw meat is best by the FDA's freezer time for its kind,
+// the household's way of wrapping it deciding which end of the range.
+func TestFreezeSetsTheBestByDate(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	res, err := svc.Freeze(context.Background(), member(testHousehold), FreezeInput{
+		Name: "Ground Pork", Quantity: "10", Unit: "oz",
+	})
+	if err != nil {
+		t.Fatalf("Freeze: %v", err)
+	}
+	item := res.Item
+	if item.Category != ingredients.CategoryMeatSeafood {
+		t.Skipf("category = %q; the test catalog doesn't file ground pork as meat", item.Category)
+	}
+	if want := BestByWrapped(item.FrozenOn, "Ground Pork", item.Category, households.FreezerWrapVacuum); item.ExpiresOn != want || want == "" {
+		t.Errorf("ExpiresOn = %q, want %q: vacuum sealed ground meat keeps 4 months", item.ExpiresOn, want)
+	}
+	res, err = svc.Freeze(context.Background(), member(testHousehold), FreezeInput{
+		Name: "Ground Pork", Quantity: "10", Unit: "oz", Wrap: households.FreezerWrapBag,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := BestByWrapped(res.Item.FrozenOn, "Ground Pork", res.Item.Category, households.FreezerWrapBag); res.Item.ExpiresOn != want {
+		t.Errorf("bagged ExpiresOn = %q, want %q", res.Item.ExpiresOn, want)
 	}
 }

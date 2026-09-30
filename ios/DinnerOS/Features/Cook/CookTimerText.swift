@@ -5,8 +5,12 @@ import SwiftUI
 enum CookTimerText {
     static let scheme = "dinneros-timer"
 
-    /// `subject` is what the step is cooking by then ("Zucchini"), which names the timer.
-    static func text(_ string: String, step: Int, subject: (String) -> String? = { _ in nil }) -> Text {
+    /// `subject` is what the step is cooking by then ("Zucchini"), which names the timer. `server`
+    /// is the server's timer for a time, when it named one; its name and start time win.
+    static func text(
+        _ string: String, step: Int, subject: (String) -> String? = { _ in nil },
+        server: (CookDuration, String) -> InstructionTimer? = { _, _ in nil }
+    ) -> Text {
         let durations = CookDurations.find(in: string)
         guard !durations.isEmpty else { return Text(verbatim: string) }
         var out = Text(verbatim: "")
@@ -15,7 +19,11 @@ enum CookTimerText {
             out = out + Text(verbatim: String(string[cursor..<duration.range.lowerBound]))
             var link = AttributedString(String(string[duration.range]))
             let before = String(string[string.startIndex..<duration.range.lowerBound])
-            link.link = url(step: step, duration: duration, subject: subject(before))
+            if let timer = server(duration, String(string[duration.range])) {
+                link.link = url(step: step, duration: duration, subject: timer.subject, start: timer.startSeconds)
+            } else {
+                link.link = url(step: step, duration: duration, subject: subject(before))
+            }
             link.foregroundColor = .accentColor
             link.font = .body.bold()
             out =
@@ -28,7 +36,7 @@ enum CookTimerText {
         return out + Text(verbatim: String(string[cursor...]))
     }
 
-    static func url(step: Int, duration: CookDuration, subject: String? = nil) -> URL? {
+    static func url(step: Int, duration: CookDuration, subject: String? = nil, start: Int? = nil) -> URL? {
         var components = URLComponents()
         components.scheme = scheme
         components.host = "start"
@@ -40,6 +48,9 @@ enum CookTimerText {
         if let subject, !subject.isEmpty {
             components.queryItems?.append(URLQueryItem(name: "what", value: subject))
         }
+        if let start, start > 0 {
+            components.queryItems?.append(URLQueryItem(name: "start", value: String(start)))
+        }
         return components.url
     }
 
@@ -50,7 +61,8 @@ enum CookTimerText {
         func value(_ name: String) -> Int? { items.first { $0.name == name }?.value.flatMap(Int.init) }
         guard let step = value("step"), let low = value("low") else { return nil }
         let what = items.first { $0.name == "what" }?.value
-        return CookTimerRequest(step: step, lowSeconds: low, highSeconds: value("high") ?? low, subject: what)
+        return CookTimerRequest(
+            step: step, lowSeconds: low, highSeconds: value("high") ?? low, subject: what, startSeconds: value("start"))
     }
 }
 
@@ -61,6 +73,8 @@ struct CookTimerRequest: Identifiable, Equatable {
     let highSeconds: Int
     /// What it's for, "Zucchini"; `nil` when the step doesn't say.
     var subject: String? = nil
+    /// Where the server says to start it; `nil` from an older server (the high end is used).
+    var startSeconds: Int? = nil
     var id: String { "\(step)-\(lowSeconds)-\(highSeconds)-\(subject ?? "")" }
 }
 

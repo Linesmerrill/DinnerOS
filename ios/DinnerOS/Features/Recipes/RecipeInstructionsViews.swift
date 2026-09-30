@@ -21,8 +21,9 @@ struct InstructionStepText: View {
         // A step that is really several ("Heat the oil. \n Stir in the garlic.") reads as
         // separate paragraphs with space between them, not one block.
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
-                composed(paragraph)
+            let paragraphs = paragraphs
+            ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
+                composed(paragraph, timersBefore: timerCount(in: paragraphs.prefix(index)))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -51,10 +52,17 @@ struct InstructionStepText: View {
         }
     }
 
+    /// How many times the paragraphs' text names, so each paragraph's times line up with the
+    /// server's timers for the step.
+    private func timerCount(in paragraphs: ArraySlice<[InstructionSegment]>) -> Int {
+        paragraphs.joined().filter { !$0.isIngredient }.reduce(0) { $0 + CookDurations.find(in: $1.text).count }
+    }
+
     /// `Text` concatenation keeps one paragraph that wraps and scales with Dynamic Type.
-    private func composed(_ segments: [InstructionSegment]) -> Text {
+    private func composed(_ segments: [InstructionSegment], timersBefore: Int = 0) -> Text {
         var text = Text(verbatim: "")
         var soFar = ""
+        var timerIndex = timersBefore
         let names = step.segments.filter(\.isIngredient).map { $0.name ?? $0.text }
         for segment in segments {
             if segment.isIngredient {
@@ -63,11 +71,21 @@ struct InstructionStepText: View {
                 // A time is named for what the sentence is cooking: "…breaking up meat, until
                 // browned, 4-6 minutes" is a Beef timer, never the salt added along the way.
                 let before = soFar
+                // The server names the timer and says where to start it; the app's own reading
+                // is the fallback for an older server.
                 text =
                     text
-                    + CookTimerText.text(segment.text, step: step.index) { inSegment in
-                        CookTimerSubject.pick(sentence: before + inSegment, ingredients: names)
-                    }
+                    + CookTimerText.text(
+                        segment.text, step: step.index,
+                        subject: { inSegment in
+                            CookTimerSubject.pick(sentence: before + inSegment, ingredients: names)
+                        },
+                        server: { _, written in
+                            defer { timerIndex += 1 }
+                            guard step.timers.indices.contains(timerIndex), step.timers[timerIndex].text == written
+                            else { return nil }
+                            return step.timers[timerIndex]
+                        })
             } else {
                 text = text + Self.text(for: segment)
             }

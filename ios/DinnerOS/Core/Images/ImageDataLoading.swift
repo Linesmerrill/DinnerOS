@@ -21,6 +21,19 @@ nonisolated struct URLSessionImageDataLoader: ImageDataLoading {
 
     func data(for url: URL) async throws -> Data {
         let request = URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 20)
+        do {
+            return try await load(request)
+        } catch let error as URLError where error.code != .cancelled {
+            // Offline: a photo seen before is still on disk, even if its cache headers say to
+            // check again.
+            var saved = request
+            saved.cachePolicy = .returnCacheDataDontLoad
+            if let bytes = try? await load(saved) { return bytes }
+            throw error
+        }
+    }
+
+    private func load(_ request: URLRequest) async throws -> Data {
         let (bytes, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw ImageLoadError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else { throw ImageLoadError.server(status: http.statusCode) }

@@ -262,3 +262,14 @@ func TestCountPlural(t *testing.T) {
 		}
 	}
 }
+
+func TestBouillonBaseStaysInTeaspoons(t *testing.T) {
+	c := grocery.Component{Name: "Smoky Chipotle Bouillon Base", Quantity: quantityPtr(t, "1"), Unit: "tsp"}
+	if got := scaledComponent(c, big.NewRat(3, 1)).Text(); got != "3 tsp" {
+		t.Errorf("3 packets = %q, want 3 tsp", got)
+	}
+	paste := grocery.Component{Name: "Tomato Paste", Quantity: quantityPtr(t, "5"), Unit: "tsp"}
+	if got := scaledComponent(paste, big.NewRat(3, 1)).Text(); got != "5 Tbsp" {
+		t.Errorf("tomato paste = %q, want 5 Tbsp", got)
+	}
+}

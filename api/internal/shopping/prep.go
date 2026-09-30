@@ -215,6 +215,9 @@ type PrepCard struct {
 	// 10 oz", "Frozen Sep 27", "Best by Dec 27". Empty when nothing is
 	// being frozen or the card is already answered.
 	BagLabel []string
+	// Wrap is how the household freezes meat, which sets the label's best-by
+	// date and the frozen item's.
+	Wrap string
 	// FrozenItemID, FrozenPortions, and FrozenAt describe what finishing it
 	// recorded, when it froze something.
 	FrozenItemID   string
@@ -293,13 +296,14 @@ func (s *Service) prepSession(ctx context.Context, householdID, week string) (Pr
 	if err != nil {
 		return PrepSession{}, err
 	}
-	meals, today, bagOz, err := s.weekMeals(ctx, householdID, week)
+	meals, today, bagOz, wrap, err := s.weekMeals(ctx, householdID, week)
 	if err != nil {
 		return PrepSession{}, err
 	}
 	images := s.ingredientImages(ctx, packs)
 	for _, p := range packs {
 		card := prepCardFor(p.handoffID, p.provider, p.pack, meals, today, bagOz)
+		card.Wrap = wrap
 		card.ImageURL = images[p.pack.IngredientID()]
 		if st, ok := states[card.ID]; ok {
 			card.Status, card.FrozenItemID = st.Status, st.FrozenItemID
@@ -461,23 +465,24 @@ func (s *Service) prepStates(ctx context.Context, householdID, week string) (map
 // meal's worth.
 func (s *Service) weekMeals(
 	ctx context.Context, householdID, week string,
-) (map[string][]PrepMeal, string, *int, error) {
+) (map[string][]PrepMeal, string, *int, string, error) {
 	loc := time.UTC
 	var bagOz *int
+	wrap := households.FreezerWrapVacuum
 	if s.households != nil {
 		hh, err := s.orderHousehold(ctx, householdID)
 		if err != nil {
-			return nil, "", nil, err
+			return nil, "", nil, "", err
 		}
-		loc, bagOz = orderLocation(hh.TimeZone), hh.FreezeMinOunces
+		loc, bagOz, wrap = orderLocation(hh.TimeZone), hh.FreezeMinOunces, hh.Wrap()
 	}
 	today := s.now().In(loc).Format(time.DateOnly)
 	if s.plans == nil {
-		return map[string][]PrepMeal{}, today, bagOz, nil
+		return map[string][]PrepMeal{}, today, bagOz, wrap, nil
 	}
 	plan, err := s.plans.Get(ctx, householdID, week)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("load plan: %w", err)
+		return nil, "", nil, "", fmt.Errorf("load plan: %w", err)
 	}
 	out := map[string][]PrepMeal{}
 	for _, e := range plan.Entries {
@@ -487,7 +492,7 @@ func (s *Service) weekMeals(
 			Past: date != "" && date < today,
 		})
 	}
-	return out, today, bagOz, nil
+	return out, today, bagOz, wrap, nil
 }
 
 // prepCardFor builds one card from a measured pack.
@@ -717,7 +722,7 @@ func bagLabel(card PrepCard, today string) []string {
 	if frozen, err := time.Parse(time.DateOnly, today); err == nil {
 		out = append(out, "Frozen "+frozen.Format("Jan 2"))
 	}
-	if best := pantry.BestBy(today, card.Pack.Name, card.Pack.Category); best != "" {
+	if best := pantry.BestByWrapped(today, card.Pack.Name, card.Pack.Category, card.Wrap); best != "" {
 		if t, err := time.Parse(time.DateOnly, best); err == nil {
 			out = append(out, "Best by "+t.Format("Jan 2, 2006"))
 		}
@@ -877,6 +882,7 @@ func (s *Service) freeze(
 			Provider: string(card.Provider), HandoffID: card.HandoffID, LineID: card.LineID,
 		},
 		KeptOutThrough: keptOutThrough(card.Meals, s.timestamp()),
+		Wrap:           card.Wrap,
 	})
 	if err != nil {
 		return pantry.FreezeResult{}, fmt.Errorf("freeze the remainder: %w", err)

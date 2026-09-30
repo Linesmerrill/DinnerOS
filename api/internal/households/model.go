@@ -111,6 +111,11 @@ type Household struct {
 	// measures it (docs/shopping-providers.md#the-portion-size-heuristic).
 	// Less than that is thrown into the meal or tossed.
 	FreezeMinOunces *int
+	// FreezerWrap is how the household freezes raw meat: FreezerWrapVacuum,
+	// FreezerWrapBag, or FreezerWrapPackage; "" is vacuum sealed. It sets
+	// the best-by date on a frozen bag (pantry.BestByWrapped). Read it
+	// through Wrap.
+	FreezerWrap string
 	// MealKit is what the household spent on meal kits, the baseline the
 	// weekly grocery cost is compared with, or nil when not set.
 	MealKit   *MealKit
@@ -191,6 +196,8 @@ type UpdateInput struct {
 	// returns the household to one dinner's worth.
 	SetFreezeMinOunces bool
 	FreezeMinOunces    *int
+	// FreezerWrap changes how the household freezes meat.
+	FreezerWrap *string
 	// SetMealKit changes the meal kit baseline to MealKit; nil clears it.
 	SetMealKit bool
 	MealKit    *MealKit
@@ -211,6 +218,7 @@ type HouseholdPatch struct {
 	// FreezeMinOunces is nil.
 	SetFreezeMinOunces bool
 	FreezeMinOunces    *int
+	FreezerWrap        *string
 	// SetMealKit sets MealKit, or removes it when MealKit is nil.
 	SetMealKit bool
 	MealKit    *MealKit
@@ -265,6 +273,29 @@ func validateFreezeMinOunces(oz *int) error {
 		return invalid("freezeMinOunces must be between 1 and 80, or null")
 	}
 	return nil
+}
+
+// Freezer wraps: how raw meat goes into the freezer.
+const (
+	FreezerWrapVacuum  = "vacuum_sealed"
+	FreezerWrapBag     = "freezer_bag"
+	FreezerWrapPackage = "store_package"
+)
+
+// Wrap is the household's freezer wrap, vacuum sealed when never chosen.
+func (h Household) Wrap() string {
+	if h.FreezerWrap == "" {
+		return FreezerWrapVacuum
+	}
+	return h.FreezerWrap
+}
+
+func validateFreezerWrap(wrap string) error {
+	switch wrap {
+	case FreezerWrapVacuum, FreezerWrapBag, FreezerWrapPackage:
+		return nil
+	}
+	return invalid("freezerWrap must be vacuum_sealed, freezer_bag, or store_package")
 }
 
 // normalizeOrderDay accepts a weekday code, or "" meaning no order day.

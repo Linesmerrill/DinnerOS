@@ -6203,6 +6203,8 @@ components:
           description: The specialty ingredients that read differently because of the household's choices.
           items:
             $ref: "#/components/schemas/InstructionSubstitution"
+        checklist:
+          $ref: "#/components/schemas/CookChecklist"
         unchosenSpecialties:
           type: array
           description: |
@@ -6303,6 +6305,27 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/InstructionSegment"
+        timers:
+          type: array
+          description: |
+            The step's cooking times in text order, each named for what it's
+            cooking and with the time to start at (the high end of a range).
+          items:
+            type: object
+            required: [text, lowSeconds, highSeconds, startSeconds]
+            properties:
+              text:
+                type: string
+                example: 2-3 minutes
+              lowSeconds:
+                type: integer
+              highSeconds:
+                type: integer
+              startSeconds:
+                type: integer
+              subject:
+                type: string
+                example: Sauce
         notes:
           type: array
           description: |
@@ -6320,6 +6343,87 @@ components:
                 type: string
               text:
                 type: string
+    CookChecklist:
+      type: object
+      description: |
+        The cooking screen's ingredient checklist, built from the rendered
+        steps and shown as sent: every ingredient all together, and grouped
+        by the step that uses it with how the step readies it. Group index 0
+        is "Have Ready": what no step names, blends to mix first, and what to
+        get ready ahead for a later step.
+      required: [all, byStep]
+      properties:
+        all:
+          type: array
+          items:
+            type: object
+            required: [id, index, name, ingredientKey, parts, components]
+            properties:
+              id:
+                type: string
+                description: '"<index>-<ingredientId>", the row''s ID on every device.'
+              index:
+                type: integer
+              name:
+                type: string
+              amountText:
+                type: string
+              leftOut:
+                type: boolean
+              ingredientKey:
+                type: string
+              parts:
+                type: array
+                description: Per-step shares, when two or more steps each say how much they use.
+                items:
+                  type: object
+                  required: [id, amountText, stepIndex]
+                  properties:
+                    id:
+                      type: string
+                    amountText:
+                      type: string
+                    stepIndex:
+                      type: integer
+              components:
+                type: array
+                description: What a home-made blend is mixed from ("1 tsp Chili Powder").
+                items:
+                  type: string
+        byStep:
+          type: array
+          items:
+            type: object
+            required: [index, items]
+            properties:
+              index:
+                type: integer
+              items:
+                type: array
+                items:
+                  type: object
+                  required: [id, ingredientIndex, name, parts, ingredientKey]
+                  properties:
+                    id:
+                      type: string
+                    ingredientIndex:
+                      type: integer
+                    name:
+                      type: string
+                      example: Lime wedges
+                    amountText:
+                      type: string
+                    prep:
+                      type: string
+                      example: halved, cored, and thinly sliced into strips
+                    parts:
+                      type: array
+                      items:
+                        type: string
+                    leftOut:
+                      type: boolean
+                    ingredientKey:
+                      type: string
     InstructionSegment:
       type: object
       required: [kind, text]
@@ -6332,6 +6436,9 @@ components:
         ingredientId:
           type: string
           description: Catalog ingredient, absent when the catalog does not know it.
+        ingredientIndex:
+          type: integer
+          description: The recipe ingredient's position, on an ingredient segment.
         name:
           type: string
           description: What the segment stands for, after any substitution.
@@ -7094,6 +7201,10 @@ components:
           maximum: 80
           description: The size of one frozen bag of leftover meat, in ounces. Less than this is thrown into the meal or tossed. Null means one dinner's worth, as the week's recipe measures it.
           example: null
+        freezerWrap:
+          type: string
+          enum: [vacuum_sealed, freezer_bag, store_package]
+          description: How the household freezes raw meat. A frozen bag's best-by date is the FDA freezer time for its kind, the long end for vacuum sealed and the short end otherwise. vacuum_sealed for a household that never chose.
         weekStartsOn:
           $ref: "#/components/schemas/WeekStartDay"
         mealKit:
@@ -7207,6 +7318,10 @@ components:
           maximum: 80
           description: The size of one frozen bag of leftover meat, in ounces; null returns the household to one dinner's worth.
           example: 8
+        freezerWrap:
+          type: string
+          enum: [vacuum_sealed, freezer_bag, store_package]
+          description: How the household freezes raw meat.
         weekStartsOn:
           $ref: "#/components/schemas/WeekStartDay"
         mealKit:

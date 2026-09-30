@@ -26,11 +26,14 @@ nonisolated struct RecipeInstructions: Decodable, Equatable, Sendable {
     /// The recipe's ingredients in its order, as the household cooks them. Empty from an older
     /// server.
     var ingredients: [InstructionIngredient] = []
+    /// The cooking screen's checklist, built by the server; `nil` from an older server, when the
+    /// app builds it itself (`CookChecklist`).
+    var checklist: InstructionChecklist? = nil
 
     private enum CodingKeys: String, CodingKey {
         case recipeID = "recipeId"
         case recipeName, servings, servingOptions, specialtiesApplied, steps, substitutions
-        case unchosenSpecialties, leftOutApplied, ingredients
+        case unchosenSpecialties, leftOutApplied, ingredients, checklist
     }
 
     static let empty = RecipeInstructions(
@@ -149,6 +152,7 @@ nonisolated extension RecipeInstructions {
             unchosenSpecialties: container.decodeLossyArray(InstructionSpecialtyRef.self, forKey: .unchosenSpecialties),
             leftOutApplied: container.decodeLenientBool(forKey: .leftOutApplied) ?? false,
             ingredients: container.decodeLossyArray(InstructionIngredient.self, forKey: .ingredients))
+        checklist = container.decodeLenient(InstructionChecklist.self, forKey: .checklist)
     }
 }
 
@@ -164,12 +168,14 @@ nonisolated struct InstructionStep: Decodable, Equatable, Sendable, Identifiable
     let notes: [InstructionNote]
     /// Every ingredient the step names is left out, so there's nothing to do in it.
     var leftOut = false
+    /// The step's cooking times in text order, named by the server; empty from an older server.
+    var timers: [InstructionTimer] = []
 
     var id: Int { index }
     var imageURL: URL? { imageURLString.flatMap { URL(string: $0) } }
 
     private enum CodingKeys: String, CodingKey {
-        case index, text, originalText, segments, notes, leftOut
+        case index, text, originalText, segments, notes, leftOut, timers
         case imageURLString = "imageUrl"
     }
 
@@ -196,6 +202,7 @@ nonisolated struct InstructionStep: Decodable, Equatable, Sendable, Identifiable
             segments: container.decodeLossyArray(InstructionSegment.self, forKey: .segments),
             notes: container.decodeLossyArray(InstructionNote.self, forKey: .notes),
             leftOut: container.decodeLenientBool(forKey: .leftOut) ?? false)
+        timers = container.decodeLossyArray(InstructionTimer.self, forKey: .timers)
     }
 }
 

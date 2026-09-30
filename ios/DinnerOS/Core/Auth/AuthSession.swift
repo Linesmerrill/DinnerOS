@@ -169,13 +169,22 @@ final class AuthSession {
 
     /// Runs `operation` with a valid access token.
     ///
-    /// An expired token is refreshed first. If the server still answers `401`, the
-    /// session refreshes once and retries once. A rejected refresh, or a second `401`,
-    /// signs out.
+    /// An expired token is refreshed first; offline, the old one is used so saved answers can
+    /// stand in. If the server still answers `401`, the session refreshes once and retries once.
+    /// A rejected refresh, or a second `401`, signs out.
     func authorized<Response: Sendable>(
         _ operation: (String) async throws -> Response
     ) async throws -> Response {
-        let accessToken = try await validAccessToken()
+        let accessToken: String
+        do {
+            accessToken = try await validAccessToken()
+        } catch let error as APIError where ResponseCache.shouldReplay(error) {
+            // Offline with an expired token: the refresh can't reach the server, so the request
+            // goes with the old token. It can't reach the server either, and the saved answer
+            // is shown instead of an error. Nothing here signs anyone out.
+            guard let stale = tokens?.accessToken else { throw error }
+            accessToken = stale
+        }
         do {
             return try await operation(accessToken)
         } catch let error as APIError where error.isUnauthorized {

@@ -100,6 +100,7 @@ struct CookingView: View {
                     Button("Keep Cooking", role: .cancel) {}
                 }
         }
+        .offlineBanner()
         .task(id: recipeID) {
             if sync == nil { sync = CookSync(library: library, session: session, timers: timers) }
             sync?.follow(recipe: recipeID)
@@ -286,12 +287,15 @@ struct CookDish {
     let servings: Int?
     let instructions: RecipeInstructions?
 
+    /// The server's checklist when it sent one; the app's own reading of the steps otherwise.
     var ingredients: [CookIngredient] {
-        CookChecklist.make(recipe: recipe, servings: servings ?? 0, instructions: instructions)
+        if let checklist = instructions?.checklist { return checklist.cookIngredients(recipe: recipe) }
+        return CookChecklist.make(recipe: recipe, servings: servings ?? 0, instructions: instructions)
     }
 
     var stepGroups: [CookStepGroup] {
-        CookChecklist.byStep(recipe: recipe, servings: servings ?? 0, instructions: instructions)
+        if let checklist = instructions?.checklist { return checklist.cookStepGroups }
+        return CookChecklist.byStep(recipe: recipe, servings: servings ?? 0, instructions: instructions)
     }
 }
 
