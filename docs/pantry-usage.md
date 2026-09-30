@@ -265,6 +265,45 @@ next time any member opens the pantry or notifications, or at the next hourly
 push sweep, whichever comes first. `Refresh` is idempotent, so overlapping
 sweeps and in-app reads are safe.
 
+## Best-by dates
+
+A pantry item can say where it's kept (`storage`: `pantry`, `fridge`, or
+`freezer`) and when it was put away there (`storedOn`). When an add or a move
+gives a storage and no `expiresOn` of the member's own, the server fills in a
+recommended best-by date: `storedOn` plus the food's time in that storage.
+
+The times come from the shelf-life library (`internal/shelflife`):
+
+- **The seed** is the USDA FoodKeeper data (FSIS, data version 128, public
+  domain), the source of FoodSafety.gov's storage charts: 613 foods with
+  pantry, fridge, and freezer ranges, embedded in the binary. A handful of
+  everyday foods FoodKeeper leaves out (milk, limes, avocados, …) are added
+  from FoodSafety.gov guidance.
+- **Added entries** in `shelf_life_entries` win over the seed, so a time can be
+  fixed or a food added without an app update.
+- **Misses**: a name the library doesn't match gets its category's typical
+  time (`estimate: true`, kept on the short side) and is recorded in
+  `shelf_life_misses` with a count, so the foods households actually buy show
+  up as the next ones to add.
+
+Matching scores the item's name against each food's name, detail, and
+keywords. It never looks at the storage asked about, so "Carrots" in the
+pantry is still carrots (no pantry time, so an estimate), not baby carrots.
+A name listing several foods ("Carrots, parsnips") only counts the part that
+matched, and a prepared form ("Carrot juice", "Stuffed chicken breasts") needs
+the query to say so.
+
+The date uses the short end of the range, except frozen meat and seafood,
+which follow the household's `freezerWrap` (vacuum sealed keeps the long end).
+Counts given in months or years are added as calendar months: four months
+from Sep 29 is Jan 29.
+
+`GET .../pantry/shelf-life?name=&storage=&storedOn=&category=` answers the add
+form as the member types: the date, the time in words ("2–3 weeks"), what it
+matched, whether it's an estimate, and where the food is usually kept (the
+form's starting storage). The dates are for quality, not safety; the app says
+they're recommendations and to use your best judgment.
+
 ## The freezer
 
 A pantry item now knows where in the house it's kept: `storage` is `pantry` or

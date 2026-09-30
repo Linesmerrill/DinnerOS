@@ -41,6 +41,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/push"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recommendations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/shelflife"
 	"github.com/Linesmerrill/DinnerOS/api/internal/shopping"
 	"github.com/Linesmerrill/DinnerOS/api/internal/skips"
 	"github.com/Linesmerrill/DinnerOS/api/internal/substitutes"
@@ -254,6 +255,12 @@ func run() error {
 	})
 	planService.WithCustomizations(customizeService)
 	pantryService.SetCookAdjuster(customizeService)
+	// Recommended best-by dates, from the USDA FoodKeeper library and the
+	// entries added since.
+	shelfLifeService := shelflife.NewService(shelflife.Options{
+		Store: shelflife.NewMongoStore(db.Database()), Households: householdService, Logger: logger,
+	})
+	pantryService.SetShelfLife(shelfLifeService)
 	customizeHandler := customize.NewHandler(customize.HandlerOptions{
 		Service:    customizeService,
 		Authorizer: householdService,
@@ -425,6 +432,7 @@ func run() error {
 				accountHandler.Mount(r)
 				behavior.ratingHandler.Mount(r)
 				cooking.NewHandler(cooking.NewStore(db.Database()), householdService, tokens, logger).Mount(r)
+				shelflife.NewHandler(shelfLifeService, householdService, tokens, logger).Mount(r)
 				behavior.eventHandler.Mount(r)
 			},
 		}),
@@ -477,6 +485,7 @@ func indexSets() []mongodb.IndexSet {
 		users.Indexes(),
 		auth.Indexes(),
 		cooking.Indexes(),
+		shelflife.Indexes(),
 		households.Indexes(),
 		invitations.Indexes(),
 		recipes.Indexes(),

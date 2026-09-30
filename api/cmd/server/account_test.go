@@ -26,6 +26,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/ratings"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recommendations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/shelflife"
 	"github.com/Linesmerrill/DinnerOS/api/internal/shopping"
 	"github.com/Linesmerrill/DinnerOS/api/internal/skips"
 	"github.com/Linesmerrill/DinnerOS/api/internal/substitutes"
@@ -48,24 +49,27 @@ const (
 )
 
 var accountDeletionKinds = map[string]collectionKind{
-	households.HouseholdsCollection:        householdsModule,
-	households.MembershipsCollection:       householdsModule,
-	users.IdentitiesCollection:             userOnly,
-	auth.SessionsCollection:                userOnly,
-	push.Collection:                        userOnly,
-	invitations.InvitationsCollection:      householdData,
-	recipes.RecipesCollection:              householdData,
-	cooking.Collection:                     householdData,
-	recipes.ImportReviewsCollection:        householdData,
-	recipes.IngredientsCollection:          global,
-	catalog.RecipesCollection:              global,
-	planning.PlansCollection:               householdData,
-	pantry.ItemsCollection:                 householdData,
-	pantry.PurchasesCollection:             householdData,
-	pantry.SettingsCollection:              householdData,
-	pantry.CookUsageCollection:             userHistory,
-	notifications.Collection:               householdData,
-	substitutes.SpecialtiesCollection:      global,
+	households.HouseholdsCollection:   householdsModule,
+	households.MembershipsCollection:  householdsModule,
+	users.IdentitiesCollection:        userOnly,
+	auth.SessionsCollection:           userOnly,
+	push.Collection:                   userOnly,
+	invitations.InvitationsCollection: householdData,
+	recipes.RecipesCollection:         householdData,
+	cooking.Collection:                householdData,
+	recipes.ImportReviewsCollection:   householdData,
+	recipes.IngredientsCollection:     global,
+	catalog.RecipesCollection:         global,
+	planning.PlansCollection:          householdData,
+	pantry.ItemsCollection:            householdData,
+	pantry.PurchasesCollection:        householdData,
+	pantry.SettingsCollection:         householdData,
+	pantry.CookUsageCollection:        userHistory,
+	notifications.Collection:          householdData,
+	substitutes.SpecialtiesCollection: global,
+	// Food names and times only; misses carry no household or user.
+	shelflife.EntriesCollection:            global,
+	shelflife.MissesCollection:             global,
 	substitutes.OptionsCollection:          householdData,
 	substitutes.ChoicesCollection:          householdData,
 	substitutes.SettingsCollection:         householdData,

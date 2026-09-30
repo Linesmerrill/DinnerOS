@@ -88,6 +88,8 @@ type PantryItemResponse struct {
 	// takes to thaw (docs/pantry-usage.md#the-freezer).
 	Storage Storage         `json:"storage"`
 	Frozen  *FrozenResponse `json:"frozen"`
+	// StoredOn is when it was put away where it is, or null.
+	StoredOn *string `json:"storedOn"`
 	// StatusSource is person, or estimate when the usage estimate marked
 	// the item low.
 	StatusSource StatusSource `json:"statusSource"`
@@ -117,6 +119,11 @@ type AddPantryItemRequest struct {
 	IsStaple     *bool  `json:"isStaple"`
 	ExpiresOn    string `json:"expiresOn"`
 	Note         string `json:"note"`
+	// Storage is pantry, fridge, or freezer, and StoredOn when it was put
+	// away (today when absent). With a storage and no expiresOn, the item
+	// gets its recommended best-by date.
+	Storage  Storage `json:"storage"`
+	StoredOn string  `json:"storedOn"`
 }
 
 // Nullable is a request field that distinguishes absent, null, and a value.
@@ -151,6 +158,10 @@ type UpdatePantryItemRequest struct {
 	ExpiresOn           Nullable[string] `json:"expiresOn"`
 	Note                Nullable[string] `json:"note"`
 	LowThresholdPercent Nullable[int]    `json:"lowThresholdPercent"`
+	// Storage moves the item; without expiresOn it gets the new place's
+	// recommended best-by date, counted from storedOn (today when absent).
+	Storage  Nullable[Storage] `json:"storage"`
+	StoredOn Nullable[string]  `json:"storedOn"`
 }
 
 // BulkStatusRequest is the body of POST .../pantry/bulk.
@@ -208,6 +219,10 @@ func newItemResponse(item Item) PantryItemResponse {
 	if item.ExpiresOn != "" {
 		date := item.ExpiresOn
 		resp.ExpiresOn = &date
+	}
+	if item.StoredOn != "" {
+		on := item.StoredOn
+		resp.StoredOn = &on
 	}
 	if item.Storage == StorageFreezer {
 		resp.Frozen = newFrozenResponse(item)
@@ -300,6 +315,10 @@ func (req UpdatePantryItemRequest) input() (UpdateInput, error) {
 	}
 	in.Quantity, in.Unit = clearable(req.Quantity), clearable(req.Unit)
 	in.ExpiresOn, in.Note = clearable(req.ExpiresOn), clearable(req.Note)
+	if in.Storage, err = nonNull(req.Storage, "storage"); err != nil {
+		return UpdateInput{}, err
+	}
+	in.StoredOn = clearable(req.StoredOn)
 	if req.LowThresholdPercent.Set {
 		pct := req.LowThresholdPercent.Value // null is 0, which clears the override
 		if !req.LowThresholdPercent.Null && pct == 0 {

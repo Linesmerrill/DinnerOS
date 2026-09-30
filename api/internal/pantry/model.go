@@ -69,13 +69,14 @@ type Storage string
 // the freezer existed is on a shelf.
 const (
 	StoragePantry  Storage = "pantry"
+	StorageFridge  Storage = "fridge"
 	StorageFreezer Storage = "freezer"
 )
 
 // Valid reports whether s is a known storage.
 func (s Storage) Valid() bool {
 	switch s {
-	case StoragePantry, StorageFreezer:
+	case StoragePantry, StorageFridge, StorageFreezer:
 		return true
 	}
 	return false
@@ -133,6 +134,9 @@ type Item struct {
 	// FrozenOn is the calendar date (DateLayout) the item went in the
 	// freezer, or empty.
 	FrozenOn string
+	// StoredOn is the date (DateLayout) it was put away where it is now, the
+	// start of its recommended best-by date; empty when nobody said.
+	StoredOn string
 	// Portions is how many sealed portions the frozen amount was split
 	// into, or 0 when nobody said. It decides the thaw estimate's weight:
 	// one portion is thawed, not the whole bag.
@@ -196,6 +200,12 @@ type AddInput struct {
 	IsStaple  *bool
 	ExpiresOn string
 	Note      string
+	// Storage is where it's kept; empty keeps the item's (pantry for a new
+	// one). StoredOn is when it was put away there, today when empty.
+	// Given a storage and no ExpiresOn, the item gets its recommended best-by
+	// date (Service.SetShelfLife).
+	Storage  Storage
+	StoredOn string
 }
 
 // UpdateInput is a partial update; nil fields are unchanged. For Quantity,
@@ -211,6 +221,10 @@ type UpdateInput struct {
 	ExpiresOn           *string
 	Note                *string
 	LowThresholdPercent *int
+	// Storage moves the item (into the freezer, say), and StoredOn is when.
+	// Moving it without an ExpiresOn gives it the new place's best-by date.
+	Storage  *Storage
+	StoredOn *string
 }
 
 // StatusUpdate sets one item's status.

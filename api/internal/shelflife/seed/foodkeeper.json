@@ -1,0 +1,11470 @@
+{
+"source": "USDA FoodKeeper (FSIS), data version 128",
+"license": "Public domain, U.S. Government work",
+"entries": [
+{
+"id": 1,
+"category": "Dairy Products & Eggs",
+"name": "Butter",
+"detail": "",
+"keywords": [
+"butter"
+],
+"fridge": [
+30,
+60
+],
+"freezer": [
+180,
+270
+]
+},
+{
+"id": 2,
+"category": "Dairy Products & Eggs",
+"name": "Buttermilk",
+"detail": "",
+"keywords": [
+"buttermilk"
+],
+"fridge": [
+7,
+14
+],
+"freezer": [
+90,
+90
+]
+},
+{
+"id": 3,
+"category": "Dairy Products & Eggs",
+"name": "Cheese",
+"detail": "hard such as cheddar, swiss, block parmesan",
+"keywords": [
+"cheddar",
+"cheese",
+"parmesan",
+"swiss"
+],
+"fridge": [
+180,
+180
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 4,
+"category": "Dairy Products & Eggs",
+"name": "Cheese",
+"detail": "parmesan; shredded or grated",
+"keywords": [
+"cheese",
+"grated",
+"parmesan",
+"shredded"
+],
+"fridge": [
+360,
+360
+]
+},
+{
+"id": 5,
+"category": "Dairy Products & Eggs",
+"name": "Cheese",
+"detail": "shredded; cheddar, mozzarella, etc.",
+"keywords": [
+"cheddar",
+"cheese",
+"mozzarella",
+"shredded"
+],
+"fridge": [
+30,
+30
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 6,
+"category": "Dairy Products & Eggs",
+"name": "Cheese",
+"detail": "processed slices",
+"keywords": [
+"cheese",
+"processed slices",
+"slice",
+"slices"
+],
+"fridge": [
+21,
+28
+]
+},
+{
+"id": 7,
+"category": "Dairy Products & Eggs",
+"name": "Cheese",
+"detail": "soft such as brie, bel paese, goat",
+"keywords": [
+"bel paese",
+"brie",
+"cheese",
+"goat"
+],
+"fridge": [
+7,
+14
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 8,
+"category": "Dairy Products & Eggs",
+"name": "Coffee creamer",
+"detail": "liquid refrigerated",
+"keywords": [
+"coffee",
+"coffee creamer",
+"creamer",
+"liquid refrigerated"
+],
+"fridge": [
+21,
+21
+]
+},
+{
+"id": 9,
+"category": "Dairy Products & Eggs",
+"name": "Cottage cheese",
+"detail": "",
+"keywords": [
+"cheese",
+"cottage cheese"
+],
+"fridge": [
+14,
+14
+]
+},
+{
+"id": 10,
+"category": "Dairy Products & Eggs",
+"name": "Cream cheese",
+"detail": "",
+"keywords": [],
+"fridge": [
+14,
+14
+]
+},
+{
+"id": 11,
+"category": "Dairy Products & Eggs",
+"name": "Cream",
+"detail": "whipping, ultrapasteurized",
+"keywords": [
+"cream",
+"ultrapasteurized",
+"whipping"
+],
+"fridge": [
+30,
+30
+]
+},
+{
+"id": 12,
+"category": "Dairy Products & Eggs",
+"name": "Cream",
+"detail": "whipped, sweetened",
+"keywords": [
+"cream",
+"sweetened",
+"whipped"
+],
+"fridge": [
+1,
+1
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 13,
+"category": "Dairy Products & Eggs",
+"name": "Cream",
+"detail": "half and half",
+"keywords": [
+"cream",
+"half"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+120,
+120
+]
+},
+{
+"id": 14,
+"category": "Dairy Products & Eggs",
+"name": "Cream",
+"detail": "heavy",
+"keywords": [
+"cream",
+"heavy"
+],
+"fridge": [
+10,
+10
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 15,
+"category": "Dairy Products & Eggs",
+"name": "Cream",
+"detail": "light",
+"keywords": [
+"cream",
+"light"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 16,
+"category": "Dairy Products & Eggs",
+"name": "Dips",
+"detail": "sour cream based",
+"keywords": [
+"cream",
+"cream based",
+"dip",
+"dips",
+"sour",
+"sour cream based"
+],
+"fridge": [
+14,
+14
+]
+},
+{
+"id": 17,
+"category": "Dairy Products & Eggs",
+"name": "Egg substitutes",
+"detail": "liquid",
+"keywords": [
+"egg",
+"egg substitutes",
+"liquid",
+"substitute",
+"substitutes"
+],
+"fridge": [
+7,
+7
+]
+},
+{
+"id": 20,
+"category": "Dairy Products & Eggs",
+"name": "Eggnog",
+"detail": "commercial",
+"keywords": [
+"commercial",
+"egg",
+"eggnog",
+"nog"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 21,
+"category": "Dairy Products & Eggs",
+"name": "Eggs",
+"detail": "in shell",
+"keywords": [
+"egg",
+"eggs",
+"in shell",
+"shell"
+],
+"fridge": [
+21,
+35
+]
+},
+{
+"id": 22,
+"category": "Dairy Products & Eggs",
+"name": "Eggs",
+"detail": "raw whites, yolks",
+"keywords": [
+"egg",
+"eggs",
+"raw whites",
+"whites",
+"yolks"
+],
+"fridge": [
+2,
+4
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 23,
+"category": "Dairy Products & Eggs",
+"name": "Eggs",
+"detail": "hard boiled cooked",
+"keywords": [
+"boiled",
+"egg",
+"eggs",
+"hard boiled",
+"hard boiled cooked"
+],
+"fridge": [
+7,
+7
+]
+},
+{
+"id": 24,
+"category": "Dairy Products & Eggs",
+"name": "Egg dishes",
+"detail": "",
+"keywords": [
+"dishes",
+"egg",
+"egg dishes"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+60,
+90
+]
+},
+{
+"id": 25,
+"category": "Dairy Products & Eggs",
+"name": "Kefir",
+"detail": "fermented milk",
+"keywords": [
+"fermented",
+"fermented milk",
+"kefir",
+"milk"
+],
+"fridge": [
+7,
+7
+]
+},
+{
+"id": 26,
+"category": "Dairy Products & Eggs",
+"name": "Margarine",
+"detail": "",
+"keywords": [
+"margarine"
+],
+"fridge": [
+180,
+180
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 27,
+"category": "Dairy Products & Eggs",
+"name": "Milk",
+"detail": "plain or flavored",
+"keywords": [
+"flavor",
+"flavored",
+"milk",
+"plain"
+],
+"freezer": [
+90,
+90
+]
+},
+{
+"id": 30,
+"category": "Dairy Products & Eggs",
+"name": "Whipped cream",
+"detail": "aerosol can",
+"keywords": [
+"aerosol can",
+"can",
+"cream",
+"whipped cream"
+],
+"fridge": [
+21,
+28
+]
+},
+{
+"id": 31,
+"category": "Dairy Products & Eggs",
+"name": "Whipped topping",
+"detail": "aerosol can",
+"keywords": [
+"aerosol can",
+"can",
+"topping",
+"whipped",
+"whipped topping"
+],
+"fridge": [
+90,
+90
+]
+},
+{
+"id": 32,
+"category": "Dairy Products & Eggs",
+"name": "Whipped topping",
+"detail": "tub",
+"keywords": [
+"topping",
+"tub",
+"whipped",
+"whipped topping"
+],
+"fridge": [
+14,
+14
+],
+"freezer": [
+420,
+420
+]
+},
+{
+"id": 33,
+"category": "Dairy Products & Eggs",
+"name": "Yogurt",
+"detail": "",
+"keywords": [
+"yogurt"
+],
+"fridge": [
+7,
+14
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 34,
+"category": "Meat · Fresh",
+"name": "Beef",
+"detail": "rib roast, bone-in",
+"keywords": [
+"beef",
+"bone",
+"bone-in",
+"rib",
+"rib roast",
+"roast"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 35,
+"category": "Meat · Fresh",
+"name": "Beef",
+"detail": "rib roast; boneless, rolled",
+"keywords": [
+"beef",
+"boneless",
+"rib",
+"rib roast",
+"roast",
+"rolled"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 36,
+"category": "Meat · Fresh",
+"name": "Beef",
+"detail": "round or rump roast",
+"keywords": [
+"beef",
+"roast",
+"round",
+"rump roast"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 37,
+"category": "Meat · Fresh",
+"name": "Beef",
+"detail": "tenderloin, whole",
+"keywords": [
+"beef",
+"tenderloin",
+"whole"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 38,
+"category": "Meat · Fresh",
+"name": "Beef",
+"detail": "tenderloin, half",
+"keywords": [
+"beef",
+"half",
+"tenderloin"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 39,
+"category": "Meat · Fresh",
+"name": "Beef",
+"detail": "chuck roast, brisket",
+"keywords": [
+"beef",
+"brisket",
+"chuck roast",
+"roast"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 40,
+"category": "Meat · Fresh",
+"name": "Beef",
+"detail": "steaks",
+"keywords": [
+"beef",
+"steak",
+"steaks"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 41,
+"category": "Meat · Fresh",
+"name": "Beef",
+"detail": "stew, cubes",
+"keywords": [
+"beef",
+"cube",
+"cubes",
+"stew"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 42,
+"category": "Meat · Fresh",
+"name": "Beef",
+"detail": "short ribs",
+"keywords": [
+"beef",
+"rib",
+"ribs",
+"short ribs"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 43,
+"category": "Meat · Fresh",
+"name": "Beef",
+"detail": "ground",
+"keywords": [
+"beef",
+"ground"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 44,
+"category": "Meat · Fresh",
+"name": "Lamb",
+"detail": "leg, bone-in - small",
+"keywords": [
+"bone",
+"bone-in",
+"bone-in - small",
+"lamb",
+"leg"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 45,
+"category": "Meat · Fresh",
+"name": "Lamb",
+"detail": "leg, bone-in - large",
+"keywords": [
+"bone",
+"bone-in",
+"bone-in - large",
+"lamb",
+"leg"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 46,
+"category": "Meat · Fresh",
+"name": "Lamb",
+"detail": "leg; boneless, rolled",
+"keywords": [
+"bone",
+"boneless",
+"lamb",
+"leg",
+"rolled"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 47,
+"category": "Meat · Fresh",
+"name": "Lamb",
+"detail": "crown roast",
+"keywords": [
+"crown roast",
+"lamb",
+"roast"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 48,
+"category": "Meat · Fresh",
+"name": "Lamb",
+"detail": "shoulder roast or shank leg half",
+"keywords": [
+"half",
+"lamb",
+"leg",
+"roast",
+"shank",
+"shank leg",
+"shank leg half",
+"shoulder",
+"shoulder roast"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 49,
+"category": "Meat · Fresh",
+"name": "Lamb",
+"detail": "cubes for kabobs",
+"keywords": [
+"cube",
+"cubes",
+"kabob",
+"kabobs",
+"lamb"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 50,
+"category": "Meat · Fresh",
+"name": "Lamb",
+"detail": "ground",
+"keywords": [
+"ground",
+"lamb"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 51,
+"category": "Meat · Fresh",
+"name": "Lamb",
+"detail": "chops, ribs, or loin",
+"keywords": [
+"chops",
+"lamb",
+"loin",
+"rib",
+"ribs"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 52,
+"category": "Meat · Fresh",
+"name": "Lamb",
+"detail": "leg steaks",
+"keywords": [
+"lamb",
+"leg",
+"leg steaks",
+"steak",
+"steaks"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 53,
+"category": "Meat · Fresh",
+"name": "Lamb",
+"detail": "stew meat, pieces",
+"keywords": [
+"lamb",
+"meat",
+"piece",
+"pieces",
+"stew",
+"stew meat"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 54,
+"category": "Meat · Fresh",
+"name": "Lamb",
+"detail": "shanks",
+"keywords": [
+"lamb",
+"shank",
+"shanks"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 55,
+"category": "Meat · Fresh",
+"name": "Lamb",
+"detail": "breast, rolled",
+"keywords": [
+"breast",
+"lamb",
+"rolled"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 56,
+"category": "Meat · Fresh",
+"name": "Veal",
+"detail": "shoulder roast, boneless",
+"keywords": [
+"boneless",
+"roast",
+"shoulder",
+"shoulder roast",
+"veal"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 57,
+"category": "Meat · Fresh",
+"name": "Veal",
+"detail": "leg rump or round roast, boneless",
+"keywords": [
+"boneless",
+"leg",
+"leg rump",
+"roast",
+"round",
+"round roast",
+"rump",
+"veal"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 58,
+"category": "Meat · Fresh",
+"name": "Veal",
+"detail": "loin roast, bone-in",
+"keywords": [
+"bone",
+"bone-in",
+"loin",
+"loin roast",
+"roast",
+"veal"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 59,
+"category": "Meat · Fresh",
+"name": "Veal",
+"detail": "ground",
+"keywords": [
+"ground",
+"veal"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 60,
+"category": "Meat · Fresh",
+"name": "Pork",
+"detail": "loin roast, bone-in",
+"keywords": [
+"bone",
+"bone-in",
+"loin",
+"loin roast",
+"pork",
+"roast"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 61,
+"category": "Meat · Fresh",
+"name": "Pork",
+"detail": "loin roast, boneless",
+"keywords": [
+"boneless",
+"loin",
+"loin roast",
+"pork",
+"roast"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 63,
+"category": "Meat · Fresh",
+"name": "Pork",
+"detail": "loin chops, bone-in",
+"keywords": [
+"bone",
+"bone-in",
+"chops",
+"loin",
+"loin chops",
+"pork"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 64,
+"category": "Meat · Fresh",
+"name": "Pork",
+"detail": "loin chops, boneless",
+"keywords": [
+"boneless",
+"chops",
+"loin",
+"loin chops",
+"pork"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 65,
+"category": "Meat · Fresh",
+"name": "Pork",
+"detail": "crown roast - small",
+"keywords": [
+"crown",
+"crown roast",
+"crown roast - small",
+"pork",
+"roast",
+"small"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 66,
+"category": "Meat · Fresh",
+"name": "Pork",
+"detail": "crown roast - large",
+"keywords": [
+"crown",
+"crown roast",
+"crown roast - large",
+"large",
+"pork",
+"roast"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 67,
+"category": "Meat · Fresh",
+"name": "Pork",
+"detail": "tenderloin",
+"keywords": [
+"pork",
+"tenderloin"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 69,
+"category": "Meat · Fresh",
+"name": "Pork",
+"detail": "tenderloin medallions or loin cubes",
+"keywords": [
+"cube",
+"cubes",
+"loin",
+"loin cube",
+"loin cubes",
+"medallion",
+"medallions",
+"pork",
+"tenderloin",
+"tenderloin medallions"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 70,
+"category": "Meat · Fresh",
+"name": "Goat",
+"detail": "tender whole cuts (legs, ribs, shoulder, loin)",
+"keywords": [
+"goat",
+"leg",
+"legs",
+"loin",
+"rib",
+"ribs",
+"shoulder",
+"tender",
+"tender whole cuts",
+"whole cuts"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 71,
+"category": "Meat · Fresh",
+"name": "Goat",
+"detail": "less tender whole cuts (stew meat, riblets, shanks)",
+"keywords": [
+"goat",
+"less tender",
+"less tender whole cuts",
+"meat",
+"riblets",
+"shanks",
+"stew",
+"stew meat",
+"tender",
+"whole cuts"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 72,
+"category": "Meat · Fresh",
+"name": "Pork",
+"detail": "ribs",
+"keywords": [
+"pork",
+"rib",
+"ribs"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 73,
+"category": "Meat · Fresh",
+"name": "Pork",
+"detail": "ground",
+"keywords": [
+"ground",
+"pork"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 74,
+"category": "Meat · Fresh",
+"name": "Pork",
+"detail": "shoulder",
+"keywords": [
+"pork",
+"shoulder"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 75,
+"category": "Meat · Fresh",
+"name": "Pork",
+"detail": "loin, cubes",
+"keywords": [
+"cube",
+"cubes",
+"loin",
+"pork"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 76,
+"category": "Meat · Fresh",
+"name": "Venison",
+"detail": "round, rump, loin, or rib roast",
+"keywords": [
+"loin",
+"rib",
+"rib roast",
+"roast",
+"round",
+"rump",
+"venison"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+120,
+360
+]
+},
+{
+"id": 77,
+"category": "Meat · Fresh",
+"name": "Variety meats",
+"detail": "liver, tongue, chitterlings, etc.",
+"keywords": [
+"chitterling",
+"chitterlings",
+"liver",
+"meat",
+"meats",
+"tongue",
+"variety meats"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 78,
+"category": "Meat · Fresh",
+"name": "Goat",
+"detail": "ground",
+"keywords": [
+"goat",
+"ground"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 79,
+"category": "Meat · Smoked or Processed",
+"name": "Bacon",
+"detail": "",
+"keywords": [
+"bacon"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+30,
+30
+]
+},
+{
+"id": 81,
+"category": "Meat · Smoked or Processed",
+"name": "Corned beef",
+"detail": "in pouch with pickling juices",
+"keywords": [
+"corned beef",
+"juice",
+"juices",
+"pickling juices",
+"pouch"
+],
+"fridge": [
+5,
+7
+],
+"freezer": [
+30,
+30
+]
+},
+{
+"id": 82,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "canned (“keep refrigerated” label)",
+"keywords": [
+"canned",
+"ham",
+"keep refrigerated",
+"label",
+"refrigerated"
+],
+"fridge": [
+180,
+270
+]
+},
+{
+"id": 83,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "fully cooked, bone-in, whole",
+"keywords": [
+"bone",
+"bone-in",
+"cooked",
+"fully cooked",
+"ham",
+"whole"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 84,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "fully cooked, bone-in, half",
+"keywords": [
+"bone",
+"bone-in",
+"cooked",
+"fully cooked",
+"half",
+"ham"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 85,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "fully cooked, slices, half, or spiral cut",
+"keywords": [
+"cooked",
+"fully cooked",
+"half",
+"ham",
+"slice",
+"slices",
+"spiral cut"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 86,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "fully cooked, arm picnic shoulder, boneless",
+"keywords": [
+"arm picnic",
+"arm picnic shoulder",
+"boneless",
+"cooked",
+"fully cooked",
+"ham",
+"shoulder"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 87,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "fully cooked, canned, boneless (refrigerated)",
+"keywords": [
+"boneless",
+"canned",
+"cooked",
+"fully cooked",
+"ham",
+"refrigerated"
+],
+"fridge": [
+180,
+270
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 88,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "fully cooked, vacuum packed, boneless",
+"keywords": [
+"boneless",
+"cooked",
+"fully cooked",
+"ham",
+"vacuum packed"
+],
+"fridge": [
+14,
+14
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 89,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "fresh, cook-before-eating, bone-in, whole",
+"keywords": [
+"bone",
+"bone-in",
+"cook-before-eating",
+"fresh",
+"ham",
+"whole"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 90,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "fresh, cook-before-eating, bone-in, half",
+"keywords": [
+"bone",
+"bone-in",
+"cook-before-eating",
+"fresh",
+"half",
+"ham"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 91,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "fresh, cook-before-eating, shank or butt portion, bone-in",
+"keywords": [
+"bone",
+"bone-in",
+"butt portion",
+"cook-before-eating",
+"fresh",
+"ham",
+"shank"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 92,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "fresh, cook-before-eating, arm picnic shoulder, boneless",
+"keywords": [
+"arm picnic",
+"arm picnic shoulder",
+"before-eating",
+"boneless",
+"cook-before-eating",
+"fresh",
+"ham",
+"shoulder"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 93,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "fresh, cook-before-eating, shoulder roll (butt), boneless",
+"keywords": [
+"before-eating",
+"boneless",
+"butt",
+"cook-before-eating",
+"fresh",
+"ham",
+"roll",
+"shoulder roll"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 94,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "fresh, uncooked, whole leg, bone-in",
+"keywords": [
+"bone",
+"bone-in",
+"cooked",
+"fresh",
+"ham",
+"leg",
+"uncooked",
+"whole leg"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 95,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "fresh, uncooked, whole leg, boneless",
+"keywords": [
+"bone",
+"boneless",
+"cooked",
+"fresh",
+"ham",
+"leg",
+"uncooked",
+"whole leg"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 96,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "fresh, uncooked, half leg, bone-in",
+"keywords": [
+"bone",
+"bone-in",
+"cooked",
+"fresh",
+"half leg",
+"ham",
+"leg",
+"uncooked"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 97,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "country ham (whole or half)",
+"keywords": [
+"country ham",
+"half",
+"ham",
+"whole"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 98,
+"category": "Meat · Smoked or Processed",
+"name": "Hot dogs",
+"detail": "",
+"keywords": [
+"hot",
+"hot dogs"
+],
+"fridge": [
+14,
+14
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 102,
+"category": "Meat · Smoked or Processed",
+"name": "Sausage",
+"detail": "raw bulk type or patties",
+"keywords": [
+"patties",
+"patty",
+"raw",
+"raw bulk type",
+"sausage"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 103,
+"category": "Meat · Smoked or Processed",
+"name": "Sausage",
+"detail": "fully cooked smoked links, kielbasa",
+"keywords": [
+"fully cooked",
+"fully cooked smoked links",
+"kielbasa",
+"link",
+"links",
+"sausage",
+"smoked links"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 104,
+"category": "Meat · Smoked or Processed",
+"name": "Sausage",
+"detail": "hard, dry (pepperoni), sliced",
+"keywords": [
+"dry",
+"dry pepperoni",
+"hard",
+"pepperoni",
+"sausage",
+"slice",
+"sliced"
+],
+"fridge": [
+14,
+21
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 105,
+"category": "Meat · Stuffed or Assembled",
+"name": "Stuffed, raw pork chops",
+"detail": "",
+"keywords": [
+"chops",
+"pork",
+"raw pork",
+"raw pork chops",
+"stuffed"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+270,
+270
+]
+},
+{
+"id": 106,
+"category": "Meat · Stuffed or Assembled",
+"name": "Raw kabobs with vegetables",
+"detail": "",
+"keywords": [
+"kabob",
+"kabobs",
+"raw kabobs",
+"vegetables"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 107,
+"category": "Meat · Shelf Stable Foods",
+"name": "Bacon",
+"detail": "fully cooked",
+"keywords": [
+"bacon",
+"cooked",
+"fully cooked"
+],
+"pantry": [
+180,
+180
+]
+},
+{
+"id": 108,
+"category": "Meat · Shelf Stable Foods",
+"name": "Ham",
+"detail": "shelf-stable cans",
+"keywords": [
+"can",
+"cans",
+"ham",
+"shelf",
+"shelf stable",
+"shelf stable cans",
+"stable"
+],
+"pantry": [
+180,
+270
+]
+},
+{
+"id": 109,
+"category": "Meat · Shelf Stable Foods",
+"name": "Jerky",
+"detail": "commercially dried",
+"keywords": [
+"commercially dried",
+"dried",
+"jerky"
+],
+"pantry": [
+360,
+360
+]
+},
+{
+"id": 110,
+"category": "Meat · Shelf Stable Foods",
+"name": "Jerky",
+"detail": "homemade",
+"keywords": [
+"homemade",
+"jerky"
+],
+"pantry": [
+30,
+60
+],
+"fridge": [
+30,
+60
+]
+},
+{
+"id": 111,
+"category": "Meat · Shelf Stable Foods",
+"name": "Meat products",
+"detail": "canned",
+"keywords": [
+"canned",
+"meat",
+"meat products",
+"product",
+"products"
+],
+"pantry": [
+1825,
+1825
+]
+},
+{
+"id": 113,
+"category": "Poultry · Fresh",
+"name": "Chicken",
+"detail": "whole",
+"keywords": [
+"chicken",
+"whole"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 114,
+"category": "Poultry · Fresh",
+"name": "Turkey",
+"detail": "whole",
+"keywords": [
+"turkey",
+"whole"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 115,
+"category": "Poultry · Fresh",
+"name": "Ground turkey or chicken",
+"detail": "",
+"keywords": [
+"chicken",
+"ground turkey",
+"turkey"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 116,
+"category": "Poultry · Fresh",
+"name": "Chicken parts",
+"detail": "breast halves, bone-in",
+"keywords": [
+"bone",
+"bone-in",
+"breast",
+"breast halves",
+"chicken",
+"chicken parts",
+"half",
+"halves"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+270,
+270
+]
+},
+{
+"id": 117,
+"category": "Poultry · Fresh",
+"name": "Chicken parts",
+"detail": "breast halves, boneless",
+"keywords": [
+"bone",
+"boneless",
+"breast",
+"breast halves",
+"chicken",
+"chicken parts",
+"half",
+"halves"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+270,
+270
+]
+},
+{
+"id": 118,
+"category": "Poultry · Fresh",
+"name": "Chicken parts",
+"detail": "legs or thighs",
+"keywords": [
+"chicken",
+"chicken parts",
+"leg",
+"legs",
+"thigh",
+"thighs"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+270,
+270
+]
+},
+{
+"id": 119,
+"category": "Poultry · Fresh",
+"name": "Turkey parts",
+"detail": "breast halves, bone-in",
+"keywords": [
+"bone",
+"bone-in",
+"breast",
+"breast halves",
+"half",
+"halves",
+"turkey",
+"turkey parts"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+270,
+270
+]
+},
+{
+"id": 120,
+"category": "Poultry · Fresh",
+"name": "Turkey parts",
+"detail": "breast halves, boneless",
+"keywords": [
+"bone",
+"boneless",
+"breast",
+"turkey",
+"turkey parts"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+270,
+270
+]
+},
+{
+"id": 121,
+"category": "Poultry · Fresh",
+"name": "Turkey parts",
+"detail": "legs or thighs",
+"keywords": [
+"leg",
+"legs",
+"thigh",
+"thighs",
+"turkey",
+"turkey parts"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+270,
+270
+]
+},
+{
+"id": 123,
+"category": "Poultry · Fresh",
+"name": "Duckling",
+"detail": "domestic or wild, whole",
+"keywords": [
+"domestic",
+"duckling",
+"whole",
+"wild"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 125,
+"category": "Poultry · Fresh",
+"name": "Goose",
+"detail": "domestic or wild, whole",
+"keywords": [
+"domestic",
+"goose",
+"whole",
+"wild"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 126,
+"category": "Poultry · Fresh",
+"name": "Pheasant",
+"detail": "young, whole",
+"keywords": [
+"pheasant",
+"whole",
+"young"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 127,
+"category": "Poultry · Fresh",
+"name": "Quail",
+"detail": "whole",
+"keywords": [
+"quail",
+"whole"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 128,
+"category": "Poultry · Fresh",
+"name": "Capon",
+"detail": "whole",
+"keywords": [
+"capon",
+"whole"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 129,
+"category": "Poultry · Fresh",
+"name": "Cornish Hens",
+"detail": "whole",
+"keywords": [
+"cornish hens",
+"hen",
+"hens",
+"whole"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 130,
+"category": "Poultry · Fresh",
+"name": "Giblets",
+"detail": "",
+"keywords": [
+"giblet",
+"giblets"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 131,
+"category": "Poultry · Stuffed or Assembled",
+"name": "Stuffed, raw chicken breasts",
+"detail": "",
+"keywords": [
+"breast",
+"chicken",
+"chicken breasts",
+"raw chicken breasts",
+"stuffed"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+270,
+270
+]
+},
+{
+"id": 132,
+"category": "Poultry · Stuffed or Assembled",
+"name": "Raw kabobs with vegetables",
+"detail": "",
+"keywords": [
+"kabob",
+"kabobs",
+"raw kabobs",
+"vegetable",
+"vegetables"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 133,
+"category": "Poultry · Stuffed or Assembled",
+"name": "Turducken",
+"detail": "",
+"keywords": [
+"turducken"
+],
+"freezer": [
+270,
+270
+]
+},
+{
+"id": 134,
+"category": "Poultry · Cooked or Processed",
+"name": "Chicken nuggets, patties",
+"detail": "",
+"keywords": [
+"chicken",
+"chicken nuggets",
+"nugget",
+"nuggets",
+"patties",
+"patty"
+],
+"freezer": [
+30,
+90
+]
+},
+{
+"id": 135,
+"category": "Poultry · Cooked or Processed",
+"name": "Cooked poultry dishes",
+"detail": "",
+"keywords": [
+"cooked poultry dishes",
+"poultry",
+"poultry dishes"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+120,
+180
+]
+},
+{
+"id": 136,
+"category": "Poultry · Cooked or Processed",
+"name": "Fried chicken",
+"detail": "",
+"keywords": [
+"chicken",
+"fried chicken"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+120,
+120
+]
+},
+{
+"id": 140,
+"category": "Deli & Prepared Foods",
+"name": "Poultry pieces",
+"detail": "covered with gravy or broth",
+"keywords": [
+"broth",
+"gravy",
+"piece",
+"pieces",
+"poultry",
+"poultry pieces"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 141,
+"category": "Poultry · Cooked or Processed",
+"name": "Rotisserie chicken",
+"detail": "",
+"keywords": [
+"chicken",
+"rotisserie",
+"rotisserie chicken"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+120,
+120
+]
+},
+{
+"id": 142,
+"category": "Poultry · Shelf Stable Foods",
+"name": "Canned chicken",
+"detail": "",
+"keywords": [
+"can",
+"canned",
+"canned chicken",
+"chicken"
+],
+"pantry": [
+1825,
+1825
+]
+},
+{
+"id": 144,
+"category": "Seafood · Fresh",
+"name": "Lean fish",
+"detail": "cod, flounder, haddock, halibut, sole, etc.",
+"keywords": [
+"cod",
+"fish",
+"flounder",
+"haddock",
+"halibut",
+"lean fish",
+"sole"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+180,
+240
+]
+},
+{
+"id": 145,
+"category": "Seafood · Fresh",
+"name": "Lean fish",
+"detail": "pollock, ocean perch, rockfish, sea trout.",
+"keywords": [
+"fish",
+"lean fish",
+"ocean",
+"ocean perch",
+"perch",
+"pollock",
+"rock",
+"rockfish",
+"sea",
+"sea trout",
+"trout"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+120,
+240
+]
+},
+{
+"id": 146,
+"category": "Seafood · Fresh",
+"name": "Fatty fish",
+"detail": "bluefish, catfish, mackerel, mullet, salmon, tuna, etc.",
+"keywords": [
+"blue",
+"bluefish",
+"cat",
+"catfish",
+"fatty",
+"fatty fish",
+"fish",
+"mackerel",
+"mullet",
+"salmon",
+"tuna"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+60,
+90
+]
+},
+{
+"id": 147,
+"category": "Seafood · Fresh",
+"name": "Caviar",
+"detail": "fresh, in jar",
+"keywords": [
+"caviar",
+"fresh",
+"jar"
+],
+"fridge": [
+7,
+28
+]
+},
+{
+"id": 148,
+"category": "Seafood · Fresh",
+"name": "Cooked fish",
+"detail": "all",
+"keywords": [
+"all",
+"cooked fish",
+"fish"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 149,
+"category": "Seafood · Fresh",
+"name": "Surimi seafood",
+"detail": "",
+"keywords": [
+"food",
+"sea",
+"surimi",
+"surimi seafood"
+],
+"freezer": [
+270,
+270
+]
+},
+{
+"id": 150,
+"category": "Seafood · Shellfish",
+"name": "Scallops",
+"detail": "",
+"keywords": [
+"scallop",
+"scallops"
+],
+"fridge": [
+1,
+3
+],
+"freezer": [
+180,
+540
+]
+},
+{
+"id": 151,
+"category": "Seafood · Shellfish",
+"name": "Shrimp, crayfish",
+"detail": "",
+"keywords": [
+"cray",
+"crayfish",
+"fish",
+"shrimp"
+],
+"fridge": [
+1,
+3
+],
+"freezer": [
+180,
+540
+]
+},
+{
+"id": 152,
+"category": "Seafood · Shellfish",
+"name": "Squid",
+"detail": "",
+"keywords": [
+"squid"
+],
+"fridge": [
+1,
+3
+],
+"freezer": [
+180,
+540
+]
+},
+{
+"id": 153,
+"category": "Seafood · Shellfish",
+"name": "Shucked clams, mussels, and oysters",
+"detail": "",
+"keywords": [
+"clam",
+"clams",
+"mussel",
+"mussels",
+"oyster",
+"oysters",
+"shucked clams"
+],
+"fridge": [
+3,
+10
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 154,
+"category": "Seafood · Shellfish",
+"name": "Crab meat",
+"detail": "fresh",
+"keywords": [
+"crab",
+"crab meat",
+"fresh",
+"meat"
+],
+"fridge": [
+1,
+3
+],
+"freezer": [
+60,
+120
+]
+},
+{
+"id": 155,
+"category": "Seafood · Shellfish",
+"name": "Crab meat",
+"detail": "pasteurized",
+"keywords": [
+"crab",
+"crab meat",
+"meat",
+"pasteurized"
+],
+"fridge": [
+300,
+360
+],
+"freezer": [
+120,
+300
+]
+},
+{
+"id": 156,
+"category": "Seafood · Shellfish",
+"name": "Crab legs",
+"detail": "king, dungeness, snow",
+"keywords": [
+"crab",
+"crab legs",
+"dungeness",
+"king",
+"leg",
+"legs",
+"snow"
+],
+"fridge": [
+2,
+4
+],
+"freezer": [
+270,
+360
+]
+},
+{
+"id": 157,
+"category": "Seafood · Shellfish",
+"name": "Live clams, mussels, crab, and oysters",
+"detail": "",
+"keywords": [
+"clam",
+"clams",
+"crab",
+"live clams",
+"mussel",
+"mussels",
+"oyster",
+"oysters"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+60,
+90
+]
+},
+{
+"id": 158,
+"category": "Seafood · Shellfish",
+"name": "Fresh whole lobster",
+"detail": "live",
+"keywords": [
+"fresh whole lobster",
+"live",
+"lobster",
+"whole lobster"
+],
+"fridge": [
+1,
+1
+]
+},
+{
+"id": 159,
+"category": "Seafood · Shellfish",
+"name": "Fresh lobster tails",
+"detail": "cooked",
+"keywords": [
+"cooked",
+"fresh lobster tails",
+"lobster tails",
+"tail",
+"tails"
+],
+"fridge": [
+2,
+3
+],
+"freezer": [
+14,
+28
+]
+},
+{
+"id": 160,
+"category": "Seafood · Shellfish",
+"name": "Fresh clams, mussels, oysters",
+"detail": "",
+"keywords": [
+"clam",
+"clams",
+"fresh clams",
+"mussel",
+"mussels",
+"oyster",
+"oysters"
+],
+"fridge": [
+5,
+10
+]
+},
+{
+"id": 161,
+"category": "Seafood · Shellfish",
+"name": "Fresh whole lobster",
+"detail": "frozen",
+"keywords": [
+"fresh whole lobster",
+"frozen",
+"lobster",
+"whole lobster"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+14,
+28
+]
+},
+{
+"id": 162,
+"category": "Seafood · Shellfish",
+"name": "Cooked shellfish",
+"detail": "all",
+"keywords": [
+"cooked",
+"cooked shellfish",
+"fish",
+"shellfish"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+30,
+90
+]
+},
+{
+"id": 163,
+"category": "Seafood · Smoked",
+"name": "Herring",
+"detail": "glass packed, in wine sauce",
+"keywords": [
+"glass",
+"glass packed",
+"herring",
+"packed",
+"sauce",
+"wine",
+"wine sauce"
+],
+"fridge": [
+120,
+180
+]
+},
+{
+"id": 164,
+"category": "Seafood · Smoked",
+"name": "Fish",
+"detail": "hot smoked, air pack",
+"keywords": [
+"air pack",
+"fish",
+"hot",
+"hot smoked",
+"pack",
+"smoked"
+],
+"fridge": [
+14,
+45
+],
+"freezer": [
+270,
+360
+]
+},
+{
+"id": 165,
+"category": "Seafood · Smoked",
+"name": "Fish",
+"detail": "hot smoked, vacuum pack",
+"keywords": [
+"fish",
+"hot",
+"hot smoked",
+"pack",
+"smoked",
+"vacuum",
+"vacuum pack"
+],
+"fridge": [
+14,
+45
+],
+"freezer": [
+180,
+360
+]
+},
+{
+"id": 166,
+"category": "Seafood · Smoked",
+"name": "Fish",
+"detail": "cold smoked, air pack",
+"keywords": [
+"air pack",
+"cold",
+"cold smoked",
+"fish",
+"pack",
+"smoked"
+],
+"fridge": [
+14,
+30
+],
+"freezer": [
+270,
+360
+]
+},
+{
+"id": 167,
+"category": "Seafood · Smoked",
+"name": "Fish",
+"detail": "cold smoked, vacuum pack",
+"keywords": [
+"cold",
+"cold smoked",
+"fish",
+"pack",
+"smoked",
+"vacuum",
+"vacuum pack"
+],
+"fridge": [
+21,
+30
+],
+"freezer": [
+270,
+360
+]
+},
+{
+"id": 168,
+"category": "Vegetarian Proteins",
+"name": "Tofu",
+"detail": "",
+"keywords": [
+"tofu"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+150,
+150
+]
+},
+{
+"id": 169,
+"category": "Vegetarian Proteins",
+"name": "Miso",
+"detail": "",
+"keywords": [
+"miso"
+],
+"fridge": [
+365,
+365
+]
+},
+{
+"id": 170,
+"category": "Vegetarian Proteins",
+"name": "Soy flour",
+"detail": "full-fat",
+"keywords": [
+"fat",
+"flour",
+"full fat",
+"soy",
+"soy flour"
+],
+"pantry": [
+60,
+60
+],
+"fridge": [
+180,
+180
+]
+},
+{
+"id": 171,
+"category": "Vegetarian Proteins",
+"name": "Textured soy protein",
+"detail": "(TSP)",
+"keywords": [
+"protein",
+"soy",
+"soy protein",
+"textured soy protein",
+"tsp"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 172,
+"category": "Vegetarian Proteins",
+"name": "Re-hydrated textured soy protein",
+"detail": "(TSP)",
+"keywords": [
+"protein",
+"re hydrated",
+"re hydrated textured soy protein",
+"soy",
+"soy protein",
+"textured soy protein",
+"tsp"
+],
+"pantry": [
+90,
+120
+],
+"fridge": [
+3,
+4
+]
+},
+{
+"id": 173,
+"category": "Deli & Prepared Foods",
+"name": "Leftovers",
+"detail": "with meat, fish, poultry, or egg",
+"keywords": [
+"egg",
+"fish",
+"leftover",
+"leftovers",
+"meat",
+"poultry"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+60,
+90
+]
+},
+{
+"id": 174,
+"category": "Deli & Prepared Foods",
+"name": "Leftovers",
+"detail": "without meat, fish, poultry, or egg (such as cooked vegitables, rice, or potatoes)",
+"keywords": [
+"cooked vegetables",
+"egg",
+"fish",
+"leftover",
+"leftovers",
+"meat",
+"potato",
+"potatoes",
+"poultry",
+"rice",
+"vegetable",
+"vegetables",
+"without meat"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 175,
+"category": "Deli & Prepared Foods",
+"name": "Leftovers",
+"detail": "pizza",
+"keywords": [
+"leftovers",
+"pizza"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 176,
+"category": "Deli & Prepared Foods",
+"name": "Commercial brand vacuum-packed dinners",
+"detail": "with USDA seal",
+"keywords": [
+"brand vacuum packed dinners",
+"commercial brand vacuum-packed dinners",
+"dinner",
+"dinners",
+"packed",
+"packed dinner",
+"seal",
+"usda",
+"usda seal",
+"vacuum packed",
+"vacuum packed dinner"
+],
+"fridge": [
+14,
+14
+]
+},
+{
+"id": 177,
+"category": "Deli & Prepared Foods",
+"name": "Cooked pasta",
+"detail": "",
+"keywords": [
+"cooked pasta",
+"pasta"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 178,
+"category": "Deli & Prepared Foods",
+"name": "Cooked rice",
+"detail": "",
+"keywords": [
+"cooked rice",
+"rice"
+],
+"fridge": [
+4,
+6
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 180,
+"category": "Deli & Prepared Foods",
+"name": "Guacamole",
+"detail": "",
+"keywords": [
+"guacamole"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 181,
+"category": "Deli & Prepared Foods",
+"name": "Hummus",
+"detail": "commercial (pasteurized, with preservatives)",
+"keywords": [
+"commercial",
+"hummus",
+"pasteurized",
+"preservative",
+"preservatives"
+],
+"fridge": [
+90,
+90
+]
+},
+{
+"id": 183,
+"category": "Deli & Prepared Foods",
+"name": "Hummus",
+"detail": "traditional (no preservatives, not pasteurized)",
+"keywords": [
+"hummus",
+"no preservative",
+"no preservatives",
+"not pasteurized",
+"pasteurized",
+"preservative",
+"preservatives",
+"traditional"
+],
+"fridge": [
+7,
+7
+]
+},
+{
+"id": 184,
+"category": "Deli & Prepared Foods",
+"name": "Luncheon meat or poultry",
+"detail": "store-sliced",
+"keywords": [
+"luncheon",
+"luncheon meat",
+"meat",
+"poultry",
+"sliced",
+"store",
+"store sliced"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 185,
+"category": "Deli & Prepared Foods",
+"name": "Main dishes or meals",
+"detail": "hot or refrigerated",
+"keywords": [
+"dish",
+"dishes",
+"hot",
+"main dishes",
+"meal",
+"meals",
+"refrigerated"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+60,
+90
+]
+},
+{
+"id": 186,
+"category": "Deli & Prepared Foods",
+"name": "Meats",
+"detail": "covered with gravy or broth",
+"keywords": [
+"broth",
+"gravy",
+"meat",
+"meats"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 187,
+"category": "Deli & Prepared Foods",
+"name": "Olives",
+"detail": "from olive bar",
+"keywords": [
+"bar",
+"olive",
+"olives"
+],
+"fridge": [
+14,
+14
+]
+},
+{
+"id": 188,
+"category": "Deli & Prepared Foods",
+"name": "Pate",
+"detail": "",
+"keywords": [
+"pate"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 192,
+"category": "Deli & Prepared Foods",
+"name": "Luncheon meat or poultry",
+"detail": "pre-packaged",
+"keywords": [
+"luncheon",
+"luncheon meat",
+"meat",
+"packaged",
+"poultry",
+"pre packaged"
+],
+"fridge": [
+14,
+14
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 193,
+"category": "Deli & Prepared Foods",
+"name": "Soup, stews",
+"detail": "",
+"keywords": [
+"soup",
+"stew",
+"stews"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+60,
+90
+]
+},
+{
+"id": 194,
+"category": "Deli & Prepared Foods",
+"name": "Casseroles",
+"detail": "",
+"keywords": [
+"casserole",
+"casseroles"
+],
+"fridge": [
+3,
+4
+]
+},
+{
+"id": 195,
+"category": "Baked Goods · Bakery",
+"name": "Commercial bread products",
+"detail": "including pan breads, flat breads, rolls, and buns",
+"keywords": [
+"bread",
+"bread products",
+"breads",
+"bun",
+"buns",
+"commercial bread products",
+"flat",
+"flat breads",
+"pan",
+"pan breads",
+"product",
+"products",
+"roll",
+"rolls"
+],
+"pantry": [
+14,
+18
+],
+"freezer": [
+90,
+150
+]
+},
+{
+"id": 196,
+"category": "Grains, Beans & Pasta",
+"name": "Tortillas",
+"detail": "flour",
+"keywords": [
+"tortilla",
+"tortillas"
+],
+"pantry": [
+90,
+90
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 197,
+"category": "Baked Goods · Bakery",
+"name": "Commercial cakes and muffins",
+"detail": "",
+"keywords": [
+"cake",
+"commercial cakes",
+"muffin",
+"muffins"
+],
+"pantry": [
+3,
+7
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 198,
+"category": "Baked Goods · Bakery",
+"name": "Cheesecake",
+"detail": "",
+"keywords": [
+"cake",
+"cheese",
+"cheesecake"
+],
+"freezer": [
+90,
+180
+]
+},
+{
+"id": 199,
+"category": "Baked Goods · Bakery",
+"name": "Cookies",
+"detail": "soft",
+"keywords": [
+"cookie",
+"cookies",
+"soft"
+],
+"pantry": [
+60,
+90
+],
+"freezer": [
+240,
+360
+]
+},
+{
+"id": 200,
+"category": "Baked Goods · Bakery",
+"name": "Cookies",
+"detail": "crispy",
+"keywords": [
+"cookie",
+"cookies",
+"crispy"
+],
+"pantry": [
+120,
+180
+],
+"freezer": [
+240,
+360
+]
+},
+{
+"id": 201,
+"category": "Baked Goods · Bakery",
+"name": "Dairy filled eclairs",
+"detail": "",
+"keywords": [
+"dairy",
+"dairy filled",
+"dairy filled eclairs",
+"eclairs",
+"éclair"
+],
+"freezer": [
+90,
+90
+]
+},
+{
+"id": 202,
+"category": "Baked Goods · Bakery",
+"name": "Doughnuts",
+"detail": "",
+"keywords": [
+"dough",
+"doughnut",
+"doughnuts",
+"nut"
+],
+"pantry": [
+1,
+2
+]
+},
+{
+"id": 203,
+"category": "Baked Goods · Bakery",
+"name": "Fruit cake",
+"detail": "",
+"keywords": [
+"cake",
+"fruit",
+"fruit cake"
+],
+"pantry": [
+180,
+180
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 204,
+"category": "Baked Goods · Bakery",
+"name": "Pastries, danish",
+"detail": "",
+"keywords": [
+"danish",
+"pastries",
+"pastry"
+],
+"pantry": [
+5,
+10
+]
+},
+{
+"id": 207,
+"category": "Baked Goods · Bakery",
+"name": "Fruit pies",
+"detail": "apple, peach, blueberry, apricot, cherry, blackberry",
+"keywords": [
+"apple",
+"apple pie",
+"apricot",
+"apricot pie",
+"blackberry",
+"blackberry pie",
+"blueberry",
+"blueberry pie",
+"cherry",
+"cherry pie",
+"fruit",
+"peach",
+"peach pie",
+"pie",
+"pies"
+],
+"pantry": [
+1,
+2
+],
+"freezer": [
+240,
+240
+]
+},
+{
+"id": 208,
+"category": "Baked Goods · Bakery",
+"name": "Pies",
+"detail": "mincemeat",
+"keywords": [
+"meat",
+"mince",
+"mincemeat",
+"pie",
+"pies"
+],
+"freezer": [
+240,
+240
+]
+},
+{
+"id": 209,
+"category": "Baked Goods · Bakery",
+"name": "Pies",
+"detail": "pecan",
+"keywords": [
+"pecan",
+"pie",
+"pies"
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 210,
+"category": "Baked Goods · Bakery",
+"name": "Pies",
+"detail": "pumpkin",
+"keywords": [
+"pie",
+"pies",
+"pumpkin"
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 211,
+"category": "Baked Goods · Bakery",
+"name": "Quiche",
+"detail": "",
+"keywords": [
+"quiche"
+],
+"freezer": [
+60,
+90
+]
+},
+{
+"id": 212,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Baking powder",
+"detail": "",
+"keywords": [
+"baking",
+"baking powder",
+"powder"
+],
+"pantry": [
+180,
+540
+]
+},
+{
+"id": 213,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Baking soda",
+"detail": "",
+"keywords": [
+"baking",
+"baking soda",
+"soda"
+],
+"pantry": [
+730,
+1095
+]
+},
+{
+"id": 214,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Biscuit or pancake mix",
+"detail": "",
+"keywords": [
+"biscuit",
+"cake",
+"mix",
+"pancake",
+"pancake mix"
+],
+"pantry": [
+270,
+270
+]
+},
+{
+"id": 215,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Cake, brownie, bread mixes",
+"detail": "",
+"keywords": [
+"bread",
+"bread mixes",
+"brownie",
+"cake",
+"mix",
+"mixes"
+],
+"pantry": [
+360,
+540
+]
+},
+{
+"id": 216,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Chocolate",
+"detail": "unsweetened and semi-sweet, solid",
+"keywords": [
+"chocolate",
+"semi sweet",
+"solid",
+"sweet",
+"unsweetened"
+],
+"pantry": [
+365,
+730
+]
+},
+{
+"id": 218,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Cornmeal",
+"detail": "regular, degerminated",
+"keywords": [
+"corn",
+"cornmeal",
+"degerminated",
+"germinate",
+"germinated",
+"meal",
+"regular"
+],
+"pantry": [
+180,
+360
+]
+},
+{
+"id": 219,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Cornmeal",
+"detail": "stone ground or blue",
+"keywords": [
+"blue",
+"corn",
+"cornmeal",
+"ground",
+"meal",
+"stone",
+"stone ground"
+],
+"pantry": [
+30,
+30
+]
+},
+{
+"id": 220,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Cornstarch",
+"detail": "",
+"keywords": [
+"corn",
+"cornstarch",
+"starch"
+],
+"pantry": [
+540,
+720
+]
+},
+{
+"id": 222,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Flour",
+"detail": "white",
+"keywords": [
+"flour",
+"white"
+],
+"pantry": [
+180,
+360
+]
+},
+{
+"id": 223,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Flour",
+"detail": "whole wheat",
+"keywords": [
+"flour",
+"wheat",
+"whole wheat"
+],
+"pantry": [
+90,
+180
+]
+},
+{
+"id": 224,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Frosting or icing",
+"detail": "",
+"keywords": [
+"frost",
+"frosting",
+"ice",
+"icing"
+],
+"pantry": [
+300,
+360
+]
+},
+{
+"id": 225,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Gelatin",
+"detail": "flavored",
+"keywords": [
+"flavor",
+"flavored",
+"gelatin"
+],
+"pantry": [
+300,
+360
+]
+},
+{
+"id": 226,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Gelatin",
+"detail": "unflavored",
+"keywords": [
+"gelatin",
+"unflavor",
+"unflavored"
+],
+"pantry": [
+1095,
+1095
+]
+},
+{
+"id": 227,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Oils",
+"detail": "olive or vegetable",
+"keywords": [
+"oil",
+"oils",
+"olive",
+"vegetable"
+],
+"pantry": [
+180,
+360
+]
+},
+{
+"id": 228,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Nut oils",
+"detail": "",
+"keywords": [
+"nut",
+"nut oils",
+"oil",
+"oils"
+],
+"pantry": [
+180,
+360
+]
+},
+{
+"id": 229,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Vegetable oil sprays",
+"detail": "",
+"keywords": [
+"oil",
+"sprays",
+"vegetable",
+"vegetable oil",
+"vegetable oil sprays"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 230,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Shortening",
+"detail": "solid",
+"keywords": [
+"shortening",
+"solid"
+],
+"pantry": [
+365,
+730
+]
+},
+{
+"id": 231,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Tamarind paste",
+"detail": "",
+"keywords": [
+"paste",
+"tamarind",
+"tamarind paste"
+],
+"pantry": [
+180,
+360
+]
+},
+{
+"id": 232,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Chili powder",
+"detail": "",
+"keywords": [
+"chili",
+"chili powder",
+"powder"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 233,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Seasoning blends",
+"detail": "",
+"keywords": [
+"blend",
+"blends",
+"seasoning",
+"seasoning blends"
+],
+"pantry": [
+365,
+730
+]
+},
+{
+"id": 234,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Flavored or herb mixes",
+"detail": "",
+"keywords": [
+"flavor",
+"flavored",
+"herb",
+"herb mixes",
+"mix",
+"mixes"
+],
+"pantry": [
+180,
+180
+]
+},
+{
+"id": 235,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Garlic",
+"detail": "chopped, commercial jars",
+"keywords": [
+"chopped",
+"commercial jars",
+"garlic",
+"jar",
+"jars"
+],
+"pantry": [
+240,
+360
+]
+},
+{
+"id": 236,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Herbs",
+"detail": "dried",
+"keywords": [
+"dried",
+"herb",
+"herbs"
+],
+"pantry": [
+365,
+730
+]
+},
+{
+"id": 237,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Spice/spices",
+"detail": "whole",
+"keywords": [
+"spice",
+"spices",
+"whole"
+],
+"pantry": [
+1095,
+1460
+]
+},
+{
+"id": 238,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Spice/spices",
+"detail": "ground",
+"keywords": [
+"ground",
+"spice",
+"spices"
+],
+"pantry": [
+730,
+1095
+]
+},
+{
+"id": 242,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Sugar substitutes",
+"detail": "",
+"keywords": [
+"substitute",
+"substitutes",
+"sugar",
+"sugar substitutes"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 243,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Tapiocas",
+"detail": "",
+"keywords": [
+"tapioca",
+"tapiocas"
+],
+"pantry": [
+360,
+360
+]
+},
+{
+"id": 246,
+"category": "Baked Goods · Refrigerated Dough",
+"name": "Ready-to-bake pie crust",
+"detail": "",
+"keywords": [
+"bake",
+"crust",
+"pie",
+"ready",
+"ready to bake pie crust"
+],
+"freezer": [
+60,
+60
+]
+},
+{
+"id": 247,
+"category": "Baked Goods · Refrigerated Dough",
+"name": "Cookie dough",
+"detail": "",
+"keywords": [
+"cookie",
+"cookie dough",
+"dough"
+],
+"freezer": [
+60,
+60
+]
+},
+{
+"id": 248,
+"category": "Produce · Fresh Fruits",
+"name": "Apples",
+"detail": "",
+"keywords": [
+"apple",
+"apples"
+],
+"pantry": [
+21,
+21
+],
+"fridge": [
+28,
+42
+],
+"freezer": [
+240,
+240
+]
+},
+{
+"id": 249,
+"category": "Produce · Fresh Fruits",
+"name": "Apricots",
+"detail": "",
+"keywords": [
+"apricot",
+"apricots"
+],
+"fridge": [
+2,
+5
+]
+},
+{
+"id": 250,
+"category": "Produce · Fresh Fruits",
+"name": "Avocados",
+"detail": "",
+"keywords": [
+"avocado",
+"avocados"
+],
+"fridge": [
+3,
+4
+]
+},
+{
+"id": 251,
+"category": "Produce · Fresh Fruits",
+"name": "Bananas",
+"detail": "",
+"keywords": [
+"banana",
+"bananas"
+],
+"fridge": [
+3,
+3
+],
+"freezer": [
+60,
+90
+]
+},
+{
+"id": 252,
+"category": "Produce · Fresh Fruits",
+"name": "Berries",
+"detail": "cherries, goose berries, lychee",
+"keywords": [
+"berries",
+"berry",
+"cherries",
+"cherry",
+"goose berries",
+"goose berry",
+"gooseberries",
+"lychee"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 253,
+"category": "Produce · Fresh Fruits",
+"name": "Berries",
+"detail": "blackberries, boysenberries, currant",
+"keywords": [
+"berries",
+"berry",
+"blackberries",
+"blackberry",
+"boysenberries",
+"boysenberry",
+"currant"
+],
+"fridge": [
+3,
+6
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 254,
+"category": "Produce · Fresh Fruits",
+"name": "Blueberries",
+"detail": "",
+"keywords": [
+"berries",
+"berry",
+"blueberries",
+"blueberry"
+],
+"fridge": [
+7,
+14
+],
+"freezer": [
+240,
+360
+]
+},
+{
+"id": 255,
+"category": "Produce · Fresh Fruits",
+"name": "Cherimoya",
+"detail": "",
+"keywords": [
+"cherimoya"
+],
+"fridge": [
+4,
+4
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 256,
+"category": "Produce · Fresh Fruits",
+"name": "Citrus fruit",
+"detail": "lemon, lime, orange, grapefruit, tangerines, clementines",
+"keywords": [
+"citrus",
+"citrus fruit",
+"clementine",
+"clementines",
+"fruit",
+"grape",
+"grapefruit",
+"lemon",
+"lime",
+"orange",
+"tangerine",
+"tangerines"
+],
+"pantry": [
+10,
+10
+],
+"fridge": [
+10,
+21
+]
+},
+{
+"id": 257,
+"category": "Produce · Fresh Fruits",
+"name": "Coconut",
+"detail": "shredded",
+"keywords": [
+"coconut",
+"shredded"
+],
+"pantry": [
+365,
+365
+],
+"freezer": [
+365,
+365
+]
+},
+{
+"id": 258,
+"category": "Produce · Fresh Fruits",
+"name": "Coconuts",
+"detail": "fresh",
+"keywords": [
+"coconut",
+"coconuts",
+"fresh"
+],
+"pantry": [
+7,
+7
+],
+"fridge": [
+14,
+21
+]
+},
+{
+"id": 259,
+"category": "Produce · Fresh Fruits",
+"name": "Cranberries",
+"detail": "",
+"keywords": [
+"cranberries",
+"cranberry"
+],
+"fridge": [
+60,
+60
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 260,
+"category": "Produce · Fresh Fruits",
+"name": "Dates",
+"detail": "",
+"keywords": [
+"dates"
+],
+"pantry": [
+60,
+60
+],
+"fridge": [
+360,
+360
+],
+"freezer": [
+365,
+730
+]
+},
+{
+"id": 261,
+"category": "Produce · Fresh Fruits",
+"name": "Grapes",
+"detail": "",
+"keywords": [
+"grape",
+"grapes"
+],
+"pantry": [
+1,
+1
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+30,
+30
+]
+},
+{
+"id": 262,
+"category": "Produce · Fresh Fruits",
+"name": "Guava",
+"detail": "",
+"keywords": [
+"guava"
+],
+"fridge": [
+2,
+4
+]
+},
+{
+"id": 263,
+"category": "Produce · Fresh Fruits",
+"name": "Kiwi fruit",
+"detail": "",
+"keywords": [
+"fruit",
+"kiwi",
+"kiwi fruit"
+],
+"fridge": [
+3,
+6
+]
+},
+{
+"id": 264,
+"category": "Produce · Fresh Fruits",
+"name": "Melons",
+"detail": "",
+"keywords": [
+"melon",
+"melons"
+],
+"fridge": [
+14,
+14
+],
+"freezer": [
+30,
+30
+]
+},
+{
+"id": 265,
+"category": "Produce · Fresh Fruits",
+"name": "Papaya, mango, feijoa, passionfruit, casaha melon",
+"detail": "",
+"keywords": [
+"casaha melon",
+"feijoa",
+"fruit",
+"mango",
+"melon",
+"papaya",
+"passion",
+"passionfruit"
+],
+"pantry": [
+3,
+5
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+180,
+240
+]
+},
+{
+"id": 266,
+"category": "Produce · Fresh Fruits",
+"name": "Peaches, nectarines, plums, pears, sapote",
+"detail": "",
+"keywords": [
+"nectarine",
+"nectarines",
+"peach",
+"peaches",
+"pear",
+"pears",
+"plum",
+"plums",
+"sapote"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+60,
+60
+]
+},
+{
+"id": 267,
+"category": "Produce · Fresh Fruits",
+"name": "Pineapple",
+"detail": "",
+"keywords": [
+"pineapple"
+],
+"fridge": [
+5,
+7
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 268,
+"category": "Produce · Fresh Fruits",
+"name": "Plantains",
+"detail": "",
+"keywords": [
+"plantain",
+"plantains"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 269,
+"category": "Produce · Fresh Fruits",
+"name": "Pomegranate",
+"detail": "",
+"keywords": [
+"pomegranate"
+],
+"pantry": [
+2,
+5
+],
+"fridge": [
+30,
+90
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 270,
+"category": "Produce · Fresh Vegetables",
+"name": "Artichokes, whole",
+"detail": "",
+"keywords": [
+"artichoke",
+"artichokes",
+"whole"
+],
+"pantry": [
+1,
+2
+],
+"fridge": [
+7,
+14
+]
+},
+{
+"id": 271,
+"category": "Produce · Fresh Vegetables",
+"name": "Asparagus",
+"detail": "",
+"keywords": [
+"asparagus"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+150,
+150
+]
+},
+{
+"id": 272,
+"category": "Produce · Fresh Vegetables",
+"name": "Bamboo shoots",
+"detail": "",
+"keywords": [
+"bamboo",
+"bamboo shoots",
+"shoot",
+"shoots"
+],
+"fridge": [
+14,
+14
+]
+},
+{
+"id": 273,
+"category": "Produce · Fresh Vegetables",
+"name": "Beans and peas",
+"detail": "green, fava, lima, soybean, wax, snow, sugar snap",
+"keywords": [
+"beans",
+"fava",
+"green",
+"lima",
+"pea",
+"peas",
+"snow",
+"soya",
+"soybean",
+"sugar",
+"sugar snap",
+"wax"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+240,
+240
+]
+},
+{
+"id": 274,
+"category": "Produce · Fresh Vegetables",
+"name": "Beets",
+"detail": "",
+"keywords": [
+"beets"
+],
+"pantry": [
+1,
+1
+],
+"fridge": [
+7,
+14
+],
+"freezer": [
+180,
+240
+]
+},
+{
+"id": 275,
+"category": "Produce · Fresh Vegetables",
+"name": "Bok choy",
+"detail": "",
+"keywords": [
+"bok choy"
+],
+"fridge": [
+2,
+3
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 276,
+"category": "Produce · Fresh Vegetables",
+"name": "Broccoli and broccoli raab (rapini)",
+"detail": "",
+"keywords": [
+"broccoli",
+"broccoli raab",
+"raab",
+"rapini"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 277,
+"category": "Produce · Fresh Vegetables",
+"name": "Brussels sprouts",
+"detail": "",
+"keywords": [
+"brussel",
+"brussels",
+"brussels sprouts",
+"sprout",
+"sprouts"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 278,
+"category": "Produce · Fresh Vegetables",
+"name": "Cabbage",
+"detail": "",
+"keywords": [
+"cabbage"
+],
+"fridge": [
+7,
+14
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 279,
+"category": "Produce · Fresh Vegetables",
+"name": "Carrots, parsnips",
+"detail": "",
+"keywords": [
+"carrot",
+"carrots",
+"parsnip",
+"parsnips"
+],
+"fridge": [
+14,
+21
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 280,
+"category": "Produce · Fresh Vegetables",
+"name": "Cauliflower",
+"detail": "",
+"keywords": [
+"cauliflower"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 281,
+"category": "Produce · Fresh Vegetables",
+"name": "Celery",
+"detail": "",
+"keywords": [
+"celery"
+],
+"fridge": [
+7,
+14
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 282,
+"category": "Produce · Fresh Vegetables",
+"name": "Corn on the cob",
+"detail": "",
+"keywords": [
+"cob",
+"corn"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+240,
+240
+]
+},
+{
+"id": 283,
+"category": "Produce · Fresh Vegetables",
+"name": "Cucumbers",
+"detail": "",
+"keywords": [
+"cucumber",
+"cucumbers"
+],
+"fridge": [
+4,
+6
+]
+},
+{
+"id": 284,
+"category": "Produce · Fresh Vegetables",
+"name": "Eggplant",
+"detail": "",
+"keywords": [
+"egg",
+"eggplant"
+],
+"pantry": [
+1,
+1
+],
+"fridge": [
+4,
+7
+],
+"freezer": [
+180,
+240
+]
+},
+{
+"id": 285,
+"category": "Produce · Fresh Vegetables",
+"name": "Garlic",
+"detail": "",
+"keywords": [
+"garlic"
+],
+"pantry": [
+30,
+30
+],
+"fridge": [
+3,
+14
+],
+"freezer": [
+30,
+30
+]
+},
+{
+"id": 286,
+"category": "Produce · Fresh Vegetables",
+"name": "Ginger root",
+"detail": "",
+"keywords": [
+"ginger",
+"ginger root",
+"root"
+],
+"pantry": [
+2,
+5
+],
+"fridge": [
+14,
+21
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 287,
+"category": "Produce · Fresh Vegetables",
+"name": "Greens",
+"detail": "",
+"keywords": [
+"green",
+"greens"
+],
+"fridge": [
+1,
+4
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 288,
+"category": "Produce · Fresh Vegetables",
+"name": "Herbs",
+"detail": "",
+"keywords": [
+"herb",
+"herbs"
+],
+"fridge": [
+7,
+10
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 289,
+"category": "Produce · Fresh Vegetables",
+"name": "Leeks",
+"detail": "",
+"keywords": [
+"leek",
+"leeks"
+],
+"fridge": [
+7,
+14
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 290,
+"category": "Produce · Fresh Vegetables",
+"name": "Lettuce",
+"detail": "iceberg, romaine",
+"keywords": [
+"iceberg",
+"lettuce",
+"romaine"
+],
+"fridge": [
+7,
+14
+]
+},
+{
+"id": 291,
+"category": "Produce · Fresh Vegetables",
+"name": "Lettuce",
+"detail": "leaf, spinach",
+"keywords": [
+"leaf",
+"lettuce",
+"spinach"
+],
+"fridge": [
+3,
+7
+]
+},
+{
+"id": 292,
+"category": "Produce · Fresh Vegetables",
+"name": "Mushrooms",
+"detail": "",
+"keywords": [
+"mushroom",
+"mushrooms"
+],
+"fridge": [
+3,
+7
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 293,
+"category": "Produce · Fresh Vegetables",
+"name": "Okra",
+"detail": "",
+"keywords": [
+"okra"
+],
+"pantry": [
+1,
+1
+],
+"fridge": [
+2,
+3
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 294,
+"category": "Produce · Fresh Vegetables",
+"name": "Onions",
+"detail": "yellow, white, red, etc.",
+"keywords": [
+"onion",
+"onions",
+"red",
+"white",
+"yellow"
+],
+"pantry": [
+30,
+30
+],
+"fridge": [
+60,
+60
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 295,
+"category": "Produce · Fresh Vegetables",
+"name": "Onions",
+"detail": "spring or green",
+"keywords": [
+"green",
+"onion",
+"onions",
+"spring"
+],
+"pantry": [
+30,
+30
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 296,
+"category": "Produce · Fresh Vegetables",
+"name": "Peppers",
+"detail": "",
+"keywords": [
+"pepper",
+"peppers"
+],
+"fridge": [
+4,
+14
+],
+"freezer": [
+180,
+240
+]
+},
+{
+"id": 297,
+"category": "Produce · Fresh Vegetables",
+"name": "Potatoes",
+"detail": "",
+"keywords": [
+"potato",
+"potatoes"
+],
+"pantry": [
+30,
+60
+],
+"fridge": [
+7,
+14
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 298,
+"category": "Produce · Fresh Vegetables",
+"name": "Pumpkins",
+"detail": "",
+"keywords": [
+"pumpkin",
+"pumpkins"
+],
+"pantry": [
+60,
+90
+],
+"fridge": [
+90,
+150
+]
+},
+{
+"id": 299,
+"category": "Produce · Fresh Vegetables",
+"name": "Radishes",
+"detail": "",
+"keywords": [
+"radish",
+"radishes"
+],
+"fridge": [
+10,
+14
+]
+},
+{
+"id": 300,
+"category": "Produce · Fresh Vegetables",
+"name": "Rhubarb",
+"detail": "",
+"keywords": [
+"rhubarb"
+],
+"fridge": [
+3,
+7
+]
+},
+{
+"id": 301,
+"category": "Produce · Fresh Vegetables",
+"name": "Rutabagas",
+"detail": "",
+"keywords": [
+"rutabagas"
+],
+"pantry": [
+7,
+7
+],
+"fridge": [
+14,
+21
+],
+"freezer": [
+240,
+300
+]
+},
+{
+"id": 302,
+"category": "Produce · Fresh Vegetables",
+"name": "Squash",
+"detail": "summer and zucchini",
+"keywords": [
+"squash",
+"summer",
+"zucchini"
+],
+"pantry": [
+1,
+5
+],
+"fridge": [
+4,
+5
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 303,
+"category": "Produce · Fresh Vegetables",
+"name": "Squash",
+"detail": "winter",
+"keywords": [
+"squash",
+"winter"
+],
+"pantry": [
+14,
+42
+],
+"fridge": [
+30,
+90
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 304,
+"category": "Produce · Fresh Vegetables",
+"name": "Tamarind",
+"detail": "",
+"keywords": [
+"tamarind"
+],
+"pantry": [
+7,
+21
+],
+"fridge": [
+180,
+180
+],
+"freezer": [
+365,
+365
+]
+},
+{
+"id": 305,
+"category": "Produce · Fresh Vegetables",
+"name": "Taro",
+"detail": "",
+"keywords": [
+"taro"
+],
+"pantry": [
+7,
+7
+],
+"fridge": [
+2,
+3
+]
+},
+{
+"id": 306,
+"category": "Produce · Fresh Vegetables",
+"name": "Tomatoes",
+"detail": "",
+"keywords": [
+"tomato",
+"tomatoes"
+],
+"freezer": [
+60,
+60
+]
+},
+{
+"id": 307,
+"category": "Produce · Fresh Vegetables",
+"name": "Turnips",
+"detail": "",
+"keywords": [
+"turnip",
+"turnips"
+],
+"fridge": [
+14,
+14
+],
+"freezer": [
+240,
+300
+]
+},
+{
+"id": 308,
+"category": "Produce · Fresh Vegetables",
+"name": "Yuca/cassava",
+"detail": "",
+"keywords": [
+"cassava",
+"yuca"
+],
+"pantry": [
+7,
+7
+],
+"fridge": [
+3,
+3
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 309,
+"category": "Food Purchased Frozen",
+"name": "Dough",
+"detail": "commercial (bread or cookie)",
+"keywords": [
+"bread",
+"commercial",
+"cookie",
+"dough"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 310,
+"category": "Food Purchased Frozen",
+"name": "Egg substitutes",
+"detail": "",
+"keywords": [
+"egg",
+"egg substitute",
+"egg substitutes",
+"substitute"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 311,
+"category": "Food Purchased Frozen",
+"name": "Fish",
+"detail": "breaded",
+"keywords": [
+"bread",
+"breaded",
+"fish"
+],
+"freezer": [
+540,
+540
+]
+},
+{
+"id": 312,
+"category": "Food Purchased Frozen",
+"name": "Fish",
+"detail": "raw but headed and gutted",
+"keywords": [
+"fish",
+"gutted",
+"headed",
+"raw"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 313,
+"category": "Food Purchased Frozen",
+"name": "Frozen potato products",
+"detail": "fries, hashbrowns, tater tots",
+"keywords": [
+"fries",
+"frozen potato",
+"frozen potato products",
+"hashbrown",
+"hashbrowns",
+"potato products",
+"product",
+"products",
+"tater tot",
+"tater tots"
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 314,
+"category": "Food Purchased Frozen",
+"name": "Frozen pretzels",
+"detail": "",
+"keywords": [
+"frozen",
+"frozen pretzels",
+"pretzel",
+"pretzels"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+270,
+270
+]
+},
+{
+"id": 315,
+"category": "Food Purchased Frozen",
+"name": "Fruits",
+"detail": "such as berries, melons",
+"keywords": [
+"berries",
+"berry",
+"fruits",
+"melon",
+"melons"
+],
+"freezer": [
+300,
+540
+]
+},
+{
+"id": 317,
+"category": "Food Purchased Frozen",
+"name": "Ice cream",
+"detail": "",
+"keywords": [
+"cream",
+"ice",
+"ice cream"
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 318,
+"category": "Food Purchased Frozen",
+"name": "Ice pops",
+"detail": "",
+"keywords": [
+"ice",
+"ice pops",
+"pop",
+"pops"
+],
+"freezer": [
+270,
+270
+]
+},
+{
+"id": 319,
+"category": "Food Purchased Frozen",
+"name": "Juice concentrates",
+"detail": "",
+"keywords": [
+"concentrate",
+"juice",
+"juice concentrates"
+],
+"freezer": [
+730,
+730
+]
+},
+{
+"id": 320,
+"category": "Food Purchased Frozen",
+"name": "Lobster tails",
+"detail": "",
+"keywords": [
+"lobster",
+"lobster tail",
+"lobster tails",
+"tail"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+240,
+240
+]
+},
+{
+"id": 321,
+"category": "Food Purchased Frozen",
+"name": "Pancakes, waffles",
+"detail": "",
+"keywords": [
+"pancake",
+"pancakes",
+"waffles"
+],
+"freezer": [
+90,
+90
+]
+},
+{
+"id": 322,
+"category": "Food Purchased Frozen",
+"name": "Sausages",
+"detail": "uncooked",
+"keywords": [
+"cooked",
+"sausage",
+"sausages",
+"uncooked"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 323,
+"category": "Food Purchased Frozen",
+"name": "Sausages",
+"detail": "precooked",
+"keywords": [
+"cooked",
+"precooked",
+"sausage",
+"sausages"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 324,
+"category": "Food Purchased Frozen",
+"name": "Sherbet, sorbet",
+"detail": "",
+"keywords": [
+"sherbet",
+"sorbet"
+],
+"freezer": [
+270,
+270
+]
+},
+{
+"id": 325,
+"category": "Food Purchased Frozen",
+"name": "Shrimp, shellfish",
+"detail": "",
+"keywords": [
+"fish",
+"shellfish",
+"shrimp"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+360,
+540
+]
+},
+{
+"id": 326,
+"category": "Food Purchased Frozen",
+"name": "Soy crumbles and hot dogs",
+"detail": "",
+"keywords": [
+"hot dog",
+"hot dogs",
+"soy",
+"soy crumble",
+"soy crumbles"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 327,
+"category": "Food Purchased Frozen",
+"name": "Soy meat substitutes",
+"detail": "",
+"keywords": [
+"meat",
+"meat substitutes",
+"soy",
+"soy meat",
+"soy meat substitutes",
+"substitute",
+"substitutes"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+360,
+540
+]
+},
+{
+"id": 328,
+"category": "Food Purchased Frozen",
+"name": "Tempeh",
+"detail": "",
+"keywords": [
+"tempeh"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 330,
+"category": "Food Purchased Frozen",
+"name": "Frozen entrees",
+"detail": "prepared meals",
+"keywords": [
+"breakfast",
+"dinner",
+"dinners",
+"entrees",
+"entry",
+"tv",
+"tv dinners"
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 331,
+"category": "Food Purchased Frozen",
+"name": "Vegetables",
+"detail": "",
+"keywords": [
+"vegetable",
+"vegetables"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+300,
+540
+]
+},
+{
+"id": 332,
+"category": "Grains, Beans & Pasta",
+"name": "Fresh pasta",
+"detail": "",
+"keywords": [
+"fresh pasta",
+"pasta"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+60,
+60
+]
+},
+{
+"id": 333,
+"category": "Grains, Beans & Pasta",
+"name": "Beans",
+"detail": "dried",
+"keywords": [
+"beans",
+"dried"
+],
+"pantry": [
+365,
+730
+]
+},
+{
+"id": 334,
+"category": "Grains, Beans & Pasta",
+"name": "Lentils",
+"detail": "dried",
+"keywords": [
+"dried",
+"lentils"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 335,
+"category": "Grains, Beans & Pasta",
+"name": "Pasta",
+"detail": "dry, without eggs",
+"keywords": [
+"dry",
+"egg",
+"eggs",
+"pasta",
+"without egg",
+"without eggs"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 336,
+"category": "Grains, Beans & Pasta",
+"name": "Dry egg noodles",
+"detail": "",
+"keywords": [
+"dry",
+"dry egg noodles",
+"egg",
+"egg noodles",
+"noodle",
+"noodles"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 337,
+"category": "Grains, Beans & Pasta",
+"name": "Peas",
+"detail": "dried split",
+"keywords": [
+"dried split",
+"pea",
+"peas",
+"split"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 338,
+"category": "Grains, Beans & Pasta",
+"name": "Rice",
+"detail": "white or wild",
+"keywords": [
+"rice",
+"white",
+"wild"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 339,
+"category": "Grains, Beans & Pasta",
+"name": "Rice",
+"detail": "brown",
+"keywords": [
+"brown",
+"rice"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 340,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Barbecue sauce",
+"detail": "bottled",
+"keywords": [
+"barbecue",
+"barbecue sauce",
+"bottled",
+"sauce"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 341,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Chutney",
+"detail": "",
+"keywords": [
+"chutney"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 342,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Cream sauces, milk solids",
+"detail": "",
+"keywords": [
+"cream",
+"cream sauces",
+"milk",
+"milk solids",
+"sauce",
+"sauces",
+"solid",
+"solids"
+],
+"pantry": [
+180,
+360
+]
+},
+{
+"id": 343,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Dry gravy mixes",
+"detail": "",
+"keywords": [
+"dry",
+"dry gravy mixes",
+"gravy",
+"mix",
+"mixes"
+],
+"pantry": [
+730,
+730
+],
+"fridge": [
+1,
+2
+]
+},
+{
+"id": 344,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Gravy",
+"detail": "jars and cans",
+"keywords": [
+"can",
+"cans",
+"gravy",
+"jar",
+"jars"
+],
+"pantry": [
+730,
+1825
+]
+},
+{
+"id": 345,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Honey",
+"detail": "",
+"keywords": [
+"honey"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 346,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Horseradish",
+"detail": "in jar",
+"keywords": [
+"horseradish",
+"jar"
+],
+"fridge": [
+360,
+360
+]
+},
+{
+"id": 347,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Jams, jellies, and preserves",
+"detail": "",
+"keywords": [
+"jam",
+"jams",
+"jellies",
+"jelly",
+"preserve",
+"preserves"
+],
+"pantry": [
+180,
+540
+]
+},
+{
+"id": 348,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Ketchup, cocktail, or chili sauce",
+"detail": "",
+"keywords": [
+"chili",
+"chili sauce",
+"cocktail",
+"ketchup",
+"sauce"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 349,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Marinades",
+"detail": "",
+"keywords": [
+"marinade",
+"marinades"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 350,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Mayonnaise",
+"detail": "commercial",
+"keywords": [
+"commercial",
+"mayonnaise"
+],
+"pantry": [
+90,
+180
+]
+},
+{
+"id": 351,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Mustard",
+"detail": "",
+"keywords": [
+"mustard"
+],
+"pantry": [
+365,
+730
+]
+},
+{
+"id": 352,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Olives",
+"detail": "black and green",
+"keywords": [
+"black",
+"green",
+"olive",
+"olives"
+],
+"pantry": [
+360,
+540
+]
+},
+{
+"id": 353,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Pickles",
+"detail": "",
+"keywords": [
+"pickle",
+"pickles"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 354,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Pesto",
+"detail": "jarred",
+"keywords": [
+"jar",
+"jarred",
+"pesto"
+],
+"fridge": [
+180,
+180
+],
+"freezer": [
+30,
+30
+]
+},
+{
+"id": 356,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Salad dressings",
+"detail": "commercial, bottled",
+"keywords": [
+"bottle",
+"bottled",
+"commercial",
+"dressing",
+"dressings",
+"salad",
+"salad dressings"
+],
+"pantry": [
+300,
+360
+]
+},
+{
+"id": 357,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Salsa",
+"detail": "picante and taco sauces",
+"keywords": [
+"picante",
+"salsa",
+"sauce",
+"sauces",
+"taco",
+"taco sauces"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 358,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Sauce mixes",
+"detail": "nondairy (spaghetti, taco, etc.)",
+"keywords": [
+"dairy",
+"mix",
+"mixes",
+"nondairy",
+"sauce",
+"sauce mixes",
+"spaghetti",
+"taco"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 359,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Spaghetti sauce",
+"detail": "in jars",
+"keywords": [
+"in jars",
+"jar",
+"jars",
+"sauce",
+"spaghetti",
+"spaghetti sauce"
+],
+"pantry": [
+540,
+540
+]
+},
+{
+"id": 360,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Soy sauce or teriyaki sauce",
+"detail": "",
+"keywords": [
+"sauce",
+"soy",
+"soy sauce",
+"teriyaki",
+"teriyaki sauce"
+],
+"pantry": [
+1095,
+1095
+]
+},
+{
+"id": 361,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Vinegar",
+"detail": "",
+"keywords": [
+"vinegar"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 362,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Worcestershire sauce",
+"detail": "",
+"keywords": [
+"sauce",
+"worcestershire",
+"worcestershire sauce"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 370,
+"category": "Shelf Stable Foods",
+"name": "Applesauce",
+"detail": "commercial",
+"keywords": [
+"apple",
+"applesauce",
+"commercial",
+"sauce"
+],
+"pantry": [
+360,
+540
+]
+},
+{
+"id": 371,
+"category": "Shelf Stable Foods",
+"name": "Bacon bits",
+"detail": "imitation",
+"keywords": [
+"bacon",
+"bacon bits",
+"bit",
+"bits",
+"imitation"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 372,
+"category": "Shelf Stable Foods",
+"name": "Canned goods",
+"detail": "low acid (such as meat, poultry, fish, gravy, stew, soups, beans, carrots, corn, pasta, peas, potatoes, spinach)",
+"keywords": [
+"bean",
+"beans",
+"can",
+"canned",
+"canned goods",
+"carrot",
+"carrots",
+"corn",
+"fish",
+"goods",
+"gravy",
+"low",
+"low acid",
+"meat",
+"pasta",
+"pea",
+"peas",
+"potato",
+"potatoes",
+"poultry",
+"soup",
+"soups",
+"spinach",
+"stew"
+],
+"pantry": [
+730,
+1825
+]
+},
+{
+"id": 373,
+"category": "Shelf Stable Foods",
+"name": "Canned goods",
+"detail": "high acid (such as juices, fruit, pickles, sauerkraut, tomato soup, and foods in vinegar-based sauce)",
+"keywords": [
+"can",
+"canned",
+"canned goods",
+"food",
+"foods",
+"foods in vinegar based sauce",
+"fruit",
+"fruits",
+"goods",
+"high",
+"high acid",
+"juice",
+"juices",
+"pickle",
+"pickles",
+"sauce",
+"sauerkraut",
+"soup",
+"tomato",
+"tomato soup",
+"vinegar",
+"vinegar based"
+],
+"pantry": [
+360,
+540
+]
+},
+{
+"id": 374,
+"category": "Shelf Stable Foods",
+"name": "Cereal",
+"detail": "ready-to-eat",
+"keywords": [
+"cereal",
+"eat",
+"ready"
+],
+"pantry": [
+180,
+360
+]
+},
+{
+"id": 375,
+"category": "Shelf Stable Foods",
+"name": "Cereal",
+"detail": "cook before eating (oatmeal, etc.)",
+"keywords": [
+"cereal",
+"cook before eating",
+"meal",
+"oat",
+"oatmeal",
+"oats"
+],
+"pantry": [
+360,
+360
+]
+},
+{
+"id": 376,
+"category": "Shelf Stable Foods",
+"name": "Chocolate syrup",
+"detail": "",
+"keywords": [
+"chocolate",
+"chocolate syrup",
+"syrup"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 377,
+"category": "Shelf Stable Foods",
+"name": "Crackers",
+"detail": "",
+"keywords": [
+"cracker",
+"crackers"
+],
+"pantry": [
+240,
+240
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 378,
+"category": "Shelf Stable Foods",
+"name": "Graham cracker/animal cracker",
+"detail": "",
+"keywords": [
+"animal",
+"animal cracker",
+"cracker",
+"graham",
+"graham cracker"
+],
+"pantry": [
+180,
+270
+]
+},
+{
+"id": 379,
+"category": "Shelf Stable Foods",
+"name": "Fruits, dried",
+"detail": "raisins, apricots, mangoes, cranberries, etc.",
+"keywords": [
+"apricot",
+"apricots",
+"cranberries",
+"cranberry",
+"dried",
+"fruit",
+"fruits",
+"mangoe",
+"mangoes",
+"raisin",
+"raisins"
+],
+"pantry": [
+180,
+180
+]
+},
+{
+"id": 380,
+"category": "Shelf Stable Foods",
+"name": "Gummy (fruit) snacks",
+"detail": "",
+"keywords": [
+"fruit",
+"fruit snack",
+"fruit snacks",
+"gummy",
+"gummy snack",
+"gummy snacks",
+"snack",
+"snacks"
+],
+"pantry": [
+180,
+270
+]
+},
+{
+"id": 381,
+"category": "Shelf Stable Foods",
+"name": "Marshmallows",
+"detail": "",
+"keywords": [
+"marshmallow",
+"marshmallows"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 382,
+"category": "Shelf Stable Foods",
+"name": "Marshmallow crème",
+"detail": "",
+"keywords": [
+"crème",
+"marshmallow",
+"marshmallow crème"
+],
+"pantry": [
+60,
+150
+]
+},
+{
+"id": 383,
+"category": "Shelf Stable Foods",
+"name": "Milk",
+"detail": "canned evaporated or condensed",
+"keywords": [
+"can",
+"canned",
+"condense",
+"condensed",
+"evaporate",
+"evaporated",
+"milk"
+],
+"pantry": [
+360,
+360
+]
+},
+{
+"id": 384,
+"category": "Shelf Stable Foods",
+"name": "Molasses",
+"detail": "",
+"keywords": [
+"molasses"
+],
+"pantry": [
+365,
+730
+]
+},
+{
+"id": 385,
+"category": "Shelf Stable Foods",
+"name": "Mushrooms",
+"detail": "dried",
+"keywords": [
+"dried",
+"mushroom",
+"mushrooms"
+],
+"pantry": [
+365,
+730
+]
+},
+{
+"id": 386,
+"category": "Shelf Stable Foods",
+"name": "Nuts",
+"detail": "jars or cans",
+"keywords": [
+"can",
+"cans",
+"jar",
+"jars",
+"nut",
+"nuts"
+],
+"pantry": [
+365,
+365
+],
+"freezer": [
+180,
+360
+]
+},
+{
+"id": 387,
+"category": "Shelf Stable Foods",
+"name": "Peanut butter",
+"detail": "commercial",
+"keywords": [
+"butter",
+"commercial",
+"peanut",
+"peanut butter"
+],
+"pantry": [
+180,
+720
+]
+},
+{
+"id": 389,
+"category": "Shelf Stable Foods",
+"name": "Popcorn",
+"detail": "dry kernels in jar",
+"keywords": [
+"chip",
+"chips",
+"dry kernels",
+"dry kernels in jar",
+"in jar",
+"jar",
+"kernel",
+"kernels",
+"popcorn"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 390,
+"category": "Shelf Stable Foods",
+"name": "Popcorn",
+"detail": "commercially popped in bags",
+"keywords": [
+"bag",
+"bags",
+"commercially",
+"in bags",
+"popcorn",
+"popped in bags"
+],
+"pantry": [
+60,
+90
+]
+},
+{
+"id": 391,
+"category": "Shelf Stable Foods",
+"name": "Popcorn",
+"detail": "microwave packets",
+"keywords": [
+"microwave",
+"microwave packets",
+"packet",
+"packets",
+"popcorn"
+],
+"pantry": [
+180,
+360
+]
+},
+{
+"id": 392,
+"category": "Shelf Stable Foods",
+"name": "Potato chips",
+"detail": "",
+"keywords": [
+"chip",
+"chips",
+"potato",
+"potato chips",
+"potatoes"
+],
+"pantry": [
+60,
+60
+]
+},
+{
+"id": 393,
+"category": "Shelf Stable Foods",
+"name": "Potatoes",
+"detail": "instant",
+"keywords": [
+"instant",
+"potato",
+"potatoes"
+],
+"pantry": [
+300,
+450
+]
+},
+{
+"id": 394,
+"category": "Shelf Stable Foods",
+"name": "Pretzels",
+"detail": "",
+"keywords": [
+"pretzel",
+"pretzels"
+],
+"pantry": [
+120,
+270
+]
+},
+{
+"id": 395,
+"category": "Shelf Stable Foods",
+"name": "Pudding mixes",
+"detail": "",
+"keywords": [
+"mix",
+"mixes",
+"pudding",
+"pudding mixes"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 396,
+"category": "Shelf Stable Foods",
+"name": "Soup mixes",
+"detail": "dry bouillon",
+"keywords": [
+"bouillon",
+"dry bouillon",
+"mix",
+"mixes",
+"soup",
+"soup mixes"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 397,
+"category": "Shelf Stable Foods",
+"name": "Sun dried tomatoes",
+"detail": "jar",
+"keywords": [
+"dried",
+"dried tomatoes",
+"sun",
+"sun dried",
+"sun dried tomatoes",
+"tomato",
+"tomatoes"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 398,
+"category": "Shelf Stable Foods",
+"name": "Syrup",
+"detail": "",
+"keywords": [
+"syrup"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 399,
+"category": "Shelf Stable Foods",
+"name": "Toaster pastries",
+"detail": "",
+"keywords": [
+"pastries",
+"pastry",
+"toaster",
+"toaster pastries"
+],
+"pantry": [
+180,
+360
+]
+},
+{
+"id": 400,
+"category": "Beverages",
+"name": "Coffee",
+"detail": "whole beans",
+"keywords": [
+"bean",
+"beans",
+"coffee",
+"whole",
+"whole beans"
+],
+"pantry": [
+90,
+150
+]
+},
+{
+"id": 401,
+"category": "Beverages",
+"name": "Coffee",
+"detail": "home ground, non-vacuum",
+"keywords": [
+"coffee",
+"ground",
+"home",
+"home ground",
+"non vacuum",
+"vacuum"
+],
+"pantry": [
+90,
+150
+],
+"freezer": [
+365,
+730
+]
+},
+{
+"id": 402,
+"category": "Beverages",
+"name": "Coffee",
+"detail": "instant",
+"keywords": [
+"coffee",
+"instant"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 403,
+"category": "Beverages",
+"name": "Diet powder mixes and drink mixes",
+"detail": "",
+"keywords": [
+"diet powder",
+"diet powder mixes",
+"drink",
+"drink mixes",
+"mix",
+"mixes",
+"powder mixes"
+],
+"pantry": [
+540,
+720
+]
+},
+{
+"id": 404,
+"category": "Beverages",
+"name": "Fruit Juice in cartons, fruit drinks, punch",
+"detail": "",
+"keywords": [
+"carton",
+"cartons",
+"drink",
+"drinks",
+"fruit",
+"fruit drinks",
+"fruit juice",
+"fruit juice in cartons",
+"juice in cartons",
+"punch"
+],
+"pantry": [
+21,
+21
+]
+},
+{
+"id": 406,
+"category": "Beverages",
+"name": "Nectar",
+"detail": "papaya, mango, guava, or guavabana",
+"keywords": [
+"guava",
+"guavabana",
+"mango",
+"mangoes",
+"nectar",
+"papaya"
+],
+"pantry": [
+360,
+540
+]
+},
+{
+"id": 410,
+"category": "Beverages",
+"name": "Tea",
+"detail": "bags",
+"keywords": [
+"bag",
+"bags",
+"tea"
+],
+"pantry": [
+540,
+1080
+]
+},
+{
+"id": 411,
+"category": "Beverages",
+"name": "Tea",
+"detail": "instant",
+"keywords": [
+"instant",
+"tea"
+],
+"pantry": [
+730,
+1095
+]
+},
+{
+"id": 412,
+"category": "Beverages",
+"name": "Tea",
+"detail": "loose",
+"keywords": [
+"loose",
+"tea"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 414,
+"category": "Produce · Fresh Fruits",
+"name": "Kumquats",
+"detail": "",
+"keywords": [
+"kumquats"
+],
+"fridge": [
+21,
+21
+]
+},
+{
+"id": 415,
+"category": "Produce · Fresh Vegetables",
+"name": "Bagged greens",
+"detail": "leaf, spinach, lettuce, etc.",
+"keywords": [
+"bagged",
+"bagged greens",
+"green",
+"greens",
+"leaf",
+"lettuce",
+"spinach"
+],
+"fridge": [
+3,
+5
+]
+},
+{
+"id": 416,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Tahini",
+"detail": "",
+"keywords": [
+"tahini"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 190,
+"category": "Deli & Prepared Foods",
+"name": "Egg salad",
+"detail": "",
+"keywords": [
+"egg",
+"egg salad",
+"salad"
+],
+"fridge": [
+3,
+4
+]
+},
+{
+"id": 191,
+"category": "Deli & Prepared Foods",
+"name": "Potato salad",
+"detail": "",
+"keywords": [
+"potato",
+"potato salad",
+"salad"
+],
+"fridge": [
+3,
+5
+]
+},
+{
+"id": 417,
+"category": "Deli & Prepared Foods",
+"name": "Seafood salads",
+"detail": "(tuna salad, shrimp salad, salmon salad, mixed seafood salad, etc.)",
+"keywords": [
+"mixed",
+"mixed seafood",
+"mixed seafood salad",
+"salad",
+"salads",
+"salmon",
+"salmon salad",
+"seafood",
+"seafood salad",
+"seafood salads",
+"shrimp",
+"shrimp salad",
+"tuna",
+"tuna salad"
+],
+"fridge": [
+3,
+4
+]
+},
+{
+"id": 418,
+"category": "Deli & Prepared Foods",
+"name": "Chicken salad",
+"detail": "",
+"keywords": [
+"chicken",
+"chicken salad",
+"salad"
+],
+"fridge": [
+3,
+4
+]
+},
+{
+"id": 419,
+"category": "Deli & Prepared Foods",
+"name": "Ham salad",
+"detail": "",
+"keywords": [
+"ham",
+"ham salad",
+"salad"
+],
+"fridge": [
+3,
+4
+]
+},
+{
+"id": 420,
+"category": "Deli & Prepared Foods",
+"name": "Pasta salad",
+"detail": "",
+"keywords": [
+"pasta",
+"pasta salad",
+"salad"
+],
+"fridge": [
+3,
+5
+]
+},
+{
+"id": 422,
+"category": "Produce · Fresh Vegetables",
+"name": "Yams/sweet potatoes",
+"detail": "",
+"keywords": [
+"potato",
+"potatoes",
+"sweet potatoes",
+"yam",
+"yams"
+],
+"pantry": [
+14,
+21
+]
+},
+{
+"id": 423,
+"category": "Produce · Fresh Vegetables",
+"name": "Kale",
+"detail": "",
+"keywords": [
+"kale"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+240,
+360
+]
+},
+{
+"id": 425,
+"category": "Grains, Beans & Pasta",
+"name": "Quinoa",
+"detail": "uncooked",
+"keywords": [
+"cook",
+"cooked",
+"quinoa",
+"uncooked"
+],
+"pantry": [
+730,
+1095
+]
+},
+{
+"id": 426,
+"category": "Grains, Beans & Pasta",
+"name": "Quinoa",
+"detail": "cooked",
+"keywords": [
+"cook",
+"cooked",
+"quinoa"
+],
+"fridge": [
+6,
+7
+],
+"freezer": [
+180,
+360
+]
+},
+{
+"id": 430,
+"category": "Dairy Products & Eggs",
+"name": "Coffee creamer",
+"detail": "powdered",
+"keywords": [
+"coffee",
+"coffee creamer",
+"cream",
+"creamer",
+"powder",
+"powdered"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 431,
+"category": "Poultry · Cooked or Processed",
+"name": "Turkey bacon",
+"detail": "",
+"keywords": [
+"bacon",
+"turkey",
+"turkey bacon"
+],
+"fridge": [
+14,
+14
+],
+"freezer": [
+60,
+120
+]
+},
+{
+"id": 432,
+"category": "Shelf Stable Foods",
+"name": "Fruit cocktail",
+"detail": "canned",
+"keywords": [
+"can",
+"canned",
+"cocktail",
+"fruit",
+"fruit cocktail"
+],
+"pantry": [
+540,
+540
+]
+},
+{
+"id": 433,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Black bean sauce",
+"detail": "",
+"keywords": [
+"bean",
+"bean sauce",
+"black",
+"black bean",
+"black bean sauce",
+"sauce"
+],
+"pantry": [
+540,
+720
+]
+},
+{
+"id": 434,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Oyster sauce",
+"detail": "",
+"keywords": [
+"oyster",
+"oyster sauce",
+"sauce"
+],
+"pantry": [
+540,
+720
+]
+},
+{
+"id": 435,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Hoisin sauce",
+"detail": "",
+"keywords": [
+"hoisin",
+"hoisin sauce",
+"sauce"
+],
+"pantry": [
+540,
+720
+]
+},
+{
+"id": 437,
+"category": "Shelf Stable Foods",
+"name": "Almonds",
+"detail": "shell",
+"keywords": [
+"almond",
+"almonds",
+"shell"
+],
+"pantry": [
+180,
+180
+],
+"fridge": [
+480,
+480
+],
+"freezer": [
+600,
+600
+]
+},
+{
+"id": 438,
+"category": "Shelf Stable Foods",
+"name": "Almonds",
+"detail": "no shell",
+"keywords": [
+"almond",
+"almonds",
+"no shell",
+"shell"
+],
+"pantry": [
+120,
+120
+],
+"fridge": [
+240,
+240
+],
+"freezer": [
+300,
+300
+]
+},
+{
+"id": 439,
+"category": "Shelf Stable Foods",
+"name": "Cashews",
+"detail": "no shell",
+"keywords": [
+"cashew",
+"cashews",
+"no shell",
+"shell"
+],
+"pantry": [
+14,
+28
+],
+"fridge": [
+180,
+180
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 440,
+"category": "Shelf Stable Foods",
+"name": "Macadamias",
+"detail": "no shell",
+"keywords": [
+"macadamia",
+"macadamias",
+"no shell",
+"shell"
+],
+"pantry": [
+14,
+28
+],
+"fridge": [
+360,
+360
+],
+"freezer": [
+720,
+720
+]
+},
+{
+"id": 441,
+"category": "Shelf Stable Foods",
+"name": "Peanuts",
+"detail": "shell",
+"keywords": [
+"nut",
+"peanut",
+"peanuts",
+"shell"
+],
+"pantry": [
+120,
+120
+],
+"fridge": [
+360,
+360
+],
+"freezer": [
+720,
+720
+]
+},
+{
+"id": 442,
+"category": "Shelf Stable Foods",
+"name": "Peanuts",
+"detail": "no shell",
+"keywords": [
+"no shell",
+"nut",
+"peanut",
+"peanuts",
+"shell"
+],
+"pantry": [
+28,
+28
+],
+"fridge": [
+360,
+360
+],
+"freezer": [
+720,
+720
+]
+},
+{
+"id": 443,
+"category": "Shelf Stable Foods",
+"name": "Pecans",
+"detail": "shell",
+"keywords": [
+"pecan",
+"pecans",
+"shell"
+],
+"pantry": [
+14,
+28
+],
+"fridge": [
+360,
+360
+],
+"freezer": [
+720,
+720
+]
+},
+{
+"id": 444,
+"category": "Shelf Stable Foods",
+"name": "Pecans",
+"detail": "no shell",
+"keywords": [
+"no shell",
+"pecan",
+"pecans",
+"shell"
+],
+"pantry": [
+14,
+28
+],
+"fridge": [
+270,
+270
+],
+"freezer": [
+720,
+720
+]
+},
+{
+"id": 445,
+"category": "Shelf Stable Foods",
+"name": "Pistachios",
+"detail": "shell or no shell",
+"keywords": [
+"no shell",
+"pista",
+"pistachio",
+"pistachios",
+"shell"
+],
+"pantry": [
+21,
+21
+],
+"fridge": [
+360,
+360
+],
+"freezer": [
+720,
+720
+]
+},
+{
+"id": 446,
+"category": "Shelf Stable Foods",
+"name": "Walnuts",
+"detail": "shell or no shell",
+"keywords": [
+"no shell",
+"shell",
+"walnut",
+"walnuts"
+],
+"pantry": [
+14,
+28
+],
+"fridge": [
+270,
+360
+],
+"freezer": [
+720,
+720
+]
+},
+{
+"id": 447,
+"category": "Beverages",
+"name": "Lime juice",
+"detail": "",
+"keywords": [
+"juice",
+"lime",
+"lime juice"
+],
+"pantry": [
+360,
+540
+]
+},
+{
+"id": 448,
+"category": "Beverages",
+"name": "Lemon juice",
+"detail": "",
+"keywords": [
+"juice",
+"lemon",
+"lemon juice"
+],
+"pantry": [
+360,
+540
+]
+},
+{
+"id": 449,
+"category": "Baked Goods · Bakery",
+"name": "Bagel",
+"detail": "fresh baked",
+"keywords": [
+"bagel",
+"baked",
+"fresh baked"
+],
+"pantry": [
+1,
+2
+],
+"freezer": [
+90,
+90
+]
+},
+{
+"id": 450,
+"category": "Baked Goods · Bakery",
+"name": "Bagel",
+"detail": "commercially frozen",
+"keywords": [
+"bagel",
+"commercially frozen",
+"frozen"
+],
+"freezer": [
+90,
+90
+]
+},
+{
+"id": 451,
+"category": "Baked Goods · Bakery",
+"name": "Muffin",
+"detail": "homemade - including bran, blueberry, banana, corn, chocolate chip",
+"keywords": [
+"banana",
+"blueberry",
+"bran",
+"chip",
+"chocolate",
+"chocolate chip",
+"corn",
+"homemade",
+"homemade including bran",
+"including bran",
+"muffin"
+],
+"pantry": [
+3,
+7
+],
+"freezer": [
+60,
+90
+]
+},
+{
+"id": 452,
+"category": "Baked Goods · Bakery",
+"name": "Muffin",
+"detail": "commercially packaged",
+"keywords": [
+"commercially packaged",
+"muffin",
+"packaged"
+],
+"pantry": [
+3,
+7
+],
+"freezer": [
+90,
+90
+]
+},
+{
+"id": 453,
+"category": "Baked Goods · Bakery",
+"name": "Muffin",
+"detail": "mix, dry, commercially packaged",
+"keywords": [
+"commercial",
+"commercially",
+"commercially packaged",
+"dry",
+"mix",
+"muffin",
+"packaged"
+],
+"pantry": [
+270,
+270
+]
+},
+{
+"id": 454,
+"category": "Shelf Stable Foods",
+"name": "Coconut oil",
+"detail": "",
+"keywords": [
+"coconut",
+"coconut oil",
+"oil"
+],
+"pantry": [
+1095,
+1095
+]
+},
+{
+"id": 455,
+"category": "Beverages",
+"name": "Orange juice",
+"detail": "commercially packaged carton",
+"keywords": [
+"carton",
+"commercial",
+"commercially",
+"commercially packaged",
+"commercially packaged carton",
+"juice",
+"orange",
+"orange juice",
+"packaged",
+"packaged carton"
+],
+"freezer": [
+240,
+360
+]
+},
+{
+"id": 456,
+"category": "Beverages",
+"name": "Orange juice",
+"detail": "commercially frozen concentrate",
+"keywords": [
+"commercially",
+"commercially frozen",
+"commercially frozen concentrate",
+"concentrate",
+"frozen",
+"frozen concentrate",
+"juice",
+"orange",
+"orange juice"
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 457,
+"category": "Beverages",
+"name": "Orange juice",
+"detail": "freshly squeezed",
+"keywords": [
+"fresh",
+"freshly",
+"freshly squeezed",
+"juice",
+"orange",
+"orange juice",
+"sqeeze",
+"squeezed"
+],
+"fridge": [
+2,
+3
+],
+"freezer": [
+14,
+21
+]
+},
+{
+"id": 458,
+"category": "Shelf Stable Foods",
+"name": "Roasted red peppers",
+"detail": "jar",
+"keywords": [
+"jar",
+"pepper",
+"peppers",
+"red",
+"red peppers",
+"roasted",
+"roasted red",
+"roasted red peppers"
+],
+"fridge": [
+120,
+180
+]
+},
+{
+"id": 459,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Whole wheat flour",
+"detail": "",
+"keywords": [
+"flour",
+"wheat",
+"wheat flour",
+"whole",
+"whole wheat",
+"whole wheat flour"
+],
+"pantry": [
+360,
+360
+],
+"fridge": [
+730,
+730
+],
+"freezer": [
+730,
+730
+]
+},
+{
+"id": 460,
+"category": "Grains, Beans & Pasta",
+"name": "Whole wheat bread",
+"detail": "homemade",
+"keywords": [
+"bread",
+"homemade",
+"wheat",
+"wheat bread",
+"whole",
+"whole wheat",
+"whole wheat bread"
+],
+"pantry": [
+3,
+5
+],
+"freezer": [
+90,
+90
+]
+},
+{
+"id": 461,
+"category": "Grains, Beans & Pasta",
+"name": "Whole wheat bread",
+"detail": "commercially baked & pre-sliced",
+"keywords": [
+"baked",
+"commercial",
+"commercially",
+"commercially baked",
+"flour",
+"pre sliced",
+"slice",
+"sliced",
+"wheat",
+"wheat flour",
+"whole",
+"whole wheat",
+"whole wheat flour"
+],
+"pantry": [
+3,
+5
+],
+"freezer": [
+90,
+90
+]
+},
+{
+"id": 462,
+"category": "Beverages",
+"name": "Red wine",
+"detail": "",
+"keywords": [
+"red",
+"red wine",
+"wine"
+],
+"pantry": [
+1095,
+1825
+]
+},
+{
+"id": 463,
+"category": "Beverages",
+"name": "White wine",
+"detail": "",
+"keywords": [
+"white",
+"white wine",
+"wine"
+],
+"pantry": [
+365,
+730
+]
+},
+{
+"id": 464,
+"category": "Shelf Stable Foods",
+"name": "Dry stuffing mix",
+"detail": "commercially packaged",
+"keywords": [
+"commercial",
+"commercially",
+"commercially packaged",
+"dry",
+"dry stuffing",
+"dry stuffing mix",
+"mix",
+"pack",
+"packaged",
+"stuffing",
+"stuffing mix"
+],
+"pantry": [
+270,
+360
+]
+},
+{
+"id": 465,
+"category": "Dairy Products & Eggs",
+"name": "Powdered milk",
+"detail": "",
+"keywords": [
+"milk",
+"powder",
+"powdered",
+"powdered milk"
+],
+"pantry": [
+1095,
+1825
+]
+},
+{
+"id": 466,
+"category": "Shelf Stable Foods",
+"name": "Almond butter",
+"detail": "",
+"keywords": [
+"almond",
+"almond butter",
+"butter"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 467,
+"category": "Shelf Stable Foods",
+"name": "Cashew butter",
+"detail": "",
+"keywords": [
+"butter",
+"cashew",
+"cashew butter"
+],
+"pantry": [
+90,
+90
+]
+},
+{
+"id": 469,
+"category": "Shelf Stable Foods",
+"name": "Black pepper",
+"detail": "ground, dried, commercially bottled or purchased in bulk",
+"keywords": [
+"black",
+"black pepper",
+"bottle",
+"bottled",
+"bulk",
+"commercial",
+"commercially",
+"commercially bottled",
+"dried",
+"ground",
+"pepper",
+"purchase",
+"purchased",
+"purchased in bulk"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 470,
+"category": "Shelf Stable Foods",
+"name": "Black pepper",
+"detail": "cracked, dried, commercially bottled or purchased in bulk",
+"keywords": [
+"black",
+"black pepper",
+"bottle",
+"bottled",
+"bulk",
+"commercial",
+"commercially",
+"commercially bottled",
+"crack",
+"cracked",
+"dried",
+"pepper",
+"purchase",
+"purchased",
+"purchased in bulk"
+],
+"pantry": [
+730,
+1095
+]
+},
+{
+"id": 471,
+"category": "Shelf Stable Foods",
+"name": "Cajun seasoning blend",
+"detail": "ground, dried, commercially bottled or purchased in bulk",
+"keywords": [
+"blend",
+"bottle",
+"bottled",
+"bulk",
+"cajun",
+"cajun seasoning",
+"cajun seasoning blend",
+"commercial",
+"commercially",
+"commercially bottled",
+"dried",
+"ground",
+"purchase",
+"purchased",
+"purchased in bulk",
+"seasoning",
+"seasoning blend"
+],
+"pantry": [
+365,
+730
+]
+},
+{
+"id": 472,
+"category": "Shelf Stable Foods",
+"name": "Cinnamon",
+"detail": "ground, dried, commercially bottled or purchased in bulk",
+"keywords": [
+"bottle",
+"bottled",
+"bulk",
+"cinnamon",
+"commercial",
+"commercially",
+"commercially bottled",
+"dried",
+"ground",
+"purchase",
+"purchased",
+"purchased in bulk"
+],
+"pantry": [
+1095,
+1460
+]
+},
+{
+"id": 473,
+"category": "Shelf Stable Foods",
+"name": "Cumin",
+"detail": "ground, dried, commercially bottled or purchased in bulk, opened or unopened",
+"keywords": [
+"bottle",
+"bottled",
+"bulk",
+"commercial",
+"commercially",
+"commercially bottled",
+"cumin",
+"dried",
+"ground",
+"open",
+"opened",
+"purchase",
+"purchased",
+"purchased in bulk",
+"unopen",
+"unopened"
+],
+"pantry": [
+1095,
+1460
+]
+},
+{
+"id": 474,
+"category": "Shelf Stable Foods",
+"name": "Garlic powder",
+"detail": "dried, commercially bottled or purchased in bulk",
+"keywords": [
+"bottle",
+"bottled",
+"bulk",
+"commercial",
+"commercially",
+"commercially bottled",
+"dried",
+"garlic",
+"garlic powder",
+"powder",
+"purchase",
+"purchased",
+"purchased in bulk"
+],
+"pantry": [
+1095,
+1460
+]
+},
+{
+"id": 475,
+"category": "Shelf Stable Foods",
+"name": "Onion powder",
+"detail": "dried, commercially bottled or purchased in bulk",
+"keywords": [
+"bottle",
+"bottled",
+"bulk",
+"commercial",
+"commercially",
+"commercially bottled",
+"dried",
+"onion",
+"onion powder",
+"powder",
+"purchase",
+"purchased",
+"purchased in bulk"
+],
+"pantry": [
+1095,
+1460
+]
+},
+{
+"id": 476,
+"category": "Shelf Stable Foods",
+"name": "Nutmeg",
+"detail": "ground, dried, commercially bottled or purchased in bulk",
+"keywords": [
+"bottle",
+"bottled",
+"bulk",
+"commercial",
+"commercially",
+"commercially bottled",
+"dried",
+"ground",
+"nutmeg",
+"purchase",
+"purchased",
+"purchased in bulk"
+],
+"pantry": [
+1095,
+1460
+]
+},
+{
+"id": 477,
+"category": "Dairy Products & Eggs",
+"name": "Nacho cheese",
+"detail": "store bought",
+"keywords": [
+"cheese",
+"nacho",
+"nacho cheese",
+"store",
+"store bought"
+],
+"pantry": [
+730,
+730
+],
+"freezer": [
+90,
+90
+]
+},
+{
+"id": 478,
+"category": "Produce · Fresh Fruits",
+"name": "Star fruit",
+"detail": "",
+"keywords": [
+"fruit",
+"fruits",
+"star fruit"
+],
+"pantry": [
+7,
+7
+],
+"fridge": [
+7,
+14
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 479,
+"category": "Produce · Fresh Fruits",
+"name": "Prickly pear",
+"detail": "",
+"keywords": [
+"pear",
+"pickle",
+"prickly pear"
+],
+"pantry": [
+2,
+5
+],
+"fridge": [
+7,
+14
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 480,
+"category": "Produce · Fresh Fruits",
+"name": "Pitaya/dragon fruit",
+"detail": "",
+"keywords": [
+"dragon fruit",
+"fruit",
+"fruits",
+"pitaya"
+],
+"pantry": [
+2,
+5
+],
+"fridge": [
+14,
+21
+],
+"freezer": [
+300,
+360
+]
+},
+{
+"id": 481,
+"category": "Produce · Fresh Fruits",
+"name": "Strawberries",
+"detail": "",
+"keywords": [
+"strawberries",
+"strawberry"
+],
+"fridge": [
+2,
+3
+],
+"freezer": [
+240,
+360
+]
+},
+{
+"id": 482,
+"category": "Produce · Fresh Fruits",
+"name": "Raspberries",
+"detail": "",
+"keywords": [
+"raspberries",
+"raspberry"
+],
+"fridge": [
+2,
+3
+],
+"freezer": [
+240,
+360
+]
+},
+{
+"id": 483,
+"category": "Produce · Fresh Fruits",
+"name": "Cherries",
+"detail": "",
+"keywords": [
+"cherries",
+"cherry"
+],
+"fridge": [
+2,
+3
+],
+"freezer": [
+240,
+360
+]
+},
+{
+"id": 484,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Broth",
+"detail": "homemade",
+"keywords": [
+"broth",
+"homemade"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+60,
+90
+]
+},
+{
+"id": 485,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Beef broth/stock/consommé",
+"detail": "commercially produced",
+"keywords": [
+"beef broth",
+"beef consommé",
+"beef stock",
+"commercially produced",
+"consommé"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+60,
+90
+]
+},
+{
+"id": 486,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Chicken broth/stock/consommé",
+"detail": "commercially produced",
+"keywords": [
+"chicken broth",
+"chicken stock",
+"commercially produced",
+"consommé"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+60,
+90
+]
+},
+{
+"id": 487,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Vegetable stock/broth",
+"detail": "commercially produced",
+"keywords": [
+"broth",
+"commercial vegetable broth",
+"commercial vegetable stock",
+"vegetable",
+"vegetable broth",
+"vegetable stock"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+60,
+90
+]
+},
+{
+"id": 488,
+"category": "Shelf Stable Foods",
+"name": "Peanut butter",
+"detail": "commercially produced, containing hydrogenated fat or other stabilizers",
+"keywords": [
+"butter",
+"commercial peanut butter",
+"fat",
+"hydrogenated fat",
+"peanut butter",
+"stabilizer",
+"stabilizers"
+],
+"pantry": [
+180,
+270
+],
+"fridge": [
+360,
+360
+]
+},
+{
+"id": 489,
+"category": "Shelf Stable Foods",
+"name": "Peanut butter",
+"detail": "natural",
+"keywords": [
+"butter",
+"natural",
+"peanut butter"
+],
+"fridge": [
+360,
+360
+]
+},
+{
+"id": 490,
+"category": "Dairy Products & Eggs",
+"name": "Ricotta",
+"detail": "",
+"keywords": [
+"ricotta"
+],
+"fridge": [
+14,
+14
+]
+},
+{
+"id": 491,
+"category": "Produce · Fresh Vegetables",
+"name": "Baby carrots",
+"detail": "",
+"keywords": [
+"baby carrot",
+"baby carrots",
+"carrot"
+],
+"pantry": [
+4,
+4
+],
+"fridge": [
+28,
+28
+],
+"freezer": [
+90,
+90
+]
+},
+{
+"id": 492,
+"category": "Produce · Fresh Vegetables",
+"name": "Jicama",
+"detail": "fresh",
+"keywords": [
+"fresh",
+"jicama"
+],
+"pantry": [
+120,
+120
+],
+"fridge": [
+14,
+21
+]
+},
+{
+"id": 493,
+"category": "Produce · Fresh Vegetables",
+"name": "Kimchi",
+"detail": "",
+"keywords": [
+"kimchi"
+],
+"fridge": [
+180,
+360
+]
+},
+{
+"id": 494,
+"category": "Produce · Fresh Vegetables",
+"name": "Kohlrabi",
+"detail": "",
+"keywords": [
+"kohlrabi"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+240,
+360
+]
+},
+{
+"id": 495,
+"category": "Produce · Fresh Fruits",
+"name": "Watermelon",
+"detail": "",
+"keywords": [
+"watermelon"
+],
+"pantry": [
+1,
+2
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 496,
+"category": "Produce · Fresh Fruits",
+"name": "Cantaloupe",
+"detail": "",
+"keywords": [
+"cantaloupe"
+],
+"pantry": [
+2,
+4
+],
+"fridge": [
+5,
+15
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 497,
+"category": "Produce · Fresh Fruits",
+"name": "Honeydew",
+"detail": "",
+"keywords": [
+"honeydew"
+],
+"pantry": [
+2,
+7
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 498,
+"category": "Grains, Beans & Pasta",
+"name": "Peanuts",
+"detail": "boiled, shelled",
+"keywords": [
+"boiled",
+"peanut",
+"peanuts",
+"shelled"
+],
+"pantry": [
+1095,
+1095
+]
+},
+{
+"id": 499,
+"category": "Grains, Beans & Pasta",
+"name": "Refried beans",
+"detail": "",
+"keywords": [
+"refried bean",
+"refried beans"
+],
+"pantry": [
+1095,
+1095
+]
+},
+{
+"id": 500,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Relish",
+"detail": "",
+"keywords": [
+"relish"
+],
+"pantry": [
+900,
+900
+],
+"fridge": [
+270,
+270
+]
+},
+{
+"id": 501,
+"category": "Shelf Stable Foods",
+"name": "Tomato paste",
+"detail": "",
+"keywords": [
+"tomato paste"
+],
+"pantry": [
+810,
+810
+],
+"freezer": [
+60,
+90
+]
+},
+{
+"id": 502,
+"category": "Shelf Stable Foods",
+"name": "Tapenade",
+"detail": "",
+"keywords": [
+"tapenade"
+],
+"pantry": [
+270,
+270
+],
+"fridge": [
+270,
+270
+]
+},
+{
+"id": 503,
+"category": "Shelf Stable Foods",
+"name": "Flaxseed",
+"detail": "whole seed",
+"keywords": [
+"flaxseed",
+"seed",
+"whole seed"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 504,
+"category": "Shelf Stable Foods",
+"name": "Flaxseed",
+"detail": "ground",
+"keywords": [
+"flaxseed",
+"ground"
+],
+"fridge": [
+360,
+360
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 505,
+"category": "Produce · Fresh Vegetables",
+"name": "Lemongrass",
+"detail": "",
+"keywords": [
+"lemongrass"
+],
+"fridge": [
+7,
+9
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 506,
+"category": "Produce · Fresh Vegetables",
+"name": "Cilantro",
+"detail": "",
+"keywords": [
+"cilantro"
+],
+"pantry": [
+7,
+14
+],
+"fridge": [
+14,
+21
+]
+},
+{
+"id": 507,
+"category": "Produce · Fresh Vegetables",
+"name": "Mint",
+"detail": "",
+"keywords": [
+"mint"
+],
+"pantry": [
+7,
+14
+],
+"fridge": [
+14,
+21
+]
+},
+{
+"id": 508,
+"category": "Produce · Fresh Vegetables",
+"name": "Basil",
+"detail": "dried",
+"keywords": [
+"basil",
+"dried"
+],
+"pantry": [
+360,
+360
+]
+},
+{
+"id": 509,
+"category": "Produce · Fresh Vegetables",
+"name": "Basil",
+"detail": "fresh",
+"keywords": [
+"basil",
+"fresh"
+],
+"pantry": [
+5,
+5
+],
+"fridge": [
+10,
+10
+]
+},
+{
+"id": 510,
+"category": "Produce · Fresh Vegetables",
+"name": "Oregano",
+"detail": "",
+"keywords": [
+"oregano"
+],
+"pantry": [
+7,
+14
+],
+"fridge": [
+14,
+21
+]
+},
+{
+"id": 511,
+"category": "Produce · Fresh Vegetables",
+"name": "Rosemary",
+"detail": "",
+"keywords": [
+"rosemary"
+],
+"pantry": [
+7,
+14
+],
+"fridge": [
+14,
+21
+]
+},
+{
+"id": 512,
+"category": "Produce · Fresh Vegetables",
+"name": "Chives",
+"detail": "",
+"keywords": [
+"chives"
+],
+"pantry": [
+7,
+14
+],
+"fridge": [
+14,
+21
+]
+},
+{
+"id": 513,
+"category": "Produce · Fresh Vegetables",
+"name": "Thyme",
+"detail": "",
+"keywords": [
+"thyme"
+],
+"pantry": [
+7,
+14
+],
+"fridge": [
+14,
+21
+]
+},
+{
+"id": 514,
+"category": "Deli & Prepared Foods",
+"name": "Turkey",
+"detail": "pre-packaged, luncheon/deli meat",
+"keywords": [
+"deli",
+"luncheon",
+"luncheon/deli meat",
+"packaged",
+"pre-packaged",
+"turkey"
+],
+"fridge": [
+14,
+14
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 515,
+"category": "Deli & Prepared Foods",
+"name": "Ham",
+"detail": "pre-packaged, luncheon/deli meat",
+"keywords": [
+"deli",
+"ham",
+"luncheon",
+"luncheon/deli meat",
+"packaged",
+"pre-packaged"
+],
+"fridge": [
+14,
+14
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 516,
+"category": "Deli & Prepared Foods",
+"name": "Salami",
+"detail": "pre-packaged, luncheon/deli meat",
+"keywords": [
+"deli meat",
+"luncheon meat",
+"luncheon/deli",
+"packaged",
+"pre",
+"pre-packaged",
+"salami"
+],
+"fridge": [
+14,
+14
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 517,
+"category": "Deli & Prepared Foods",
+"name": "Chicken",
+"detail": "pre-packaged, luncheon/deli meat",
+"keywords": [
+"chicken",
+"deli meat",
+"luncheon meat",
+"packaged",
+"pre-packaged"
+],
+"fridge": [
+14,
+14
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 518,
+"category": "Deli & Prepared Foods",
+"name": "Canadian bacon",
+"detail": "whole",
+"keywords": [
+"bacon",
+"canadian bacon",
+"whole"
+],
+"fridge": [
+14,
+14
+],
+"freezer": [
+60,
+60
+]
+},
+{
+"id": 519,
+"category": "Deli & Prepared Foods",
+"name": "Canadian bacon",
+"detail": "sliced",
+"keywords": [
+"bacon",
+"canadian bacon",
+"sliced"
+],
+"fridge": [
+10,
+10
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 520,
+"category": "Shelf Stable Foods",
+"name": "Canola oil",
+"detail": "",
+"keywords": [
+"canola",
+"canola oil"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 521,
+"category": "Shelf Stable Foods",
+"name": "Almond oil",
+"detail": "",
+"keywords": [
+"almond",
+"almond oil"
+],
+"pantry": [
+365,
+365
+],
+"fridge": [
+730,
+730
+]
+},
+{
+"id": 522,
+"category": "Shelf Stable Foods",
+"name": "Sunflower oil",
+"detail": "",
+"keywords": [
+"oil",
+"sunflower",
+"sunflower oil"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 523,
+"category": "Shelf Stable Foods",
+"name": "Grapeseed oil",
+"detail": "",
+"keywords": [
+"grapeseed",
+"grapeseed oil",
+"oil"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 524,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Duck fat",
+"detail": "",
+"keywords": [
+"duck",
+"duck fat"
+],
+"fridge": [
+30,
+30
+]
+},
+{
+"id": 525,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Bacon grease",
+"detail": "",
+"keywords": [
+"bacon",
+"bacon grease",
+"grease"
+],
+"fridge": [
+180,
+180
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 526,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Frying oil",
+"detail": "re-used",
+"keywords": [
+"frying oil",
+"oil",
+"re-used oil"
+],
+"fridge": [
+30,
+30
+],
+"freezer": [
+180,
+270
+]
+},
+{
+"id": 527,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Almond extract",
+"detail": "",
+"keywords": [
+"almond extract"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 528,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Cinnamon extract",
+"detail": "",
+"keywords": [
+"cinnamon extract"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 529,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Lemon extract",
+"detail": "",
+"keywords": [
+"lemon",
+"lemon extract"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 530,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Pure vanilla extract",
+"detail": "",
+"keywords": [
+"vanila extract",
+"vanilla"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 531,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Butter flavor",
+"detail": "",
+"keywords": [
+"butter",
+"butter flavor"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 532,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Coconut flavor",
+"detail": "",
+"keywords": [
+"coconut",
+"coconut flavor"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 533,
+"category": "Shelf Stable Foods",
+"name": "\"Genuine\" Maple syrup",
+"detail": "unopened, glass",
+"keywords": [
+"genuine maple syrup",
+"glass",
+"syrup",
+"unopened"
+],
+"pantry": [
+1460,
+1460
+]
+},
+{
+"id": 534,
+"category": "Shelf Stable Foods",
+"name": "\"Genuine\" Maple syrup",
+"detail": "unopened, plastic",
+"keywords": [
+"genuine maple syrup",
+"plastic",
+"syrup",
+"unopened"
+],
+"pantry": [
+730,
+730
+],
+"fridge": [
+540,
+720
+]
+},
+{
+"id": 536,
+"category": "Beverages",
+"name": "Lemon juice",
+"detail": "fresh squeezed",
+"keywords": [
+"fresh squeezed",
+"juice",
+"juices",
+"lemon juice",
+"squeezed"
+],
+"fridge": [
+6,
+6
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 537,
+"category": "Beverages",
+"name": "Apple juice",
+"detail": "fresh squeezed",
+"keywords": [
+"apple",
+"apple juice",
+"fresh squeezed",
+"juice",
+"juices",
+"squeezed"
+],
+"fridge": [
+6,
+6
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 538,
+"category": "Beverages",
+"name": "Carrot juice",
+"detail": "fresh squeezed",
+"keywords": [
+"carrot juice",
+"fresh squeezed",
+"juice",
+"juices",
+"squeezed"
+],
+"fridge": [
+6,
+6
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 540,
+"category": "Beverages",
+"name": "Cream liquors",
+"detail": "unopened",
+"keywords": [
+"cream liquors",
+"liquor",
+"liquors",
+"unopened"
+],
+"pantry": [
+180,
+240
+]
+},
+{
+"id": 541,
+"category": "Beverages",
+"name": "Coffee",
+"detail": "commercial ground, non-vacuum",
+"keywords": [
+"coffee",
+"commercial ground",
+"non-vacuum"
+],
+"pantry": [
+730,
+730
+],
+"freezer": [
+180,
+360
+]
+},
+{
+"id": 542,
+"category": "Baked Goods · Bakery",
+"name": "Macaroons",
+"detail": "french",
+"keywords": [
+"french",
+"macaroon",
+"macaroons"
+],
+"pantry": [
+1,
+2
+],
+"freezer": [
+90,
+90
+]
+},
+{
+"id": 544,
+"category": "Dairy Products & Eggs",
+"name": "String Cheese",
+"detail": "",
+"keywords": [
+"cheese",
+"string cheese"
+],
+"fridge": [
+150,
+150
+]
+},
+{
+"id": 545,
+"category": "Dairy Products & Eggs",
+"name": "Vegan Cheddar Cheese",
+"detail": "",
+"keywords": [
+"cheddar",
+"cheese",
+"vegan cheddar cheese"
+],
+"fridge": [
+120,
+120
+]
+},
+{
+"id": 546,
+"category": "Dairy Products & Eggs",
+"name": "Quark",
+"detail": "fresh cheese",
+"keywords": [
+"cheese",
+"fresh cheese",
+"quark"
+],
+"fridge": [
+7,
+10
+]
+},
+{
+"id": 547,
+"category": "Produce · Fresh Vegetables",
+"name": "Zucchini",
+"detail": "fresh, whole",
+"keywords": [
+"fresh",
+"whole",
+"zucchini"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+300,
+300
+]
+},
+{
+"id": 548,
+"category": "Produce · Fresh Vegetables",
+"name": "Hot peppers",
+"detail": "",
+"keywords": [
+"hot peppers",
+"pepper"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+270,
+270
+]
+},
+{
+"id": 549,
+"category": "Produce · Fresh Vegetables",
+"name": "Bean sprouts",
+"detail": "",
+"keywords": [
+"bean",
+"bean sprouts",
+"sprouts"
+],
+"fridge": [
+5,
+10
+]
+},
+{
+"id": 550,
+"category": "Produce · Fresh Vegetables",
+"name": "Swiss chard",
+"detail": "",
+"keywords": [
+"chard",
+"swiss chard"
+],
+"fridge": [
+7,
+14
+]
+},
+{
+"id": 551,
+"category": "Baked Goods · Refrigerated Dough",
+"name": "Puff pastry",
+"detail": "",
+"keywords": [
+"pastries",
+"pastry",
+"puff",
+"puff pastry"
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 553,
+"category": "Grains, Beans & Pasta",
+"name": "Tortillas",
+"detail": "corn",
+"keywords": [
+"corn",
+"tortillas"
+],
+"pantry": [
+25,
+45
+],
+"fridge": [
+60,
+90
+]
+},
+{
+"id": 554,
+"category": "Baked Goods · Refrigerated Dough",
+"name": "Pie crust",
+"detail": "refrigerated",
+"keywords": [
+"crust",
+"pie",
+"pie crust",
+"refrigerated"
+],
+"freezer": [
+60,
+60
+]
+},
+{
+"id": 555,
+"category": "Shelf Stable Foods",
+"name": "Granola",
+"detail": "",
+"keywords": [
+"granola"
+],
+"pantry": [
+180,
+270
+]
+},
+{
+"id": 556,
+"category": "Shelf Stable Foods",
+"name": "Pork rinds",
+"detail": "",
+"keywords": [
+"pork",
+"pork rinds",
+"rinds"
+],
+"pantry": [
+120,
+120
+]
+},
+{
+"id": 558,
+"category": "Beverages",
+"name": "Nutrition supplement drinks",
+"detail": "canned",
+"keywords": [
+"boost",
+"canned",
+"drinks",
+"ensure",
+"nutrition supplement drinks",
+"supplement"
+],
+"pantry": [
+730,
+1825
+]
+},
+{
+"id": 559,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Hot sauce",
+"detail": "",
+"keywords": [
+"hot sauce",
+"sauce"
+],
+"pantry": [
+180,
+180
+]
+},
+{
+"id": 560,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Thai red curry paste",
+"detail": "",
+"keywords": [
+"curry",
+"curry paste",
+"paste",
+"red curry paste",
+"thai red curry paste"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 561,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Yeast",
+"detail": "packaged",
+"keywords": [
+"packaged",
+"yeast"
+],
+"pantry": [
+730,
+730
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 562,
+"category": "Produce · Fresh Fruits",
+"name": "Applesauce",
+"detail": "homemade",
+"keywords": [
+"applesauce",
+"homemade"
+],
+"fridge": [
+21,
+21
+],
+"freezer": [
+240,
+360
+]
+},
+{
+"id": 563,
+"category": "Meat · Smoked or Processed",
+"name": "Pate",
+"detail": "meat",
+"keywords": [
+"meat",
+"pate"
+],
+"fridge": [
+7,
+7
+]
+},
+{
+"id": 564,
+"category": "Poultry · Cooked or Processed",
+"name": "Pate",
+"detail": "poultry",
+"keywords": [
+"pate",
+"poultry"
+],
+"fridge": [
+7,
+7
+]
+},
+{
+"id": 565,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Cranberry sauce",
+"detail": "canned",
+"keywords": [
+"canned",
+"cranberry sauce",
+"sauce"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 566,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Cranberry sauce",
+"detail": "homemade",
+"keywords": [
+"cranberry sauce",
+"homemade",
+"sauce"
+],
+"fridge": [
+7,
+10
+]
+},
+{
+"id": 567,
+"category": "Beverages",
+"name": "Vegetable juice",
+"detail": "shelf-stable",
+"keywords": [
+"shelf",
+"shelf-stable",
+"stable",
+"vegetable juice"
+],
+"pantry": [
+540,
+540
+]
+},
+{
+"id": 568,
+"category": "Beverages",
+"name": "Vegetable juice",
+"detail": "commercial, sold refrigerated",
+"keywords": [
+"commercial",
+"refrigerated",
+"vegetable",
+"vegetable juice"
+],
+"fridge": [
+30,
+30
+]
+},
+{
+"id": 570,
+"category": "Produce · Fresh Vegetables",
+"name": "Marinated vegetables",
+"detail": "in oil",
+"keywords": [
+"marinated vegetables",
+"oil",
+"vegetable",
+"vegetables"
+],
+"fridge": [
+3,
+4
+]
+},
+{
+"id": 571,
+"category": "Food Purchased Frozen",
+"name": "Pizza",
+"detail": "frozen",
+"keywords": [
+"frozen",
+"pizza"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 572,
+"category": "Deli & Prepared Foods",
+"name": "Salsa",
+"detail": "fresh",
+"keywords": [
+"fresh",
+"salsa"
+],
+"fridge": [
+4,
+7
+]
+},
+{
+"id": 573,
+"category": "Shelf Stable Foods",
+"name": "Chia seeds",
+"detail": "",
+"keywords": [
+"chia",
+"chia seeds",
+"seed",
+"seeds"
+],
+"pantry": [
+540,
+540
+]
+},
+{
+"id": 574,
+"category": "Baked Goods · Bakery",
+"name": "Bread",
+"detail": "homemade",
+"keywords": [
+"bread",
+"breads",
+"homemade"
+],
+"pantry": [
+3,
+5
+],
+"fridge": [
+60,
+90
+]
+},
+{
+"id": 575,
+"category": "Grains, Beans & Pasta",
+"name": "Amaranth",
+"detail": "whole grain",
+"keywords": [
+"amaranth",
+"grain",
+"whole grain"
+],
+"pantry": [
+120,
+120
+],
+"freezer": [
+240,
+240
+]
+},
+{
+"id": 576,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Amaranth",
+"detail": "flour, meal",
+"keywords": [
+"amaranth",
+"flour",
+"meal"
+],
+"pantry": [
+60,
+60
+],
+"freezer": [
+120,
+120
+]
+},
+{
+"id": 577,
+"category": "Grains, Beans & Pasta",
+"name": "Barley",
+"detail": "whole grain",
+"keywords": [
+"barley",
+"grain",
+"whole grain"
+],
+"pantry": [
+180,
+180
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 578,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Barley",
+"detail": "flour, meal",
+"keywords": [
+"barley",
+"flour",
+"meal"
+],
+"pantry": [
+90,
+90
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 579,
+"category": "Grains, Beans & Pasta",
+"name": "Buckwheat",
+"detail": "whole grain",
+"keywords": [
+"buckwheat",
+"grain",
+"whole grain"
+],
+"pantry": [
+60,
+60
+],
+"freezer": [
+120,
+120
+]
+},
+{
+"id": 580,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Buckwheat",
+"detail": "flour, meal",
+"keywords": [
+"buckwheat",
+"flour",
+"meal"
+],
+"pantry": [
+30,
+30
+],
+"freezer": [
+60,
+60
+]
+},
+{
+"id": 581,
+"category": "Grains, Beans & Pasta",
+"name": "Farro",
+"detail": "whole grain",
+"keywords": [
+"farro",
+"grain",
+"whole grain"
+],
+"pantry": [
+180,
+180
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 582,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Farro",
+"detail": "flour, meal",
+"keywords": [
+"farro",
+"flour",
+"meal"
+],
+"pantry": [
+90,
+90
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 583,
+"category": "Grains, Beans & Pasta",
+"name": "Millet",
+"detail": "whole grain",
+"keywords": [
+"grain",
+"millet",
+"whole grain"
+],
+"pantry": [
+60,
+60
+],
+"freezer": [
+120,
+120
+]
+},
+{
+"id": 584,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Millet",
+"detail": "flour, meal",
+"keywords": [
+"flour",
+"meal",
+"millet"
+],
+"pantry": [
+30,
+30
+],
+"freezer": [
+60,
+60
+]
+},
+{
+"id": 585,
+"category": "Grains, Beans & Pasta",
+"name": "Oats",
+"detail": "whole grain",
+"keywords": [
+"grain",
+"oat",
+"oats",
+"whole grain"
+],
+"pantry": [
+120,
+120
+],
+"freezer": [
+240,
+240
+]
+},
+{
+"id": 586,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Oats",
+"detail": "flour, meal",
+"keywords": [
+"flour",
+"meal",
+"oat",
+"oats"
+],
+"pantry": [
+60,
+60
+],
+"freezer": [
+120,
+120
+]
+},
+{
+"id": 587,
+"category": "Grains, Beans & Pasta",
+"name": "Rye",
+"detail": "whole grain",
+"keywords": [
+"grain",
+"rye",
+"whole grain"
+],
+"pantry": [
+180,
+180
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 588,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Rye",
+"detail": "flour, meal",
+"keywords": [
+"flour",
+"meal",
+"rye"
+],
+"pantry": [
+90,
+90
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 589,
+"category": "Grains, Beans & Pasta",
+"name": "Sorghum",
+"detail": "whole grain",
+"keywords": [
+"grain",
+"sorghum",
+"whole grain"
+],
+"pantry": [
+120,
+120
+],
+"freezer": [
+240,
+240
+]
+},
+{
+"id": 590,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Sorghum",
+"detail": "flour, meal",
+"keywords": [
+"flour",
+"meal",
+"sorghum"
+],
+"pantry": [
+60,
+60
+],
+"freezer": [
+120,
+120
+]
+},
+{
+"id": 591,
+"category": "Grains, Beans & Pasta",
+"name": "Spelt",
+"detail": "whole grain",
+"keywords": [
+"grain",
+"spelt",
+"whole grain"
+],
+"pantry": [
+180,
+180
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 592,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Spelt",
+"detail": "flour, meal",
+"keywords": [
+"flour",
+"meal",
+"spelt"
+],
+"pantry": [
+90,
+90
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 593,
+"category": "Grains, Beans & Pasta",
+"name": "Teff",
+"detail": "whole grain",
+"keywords": [
+"grain",
+"teff",
+"whole grain"
+],
+"pantry": [
+120,
+120
+],
+"freezer": [
+240,
+240
+]
+},
+{
+"id": 594,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Teff",
+"detail": "flour, meal",
+"keywords": [
+"flour",
+"meal",
+"teff"
+],
+"pantry": [
+60,
+60
+],
+"freezer": [
+120,
+120
+]
+},
+{
+"id": 595,
+"category": "Meat · Fresh",
+"name": "Rabbit",
+"detail": "whole, fresh",
+"keywords": [
+"fresh",
+"rabbit",
+"whole"
+],
+"fridge": [
+2,
+2
+],
+"freezer": [
+270,
+270
+]
+},
+{
+"id": 596,
+"category": "Produce · Fresh Vegetables",
+"name": "Spaghetti squash",
+"detail": "whole",
+"keywords": [
+"spaghetti squash",
+"squash",
+"whole"
+],
+"pantry": [
+60,
+60
+],
+"fridge": [
+7,
+14
+]
+},
+{
+"id": 597,
+"category": "Produce · Fresh Vegetables",
+"name": "Spaghetti squash",
+"detail": "cut",
+"keywords": [
+"cut",
+"spaghetti squash",
+"squash"
+],
+"fridge": [
+4,
+5
+]
+},
+{
+"id": 598,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Garam masala",
+"detail": "",
+"keywords": [
+"garam masala"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 600,
+"category": "Produce · Fresh Vegetables",
+"name": "Cherry tomatoes",
+"detail": "",
+"keywords": [
+"cherry",
+"tomato",
+"tomatoes"
+],
+"pantry": [
+10,
+10
+],
+"fridge": [
+5,
+5
+]
+},
+{
+"id": 601,
+"category": "Shelf Stable Foods",
+"name": "Coconut cream",
+"detail": "canned",
+"keywords": [
+"can",
+"canned",
+"coconut",
+"coconut cream",
+"cream"
+],
+"pantry": [
+730,
+1825
+],
+"freezer": [
+90,
+90
+]
+},
+{
+"id": 602,
+"category": "Shelf Stable Foods",
+"name": "Coconut milk",
+"detail": "canned",
+"keywords": [
+"can",
+"canned",
+"coconut",
+"coconut milk",
+"milk"
+],
+"pantry": [
+730,
+1825
+],
+"freezer": [
+90,
+90
+]
+},
+{
+"id": 603,
+"category": "Deli & Prepared Foods",
+"name": "Coleslaw",
+"detail": "homemade, prepared",
+"keywords": [
+"coleslaw",
+"homemade",
+"homemade coleslaw",
+"prepared",
+"prepared coleslaw"
+],
+"fridge": [
+3,
+5
+]
+},
+{
+"id": 604,
+"category": "Shelf Stable Foods",
+"name": "Pumpkin seeds",
+"detail": "raw, no shell",
+"keywords": [
+"pumpkin",
+"pumpkin seed",
+"pumpkin seeds",
+"seed",
+"seeds"
+],
+"pantry": [
+180,
+180
+],
+"fridge": [
+180,
+180
+]
+},
+{
+"id": 605,
+"category": "Shelf Stable Foods",
+"name": "Pumpkin seeds",
+"detail": "raw, in-shell",
+"keywords": [
+"pumpkin",
+"pumpkin seed",
+"pumpkin seeds",
+"seed",
+"seeds"
+],
+"pantry": [
+180,
+180
+]
+},
+{
+"id": 606,
+"category": "Shelf Stable Foods",
+"name": "Pumpkin seeds",
+"detail": "roasted, no-shell",
+"keywords": [
+"pumpkin",
+"pumpkin seed",
+"pumpkin seeds",
+"seed",
+"seeds"
+],
+"pantry": [
+180,
+180
+]
+},
+{
+"id": 607,
+"category": "Shelf Stable Foods",
+"name": "Pumpkin seeds",
+"detail": "roasted, in-shell",
+"keywords": [
+"pumpkin",
+"pumpkin seed",
+"pumpkin seeds",
+"seed",
+"seeds"
+],
+"pantry": [
+180,
+180
+]
+},
+{
+"id": 608,
+"category": "Shelf Stable Foods",
+"name": "Sunflower seeds",
+"detail": "raw, unsalted, no shell",
+"keywords": [
+"seed",
+"seeds",
+"sunflower",
+"sunflower seed",
+"sunflower seeds"
+],
+"pantry": [
+360,
+360
+]
+},
+{
+"id": 609,
+"category": "Shelf Stable Foods",
+"name": "Sunflower seeds",
+"detail": "roasted, no shell",
+"keywords": [
+"kernal",
+"seed",
+"seeds",
+"shell",
+"sunflower",
+"sunflower seed",
+"sunflower seeds"
+],
+"pantry": [
+360,
+360
+]
+},
+{
+"id": 611,
+"category": "Produce · Fresh Vegetables",
+"name": "Parsley",
+"detail": "fresh",
+"keywords": [
+"parsley"
+],
+"fridge": [
+2,
+3
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 612,
+"category": "Shelf Stable Foods",
+"name": "Sesame oil",
+"detail": "",
+"keywords": [
+"oil",
+"sesame",
+"sesame oil"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 613,
+"category": "Shelf Stable Foods",
+"name": "Sesame seeds",
+"detail": "",
+"keywords": [
+"seed",
+"seeds",
+"sesame",
+"sesame seeds"
+],
+"pantry": [
+1825,
+1825
+]
+},
+{
+"id": 617,
+"category": "Shelf Stable Foods",
+"name": "Tuna",
+"detail": "packet",
+"keywords": [
+"packet",
+"retort",
+"retort packaging",
+"tuna",
+"tuna packet"
+],
+"pantry": [
+540,
+540
+]
+},
+{
+"id": 618,
+"category": "Shelf Stable Foods",
+"name": "Tuna",
+"detail": "canned",
+"keywords": [
+"canned",
+"canned tuna",
+"tuna"
+],
+"pantry": [
+1095,
+1095
+]
+},
+{
+"id": 619,
+"category": "Shelf Stable Foods",
+"name": "Seafood",
+"detail": "canned",
+"keywords": [
+"canned",
+"canned seafood",
+"seafood"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 621,
+"category": "Meat · Fresh",
+"name": "Bison",
+"detail": "whole",
+"keywords": [
+"bison",
+"bison whole",
+"whole"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+180,
+270
+]
+},
+{
+"id": 622,
+"category": "Meat · Fresh",
+"name": "Bison",
+"detail": "ground",
+"keywords": [
+"bison",
+"ground",
+"ground bison"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 623,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Salad dressing",
+"detail": "creamy",
+"keywords": [
+"creamy",
+"creamy salad dressing",
+"dressing",
+"salad",
+"salad dressing"
+],
+"pantry": [
+180,
+180
+]
+},
+{
+"id": 624,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Salad dressing",
+"detail": "vinaigrette,homemade",
+"keywords": [
+"dressing",
+"homemade",
+"salad",
+"salad dressing",
+"vinaigrette"
+],
+"fridge": [
+14,
+21
+]
+},
+{
+"id": 625,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Salad dressing",
+"detail": "vinaigrette",
+"keywords": [
+"dressing",
+"salad",
+"salad dressing",
+"vinaigrette"
+],
+"pantry": [
+180,
+180
+]
+},
+{
+"id": 627,
+"category": "Shelf Stable Foods",
+"name": "Grits",
+"detail": "boxed",
+"keywords": [
+"box",
+"boxed",
+"boxed grits",
+"grits"
+],
+"pantry": [
+360,
+360
+]
+},
+{
+"id": 628,
+"category": "Dairy Products & Eggs",
+"name": "Cheese Curds",
+"detail": "fresh, unaged",
+"keywords": [
+"cheese",
+"cheese curd",
+"cheese curds",
+"curd",
+"curds"
+],
+"fridge": [
+14,
+14
+],
+"freezer": [
+120,
+120
+]
+},
+{
+"id": 629,
+"category": "Deli & Prepared Foods",
+"name": "Vegetable soup",
+"detail": "homemade",
+"keywords": [
+"soup",
+"vegetable",
+"vegetable soup"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+90,
+90
+]
+},
+{
+"id": 630,
+"category": "Meat · Fresh",
+"name": "Chorizo",
+"detail": "fresh",
+"keywords": [
+"chorizo",
+"fresh chorizo"
+],
+"fridge": [
+1,
+2
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 631,
+"category": "Meat · Smoked or Processed",
+"name": "Chorizo",
+"detail": "smoked and processed, uncooked",
+"keywords": [
+"chorizo",
+"processed",
+"processed chorizo",
+"smoked",
+"smoked chorizo",
+"uncooked",
+"uncooked processed chorizo",
+"uncooked smoked chorizo"
+],
+"fridge": [
+7,
+7
+],
+"freezer": [
+30,
+60
+]
+},
+{
+"id": 632,
+"category": "Meat · Smoked or Processed",
+"name": "Chorizo",
+"detail": "smoked and processed, cooked",
+"keywords": [
+"chorizo",
+"cooked",
+"cooked processed chorizo",
+"cooked smoked chorizo",
+"processed",
+"processed chorizo",
+"smoked",
+"smoked chorizo"
+],
+"pantry": [
+365,
+365
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 633,
+"category": "Shelf Stable Foods",
+"name": "Beets",
+"detail": "pickled",
+"keywords": [
+"beets",
+"pickled",
+"pickled beets"
+],
+"pantry": [
+365,
+365
+]
+},
+{
+"id": 635,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Cinnamon rolls",
+"detail": "baked",
+"keywords": [
+"cinnamon",
+"cinnamon roll",
+"cinnamon rolls",
+"roll",
+"rolls"
+],
+"pantry": [
+1,
+3
+],
+"freezer": [
+90,
+90
+]
+},
+{
+"id": 637,
+"category": "Grains, Beans & Pasta",
+"name": "Bulgur",
+"detail": "",
+"keywords": [
+"bulgur"
+],
+"pantry": [
+180,
+360
+]
+},
+{
+"id": 638,
+"category": "Meat · Fresh",
+"name": "Bratwurst",
+"detail": "fresh",
+"keywords": [
+"brautwurst",
+"fresh",
+"fresh brautwurst"
+],
+"fridge": [
+2,
+3
+],
+"freezer": [
+60,
+90
+]
+},
+{
+"id": 639,
+"category": "Meat · Smoked or Processed",
+"name": "Bratwurst",
+"detail": "smoked and processed",
+"keywords": [
+"bratwurst",
+"processed",
+"processed brautwurst",
+"smoked",
+"smoked brautwurst"
+],
+"fridge": [
+5,
+7
+],
+"freezer": [
+60,
+90
+]
+},
+{
+"id": 640,
+"category": "Produce · Fresh Vegetables",
+"name": "Edamame",
+"detail": "fresh",
+"keywords": [
+"edamame",
+"fresh",
+"fresh edamame",
+"soybean",
+"soybeans"
+],
+"fridge": [
+4,
+5
+]
+},
+{
+"id": 641,
+"category": "Food Purchased Frozen",
+"name": "Edamame",
+"detail": "frozen",
+"keywords": [
+"edamame",
+"frozen",
+"frozen edamame",
+"soybean",
+"soybeans"
+],
+"freezer": [
+730,
+730
+]
+},
+{
+"id": 642,
+"category": "Shelf Stable Foods",
+"name": "Edamame",
+"detail": "salted, dry roasted, out of pod",
+"keywords": [
+"dry roasted",
+"edamame",
+"roasted",
+"salted",
+"soybean",
+"soybeans"
+],
+"pantry": [
+360,
+360
+],
+"fridge": [
+180,
+180
+]
+},
+{
+"id": 643,
+"category": "Shelf Stable Foods",
+"name": "Breadcrumbs",
+"detail": "commercial",
+"keywords": [
+"breadcrumb",
+"breadcrumbs"
+],
+"pantry": [
+180,
+180
+]
+},
+{
+"id": 644,
+"category": "Shelf Stable Foods",
+"name": "Milk",
+"detail": "shelf-stable",
+"keywords": [
+"aseptic packaging",
+"milk",
+"shelf",
+"shelf stable milk",
+"stable",
+"uht",
+"ultrapasteurized"
+],
+"pantry": [
+180,
+360
+]
+},
+{
+"id": 645,
+"category": "Deli & Prepared Foods",
+"name": "Salsa",
+"detail": "homemade, fresh",
+"keywords": [
+"homemade",
+"homemade salsa",
+"salsa"
+],
+"fridge": [
+5,
+7
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 646,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Salsa",
+"detail": "homemade, canned",
+"keywords": [
+"homemade",
+"homemade salsa",
+"salsa"
+],
+"pantry": [
+270,
+360
+]
+},
+{
+"id": 647,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Tomato Sauce",
+"detail": "homemade, canned",
+"keywords": [
+"homemade",
+"homemade sauce",
+"homemade spaghetti sauce",
+"homemade tomato sauce",
+"spaghetti sauce",
+"tomato sauce"
+],
+"pantry": [
+270,
+360
+]
+},
+{
+"id": 648,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Barbecue Sauce",
+"detail": "homemade, canned",
+"keywords": [
+"barbecue sauce",
+"bbq sauce",
+"homemade barbecue sauce",
+"homemade bbq sauce",
+"homemade sauce"
+],
+"pantry": [
+270,
+360
+]
+},
+{
+"id": 649,
+"category": "Dairy Products & Eggs",
+"name": "Ghee",
+"detail": "",
+"keywords": [
+"butter",
+"clarified",
+"clarified butter",
+"ghee"
+],
+"pantry": [
+180,
+240
+],
+"fridge": [
+365,
+730
+]
+},
+{
+"id": 650,
+"category": "Shelf Stable Foods",
+"name": "Corn syrup",
+"detail": "",
+"keywords": [
+"corn",
+"corn syrup",
+"syrup"
+],
+"pantry": [
+1095,
+1095
+]
+},
+{
+"id": 652,
+"category": "Shelf Stable Foods",
+"name": "Instant breakfast drinks",
+"detail": "bottled",
+"keywords": [
+"bottled breakfast",
+"bottled instant breakfast",
+"bottled instant breakfast drink",
+"breakfast",
+"carnation",
+"drinks",
+"instant",
+"instant breakfast",
+"instant breakfast drinks",
+"instant drink"
+],
+"pantry": [
+180,
+180
+]
+},
+{
+"id": 653,
+"category": "Shelf Stable Foods",
+"name": "Pine nuts",
+"detail": "",
+"keywords": [
+"nut",
+"nuts",
+"pine",
+"pine nut",
+"pine nuts"
+],
+"pantry": [
+14,
+21
+],
+"fridge": [
+90,
+90
+],
+"freezer": [
+270,
+270
+]
+},
+{
+"id": 654,
+"category": "Baked Goods · Baking and Cooking",
+"name": "Coconut flour",
+"detail": "",
+"keywords": [
+"coconut",
+"coconut flour",
+"flour"
+],
+"fridge": [
+270,
+360
+],
+"freezer": [
+270,
+360
+]
+},
+{
+"id": 655,
+"category": "Shelf Stable Foods",
+"name": "Pecans",
+"detail": "chopped",
+"keywords": [
+"chopped",
+"chopped pecans",
+"pecan",
+"pecans"
+],
+"fridge": [
+360,
+360
+],
+"freezer": [
+730,
+730
+]
+},
+{
+"id": 657,
+"category": "Food Purchased Frozen",
+"name": "Polenta",
+"detail": "frozen",
+"keywords": [
+"frozen",
+"frozen polenta",
+"polenta"
+],
+"freezer": [
+360,
+360
+]
+},
+{
+"id": 658,
+"category": "Shelf Stable Foods",
+"name": "Cereal or granola bars",
+"detail": "",
+"keywords": [
+"bar",
+"bars",
+"breakfast",
+"breakfast bar",
+"breakfast bars",
+"cereal bar",
+"cereal bars",
+"crunchy bar",
+"crunchy bars",
+"energy bar",
+"energy bars",
+"fruit bar",
+"fruit bars",
+"granola",
+"granola bar",
+"granola bars",
+"health bar",
+"health bars",
+"nut bar",
+"nut bars",
+"nutrition bar",
+"nutrition bars",
+"seed bar",
+"seed bars",
+"snack bars",
+"snack barsnack"
+],
+"pantry": [
+180,
+360
+]
+},
+{
+"id": 659,
+"category": "Shelf Stable Foods",
+"name": "Milk",
+"detail": "ultra-pasteurized",
+"keywords": [
+"milk",
+"pasteurized",
+"ultra",
+"ultra pasteurized milk"
+],
+"fridge": [
+30,
+90
+]
+},
+{
+"id": 660,
+"category": "Beverages",
+"name": "Coconut water",
+"detail": "",
+"keywords": [
+"coconut",
+"coconut water",
+"water"
+],
+"pantry": [
+360,
+360
+]
+},
+{
+"id": 661,
+"category": "Produce · Fresh Vegetables",
+"name": "Celery root",
+"detail": "",
+"keywords": [
+"celeriac",
+"celery",
+"celery root"
+],
+"fridge": [
+7,
+7
+]
+},
+{
+"id": 662,
+"category": "Beverages",
+"name": "Apple cider",
+"detail": "fresh",
+"keywords": [
+"apple",
+"apple cider",
+"cider"
+],
+"pantry": [
+2,
+3
+],
+"fridge": [
+14,
+21
+]
+},
+{
+"id": 663,
+"category": "Beverages",
+"name": "Yuzu juice",
+"detail": "",
+"keywords": [
+"juice",
+"yuzu",
+"yuzu juice"
+],
+"pantry": [
+120,
+180
+],
+"fridge": [
+270,
+360
+],
+"freezer": [
+365,
+730
+]
+},
+{
+"id": 664,
+"category": "Beverages",
+"name": "Yuzu",
+"detail": "fruit, fresh",
+"keywords": [
+"yuzu",
+"yuzu fruit"
+],
+"fridge": [
+5,
+7
+]
+},
+{
+"id": 665,
+"category": "Meat · Smoked or Processed",
+"name": "Pastrami",
+"detail": "",
+"keywords": [
+"pastrami"
+],
+"fridge": [
+40,
+40
+]
+},
+{
+"id": 666,
+"category": "Food Purchased Frozen",
+"name": "Kugel",
+"detail": "commercial",
+"keywords": [
+"commercial",
+"commercial kugel",
+"kugel"
+],
+"freezer": [
+365,
+365
+]
+},
+{
+"id": 667,
+"category": "Deli & Prepared Foods",
+"name": "Kugel",
+"detail": "homemade",
+"keywords": [
+"homemade",
+"homemade kugel",
+"kugel"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+30,
+30
+]
+},
+{
+"id": 668,
+"category": "Shelf Stable Foods",
+"name": "Avocado Oil",
+"detail": "",
+"keywords": [
+"avocado",
+"avodaco oil",
+"oil"
+],
+"pantry": [
+730,
+730
+]
+},
+{
+"id": 669,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Balsamic vinegar",
+"detail": "",
+"keywords": [
+"balsamic",
+"balsamic vinegar",
+"vinegar"
+],
+"pantry": [
+1095,
+1825
+]
+},
+{
+"id": 670,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Aioli",
+"detail": "homemade",
+"keywords": [
+"aioli",
+"garlic",
+"garlic aioli",
+"garlic mayo",
+"garlic mayonnaise",
+"mayo",
+"mayonnaise"
+],
+"fridge": [
+3,
+4
+]
+},
+{
+"id": 673,
+"category": "Condiments, Sauces & Canned Goods",
+"name": "Anchovies",
+"detail": "canned",
+"keywords": [
+"anchovies",
+"anchovy",
+"canned anchovies"
+],
+"pantry": [
+1825,
+1825
+],
+"freezer": [
+60,
+60
+]
+},
+{
+"id": 674,
+"category": "Produce · Fresh Vegetables",
+"name": "Radicchio",
+"detail": "",
+"keywords": [
+"radicchio"
+],
+"fridge": [
+14,
+21
+]
+},
+{
+"id": 675,
+"category": "Meat · Smoked or Processed",
+"name": "Prosciutto",
+"detail": "",
+"keywords": [
+"prosciutto"
+],
+"fridge": [
+60,
+90
+],
+"freezer": [
+30,
+30
+]
+},
+{
+"id": 676,
+"category": "Meat · Smoked or Processed",
+"name": "Ham",
+"detail": "uncured, fresh, cooked",
+"keywords": [
+"cooked",
+"fresh",
+"fully cooked",
+"fully cooked uncured ham",
+"ham",
+"uncured",
+"uncured ham"
+],
+"fridge": [
+3,
+4
+],
+"freezer": [
+90,
+120
+]
+},
+{
+"id": 677,
+"category": "Meat · Fresh",
+"name": "Ham",
+"detail": "uncured, fresh, uncooked",
+"keywords": [
+"fresh",
+"ham",
+"uncooked",
+"uncured",
+"uncured ham",
+"uncured ham uncooked"
+],
+"fridge": [
+3,
+5
+],
+"freezer": [
+180,
+180
+]
+},
+{
+"id": 678,
+"category": "Produce · Fresh Vegetables",
+"name": "Arugula",
+"detail": "",
+"keywords": [
+"arugula",
+"greens",
+"salad",
+"salad greens"
+],
+"fridge": [
+3,
+7
+]
+},
+{
+"id": 679,
+"category": "Grains, Beans & Pasta",
+"name": "Mung bean",
+"detail": "sprouts",
+"keywords": [
+"bean",
+"mung",
+"mung bean",
+"mung beans",
+"mungbean",
+"sprout",
+"sprouted mung bean",
+"sprouted mung beans",
+"sprouts"
+],
+"fridge": [
+28,
+42
+]
+},
+{
+"id": 680,
+"category": "Grains, Beans & Pasta",
+"name": "Mung bean",
+"detail": "dry, food-grade bags",
+"keywords": [
+"bag",
+"bagged mung beans",
+"bean",
+"dry",
+"dry mung beans",
+"mung",
+"mung bean",
+"mung beans"
+],
+"pantry": [
+365,
+365
+],
+"fridge": [
+365,
+365
+],
+"freezer": [
+365,
+365
+]
+},
+{
+"id": 681,
+"category": "Grains, Beans & Pasta",
+"name": "Mung bean",
+"detail": "dry, vacuum-sealed",
+"keywords": [
+"bean",
+"dry",
+"dry mung beans",
+"mung",
+"mung bean",
+"mung beans",
+"vacuum sealed",
+"vacuum sealed mung beans"
+],
+"pantry": [
+2920,
+3650
+]
+},
+{
+"id": 682,
+"category": "Shelf Stable Foods",
+"name": "Croutons",
+"detail": "",
+"keywords": [
+"bread",
+"crouton",
+"croutons"
+],
+"pantry": [
+150,
+180
+],
+"fridge": [
+150,
+180
+],
+"freezer": [
+330,
+360
+]
+},
+{
+"id": 683,
+"category": "Meat · Smoked or Processed",
+"name": "Bacon",
+"detail": "uncured",
+"keywords": [
+"bacon",
+"natural",
+"natural bacon",
+"nitrite",
+"nitrite-free",
+"nitrite-free bacon",
+"uncured",
+"uncured bacon"
+],
+"fridge": [
+4,
+7
+],
+"freezer": [
+21,
+28
+]
+},
+{
+"id": 684,
+"category": "Shelf Stable Foods",
+"name": "Mustard",
+"detail": "dried, ground",
+"keywords": [
+"dried ground mustard",
+"dried mustard",
+"ground mustard",
+"mustard"
+],
+"pantry": [
+180,
+180
+],
+"freezer": [
+365,
+730
+]
+}
+]
+}

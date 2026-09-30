@@ -48,8 +48,10 @@ type Service struct {
 	leftOut LeftOutSource
 	// adjuster is set by SetCookAdjuster; it's optional (customized.go).
 	adjuster CookAdjuster
-	logger   *slog.Logger
-	now      func() time.Time
+	// shelfLife is set by SetShelfLife; it's optional.
+	shelfLife ShelfLife
+	logger    *slog.Logger
+	now       func() time.Time
 	// newID generates purchase and cycle IDs.
 	newID func() string
 }
@@ -133,6 +135,35 @@ type addition struct {
 	isStaple      *bool
 	expiresOn     string
 	note          string
+	storage       Storage
+	storedOn      string
+}
+
+// ShelfLife gives a food's recommended best-by date for where it's kept,
+// counted from storedOn. *shelflife.Service implements it.
+type ShelfLife interface {
+	BestBy(ctx context.Context, householdID, name, category, storage, storedOn string) (string, error)
+}
+
+// SetShelfLife fills in recommended best-by dates from l when an item is
+// added to or moved into a place without one, and returns s.
+func (s *Service) SetShelfLife(l ShelfLife) *Service {
+	s.shelfLife = l
+	return s
+}
+
+// bestBy is the recommended best-by date for an item, or "" when there's no
+// shelf-life source or it fails (a missing date is better than no pantry).
+func (s *Service) bestBy(ctx context.Context, householdID, name, category string, storage Storage, storedOn string) string {
+	if s.shelfLife == nil {
+		return ""
+	}
+	date, err := s.shelfLife.BestBy(ctx, householdID, name, category, string(storage.Or()), storedOn)
+	if err != nil {
+		s.logger.WarnContext(ctx, "look up best-by date", "name", name, "error", err)
+		return ""
+	}
+	return date
 }
 
 // Add adds an ingredient to the pantry, or merges into the item that already
@@ -150,6 +181,14 @@ func (s *Service) Add(ctx context.Context, actor households.Membership, in AddIn
 		return Item{}, false, err
 	}
 	hh := actor.HouseholdID
+	if a.storage != "" {
+		if a.storedOn == "" {
+			a.storedOn = s.timestamp().Format(DateLayout)
+		}
+		if a.expiresOn == "" {
+			a.expiresOn = s.bestBy(ctx, hh, a.displayName, a.category, a.storage, a.storedOn)
+		}
+	}
 	for range maxWriteAttempts {
 		existing, err := s.store.FindItemsByKeys(ctx, hh, []string{a.key})
 		if err != nil {
@@ -252,6 +291,15 @@ func (s *Service) validateAddition(ctx context.Context, in AddInput) (addition, 
 	if a.note, err = normalizeNote(in.Note); err != nil {
 		return addition{}, err
 	}
+	if in.Storage != "" {
+		if !in.Storage.Valid() {
+			return addition{}, invalid("storage must be pantry, fridge, or freezer")
+		}
+		a.storage = in.Storage
+	}
+	if a.storedOn, err = normalizeDate(in.StoredOn); err != nil {
+		return addition{}, invalid("storedOn must be a date in YYYY-MM-DD form")
+	}
 	a.isStaple = in.IsStaple
 	return a, nil
 }
@@ -267,7 +315,22 @@ func newItem(householdID string, a addition, userID string, now time.Time) Item 
 	if a.isStaple != nil {
 		item.IsStaple = *a.isStaple
 	}
+	applyStorage(&item, a.storage, a.storedOn)
 	return item
+}
+
+// applyStorage puts item in storage from storedOn; frozen food records the
+// day it went in, for its label and thaw reminder.
+func applyStorage(item *Item, storage Storage, storedOn string) {
+	if storage == "" {
+		return
+	}
+	item.Storage, item.StoredOn = storage, storedOn
+	if storage == StorageFreezer {
+		item.FrozenOn = storedOn
+	} else {
+		item.FrozenOn, item.Portions, item.FrozenFrom, item.KeptOutThrough = "", 0, "", ""
+	}
 }
 
 func mergeAddition(item Item, a addition) Item {
@@ -293,6 +356,7 @@ func mergeAddition(item Item, a addition) Item {
 	if a.note != "" {
 		item.Note = a.note
 	}
+	applyStorage(&item, a.storage, a.storedOn)
 	return item
 }
 
@@ -325,6 +389,19 @@ func (s *Service) Update(ctx context.Context, actor households.Membership, id st
 			return Item{}, err
 		}
 		now := s.timestamp()
+		if in.Storage != nil {
+			storedOn := next.StoredOn
+			if in.StoredOn == nil || storedOn == "" {
+				storedOn = now.Format(DateLayout)
+			}
+			applyStorage(&next, *in.Storage, storedOn)
+			// Moved, or its own date cleared: the recommended best-by date.
+			if in.ExpiresOn == nil || *in.ExpiresOn == "" {
+				if date := s.bestBy(ctx, actor.HouseholdID, next.DisplayName, next.Category, next.Storage, storedOn); date != "" {
+					next.ExpiresOn = date
+				}
+			}
+		}
 		applyPersonEdit(item, &next, now, s.newID)
 		if in.Status != nil && next.StatusSource == StatusSourceEstimate {
 			next.StatusSource, next.StatusSetAt = StatusSourcePerson, now
@@ -373,6 +450,14 @@ func applyUpdate(item Item, in UpdateInput) (Item, error) {
 	if in.ExpiresOn != nil {
 		if item.ExpiresOn, err = normalizeDate(*in.ExpiresOn); err != nil {
 			return Item{}, err
+		}
+	}
+	if in.Storage != nil && !in.Storage.Valid() {
+		return Item{}, invalid("storage must be pantry, fridge, or freezer")
+	}
+	if in.StoredOn != nil {
+		if item.StoredOn, err = normalizeDate(*in.StoredOn); err != nil {
+			return Item{}, invalid("storedOn must be a date in YYYY-MM-DD form")
 		}
 	}
 	if in.Note != nil {

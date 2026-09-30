@@ -2507,6 +2507,36 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/pantry/shelf-life:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: Recommended best-by date for a food
+      description: |
+        How long `name` keeps in `storage` from `storedOn`, from the USDA
+        FoodKeeper library plus entries added later. Frozen meat and seafood
+        use the household's `freezerWrap`. A food the library doesn't know
+        gets its category's typical time (`estimate: true`) and is recorded
+        so the library can grow. Dates are for quality; the app says to use
+        judgment (docs/pantry-usage.md#best-by-dates).
+      parameters:
+        - {name: name, in: query, required: true, schema: {type: string}}
+        - {name: storage, in: query, schema: {$ref: "#/components/schemas/PantryStorage"}}
+        - {name: storedOn, in: query, description: Today when omitted., schema: {type: string, format: date}}
+        - {name: category, in: query, description: Guessed from the name when omitted., schema: {$ref: "#/components/schemas/GroceryCategoryName"}}
+      responses:
+        "200":
+          description: The recommendation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShelfLifeSuggestion"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/households/{householdId}/pantry/freezer:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -8366,11 +8396,11 @@ components:
         and `out`: always `toBuy`, even for a staple.
     PantryStorage:
       type: string
-      enum: [pantry, freezer]
+      enum: [pantry, fridge, freezer]
       description: |
         Where the item is kept. `pantry` is the shelf, and is also what every
-        item stored before the freezer existed reads as. `freezer`: sealed
-        stock that has to be thawed before it is cooked
+        item stored before storage existed reads as. `fridge`: refrigerated.
+        `freezer`: sealed stock that has to be thawed before it is cooked
         (docs/pantry-usage.md#the-freezer).
       example: freezer
     PantryItem:
@@ -8417,6 +8447,10 @@ components:
           type: string
         storage:
           $ref: "#/components/schemas/PantryStorage"
+        storedOn:
+          type: [string, "null"]
+          format: date
+          description: When it was put away where it is, the start of its recommended best-by date; null when never said.
         frozen:
           description: How the item was sealed and how long it takes to thaw; null for a shelf item.
           oneOf:
@@ -8524,9 +8558,16 @@ components:
         expiresOn:
           type: string
           format: date
+          description: The member's own best-by date. Omitted with a `storage`, the recommended date is filled in (docs/pantry-usage.md#best-by-dates).
         note:
           type: string
           maxLength: 500
+        storage:
+          $ref: "#/components/schemas/PantryStorage"
+        storedOn:
+          type: string
+          format: date
+          description: When it was put away; today when omitted.
     UpdatePantryItemRequest:
       type: object
       minProperties: 1
@@ -8557,6 +8598,48 @@ components:
           minimum: 1
           maximum: 100
           description: The item's own low-stock threshold; null returns it to the household's.
+        storage:
+          $ref: "#/components/schemas/PantryStorage"
+        storedOn:
+          type: [string, "null"]
+          format: date
+          description: |
+            When it was put away where it is; today when omitted with a
+            `storage`. With a `storage` and no `expiresOn` (or `expiresOn: ""`),
+            the item gets the recommended best-by date for its new place.
+    ShelfLifeSuggestion:
+      type: object
+      required: [bestBy, storedOn, storage, text, minDays, maxDays, estimate, source, usualStorage]
+      properties:
+        bestBy:
+          type: string
+          format: date
+          example: "2026-10-14"
+        storedOn:
+          type: string
+          format: date
+        storage:
+          $ref: "#/components/schemas/PantryStorage"
+        text:
+          type: string
+          description: The recommended time, for people.
+          example: 2–3 weeks
+        minDays:
+          type: integer
+        maxDays:
+          type: integer
+        matched:
+          type: string
+          description: The library food the time is for; absent for an estimate.
+          example: Carrots, parsnips
+        estimate:
+          type: boolean
+          description: The library didn't know the food; the time is typical for its category, and the name was recorded as a miss.
+        source:
+          type: string
+          example: USDA FoodKeeper (FSIS), data version 128
+        usualStorage:
+          $ref: "#/components/schemas/PantryStorage"
     FreezePantryItemRequest:
       type: object
       description: Either `ingredientId` or `name` is required.
