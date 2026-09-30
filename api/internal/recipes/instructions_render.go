@@ -167,6 +167,11 @@ var relativeWords = []string{
 	// "a drizzle of oil": the step says how much, in its own words.
 	"drizzle of", "splash of", "pinch of", "dash of", "sprinkle of", "handful of", "knob of", "pat of",
 	"drizzle of the", "splash of the", "pinch of the",
+	// "Open package of chicken", "one packet of sour cream": the whole pack.
+	"package of", "packet of", "packets of", "container of", "can of", "jar of", "bag of",
+	"layer of", "dollop of", "tops of",
+	// "Wash and dry produce (except green beans)".
+	"except",
 }
 
 // fractionOf reads "half the", "half of the", or "¼ of the" at the end of the
@@ -366,9 +371,10 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		case m.substituted:
 			surface = m.display
 		case amount != nil && inText && amount.Unit == "count" && amount.Quantity.Cmp(ingredients.NewQuantity(1, 1)) > 0 &&
-			singularize(surface) == surface:
-			// "Quarter 3 limes", not "Quarter 3 lime".
-			surface = pluralize(surface)
+			singularize(surface) == surface && len(strings.Fields(surface)) <= 2:
+			// "Quarter 3 limes", not "Quarter 3 lime". A longer name is a
+			// product ("Sesame Ginger Crunch"), not something counted.
+			surface = countPlural(surface)
 		}
 		text := surface
 		if amount != nil && inText {
@@ -450,7 +456,7 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 
 var (
 	// " (7-10 minutes for 4 servings)", " (2 cups for 4)"
-	boxNoteRe = regexp.MustCompile(`\s*\(([^()]{1,40}?) for (\d+)(?: servings?)?\)`)
+	boxNoteRe = regexp.MustCompile(`\s*\(([^()]{1,90}?) for (\d+)(?: servings?)?\)`)
 	// "7-10 minutes", "1½ cups": a number or range, then a word.
 	noteAmountRe = regexp.MustCompile(`^([\d½¼¾⅓⅔⅛][\d½¼¾⅓⅔⅛\-–/. ]*?)\s*([A-Za-z]+)$`)
 )
@@ -459,9 +465,10 @@ var (
 // that isn't an ingredient ("5-7 minutes (7-10 minutes for 4 servings)"),
 // since the size being cooked is already chosen. The note's value replaces
 // the one before it when the note's size is the closer one; the note goes
-// either way. A note with no value to swap ("middle position (middle and top
-// positions for 4 servings)") stays, without its "for 4 servings", when that
-// size is the closer one.
+// either way. A note with no single value to swap ("middle position (middle
+// and top positions for 4 servings)", "(2 tsp water and 1½ tsp salt for 4
+// servings)") stays as written when that size is the closer one, and goes
+// otherwise.
 func boxNotes(text string, servings, base int) string {
 	locs := boxNoteRe.FindAllStringSubmatchIndex(text, -1)
 	for j := len(locs) - 1; j >= 0; j-- {
@@ -478,9 +485,7 @@ func boxNotes(text string, servings, base int) string {
 		prefix, rest := text[:loc[0]], text[loc[1]:]
 		note := noteAmountRe.FindStringSubmatch(strings.TrimSpace(inner))
 		if note == nil {
-			if useNote {
-				text = prefix + " (" + strings.TrimSpace(inner) + ")" + rest
-			} else {
+			if !useNote {
 				text = prefix + rest
 			}
 			continue
@@ -500,6 +505,20 @@ func boxNotes(text string, servings, base int) string {
 		text = prefix + rest
 	}
 	return text
+}
+
+// countPlural is the plural a step shows after a count: "3 limes", "2
+// jalapeños", "3 tomatoes".
+func countPlural(s string) string {
+	head, last := splitLastWord(s)
+	switch strings.ToLower(last) {
+	case "tomato", "potato":
+		return head + last + "es"
+	}
+	if strings.HasSuffix(strings.ToLower(last), "o") {
+		return head + last + "s"
+	}
+	return pluralize(s)
 }
 
 // matchCase writes name the way the step wrote what it replaces: "ground

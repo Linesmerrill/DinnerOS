@@ -214,7 +214,9 @@ func TestBoxNotesSettleForTheSizeBeingCooked(t *testing.T) {
 		{"Cook, 5-7 minutes (7-10 minutes for 4 servings).", 4, 2, "Cook, 7-10 minutes."},
 		{"Reserve 2 cups pasta water (4 cups for 4 servings), then drain.", 6, 2, "Reserve 4 cups pasta water, then drain."},
 		{"Adjust rack to middle position (middle and top positions for 4 servings).", 2, 2, "Adjust rack to middle position."},
-		{"Adjust rack to middle position (middle and top positions for 4 servings).", 4, 2, "Adjust rack to middle position (middle and top positions)."},
+		{"Adjust rack to middle position (middle and top positions for 4 servings).", 4, 2, "Adjust rack to middle position (middle and top positions for 4 servings)."},
+		{"Stir in salt (2 tsp water and 1½ tsp salt for 4 servings).", 2, 2, "Stir in salt."},
+		{"Stir in salt (2 tsp water and 1½ tsp salt for 4 servings).", 4, 2, "Stir in salt (2 tsp water and 1½ tsp salt for 4 servings)."},
 		{"Stir (you'll use the rest later).", 4, 2, "Stir (you'll use the rest later)."},
 	} {
 		if got := boxNotes(tc.text, tc.servings, tc.base); got != tc.want {
@@ -230,13 +232,33 @@ func TestAnnotateCleansTheCardsMarks(t *testing.T) {
 			tacoLine("ing-beans", "Black Beans", "1", "3/2", "count"),
 			tacoLine("ing-lemon", "Lemon", "1", "3/2", "count"),
 		},
-		"Pat chicken*  dry. Drain and rinse beans. Melt 1 TBSP butter.",
+		"Pat chicken*  dry. Drain and rinse beans. Melt 1 TBSP butter. Open package of chicken.",
 		"Quarter lemon. Add half the lemon zest.")
 	in := Annotate(r, 2, nil, true)
-	if got, want := joined(in.Steps[0]), "Pat 10 oz chicken dry. Drain and rinse beans. Melt 1 Tbsp butter."; got != want {
+	if got, want := joined(in.Steps[0]), "Pat 10 oz chicken dry. Drain and rinse beans. Melt 1 Tbsp butter. Open package of chicken."; got != want {
 		t.Errorf("step 1 = %q, want %q", got, want)
 	}
 	if got, want := joined(in.Steps[1]), "Quarter 1 lemon. Add half the lemon zest."; got != want {
 		t.Errorf("step 2 = %q, want %q", got, want)
+	}
+}
+
+func TestAnnotateGivesNoAmountForAWholePack(t *testing.T) {
+	r := tacoRecipe(
+		[]RecipeIngredient{tacoLine("ing-chicken", "Chicken Breasts", "10", "15", "oz")},
+		"Open package of chicken and drain.")
+	if got, want := joined(Annotate(r, 2, nil, true).Steps[0]), "Open package of chicken and drain."; got != want {
+		t.Errorf("text = %q, want %q", got, want)
+	}
+}
+
+func TestCountPlural(t *testing.T) {
+	for in, want := range map[string]string{
+		"lime": "limes", "jalapeño": "jalapeños", "tomato": "tomatoes", "sweet potato": "sweet potatoes",
+		"green pepper": "green peppers", "radish": "radishes",
+	} {
+		if got := countPlural(in); got != want {
+			t.Errorf("countPlural(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
