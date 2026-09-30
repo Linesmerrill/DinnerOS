@@ -69,6 +69,7 @@ type itemDoc struct {
 	FrozenOn      string         `bson:"frozenOn,omitempty"`
 	Portions      int            `bson:"portions,omitempty"`
 	FrozenFrom    string         `bson:"frozenFrom,omitempty"`
+	KeptOut       string         `bson:"keptOutThrough,omitempty"`
 	// Usage is the usage estimate's state (docs/pantry-usage.md).
 	Usage     usageItemFields `bson:",inline"`
 	Version   int64           `bson:"version"`
@@ -87,6 +88,7 @@ func newItemDoc(item Item, id, householdID bson.ObjectID) (itemDoc, error) {
 		Quantity: item.Quantity, Unit: item.Unit, Status: string(item.Status), IsStaple: item.IsStaple,
 		ExpiresOn: item.ExpiresOn, Note: item.Note, Version: item.Version,
 		Storage: string(item.Storage), FrozenOn: item.FrozenOn, Portions: item.Portions, FrozenFrom: item.FrozenFrom,
+		KeptOut:   item.KeptOutThrough,
 		CreatedAt: item.CreatedAt, UpdatedBy: updatedBy, UpdatedAt: item.UpdatedAt,
 		Usage: newUsageItemFields(item),
 	}
@@ -114,7 +116,8 @@ func (d itemDoc) toItem() Item {
 		Quantity: d.Quantity, Unit: d.Unit, Status: Status(d.Status), IsStaple: d.IsStaple,
 		ExpiresOn: d.ExpiresOn, Note: d.Note, Version: d.Version,
 		Storage: Storage(d.Storage), FrozenOn: d.FrozenOn, Portions: d.Portions, FrozenFrom: d.FrozenFrom,
-		CreatedAt: d.CreatedAt.UTC(), UpdatedBy: d.UpdatedBy.Hex(), UpdatedAt: d.UpdatedAt.UTC(),
+		KeptOutThrough: d.KeptOut,
+		CreatedAt:      d.CreatedAt.UTC(), UpdatedBy: d.UpdatedBy.Hex(), UpdatedAt: d.UpdatedAt.UTC(),
 	}
 	if d.IngredientID != nil {
 		item.IngredientID = d.IngredientID.Hex()
@@ -302,6 +305,7 @@ func (s *MongoStore) UpdateItem(ctx context.Context, item Item) (Item, error) {
 	optional("frozenOn", doc.FrozenOn, doc.FrozenOn != "")
 	optional("portions", doc.Portions, doc.Portions != 0)
 	optional("frozenFrom", doc.FrozenFrom, doc.FrozenFrom != "")
+	optional("keptOutThrough", doc.KeptOut, doc.KeptOut != "")
 	doc.Usage.usageSet(optional)
 	update := bson.D{{Key: "$set", Value: set}}
 	if len(unset) > 0 {

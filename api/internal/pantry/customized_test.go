@@ -165,3 +165,22 @@ func TestCookLeftOutFailureDeductsNothing(t *testing.T) {
 		t.Fatalf("ApplyCooked() = %v, %v; want the failure and nothing applied", applied, err)
 	}
 }
+
+// A frozen bag whose pack kept a fresh portion out for this week's meals isn't
+// counted down by those meals: they cooked from the fridge.
+func TestCookSkipsABagFrozenAfterTheMealWasKeptOut(t *testing.T) {
+	f := newUsageFixture(t)
+	res, err := f.svc.Freeze(f.ctx, f.actor, FreezeInput{
+		Name: "Butter", Quantity: "1", Unit: "cup", KeptOutThrough: time.Now().UTC().Format(DateLayout),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	usage, applied := f.cook(t, "entry-kept-out", 2)
+	if !applied || len(usage.Lines) != 1 || usage.Lines[0].SkipReason != SkipKeptOut {
+		t.Fatalf("usage = %+v (applied %v), want the butter skipped as kept out", usage.Lines, applied)
+	}
+	if got := f.item(t, res.Item.ID).Tracking; got.RecipeUsed != "" && got.RecipeUsed != "0" {
+		t.Errorf("frozen bag counted down by %s, want untouched", got.RecipeUsed)
+	}
+}

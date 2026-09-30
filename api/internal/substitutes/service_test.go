@@ -485,15 +485,15 @@ func TestGrocerySpecialties(t *testing.T) {
 		t.Fatalf("specialties = %v", specs)
 	}
 	tex := specs[texID]
-	if tex.ID != "tex-mex-paste" || tex.Choice == nil || tex.Choice.Type != grocery.ChoiceStoreAlternative || tex.Choice.Per.Unit != "tbsp" ||
+	if tex.ID != "tex-mex-paste" || tex.Choice == nil || tex.Choice.Type != grocery.ChoiceStoreAlternative || tex.Choice.Per.Unit != "count" ||
 		len(tex.UnitSizes) != 2 || len(tex.Choice.Components) != 2 {
 		t.Fatalf("tex-mex = %+v choice %+v", tex, tex.Choice)
 	}
 	base, paste := tex.Choice.Components[0], tex.Choice.Components[1]
-	if base.Name != "Smoky Chipotle Bouillon Base" || base.Category != "condiments" || quantityOf(base.Quantity) != "2" || base.Unit != "tsp" {
+	if base.Name != "Smoky Chipotle Bouillon Base" || base.Category != "condiments" || quantityOf(base.Quantity) != "1" || base.Unit != "tsp" {
 		t.Errorf("chipotle base = %+v", base)
 	}
-	if paste.IngredientKey != f.catalog.id("Tomato Paste") || paste.Name != "Tomato Paste" || quantityOf(paste.Quantity) != "1" || paste.Unit != "tsp" {
+	if paste.IngredientKey != f.catalog.id("Tomato Paste") || paste.Name != "Tomato Paste" || quantityOf(paste.Quantity) != "5" || paste.Unit != "tsp" {
 		t.Errorf("tomato paste = %+v", paste)
 	}
 	sw := specs[southwestID]

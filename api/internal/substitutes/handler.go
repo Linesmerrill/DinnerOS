@@ -288,6 +288,13 @@ func optionSummary(o Option) string {
 		per := ""
 		if a := measureResponse(o.Per); a != nil {
 			per = a.Text + " = "
+			// "1 packet =", not "1 =".
+			if o.Per.Unit == "count" {
+				per = a.Text + " packet = "
+				if a.QuantityValue != 1 {
+					per = a.Text + " packets = "
+				}
+			}
 		}
 		return per + strings.Join(parts, " + ")
 	case TypeHouseMadeBatch:

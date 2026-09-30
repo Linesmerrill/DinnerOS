@@ -179,3 +179,32 @@ func TestClockText(t *testing.T) {
 		}
 	}
 }
+
+// Bought this week, a dinner's worth kept in the fridge and the rest frozen:
+// tonight cooks from the fridge, so there is nothing to thaw — not this bag,
+// and not an older bag of the same meat either.
+func TestThawDueSkipsABagFrozenAfterThisWeeksMealsWereKeptOut(t *testing.T) {
+	ctx := context.Background()
+	fresh := frozenChicken()
+	fresh.Item.ID, fresh.Item.FrozenOn, fresh.Item.KeptOutThrough = "66e5a1f2c3b4a5d6e7f84002", "2026-09-13", "2026-09-17"
+	older := frozenChicken()
+	older.Item.FrozenOn = "2026-08-01"
+	svc, _ := thawService(t, nil, older, fresh)
+	mustAdd(t, svc, hhAda, userAda, testWeek, NewEntry{RecipeID: recipeChicken, Day: "tue", Servings: 2})
+
+	due, err := svc.ThawDue(ctx, hhAda)
+	if err != nil {
+		t.Fatalf("ThawDue: %v", err)
+	}
+	if len(due.Items) != 0 {
+		t.Fatalf("items = %+v, want none: tonight's chicken is in the fridge", due.Items)
+	}
+
+	// After that week, the bag is ordinary freezer stock again.
+	fresh.Item.KeptOutThrough = "2026-09-14"
+	svc, _ = thawService(t, nil, fresh)
+	mustAdd(t, svc, hhAda, userAda, testWeek, NewEntry{RecipeID: recipeChicken, Day: "tue", Servings: 2})
+	if due, err = svc.ThawDue(ctx, hhAda); err != nil || len(due.Items) != 1 {
+		t.Fatalf("items = %+v (%v), want the bag once its week has passed", due.Items, err)
+	}
+}

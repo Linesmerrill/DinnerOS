@@ -1,6 +1,7 @@
 package substitutes
 
 import (
+	"math/big"
 	"slices"
 	"strings"
 	"testing"
@@ -241,4 +242,82 @@ func TestParseSeedRejectsBadData(t *testing.T) {
 	if _, err := ParseSeed([]byte(two)); err == nil || !strings.Contains(err.Error(), "already") {
 		t.Errorf("a name that is another specialty's alias: error = %v", err)
 	}
+}
+
+// A packet of any specialty takes at most 1 tsp of a bouillon base, the
+// household's measure for a stock concentrate packet: the bases are far
+// stronger than a meal-kit packet, and 4 tsp in a Tex-Mex Paste packet is
+// several times too salty.
+func TestSeedBouillonBaseIsAtMostOneTeaspoonPerPacket(t *testing.T) {
+	seed, err := LoadSeed()
+	if err != nil {
+		t.Fatal(err)
+	}
+	checked := 0
+	for _, sp := range seed.Specialties {
+		packet := map[string]UnitSize{}
+		for _, us := range sp.UnitSizes {
+			packet[us.Per] = us
+		}
+		for _, o := range sp.Options {
+			if o.Type != TypeStoreAlternative || o.Per == nil {
+				continue
+			}
+			// How many packets the option's "per" amount is.
+			per := quantity(t, o.Per.Quantity)
+			if o.Per.Unit != "count" && o.Per.Unit != "package" {
+				us, ok := packet["count"]
+				if !ok || us.Unit != o.Per.Unit {
+					continue
+				}
+				per.Quo(per, quantity(t, us.Quantity))
+			}
+			for _, c := range o.Ingredients {
+				if !strings.HasSuffix(c.Name, "Bouillon Base") {
+					continue
+				}
+				checked++
+				if c.Unit != "tsp" {
+					t.Errorf("%s: %s is in %s, want tsp", o.ID, c.Name, c.Unit)
+					continue
+				}
+				perPacket := new(big.Rat).Quo(quantity(t, c.Quantity), per)
+				if perPacket.Cmp(big.NewRat(1, 1)) > 0 {
+					t.Errorf("%s: %s tsp of %s per packet, want at most 1", o.ID, perPacket.RatString(), c.Name)
+				}
+			}
+		}
+	}
+	if checked < 4 {
+		t.Errorf("checked %d bouillon bases, want the stock concentrates and Tex-Mex Paste", checked)
+	}
+}
+
+func TestSeedTexMexPasteIsOneTeaspoonOfBasePerPacket(t *testing.T) {
+	seed, err := LoadSeed()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sp := range seed.Specialties {
+		if sp.ID != "tex-mex-paste" {
+			continue
+		}
+		o := sp.Options[0]
+		if o.ID != "tex-mex-paste.store" || o.Per == nil || o.Per.Quantity != "1" || o.Per.Unit != "count" ||
+			len(o.Ingredients) != 2 || o.Ingredients[0].Quantity != "1" || o.Ingredients[0].Unit != "tsp" ||
+			o.Ingredients[1].Name != "Tomato Paste" || o.Ingredients[1].Quantity != "5" || o.Ingredients[1].Unit != "tsp" {
+			t.Errorf("tex-mex store option = %+v per %+v", o.Ingredients, o.Per)
+		}
+		return
+	}
+	t.Fatal("no tex-mex-paste in the seed")
+}
+
+func quantity(t *testing.T, s string) *big.Rat {
+	t.Helper()
+	r, ok := new(big.Rat).SetString(s)
+	if !ok {
+		t.Fatalf("quantity %q", s)
+	}
+	return r
 }

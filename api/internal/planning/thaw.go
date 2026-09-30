@@ -154,6 +154,18 @@ func (s *Service) ThawDue(ctx context.Context, householdID string) (ThawDue, err
 		}
 	}
 
+	// A bag frozen from this week's groceries is for later: the week's meals
+	// were kept out of the pack first and are in the fridge, so nothing of
+	// that ingredient needs thawing for them, from this bag or an older one.
+	keptOut := map[string]bool{}
+	for _, f := range stock {
+		if f.Item.KeptOutThrough != "" && out.Date <= f.Item.KeptOutThrough {
+			for _, key := range f.Keys {
+				keptOut[key] = true
+			}
+		}
+	}
+
 	needed := map[string]*ThawItem{}
 	for _, id := range todayIDs {
 		r, ok := byID[id]
@@ -161,8 +173,9 @@ func (s *Service) ThawDue(ctx context.Context, householdID string) (ThawDue, err
 			continue
 		}
 		for _, ing := range r.Ingredients {
-			f, ok := byKey[thawKey(ing.IngredientID, ing.Name)]
-			if !ok {
+			key := thawKey(ing.IngredientID, ing.Name)
+			f, ok := byKey[key]
+			if !ok || keptOut[key] {
 				continue
 			}
 			item := needed[f.Item.ID]

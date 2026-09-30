@@ -226,7 +226,7 @@
       "id": "tex-mex-paste",
       "name": "Tex-Mex Paste",
       "category": "condiments",
-      "note": "The easiest store route is a smoky chipotle bouillon base (Better Than Bouillon make one) loosened with tomato paste; canned chipotles in adobo, for the jar, are in the Latin or canned-vegetable aisle. Follow the recipe's own amount — the options below are measured per tablespoon it asks for.",
+      "note": "The easiest store route is a smoky chipotle bouillon base (Better Than Bouillon make one) loosened with tomato paste; canned chipotles in adobo, for the jar, are in the Latin or canned-vegetable aisle. A packet is 2 tbsp: 1 tsp of the base (as for stock concentrates) and tomato paste for the rest.",
       "unitSizes": [
         { "per": "count", "quantity": "2", "unit": "tbsp" },
         { "per": "package", "quantity": "2", "unit": "tbsp" }
@@ -238,10 +238,10 @@
           "type": "store_alternative",
           "name": "Smoky chipotle base loosened with tomato paste",
           "notes": "The base is very concentrated, so it goes in with a little tomato paste rather than straight. A chipotle pepper paste works too, but it is more chipotle-forward and less of a rounded Tex-Mex flavour.",
-          "per": { "quantity": "1", "unit": "tbsp" },
+          "per": { "quantity": "1", "unit": "count" },
           "ingredients": [
-            { "name": "Smoky Chipotle Bouillon Base", "quantity": "2", "unit": "tsp", "category": "condiments" },
-            { "name": "Tomato Paste", "quantity": "1", "unit": "tsp" }
+            { "name": "Smoky Chipotle Bouillon Base", "quantity": "1", "unit": "tsp", "category": "condiments" },
+            { "name": "Tomato Paste", "quantity": "5", "unit": "tsp" }
           ]
         },
         {

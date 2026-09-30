@@ -43,6 +43,10 @@ const (
 	// SkipUnitMismatch: the recipe's unit doesn't convert exactly to the
 	// item's (tbsp of butter against a count of sticks with no size).
 	SkipUnitMismatch CookSkipReason = "unit_mismatch"
+	// SkipKeptOut: the item is a frozen bag and this meal was one the fresh
+	// portion was kept out for (Item.KeptOutThrough), so it cooked from the
+	// fridge, not the bag.
+	SkipKeptOut CookSkipReason = "kept_out"
 )
 
 // CookUsage records one cooked meal's deductions. (HouseholdID, SourceKey) is
@@ -276,6 +280,8 @@ func (s *Service) matchNeeds(ctx context.Context, m CookedMeal, needs []recipeNe
 			line.SkipReason = SkipItemOut
 		case m.OccurredAt.Before(t.SegmentStartedAt):
 			line.SkipReason = SkipBeforeCycle
+		case keptOutFor(item, m.OccurredAt):
+			line.SkipReason = SkipKeptOut
 		case n.quantity == nil:
 			line.SkipReason = SkipNoAmount
 		default:
@@ -300,6 +306,21 @@ func (s *Service) matchNeeds(ctx context.Context, m CookedMeal, needs []recipeNe
 		lines = append(lines, line)
 	}
 	return lines, nil
+}
+
+// keptOutFor reports whether a meal cooked at occurred used the fresh portion
+// kept out of a frozen item's pack rather than the bag. The day is compared
+// with room to spare, since a meal cooked on the evening of the last day is
+// the next day in UTC.
+func keptOutFor(item Item, occurred time.Time) bool {
+	if item.Storage != StorageFreezer || item.KeptOutThrough == "" {
+		return false
+	}
+	last, err := time.Parse(DateLayout, item.KeptOutThrough)
+	if err != nil {
+		return false
+	}
+	return occurred.Before(last.Add(36 * time.Hour))
 }
 
 // deductItem applies one item's lines, retrying when the item changes

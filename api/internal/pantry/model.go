@@ -141,6 +141,11 @@ type Item struct {
 	// "<handoffId>:<lineId>", or empty. Freezing the same line twice is a
 	// no-op, so a retried request never doubles the freezer.
 	FrozenFrom string
+	// KeptOutThrough is the last day (DateLayout) of the meals that were kept
+	// out of the pack before the rest was frozen, or empty. Those meals cook
+	// from the fresh portion in the fridge, so until then the bag is for later
+	// weeks: no thaw reminder, and cooking doesn't count it down.
+	KeptOutThrough string
 
 	// StatusSource says who set Status: a person (the default for items
 	// written before usage tracking) or the usage estimate.

@@ -142,6 +142,10 @@ Amounts convert exactly or not at all. There is no density or "1 onion ≈
   `skipReason` (`unit_mismatch`, `no_amount`), and the item's
   `estimate.skippedRecipes` counts it, so the app can say "1 recipe couldn't
   be counted". Nothing is guessed.
+- `kept_out`: the item is a frozen bag sealed from this week's groceries,
+  and the meal is one its fresh portion was kept out for
+  (`keptOutThrough`). That meal cooked from the fridge, so the bag isn't
+  counted down.
 - Other skip reasons: `not_tracked` (no amount recorded), `item_out`, and
   `before_cycle` (the meal was cooked before the latest purchase or
   correction).
@@ -326,6 +330,12 @@ meals decide the size, and the count decides the thaw estimate below
 The freezer only works if something takes the food out of it in time. A pork
 loin sealed in March isn't dinner on a Thursday unless somebody remembers on
 Thursday *morning*, and "I'll remember" is exactly the thing that fails.
+
+A bag frozen from this week's groceries is for later weeks. The prep card
+keeps this week's meals out of the pack first (they go in the fridge) and
+freezes only the rest, recording the last kept-out meal's date as
+`keptOutThrough`. Until that day passes, no meal needs that ingredient
+thawed, from this bag or an older one (decision 589).
 
 ### How long it takes
 

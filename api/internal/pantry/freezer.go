@@ -59,6 +59,9 @@ type FreezeInput struct {
 	Note     string
 	// Source, when set, is the handoff line the remainder came from.
 	Source *FreezeSource
+	// KeptOutThrough is the last day of the meals the fresh portion was kept
+	// out for (Item.KeptOutThrough), or empty.
+	KeptOutThrough string
 }
 
 // MaxPortions bounds the portions a remainder is split into.
@@ -136,6 +139,7 @@ func (s *Service) Freeze(ctx context.Context, actor households.Membership, in Fr
 			}
 		}
 		freezeItem(&item, quantity, unit, in.Portions, note, ref, s.newID(), now)
+		item.KeptOutThrough = in.KeptOutThrough
 		item.UpdatedBy, item.UpdatedAt = actor.UserID, now
 
 		var saved Item

@@ -3,6 +3,7 @@ package shopping
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 	"github.com/Linesmerrill/DinnerOS/api/internal/providers"
@@ -322,5 +323,18 @@ func TestPortionOptionsCarryTheirLeftover(t *testing.T) {
 	if resp.Portions != 0 || len(resp.Options) != 0 || resp.LeftoverText != "4 oz" {
 		t.Errorf("small surplus = %d bags, %d options, leftover %q; want 0, 0, 4 oz",
 			resp.Portions, len(resp.Options), resp.LeftoverText)
+	}
+}
+
+// The bag frozen from a card is for after the meals the card kept a fresh
+// portion out for.
+func TestKeptOutThroughIsTheLastKeptOutMeal(t *testing.T) {
+	now := time.Date(2026, 9, 27, 15, 0, 0, 0, time.UTC)
+	meals := []PrepMeal{{Date: "2026-09-29"}, {Date: "2026-10-01"}}
+	if got := keptOutThrough(meals, now); got != "2026-10-01" {
+		t.Errorf("keptOutThrough = %q, want the Thursday meal", got)
+	}
+	if got := keptOutThrough(append(meals, PrepMeal{}), now); got != "2026-10-03" {
+		t.Errorf("with an unscheduled meal = %q, want a week out", got)
 	}
 }

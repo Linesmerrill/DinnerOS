@@ -275,8 +275,8 @@ func TestIntegrationGroceryAndBatchDeduction(t *testing.T) {
 	if _, ok := items["Tex-Mex Paste"]; ok {
 		t.Error("Tex-Mex Paste is still listed")
 	}
-	// 2 Tbsp of paste is 2 tsp of tomato paste, plus the bowls' own 1 Tbsp.
-	if paste := items["Tomato Paste"]; len(paste.Amounts) != 1 || amountsOf(paste)[0] != "5/3 tbsp" || len(paste.Via) != 1 || len(paste.Sources) != 2 {
+	// 2 Tbsp of paste is one packet, 5 tsp of tomato paste, plus the bowls' own 1 Tbsp.
+	if paste := items["Tomato Paste"]; len(paste.Amounts) != 1 || amountsOf(paste)[0] != "8/3 tbsp" || len(paste.Via) != 1 || len(paste.Sources) != 2 {
 		t.Errorf("tomato paste = %+v", paste)
 	}
 	// The store route for the paste is a bouillon base now, so cumin comes only from the batch.

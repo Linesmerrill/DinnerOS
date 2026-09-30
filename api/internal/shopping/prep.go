@@ -876,11 +876,26 @@ func (s *Service) freeze(
 		Source: &pantry.FreezeSource{
 			Provider: string(card.Provider), HandoffID: card.HandoffID, LineID: card.LineID,
 		},
+		KeptOutThrough: keptOutThrough(card.Meals, s.timestamp()),
 	})
 	if err != nil {
 		return pantry.FreezeResult{}, fmt.Errorf("freeze the remainder: %w", err)
 	}
 	return res, nil
+}
+
+// keptOutThrough is the last day of the meals the card kept a fresh portion
+// out for: the latest planned date, or a week from now when a meal has no
+// day. Until then the frozen bag is for later weeks.
+func keptOutThrough(meals []PrepMeal, now time.Time) string {
+	last := ""
+	for _, m := range meals {
+		if m.Date == "" {
+			return now.AddDate(0, 0, 6).Format(time.DateOnly)
+		}
+		last = max(last, m.Date)
+	}
+	return last
 }
 
 // frozenAmount is what sealing count portions puts in the freezer.
