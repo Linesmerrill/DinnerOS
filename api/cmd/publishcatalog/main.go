@@ -3,8 +3,9 @@
 //
 // Recipes stored before the catalog existed have no catalogKey and were never
 // published, so this command gives them their key (by re-saving them
-// unchanged) and publishes the ones from a known public source. Recipes a
-// household typed or pasted are left alone unless the household shared them.
+// unchanged) and publishes what the household shares: nothing when its
+// catalogSharing is off (the default), every recipe when it's all, and the
+// ones it marked when it's chosen.
 // It is a dry run unless -apply is given, and re-running it is safe.
 //
 //	MONGODB_URI=... MONGODB_DATABASE=dinneros \
@@ -89,7 +90,9 @@ func run(ctx context.Context, args []string, getenv func(string) string, out io.
 	}
 
 	catalogService := catalog.NewService(catalog.ServiceOptions{Store: catalog.NewMongoStore(client.Database())})
-	service := recipes.NewService(recipes.NewMongoStore(client.Database())).WithCatalog(catalogService)
+	// Only what the household chose to share (its catalogSharing) is published.
+	householdService := households.NewService(households.ServiceOptions{Store: households.NewMongoStore(client.Database())})
+	service := recipes.NewService(recipes.NewMongoStore(client.Database())).WithCatalog(catalogService).WithSharing(householdService)
 	catalogService.SetLibrary(service)
 
 	started := time.Now()
