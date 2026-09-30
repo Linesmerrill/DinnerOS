@@ -118,6 +118,7 @@ func TestIntegrationStoreProposalsAndOverrides(t *testing.T) {
 		Slots: []Slot{{
 			ID: "sun", Day: "sun", RecipeID: rTenderloin, RecipeName: "Smoky Pork Tenderloin", CookMinutes: 90, TimeBand: "long", Servings: 4,
 			Score: 1.25, Signals: map[string]float64{"rule": 1}, Reasons: []Reason{{Code: "rule", Text: "Sunday smoker night · Pork · Long cook OK"}},
+			Badges:    []Badge{{Code: "weather", Label: "Rainy", Symbol: "cloud.rain", Detail: "Picked for the weather: Sunday looks rainy, so a warm, comforting dinner."}},
 			SwapCount: 1, RejectedRecipeIDs: []string{rThighs},
 		}},
 		Unfilled:  []Unfilled{{Day: "sat", Code: "no_candidates", Text: "No remaining recipe fits Saturday."}},

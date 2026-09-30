@@ -36,6 +36,7 @@ type cand struct {
 	servings int
 	signals  map[string]float64
 	reasons  []reason
+	badges   []autopilot.Badge
 }
 
 type reason struct {
@@ -242,6 +243,9 @@ func (m *model) score(s *slot, it *item) cand {
 	if value, reasons := m.contextFor(s, it); value != 0 {
 		add(SignalContext, value, w.Context)
 		c.reasons = append(c.reasons, reasons...)
+	}
+	if b, ok := m.weatherBadge(s, it); ok {
+		c.badges = append(c.badges, b)
 	}
 
 	// Weekday rule. A rule's methods (already limited to the household's

@@ -245,11 +245,19 @@ type Slot struct {
 	Score          float64
 	Signals        map[string]float64
 	Reasons        []Reason
-	SwapCount      int
+	// Badges mark why the pick fits its day, such as the forecast.
+	Badges    []Badge
+	SwapCount int
 	// RejectedRecipeIDs were swapped out of this slot, most recent last.
 	RejectedRecipeIDs []string
 	// Pairings are add-ons and grocery items offered with the meal.
 	Pairings []Pairing
+}
+
+// Badge marks a pick with a short label, an SF Symbol, and a sentence
+// explaining it.
+type Badge struct {
+	Code, Label, Symbol, Detail string
 }
 
 // Reason explains a pick.

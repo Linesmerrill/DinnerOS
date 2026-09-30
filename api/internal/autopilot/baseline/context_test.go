@@ -2,6 +2,7 @@ package baseline
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot"
@@ -124,6 +125,50 @@ func TestWeatherContext(t *testing.T) {
 	week := generate(t, p, in)
 	if !slices.ContainsFunc(week.Messages, func(m autopilot.Message) bool { return m.Text == "Planned around the forecast." }) {
 		t.Errorf("messages = %+v", week.Messages)
+	}
+}
+
+func TestWeatherBadges(t *testing.T) {
+	p := New(Options{})
+	in := contextCatalog()
+	in.Context.Days = []autopilot.DayContext{
+		onDay(autopilot.Tuesday, autopilot.ContextTemperatureBand, "cold", autopilot.ContextPrecipitation, "rain"),
+		onDay(autopilot.Wednesday, autopilot.ContextTemperatureBand, "hot"),
+		onDay(autopilot.Thursday, autopilot.ContextPrecipitation, "snow"),
+		// A busy evening outranks the weather as a reason; the badge still shows.
+		{Day: autopilot.Friday, Signals: autopilot.Signals{
+			autopilot.ContextTemperatureBand: autopilot.Text("cold"), autopilot.ContextBusyness: autopilot.Text("busy"),
+		}},
+	}
+	for _, tc := range []struct {
+		day                   autopilot.Day
+		id, label, symbol, in string
+	}{
+		{autopilot.Tuesday, "soup", "Cold and rainy", "cloud.rain", "Tuesday looks cold and rainy"},
+		{autopilot.Wednesday, "salad", "Hot", "sun.max", "Wednesday looks hot, so something lighter"},
+		{autopilot.Thursday, "soup", "Snowy", "cloud.snow", "Thursday looks snowy"},
+		{autopilot.Friday, "soup", "Cold", "thermometer.snowflake", "Friday looks cold"},
+	} {
+		r := contextReason(t, p, in, tc.day, tc.id)
+		if len(r.Badges) != 1 {
+			t.Errorf("%s %s badges = %+v", tc.day, tc.id, r.Badges)
+			continue
+		}
+		b := r.Badges[0]
+		if b.Code != "weather" || b.Label != tc.label || b.Symbol != tc.symbol || !strings.Contains(b.Detail, tc.in) {
+			t.Errorf("%s %s badge = %+v", tc.day, tc.id, b)
+		}
+	}
+	// No badge where the weather counts against the meal, or says nothing.
+	for _, tc := range []struct {
+		day autopilot.Day
+		id  string
+	}{
+		{autopilot.Wednesday, "soup"}, {autopilot.Wednesday, "roast"}, {autopilot.Tuesday, "salad"}, {autopilot.Monday, "soup"},
+	} {
+		if r := contextReason(t, p, in, tc.day, tc.id); len(r.Badges) != 0 {
+			t.Errorf("%s %s got badges %+v", tc.day, tc.id, r.Badges)
+		}
 	}
 }
 

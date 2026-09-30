@@ -62,6 +62,9 @@ func (d inputData) slot(s autopilot.Slot) Slot {
 	for _, reason := range s.Reasons {
 		out.Reasons = append(out.Reasons, Reason{Code: reason.Code, Text: reason.Text})
 	}
+	for _, b := range s.Badges {
+		out.Badges = append(out.Badges, Badge(b))
+	}
 	return out
 }
 

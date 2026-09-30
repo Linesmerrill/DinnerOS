@@ -242,6 +242,44 @@ func (m *model) contextFor(s *slot, it *item) (float64, []reason) {
 	return value, reasons
 }
 
+// weatherBadge marks a meal the day's forecast favors (comfort food on a cold
+// or wet day, something lighter on a hot one), whether or not the weather is
+// its strongest reason.
+func (m *model) weatherBadge(s *slot, it *item) (autopilot.Badge, bool) {
+	if m.w.Context == 0 {
+		return autopilot.Badge{}, false
+	}
+	sig := m.ctx.days[s.day].sig
+	day := autopilot.Days[s.day].Name()
+	cold := sig.temperature == autopilot.TemperatureCold
+	rain := sig.precipitation == autopilot.PrecipitationRain
+	snow := sig.precipitation == autopilot.PrecipitationSnow
+	var label, symbol, looks string
+	switch {
+	case (cold || rain || snow) && comfort(it):
+		switch {
+		case snow:
+			label, symbol, looks = "Snowy", "cloud.snow", "snowy"
+		case cold && rain:
+			label, symbol, looks = "Cold and rainy", "cloud.rain", "cold and rainy"
+		case cold:
+			label, symbol, looks = "Cold", "thermometer.snowflake", "cold"
+		default:
+			label, symbol, looks = "Rainy", "cloud.rain", "rainy"
+		}
+		return autopilot.Badge{
+			Code: "weather", Label: label, Symbol: symbol,
+			Detail: fmt.Sprintf("Picked for the weather: %s looks %s, so a warm, comforting dinner.", day, looks),
+		}, true
+	case sig.temperature == autopilot.TemperatureHot && light(it):
+		return autopilot.Badge{
+			Code: "weather", Label: "Hot", Symbol: "sun.max",
+			Detail: fmt.Sprintf("Picked for the weather: %s looks hot, so something lighter.", day),
+		}, true
+	}
+	return autopilot.Badge{}, false
+}
+
 func weatherPhrase(sig daySignals, day autopilot.Day) string {
 	cold := sig.temperature == autopilot.TemperatureCold
 	switch {

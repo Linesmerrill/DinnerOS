@@ -236,9 +236,20 @@ type SlotJSON struct {
 	Score       float64            `json:"score"`
 	Signals     map[string]float64 `json:"signals"`
 	Reasons     []TextJSON         `json:"reasons"`
-	SwapCount   int                `json:"swapCount"`
+	// Badges mark why the pick fits its day ("Rainy"), with a sentence for
+	// when the badge is tapped.
+	Badges    []BadgeJSON `json:"badges"`
+	SwapCount int         `json:"swapCount"`
 	// Pairings are add-ons and grocery items offered with the meal.
 	Pairings []ProposalPairingJSON `json:"pairings"`
+}
+
+// BadgeJSON is one badge on a pick.
+type BadgeJSON struct {
+	Code   string `json:"code"`
+	Label  string `json:"label"`
+	Symbol string `json:"symbol"`
+	Detail string `json:"detail"`
 }
 
 // UnfilledJSON is a day the proposal couldn't fill.
@@ -639,7 +650,11 @@ func newProposalResponse(p Proposal, first planning.Day) ProposalResponse {
 			ID: s.ID, Day: s.Day, Date: w.DateOn(first, planning.Day(s.Day)),
 			Recipe:   ProposalRecipeJSON{ID: s.RecipeID, Name: s.RecipeName, ImageURL: s.RecipeImageURL},
 			Servings: s.Servings, CookMinutes: optionalInt(s.CookMinutes), TimeBand: s.TimeBand, Score: s.Score,
-			Signals: s.Signals, Reasons: []TextJSON{}, SwapCount: s.SwapCount, Pairings: proposalPairingsJSON(s.ID, s.Pairings),
+			Signals: s.Signals, Reasons: []TextJSON{}, Badges: []BadgeJSON{}, SwapCount: s.SwapCount,
+			Pairings: proposalPairingsJSON(s.ID, s.Pairings),
+		}
+		for _, b := range s.Badges {
+			sj.Badges = append(sj.Badges, BadgeJSON(b))
 		}
 		if sj.Signals == nil {
 			sj.Signals = map[string]float64{}

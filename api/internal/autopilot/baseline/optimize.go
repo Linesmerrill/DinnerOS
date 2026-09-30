@@ -564,6 +564,7 @@ func recommendation(c *cand, pen [4]float64) autopilot.Recommendation {
 		TimeBand: c.it.band,
 		Signals:  signals,
 		Reasons:  c.explanation(),
+		Badges:   c.badges,
 	}
 }
 

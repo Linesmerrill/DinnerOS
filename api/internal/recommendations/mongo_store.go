@@ -170,9 +170,17 @@ type slotDoc struct {
 	Score             float64            `bson:"score"`
 	Signals           map[string]float64 `bson:"signals"`
 	Reasons           []textDoc          `bson:"reasons"`
+	Badges            []badgeDoc         `bson:"badges,omitempty"`
 	SwapCount         int                `bson:"swapCount"`
 	RejectedRecipeIDs []bson.ObjectID    `bson:"rejectedRecipeIds,omitempty"`
 	Pairings          []pairingDoc       `bson:"pairings,omitempty"`
+}
+
+type badgeDoc struct {
+	Code   string `bson:"code"`
+	Label  string `bson:"label"`
+	Symbol string `bson:"symbol,omitempty"`
+	Detail string `bson:"detail"`
 }
 
 type objectiveDoc struct {
@@ -398,6 +406,9 @@ func newProposalDoc(p Proposal) (proposalDoc, error) {
 		for _, r := range s.Reasons {
 			sd.Reasons = append(sd.Reasons, textDoc{Code: r.Code, Text: r.Text})
 		}
+		for _, b := range s.Badges {
+			sd.Badges = append(sd.Badges, badgeDoc(b))
+		}
 		for _, id := range s.RejectedRecipeIDs {
 			sd.RejectedRecipeIDs = append(sd.RejectedRecipeIDs, in.parse("rejected recipe id", id))
 		}
@@ -434,6 +445,9 @@ func (d proposalDoc) toProposal() Proposal {
 		}
 		for _, r := range sd.Reasons {
 			s.Reasons = append(s.Reasons, Reason{Code: r.Code, Text: r.Text})
+		}
+		for _, b := range sd.Badges {
+			s.Badges = append(s.Badges, Badge(b))
 		}
 		for _, id := range sd.RejectedRecipeIDs {
 			s.RejectedRecipeIDs = append(s.RejectedRecipeIDs, id.Hex())

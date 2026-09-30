@@ -115,6 +115,22 @@ type Recommendation struct {
 	// plus learned and context reasons, which are always shown (at most 5 in
 	// all).
 	Reasons []Reason
+	// Badges are short labels shown on the pick with a longer explanation,
+	// such as the forecast it was chosen for.
+	Badges []Badge
+}
+
+// Badge marks a pick with why it fits the day ("Rainy"), and says more when
+// tapped.
+type Badge struct {
+	// Code is stable and machine-readable ("weather").
+	Code string
+	// Label is the badge's text ("Cold and rainy").
+	Label string
+	// Symbol is an SF Symbol name for the badge ("cloud.rain").
+	Symbol string
+	// Detail explains it in a sentence.
+	Detail string
 }
 
 // Slot is a day of the week with its chosen meal.

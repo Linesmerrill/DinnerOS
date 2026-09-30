@@ -10442,7 +10442,7 @@ components:
           description: Human-readable text to show. Not stable; do not parse.
     AutopilotSlot:
       type: object
-      required: [id, day, date, recipe, servings, cookMinutes, timeBand, score, signals, reasons, swapCount, pairings]
+      required: [id, day, date, recipe, servings, cookMinutes, timeBand, score, signals, reasons, badges, swapCount, pairings]
       properties:
         id:
           type: string
@@ -10518,6 +10518,32 @@ components:
               text: Sunday smoker night · Pork · Long cook OK
             - code: rating
               text: Rated 4.5★ by your household
+        badges:
+          type: array
+          description: |
+            Short labels for why the meal fits its day, each with a sentence
+            the app shows when tapped. `weather` marks a meal the day's
+            forecast favors (comfort food on a cold, rainy, or snowy day;
+            something lighter on a hot one), even when the weather isn't its
+            strongest reason. The server writes the words and picks an SF
+            Symbol. Always present; empty when nothing applies.
+          items:
+            type: object
+            required: [code, label, symbol, detail]
+            properties:
+              code:
+                type: string
+                example: weather
+              label:
+                type: string
+                example: Cold and rainy
+              symbol:
+                type: string
+                description: An SF Symbol name.
+                example: cloud.rain
+              detail:
+                type: string
+                example: "Picked for the weather: Tuesday looks cold and rainy, so a warm, comforting dinner."
         swapCount:
           type: integer
           minimum: 0

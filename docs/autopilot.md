@@ -423,6 +423,17 @@ more than five. The app joins them with " · ".
 | `calendar` | Quick for your busy Wednesday evening / Fits the 25 min you have free Tuesday / Free Saturday evening, time for a longer cook |
 | `weather` | Cold and rainy Tuesday, comfort food / Hot Wednesday, something lighter / Soup on a hot Wednesday |
 
+A pick can also carry **badges** (`badges` on each slot): a short label, an SF
+Symbol, and a sentence the app shows when the badge is tapped. `weather` marks
+a meal the day's forecast favors — comfort food on a cold, rainy, or snowy day
+("Cold and rainy", "Snowy", "Cold", "Rainy"), something lighter on a hot one
+("Hot") — whether or not the weather is its strongest reason, so a pick whose
+top reason is "Fits the 240 min you have free" still says it suits a rainy
+Tuesday. Meals the weather counts against (soup on a hot day, grilling in the
+rain) get no badge. The server writes the words, so they change with an API
+deploy; the app shows the first badge over the card's photo and every badge in
+the review, with Apple Weather's attribution in the explanation.
+
 Week messages explain shortfalls gracefully: `week_skipped`, `empty_catalog`,
 `week_full`, `not_enough_candidates` ("Only 3 quick recipes (≤20 min) match;
 planned 3 of 5 nights."), `not_enough_days` ("Only 4 days are open this week;
