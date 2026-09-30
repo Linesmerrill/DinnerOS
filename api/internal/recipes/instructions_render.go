@@ -2,7 +2,9 @@ package recipes
 
 import (
 	"math/big"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -110,7 +112,10 @@ func otherServings(text []rune) (m Measure, servings, length int, ok bool) {
 		return Measure{}, 0, 0, false
 	}
 	inner := strings.Fields(strings.ToLower(string(text[i+1 : closeAt])))
-	// "<amount…> for <n> serving(s)"
+	// "<amount…> for <n> serving(s)", or just "<amount…> for <n>".
+	if len(inner) >= 2 && !strings.HasPrefix(inner[len(inner)-1], "serving") {
+		inner = append(inner, "servings")
+	}
 	if len(inner) < 4 || inner[len(inner)-3] != "for" ||
 		!strings.HasPrefix(inner[len(inner)-1], "serving") {
 		return Measure{}, 0, 0, false
@@ -149,6 +154,53 @@ type stepAmounts struct {
 	// found, when set, collects the ingredients this step writes an amount
 	// for (statedMentions).
 	found map[int]bool
+	// notedBefore holds the specialty ingredients an earlier step already
+	// explained, and seen the ingredients an earlier step already named.
+	notedBefore map[string]bool
+	seen        map[int]bool
+}
+
+// relativeWords end the text before a mention that is a share of it, not the
+// whole amount: "the remaining onion", "the rest of the butter".
+var relativeWords = []string{
+	"remaining", "rest of the", "rest of", "reserved",
+	// "a drizzle of oil": the step says how much, in its own words.
+	"drizzle of", "splash of", "pinch of", "dash of", "sprinkle of", "handful of", "knob of", "pat of",
+	"drizzle of the", "splash of the", "pinch of the",
+}
+
+// fractionOf reads "half the", "half of the", or "¼ of the" at the end of the
+// text before a mention, and returns the fraction and how many runes of the
+// text it spans with the space after it.
+func fractionOf(text []rune) (*big.Rat, int, bool) {
+	lower := strings.ToLower(string(text))
+	trimmed := strings.TrimRightFunc(lower, unicode.IsSpace)
+	if len(trimmed) == len(lower) {
+		return nil, 0, false
+	}
+	for _, phrase := range []string{"half of the", "half the"} {
+		if strings.HasSuffix(trimmed, phrase) && (len(trimmed) == len(phrase) || trimmed[len(trimmed)-len(phrase)-1] == ' ') {
+			return big.NewRat(1, 2), len([]rune(lower)) - len([]rune(trimmed)) + len([]rune(phrase)), true
+		}
+	}
+	if !strings.HasSuffix(trimmed, " of the") {
+		return nil, 0, false
+	}
+	head := []rune(strings.TrimSuffix(trimmed, " of the"))
+	word, start := lastWord(head, len(head))
+	if !isNumberWord(word) {
+		return nil, 0, false
+	}
+	q, err := ingredients.ParseQuantity(strings.ReplaceAll(word, "\u2044", "/"))
+	if err != nil || q.Cmp(ingredients.NewQuantity(1, 1)) >= 0 {
+		return nil, 0, false
+	}
+	return q.Rat(), len([]rune(lower)) - start, true
+}
+
+// wedgesOf is n lime or lemon wedges.
+func wedgesOf(n ingredients.Quantity) *Measure {
+	return &Measure{Quantity: n, Unit: "wedge"}
 }
 
 func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionStep {
@@ -171,10 +223,12 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 	var segments []Segment
 	var plain []rune
 	amountShown := map[int]bool{}
+	seenHere := map[int]bool{}
 	noted := map[string]bool{}
 	flush := func() {
 		if len(plain) > 0 {
-			segments = append(segments, Segment{Kind: SegmentText, Text: string(plain)})
+			text := boxNotes(string(plain), amounts.servings, amounts.base)
+			segments = append(segments, Segment{Kind: SegmentText, Text: text})
 			plain = plain[:0]
 		}
 	}
@@ -196,7 +250,8 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		// The card wrote this step's share ("1 TBSP butter (2 TBSP for 4
 		// servings)"): that share is the amount here, not the recipe's total,
 		// which belongs on the ingredient list.
-		if stated, statedLen, ok := statedAmount(plain); ok && !shownBefore && !m.substituted {
+		keepsName := !m.substituted || m.display == m.name
+		if stated, statedLen, ok := statedAmount(plain); ok && !shownBefore && keepsName && !m.swapped {
 			if amounts.found != nil {
 				amounts.found[hit] = true
 			}
@@ -208,7 +263,7 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			case hasOther && amounts.servings == otherSize:
 				stated = other
 			case amounts.servings == amounts.base || amounts.base == 0:
-			case m.baseAmount != nil && m.amount != nil && stated.Unit == m.baseAmount.Unit &&
+			case m.baseAmount != nil && m.amount != nil &&
 				m.amount.Unit == m.baseAmount.Unit && !m.baseAmount.Quantity.IsZero():
 				// The card's numbers are for its smallest box; the recipe's own
 				// amounts for the two sizes say how this step's share grows.
@@ -235,9 +290,50 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			// Another step wrote its own share of this ingredient, so the
 			// total would be wrong here ("the remaining butter").
 			amount = nil
+		} else if amounts.seen[hit] {
+			// An earlier step already said how much ("Quarter 1 lime" … "While
+			// pork cooks"): the whole amount again would read as more.
+			amount = nil
+		}
+		lowerBefore := strings.ToLower(before)
+		for _, w := range relativeWords {
+			if strings.HasSuffix(lowerBefore, w) {
+				amount = nil
+			}
+		}
+		// The text keeps its own words when the amount is only for the list:
+		// "¼ of the onion" is ¼ onion to have ready, and reads as written.
+		inText := true
+		fraction, fractionLen, isFraction := fractionOf(plain)
+		// "half the lemon zest" is half the zest, not half the lemon.
+		if isFraction && strings.HasPrefix(strings.ToLower(string(runes[i+length:])), " zest") {
+			isFraction, amount = false, nil
+		}
+		if isFraction {
+			amount = nil
+			if m.amount != nil && m.amount.Unit == "count" && !m.leftOut && !shownBefore {
+				share := &Measure{Quantity: m.amount.Quantity.MulRat(fraction), Unit: "count"}
+				if m.wedges {
+					// "juice from half the lime" after "Quarter lime": 2 wedges.
+					share = wedgesOf(share.Quantity.Mul(ingredients.NewQuantity(4, 1)))
+					plain = plain[:len(plain)-fractionLen]
+				} else {
+					inText = false
+				}
+				amount, part = share, true
+				amountShown[hit] = true
+			}
 		}
 		if squeeze {
-			amount = nil
+			// One wedge for the card's smallest box, more for a bigger one.
+			n := ingredients.NewQuantity(1, 1)
+			if amounts.base > 0 && amounts.servings > 0 {
+				n = ingredients.NewQuantity(int64(amounts.servings), int64(amounts.base))
+			}
+			amount, part = wedgesOf(n), true
+			if m.leftOut || shownBefore {
+				amount = nil
+			}
 		}
 		if i > 0 && runes[i-1] == '-' {
 			// Part of a compound word ("soy-sriracha sauce"): mark it, but an
@@ -247,6 +343,10 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		if m.leftOut {
 			// A left-out ingredient keeps the step's own words and gets no
 			// amount: nothing of it goes in.
+			amount = nil
+		}
+		if m.packaged && amount != nil && amount.Unit == "count" {
+			// "1 Black Beans" is a can: "rinse 1 beans" would be wrong.
 			amount = nil
 		}
 		if shownBefore {
@@ -260,20 +360,35 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		}
 		flush()
 		surface := string(runes[i : i+length])
-		if m.substituted {
+		switch {
+		case m.swapped:
+			surface = matchCase(m.display, surface)
+		case m.substituted:
 			surface = m.display
-		}
-		// "a squeeze of lime juice" is one wedge, not the whole lime: the
-		// card quartered it earlier. It reads "a squeeze of 1 lime wedge".
-		if wedge := wedgeCitrus(m.name); squeeze {
-			surface = "1 " + wedge + " wedge"
-			if rest := strings.ToLower(string(runes[i+length:])); strings.HasPrefix(rest, " juice") {
-				skipAfter = len(" juice")
-			}
+		case amount != nil && inText && amount.Unit == "count" && amount.Quantity.Cmp(ingredients.NewQuantity(1, 1)) > 0 &&
+			singularize(surface) == surface:
+			// "Quarter 3 limes", not "Quarter 3 lime".
+			surface = pluralize(surface)
 		}
 		text := surface
-		if amount != nil {
+		if amount != nil && inText {
 			text = amount.Text() + " " + surface
+		}
+		// "a squeeze of lime juice" is a wedge, not the whole lime: the card
+		// quartered it earlier. It reads "a squeeze of 1 lime wedge".
+		if amount != nil && amount.Unit == "wedge" {
+			noun := "wedge"
+			if amount.Quantity.Cmp(ingredients.NewQuantity(1, 1)) > 0 {
+				noun = "wedges"
+			}
+			text = amount.Quantity.Format() + " " + strings.ToLower(singularize(surface)) + " " + noun
+			rest := strings.ToLower(string(runes[i+length:]))
+			for _, tail := range []string{" wedges", " wedge", " juice"} {
+				if strings.HasPrefix(rest, tail) {
+					skipAfter = len(tail)
+					break
+				}
+			}
 		}
 		segments = append(segments, Segment{
 			Kind: SegmentIngredient, Text: text, IngredientID: m.ingredientID, Name: m.display,
@@ -288,11 +403,30 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			}
 		} else if m.note != "" && !noted[m.note] {
 			noted[m.note] = true
-			out.Notes = append(out.Notes, StepNote{Kind: NoteSubstitution, SpecialtyID: m.specialtyID, Text: m.note})
+			note := m.note
+			mixed := strings.HasPrefix(note, "Instead of ") || strings.HasPrefix(note, "To make ")
+			switch {
+			case mixed && amounts.notedBefore[m.specialtyID]:
+				// An earlier step said how to mix it all.
+				note = "Use the rest of the " + m.specialtyName + " you mixed."
+			case mixed && part && amount != nil:
+				// Mix it all now, since a later step uses the rest.
+				note += " Use " + amount.Text() + " here and save the rest."
+			}
+			if m.specialtyID != "" && amounts.notedBefore != nil {
+				amounts.notedBefore[m.specialtyID] = true
+			}
+			out.Notes = append(out.Notes, StepNote{Kind: NoteSubstitution, SpecialtyID: m.specialtyID, Text: note})
+		}
+		if amounts.seen != nil {
+			seenHere[hit] = true
 		}
 		i += length + skipAfter
 	}
 	flush()
+	for hit := range seenHere {
+		amounts.seen[hit] = true
+	}
 	var b strings.Builder
 	for _, s := range segments {
 		b.WriteString(s.Text)
@@ -312,6 +446,70 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		out.Text, out.Original = rendered, step.Text
 	}
 	return out
+}
+
+var (
+	// " (7-10 minutes for 4 servings)", " (2 cups for 4)"
+	boxNoteRe = regexp.MustCompile(`\s*\(([^()]{1,40}?) for (\d+)(?: servings?)?\)`)
+	// "7-10 minutes", "1½ cups": a number or range, then a word.
+	noteAmountRe = regexp.MustCompile(`^([\d½¼¾⅓⅔⅛][\d½¼¾⅓⅔⅛\-–/. ]*?)\s*([A-Za-z]+)$`)
+)
+
+// boxNotes settles the notes a card writes for its other box size in text
+// that isn't an ingredient ("5-7 minutes (7-10 minutes for 4 servings)"),
+// since the size being cooked is already chosen. The note's value replaces
+// the one before it when the note's size is the closer one; the note goes
+// either way. A note with no value to swap ("middle position (middle and top
+// positions for 4 servings)") stays, without its "for 4 servings", when that
+// size is the closer one.
+func boxNotes(text string, servings, base int) string {
+	locs := boxNoteRe.FindAllStringSubmatchIndex(text, -1)
+	for j := len(locs) - 1; j >= 0; j-- {
+		loc := locs[j]
+		inner := text[loc[2]:loc[3]]
+		n, err := strconv.Atoi(text[loc[4]:loc[5]])
+		if err != nil || n <= 0 {
+			continue
+		}
+		useNote := servings >= n
+		if base > 0 && base < n {
+			useNote = 2*servings >= base+n
+		}
+		prefix, rest := text[:loc[0]], text[loc[1]:]
+		note := noteAmountRe.FindStringSubmatch(strings.TrimSpace(inner))
+		if note == nil {
+			if useNote {
+				text = prefix + " (" + strings.TrimSpace(inner) + ")" + rest
+			} else {
+				text = prefix + rest
+			}
+			continue
+		}
+		unit := strings.TrimSuffix(strings.ToLower(note[2]), "s")
+		before := regexp.MustCompile(`(?i)([\d½¼¾⅓⅔⅛][\d½¼¾⅓⅔⅛\-–/. ]*?)(\s*` + regexp.QuoteMeta(unit) + `s?\b)`)
+		if useNote {
+			if all := before.FindAllStringSubmatchIndex(prefix, -1); len(all) > 0 {
+				last := all[len(all)-1]
+				prefix = prefix[:last[2]] + strings.TrimSpace(note[1]) + prefix[last[3]:]
+			} else {
+				// Nothing to swap it into: keep what the note says.
+				text = prefix + " (" + strings.TrimSpace(inner) + ")" + rest
+				continue
+			}
+		}
+		text = prefix + rest
+	}
+	return text
+}
+
+// matchCase writes name the way the step wrote what it replaces: "ground
+// beef" for "pork", "Ground beef" for "Pork".
+func matchCase(name, surface string) string {
+	lower := []rune(strings.ToLower(name))
+	if first := []rune(surface); len(first) > 0 && len(lower) > 0 && unicode.IsUpper(first[0]) {
+		lower[0] = unicode.ToUpper(lower[0])
+	}
+	return string(lower)
 }
 
 // matchAt returns the longest candidate that starts at i on a word boundary

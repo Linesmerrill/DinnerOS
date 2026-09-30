@@ -155,7 +155,7 @@ private struct CookWelcomeDrawing: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 14) {
                 circleButton("minus")
-                Text("2:00")
+                Text("3:00")
                     .font(.system(size: 34, weight: .heavy, design: .rounded).monospacedDigit())
                 circleButton("plus")
             }

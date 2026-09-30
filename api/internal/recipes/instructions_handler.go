@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -28,6 +29,13 @@ type LeftOutSource interface {
 // about what the household is cooking with.
 type SpecialtySource interface {
 	GrocerySpecialties(ctx context.Context, householdID string, lines []grocery.Line) (grocery.Specialties, error)
+}
+
+// SwapSource resolves a meal's protein choice for one of the recipe's lines
+// (by ingredient key) to the protein cooked and how much of it. ok is false
+// for a choice that doesn't apply. *customize.Service implements it.
+type SwapSource interface {
+	InstructionSwap(r Recipe, servings int, ingredientKey, choiceID string) (Swap, bool)
 }
 
 // --- Wire types ---------------------------------------------------------------
@@ -65,6 +73,9 @@ type IngredientStateResponse struct {
 	Index         int    `json:"index"`
 	IngredientKey string `json:"ingredientKey"`
 	Name          string `json:"name"`
+	// SwapName is the protein cooked instead of this one, when the meal swaps
+	// it; omitted otherwise.
+	SwapName string `json:"swapName,omitempty"`
 	// AmountText is the amount to show for the servings, a packet read as a
 	// kitchen measure ("2 Tbsp"); omitted when there is none.
 	AmountText string `json:"amountText,omitempty"`
@@ -189,7 +200,7 @@ func newInstructionsResponse(in Instructions) InstructionsResponse {
 		Ingredients:         make([]IngredientStateResponse, 0, len(in.Ingredients)),
 	}
 	for _, st := range in.Ingredients {
-		sr := IngredientStateResponse{Index: st.Index, IngredientKey: st.IngredientKey, Name: st.Name}
+		sr := IngredientStateResponse{Index: st.Index, IngredientKey: st.IngredientKey, Name: st.Name, SwapName: st.SwapName}
 		if st.Amount != nil {
 			sr.AmountText = st.Amount.Text()
 		}
@@ -280,7 +291,28 @@ func (h *Handler) instructions(w http.ResponseWriter, r *http.Request) {
 		h.internalError(w, r, "load left-out ingredients failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, newInstructionsResponse(AnnotateWith(recipe, servings, specs, applied, leftOut, leftOutApplied)))
+	swaps := h.mealSwaps(recipe, servings, r.URL.Query()["swap"])
+	httpx.WriteJSON(w, http.StatusOK, newInstructionsResponse(AnnotateMeal(recipe, servings, specs, applied, leftOut, leftOutApplied, swaps)))
+}
+
+// mealSwaps reads the swap parameters, each "<ingredientKey>=<choiceId>" as
+// the meal's customizations list them. One that doesn't apply is ignored: the
+// step then reads as the card wrote it.
+func (h *Handler) mealSwaps(recipe Recipe, servings int, params []string) Swaps {
+	if h.opts.Swaps == nil || len(params) == 0 {
+		return nil
+	}
+	out := Swaps{}
+	for _, p := range params {
+		key, choice, ok := strings.Cut(p, "=")
+		if !ok || key == "" || choice == "" {
+			continue
+		}
+		if sw, ok := h.opts.Swaps.InstructionSwap(recipe, servings, key, choice); ok {
+			out[key] = sw
+		}
+	}
+	return out
 }
 
 // recipeLeftOut loads what the household leaves out of the recipe. applied is

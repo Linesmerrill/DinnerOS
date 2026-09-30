@@ -527,3 +527,22 @@ func cmpOr(v, fallback string) string {
 	}
 	return v
 }
+
+// InstructionSwap implements recipes.SwapSource: the protein a meal's choice
+// cooks for the recipe line keyed ingredientKey, and how much of it per
+// original amount. A double keeps the line's name.
+func (s *Service) InstructionSwap(r recipes.Recipe, _ int, ingredientKey, choiceID string) (recipes.Swap, bool) {
+	i := slices.IndexFunc(r.Ingredients, func(ing recipes.RecipeIngredient) bool { return LineKey(ing) == ingredientKey })
+	if i < 0 {
+		return recipes.Swap{}, false
+	}
+	choice, ok := s.resolve(r.Ingredients[i].Name, choiceID)
+	if !ok || choice.Kind == KindOriginal {
+		return recipes.Swap{}, false
+	}
+	sw := recipes.Swap{Factor: choice.Factor}
+	if choice.IsSwap() {
+		sw.Name = choice.Protein.Name
+	}
+	return sw, true
+}

@@ -1223,13 +1223,29 @@ paths:
         - name: servings
           in: query
           description: |
-            One of the recipe's `servings`. Amounts are never scaled from
-            another serving size, so any other value is a 400. Defaults to the
-            recipe's smallest size.
+            One of the recipe's `servings`; any other value is a 400. Defaults
+            to the recipe's smallest size. When the card left this size blank
+            for a line (meal kits often do for their bigger boxes), that line
+            is scaled from the closest size it did write, for these cooking
+            screens only; grocery lists never scale.
           schema:
             type: integer
             minimum: 1
             example: 4
+        - name: swap
+          in: query
+          description: |
+            A planned meal's protein choice, `<ingredientKey>=<choiceId>` as
+            the entry's `customizations` list it; repeat for each. The steps
+            then name the protein being cooked, at its amount, and the
+            ingredient's `swapName` is set. One that doesn't apply is ignored.
+          schema:
+            type: array
+            items:
+              type: string
+              example: "6aa9436b1bf9c38c81149657=swap:ground-beef"
+          style: form
+          explode: true
       responses:
         "200":
           description: The rendered instructions.
@@ -6227,6 +6243,10 @@ components:
           description: The catalog ingredient ID, or `name:<normalized name>`; post it to grocery-skips to leave the ingredient out.
         name:
           type: string
+        swapName:
+          type: string
+          description: The protein cooked instead of this one when the meal swaps it (the `swap` parameter); omitted otherwise.
+          example: Ground Beef
         leftOut:
           oneOf:
             - type: object

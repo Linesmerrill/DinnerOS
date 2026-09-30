@@ -20,6 +20,11 @@ nonisolated struct CookIngredient: Equatable, Sendable, Identifiable {
     var ingredientKey: String? = nil
     /// Empty unless two or more steps each say how much of it they use.
     let parts: [CookPart]
+    /// What the household mixes it from, when it's a sauce or blend made at home: "1 tsp
+    /// Chili Powder".
+    var components: [String] = []
+
+    func componentID(_ index: Int) -> String { "\(id)#mix\(index)" }
 }
 
 /// Builds the cooking checklist from the recipe and its rendered steps.
@@ -38,7 +43,8 @@ nonisolated enum CookChecklist {
             }
             return CookIngredient(
                 id: state.id, name: state.line.name, amountText: state.line.amount, imageURL: state.line.imageURL,
-                isLeftOut: state.isLeftOut, ingredientKey: state.ingredientKey, parts: parts.count >= 2 ? parts : [])
+                isLeftOut: state.isLeftOut, ingredientKey: state.ingredientKey, parts: parts.count >= 2 ? parts : [],
+                components: state.isLeftOut ? [] : state.component?.parts ?? [])
         }
     }
 
@@ -84,6 +90,13 @@ final class CookSession {
         } else {
             set.remove(ingredient.id)
         }
+        commit(set, recipe: recipe)
+    }
+
+    /// Ticks one row that stands on its own, such as one spice of a blend.
+    func toggle(id: String, recipe: String) {
+        var set = checked[recipe, default: []]
+        if set.contains(id) { set.remove(id) } else { set.insert(id) }
         commit(set, recipe: recipe)
     }
 
@@ -177,15 +190,36 @@ nonisolated extension CookChecklist {
                 }
                 guard let index = recipe.ingredients.firstIndex(where: { matches(segment, $0) }), index < all.count
                 else { continue }
+                // "While pork cooks, warm tortillas": the pork isn't part of this step.
+                if clause.lowercased().trimmingCharacters(in: .whitespaces) == "while" {
+                    clause = ""
+                    continue
+                }
                 let ingredient = all[index]
                 used.insert(ingredient.id)
                 let after =
                     i + 1 < step.segments.count && !step.segments[i + 1].isIngredient ? step.segments[i + 1].text : ""
-                let partWord = leadingPart(after)
+                // "6 wedges" of lime reads as "6 | Lime wedges".
+                let wedges = segment.amount?.unit == "wedge"
+                let partWord = wedges ? (segment.amount?.quantityValue == 1 ? "wedge" : "wedges") : leadingPart(after)
                 let name = partWord.map { "\(singular(ingredient.name)) \($0)" } ?? ingredient.name
+                let amountText =
+                    wedges
+                    ? segment.amount?.text.replacingOccurrences(of: " wedges", with: "")
+                        .replacingOccurrences(of: " wedge", with: "") : segment.amount?.text
                 // "Crushed Tomatoes, crushed" says nothing.
-                let prep = prepWords(in: clause).flatMap { words in
+                var prep = prepWords(in: clause).flatMap { words in
                     ingredient.name.lowercased().contains(words) ? nil : words
+                }
+                // "thinly slice green pepper into strips": how it's cut comes after the name.
+                if let tail = trailingPrep(after) {
+                    prep = prep.map { "\($0) \(tail)" } ?? tail
+                }
+                // "Add remaining onion": what's left from an earlier step.
+                if prep == nil, endsWithRemaining(clause), segment.amount == nil,
+                    !items.contains(where: { $0.name == name })
+                {
+                    prep = String(localized: "the rest")
                 }
                 let parts = splitParts(after, name: ingredient.name)
                 if let existing = items.firstIndex(where: { $0.name == name }) {
@@ -202,7 +236,7 @@ nonisolated extension CookChecklist {
                     items.append(
                         CookStepItem(
                             id: "\(ingredient.id)@\(step.index)-\(items.count)", name: name,
-                            amountText: partWord == nil ? segment.amount?.text : segment.amount?.text,
+                            amountText: amountText,
                             prep: prep, parts: parts, isLeftOut: ingredient.isLeftOut || segment.leftOut,
                             ingredientKey: ingredient.ingredientKey))
                 }
@@ -211,6 +245,15 @@ nonisolated extension CookChecklist {
             if !items.isEmpty { groups.append(CookStepGroup(index: step.index, items: items)) }
         }
         var ready = all.filter { !used.contains($0.id) }.map(item(for:))
+        // A sauce or blend made at home: mix it before cooking, spice by spice. The steps then
+        // use it like any other ingredient.
+        for ingredient in all where used.contains(ingredient.id) && !ingredient.components.isEmpty {
+            ready.append(
+                CookStepItem(
+                    id: "\(ingredient.id)@mix", name: ingredient.name, amountText: ingredient.amountText,
+                    prep: String(localized: "mix together first"), parts: ingredient.components, isLeftOut: false,
+                    ingredientKey: ingredient.ingredientKey))
+        }
         // Things to get ready before the cooking starts, for a later step: butter cut up, cream
         // cheese softening. They stay in their own step too, to check off when they go in.
         for group in groups where group.index > 1 {
@@ -239,9 +282,37 @@ nonisolated extension CookChecklist {
     }
 
     private static func item(for ingredient: CookIngredient) -> CookStepItem {
-        CookStepItem(
-            id: "\(ingredient.id)@0", name: ingredient.name, amountText: ingredient.amountText, prep: nil, parts: [],
+        let mixed = !ingredient.components.isEmpty
+        return CookStepItem(
+            id: "\(ingredient.id)@0", name: ingredient.name, amountText: ingredient.amountText,
+            prep: mixed ? String(localized: "mix together first") : nil, parts: ingredient.components,
             isLeftOut: ingredient.isLeftOut, ingredientKey: ingredient.ingredientKey)
+    }
+
+    /// How a step cuts it, written after the name: "into strips", "into ½-inch pieces",
+    /// "lengthwise". `nil` when the words after it are about something else.
+    static func trailingPrep(_ text: String) -> String? {
+        let clause = String(text.prefix { !".;,:\n(".contains($0) }).trimmingCharacters(in: .whitespaces)
+        let lower = clause.lowercased()
+        for lead in ["into ", "lengthwise", "crosswise", "in half"] where lower.hasPrefix(lead) {
+            // "into strips", but not "into a bowl" or "into pot with couscous".
+            if lead == "into " {
+                let words = lower.dropFirst(lead.count).split(separator: " ")
+                guard let last = words.last, words.count <= 3, cutWords.contains(String(last)) else { return nil }
+            }
+            return lower.split(separator: " ").prefix(4).joined(separator: " ")
+        }
+        return nil
+    }
+
+    private static let cutWords: Set<String> = [
+        "strips", "pieces", "wedges", "rounds", "cubes", "chunks", "slices", "halves", "quarters", "florets",
+        "coins", "matchsticks", "planks", "rings", "thirds", "bites", "segments",
+    ]
+
+    private static func endsWithRemaining(_ clause: String) -> Bool {
+        let words = clause.lowercased().split { !$0.isLetter }
+        return words.last == "remaining" || words.suffix(3) == ["rest", "of", "the"]
     }
 
     /// The text since the last sentence or clause break.
@@ -339,7 +410,7 @@ nonisolated extension CookChecklist {
     private static func leadingPart(_ text: String) -> String? {
         // Only a word right after the name ("scallion greens"), never one after a comma.
         let lower = text.lowercased()
-        for part in ["whites", "greens"] where lower.hasPrefix(" \(part)") { return part }
+        for part in ["whites", "greens", "wedges"] where lower.hasPrefix(" \(part)") { return part }
         return nil
     }
 

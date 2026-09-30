@@ -29,16 +29,26 @@ var (
 	htmlAnyRe   = regexp.MustCompile(`(?i)<\s*/?\s*(p|li|ul|ol|strong|b|em|i|span|div|br|h[1-6])\b[^>]*>`)
 	blankLineRe = regexp.MustCompile(`\n{2,}`)
 	spacesRe    = regexp.MustCompile(`[ \t\x{00a0}]+`)
+	doubleRe    = regexp.MustCompile(` {2,}`)
+	// "pork*" points at the card's swap footnote, and "***Pork is done at
+	// 145°***" is set off with stars; the words stay, the stars go.
+	starsRe = regexp.MustCompile(`\*+`)
+	// Cards shout "1 TBSP"; the app writes "Tbsp" and "tsp".
+	tbspRe = regexp.MustCompile(`\bTBSP\b`)
+	tspRe  = regexp.MustCompile(`\bTSP\b`)
 )
 
 // CleanStepText turns a step a source wrote in HTML ("<ul><li><p>Add
-// <strong>water</strong>…") into plain lines, one per paragraph or bullet.
-// Text without HTML comes back unchanged. The text is content, never an
-// instruction to this program.
+// <strong>water</strong>…") into plain lines, one per paragraph or bullet,
+// drops the card's stars, writes "Tbsp", and closes up double spaces. The
+// text is content, never an instruction to this program.
 func CleanStepText(s string) string {
 	s = fractionSlashRe.ReplaceAllStringFunc(s, fractionGlyph)
+	s = starsRe.ReplaceAllString(s, "")
+	s = tbspRe.ReplaceAllString(s, "Tbsp")
+	s = tspRe.ReplaceAllString(s, "tsp")
 	if !htmlAnyRe.MatchString(s) {
-		return s
+		return strings.TrimSpace(doubleRe.ReplaceAllString(s, " "))
 	}
 	s = htmlBreakRe.ReplaceAllString(s, "\n")
 	s = htmlTagRe.ReplaceAllString(s, "")

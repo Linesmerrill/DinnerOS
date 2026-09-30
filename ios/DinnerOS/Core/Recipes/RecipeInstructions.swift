@@ -57,12 +57,14 @@ nonisolated struct InstructionIngredient: Decodable, Equatable, Sendable, Identi
     /// The amount to show, a packet read as a kitchen measure ("2 Tbsp"); `nil` from an older
     /// server or when there's no amount.
     var amountText: String? = nil
+    /// The protein cooked instead, when the meal swaps it ("Ground Beef").
+    var swapName: String? = nil
 
     var id: Int { index }
     var isLeftOut: Bool { leftOut != nil }
 
     private enum CodingKeys: String, CodingKey {
-        case index, ingredientKey, name, leftOut, component, amountText
+        case index, ingredientKey, name, leftOut, component, amountText, swapName
     }
 
     init(
@@ -85,6 +87,7 @@ nonisolated struct InstructionIngredient: Decodable, Equatable, Sendable, Identi
             leftOut: container.decodeLenient(InstructionLeftOut.self, forKey: .leftOut),
             component: container.decodeLenient(InstructionComponent.self, forKey: .component))
         amountText = container.decodeLenient(String.self, forKey: .amountText)
+        swapName = container.decodeLenient(String.self, forKey: .swapName)
     }
 }
 

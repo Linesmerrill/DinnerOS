@@ -178,8 +178,8 @@ enum CookTimerStyle {
     static let urgent = Color(.systemOrange)
 }
 
-/// The quick adjust for a tapped time: starts at the low end of the recipe's range, a minute
-/// more or less at a tap, then Start.
+/// The quick adjust for a tapped time: starts at the high end of the recipe's range ("2-3
+/// minutes" is 3), a minute more or less at a tap, then Start.
 struct CookTimerSetup: View {
     let request: CookTimerRequest
     let label: String
@@ -191,11 +191,11 @@ struct CookTimerSetup: View {
         self.request = request
         self.label = label
         self.start = start
-        _seconds = State(initialValue: request.lowSeconds)
+        _seconds = State(initialValue: request.highSeconds)
     }
 
     /// Short times move by 15 seconds; everything else by a minute.
-    private var increment: Int { request.lowSeconds < 120 ? 15 : 60 }
+    private var increment: Int { request.highSeconds < 120 ? 15 : 60 }
 
     private var recipeText: String {
         CookDuration(

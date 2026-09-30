@@ -266,6 +266,7 @@ func run() error {
 		Service:        recipeService,
 		Specialties:    substitutesService,
 		LeftOut:        skipsService,
+		Swaps:          customizeService,
 		Ratings:        behavior.ratings,
 		Events:         behavior.events,
 		TimeBands:      autopilotService,

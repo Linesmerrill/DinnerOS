@@ -140,9 +140,9 @@ func TestAnnotateSameIngredientTwiceInOneStepShowsTheAmountOnce(t *testing.T) {
 	if got, want := joined(in.Steps[0]), "Melt 2 Tbsp butter, then brush with butter."; got != want {
 		t.Errorf("text = %q, want %q", got, want)
 	}
-	// A new step starts over: the amount is shown again.
-	if second := ingredientSegments(in.Steps[1]); len(second) != 1 || second[0].Amount == nil {
-		t.Errorf("second step = %+v, want the amount again", second)
+	// A later step doesn't give the whole amount again: it would read as more.
+	if second := ingredientSegments(in.Steps[1]); len(second) != 1 || second[0].Amount != nil {
+		t.Errorf("second step = %+v, want it marked without the amount", second)
 	}
 }
 

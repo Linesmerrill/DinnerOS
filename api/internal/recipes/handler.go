@@ -53,6 +53,9 @@ type HandlerOptions struct {
 	// LeftOut, when set, marks the ingredients the household leaves out of a
 	// recipe in its cooking instructions.
 	LeftOut LeftOutSource
+	// Swaps, when set, reads a meal's protein swaps (the swap query
+	// parameter) so the steps name the protein being cooked.
+	Swaps SwapSource
 	// Fetcher reads a recipe page for manual entry by URL. The default is a
 	// WebFetcher with every guard on (manual_web.go); tests replace it.
 	Fetcher *WebFetcher

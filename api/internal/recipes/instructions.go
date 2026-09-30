@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"math/big"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -38,10 +39,18 @@ type Measure struct {
 	// Or is another way to measure it, one per unit ("bouillon cube"), shown
 	// in parentheses: "2 tsp (or 2 bouillon cubes)". Empty for most.
 	Or string
+	// Exact keeps the unit as it is: a kitchen measure counted per packet
+	// ("3 tsp" of bouillon base, one per packet) isn't tidied to "1 Tbsp".
+	Exact bool
 }
 
-// Text renders the measure for people: "1 ½ cups", "2 cloves", "3".
+// Text renders the measure for people: "1 ½ cups", "2 cloves", "3". Big
+// spoon counts read as a kitchen would measure them: "12 tsp" is "4 Tbsp",
+// "12 Tbsp" is "¾ cup".
 func (m Measure) Text() string {
+	if m.Or == "" && !m.Exact {
+		m = tidySpoons(m)
+	}
 	text := m.Quantity.Format()
 	if u, err := ingredients.LookupUnit(m.Unit); err == nil {
 		if label := u.Label(m.Quantity); label != "" {
@@ -56,6 +65,25 @@ func (m Measure) Text() string {
 		text += " (or " + m.Quantity.Format() + " " + or + ")"
 	}
 	return text
+}
+
+// tidySpoons moves 3 tsp or more up to tablespoons, and 8 Tbsp or more up to
+// cups, when the result is a half tablespoon or a quarter cup exactly.
+func tidySpoons(m Measure) Measure {
+	up := func(from, to string, per, min, step int64) bool {
+		if m.Unit != from || m.Quantity.Cmp(ingredients.NewQuantity(min, 1)) < 0 {
+			return false
+		}
+		q := m.Quantity.MulRat(big.NewRat(1, per))
+		if !q.MulRat(big.NewRat(step, 1)).Rat().IsInt() {
+			return false
+		}
+		m = Measure{Quantity: q, Unit: to}
+		return true
+	}
+	up("tsp", "tbsp", 3, 3, 2)
+	up("tbsp", "cup", 16, 8, 4)
+	return m
 }
 
 // packetContents is what a packet of a specialty holds, from its unit sizes
@@ -124,7 +152,7 @@ func kitchenMeasure(name string, m *Measure) *Measure {
 		return m
 	}
 	q := m.Quantity.MulRat(km.PerPacket)
-	out := Measure{Quantity: q, Unit: km.Unit}
+	out := Measure{Quantity: q, Unit: km.Unit, Exact: true}
 	if km.Or != "" {
 		out.Or = km.Or
 	}
@@ -214,6 +242,9 @@ type IngredientState struct {
 	// catalog ID, or "name:" and the normalized name.
 	IngredientKey string
 	Name          string
+	// SwapName is the protein cooked instead, when the meal swaps it ("Ground
+	// Beef" for "Ground Pork"); empty otherwise.
+	SwapName string
 	// Amount is the ingredient's amount for the servings, as the cooking
 	// screens show it: a packet reads as a kitchen measure ("2 Tbsp").
 	Amount *Measure
@@ -358,9 +389,28 @@ type mention struct {
 	note string
 	// leftOut is set when the household leaves the ingredient out.
 	leftOut bool
+	// swapped is set when the meal cooks another protein in its place; display
+	// is that protein.
+	swapped bool
+	// wedges is set for a lime or lemon the recipe cuts into wedges, so a
+	// squeeze or half of it reads in wedges.
+	wedges bool
+	// packaged is set for a plural name counted in ones ("1 Black Beans"): a
+	// can or a package, so a step doesn't count it.
+	packaged bool
 	// forms are the spellings to look for, longest first.
 	forms []string
 }
+
+// Swap is a protein the meal cooks in place of the recipe's: its name, and how
+// much of it per amount of the original (2 for a double portion).
+type Swap struct {
+	Name   string
+	Factor *big.Rat
+}
+
+// Swaps are a meal's protein swaps, by ingredient key.
+type Swaps map[string]Swap
 
 // Annotate renders r's steps for servings, with the household's specialty
 // choices in specs applied. specs may be nil, in which case the steps read as
@@ -376,6 +426,13 @@ func Annotate(r Recipe, servings int, specs grocery.Specialties, applied bool) I
 // it. A left-out specialty ingredient isn't substituted: nothing is made for
 // it.
 func AnnotateWith(r Recipe, servings int, specs grocery.Specialties, applied bool, leftOut grocery.LeftOutSet, leftOutApplied bool) Instructions {
+	return AnnotateMeal(r, servings, specs, applied, leftOut, leftOutApplied, nil)
+}
+
+// AnnotateMeal is AnnotateWith for a planned meal that swaps or doubles its
+// protein: the steps name the protein being cooked, at its amount, so nobody
+// reads "pork*" and has to remember they bought beef.
+func AnnotateMeal(r Recipe, servings int, specs grocery.Specialties, applied bool, leftOut grocery.LeftOutSet, leftOutApplied bool, swaps Swaps) Instructions {
 	out := Instructions{
 		RecipeID: r.ID, RecipeName: r.Name, Servings: servings,
 		ServingOptions: append([]int(nil), r.Servings...), SpecialtiesApplied: applied,
@@ -388,12 +445,25 @@ func AnnotateWith(r Recipe, servings int, specs grocery.Specialties, applied boo
 		key := ingredientKey(ing)
 		state := IngredientState{Index: index, IngredientKey: key, Name: ing.Name}
 		m := mention{ingredientID: ing.IngredientID, name: ing.Name, display: ing.Name, spicy: ingredients.Spicy(ing.Name)}
-		if a, ok := amountAt(ing, servings); ok {
+		if a, ok := cookAmountAt(r, ing, servings); ok {
 			m.amount = &a
 		}
 		if a, ok := amountAt(ing, smallest(r.Servings)); ok {
 			m.baseAmount = &a
 		}
+		if sw, ok := swaps[key]; ok {
+			if sw.Factor != nil {
+				m.amount, m.baseAmount = scaled(m.amount, sw.Factor), scaled(m.baseAmount, sw.Factor)
+			}
+			if sw.Name != "" && !strings.EqualFold(sw.Name, ing.Name) {
+				m.display, m.swapped = sw.Name, true
+				m.spicy = ingredients.Spicy(sw.Name)
+				state.SwapName = sw.Name
+			}
+		}
+		m.wedges = wedgeCitrus(ing.Name) != "" && cutIntoWedges(r.Steps, ing.Name)
+		m.packaged = m.baseAmount != nil && m.baseAmount.Unit == "count" &&
+			m.baseAmount.Quantity.Cmp(ingredients.NewQuantity(1, 1)) <= 0 && singularize(ing.Name) != ing.Name
 		// The packet count, before it reads as a kitchen measure: a substitute's
 		// amount is worked out from packets.
 		packets, basePackets := m.amount, m.baseAmount
@@ -446,9 +516,9 @@ func AnnotateWith(r Recipe, servings int, specs grocery.Specialties, applied boo
 				// The household's own measure for a packet wins over the option's:
 				// a stock concentrate packet is 1 tsp of whatever base they use.
 				if km, ok := ingredients.KitchenMeasureFor(ing.Name, unitOf(packets)); ok && m.display != m.name {
-					m.amount = &Measure{Quantity: packets.Quantity.MulRat(km.PerPacket), Unit: km.Unit}
+					m.amount = &Measure{Quantity: packets.Quantity.MulRat(km.PerPacket), Unit: km.Unit, Exact: true}
 					if basePackets != nil {
-						m.baseAmount = &Measure{Quantity: basePackets.Quantity.MulRat(km.PerPacket), Unit: km.Unit}
+						m.baseAmount = &Measure{Quantity: basePackets.Quantity.MulRat(km.PerPacket), Unit: km.Unit, Exact: true}
 					}
 					state.Amount = m.amount
 					out.Ingredients[len(out.Ingredients)-1].Amount = m.amount
@@ -463,13 +533,89 @@ func AnnotateWith(r Recipe, servings int, specs grocery.Specialties, applied boo
 		m.forms = nameForms(m.name, specs[key])
 		mentions = append(mentions, m)
 	}
-	amounts := stepAmounts{servings: servings, base: smallest(r.Servings), stated: statedMentions(r.Steps, mentions)}
+	dedupeForms(mentions)
+	amounts := stepAmounts{
+		servings: servings, base: smallest(r.Servings), stated: statedMentions(r.Steps, mentions),
+		notedBefore: map[string]bool{}, seen: map[int]bool{},
+	}
 	for _, step := range r.Steps {
 		out.Steps = append(out.Steps, renderStep(step, mentions, amounts))
 	}
 	sort.SliceStable(out.Substitutions, func(i, j int) bool { return out.Substitutions[i].Name < out.Substitutions[j].Name })
 	sort.SliceStable(out.Unchosen, func(i, j int) bool { return out.Unchosen[i].Name < out.Unchosen[j].Name })
 	return out
+}
+
+// cookAmountAt is the line's amount for servings as the cooking screens show
+// it. Meal-kit cards often leave their bigger boxes blank ("unit Red Onion"
+// for 4), so when the recipe offers servings but this line has no amount
+// there, it's scaled from the closest size that has one — a size that divides
+// servings evenly first. The grocery list never scales (amountAt); this is
+// only what to scoop.
+func cookAmountAt(r Recipe, ing RecipeIngredient, servings int) (Measure, bool) {
+	if m, ok := amountAt(ing, servings); ok {
+		return m, true
+	}
+	if servings <= 0 || !slices.Contains(r.Servings, servings) {
+		return Measure{}, false
+	}
+	from, fromMeasure := 0, Measure{}
+	better := func(size int) bool {
+		if from == 0 {
+			return true
+		}
+		even, fromEven := servings%size == 0, servings%from == 0
+		if even != fromEven {
+			return even
+		}
+		return absInt(servings-size) < absInt(servings-from)
+	}
+	for _, a := range ing.Amounts {
+		if a.Servings <= 0 || a.Servings == servings {
+			continue
+		}
+		m, ok := amountAt(ing, a.Servings)
+		if !ok || m.Quantity.IsZero() || !better(a.Servings) {
+			continue
+		}
+		from, fromMeasure = a.Servings, m
+	}
+	if from == 0 {
+		return Measure{}, false
+	}
+	fromMeasure.Quantity = fromMeasure.Quantity.MulRat(big.NewRat(int64(servings), int64(from)))
+	return fromMeasure, true
+}
+
+func absInt(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+// scaled is m times factor, or nil.
+func scaled(m *Measure, factor *big.Rat) *Measure {
+	if m == nil {
+		return nil
+	}
+	out := *m
+	out.Quantity = m.Quantity.MulRat(factor)
+	return &out
+}
+
+// cutIntoWedges reports whether a step quarters the citrus or cuts it into
+// wedges ("Quarter lime", "Cut lemon into wedges").
+func cutIntoWedges(steps []Step, name string) bool {
+	citrus := wedgeCitrus(name)
+	for _, st := range steps {
+		lower := strings.ToLower(st.Text)
+		if strings.Contains(lower, "quarter "+citrus) || strings.Contains(lower, citrus+" into wedges") ||
+			strings.Contains(lower, citrus+"s into wedges") || strings.Contains(lower, citrus+" wedges") {
+			return true
+		}
+	}
+	return false
 }
 
 // smallest is the smallest serving size, the one a meal-kit card's own
@@ -488,7 +634,7 @@ func smallest(sizes []int) int {
 func statedMentions(steps []Step, mentions []mention) map[int]bool {
 	found := map[int]bool{}
 	for _, step := range steps {
-		renderStep(step, mentions, stepAmounts{stated: map[int]bool{}, found: found})
+		renderStep(step, mentions, stepAmounts{stated: map[int]bool{}, found: found, notedBefore: map[string]bool{}})
 	}
 	return found
 }
@@ -668,7 +814,7 @@ func nameForms(name string, spec *grocery.Specialty) []string {
 		seeds = append(seeds, "stock concentrate")
 	}
 	for _, seed := range seeds {
-		for _, base := range []string{seed, trimQualifiers(seed)} {
+		for _, base := range append([]string{seed, trimQualifiers(seed)}, headForms(trimQualifiers(seed))...) {
 			add(base)
 			add(pluralize(base))
 			add(singularize(base))
@@ -676,6 +822,87 @@ func nameForms(name string, spec *grocery.Specialty) []string {
 	}
 	sort.SliceStable(forms, func(i, j int) bool { return len(forms[i]) > len(forms[j]) })
 	return forms
+}
+
+// descriptors are words a card drops when a step names the ingredient: "Red
+// Onion" is "onion", "Ground Pork" is "pork", "Cooking Oil" is "oil", "Black
+// Pepper" is "pepper". Colors that name a different vegetable ("green
+// pepper", "green onion") aren't here.
+var descriptors = map[string]bool{
+	"red": true, "yellow": true, "white": true, "black": true, "long": true, "ground": true, "cooking": true,
+	"fresh": true, "flour": true, "corn": true, "baby": true, "boneless": true, "skinless": true, "large": true,
+	"small": true, "medium": true, "whole": true, "dried": true, "shredded": true, "grated": true, "minced": true,
+	"sliced": true, "chopped": true, "diced": true, "crushed": true, "plain": true, "unsalted": true,
+	"salted": true, "extra": true, "virgin": true, "light": true, "neutral": true,
+}
+
+// headForms are the shorter names a step uses for name: leading descriptors
+// dropped one at a time ("Long Green Pepper" → "Green Pepper"), a trailing
+// "Blend" ("Southwest Spice Blend" → "Southwest Spice"), and a protein's cut
+// ("Chicken Breasts" → "Chicken").
+func headForms(name string) []string {
+	words := strings.Fields(name)
+	var out []string
+	if n := len(words); n > 1 && strings.EqualFold(words[n-1], "blend") {
+		words = words[:n-1]
+		out = append(out, strings.Join(words, " "))
+	}
+	for len(words) > 1 && descriptors[strings.ToLower(words[0])] {
+		words = words[1:]
+		out = append(out, strings.Join(words, " "))
+	}
+	// "Pat chicken dry" for Chicken Breasts, "sear pork" for Pork Chops.
+	if n := len(words); n > 1 && cuts[strings.ToLower(words[n-1])] {
+		out = append(out, strings.Join(words[:n-1], " "))
+	}
+	return out
+}
+
+// cuts are the last words of a protein a step drops.
+var cuts = map[string]bool{
+	"breast": true, "breasts": true, "thigh": true, "thighs": true, "cutlet": true, "cutlets": true,
+	"chop": true, "chops": true, "tenderloin": true, "tenderloins": true, "fillet": true, "fillets": true,
+	"filet": true, "filets": true, "loin": true, "tenders": true, "strips": true,
+}
+
+// dedupeForms gives a spelling two ingredients share to one of them: the one
+// whose own name it is, else the one with the shorter name. With Black Pepper
+// and Long Green Pepper, "pepper" in "salt and pepper" is the black pepper.
+func dedupeForms(mentions []mention) {
+	own := func(m mention, form string) bool {
+		for _, n := range []string{m.name, trimQualifiers(m.name)} {
+			for _, f := range []string{n, pluralize(n), singularize(n)} {
+				if strings.EqualFold(f, form) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	owner := map[string]int{}
+	for i, m := range mentions {
+		for _, f := range m.forms {
+			k := strings.ToLower(f)
+			j, seen := owner[k]
+			if !seen {
+				owner[k] = i
+				continue
+			}
+			oi, oj := own(m, f), own(mentions[j], f)
+			if oi && !oj || oi == oj && len(strings.Fields(m.name)) < len(strings.Fields(mentions[j].name)) {
+				owner[k] = i
+			}
+		}
+	}
+	for i := range mentions {
+		kept := mentions[i].forms[:0:0]
+		for _, f := range mentions[i].forms {
+			if owner[strings.ToLower(f)] == i {
+				kept = append(kept, f)
+			}
+		}
+		mentions[i].forms = kept
+	}
 }
 
 // trimQualifiers drops a parenthesis or a trailing clause: "Chili Flakes

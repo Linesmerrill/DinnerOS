@@ -251,12 +251,15 @@ final class RecipeLibrary {
     /// choices applied. `nil` from a server that doesn't render instructions (a `404`), so the
     /// screen falls back to the recipe's own steps. Not cached: a changed choice or serving
     /// size has to show.
-    func instructions(recipeID: String, servings: Int?) async throws -> RecipeInstructions? {
+    func instructions(recipeID: String, servings: Int?, swaps: [PlanEntryCustomization] = []) async throws
+        -> RecipeInstructions?
+    {
         guard let api, let householdID else { throw AuthSessionError.notConfigured }
         do {
             return try await session.authorized { token in
                 try await api.instructions(
-                    householdID: householdID, recipeID: recipeID, servings: servings, accessToken: token)
+                    householdID: householdID, recipeID: recipeID, servings: servings, swaps: swaps,
+                    accessToken: token)
             }
         } catch let error as APIError where error.status == 404 || error.status == 400 {
             return nil

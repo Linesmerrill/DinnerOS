@@ -357,7 +357,8 @@ struct RecipeDetailView: View {
         let entry = plannedEntries.last
         return CookMeal(
             id: entry?.id ?? summary.id, recipeID: summary.id, name: name,
-            imageURL: recipe?.imageURL ?? summary.imageURL, dayText: entry?.day?.name(), servings: servings)
+            imageURL: recipe?.imageURL ?? summary.imageURL, dayText: entry?.day?.name(), servings: servings,
+            swaps: entry?.customizations ?? [])
     }
 
     /// The week's planned dishes, for the cooking screen's switcher, in day order.
@@ -369,7 +370,8 @@ struct RecipeDetailView: View {
             let isThis = entry.recipe.id == summary.id
             return CookMeal(
                 id: entry.id, recipeID: entry.recipe.id, name: entry.recipe.name, imageURL: entry.recipe.imageURL,
-                dayText: entry.day?.name(), servings: isThis ? servings : entry.servings)
+                dayText: entry.day?.name(), servings: isThis ? servings : entry.servings,
+                swaps: entry.customizations)
         }
     }
 
@@ -403,7 +405,10 @@ struct RecipeDetailView: View {
     /// lose the instructions because a substitution couldn't be looked up.
     private func loadInstructions() async {
         guard recipe != nil else { return }
-        instructions = (try? await library.instructions(recipeID: summary.id, servings: servings)) ?? instructions
+        instructions =
+            (try? await library.instructions(
+                recipeID: summary.id, servings: servings, swaps: plannedEntries.last?.customizations ?? []))
+            ?? instructions
     }
 
     /// Leaves an ingredient out of this recipe ("just this dish") or out of every recipe, then

@@ -9,6 +9,8 @@ struct CookMeal: Identifiable, Hashable {
     /// "Tuesday", or `nil` for a meal with no day.
     let dayText: String?
     let servings: Int?
+    /// The meal's protein swaps, so the steps name what's being cooked.
+    var swaps: [PlanEntryCustomization] = []
 }
 
 /// The screen for cooking: the ingredients as a checklist and the steps side by side on an iPad,
@@ -263,10 +265,12 @@ struct CookingView: View {
             } else {
                 recipe = try await library.recipe(id: id, reload: false)
             }
+            let meal = meals.first { $0.recipeID == id }
             let servings =
-                meals.first { $0.recipeID == id }?.servings
+                meal?.servings
                 ?? recipe.preferredServings(householdDefault: households.current?.household.defaultServings)
-            let instructions = try? await library.instructions(recipeID: id, servings: servings)
+            let instructions = try? await library.instructions(
+                recipeID: id, servings: servings, swaps: meal?.swaps ?? [])
             dishes[id] = CookDish(recipe: recipe, servings: servings, instructions: instructions)
         } catch is CancellationError {
             return
@@ -349,7 +353,14 @@ struct CookIngredientList: View {
                 ForEach(dish.ingredients) { ingredient in
                     ingredientRow(ingredient)
                     ForEach(ingredient.parts) { part in
-                        partRow(part, of: ingredient, isLast: part.id == ingredient.parts.last?.id)
+                        partRow(
+                            part, of: ingredient,
+                            isLast: part.id == ingredient.parts.last?.id && ingredient.components.isEmpty)
+                    }
+                    ForEach(Array(ingredient.components.enumerated()), id: \.offset) { index, component in
+                        componentRow(
+                            component, id: ingredient.componentID(index),
+                            isLast: index == ingredient.components.count - 1)
                     }
                 }
             case .byStep:
@@ -513,6 +524,30 @@ struct CookIngredientList: View {
         .buttonStyle(.plain)
         .accessibilityLabel(Text("\(part.amountText) of \(ingredient.name) in step \(part.stepIndex)"))
         .accessibilityAddTraits(isChecked ? .isSelected : [])
+    }
+
+    /// One thing a home-made sauce or blend is mixed from: "1 tsp Chili Powder".
+    private func componentRow(_ component: String, id: String, isLast: Bool) -> some View {
+        let isChecked = session.isChecked(id, recipe: dish.recipe.id)
+        return Button {
+            session.toggle(id: id, recipe: dish.recipe.id)
+        } label: {
+            HStack(spacing: 10) {
+                CookBranch(isLast: isLast)
+                    .frame(width: 18)
+                CookCheckbox(isChecked: isChecked, small: true)
+                Text(component)
+                    .font(.subheadline)
+                    .strikethrough(isChecked)
+                    .foregroundStyle(isChecked ? Color.secondary : Color.primary)
+                Spacer(minLength: 0)
+            }
+            .padding(.leading, 12)
+            .frame(minHeight: 34)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isChecked ? [.isButton, .isSelected] : .isButton)
     }
 
     private func amountAndName(amount: String?, name: String) -> Text {

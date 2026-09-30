@@ -405,9 +405,16 @@ step's `text` exactly, so no client needs character offsets or an encoding
 rule (decision 513). `originalText` is present only when a substitution
 changed the wording.
 
-`servings` must be one of the recipe's `servings`: amounts are never scaled
-from another serving size, the same rule the grocery list follows. Without the
-parameter, the smallest size is used.
+`servings` must be one of the recipe's `servings`. Without the parameter, the
+smallest size is used. When the card left that size blank for a line (meal kits
+often do for their bigger boxes), the line is scaled from the closest size it
+did write; only these cooking screens do this, and the grocery list never
+scales (decision 585).
+
+`swap=<ingredientKey>=<choiceId>`, repeated, passes a planned meal's protein
+choices from the entry's `customizations`: the steps then name the protein being
+cooked ("Add 20 oz ground beef") and its ingredient carries `swapName`
+(decision 587).
 
 ```json
 {
