@@ -135,6 +135,12 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 				clause = ""
 				continue
 			}
+			// "until chicken is cooked through", "to pan with bell pepper": a
+			// description, not something added in this step.
+			if i+1 < len(step.Segments) && describes(step.Segments[i+1].Text) || inPanWith(clause) {
+				clause = ""
+				continue
+			}
 			used[ing.ID] = true
 			after := ""
 			if i+1 < len(step.Segments) && step.Segments[i+1].Kind != SegmentIngredient {
@@ -157,8 +163,14 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 			if partWord != "" {
 				name = singularName(ing.Name) + " " + partWord
 			}
-			// "Crushed Tomatoes, crushed" says nothing.
+			// "Crushed Tomatoes, crushed" says nothing. "lime zest, half the
+			// cilantro": the zest is the lime's, not done to the cilantro.
 			prep := PrepWords(clause)
+			if i > 1 && step.Segments[i-2].Kind == SegmentIngredient {
+				if lc := strings.ToLower(step.Segments[i-1].Text); strings.HasPrefix(lc, " zest") || strings.HasPrefix(lc, " juice") {
+					prep = ""
+				}
+			}
 			if prep != "" && strings.Contains(strings.ToLower(ing.Name), prep) {
 				prep = ""
 			}
@@ -175,6 +187,13 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 			if prep == "" && endsWithRemaining(clause) && seg.Amount == nil && existing < 0 {
 				prep = "the rest"
 			}
+			// "more lime juice if desired" after "juice from 2 lime wedges": the
+			// same ingredient again, with nothing new to measure or do.
+			if existing < 0 && amountText == "" && prep == "" &&
+				slices.ContainsFunc(items, func(it CookStepItem) bool { return it.IngredientIndex == ing.Index }) {
+				clause = ""
+				continue
+			}
 			parts := splitParts(after, ing.Name)
 			if existing >= 0 {
 				// Named again in the same step: add only what's new.
@@ -188,6 +207,11 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 				}
 				if len(old.Parts) == 0 {
 					old.Parts = parts
+				}
+				// "Shake coconut milk … stir ⅔ cup coconut milk": the amount
+				// comes with the later mention.
+				if old.AmountText == "" {
+					old.AmountText = amountText
 				}
 				items[existing] = old
 			} else {
@@ -450,9 +474,28 @@ func endsWithRemaining(clause string) bool {
 }
 
 // leadingPart is "greens" in "2 scallion greens": a word right after the name.
+// describes reports whether the text after a mention says how it is
+// ("chicken is cooked through") rather than what to do with it.
+func describes(after string) bool {
+	lower := strings.ToLower(after)
+	return strings.HasPrefix(lower, " is ") || strings.HasPrefix(lower, " are ")
+}
+
+// inPanWith reports whether the clause ends "to pan with ": the ingredient is
+// already in the pan.
+func inPanWith(clause string) bool {
+	lower := strings.ToLower(strings.TrimSpace(clause))
+	for _, vessel := range []string{"pan with", "pot with", "skillet with", "bowl with", "sheet with"} {
+		if strings.HasSuffix(lower, vessel) {
+			return true
+		}
+	}
+	return false
+}
+
 func leadingPart(text string) string {
 	lower := strings.ToLower(text)
-	for _, part := range []string{"whites", "greens", "wedges"} {
+	for _, part := range []string{"whites", "greens", "wedges", "zest"} {
 		if strings.HasPrefix(lower, " "+part) {
 			return part
 		}

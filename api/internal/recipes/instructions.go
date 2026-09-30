@@ -897,7 +897,7 @@ var descriptors = map[string]bool{
 	"red": true, "yellow": true, "white": true, "black": true, "long": true, "ground": true, "cooking": true,
 	"fresh": true, "flour": true, "corn": true, "baby": true, "boneless": true, "skinless": true, "large": true,
 	"jasmine": true, "basmati": true, "arborio": true, "roma": true, "persian": true, "english": true,
-	"yukon": true, "gold": true,
+	"yukon": true, "gold": true, "vegetable": true, "canola": true,
 	"small": true, "medium": true, "whole": true, "dried": true, "shredded": true, "grated": true, "minced": true,
 	"sliced": true, "chopped": true, "diced": true, "crushed": true, "plain": true, "unsalted": true,
 	"salted": true, "extra": true, "virgin": true, "light": true, "neutral": true,
@@ -918,11 +918,34 @@ func headForms(name string) []string {
 		words = words[1:]
 		out = append(out, strings.Join(words, " "))
 	}
-	// "Pat chicken dry" for Chicken Breasts, "sear pork" for Pork Chops.
-	if n := len(words); n > 1 && cuts[strings.ToLower(words[n-1])] {
+	// "Thinly slice chili" for Chili Pepper, "mince jalapeño" for Jalapeño
+	// Pepper: a named chili drops the "pepper".
+	if n := len(words); n > 1 && chiliNames[strings.ToLower(words[n-2])] &&
+		(strings.EqualFold(words[n-1], "pepper") || strings.EqualFold(words[n-1], "peppers")) {
 		out = append(out, strings.Join(words[:n-1], " "))
 	}
+	// "Pat chicken dry" for Chicken Breasts, "sear pork" for Pork Chops,
+	// "add chicken" for Chicken Breast Strips (both cut words go).
+	for n := len(words); n > 1 && cuts[strings.ToLower(words[n-1])]; n = len(words) {
+		words = words[:n-1]
+		out = append(out, strings.Join(words, " "))
+	}
+	// "chili sauce" for Sweet Thai Chili Sauce: a condiment keeps its last
+	// two words.
+	if n := len(words); n > 2 && condiments[strings.ToLower(words[n-1])] {
+		out = append(out, strings.Join(words[n-2:], " "))
+	}
 	return out
+}
+
+// condiments are last words of a name a step shortens to its last two
+// ("chili sauce", "curry paste").
+var condiments = map[string]bool{"sauce": true, "paste": true, "powder": true, "flakes": true, "vinegar": true}
+
+// chiliNames are the words before "Pepper" that name a chili.
+var chiliNames = map[string]bool{
+	"chili": true, "chile": true, "jalapeño": true, "jalapeno": true, "serrano": true, "habanero": true,
+	"poblano": true, "fresno": true, "thai": true, "cayenne": true,
 }
 
 // cuts are the last words of a protein a step drops.

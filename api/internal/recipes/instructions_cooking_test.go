@@ -333,3 +333,18 @@ func TestRiceAndWaterAreBoldInTheRiceStep(t *testing.T) {
 		}
 	}
 }
+
+func TestALeftOutChiliIsStruckWhereTheStepSaysChili(t *testing.T) {
+	r := tacoRecipe(
+		[]RecipeIngredient{
+			tacoLine("ing-chili", "Chili Pepper", "1", "1", "count"),
+			tacoLine("ing-sauce", "Sweet Thai Chili Sauce", "2", "3", "tbsp"),
+		},
+		"Thinly slice chili. Drizzle with sweet Thai chili sauce.")
+	leftOut := grocery.LeftOutSet{"name:chili pepper": {SkipID: "skip-chili", Scope: grocery.SkipRecipe}}
+	in := AnnotateWith(r, 2, nil, true, leftOut, true)
+	segs := ingredientSegments(in.Steps[0])
+	if len(segs) != 2 || segs[0].Name != "Chili Pepper" || !segs[0].LeftOut || segs[1].Name != "Sweet Thai Chili Sauce" || segs[1].LeftOut {
+		t.Errorf("segments = %+v", segs)
+	}
+}

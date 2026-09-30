@@ -203,6 +203,27 @@ func fractionOf(text []rune) (*big.Rat, int, bool) {
 	return q.Rat(), len([]rune(lower)) - start, true
 }
 
+// measuredUnits are units a share can be measured in: half of "1 thumb"
+// ginger isn't an amount anyone measures.
+var measuredUnits = map[string]bool{"tsp": true, "tbsp": true, "cup": true, "oz": true, "fl oz": true, "ml": true, "l": true, "g": true, "kg": true, "lb": true}
+
+// allNoteRe is a card's "(all for 4 servings)" after a share.
+var allNoteRe = regexp.MustCompile(`^\s*\(all for (\d+)(?: servings)?\)`)
+
+// allNote reads "(all for N servings)" at the start of text: N and how many
+// runes it spans.
+func allNote(text []rune) (int, int, bool) {
+	m := allNoteRe.FindStringSubmatch(string(text))
+	if m == nil {
+		return 0, 0, false
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0, 0, false
+	}
+	return n, len([]rune(m[0])), true
+}
+
 // wedgesOf is n lime or lemon wedges.
 func wedgesOf(n ingredients.Quantity) *Measure {
 	return &Measure{Quantity: n, Unit: "wedge"}
@@ -273,6 +294,21 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			plain = plain[:0]
 		}
 	}
+	// Mentions this step gives their own amount somewhere ("Shake coconut
+	// milk … Stir ⅔ cup coconut milk"): an earlier mention without one
+	// doesn't take the whole amount.
+	statedLater := map[int]bool{}
+	for i := 0; i < len(runes); {
+		hit, length := matchAt(lower, i, candidates)
+		if hit < 0 {
+			i++
+			continue
+		}
+		if _, _, ok := statedAmount(runes[max(0, i-24):i]); ok {
+			statedLater[hit] = true
+		}
+		i += length
+	}
 	for i := 0; i < len(runes); {
 		hit, length := matchAt(lower, i, candidates)
 		if hit < 0 {
@@ -282,6 +318,9 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		}
 		m := mentions[hit]
 		amount := m.amount
+		if _, _, ok := statedAmount(plain); statedLater[hit] && !ok && !amountShown[hit] {
+			amount = nil
+		}
 		shownBefore := amountShown[hit]
 		before := strings.TrimRightFunc(string(plain), unicode.IsSpace)
 		squeeze := wedgeCitrus(m.name) != "" && len(before) < len(string(plain)) &&
@@ -362,6 +401,19 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 					inText = false
 				}
 				amount, part = share, true
+				amountShown[hit] = true
+			} else if m.amount != nil && measuredUnits[m.amount.Unit] && !m.leftOut && !shownBefore && !m.swapped {
+				// "Stir in half the curry powder (all for 4 servings)": this
+				// step's share, as an amount to measure.
+				if n, noteLen, ok := allNote(runes[i+length:]); ok {
+					skipAfter = noteLen
+					if amounts.servings >= n {
+						fraction = big.NewRat(1, 1)
+					}
+				}
+				share := kitchenSpoon(tidySpoons(Measure{Quantity: m.amount.Quantity.MulRat(fraction), Unit: m.amount.Unit}))
+				plain = plain[:len(plain)-fractionLen]
+				amount, part = &share, fraction.Cmp(big.NewRat(1, 1)) != 0
 				amountShown[hit] = true
 			}
 		}
