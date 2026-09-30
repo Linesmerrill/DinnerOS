@@ -46,9 +46,17 @@ struct MenuBottomBar: View {
                     .accessibilityLabel("Shop this week")
                 }
                 NavigationLink(value: GroceryListRoute(week: plans.week)) {
-                    Text("Grocery List")
-                        .fontWeight(.semibold)
+                    // Words give way before they break mid-word: "Grocery List", then "List",
+                    // then the icon alone.
+                    ViewThatFits(in: .horizontal) {
+                        Text("Grocery List")
+                        Label("List", systemImage: "list.bullet.clipboard")
+                        Image(systemName: "list.bullet.clipboard")
+                    }
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
                 }
+                .accessibilityLabel("Grocery List")
                 .buttonStyle(.borderedProminent)
                 .disabled(plans.plan == nil)
             }

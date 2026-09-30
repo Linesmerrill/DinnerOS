@@ -78,11 +78,15 @@ struct SuggestedMealsRow: View {
                 HStack(alignment: .top, spacing: 12) {
                     ForEach(slots) { slot in
                         card(slot)
+                            .frame(maxHeight: .infinity)
                             .containerRelativeFrame(.horizontal) { width, _ in
                                 width < 600 ? width * 0.62 : min(width * 0.5, max(280, (width - 48) / 4))
                             }
                     }
                 }
+                // Every card as tall as the tallest, so the dashed outlines line up when one
+                // recipe name or reason takes an extra line.
+                .fixedSize(horizontal: false, vertical: true)
                 .scrollTargetLayout()
                 .padding(.horizontal, 16)
             }
@@ -95,6 +99,14 @@ struct SuggestedMealsRow: View {
         let skipped = autopilot.excludedSlotIDs.contains(slot.id)
         let swapping = autopilot.swappingSlotIDs.contains(slot.id)
         return SuggestedMealCard(slot: slot, isSkipped: skipped, isShuffling: swapping)
+            // The day and the badge share one row over the photo, outside the card's link, so
+            // they line up and tapping the badge explains it instead of opening the recipe.
+            // 16 is the card's padding plus the photo's inset.
+            .overlay(alignment: .top) {
+                SuggestedCardLabels(slot: slot, showsBadge: !skipped)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+            }
             .contextMenu {
                 if isEditable {
                     Button("Shuffle", systemImage: "shuffle") { shuffle(slot) }
@@ -140,6 +152,49 @@ struct SuggestedMealsRow: View {
     }
 }
 
+/// The day and the first badge across the top of a suggestion card. Each gives up words before
+/// it gets cut off: "Monday" becomes "M", "Cold and rainy" becomes its cloud, so the row fits a
+/// narrow card or a large text size without truncating.
+struct SuggestedCardLabels: View {
+    let slot: AutopilotSlot
+    var showsBadge = true
+
+    private var badge: AutopilotBadge? { showsBadge ? slot.badges.first : nil }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            row(shortDay: false, compactBadge: false)
+            row(shortDay: true, compactBadge: false)
+            row(shortDay: false, compactBadge: true)
+            row(shortDay: true, compactBadge: true)
+        }
+    }
+
+    private func row(shortDay: Bool, compactBadge: Bool) -> some View {
+        HStack(spacing: 6) {
+            dayLabel(short: shortDay)
+            Spacer(minLength: 0)
+            if let badge {
+                AutopilotBadgeButton(badge: badge, onPhoto: true, compact: compactBadge)
+            }
+        }
+    }
+
+    private func dayLabel(short: Bool) -> some View {
+        Label(short ? slot.day.shortName() : slot.day.name(), systemImage: "sparkles")
+            .font(.caption.weight(.semibold))
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.regularMaterial, in: Capsule())
+            .accessibilityLabel(slot.day.name())
+            // Part of the card's own label; only the badge is its own element.
+            .accessibilityHidden(true)
+            .allowsHitTesting(false)
+    }
+}
+
 /// One suggested dinner: the photo, the day, the recipe, and why it was picked, drawn with a
 /// dashed outline so it reads as a suggestion rather than a planned meal.
 struct SuggestedMealCard: View {
@@ -156,14 +211,6 @@ struct SuggestedMealCard: View {
         NavigationLink(value: summary) {
             VStack(alignment: .leading, spacing: 8) {
                 RecipePhoto(url: slot.recipe.imageURL, aspectRatio: 4.0 / 3.0, pointWidth: 280, cornerRadius: 14)
-                    .overlay(alignment: .topLeading) {
-                        Label(slot.day.name(), systemImage: "sparkles")
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(.regularMaterial, in: Capsule())
-                            .padding(8)
-                    }
                     .overlay {
                         if isShuffling {
                             RoundedRectangle(cornerRadius: 14).fill(.black.opacity(0.35))
@@ -187,6 +234,7 @@ struct SuggestedMealCard: View {
                         .multilineTextAlignment(.leading)
                 }
             }
+            .frame(maxHeight: .infinity, alignment: .top)
             .padding(8)
             .background(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -203,7 +251,8 @@ struct SuggestedMealCard: View {
             Text(
                 isSkipped
                     ? "Suggested for \(slot.day.name()): \(slot.recipe.name), left open"
-                    : "Suggested for \(slot.day.name()): \(slot.recipe.name). \(slot.reasonText)")
+                    : "Suggested for \(slot.day.name()): \(slot.recipe.name). \(slot.reasonText)"
+                        + slot.badges.map { " \($0.detail)" }.joined())
         )
         .accessibilityHint(Text("Opens the recipe. Actions: shuffle, or leave this day open."))
     }

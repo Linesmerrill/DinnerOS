@@ -770,6 +770,8 @@ nonisolated struct AutopilotSlot: Decodable, Hashable, Sendable, Identifiable {
     /// Add-ons and grocery items to offer with this meal. Ones with `included` are added when
     /// the proposal is accepted unless the member takes them out.
     var pairings: [ProposalPairing] = []
+    /// Why the pick fits its day, such as the forecast, as a badge with a sentence behind it.
+    var badges: [AutopilotBadge] = []
 
     /// The reasons joined for display, for example "Sunday smoker night · Pork · Long cook OK".
     var reasonText: String {
@@ -777,7 +779,39 @@ nonisolated struct AutopilotSlot: Decodable, Hashable, Sendable, Identifiable {
     }
 
     fileprivate enum CodingKeys: String, CodingKey {
-        case id, day, date, recipe, servings, cookMinutes, timeBand, score, signals, reasons, swapCount, pairings
+        case id, day, date, recipe, servings, cookMinutes, timeBand, score, signals, reasons, swapCount, pairings,
+            badges
+    }
+}
+
+/// A badge on a pick ("Rainy"), with the sentence shown when it's tapped. The server writes the
+/// words and picks the SF Symbol, so they can change without an app update.
+nonisolated struct AutopilotBadge: Decodable, Hashable, Sendable, Identifiable {
+    let code: String
+    let label: String
+    let symbol: String
+    let detail: String
+
+    var id: String { code + label }
+
+    /// A weather badge, which shows the forecast's attribution with its explanation.
+    var isWeather: Bool { code == "weather" }
+
+    private enum CodingKeys: String, CodingKey { case code, label, symbol, detail }
+
+    init(code: String, label: String, symbol: String, detail: String) {
+        self.code = code
+        self.label = label
+        self.symbol = symbol
+        self.detail = detail
+    }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        code = try c.decode(String.self, forKey: .code)
+        label = try c.decode(String.self, forKey: .label)
+        symbol = (try? c.decode(String.self, forKey: .symbol)) ?? ""
+        detail = (try? c.decode(String.self, forKey: .detail)) ?? ""
     }
 }
 
@@ -798,7 +832,8 @@ nonisolated extension AutopilotSlot {
             signals: try container.decode([String: Double].self, forKey: .signals),
             reasons: try container.decode([AutopilotText].self, forKey: .reasons),
             swapCount: try container.decode(Int.self, forKey: .swapCount),
-            pairings: container.decodeLossyArray(ProposalPairing.self, forKey: .pairings))
+            pairings: container.decodeLossyArray(ProposalPairing.self, forKey: .pairings),
+            badges: container.decodeLossyArray(AutopilotBadge.self, forKey: .badges))
     }
 }
 

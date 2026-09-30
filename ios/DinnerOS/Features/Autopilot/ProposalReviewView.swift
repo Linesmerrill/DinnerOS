@@ -255,6 +255,10 @@ struct ProposalSlotRow: View {
                         .font(.subheadline)
                         .foregroundStyle(Color.secondary)
                 }
+                ForEach(slot.badges) { badge in
+                    AutopilotBadgeButton(badge: badge)
+                        .padding(.vertical, -8)
+                }
                 // Add-ons are secondary to the meal: small toggles under it, never a row.
                 if canEdit, !slot.pairings.isEmpty {
                     ChipFlowLayout(spacing: 6) {
@@ -333,12 +337,13 @@ struct ProposalSlotRow: View {
     }
 
     private var accessibilityLabel: String {
-        [
+        let parts = [
             AutopilotFormat.dayTitle(date: slot.date, day: slot.day), slot.recipe.name,
             AutopilotFormat.cookTime(slot.cookMinutes), slot.timeBand.title, slot.reasonText,
         ]
-        .filter { !$0.isEmpty }
-        .joined(separator: ", ")
+        return (parts + slot.badges.map(\.detail))
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
     }
 }
 

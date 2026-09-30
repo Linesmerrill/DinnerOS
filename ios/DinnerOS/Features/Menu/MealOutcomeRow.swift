@@ -43,29 +43,59 @@ struct MealOutcomeRow: View {
         }
     }
 
+    /// Gives up space before it breaks words: the full row, then the buttons as icons, then the
+    /// question on its own line above full buttons.
     private var askRow: some View {
-        HStack(spacing: 8) {
-            Text("Did you make it?")
-                .foregroundStyle(Color.secondary)
-            Spacer(minLength: 0)
-            Button("Cooked", systemImage: "checkmark") {
-                answer(.cooked) { events.recipeCooked(entry, week: plans.week) }
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                question
+                Spacer(minLength: 0)
+                buttons(iconOnly: false)
             }
-            Menu {
-                ForEach(SkipReason.allCases) { reason in
-                    Button(reason.title) {
-                        answer(.skipped(reason)) { events.recipeSkipped(entry, week: plans.week, reason: reason) }
-                    }
-                }
-                Button("Skip Without a Reason") {
-                    answer(.skipped(nil)) { events.recipeSkipped(entry, week: plans.week, reason: nil) }
-                }
-            } label: {
-                Label("Skip", systemImage: "forward")
+            HStack(spacing: 8) {
+                question
+                Spacer(minLength: 0)
+                buttons(iconOnly: true)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                question
+                HStack(spacing: 8) { buttons(iconOnly: false) }
             }
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
+    }
+
+    private var question: some View {
+        Text("Did you make it?")
+            .foregroundStyle(Color.secondary)
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    @ViewBuilder
+    private func buttons(iconOnly: Bool) -> some View {
+        Button {
+            answer(.cooked) { events.recipeCooked(entry, week: plans.week) }
+        } label: {
+            Label("Cooked", systemImage: "checkmark")
+                .labelStyle(OutcomeLabelStyle(iconOnly: iconOnly))
+        }
+        .accessibilityLabel("Cooked")
+        Menu {
+            ForEach(SkipReason.allCases) { reason in
+                Button(reason.title) {
+                    answer(.skipped(reason)) { events.recipeSkipped(entry, week: plans.week, reason: reason) }
+                }
+            }
+            Button("Skip Without a Reason") {
+                answer(.skipped(nil)) { events.recipeSkipped(entry, week: plans.week, reason: nil) }
+            }
+        } label: {
+            Label("Skip", systemImage: "forward")
+                .labelStyle(OutcomeLabelStyle(iconOnly: iconOnly))
+        }
+        .accessibilityLabel("Skip")
     }
 
     /// Undo is the whole reason marking cooked can be a plain button: the event is held for
@@ -119,4 +149,19 @@ struct MealOutcomeRow: View {
     MealOutcomeRow(entry: PlanPreviewData.plan.entries[0])
         .padding()
         .menuPreviewEnvironment()
+}
+
+/// Title and icon on one line that never wraps, or the icon alone when space is short.
+private struct OutcomeLabelStyle: LabelStyle {
+    let iconOnly: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 4) {
+            configuration.icon
+            if !iconOnly {
+                configuration.title.lineLimit(1)
+            }
+        }
+        .fixedSize()
+    }
 }

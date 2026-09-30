@@ -137,6 +137,25 @@ nonisolated extension PlanDay {
             .formatted(Date.FormatStyle(locale: locale, timeZone: .gmt).weekday(.wide))
     }
 
+    /// The shortest name that still tells the days apart, for tight spaces: "M", "T", "W",
+    /// "Th", "F", "Sa", "Su" in English, and the calendar's narrowest weekday elsewhere.
+    func shortName(locale: Locale = .autoupdatingCurrent) -> String {
+        if locale.language.languageCode == .english {
+            switch self {
+            case .mon: return "M"
+            case .tue: return "T"
+            case .wed: return "W"
+            case .thu: return "Th"
+            case .fri: return "F"
+            case .sat: return "Sa"
+            case .sun: return "Su"
+            }
+        }
+        let monday = ISOWeek("2026-W01")?.startDate ?? .distantPast
+        return monday.addingTimeInterval(TimeInterval(offset) * 86_400)
+            .formatted(Date.FormatStyle(locale: locale, timeZone: .gmt).weekday(.short))
+    }
+
     /// For example "Monday, Sep 14".
     func title(in week: ISOWeek, weekStartsOn: PlanDay, locale: Locale = .autoupdatingCurrent) -> String {
         guard let date = date(in: week, weekStartsOn: weekStartsOn) else { return name(locale: locale) }

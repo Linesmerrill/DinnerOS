@@ -99,6 +99,9 @@ struct WeekStrip: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var scrolledWeek: String?
+    /// Whether this week's pill is on screen, for the way back to it.
+    @State private var isCurrentWeekVisible = true
+    @State private var stripWidth: CGFloat = 402
 
     /// What the pills need at this text size, capped so the strip can't take the screen.
     private var pillHeight: CGFloat {
@@ -175,80 +178,119 @@ struct WeekStrip: View {
         return parts.joined(separator: ", ")
     }
 
+    /// The strip uses the whole width: **Past** rides at the start of the row instead of pinning
+    /// a column of its own, and each week is two-fifths of the screen, so the week you're on sits
+    /// in the middle with both neighbors readable. The way back to this week only appears once
+    /// this week's pill has scrolled out of sight, and floats over the edge rather than taking a
+    /// column.
     private var pills: some View {
-        HStack(spacing: 8) {
-            NavigationLink(value: PastWeeksRoute()) {
-                Label("Past", systemImage: "clock.arrow.circlepath")
-                    .font(.footnote.weight(.semibold))
-                    .labelStyle(.titleAndIcon)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(.quaternary, in: .capsule)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.tint)
-            .accessibilityHint("Shows earlier weeks")
-            .padding(.leading, 16)
-
-            ScrollView(.horizontal) {
-                LazyHStack(spacing: 8) {
-                    if menu.canLoadEarlierWeeks {
-                        ProgressView()
-                            .frame(width: 44)
-                            .task(id: menu.oldestWeek) {
-                                await menu.loadEarlierWeeks()
-                            }
-                            .accessibilityLabel("Loading earlier weeks")
-                    }
-                    ForEach(menu.stripItems) { item in
-                        Button {
-                            select(item.week)
-                        } label: {
-                            WeekPill(
-                                item: item, isSelected: item.week == plans.week,
-                                currentWeek: menu.currentWeek, weekStartsOn: menu.weekStartsOn)
+        ScrollView(.horizontal) {
+            LazyHStack(spacing: 8) {
+                pastButton
+                if menu.canLoadEarlierWeeks {
+                    ProgressView()
+                        .frame(width: 44)
+                        .task(id: menu.oldestWeek) {
+                            await menu.loadEarlierWeeks()
                         }
-                        .buttonStyle(.plain)
-                        .id(item.id)
+                        .accessibilityLabel("Loading earlier weeks")
+                }
+                ForEach(menu.stripItems) { item in
+                    Button {
+                        select(item.week)
+                    } label: {
+                        WeekPill(
+                            item: item, isSelected: item.week == plans.week,
+                            currentWeek: menu.currentWeek, weekStartsOn: menu.weekStartsOn)
+                    }
+                    .buttonStyle(WeekPillButtonStyle())
+                    // An explicit width, not `containerRelativeFrame`: the lazy row estimates
+                    // the pills it hasn't laid out from the ones it has, and a relative frame
+                    // threw that off enough to scroll the selected week to the edge.
+                    .frame(width: pillWidth)
+                    .id(item.id)
+                    .onScrollVisibilityChange(threshold: 0.6) { visible in
+                        if item.week == menu.currentWeek { isCurrentWeekVisible = visible }
                     }
                 }
-                .scrollTargetLayout()
-                .padding(.trailing, 16)
             }
-            .scrollIndicators(.hidden)
-            .scrollPosition(id: $scrolledWeek, anchor: .center)
-            // A horizontal ScrollView takes all the height it is offered, and as a top
-            // safe-area inset that is the whole screen, so pin it to the pills' height.
-            .frame(height: pillHeight)
-
-            // A way home after scrolling far away, or after picking another week.
-            if isAwayFromThisWeek {
-                Button {
-                    select(menu.currentWeek)
-                    scrollTo(menu.currentWeek)
-                } label: {
-                    Label("This Week", systemImage: "arrow.uturn.backward")
-                        .font(.footnote.weight(.semibold))
-                        .labelStyle(.titleAndIcon)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(.quaternary, in: .capsule)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.tint)
-                .padding(.trailing, 16)
-                .transition(.opacity)
+            .scrollTargetLayout()
+        }
+        .contentMargins(.horizontal, 16, for: .scrollContent)
+        .onGeometryChange(for: CGFloat.self) {
+            $0.size.width
+        } action: {
+            stripWidth = $0
+        }
+        .scrollIndicators(.hidden)
+        .scrollPosition(id: $scrolledWeek, anchor: .center)
+        // A horizontal ScrollView takes all the height it is offered, and as a top
+        // safe-area inset that is the whole screen, so pin it to the pills' height.
+        .frame(height: pillHeight)
+        .overlay(alignment: isThisWeekBehind ? .leading : .trailing) {
+            if showsThisWeekButton {
+                thisWeekButton
+                    .padding(.horizontal, 12)
+                    .transition(.scale(scale: 0.7).combined(with: .opacity))
             }
         }
-        .animation(.easeOut(duration: 0.2), value: isAwayFromThisWeek)
+        .animation(reduceMotion ? nil : .spring(duration: 0.3), value: showsThisWeekButton)
         // The pills stop growing where `pillHeight` stops, so they always fit what it reserves.
         .dynamicTypeSize(...WeekStripMetrics.largestTypeSize)
     }
 
-    /// True when the shown week, or the strip's scroll, isn't this week.
-    private var isAwayFromThisWeek: Bool {
-        plans.week != menu.currentWeek || (scrolledWeek != nil && scrolledWeek != menu.currentWeek.description)
+    /// Two-fifths of the row per week: about two and a half weeks in view. At the larger text
+    /// sizes, a week gets more of the row so its dates still fit on one line.
+    private var pillWidth: CGFloat {
+        let share: CGFloat = dynamicTypeSize >= .xxxLarge ? 0.62 : 0.4
+        return max(140, ((stripWidth - 32) * share).rounded())
     }
+
+    private var pastButton: some View {
+        NavigationLink(value: PastWeeksRoute()) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.body.weight(.semibold))
+                .frame(width: 44)
+                .frame(maxHeight: .infinity)
+                .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 14))
+                .contentShape(.rect)
+        }
+        .buttonStyle(WeekPillButtonStyle())
+        .foregroundStyle(.tint)
+        .accessibilityLabel("Past weeks")
+        .accessibilityHint("Shows earlier weeks")
+    }
+
+    /// "This Week", on the side this week is on, pointing back to it.
+    private var thisWeekButton: some View {
+        Button {
+            select(menu.currentWeek)
+            scrollTo(menu.currentWeek)
+        } label: {
+            HStack(spacing: 4) {
+                if isThisWeekBehind { Image(systemName: "chevron.backward") }
+                Text("This Week")
+                if !isThisWeekBehind { Image(systemName: "chevron.forward") }
+            }
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(Color.onAccent)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 44)
+            .background(.tint, in: .capsule)
+            .shadow(color: .black.opacity(0.2), radius: 8, y: 2)
+            .contentShape(.capsule)
+        }
+        .buttonStyle(WeekPillButtonStyle())
+        .accessibilityLabel("Go to this week")
+    }
+
+    /// Whether the strip is scrolled past this week, so the way back points left.
+    private var isThisWeekBehind: Bool {
+        menu.currentWeek < (scrolledWeek.flatMap(ISOWeek.init) ?? menu.currentWeek)
+    }
+
+    /// Shown once this week's pill is out of sight; while it's showing, the pill is the way back.
+    private var showsThisWeekButton: Bool { !isCurrentWeekVisible }
 
     private func select(_ week: ISOWeek) {
         guard week != plans.week else { return }
@@ -287,6 +329,8 @@ struct WeekPill: View {
             detail
         }
         .lineLimit(1)
+        .minimumScaleFactor(0.85)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(
@@ -308,17 +352,17 @@ struct WeekPill: View {
         MenuFormat.relativeWeekName(item.week, current: currentWeek)
     }
 
-    @ViewBuilder
+    /// Seven nights, one mark each: how full the week is at a glance, then the count in words.
     private var detail: some View {
-        HStack(spacing: 4) {
-            if item.timing == .past, (item.summary?.cookedCount ?? 0) > 0 {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption2)
-            }
+        HStack(spacing: 6) {
+            WeekNightsMeter(
+                planned: item.summary?.plannedCount ?? 0, cooked: item.summary?.cookedCount ?? 0,
+                isPast: item.timing == .past, isSelected: isSelected)
             Text(MenuFormat.weekPillDetail(item.summary, timing: item.timing) ?? " ")
                 .font(.caption2)
+                .foregroundStyle(
+                    isSelected ? AnyShapeStyle(Color.onAccent.opacity(0.9)) : AnyShapeStyle(Color.secondary))
         }
-        .foregroundStyle(isSelected ? AnyShapeStyle(Color.onAccent.opacity(0.9)) : AnyShapeStyle(Color.secondary))
     }
 
     private var accessibilityLabel: String {
@@ -330,6 +374,47 @@ struct WeekPill: View {
             parts.append(detail)
         }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// Seven short bars for the seven nights of a week: planned nights solid, open nights faint. In a
+/// past week only the nights actually cooked stay solid; planned but not cooked is half-strength.
+/// Drawn within the caption line's height so the pill doesn't grow.
+struct WeekNightsMeter: View {
+    let planned: Int
+    let cooked: Int
+    let isPast: Bool
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(0..<7, id: \.self) { night in
+                Capsule()
+                    .fill(color(for: night))
+                    .frame(width: 4, height: 9)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func color(for night: Int) -> Color {
+        let base: Color = isSelected ? .onAccent : .accentColor
+        let filled = min(max(planned, cooked), 7)
+        if night < (isPast ? min(cooked, 7) : filled) { return base }
+        if night < filled { return base.opacity(isSelected ? 0.6 : 0.45) }
+        return (isSelected ? Color.onAccent : Color.secondary).opacity(0.25)
+    }
+}
+
+/// Pills and the round buttons press in slightly, so a tap on this busy strip is felt.
+struct WeekPillButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
