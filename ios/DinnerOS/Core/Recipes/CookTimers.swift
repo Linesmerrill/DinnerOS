@@ -213,7 +213,7 @@ final class CookTimers {
         timers[i].state = .finished
         watchers[id] = nil
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        alarm.ring()
+        alarm.ring(CookTone.for(label: timers[i].label))
         if announce { shared(id) }
     }
 
@@ -253,7 +253,7 @@ final class CookTimers {
         let content = UNMutableNotificationContent()
         content.title = String(localized: "Timer done")
         content.body = timer.label
-        content.sound = .default
+        content.sound = CookTone.for(label: timer.label).notificationSound
         content.interruptionLevel = .timeSensitive
         let request = UNNotificationRequest(
             identifier: timer.id.uuidString, content: content,

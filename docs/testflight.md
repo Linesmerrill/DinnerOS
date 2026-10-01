@@ -16,7 +16,8 @@ list, and keep track of what's already in the pantry.
   to any recipe online.
 - Plan a few dinners for this week (or let Autopilot suggest a week) and check
   the grocery list makes sense.
-- Cook one with the cooking screen: are the amounts and steps right?
+- Cook one with the cooking screen: are the amounts and steps right? Tap a
+  time to start a timer; cookies and chicken each ring their own tune.
 - Invite someone to your household (Household → Invite Someone).
 - Anything confusing, broken, or slow: take a screenshot and tap Share Beta
   Feedback. Household → Feedback & Bugs explains how.

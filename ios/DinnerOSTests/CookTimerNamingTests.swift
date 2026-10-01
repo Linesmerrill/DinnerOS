@@ -24,9 +24,21 @@ struct CookTimerNamingTests {
         #expect(CookTimerSubject.noun(in: "Add the ricotta, ") == nil)
     }
 
-    @Test func theChimeIsAPlayableSound() throws {
-        let player = try AVAudioPlayer(data: CookAlarm.chime)
-        #expect(player.duration > 2 && player.duration < 3)
+    @Test func everyToneIsAPlayableSound() throws {
+        for tone in CookTone.allCases {
+            let player = try AVAudioPlayer(data: tone.data)
+            #expect(player.duration > 2 && player.duration < 3.5, "\(tone)")
+        }
+    }
+
+    @Test func whatsTimedPicksTheTone() {
+        #expect(CookTone.for(label: "Chocolate Chip Cookies") == .muffinMan)
+        #expect(CookTone.for(label: "Blueberry Muffins") == .muffinMan)
+        #expect(CookTone.for(label: "Organic Chicken Cutlets") == .quest)
+        #expect(CookTone.for(label: "Zucchini") == .chime)
+        #expect(CookTone.for(label: "Step 2") == .chime)
+        // A word inside another word doesn't count.
+        #expect(CookTone.for(label: "Pancakes") == .chime)
     }
 }
 
