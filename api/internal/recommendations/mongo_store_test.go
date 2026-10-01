@@ -185,3 +185,35 @@ func TestIntegrationStoreProposalsAndOverrides(t *testing.T) {
 		t.Errorf("GetOverride() = %+v, %v", got, err)
 	}
 }
+
+func TestIntegrationSavedProposalReadsInTodaysWords(t *testing.T) {
+	store, _ := newTestMongoStore(t)
+	ctx := context.Background()
+	hh := bson.NewObjectID().Hex()
+	p := Proposal{
+		ID: newID(), HouseholdID: hh, Week: testWeek, Status: StatusProposed, Attempt: 1, ModelVersion: "baseline-2026.8",
+		Slots: []Slot{{
+			ID: "wed", Day: "wed", RecipeID: rTenderloin, RecipeName: "Moo Shu Pork Bowls", Servings: 2,
+			Reasons: []Reason{
+				{Code: "familiar", Text: "A household regular (14 times)"},
+				{Code: "learnedTaste", Text: "Lately you favor Pork"},
+				{Code: "calendar", Text: "Fits the 240 min you have free Wednesday"},
+			},
+		}},
+		GeneratedBy: userAda, GeneratedAt: testNow, UpdatedAt: testNow,
+	}
+	if _, err := store.SaveProposal(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.GetProposal(ctx, hh, testWeek)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Reason{
+		{Code: "familiar", Text: "A household regular (14 times)"},
+		{Code: "learnedTaste", Text: "You've been choosing more pork lately"},
+	}
+	if !reflect.DeepEqual(got.Slots[0].Reasons, want) {
+		t.Errorf("reasons = %+v, want %+v", got.Slots[0].Reasons, want)
+	}
+}

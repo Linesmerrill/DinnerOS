@@ -444,7 +444,9 @@ func (d proposalDoc) toProposal() Proposal {
 			SwapCount: sd.SwapCount,
 		}
 		for _, r := range sd.Reasons {
-			s.Reasons = append(s.Reasons, Reason{Code: r.Code, Text: r.Text})
+			if reason, keep := currentReason(Reason{Code: r.Code, Text: r.Text}); keep {
+				s.Reasons = append(s.Reasons, reason)
+			}
 		}
 		for _, b := range sd.Badges {
 			s.Badges = append(s.Badges, Badge(b))
