@@ -165,6 +165,23 @@ final class CookTimers {
         shared(id)
     }
 
+    /// Takes a minute off, for a timer set too long. Not offered with a minute or less left: the
+    /// timer would just finish.
+    func removeMinute(_ id: UUID) {
+        guard let i = index(id) else { return }
+        let timer = timers[i]
+        let remaining = timer.remaining(at: now()) - 60
+        guard remaining > 0 else { return }
+        timers[i] = CookTimer(
+            id: timer.id, label: timer.label, total: max(60, timer.total - 60),
+            state: {
+                if case .paused = timer.state { return .paused(remaining: remaining) }
+                return .running(endsAt: now().addingTimeInterval(remaining))
+            }())
+        if case .running = timers[i].state { watch(timers[i]) }
+        shared(id)
+    }
+
     /// Moves a timer to where another one is, for reordering the dock by dragging.
     func move(_ id: UUID, to target: UUID) {
         guard id != target, let from = index(id), let to = index(target) else { return }

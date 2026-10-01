@@ -34,7 +34,7 @@ struct CookTimerDock: View {
     }
 }
 
-/// One timer. Collapsed it's a pill; tapped, it shows pause, a minute more, and stop. Finished,
+/// One timer. Collapsed it's a pill; tapped, it shows pause, a minute less or more, and stop. Finished,
 /// it fills green and asks to be stopped.
 struct CookTimerChip: View {
     let timer: CookTimer
@@ -92,6 +92,12 @@ struct CookTimerChip: View {
                     .strokeBorder(isFinished ? Color.clear : Color.primary.opacity(0.08))
             )
             .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+            // A tap anywhere on an open timer, outside its buttons, folds it back up.
+            .contentShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+            .onTapGesture {
+                guard isOpen, !isFinished else { return }
+                withAnimation(.snappy(duration: 0.25)) { isOpen = false }
+            }
             .scaleEffect(isFinished && pulse && !reduceMotion ? 1.04 : 1)
         }
         .onChange(of: isFinished, initial: true) { _, finished in
@@ -133,25 +139,38 @@ struct CookTimerChip: View {
     private var controls: some View {
         HStack(spacing: 8) {
             if !isFinished {
-                controlButton(isPaused ? "Resume" : "Pause", systemImage: isPaused ? "play.fill" : "pause.fill") {
+                // Pause and Cancel go to icons on a running timer so the minute buttons fit.
+                controlButton(
+                    isPaused ? "Resume" : "Pause", systemImage: isPaused ? "play.fill" : "pause.fill", iconOnly: true
+                ) {
                     if isPaused { timers.resume(timer.id) } else { timers.pause(timer.id) }
                 }
+            }
+            if !isFinished {
+                controlButton("1 Min", systemImage: "minus") {
+                    timers.removeMinute(timer.id)
+                }
+                .disabled(timer.remaining(at: .now) <= 60)
+                .opacity(timer.remaining(at: .now) <= 60 ? 0.4 : 1)
+                .accessibilityLabel(Text("One minute less"))
             }
             controlButton("1 Min", systemImage: "plus") {
                 timers.addMinute(timer.id)
             }
-            controlButton(isFinished ? "Stop" : "Cancel", systemImage: "xmark") {
+            .accessibilityLabel(Text("One minute more"))
+            controlButton(isFinished ? "Stop" : "Cancel", systemImage: "xmark", iconOnly: !isFinished) {
                 withAnimation(.snappy(duration: 0.25)) { timers.remove(timer.id) }
             }
         }
         .padding(.leading, 8)
     }
 
-    private func controlButton(_ title: LocalizedStringKey, systemImage: String, action: @escaping () -> Void)
-        -> some View
-    {
+    private func controlButton(
+        _ title: LocalizedStringKey, systemImage: String, iconOnly: Bool = false, action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
+                .labelStyle(CookTimerLabelStyle(iconOnly: iconOnly))
                 .font(.subheadline.weight(.semibold))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
@@ -169,6 +188,19 @@ struct CookTimerChip: View {
         return isPaused
             ? String(localized: "\(timer.label) timer paused, \(left) left")
             : String(localized: "\(timer.label) timer, \(left) left")
+    }
+}
+
+/// A control's label: the icon and title, or just the icon (the title is still spoken).
+struct CookTimerLabelStyle: LabelStyle {
+    let iconOnly: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        if iconOnly {
+            Label(configuration).labelStyle(.iconOnly)
+        } else {
+            Label(configuration)
+        }
     }
 }
 

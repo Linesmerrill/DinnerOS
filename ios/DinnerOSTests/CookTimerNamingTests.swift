@@ -45,6 +45,28 @@ struct CookTimerOrderTests {
     }
 }
 
+@MainActor
+struct CookTimerMinuteTests {
+    @Test func aMinuteComesOffButNeverFinishesTheTimer() {
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        let timers = CookTimers(now: { clock })
+        let t = timers.start(label: "Veggies", seconds: 300)
+        timers.removeMinute(t.id)
+        #expect(timers.timers[0].remaining(at: clock) == 240)
+        #expect(timers.timers[0].total == 240)
+        // With a minute or less left, taking one off does nothing.
+        clock = clock.addingTimeInterval(190)
+        timers.removeMinute(t.id)
+        #expect(timers.timers[0].remaining(at: clock) == 50)
+        // Paused, the minute comes off what's left.
+        timers.addMinute(t.id)
+        timers.pause(t.id)
+        timers.removeMinute(t.id)
+        #expect(timers.timers[0].remaining(at: clock) == 50)
+        timers.removeAll()
+    }
+}
+
 struct CookTimerSubjectTests {
     @Test func namesTheCookingNotTheSeasoning() {
         let names = ["Ground Beef", "Salt", "Shallot", "Rigatoni Pasta"]
