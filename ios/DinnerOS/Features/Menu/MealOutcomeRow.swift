@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// "Did you make it?" with Cooked and Skip on a meal whose night has passed.
+/// "Did you make it?" with Cooked and Skip on a planned meal.
 ///
 /// Marking a meal cooked or skipped already existed, in a `MealCard` long-press menu and a
 /// `WeekView` swipe, and nothing on screen said so: the household has three cooked events and no
@@ -8,10 +8,9 @@ import SwiftUI
 /// scoring, and cooked is what deducts the pantry — so an unrecorded night is a real loss, not a
 /// tidiness problem.
 ///
-/// This asks on the card the meal is already showing on, at the same moment the stars ask how it
-/// was, and only about a night that has actually happened (`MealFeedback.hasHappened`, the caller's
-/// gate). Nothing here infers an answer: a week going by never marks a meal cooked, and neither
-/// does rating it. The row simply disappears once it has been answered — the photo already carries
+/// This asks on the card the meal is already showing on, beside the stars that ask how it was, on
+/// any day: a household often cooks Thursday's meal on Tuesday. Nothing here infers an answer: a
+/// week going by never marks a meal cooked, and neither does rating it. The row simply disappears once it has been answered — the photo already carries
 /// the badge — so it can't become a thing that nags.
 struct MealOutcomeRow: View {
     let entry: PlanEntry
