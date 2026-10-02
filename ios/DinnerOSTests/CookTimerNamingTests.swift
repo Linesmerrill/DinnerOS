@@ -34,7 +34,7 @@ struct CookTimerNamingTests {
     @Test func whatsTimedPicksTheTone() {
         #expect(CookTone.for(label: "Chocolate Chip Cookies") == .muffinMan)
         #expect(CookTone.for(label: "Blueberry Muffins") == .muffinMan)
-        #expect(CookTone.for(label: "Organic Chicken Cutlets") == .quest)
+        #expect(CookTone.for(label: "Organic Chicken Cutlets") == .chime)
         #expect(CookTone.for(label: "Zucchini") == .chime)
         #expect(CookTone.for(label: "Step 2") == .chime)
         // A word inside another word doesn't count.

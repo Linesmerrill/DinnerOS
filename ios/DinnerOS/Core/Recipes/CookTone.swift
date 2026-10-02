@@ -2,16 +2,15 @@ import Foundation
 import UserNotifications
 
 /// The sound a finished timer rings, picked by what it's timing: cookies play The Muffin Man,
-/// chicken a short adventure fanfare, everything else the kitchen chime. All are made in code in
+/// everything else the kitchen chime. All are made in code in
 /// the same soft style, so there's no audio file to ship.
 nonisolated enum CookTone: String, CaseIterable, Sendable {
     case chime
     case muffinMan
-    case quest
 
     /// Words in a timer's name that pick a tone ("Chocolate Chip Cookies" → The Muffin Man).
     private static let words: [String: CookTone] = {
-        var words: [String: CookTone] = ["chicken": .quest]
+        var words: [String: CookTone] = [:]
         for bake in [
             "cookie", "muffin", "cupcake", "brownie", "blondie", "cake", "biscuit", "scone", "shortbread",
         ] {
@@ -31,7 +30,6 @@ nonisolated enum CookTone: String, CaseIterable, Sendable {
         switch self {
         case .chime: Self.chimeData
         case .muffinMan: Self.muffinManData
-        case .quest: Self.questData
         }
     }
 
@@ -78,19 +76,6 @@ nonisolated enum CookTone: String, CaseIterable, Sendable {
         song.mallet(g5, at: 1.40, length: 1.4, bright: true)  // "man", left to ring
         return song.wav
     }()
-
-    /// An original fanfare on a breathy, ocarina-like voice: a leap up a fifth, a quick climb, and
-    /// a held top note, the sound of finding something in a dungeon. About 2.9 seconds, looped.
-    private static let questData: Data = {
-        var song = Song(seconds: 2.9)
-        song.ocarina(523.25, at: 0, length: 0.16)  // C5
-        song.ocarina(783.99, at: 0.2, length: 0.5)  // G5
-        song.ocarina(698.46, at: 0.75, length: 0.14)  // F5
-        song.ocarina(783.99, at: 0.92, length: 0.14)  // G5
-        song.ocarina(880.0, at: 1.09, length: 0.14)  // A5
-        song.ocarina(1046.5, at: 1.26, length: 1.0)  // C6, held
-        return song.wav
-    }()
 }
 
 /// A few seconds of mono 16-bit audio built note by note.
@@ -118,20 +103,6 @@ private nonisolated struct Song {
             var wave = sin(2 * .pi * frequency * t) + 0.25 * sin(2 * .pi * frequency * 2 * t)
             if bright { wave += 0.08 * sin(2 * .pi * frequency * 3 * t) }
             return wave * attack * decay * 0.28
-        }
-    }
-
-    /// A blown note: a round sine with a little second harmonic, a soft 30 ms swell, a gentle
-    /// vibrato once it's held, and a short fade at the end.
-    mutating func ocarina(_ frequency: Double, at start: Double, length: Double) {
-        let release = 0.08
-        add(at: start, length: length + release) { t in
-            let swell = min(1, t / 0.03)
-            let fade = t > length ? max(0, 1 - (t - length) / release) : 1
-            let vibrato = t > 0.15 ? 0.004 * sin(2 * .pi * 5 * t) : 0
-            let phase = 2 * .pi * frequency * t * (1 + vibrato)
-            let wave = sin(phase) + 0.12 * sin(2 * phase)
-            return wave * swell * fade * 0.3
         }
     }
 
