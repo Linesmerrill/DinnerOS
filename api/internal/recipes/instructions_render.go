@@ -242,6 +242,8 @@ var relativeWords = []string{
 	"remaining", "rest of the", "rest of", "reserved",
 	// "Add more chili flakes if you like": to taste, not a measure.
 	"add more", "more",
+	// "as many chili flakes as you like": the cook decides.
+	"as many", "as much",
 	// "lightly oil a baking sheet": oil as a verb, not an amount of it.
 	"lightly",
 	// "a drizzle of oil": the step says how much, in its own words.

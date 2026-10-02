@@ -348,3 +348,16 @@ func TestALeftOutChiliIsStruckWhereTheStepSaysChili(t *testing.T) {
 		t.Errorf("segments = %+v", segs)
 	}
 }
+
+func TestAsManyAsYouLikeKeepsNoAmount(t *testing.T) {
+	r := instructionRecipe([]RecipeIngredient{
+		instructionLine("", "Sesame Seeds", "1", "tbsp"), instructionLine("", "Chili Flakes", "1", "tsp"),
+	}, "Top with sesame seeds and as many chili flakes as you like.")
+	in := Annotate(r, 2, nil, true)
+	if got := in.Steps[0].Text; got != "Top with 1 Tbsp sesame seeds and as many chili flakes as you like." {
+		t.Errorf("text = %q", got)
+	}
+	for _, f := range CheckSteps(in) {
+		t.Errorf("%s %q", f.Code, f.Detail)
+	}
+}

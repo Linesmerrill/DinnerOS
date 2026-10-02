@@ -56,7 +56,7 @@ var (
 	markupRe       = regexp.MustCompile(`<[a-z/][^>]*>|\w\*|\bTBSP\b|&nbsp;|&amp;`)
 	runTogetherRe  = regexp.MustCompile(`\d-\d{3,}[½¼¾⅓⅔⅛]|\d{2,}[½¼¾⅓⅔⅛]-inch`)
 	// relativeBefore are words that already say how much of an ingredient.
-	relativeBefore = []string{"half the ", "half of the ", "remaining ", "rest of the ", "the rest of ", "all the ", "more ", "some "}
+	relativeBefore = []string{"half the ", "half of the ", "remaining ", "rest of the ", "the rest of ", "all the ", "more ", "some ", "as many ", "as much "}
 )
 
 // alwaysOptional are ingredients cards often list without naming in a step.
