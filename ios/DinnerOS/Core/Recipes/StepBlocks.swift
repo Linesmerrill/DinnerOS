@@ -15,7 +15,7 @@ nonisolated enum StepBlock: Equatable {
 
 nonisolated enum StepBlocks {
     /// A sentence becomes a list once it adds this many things in a row.
-    static let minimumItems = 3
+    static let minimumItems = 2
 
     /// Splits a step's segments into paragraphs: at line breaks and at "•".
     static func paragraphs(_ segments: [InstructionSegment]) -> [[InstructionSegment]] {
@@ -79,7 +79,11 @@ nonisolated enum StepBlocks {
     private static func sentenceEnd(in text: Substring) -> Substring.Index? {
         var i = text.startIndex
         while i < text.endIndex {
-            let next = text.index(after: i)
+            var next = text.index(after: i)
+            // A closing bracket or quote stays with its sentence: "…later.) Season".
+            if ".!?;".contains(text[i]) {
+                while next < text.endIndex, ")\"”’".contains(text[next]) { next = text.index(after: next) }
+            }
             if ".!?;".contains(text[i]), next == text.endIndex || text[next] == " " {
                 var end = next
                 while end < text.endIndex, text[end] == " " { end = text.index(after: end) }
@@ -91,15 +95,21 @@ nonisolated enum StepBlocks {
         return nil
     }
 
-    /// What joins two names in a list: a comma or "and", then at most a few words that belong to the
+    /// What joins two names in a list: a comma, "and", or "with" ("combine sour cream with spice
+    /// blend"), then at most a few words that belong to the
     /// next name ("a pinch of", "juice from", "another large drizzle of").
     private static let joinRe = try? NSRegularExpression(
-        pattern: #"^\s*(?:,\s*(?:(?:and|or)\s+)?|(?:and|or)\s+)((?:[\p{L}’'-]+\s+){0,4})$"#)
+        pattern: #"^\s*(?:,\s*(?:(?:and|or)\s+)?|(?:and|or|with)\s+)((?:[\p{L}’'-]+\s+){0,4})$"#)
 
     /// Words that start a new part of the sentence rather than describe the next name: "and into the
     /// pan with chicken" isn't a list.
     private static let clauseWords: Set<String> = [
         "into", "with", "to", "in", "on", "onto", "over", "then", "until", "for", "the", "your",
+    ]
+
+    /// Words that start a sentence about something other than what goes in.
+    private static let subordinators: Set<String> = [
+        "once", "while", "when", "until", "if", "after", "before", "as", "keep", "meanwhile", "serve",
     ]
 
     private static func join(_ text: String) -> String? {
@@ -134,6 +144,11 @@ nonisolated enum StepBlocks {
         var items: [[InstructionSegment]] = [firstItemWords(&lead) + [sentence[first]]]
         guard lead.contains(where: { !$0.isIngredient && !$0.text.trimmingCharacters(in: .whitespaces).isEmpty })
         else { return nil }
+        // "Once rice and beans are done, stir…" names its subject, not what goes in; and a sentence
+        // that goes on to another clause after the names ("…and pepper, then roast") reads as written.
+        let firstWord = lead.map(\.text).joined().lowercased().split(whereSeparator: { !$0.isLetter }).first
+        let tail = sentence[(last + 1)...].map(\.text).joined()
+        guard firstWord.map({ !subordinators.contains(String($0)) }) ?? false, !tail.contains(",") else { return nil }
         for k in (run.lowerBound + 1)..<run.upperBound {
             let gap = sentence[(names[k - 1] + 1)..<names[k]].map(\.text).joined()
             let words = join(gap) ?? ""

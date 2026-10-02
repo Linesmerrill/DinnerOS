@@ -68,16 +68,51 @@ struct StepBlocksTests {
         #expect(shareItems.map(joined).first == "¼ of the onion")
     }
 
-    @Test func twoThingsOrAListWithNoVerbStayProse() {
-        let two = [text("Add "), ing("bell pepper"), text(" and a big pinch of "), ing("salt"), text(".")]
-        #expect(StepBlocks.blocks(two) == [.prose(two)])
+    @Test func twoThingsAddedTogetherAreAListToo() throws {
+        let pair = [text("Season with "), ing("salt"), text(" and "), ing("pepper"), text(".")]
+        guard case .list(let lead, let items) = StepBlocks.blocks(pair).first else {
+            Issue.record("not a list")
+            return
+        }
+        #expect(joined(lead) == "Season with:")
+        #expect(items.map(joined) == ["salt", "pepper"])
+
+        let with = [
+            text("In a separate small bowl, combine "), ing("¾ cup sour cream"), text(" with "),
+            ing("¾ tsp Southwest Spice Blend"), text("."),
+        ]
+        guard case .list(let withLead, let withItems) = StepBlocks.blocks(with).first else {
+            Issue.record("not a list")
+            return
+        }
+        #expect(joined(withLead) == "In a separate small bowl, combine:")
+        #expect(withItems.count == 2)
+
+        let aside = [
+            text("(You’ll use the remaining "), ing("Spice Blend"), text(" later.) Season with "), ing("salt"),
+            text(" and "), ing("pepper"), text("."),
+        ]
+        let blocks = StepBlocks.blocks(aside)
+        guard blocks.count == 2, case .list(let asideLead, _) = blocks[1] else {
+            Issue.record("blocks = \(blocks)")
+            return
+        }
+        #expect(joined(asideLead) == "Season with:")
+    }
+
+    @Test func aSubjectOrAListWithNoVerbStaysProse() {
+        let subject = [
+            text("Once "), ing("rice"), text(" and "), ing("beans"), text(" are done, stir together."),
+        ]
+        #expect(StepBlocks.blocks(subject) == [.prose(subject)])
+        let goesOn = [text("Toss "), ing("carrots"), text(" and "), ing("oil"), text(", then roast.")]
+        #expect(StepBlocks.blocks(goesOn) == [.prose(goesOn)])
+        let one = [text("Add "), ing("chicken"), text(".")]
+        #expect(StepBlocks.blocks(one) == [.prose(one)])
         let noLead = [ing("Rice"), text(", "), ing("water"), text(", and "), ing("salt"), text(" go in.")]
         #expect(StepBlocks.blocks(noLead) == [.prose(noLead)])
         // Names joined by more than a few words aren't a list.
-        let spread = [
-            text("Toss "), ing("carrots"), text(" with oil, then roast and top with "), ing("feta"), text(", "),
-            ing("dill"), text("."),
-        ]
+        let spread = [text("Toss "), ing("carrots"), text(" in the oven, then top with "), ing("feta"), text(".")]
         #expect(StepBlocks.blocks(spread) == [.prose(spread)])
     }
 
