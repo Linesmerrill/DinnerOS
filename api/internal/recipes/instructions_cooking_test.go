@@ -181,7 +181,7 @@ func TestAnnotateMixesABlendOnceAcrossSteps(t *testing.T) {
 		t.Errorf("step 1 = %q, want %q", got, want)
 	}
 	if n := in.Steps[0].Notes; len(n) != 1 ||
-		n[0].Text != "Instead of 1 Tbsp Southwest Spice Blend, mix 2 tsp Chili Powder and 1 tsp Ground Cumin. Use ¼ tsp here and save the rest." {
+		n[0].Text != "Make 1 Tbsp Southwest Spice Blend: mix 2 tsp Chili Powder and 1 tsp Ground Cumin. Use ¼ tsp here and save the rest." {
 		t.Errorf("step 1 notes = %+v", n)
 	}
 	if n := in.Steps[1].Notes; len(n) != 1 || n[0].Text != "Use the rest of the Southwest Spice Blend you mixed." {

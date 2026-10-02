@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -34,6 +35,13 @@ func TestLibraryScan(t *testing.T) {
 	texts, _ := os.Create(os.Getenv("SCAN_LIB") + ".texts")
 	defer texts.Close()
 	examples := map[string][]string{}
+	// SCAN_LIB.steps.json is every recipe's steps at its smallest size, as the
+	// app receives them, for the app's own scan (StepBlocksLibraryScan).
+	type scannedRecipe struct {
+		Name  string                    `json:"name"`
+		Steps []InstructionStepResponse `json:"steps"`
+	}
+	var scanned []scannedRecipe
 	after := ""
 	for {
 		page, err := store.ListRecipesAfter(ctx, os.Getenv("SCAN_LIB_HOUSEHOLD"), after, 100)
@@ -45,6 +53,9 @@ func TestLibraryScan(t *testing.T) {
 		}
 		for _, r := range page {
 			after = r.ID
+			if len(r.Servings) > 0 {
+				scanned = append(scanned, scannedRecipe{Name: r.Name, Steps: newInstructionsResponse(Annotate(r, smallest(r.Servings), nil, true)).Steps})
+			}
 			for _, n := range r.Servings {
 				in := Annotate(r, n, nil, true)
 				for _, st := range in.Steps {
@@ -63,6 +74,9 @@ func TestLibraryScan(t *testing.T) {
 				}
 			}
 		}
+	}
+	if data, err := json.Marshal(scanned); err == nil {
+		_ = os.WriteFile(os.Getenv("SCAN_LIB")+".steps.json", data, 0o600)
 	}
 	var codes []string
 	for k := range counts {

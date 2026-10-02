@@ -741,7 +741,13 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 				// An earlier step said how to mix it all.
 				note = "Use the rest of the " + m.specialtyName + " you mixed."
 			case mixed && part && amount != nil:
-				// Mix it all now, since a later step uses the rest.
+				// Mix it all now, since a later step uses the rest. "Instead
+				// of 3 Tbsp" beside a step that adds ¾ tsp read as a
+				// contradiction, so the note says what it makes, then what
+				// this step uses.
+				if rest, ok := strings.CutPrefix(note, "Instead of "); ok {
+					note = "Make " + strings.Replace(rest, ", mix ", ": mix ", 1)
+				}
 				note += " Use " + amount.Text() + " here and save the rest."
 			}
 			if m.specialtyID != "" && amounts.notedBefore != nil {
