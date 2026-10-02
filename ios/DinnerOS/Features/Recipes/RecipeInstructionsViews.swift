@@ -18,44 +18,57 @@ struct InstructionStepText: View {
     var showsTimers = false
 
     var body: some View {
-        // A step that is really several ("Heat the oil. \n Stir in the garlic.") reads as
-        // separate paragraphs with space between them, not one block.
+        // A step that is really several ("Heat the oil. • Stir in the garlic.") reads as separate
+        // paragraphs, and a sentence that adds several things at once as a list under its verb.
         VStack(alignment: .leading, spacing: 10) {
-            let paragraphs = paragraphs
-            ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
-                composed(paragraph, timersBefore: timerCount(in: paragraphs.prefix(index)))
-                    .fixedSize(horizontal: false, vertical: true)
+            ForEach(Array(runs.enumerated()), id: \.offset) { _, run in
+                switch run.block {
+                case .prose(let segments):
+                    composed(segments, timersBefore: run.timersBefore)
+                        .fixedSize(horizontal: false, vertical: true)
+                case .list(let lead, let items):
+                    StepIngredientGroup(
+                        lead: composed(lead, timersBefore: run.timersBefore),
+                        items: items.map(Self.itemText))
+                }
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(step.spokenText))
     }
 
-    /// The step's segments split at line breaks, blank paragraphs dropped.
-    private var paragraphs: [[InstructionSegment]] {
+    /// The step's blocks in reading order, each with how many times came before it, so each
+    /// block's times line up with the server's timers for the step.
+    private var runs: [(block: StepBlock, timersBefore: Int)] {
         let segments = step.segments.isEmpty ? [InstructionSegment(kind: .text, text: step.text)] : step.segments
-        var out: [[InstructionSegment]] = [[]]
-        for segment in segments {
-            guard !segment.isIngredient, segment.text.contains("\n") else {
-                out[out.count - 1].append(segment)
-                continue
-            }
-            let pieces = segment.text.components(separatedBy: "\n")
-            for (i, piece) in pieces.enumerated() {
-                if i > 0 { out.append([]) }
-                let text = i > 0 ? String(piece.drop { $0 == " " }) : piece
-                if !text.isEmpty { out[out.count - 1].append(InstructionSegment(kind: .text, text: text)) }
+        var out: [(block: StepBlock, timersBefore: Int)] = []
+        var timers = 0
+        for block in StepBlocks.paragraphs(segments).flatMap(StepBlocks.blocks) {
+            out.append((block, timers))
+            switch block {
+            case .prose(let segments): timers += Self.timerCount(in: segments)
+            case .list(let lead, let items): timers += Self.timerCount(in: lead + items.flatMap { $0 })
             }
         }
-        return out.filter { paragraph in
-            paragraph.contains { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
-        }
+        return out
     }
 
-    /// How many times the paragraphs' text names, so each paragraph's times line up with the
-    /// server's timers for the step.
-    private func timerCount(in paragraphs: ArraySlice<[InstructionSegment]>) -> Int {
-        paragraphs.joined().filter { !$0.isIngredient }.reduce(0) { $0 + CookDurations.find(in: $1.text).count }
+    /// How many times the segments' text names.
+    private static func timerCount(in segments: [InstructionSegment]) -> Int {
+        segments.filter { !$0.isIngredient }.reduce(0) { $0 + CookDurations.find(in: $1.text).count }
+    }
+
+    /// One thing a list adds: its amount quiet, its name bold ("½ cup" rice), with any words
+    /// before it ("a pinch of") as written.
+    static func itemText(_ segments: [InstructionSegment]) -> Text {
+        segments.reduce(Text(verbatim: "")) { text, segment in
+            guard segment.isIngredient, !segment.leftOut, !segment.spicy, let amount = segment.amount?.text,
+                segment.text.hasPrefix(amount + " ")
+            else { return text + Self.text(for: segment) }
+            return text
+                + Text(verbatim: amount + "\u{00A0}").foregroundStyle(Color.secondary)
+                + Text(verbatim: String(segment.text.dropFirst(amount.count + 1))).fontWeight(.semibold)
+        }
     }
 
     /// `Text` concatenation keeps one paragraph that wraps and scales with Dynamic Type.
@@ -107,6 +120,47 @@ struct InstructionStepText: View {
         return Text(Image(systemName: "flame.fill")).foregroundStyle(Color.spicyIngredient)
             + Text(verbatim: "\u{2009}")
             + named.foregroundStyle(Color.spicyIngredient)
+    }
+}
+
+/// "Combine:" and what goes in, indented under a thin rule like the ingredient list's tree lines:
+/// two columns on a phone, three with room to spare, one at the largest text sizes, so the list
+/// stays short instead of running across the page.
+struct StepIngredientGroup: View {
+    let lead: Text
+    let items: [Text]
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    private var columns: Int {
+        if dynamicTypeSize.isAccessibilitySize { return 1 }
+        return sizeClass == .regular ? 3 : 2
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            lead
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .top, spacing: 12) {
+                Capsule()
+                    .fill(Color.accentColor.opacity(0.5))
+                    .frame(width: 2)
+                Grid(alignment: .topLeading, horizontalSpacing: 14, verticalSpacing: 6) {
+                    ForEach(Array(stride(from: 0, to: items.count, by: columns)), id: \.self) { start in
+                        GridRow {
+                            ForEach(start..<min(start + columns, items.count), id: \.self) { i in
+                                items[i]
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.leading, 4)
+        }
     }
 }
 

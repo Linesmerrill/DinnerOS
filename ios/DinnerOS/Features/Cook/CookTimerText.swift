@@ -17,20 +17,25 @@ enum CookTimerText {
         var cursor = string.startIndex
         for duration in durations {
             out = out + Text(verbatim: String(string[cursor..<duration.range.lowerBound]))
-            var link = AttributedString(String(string[duration.range]))
+            // The stopwatch is part of the link and nothing in it can break, so a time that wraps
+            // moves to the next line whole and any of the green is a tap target.
+            let written = String(string[duration.range])
+            var glyph = AttributedString("\u{23F1}\u{FE0E}")
+            glyph.font = .title2.weight(.black)
+            var link =
+                glyph
+                + AttributedString(
+                    "\u{00A0}"
+                        + written.replacingOccurrences(of: " ", with: "\u{00A0}").replacingOccurrences(
+                            of: "-", with: "\u{2011}"))
             let before = String(string[string.startIndex..<duration.range.lowerBound])
-            if let timer = server(duration, String(string[duration.range])) {
+            if let timer = server(duration, written) {
                 link.link = url(step: step, duration: duration, subject: timer.subject, start: timer.startSeconds)
             } else {
                 link.link = url(step: step, duration: duration, subject: subject(before))
             }
             link.foregroundColor = .accentColor
-            link.font = .body.bold()
-            out =
-                out
-                + Text(Image(systemName: "timer")).foregroundStyle(Color.accentColor).fontWeight(.semibold)
-                + Text(verbatim: "\u{2009}")
-                + Text(link).fontWeight(.bold)
+            out = out + Text(link).fontWeight(.bold)
             cursor = duration.range.upperBound
         }
         return out + Text(verbatim: String(string[cursor...]))
