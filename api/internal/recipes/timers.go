@@ -107,6 +107,9 @@ var meatRe = regexp.MustCompile(`\bmeat\b`)
 // such one before the time.
 func timerSubject(before string, ingredients []string) string {
 	sentence := lastSentence(before)
+	if heatsPan(sentence) {
+		return heatPanSubject
+	}
 	lower := strings.ToLower(sentence)
 	var cooking []string
 	for _, name := range ingredients {

@@ -634,7 +634,7 @@ func AnnotateMeal(r Recipe, servings int, specs grocery.Specialties, applied boo
 		notedBefore: map[string]bool{}, seen: map[int]bool{}, home: home,
 	}
 	for _, step := range r.Steps {
-		st := renderStep(step, mentions, amounts)
+		st := withHeatTimer(renderStep(step, mentions, amounts))
 		var names []string
 		for _, seg := range st.Segments {
 			if seg.Kind == SegmentIngredient {
