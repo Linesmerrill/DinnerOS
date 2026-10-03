@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UIKit
 
 @testable import DinnerOS
 
@@ -391,5 +392,29 @@ struct OrderConfirmationGroupsTests {
             of: #""cart":null}"#, with: #""cart":null,"recipes":[{"id":"r-tacos","name":"Tacos"}]}"#)
         let line = try decoder.decode(ShoppingHandoffLine.self, from: Data(withRecipes.utf8))
         #expect(line.recipes == [GroceryRecipe(id: "r-tacos", name: "Tacos")])
+    }
+
+    /// Walmart copies "whatDoYouThink" and the link as separate clipboard items; the link wins
+    /// whichever order they come in, and nothing at all is better than the message alone.
+    @Test func pasteKeepsTheLinkFromAnyClipboardItem() {
+        let link = "https://www.walmart.com/ip/51259215"
+        #expect(ProductLink.pasted(["whatDoYouThink", link]) == link)
+        #expect(ProductLink.pasted([link, "whatDoYouThink"]) == link)
+        #expect(ProductLink.pasted(["whatDoYouThink \(link)?sid=abc"])?.hasPrefix(link) == true)
+        #expect(ProductLink.pasted(["  ", "51259215"]) == "51259215")
+        #expect(ProductLink.pasted(["whatDoYouThink"]) == "whatDoYouThink")
+        #expect(ProductLink.pasted([]) == nil)
+    }
+
+    /// The real clipboard, set the way Walmart's share sheet sets it: the message and the link as
+    /// two items. Reading only `string` gave "whatDoYouThink".
+    @MainActor @Test func theClipboardsSecondItemsLinkIsFound() throws {
+        let board = UIPasteboard.general
+        let saved = board.items
+        defer { board.items = saved }
+        let link = try #require(URL(string: "https://www.walmart.com/ip/51259215"))
+        board.items = [["public.utf8-plain-text": "whatDoYouThink"], ["public.url": link]]
+        #expect(board.string == "whatDoYouThink")
+        #expect(ProductLink.pasted(ChooseProductSheet.clipboardPieces()) == link.absoluteString)
     }
 }

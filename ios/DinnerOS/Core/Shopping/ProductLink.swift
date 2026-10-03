@@ -21,6 +21,16 @@ nonisolated enum ProductLink {
         return nil
     }
 
+    /// What to keep from everything on the clipboard: the first piece with a link in it, else the
+    /// first piece at all. Walmart's share sheet copies its "whatDoYouThink" message and the link
+    /// as separate items, so the link is often not the first string.
+    static func pasted(_ pieces: [String]) -> String? {
+        let pieces = pieces.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        if let withLink = pieces.lazy.compactMap({ firstURL(in: $0) }).first { return withLink }
+        if let withItem = pieces.first(where: { itemID(in: $0) != nil }) { return withItem }
+        return pieces.first
+    }
+
     /// A bare Walmart item ID: 5 to 15 digits and nothing else.
     static func itemID(in text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)

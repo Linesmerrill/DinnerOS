@@ -254,6 +254,17 @@ struct ChooseProductSheet: View {
                 // its own onChange, so the pasted preamble would stay on screen.
                 Task { @MainActor in
                     draft.trimLinkToURL()
+                    // The field's own Paste puts in only the clipboard's first item, which from
+                    // Walmart is "whatDoYouThink" without the link; the link is in another item.
+                    if draft.product == nil, !draft.linkText.isEmpty, UIPasteboard.general.hasURLs,
+                        let link = ProductLink.pasted(Self.clipboardPieces()), ProductLink.firstURL(in: link) != nil,
+                        UIPasteboard.general.strings?.contains(where: {
+                            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                                == draft.linkText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        }) == true
+                    {
+                        draft.linkText = link
+                    }
                     draft.fillNameFromLink()
                 }
             }
@@ -261,8 +272,7 @@ struct ChooseProductSheet: View {
             // String-only PasteButton treats as nothing to paste and shows disabled. Reading
             // the pasteboard here shows iOS's one-time "Allow Paste" prompt instead.
             Button("Paste", systemImage: "doc.on.clipboard") {
-                let board = UIPasteboard.general
-                paste([board.url?.absoluteString, board.string].compactMap { $0 })
+                paste(Self.clipboardPieces())
             }
             if let error = draft.linkError {
                 FormErrorLabel(message: error)
@@ -339,12 +349,17 @@ struct ChooseProductSheet: View {
         }
     }
 
-    private func paste(_ strings: [String]) {
-        // The text form first: Walmart puts the link and its "whatDoYouThink" preamble there,
-        // and some apps set only `url`. Either way the link inside is what's kept.
-        guard let text = strings.first(where: { ProductLink.firstURL(in: $0) != nil }) ?? strings.first else { return }
-        draft.linkText = ProductLink.firstURL(in: text) ?? text.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func paste(_ pieces: [String]) {
+        guard let text = ProductLink.pasted(pieces) else { return }
+        draft.linkText = text
         draft.fillNameFromLink()
+    }
+
+    /// Every link and string on the clipboard, across all its items: Walmart copies its
+    /// "whatDoYouThink" message and the link as separate items, and `url`/`string` read only the first.
+    static func clipboardPieces() -> [String] {
+        let board = UIPasteboard.general
+        return (board.urls ?? []).map(\.absoluteString) + (board.strings ?? [])
     }
 
     private func save() {
