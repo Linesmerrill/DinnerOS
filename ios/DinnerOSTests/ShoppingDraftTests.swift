@@ -409,12 +409,13 @@ struct OrderConfirmationGroupsTests {
     /// The real clipboard, set the way Walmart's share sheet sets it: the message and the link as
     /// two items. Reading only `string` gave "whatDoYouThink".
     @MainActor @Test func theClipboardsSecondItemsLinkIsFound() throws {
-        let board = UIPasteboard.general
-        let saved = board.items
-        defer { board.items = saved }
+        // A private, named pasteboard: reading the general one when another app wrote it shows
+        // iOS's paste prompt, which no one answers in a test run and every later test waits on.
+        let board = try #require(UIPasteboard(name: UIPasteboard.Name("DinnerOSTests.paste"), create: true))
+        defer { UIPasteboard.remove(withName: board.name) }
         let link = try #require(URL(string: "https://www.walmart.com/ip/51259215"))
         board.items = [["public.utf8-plain-text": "whatDoYouThink"], ["public.url": link]]
         #expect(board.string == "whatDoYouThink")
-        #expect(ProductLink.pasted(ChooseProductSheet.clipboardPieces()) == link.absoluteString)
+        #expect(ProductLink.pasted(ChooseProductSheet.clipboardPieces(board)) == link.absoluteString)
     }
 }

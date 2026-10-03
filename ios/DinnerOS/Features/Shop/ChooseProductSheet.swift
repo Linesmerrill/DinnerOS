@@ -357,9 +357,8 @@ struct ChooseProductSheet: View {
 
     /// Every link and string on the clipboard, across all its items: Walmart copies its
     /// "whatDoYouThink" message and the link as separate items, and `url`/`string` read only the first.
-    static func clipboardPieces() -> [String] {
-        let board = UIPasteboard.general
-        return (board.urls ?? []).map(\.absoluteString) + (board.strings ?? [])
+    static func clipboardPieces(_ board: UIPasteboard = .general) -> [String] {
+        (board.urls ?? []).map(\.absoluteString) + (board.strings ?? [])
     }
 
     private func save() {

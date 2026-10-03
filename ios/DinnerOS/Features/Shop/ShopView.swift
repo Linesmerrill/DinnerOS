@@ -401,8 +401,9 @@ private struct ShopWeekList: View {
         .padding(.leading, inComponent ? 12 : 0)
     }
 
-    /// "Remove from the list": out of this meal only, for this week, or always. `nil` when this
-    /// member can't, or for a pairing, which is removed from the grocery list instead.
+    /// "Remove": off the list (have it this week, always have it) or out of the recipe (this meal,
+    /// every recipe). `nil` when this member can't, or for a pairing, which is removed from the
+    /// grocery list instead.
     private func removeOptions(for row: ShopMealLayout.Row, in group: ShopMealLayout.Group) -> ShopRemoveOptions? {
         guard canLeaveOut, !row.isLeftOut, row.share?.extra != true else { return nil }
         let name = row.name
@@ -418,6 +419,15 @@ private struct ShopWeekList: View {
             leaveOut(
                 GrocerySkipRequest(ingredientKey: key, name: name, scope: .week, week: shopping.week.description),
                 key: key, rowID: row.id)
+        }
+        options.alwaysHave = {
+            change(rowID: row.id, keys: [key]) {
+                // The pantry may not be open yet this session (its tab never visited).
+                if let householdID = shopping.householdID, pantry.householdID != householdID {
+                    await pantry.activate(householdID: householdID)
+                }
+                _ = try await pantry.add(ShopRemoveOptions.staple(name: name))
+            }
         }
         options.always = {
             leaveOut(.always(ingredientKey: key, name: name), key: key, rowID: row.id)
@@ -890,13 +900,22 @@ private struct ShopMealHeader: View {
     }
 }
 
-/// What "Remove" offers for a line under a meal.
+/// What "Remove" offers for a line under a meal: off the list (have it this week, always have it)
+/// or out of the recipe (this meal, every recipe).
 struct ShopRemoveOptions {
+    /// The pantry staple "Always Have It" adds: in stock, by name, which the pantry matches to the
+    /// catalog itself (a shop line's key isn't always a catalog ingredient ID).
+    static func staple(name: String) -> NewPantryItem {
+        NewPantryItem(name: name, status: .inStock, isStaple: true)
+    }
+
     let name: String
     var mealName: String?
     /// Leaves it out of this meal only; `nil` when it can't be (a pairing, a shared batch).
     var justThisMeal: (() -> Void)?
     var thisWeek: () -> Void
+    /// Adds it to the pantry as a staple, so it stays off every list until it runs low.
+    var alwaysHave: (() -> Void)? = nil
     var always: () -> Void
 }
 
@@ -904,12 +923,19 @@ private struct ShopRemoveMenuItems: View {
     let options: ShopRemoveOptions
 
     var body: some View {
-        Section("Remove \(options.name)") {
+        // Off the list only: the recipe still calls for it, with its amount.
+        Section("Already Have It") {
+            Button("Have It This Week", systemImage: "checkmark.circle", action: options.thisWeek)
+            if let alwaysHave = options.alwaysHave {
+                Button("Always Have It", systemImage: "cabinet", action: alwaysHave)
+            }
+        }
+        // Out of the dish itself: crossed out in its steps too.
+        Section("Leave Out of the Recipe") {
             if let justThisMeal = options.justThisMeal, let meal = options.mealName {
                 Button("Just for \(meal)", systemImage: "fork.knife", action: justThisMeal)
             }
-            Button("Just This Week", systemImage: "calendar", action: options.thisWeek)
-            Button("Always", systemImage: "nosign", action: options.always)
+            Button("Every Recipe", systemImage: "nosign", action: options.always)
         }
     }
 }

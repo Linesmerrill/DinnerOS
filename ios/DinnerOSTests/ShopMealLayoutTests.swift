@@ -174,3 +174,15 @@ struct ShopMealLayoutTests {
         #expect(line.holdingSkips(in: skips).map(\.id) == ["s-crema"])
     }
 }
+
+/// "Always Have It" adds a pantry staple: in stock, by name, so the line leaves the list without
+/// leaving the recipe.
+struct ShopAlwaysHaveTests {
+    @Test func aLineBecomesAStapleByName() {
+        let item = ShopRemoveOptions.staple(name: "Dried Thyme")
+        #expect(item.ingredientID == nil)
+        #expect(item.name == "Dried Thyme")
+        #expect(item.isStaple == true)
+        #expect(item.status == .inStock)
+    }
+}
