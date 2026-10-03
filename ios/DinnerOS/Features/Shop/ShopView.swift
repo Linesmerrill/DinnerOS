@@ -149,6 +149,8 @@ private struct ShopWeekList: View {
     @State private var showsLeftOut = false
     /// Lines with a leave-out or put-back in flight, by row ID.
     @State private var working: Set<String> = []
+    /// The lines to choose for in Walmart, while that screen is open.
+    @State private var walmartChoices: WalmartChoices?
     @State private var leaveOutError: String?
     /// The skip revision this list already re-matched for, so its own changes don't match twice.
     @State private var handledSkipRevision: Int?
@@ -280,6 +282,25 @@ private struct ShopWeekList: View {
                 )
             }
             .listRowBackground(Color.clear)
+        }
+        // Every line without a product, chosen one after another inside Walmart.
+        if shopping.canEdit, !proposal.needsProduct.isEmpty {
+            Section {
+                Button {
+                    walmartChoices = WalmartChoices(items: proposal.needsProduct.map(WalmartChooser.Item.init(line:)))
+                } label: {
+                    Label(
+                        proposal.needsProduct.count == 1
+                            ? String(localized: "Choose 1 Product in Walmart")
+                            : String(localized: "Choose \(proposal.needsProduct.count) Products in Walmart"),
+                        systemImage: "cart.badge.plus")
+                }
+                .fullScreenCover(item: $walmartChoices) { choices in
+                    ChooseInWalmartView(items: choices.items)
+                }
+            } footer: {
+                Text("Walmart opens here with each item along the top. Tap a product, then Use This.")
+            }
         }
         let layout = ShopMealLayout(proposal: proposal)
         ForEach(Array(layout.groups.enumerated()), id: \.element.id) { index, group in
@@ -1489,4 +1510,10 @@ private struct ShopWeekSwitcher: View {
     }
     .environment(HouseholdPreviewData.store(session: session))
     .environment(ShopPreviewData.store(session: session, configured: false))
+}
+
+/// The lines handed to Choose in Walmart.
+struct WalmartChoices: Identifiable {
+    let id = UUID()
+    let items: [WalmartChooser.Item]
 }
