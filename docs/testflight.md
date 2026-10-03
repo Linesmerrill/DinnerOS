@@ -19,6 +19,7 @@ list, and keep track of what's already in the pantry.
 - Cook one with the cooking screen: are the amounts and steps right? Tap a
   time to start a timer (heating the pan gets one too); cookies ring their own
   tune. Steps that add several things list them under the step.
+- In Shop, try Choose Products in Walmart: tap a product, then Use This.
 - Invite someone to your household (Household → Invite Someone).
 - Anything confusing, broken, or slow: take a screenshot and tap Share Beta
   Feedback. Household → Feedback & Bugs explains how.
