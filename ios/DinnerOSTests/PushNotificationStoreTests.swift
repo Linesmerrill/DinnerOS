@@ -174,7 +174,7 @@ struct PushNotificationStoreTests {
     @Test func signOutDoesNotWaitOnASlowServer() async throws {
         let harness = try await makeHarness(status: .authorized) { request in
             if request.httpMethod == "DELETE" {
-                try await Task.sleep(for: .seconds(30))
+                try await Task.sleep(for: .seconds(600))
             }
             return (200, Data(#"{"token":"t","environment":"sandbox","platform":"ios"}"#.utf8))
         }
@@ -183,9 +183,10 @@ struct PushNotificationStoreTests {
         let started = ContinuousClock.now
         await harness.session.signOut()
 
-        // The server would take 30s. Well under that proves sign-out didn't wait for it;
-        // the bound is loose because parallel tests on a CI runner stall the clock.
-        #expect(ContinuousClock.now - started < .seconds(20))
+        // The server would take 10 minutes. Well under that proves sign-out didn't wait for it;
+        // the bound is loose because parallel tests on a CI runner stall the clock (a stalled
+        // run once took 118s here).
+        #expect(ContinuousClock.now - started < .seconds(300))
         #expect(harness.session.state == .signedOut)
     }
 
