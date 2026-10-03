@@ -26,14 +26,14 @@ func TestSweepDoesNotHoldThawRemindersForQuietHours(t *testing.T) {
 	f.now = time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC) // 06:00 in Denver
 	f.outbox.produce[hhA] = []notifications.Notification{
 		thawDue("thaw", hhA, f.now),
-		orderDue("order", hhA, f.now),
+		lowStock("low", hhA, f.now),
 	}
 	report, err := f.sweeper(f.sender).Run(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if report.Deferred != 1 {
-		t.Errorf("Deferred = %d, want 1: the order reminder still waits for 8am", report.Deferred)
+		t.Errorf("Deferred = %d, want 1: the low-stock alert still waits for 8am", report.Deferred)
 	}
 	if report.Sent != 1 {
 		t.Errorf("Sent = %d, want 1: the thaw reminder goes out now", report.Sent)
@@ -41,8 +41,8 @@ func TestSweepDoesNotHoldThawRemindersForQuietHours(t *testing.T) {
 	if f.outbox.status("thaw") != notifications.PushSent {
 		t.Errorf("thaw status = %s, want %s", f.outbox.status("thaw"), notifications.PushSent)
 	}
-	if f.outbox.status("order") != notifications.PushPending {
-		t.Errorf("order status = %s, want %s", f.outbox.status("order"), notifications.PushPending)
+	if f.outbox.status("low") != notifications.PushPending {
+		t.Errorf("low status = %s, want %s", f.outbox.status("low"), notifications.PushPending)
 	}
 }
 
@@ -57,5 +57,20 @@ func TestSweepStillSkipsStaleThawReminders(t *testing.T) {
 	}
 	if f.outbox.status("old") != notifications.PushSkipped {
 		t.Errorf("status = %s, want %s", f.outbox.status("old"), notifications.PushSkipped)
+	}
+}
+
+// The order reminder goes out at the household's reminder time too: it is
+// created at that hour, so a 7am reminder arrives at 7, not when quiet hours end.
+func TestSweepDoesNotHoldOrderRemindersForQuietHours(t *testing.T) {
+	f := newSweepFixture()
+	f.now = time.Date(2026, 9, 17, 13, 0, 0, 0, time.UTC) // 07:00 in Denver
+	f.outbox.produce[hhA] = []notifications.Notification{orderDue("order", hhA, f.now)}
+	report, err := f.sweeper(f.sender).Run(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Deferred != 0 || f.outbox.status("order") != notifications.PushSent {
+		t.Errorf("report = %+v, status = %s; want sent at 7am", report, f.outbox.status("order"))
 	}
 }

@@ -74,11 +74,12 @@ type SweepOptions struct {
 }
 
 // DefaultQuietExempt are the notification types quiet hours do not defer:
-// reminders the household itself scheduled for an early hour. A thaw
+// reminders the household itself scheduled for an early hour (thaw and order
+// reminders go out at its reminder time). A thaw
 // reminder set for 6am is an errand with a deadline, and holding it until
 // the quiet hours end at 8 would be the app overruling the member about
 // their own morning.
-var DefaultQuietExempt = []notifications.Type{notifications.TypePantryThaw}
+var DefaultQuietExempt = []notifications.Type{notifications.TypePantryThaw, notifications.TypeShoppingOrderDue}
 
 // Sweeper is one run of the reminder sweep.
 type Sweeper struct {

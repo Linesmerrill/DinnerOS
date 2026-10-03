@@ -42,8 +42,8 @@ type OrderReminder struct {
 	// DueOn is the calendar date of OrderDay in Week ("YYYY-MM-DD"), or ""
 	// without an order day.
 	DueOn string
-	// Due reports that the order day has arrived and the week hasn't ended,
-	// both read in the household's time zone.
+	// Due reports that the order day's reminder time has arrived and the
+	// week hasn't ended, both read in the household's time zone.
 	Due bool
 	// Remind is Due and not Ordered: the only state that shows a reminder.
 	// It goes quiet the moment a member marks the week, and comes back if
@@ -225,11 +225,15 @@ func (s *Service) buildReminder(hh households.Household, w planning.Week, ordere
 		return r
 	}
 	// Dates are YYYY-MM-DD, so string order is calendar order.
-	today := s.now().In(orderLocation(hh.TimeZone)).Format(time.DateOnly)
+	now := s.now().In(orderLocation(hh.TimeZone))
+	today := now.Format(time.DateOnly)
 	// A reminder belongs to its own week: it starts on the order day and
 	// stops when the week ends. That is what makes next week start fresh,
-	// and what stops a run of unmarked past weeks all asking at once.
-	r.Due = today >= r.DueOn && today <= w.EndDateOn(first)
+	// and what stops a run of unmarked past weeks all asking at once. On the
+	// order day itself it waits for the household's morning reminder time
+	// (the hour thaw reminders use), not midnight.
+	started := today > r.DueOn || today == r.DueOn && now.Hour() >= hh.ThawHour()
+	r.Due = started && today <= w.EndDateOn(first)
 	r.Remind = r.Due && !r.Ordered
 	return r
 }

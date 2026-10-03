@@ -315,3 +315,43 @@ func TestRefreshStaysQuiet(t *testing.T) {
 		}
 	})
 }
+
+// On the order day the reminder waits for the household's morning reminder
+// time, read in its own zone, rather than arriving at midnight.
+func TestOrderReminderWaitsForTheReminderTime(t *testing.T) {
+	ctx := context.Background()
+	loc, err := time.LoadLocation("America/Denver")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seven := 7
+	cases := []struct {
+		name    string
+		hour    *int
+		at      time.Time
+		wantDue bool
+	}{
+		{"just after midnight", &seven, time.Date(2026, 9, 16, 0, 10, 0, 0, loc), false},
+		{"before the chosen hour", &seven, time.Date(2026, 9, 16, 6, 59, 0, 0, loc), false},
+		{"at the chosen hour", &seven, time.Date(2026, 9, 16, 7, 0, 0, 0, loc), true},
+		{"the default hour when none is chosen", nil, time.Date(2026, 9, 16, households.DefaultThawReminderHour, 0, 0, 0, loc), true},
+		{"early the next day", &seven, time.Date(2026, 9, 17, 0, 10, 0, 0, loc), true},
+		// 7am in Denver is 13:00 UTC: the server's clock zone doesn't matter.
+		{"6am Denver read from UTC", &seven, time.Date(2026, 9, 16, 12, 30, 0, 0, time.UTC), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, _, _ := newOrderService(t, "wed", tc.at)
+			svc.households = orderHouseholds{household: households.Household{
+				ID: testHousehold, TimeZone: "America/Denver", OrderDay: "wed", ThawReminderHour: tc.hour,
+			}}
+			r, err := svc.OrderReminder(ctx, testHousehold, testWeek)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if r.Due != tc.wantDue {
+				t.Errorf("Due = %v, want %v", r.Due, tc.wantDue)
+			}
+		})
+	}
+}

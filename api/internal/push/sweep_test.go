@@ -59,6 +59,13 @@ func (f *sweepFixture) sweeper(sender Sender) *Sweeper {
 	})
 }
 
+// lowStock is a notification nobody scheduled, so quiet hours hold it.
+func lowStock(id, householdID string, createdAt time.Time) notifications.Notification {
+	n := orderDue(id, householdID, createdAt)
+	n.Type, n.DedupeKey = notifications.TypePantryLow, "pantry.low:"+id
+	return n
+}
+
 func orderDue(id, householdID string, createdAt time.Time, readBy ...string) notifications.Notification {
 	return notifications.Notification{
 		ID: id, HouseholdID: householdID, Type: notifications.TypeShoppingOrderDue,
@@ -125,10 +132,10 @@ func TestSweepSkipsMembersWhoAlreadyRead(t *testing.T) {
 func TestSweepWaitsOutQuietHoursAndSkipsStaleNotifications(t *testing.T) {
 	f := newSweepFixture()
 	f.now = time.Date(2026, 9, 17, 5, 30, 0, 0, time.UTC) // 23:30 in Denver, 07:30 in Berlin
-	f.outbox.produce[hhA] = []notifications.Notification{orderDue("night", hhA, f.now)}
+	f.outbox.produce[hhA] = []notifications.Notification{lowStock("night", hhA, f.now)}
 	f.outbox.produce[hhB] = []notifications.Notification{
-		orderDue("old", hhB, f.now.Add(-25*time.Hour)),
-		orderDue("berlin", hhB, f.now),
+		lowStock("old", hhB, f.now.Add(-25*time.Hour)),
+		lowStock("berlin", hhB, f.now),
 	}
 	ctx := context.Background()
 
