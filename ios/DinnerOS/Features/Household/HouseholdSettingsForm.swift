@@ -150,11 +150,20 @@ struct HouseholdSettingsSections: View {
                     "Order Day",
                     value: saved.orderDay.map { OrderDay.name($0) } ?? String(localized: "No reminder"))
             }
+            if settings.canEdit {
+                Picker("Reminder Time", selection: binding(\.thawReminderHour)) {
+                    ForEach(Household.thawReminderHours, id: \.self) { hour in
+                        Text(Household.thawHourText(hour)).tag(hour)
+                    }
+                }
+            } else {
+                LabeledContent("Reminder Time", value: Household.thawHourText(saved.thawReminderHour))
+            }
         } header: {
             Text("Grocery Order")
         } footer: {
             Text(
-                "Pick the day you usually order. From that day, Shop reminds the household until someone marks the week ordered, and phones that allow notifications get one that morning. Next week starts fresh."
+                "Pick the day you usually order. From that day's reminder time, Shop reminds the household until someone marks the week ordered. Thaw reminders come at the same time. Next week starts fresh."
             )
         }
     }
@@ -185,15 +194,6 @@ struct HouseholdSettingsSections: View {
 
     private var thawSection: some View {
         Section {
-            if settings.canEdit {
-                Picker("Reminder Time", selection: binding(\.thawReminderHour)) {
-                    ForEach(Household.thawReminderHours, id: \.self) { hour in
-                        Text(Household.thawHourText(hour)).tag(hour)
-                    }
-                }
-            } else {
-                LabeledContent("Reminder Time", value: Household.thawHourText(saved.thawReminderHour))
-            }
             if settings.canEdit {
                 Picker("Freezer Bag", selection: freezeBagBinding) {
                     ForEach(freezeBagChoices, id: \.self) { ounces in
@@ -230,7 +230,7 @@ struct HouseholdSettingsSections: View {
             Text("Freezer")
         } footer: {
             Text(
-                "We remind you the morning a frozen item needs to thaw.\nLeftover meat gets frozen in bags this size. Less than a bag goes into the meal or gets tossed.\nFrozen raw meat gets a best-by date from the FDA's freezer times. Vacuum sealed keeps longest."
+                "We remind you at your reminder time the morning a frozen item needs to thaw.\nLeftover meat gets frozen in bags this size. Less than a bag goes into the meal or gets tossed.\nFrozen raw meat gets a best-by date from the FDA's freezer times. Vacuum sealed keeps longest."
             )
         }
     }
