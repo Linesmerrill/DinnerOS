@@ -3,6 +3,7 @@ package pantry
 import (
 	"context"
 	"errors"
+	"math/big"
 	"slices"
 	"strings"
 	"sync"
@@ -456,5 +457,102 @@ func TestSettingsAndItemThreshold(t *testing.T) {
 	item, err = f.svc.Update(f.ctx, f.actor, res.Item.ID, UpdateInput{Quantity: ptr("2"), Unit: ptr("tbsp")})
 	if err != nil || item.Status != StatusLow || item.StatusSource != StatusSourceEstimate || len(f.notifier.all()) != 1 {
 		t.Errorf("low correction = %+v, %v, alerts %d", item, err, len(f.notifier.all()))
+	}
+}
+
+// A meal kit's "1 tomato paste" is a packet: it counts down a jar bought by
+// weight as 2 Tbsp (the steps' kitchen measure), estimated by density, rather
+// than being skipped as a count that can't become ounces.
+func TestCookCountsAMealKitPacketAgainstAJarByWeight(t *testing.T) {
+	f := newUsageFixture(t)
+	const pasteRecipe = "66e5a1f2c3b4a5d6e7f80e03"
+	paste := recipes.Recipe{ID: pasteRecipe, Name: "Chili", Servings: []int{2},
+		Ingredients: []recipes.RecipeIngredient{
+			{Name: "Tomato Paste", Amounts: amounts("count", map[int]string{2: "1"})},
+			{Name: "Sweet Thai Chili Sauce", Amounts: amounts("count", map[int]string{2: "1"})},
+		}}
+	f.svc.WithUsage(UsageOptions{Store: f.usage, Notifier: f.notifier, Recipes: fakeRecipes{testHousehold + "/" + pasteRecipe: paste}})
+	// Walmart's 6 oz can: one package of 6 oz, tracked in ounces.
+	jar, err := f.svc.RecordPurchase(f.ctx, f.actor, PurchaseInput{
+		Name: "Tomato Paste", Source: PurchaseManual, Quantity: "1", Unit: "package", UnitSizeQuantity: "6", UnitSizeUnit: "oz",
+	})
+	if err != nil || jar.Item.Tracking.Unit != "oz" {
+		t.Fatalf("jar = %+v, %v", jar.Item, err)
+	}
+	sauce, err := f.svc.RecordPurchase(f.ctx, f.actor, PurchaseInput{
+		Name: "Sweet Thai Chili Sauce", Source: PurchaseManual, Quantity: "1", Unit: "package", UnitSizeQuantity: "8", UnitSizeUnit: "oz",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.advance(time.Hour)
+	u, applied, err := f.svc.ApplyCooked(f.ctx, CookedMeal{HouseholdID: testHousehold, RecipeID: pasteRecipe, EntryID: "chili", Servings: 2, OccurredAt: *f.clock})
+	if err != nil || !applied {
+		t.Fatalf("cook = %v, %v", applied, err)
+	}
+	lines := map[string]CookLine{}
+	for _, l := range u.Lines {
+		lines[l.ItemID] = l
+	}
+	l := lines[jar.Item.ID]
+	if l.SkipReason != "" || !l.Estimated || l.TrackingUnit != "oz" {
+		t.Fatalf("tomato paste line = %+v", l)
+	}
+	// 2 Tbsp is about an ounce of paste: somewhere between ¾ and 1½ oz.
+	if d := ratOf(l.Deducted); d.Cmp(big.NewRat(3, 4)) < 0 || d.Cmp(big.NewRat(3, 2)) > 0 {
+		t.Errorf("deducted = %s oz", l.Deducted)
+	}
+	// A packet with no kitchen measure is still not guessed.
+	if l := lines[sauce.Item.ID]; l.SkipReason != SkipUnitMismatch {
+		t.Errorf("sauce line = %+v", l)
+	}
+}
+
+// "Enter what you used" takes an amount off the estimate as a person's
+// correction: spoons off a jar bought by weight by density, all of it marks
+// the item out, and an amount that can't convert asks for what's left instead.
+func TestRecordUseTakesAnAmountOffTheEstimate(t *testing.T) {
+	f := newUsageFixture(t)
+	jar, err := f.svc.RecordPurchase(f.ctx, f.actor, PurchaseInput{
+		Name: "Hoisin Sauce", Source: PurchaseManual, Quantity: "1", Unit: "package", UnitSizeQuantity: "20", UnitSizeUnit: "oz",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.advance(time.Hour)
+	item, err := f.svc.RecordUse(f.ctx, f.actor, jar.Item.ID, "2", "oz")
+	if err != nil || item.Quantity != "18" || item.Unit != "oz" || item.Status != StatusInStock {
+		t.Fatalf("after 2 oz = %q %q %s, %v", item.Quantity, item.Unit, item.Status, err)
+	}
+	if item.Tracking == nil || item.Tracking.SegmentStart != "18" {
+		t.Errorf("tracking = %+v, want a new segment from 18 oz", item.Tracking)
+	}
+	// 2 Tbsp of hoisin is about an ounce, by density.
+	item, err = f.svc.RecordUse(f.ctx, f.actor, jar.Item.ID, "2", "tbsp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if left := ratOf(item.Quantity); left.Cmp(big.NewRat(33, 2)) < 0 || left.Cmp(big.NewRat(35, 2)) > 0 {
+		t.Errorf("after 2 Tbsp = %s oz, want about 17", item.Quantity)
+	}
+	// Using more than is left marks it out.
+	item, err = f.svc.RecordUse(f.ctx, f.actor, jar.Item.ID, "3", "cup")
+	if err != nil || item.Status != StatusOut || item.Quantity != "" {
+		t.Errorf("after using it all = %q %s, %v", item.Quantity, item.Status, err)
+	}
+	// A count with no size can't take ounces.
+	noodles, err := f.svc.RecordPurchase(f.ctx, f.actor, PurchaseInput{Name: "Egg Noodles", Source: PurchaseManual, Quantity: "2", Unit: "package"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ve *ValidationError
+	if _, err := f.svc.RecordUse(f.ctx, f.actor, noodles.Item.ID, "8", "oz"); !errors.As(err, &ve) {
+		t.Errorf("noodles err = %v, want a validation error", err)
+	}
+	if _, err := f.svc.RecordUse(f.ctx, f.actor, jar.Item.ID, "", ""); !errors.As(err, &ve) {
+		t.Errorf("empty err = %v", err)
+	}
+	if _, err := f.svc.RecordUse(f.ctx, households.Membership{HouseholdID: testHousehold, UserID: testUser, Role: "viewer"}, jar.Item.ID, "1", "oz"); !errors.Is(err, ErrForbidden) {
+		t.Errorf("viewer err = %v", err)
 	}
 }

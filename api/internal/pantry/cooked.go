@@ -289,11 +289,21 @@ func (s *Service) matchNeeds(ctx context.Context, m CookedMeal, needs []recipeNe
 			for i := 0; !ok && hasResolved && i < len(r.UnitSizes); i++ {
 				converted, ok = convertAmount(n.quantity, n.unit, t.Unit, &r.UnitSizes[i])
 			}
+			// A meal kit's packet ("1 tomato paste") is a kitchen measure
+			// (2 Tbsp), the same one the steps show, so it counts against a
+			// jar bought by weight instead of being skipped as a count.
+			quantity, unit := n.quantity, n.unit
+			if !ok {
+				if km, found := ingredients.KitchenMeasureFor(n.name, n.unit); found {
+					quantity, unit = new(big.Rat).Mul(n.quantity, km.PerPacket), km.Unit
+					converted, ok = convertAmount(quantity, unit, t.Unit, item.UnitSize)
+				}
+			}
 			if !ok {
 				// Spoons against a package bought by weight: estimate with
 				// the ingredient's typical density rather than never
 				// counting it down (docs/pantry-usage.md#unit-conversion).
-				if converted, ok = estimateAmount(n.quantity, n.unit, t.Unit, item); ok {
+				if converted, ok = estimateAmount(quantity, unit, t.Unit, item); ok {
 					converted, line.Estimated = roundRat(converted, 1000), true
 				}
 			}

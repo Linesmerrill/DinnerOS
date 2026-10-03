@@ -2693,6 +2693,54 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/pantry/{itemId}/use:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/PantryItemID"
+    post:
+      summary: Record what was used
+      description: |
+        Takes an amount the household used off the item's estimate, for a
+        cooked recipe the estimate couldn't count or use outside a recipe.
+        The result is a person's correction: the amount left becomes the
+        item's quantity in its tracking unit, and a new segment starts from
+        it. Spoons from a jar bought by weight convert by typical density;
+        using it all marks the item out. An item with no estimate, or an
+        amount that can't convert, is a 400 asking for what's left instead.
+        Requires `pantry.edit`.
+      operationId: recordPantryUse
+      tags: [pantry]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity, unit]
+              properties:
+                quantity:
+                  type: string
+                  example: "2"
+                unit:
+                  type: string
+                  example: tbsp
+      responses:
+        "200":
+          description: The item after the correction.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PantryItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/pantry/purchases/{purchaseId}:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"

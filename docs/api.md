@@ -146,6 +146,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/households/{householdId}/pantry/purchases` `{itemId? or ingredientId?/name?, source, quantity?, unit?, unitSize?, week?, clientPurchaseId?, priceCents?}` → `201 {purchase, item}`, or `200` for a repeated `clientPurchaseId` | `pantry.edit` | 7 | ✅ |
 | PATCH | `/api/v1/households/{householdId}/pantry/purchases/{purchaseId}` `{priceCents}` (null clears) → `{purchase}` | `pantry.edit` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/pantry/{itemId}/purchases` → `{items}` (newest 20) | `household.view` | 7 | ✅ |
+| POST | `/api/v1/households/{householdId}/pantry/{itemId}/use` `{quantity, unit}` → item (what was used, taken off the estimate) | `pantry.edit` | 7 | ✅ |
 | GET | `/api/v1/households/{householdId}/pantry/settings` → `{lowThresholdPercent, defaultLowThresholdPercent, updatedBy, updatedAt}` | `household.view` | 7 | ✅ |
 | PUT | `/api/v1/households/{householdId}/pantry/settings` `{lowThresholdPercent}` → settings | `pantry.edit` | 7 | ✅ |
 | GET | `/api/v1/households/{householdId}/specialty-ingredients` `?all` → `{items}` | `household.view` | 7 | ✅ |

@@ -58,6 +58,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(edit).Put(base+"/settings", h.putSettings)
 		r.With(view).Get(base+"/{itemId}/purchases", h.listPurchases)
 		r.With(edit).Patch(base+"/{itemId}", h.update)
+		r.With(edit).Post(base+"/{itemId}/use", h.recordUse)
 		r.With(edit).Delete(base+"/{itemId}", h.delete)
 	})
 }
@@ -415,6 +416,27 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	item, err := h.opts.Service.Update(r.Context(), actor, chi.URLParam(r, "itemId"), in)
 	if err != nil {
 		h.writeError(w, r, "update pantry item failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, h.itemResponse(r, item))
+}
+
+// RecordUseRequest is the body of POST .../pantry/{itemId}/use: an amount the
+// household used, taken off the item's estimate.
+type RecordUseRequest struct {
+	Quantity string `json:"quantity"`
+	Unit     string `json:"unit"`
+}
+
+func (h *Handler) recordUse(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	var req RecordUseRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	item, err := h.opts.Service.RecordUse(r.Context(), actor, chi.URLParam(r, "itemId"), req.Quantity, req.Unit)
+	if err != nil {
+		h.writeError(w, r, "record pantry use failed", err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, h.itemResponse(r, item))
