@@ -190,7 +190,7 @@ struct PantryEditSheet: View {
                 }
                 PantryItemFields(draft: $draft, name: item.displayName, category: item.category)
                 PantryThresholdFields(draft: $draft, householdPercent: pantry.settings?.lowThresholdPercent)
-                PantryUsageSections(item: current)
+                PantryUsageSections(item: current, canRecordUse: true)
                 Section {
                     Button("Delete from Pantry", role: .destructive) {
                         isConfirmingDelete = true

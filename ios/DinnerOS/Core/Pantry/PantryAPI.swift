@@ -27,6 +27,14 @@ nonisolated struct PantryAPI: Sendable {
             try APIRequest.patch(Self.path(householdID) + "/\(itemID)", body: changes).authorized(with: accessToken))
     }
 
+    /// Takes an amount the household used off the item's estimate (`POST .../pantry/{itemId}/use`).
+    func recordUse(
+        householdID: String, itemID: String, use: PantryUseRequest, accessToken: String
+    ) async throws -> PantryItem {
+        try await client.send(
+            try APIRequest.post(Self.path(householdID) + "/\(itemID)/use", body: use).authorized(with: accessToken))
+    }
+
     func deleteItem(householdID: String, itemID: String, accessToken: String) async throws {
         try await client.sendIgnoringBody(
             APIRequest.delete(Self.path(householdID) + "/\(itemID)").authorized(with: accessToken))

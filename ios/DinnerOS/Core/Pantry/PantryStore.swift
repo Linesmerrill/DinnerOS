@@ -137,6 +137,20 @@ final class PantryStore {
         return item
     }
 
+    /// Takes what the household used off the item's estimate; the server does the math.
+    @discardableResult
+    func recordUse(_ item: PantryItem, quantity: String, unit: String) async throws -> PantryItem {
+        let (api, householdID) = try requirePantry()
+        let started = generation
+        let updated = try await perform { token in
+            try await api.recordUse(
+                householdID: householdID, itemID: item.id, use: PantryUseRequest(quantity: quantity, unit: unit),
+                accessToken: token)
+        }
+        if started == generation { apply([updated]) }
+        return updated
+    }
+
     @discardableResult
     func update(_ item: PantryItem, changes: PantryItemChanges) async throws -> PantryItem {
         guard !changes.isEmpty else { return item }

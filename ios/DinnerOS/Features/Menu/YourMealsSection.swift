@@ -15,6 +15,8 @@ struct YourMealsSection: View {
     /// Weeks Autopilot was already asked to suggest for this session, so viewing a week twice
     /// doesn't plan it twice.
     @State private var suggestedWeeks: Set<String> = []
+    /// Weeks whose review card the member swiped away; hidden at once while the API catches up.
+    @State private var dismissedPicks: Set<String> = []
 
     private var entries: [PlanEntry] {
         plans.plan?.entriesInDayOrder(weekStartsOn: plans.weekStartsOn) ?? []
@@ -37,14 +39,32 @@ struct YourMealsSection: View {
     }
 
     /// The pending proposal for the shown week, from Autopilot or, before it loads, the menu.
+    /// `nil` when there's nothing left to review: no proposal, one with no meals left in it
+    /// ("Autopilot suggested 0 meals" asked about nothing), or one the member dismissed.
     private var pendingProposalMeals: Int? {
+        guard !dismissedPicks.contains(plans.week.description) else { return nil }
         if let proposal = autopilot.pendingProposal, proposal.week == plans.week.description {
-            return proposal.slots.count
+            return proposal.slots.isEmpty ? nil : proposal.slots.count
         }
         if let proposal = menu.menu?.proposal, proposal.isPending, menu.menu?.week == plans.week.description {
-            return proposal.plannedMeals
+            return proposal.plannedMeals > 0 ? proposal.plannedMeals : nil
         }
         return nil
+    }
+
+    private var picksDismiss: (() -> Void)? {
+        guard isEditable else { return nil }
+        return { dismissPicks() }
+    }
+
+    /// Dismisses the week's pending picks: the plan doesn't change, and the card goes away.
+    private func dismissPicks() {
+        let week = plans.week
+        withAnimation(.snappy) { _ = dismissedPicks.insert(week.description) }
+        Task {
+            if autopilot.week == week { try? await autopilot.dismissProposal() }
+            await menu.reloadWeek(week)
+        }
     }
 
     var body: some View {
@@ -107,8 +127,9 @@ struct YourMealsSection: View {
             .padding(.horizontal, 16)
         case .loaded:
             if inlineProposal == nil, let meals = pendingProposalMeals {
-                ReviewPicksCard(meals: meals) { flow.sheet = .review }
+                ReviewPicksCard(meals: meals, review: { flow.sheet = .review }, dismiss: picksDismiss)
                     .padding(.horizontal, 16)
+                    .transition(.move(edge: .leading).combined(with: .opacity))
             }
             if entries.isEmpty {
                 emptyState(suggestionsPending: pendingProposalMeals != nil || autopilot.isGenerating)
@@ -223,9 +244,13 @@ struct YourMealsSection: View {
 }
 
 /// "Autopilot suggested 4 meals" with a button that opens the review sheet.
+/// Swipe left or tap the close button to dismiss the picks without changing the plan.
 struct ReviewPicksCard: View {
     let meals: Int
     let review: () -> Void
+    var dismiss: (() -> Void)? = nil
+
+    @State private var dragX: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -245,6 +270,32 @@ struct ReviewPicksCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(.tint.opacity(0.12), in: .rect(cornerRadius: 18))
+        .overlay(alignment: .topTrailing) {
+            if let dismiss {
+                Button("Dismiss", systemImage: "xmark", action: dismiss)
+                    .labelStyle(.iconOnly)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityLabel("Dismiss Autopilot's Picks")
+            }
+        }
+        .offset(x: dragX)
+        .gesture(
+            DragGesture(minimumDistance: 20)
+                .onChanged { value in
+                    guard dismiss != nil, abs(value.translation.width) > abs(value.translation.height) else { return }
+                    dragX = min(0, value.translation.width)
+                }
+                .onEnded { value in
+                    if let dismiss, value.translation.width < -100 {
+                        dismiss()
+                    } else {
+                        withAnimation(.snappy) { dragX = 0 }
+                    }
+                },
+            including: dismiss == nil ? .subviews : .all
+        )
         .accessibilityElement(children: .contain)
     }
 }

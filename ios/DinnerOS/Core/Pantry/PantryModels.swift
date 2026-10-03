@@ -181,6 +181,12 @@ nonisolated struct NewPantryItem: Encodable, Equatable, Sendable {
     }
 }
 
+/// The body of `POST .../pantry/{itemId}/use`: an amount used, in a DinnerOS unit code.
+nonisolated struct PantryUseRequest: Encodable, Equatable, Sendable {
+    let quantity: String
+    let unit: String
+}
+
 /// The body of `PATCH .../pantry/{itemId}`. `nil` fields are omitted and unchanged. An
 /// empty string clears `quantity` (and its unit), `expiresOn`, or `note`.
 nonisolated struct PantryItemChanges: Encodable, Equatable, Sendable {

@@ -72,10 +72,13 @@ struct PantryEstimateLabel: View {
 /// read-only detail.
 struct PantryUsageSections: View {
     let item: PantryItem
+    /// Offers "Enter What You Used" (the edit sheet; the read-only detail doesn't).
+    var canRecordUse = false
 
     @Environment(PantryStore.self) private var pantry
     @ScaledMetric(relativeTo: .headline) private var ringSize = 34.0
 
+    @State private var isRecordingUse = false
     @State private var purchases: [PantryPurchase] = []
     @State private var purchasesPhase = LoadPhase.loading
 
@@ -130,6 +133,17 @@ struct PantryUsageSections: View {
                     Label(skipped, systemImage: "exclamationmark.circle")
                         .foregroundStyle(.orange)
                 }
+                // The way out of "couldn't be counted": say what was used, and the estimate
+                // takes it off. Also for anything used outside a recipe.
+                if canRecordUse {
+                    Button(
+                        estimate.skippedRecipes > 0 ? "Enter What the Recipe Used" : "Enter What You Used",
+                        systemImage: "minus.circle"
+                    ) { isRecordingUse = true }
+                    .sheet(isPresented: $isRecordingUse) {
+                        PantryRecordUseSheet(item: item, estimate: estimate)
+                    }
+                }
                 if item.isEstimatedLow {
                     Label(
                         "The estimate marked this item low. Setting a status yourself replaces it.",
@@ -141,7 +155,9 @@ struct PantryUsageSections: View {
             } header: {
                 Text("Usage Estimate")
             } footer: {
-                Text("Units that don't convert aren't guessed. Correct the amount any time; your number wins.")
+                Text(
+                    "Units that don't convert aren't guessed. Enter what you used, or correct the amount left above; your number wins."
+                )
             }
         } else {
             Section("Usage Estimate") {
@@ -615,4 +631,81 @@ struct PantryThresholdSheet: View {
     PantryThresholdSheet()
         .environment(HouseholdPreviewData.store(session: session))
         .environment(PantryPreviewData.store(session: session))
+}
+
+/// "Enter What You Used": an amount, in any unit, that the server takes off the estimate. Spoons
+/// from a jar bought by weight convert by the item's typical density.
+struct PantryRecordUseSheet: View {
+    let item: PantryItem
+    let estimate: PantryEstimate
+
+    @Environment(PantryStore.self) private var pantry
+    @Environment(\.dismiss) private var dismiss
+    @State private var quantityText = ""
+    @State private var unit: String
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    init(item: PantryItem, estimate: PantryEstimate) {
+        self.item = item
+        self.estimate = estimate
+        // A skipped recipe usually measured in spoons; otherwise the item's own unit.
+        _unit = State(initialValue: estimate.skippedRecipes > 0 ? "tbsp" : estimate.unit)
+    }
+
+    private var quantity: String? { try? PantryQuantity.parse(quantityText) }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if let errorMessage {
+                    Section { FormErrorLabel(message: errorMessage) }
+                }
+                Section {
+                    TextField("Amount", text: $quantityText, prompt: Text("For example, 2"))
+                        .keyboardType(.decimalPad)
+                    Picker("Unit", selection: $unit) {
+                        ForEach(PantryUnit.options(including: unit), id: \.self) { code in
+                            Text(PantryUnit.pickerLabel(code)).tag(code)
+                        }
+                    }
+                } header: {
+                    Text("How Much Did You Use?")
+                } footer: {
+                    if let left = PantryUsageFormat.remainingGlance(estimate) {
+                        Text("About \(left) left now. This comes off that.")
+                    } else {
+                        Text("This comes off what's left.")
+                    }
+                }
+            }
+            .navigationTitle(item.displayName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .disabled(quantity == nil || isSaving)
+                }
+            }
+            .disabled(isSaving)
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func save() {
+        guard let quantity else { return }
+        isSaving = true
+        Task {
+            defer { isSaving = false }
+            do {
+                try await pantry.recordUse(item, quantity: quantity, unit: unit)
+                dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
 }

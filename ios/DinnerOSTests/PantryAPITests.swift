@@ -89,6 +89,20 @@ struct PantryAPITests {
         #expect(request.jsonBody == ["quantity": "", "status": "low", "expiresOn": "", "note": ""])
     }
 
+    @Test func recordUsePostsTheAmountUsed() async throws {
+        let transport = StubTransport { _ in (200, Data(PantryFixtures.zaatarJSON.utf8)) }
+
+        _ = try await PantryAPI(client: makeClient(transport))
+            .recordUse(
+                householdID: "household-1", itemID: "item-zaatar", use: PantryUseRequest(quantity: "2", unit: "tbsp"),
+                accessToken: "t")
+
+        let request = try #require(transport.requests.first)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.path() == "/api/v1/households/household-1/pantry/item-zaatar/use")
+        #expect(request.jsonBody == ["quantity": "2", "unit": "tbsp"])
+    }
+
     @Test func emptyChangesAreEmpty() {
         #expect(PantryItemChanges().isEmpty)
         #expect(!PantryItemChanges(isStaple: false).isEmpty)
