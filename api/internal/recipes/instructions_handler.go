@@ -69,6 +69,20 @@ type InstructionsResponse struct {
 	// Checklist is the cooking screen's ingredient checklist, all together
 	// and by step, ready to show.
 	Checklist ChecklistResponse `json:"checklist"`
+	// SafeTemperatures are USDA safe minimum internal temperatures for the
+	// meat and seafood the household cooks, shown under the steps with
+	// SafeTemperaturesSource; empty when there's none.
+	SafeTemperatures       []SafeTemperatureResponse `json:"safeTemperatures"`
+	SafeTemperaturesSource string                    `json:"safeTemperaturesSource"`
+}
+
+// SafeTemperatureResponse is one ingredient's safe minimum internal
+// temperature: "Chicken Breasts: 165°F".
+type SafeTemperatureResponse struct {
+	Name        string `json:"name"`
+	Fahrenheit  int    `json:"fahrenheit"`
+	RestMinutes int    `json:"restMinutes"`
+	Text        string `json:"text"`
 }
 
 // ChecklistResponse is the cooking screen's ingredient checklist.
@@ -315,6 +329,13 @@ func newInstructionsResponse(in Instructions) InstructionsResponse {
 		resp.UnchosenSpecialties = append(resp.UnchosenSpecialties, SpecialtyRefResponse(s))
 	}
 	resp.Checklist = checklistResponse(in.Checklist)
+	resp.SafeTemperatures = make([]SafeTemperatureResponse, 0, len(in.SafeTemps))
+	for _, st := range in.SafeTemps {
+		resp.SafeTemperatures = append(resp.SafeTemperatures, SafeTemperatureResponse(st))
+	}
+	if len(in.SafeTemps) > 0 {
+		resp.SafeTemperaturesSource = SafeTempsSource
+	}
 	return resp
 }
 

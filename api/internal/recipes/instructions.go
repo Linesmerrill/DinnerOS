@@ -391,6 +391,9 @@ type Instructions struct {
 	// Checklist is the cooking screen's ingredient checklist, built from the
 	// steps above (checklist.go).
 	Checklist Checklist
+	// SafeTemps are the safe internal temperatures for the meat and seafood
+	// the household cooks (safe_temps.go).
+	SafeTemps []SafeTemp
 }
 
 // GroceryLines returns the recipe's ingredient lines for servings in the form
@@ -649,6 +652,7 @@ func AnnotateMeal(r Recipe, servings int, specs grocery.Specialties, applied boo
 		out.Steps = append(out.Steps, st)
 	}
 	out.Checklist = buildChecklist(r, out)
+	out.SafeTemps = safeTemps(out.Ingredients)
 	sort.SliceStable(out.Substitutions, func(i, j int) bool { return out.Substitutions[i].Name < out.Substitutions[j].Name })
 	sort.SliceStable(out.Unchosen, func(i, j int) bool { return out.Unchosen[i].Name < out.Unchosen[j].Name })
 	return out

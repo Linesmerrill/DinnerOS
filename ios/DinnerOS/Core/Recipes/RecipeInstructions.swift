@@ -29,11 +29,16 @@ nonisolated struct RecipeInstructions: Decodable, Equatable, Sendable {
     /// The cooking screen's checklist, built by the server; `nil` from an older server, when the
     /// app builds it itself (`CookChecklist`).
     var checklist: InstructionChecklist? = nil
+    /// USDA safe internal temperatures for the meat and seafood in it, shown under the steps with
+    /// `safeTemperaturesSource`. Empty from an older server, or when there's none.
+    var safeTemperatures: [InstructionSafeTemperature] = []
+    var safeTemperaturesSource = ""
 
     private enum CodingKeys: String, CodingKey {
         case recipeID = "recipeId"
         case recipeName, servings, servingOptions, specialtiesApplied, steps, substitutions
         case unchosenSpecialties, leftOutApplied, ingredients, checklist
+        case safeTemperatures, safeTemperaturesSource
     }
 
     static let empty = RecipeInstructions(
@@ -153,7 +158,17 @@ nonisolated extension RecipeInstructions {
             leftOutApplied: container.decodeLenientBool(forKey: .leftOutApplied) ?? false,
             ingredients: container.decodeLossyArray(InstructionIngredient.self, forKey: .ingredients))
         checklist = container.decodeLenient(InstructionChecklist.self, forKey: .checklist)
+        safeTemperatures = container.decodeLossyArray(InstructionSafeTemperature.self, forKey: .safeTemperatures)
+        safeTemperaturesSource = (try? container.decode(String.self, forKey: .safeTemperaturesSource)) ?? ""
     }
+}
+
+/// "Chicken Breasts: 165°F", from the server.
+nonisolated struct InstructionSafeTemperature: Decodable, Equatable, Sendable, Identifiable {
+    let name: String
+    let fahrenheit: Int
+    let text: String
+    var id: String { name }
 }
 
 nonisolated struct InstructionStep: Decodable, Equatable, Sendable, Identifiable {

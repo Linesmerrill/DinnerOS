@@ -319,6 +319,7 @@ struct CookingStepsSection: View {
                         InstructionStepRow(step: step)
                     }
                     InstructionSubstitutionsFooter(instructions: instructions, chooseSpecialty: chooseSpecialty)
+                    SafeTemperaturesFooter(instructions: instructions)
                 } else {
                     ForEach(steps) { step in
                         RecipeStepRow(step: step)

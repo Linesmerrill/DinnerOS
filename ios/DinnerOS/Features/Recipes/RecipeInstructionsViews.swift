@@ -194,6 +194,36 @@ struct InstructionStepRow: View {
     }
 }
 
+/// Under the steps, as on the meal-kit card: how hot to cook the meat and seafood in it.
+struct SafeTemperaturesFooter: View {
+    let instructions: RecipeInstructions
+
+    var body: some View {
+        if !instructions.safeTemperatures.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Cook To", systemImage: "thermometer.medium")
+                    .font(.subheadline.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
+                ForEach(instructions.safeTemperatures) { temperature in
+                    Text(temperature.text)
+                        .font(.subheadline)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !instructions.safeTemperaturesSource.isEmpty {
+                    Text(instructions.safeTemperaturesSource)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 12))
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
 /// "Instead of 1 tbsp Tex-Mex Paste, use 2 tsp tomato paste and ½ tsp chili powder."
 struct InstructionNoteLabel: View {
     let note: InstructionNote

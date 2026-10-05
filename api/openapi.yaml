@@ -6359,6 +6359,33 @@ components:
             shown here.
           items:
             $ref: "#/components/schemas/InstructionIngredient"
+        safeTemperatures:
+          type: array
+          description: |
+            USDA safe minimum internal temperatures for the meat and seafood
+            the household cooks (after protein swaps, without left-out
+            ingredients), shown under the steps. Empty when there's none.
+          items:
+            type: object
+            required: [name, fahrenheit, restMinutes, text]
+            properties:
+              name:
+                type: string
+                example: Chicken Breasts
+              fahrenheit:
+                type: integer
+                example: 165
+              restMinutes:
+                type: integer
+                description: Rest after cooking for whole cuts of beef, pork, lamb, and veal, else 0.
+                example: 0
+              text:
+                type: string
+                example: "Chicken Breasts: 165°F"
+        safeTemperaturesSource:
+          type: string
+          description: The line shown under the temperatures; empty when there are none.
+          example: Safe minimum internal temperatures, from the USDA.
     InstructionIngredient:
       type: object
       required: [index, ingredientKey, name, leftOut, component]

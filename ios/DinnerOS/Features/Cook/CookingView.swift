@@ -707,6 +707,9 @@ struct CookStepList: View {
                     }
                 }
             }
+            if let instructions = dish.instructions {
+                SafeTemperaturesFooter(instructions: instructions)
+            }
         }
     }
 
