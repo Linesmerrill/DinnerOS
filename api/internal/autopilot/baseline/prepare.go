@@ -41,6 +41,9 @@ type model struct {
 	firstDay  int
 	// learned is what the household's feedback taught (learn.go).
 	learned learning
+	// disliked are tokenized ingredients a member didn't like in a meal they
+	// rated: a soft lean away from other meals with them, never a ban.
+	disliked [][]string
 
 	fixed   []fixedMeal
 	fixedID map[string]bool
@@ -144,9 +147,11 @@ type stats struct {
 	kidsDisliked           int
 	tooSpicy, tooBland     int
 	tooMuchWork            int
-	greatLeftovers         int
-	ordered, planned       int
-	cooked, skipped        int
+	// tooSalty and the rest are the follow-up to a rating under five.
+	tooSalty, tooSweet, tooDry, tooSoggy int
+	greatLeftovers                       int
+	ordered, planned                     int
+	cooked, skipped                      int
 	// skippedAside counts the skips whose reason was about the household's
 	// week (ate out, missing ingredients, no time) rather than about the
 	// meal. Conversion leaves them out: they are evidence of neither.
@@ -241,6 +246,16 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 	}
 
 	signals := 0
+	// Ingredients a member said they didn't like, in any meal.
+	seenDisliked := map[string]bool{}
+	for _, r := range in.Ratings {
+		for _, name := range r.Disliked {
+			if tokens := tokenize(name); len(tokens) > 0 && !seenDisliked[strings.Join(tokens, " ")] {
+				seenDisliked[strings.Join(tokens, " ")] = true
+				m.disliked = append(m.disliked, tokens)
+			}
+		}
+	}
 	for _, r := range in.Ratings {
 		it := m.byID[r.ItemID]
 		if it == nil || r.Score < 1 || r.Score > 5 {
@@ -263,8 +278,16 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 				it.st.tooSpicy++
 			case autopilot.FeedbackTooBland:
 				it.st.tooBland++
-			case autopilot.FeedbackTooMuchWork:
+			case autopilot.FeedbackTooMuchWork, autopilot.FeedbackTookTooLong:
 				it.st.tooMuchWork++
+			case autopilot.FeedbackTooSalty:
+				it.st.tooSalty++
+			case autopilot.FeedbackTooSweet:
+				it.st.tooSweet++
+			case autopilot.FeedbackTooDry:
+				it.st.tooDry++
+			case autopilot.FeedbackTooSoggy:
+				it.st.tooSoggy++
 			case autopilot.FeedbackGreatLeftovers:
 				it.st.greatLeftovers++
 			}

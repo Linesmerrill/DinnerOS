@@ -332,6 +332,14 @@ final class RecipeLibrary {
         return saved
     }
 
+    /// The follow-up questions for a rating under five.
+    func ratingQuestions(recipeID: String) async throws -> RatingQuestions {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        return try await session.authorized { token in
+            try await api.ratingQuestions(householdID: householdID, recipeID: recipeID, accessToken: token)
+        }
+    }
+
     /// Removes the signed-in user's rating, then refreshes the recipe like `saveRating`.
     func removeRating(recipeID: String) async throws {
         guard let api, let householdID else { throw AuthSessionError.notConfigured }

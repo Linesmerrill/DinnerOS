@@ -1197,6 +1197,78 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/recipes/{recipeId}/rating-questions:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - name: recipeId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Follow-up questions for a rating
+      description: |
+        "What could have been better?" after a rating under five: kinds of
+        problem (taste, texture, time, portion), each with the rating tags it
+        offers; the recipe's main ingredients as the household cooks them
+        (protein swaps read as the swap, left-out ingredients and pantry
+        basics aren't listed), with the parts of anything made from parts;
+        and what can be wrong with one ingredient (didnt-like, too-much,
+        too-little, product). Answers are saved on the rating as `tags` and
+        `misses`. Requires `household.view`.
+      operationId: getRatingQuestions
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The questions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [title, categories, ingredients, reasons]
+                properties:
+                  title: {type: string}
+                  categories:
+                    type: array
+                    items:
+                      type: object
+                      required: [code, title, symbol, options]
+                      properties:
+                        code: {type: string, example: taste}
+                        title: {type: string}
+                        symbol: {type: string, description: An SF Symbol name.}
+                        options:
+                          type: array
+                          items:
+                            type: object
+                            required: [tag, title]
+                            properties:
+                              tag: {type: string, example: too-salty}
+                              title: {type: string}
+                  ingredients:
+                    type: array
+                    items:
+                      type: object
+                      required: [ingredientKey, name, parts]
+                      properties:
+                        ingredientKey: {type: string}
+                        name: {type: string}
+                        parts: {type: array, items: {type: string}}
+                  reasons:
+                    type: array
+                    items:
+                      type: object
+                      required: [reason, title, detail]
+                      properties:
+                        reason: {type: string, enum: [didnt-like, too-much, too-little, product]}
+                        title: {type: string}
+                        detail: {type: string}
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/recipes/{recipeId}/instructions:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -7115,7 +7187,7 @@ components:
           example: 2
     RatingTag:
       type: string
-      enum: [make-again, never-again, kid-favorite, kids-disliked, too-spicy, too-bland, too-much-work, great-leftovers]
+      enum: [make-again, never-again, kid-favorite, kids-disliked, too-spicy, too-bland, too-much-work, great-leftovers, too-salty, too-sweet, took-too-long, too-dry, too-soggy, portion-too-small, portion-too-big]
       description: A fixed vocabulary; anything else belongs in `comment`. `make-again` and `never-again` can't be combined.
     Rating:
       type: object
@@ -7181,6 +7253,33 @@ components:
           description: Duplicates are ignored.
           items:
             $ref: "#/components/schemas/RatingTag"
+        misses:
+          type: array
+          maxItems: 20
+          description: |
+            Ingredients that didn't work, from the follow-up questions.
+            Omitted keeps the saved ones; an empty list clears them. A
+            "didnt-like" leans Autopilot away from other meals with the
+            ingredient (or its part); "product" means the product bought for
+            it was the problem, not the recipe.
+          items:
+            $ref: "#/components/schemas/RatingMiss"
+    RatingMiss:
+      type: object
+      required: [ingredientKey, name, reason]
+      properties:
+        ingredientKey:
+          type: string
+        name:
+          type: string
+          maxLength: 200
+        part:
+          type: string
+          maxLength: 200
+          description: The part of a made ingredient that was the problem ("Onions").
+        reason:
+          type: string
+          enum: [didnt-like, too-much, too-little, product]
     ClientEvent:
       type: object
       additionalProperties: false

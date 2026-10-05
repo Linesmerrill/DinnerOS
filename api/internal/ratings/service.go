@@ -88,9 +88,13 @@ func (s *Service) Rate(ctx context.Context, actor households.Membership, recipeI
 		return Rating{}, err
 	}
 	now := s.now().UTC()
+	misses, err := s.misses(ctx, actor, recipeID, v.misses)
+	if err != nil {
+		return Rating{}, err
+	}
 	saved, previous, err := s.store.Upsert(ctx, Rating{
 		HouseholdID: actor.HouseholdID, RecipeID: recipeID, UserID: actor.UserID,
-		Score: v.score, Comment: v.comment, Tags: v.tags, CreatedAt: now, UpdatedAt: now,
+		Score: v.score, Comment: v.comment, Tags: v.tags, Misses: misses, CreatedAt: now, UpdatedAt: now,
 	})
 	if err != nil {
 		return Rating{}, fmt.Errorf("save rating: %w", err)
@@ -112,7 +116,7 @@ func (s *Service) Rate(ctx context.Context, actor households.Membership, recipeI
 	for _, t := range s.twins(ctx, actor, recipeID) {
 		if _, _, err := s.store.Upsert(ctx, Rating{
 			HouseholdID: t.householdID, RecipeID: t.recipeID, UserID: actor.UserID,
-			Score: saved.Score, Comment: saved.Comment, Tags: saved.Tags, CreatedAt: now, UpdatedAt: now,
+			Score: saved.Score, Comment: saved.Comment, Tags: saved.Tags, Misses: saved.Misses, CreatedAt: now, UpdatedAt: now,
 		}); err != nil {
 			s.logger.WarnContext(ctx, "sync rating", "household", t.householdID, "error", err)
 		}
@@ -242,4 +246,22 @@ func (s *Service) requireRecipe(ctx context.Context, householdID, recipeID strin
 		return ErrNotFound
 	}
 	return nil
+}
+
+// misses is what to save: the request's when it sent them, else the member's
+// saved ones, kept.
+func (s *Service) misses(ctx context.Context, actor households.Membership, recipeID string, sent *[]Miss) ([]Miss, error) {
+	if sent != nil {
+		return *sent, nil
+	}
+	ratings, err := s.store.ListForRecipe(ctx, actor.HouseholdID, recipeID)
+	if err != nil {
+		return nil, fmt.Errorf("read rating: %w", err)
+	}
+	for _, r := range ratings {
+		if r.UserID == actor.UserID {
+			return r.Misses, nil
+		}
+	}
+	return nil, nil
 }

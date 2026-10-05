@@ -19,6 +19,13 @@ nonisolated struct RatingTag: RawRepresentable, Codable, Hashable, Sendable, Ide
     static let tooBland = RatingTag(rawValue: "too-bland")
     static let tooMuchWork = RatingTag(rawValue: "too-much-work")
     static let greatLeftovers = RatingTag(rawValue: "great-leftovers")
+    static let tooSalty = RatingTag(rawValue: "too-salty")
+    static let tooSweet = RatingTag(rawValue: "too-sweet")
+    static let tookTooLong = RatingTag(rawValue: "took-too-long")
+    static let tooDry = RatingTag(rawValue: "too-dry")
+    static let tooSoggy = RatingTag(rawValue: "too-soggy")
+    static let portionTooSmall = RatingTag(rawValue: "portion-too-small")
+    static let portionTooBig = RatingTag(rawValue: "portion-too-big")
 
     /// The allowlist in the API's canonical order.
     static let known: [RatingTag] = [
@@ -73,11 +80,44 @@ nonisolated struct RecipeRating: Codable, Hashable, Sendable {
     let tags: [RatingTag]
     let createdAt: Date
     let updatedAt: Date
+    /// The ingredients that didn't work, from the follow-up questions; `nil` from an older server.
+    var misses: [RatingMiss]? = nil
 
     private enum CodingKeys: String, CodingKey {
         case recipeID = "recipeId"
         case userID = "userId"
-        case score, comment, tags, createdAt, updatedAt
+        case score, comment, tags, createdAt, updatedAt, misses
+    }
+}
+
+/// One ingredient that didn't work, and what was wrong with it.
+nonisolated struct RatingMiss: Codable, Hashable, Sendable {
+    let ingredientKey: String
+    let name: String
+    /// The part of a made ingredient ("Onions"), or empty.
+    var part: String = ""
+    let reason: String
+
+    static let didntLike = "didnt-like"
+    static let product = "product"
+
+    private enum CodingKeys: String, CodingKey {
+        case ingredientKey, name, part, reason
+    }
+
+    init(ingredientKey: String, name: String, part: String = "", reason: String) {
+        self.ingredientKey = ingredientKey
+        self.name = name
+        self.part = part
+        self.reason = reason
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ingredientKey = (try? container.decode(String.self, forKey: .ingredientKey)) ?? ""
+        name = try container.decode(String.self, forKey: .name)
+        part = (try? container.decode(String.self, forKey: .part)) ?? ""
+        reason = try container.decode(String.self, forKey: .reason)
     }
 }
 
@@ -122,9 +162,11 @@ nonisolated struct RateRecipeRequest: Encodable, Equatable, Sendable {
     let score: Int
     let comment: String
     let tags: [RatingTag]
+    /// `nil` keeps the saved ones; empty clears them.
+    var misses: [RatingMiss]? = nil
 
     private enum CodingKeys: String, CodingKey {
-        case score, comment, tags
+        case score, comment, tags, misses
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -134,6 +176,7 @@ nonisolated struct RateRecipeRequest: Encodable, Equatable, Sendable {
             try container.encode(comment, forKey: .comment)
         }
         try container.encode(tags, forKey: .tags)
+        try container.encodeIfPresent(misses, forKey: .misses)
     }
 }
 
@@ -155,6 +198,8 @@ nonisolated struct RatingDraft: Equatable, Sendable {
     var comment: String
     /// Distinct, in canonical order, never containing a tag and its exclusion.
     private(set) var tags: [RatingTag]
+    /// What didn't work; `nil` leaves the saved answers as they are.
+    var misses: [RatingMiss]? = nil
 
     init(score: Int = 0, comment: String = "", tags: [RatingTag] = []) {
         self.score = score
@@ -220,7 +265,7 @@ nonisolated struct RatingDraft: Equatable, Sendable {
     }
 
     var request: RateRecipeRequest {
-        RateRecipeRequest(score: score, comment: trimmedComment, tags: tags)
+        RateRecipeRequest(score: score, comment: trimmedComment, tags: tags, misses: misses)
     }
 }
 
@@ -245,4 +290,43 @@ nonisolated enum RatingFormat {
             ? String(localized: "Rated \(value) out of 5 by 1 member")
             : String(localized: "Rated \(value) out of 5 by \(rating.count) members")
     }
+}
+
+/// "What could have been better?", from the server (`GET .../rating-questions`): kinds of problem
+/// with their choices, and the meal's ingredients as cooked.
+nonisolated struct RatingQuestions: Decodable, Equatable, Sendable {
+    struct Category: Decodable, Equatable, Sendable, Identifiable {
+        let code: String
+        let title: String
+        let symbol: String
+        let options: [Option]
+        var id: String { code }
+        /// The category that asks about one ingredient instead of offering options.
+        var isIngredients: Bool { code == "ingredients" }
+    }
+
+    struct Option: Decodable, Equatable, Sendable, Identifiable {
+        let tag: String
+        let title: String
+        var id: String { tag }
+    }
+
+    struct Ingredient: Decodable, Equatable, Sendable, Identifiable {
+        let ingredientKey: String
+        let name: String
+        let parts: [String]
+        var id: String { ingredientKey + name }
+    }
+
+    struct Reason: Decodable, Equatable, Sendable, Identifiable {
+        let reason: String
+        let title: String
+        let detail: String
+        var id: String { reason }
+    }
+
+    let title: String
+    let categories: [Category]
+    let ingredients: [Ingredient]
+    let reasons: [Reason]
 }

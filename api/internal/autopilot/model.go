@@ -101,6 +101,9 @@ type Rating struct {
 	Score int
 	// Tags are structured feedback such as FeedbackMakeAgain.
 	Tags []string
+	// Disliked are ingredients the member said they didn't like in this
+	// meal ("onions"); other meals with them are leaned away from.
+	Disliked []string
 }
 
 // Feedback tags the baseline understands.
@@ -113,6 +116,11 @@ const (
 	FeedbackTooBland       = "too-bland"
 	FeedbackTooMuchWork    = "too-much-work"
 	FeedbackGreatLeftovers = "great-leftovers"
+	FeedbackTooSalty       = "too-salty"
+	FeedbackTooSweet       = "too-sweet"
+	FeedbackTookTooLong    = "took-too-long"
+	FeedbackTooDry         = "too-dry"
+	FeedbackTooSoggy       = "too-soggy"
 )
 
 // InteractionKind is what happened with an item.

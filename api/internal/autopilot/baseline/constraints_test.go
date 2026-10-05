@@ -336,3 +336,30 @@ func TestInvalidRequests(t *testing.T) {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// An ingredient a member said they didn't like, in a meal they rated under
+// five, leans Autopilot away from other meals with it, and the new follow-up
+// tags count against the rated meal.
+func TestDislikedIngredientsAndFollowUpTagsCount(t *testing.T) {
+	p := New(Options{})
+	catalog := []autopilot.Item{
+		meal("rated", cuisine("american"), ingredients("ground beef", "brussels sprouts")),
+		meal("sprouts", cuisine("american"), ingredients("chicken breasts", "brussels sprouts")),
+		meal("plain", cuisine("american"), ingredients("chicken breasts", "green beans")),
+		meal("salty", cuisine("american"), ingredients("pork chops")),
+	}
+	in := input(catalog...)
+	disliked := rate("rated", 3)
+	disliked.Disliked = []string{"Brussels Sprouts"}
+	in.Ratings = []autopilot.Rating{disliked, rate("salty", 4, autopilot.FeedbackTooSalty)}
+	feedback := map[string]float64{}
+	for _, rec := range rank(t, p, in, autopilot.Monday).Items {
+		feedback[rec.ItemID] = rec.Signals[SignalFeedback]
+	}
+	if feedback["sprouts"] >= feedback["plain"] {
+		t.Errorf("a meal with the disliked ingredient = %v, want below %v", feedback["sprouts"], feedback["plain"])
+	}
+	if feedback["salty"] >= 0 {
+		t.Errorf("too salty feedback = %v, want negative", feedback["salty"])
+	}
+}

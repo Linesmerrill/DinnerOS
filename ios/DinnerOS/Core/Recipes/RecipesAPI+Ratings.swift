@@ -23,6 +23,12 @@ nonisolated extension RecipesAPI {
             APIRequest.get(Self.recipePath(householdID, recipeID) + "/ratings").authorized(with: accessToken))
     }
 
+    /// The follow-up questions for a rating under five.
+    func ratingQuestions(householdID: String, recipeID: String, accessToken: String) async throws -> RatingQuestions {
+        try await client.send(
+            APIRequest.get(Self.recipePath(householdID, recipeID) + "/rating-questions").authorized(with: accessToken))
+    }
+
     private static func recipePath(_ householdID: String, _ recipeID: String) -> String {
         "/api/v1/households/\(householdID)/recipes/\(recipeID)"
     }

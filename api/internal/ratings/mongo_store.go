@@ -50,8 +50,16 @@ type ratingDoc struct {
 	Score       int           `bson:"score"`
 	Comment     string        `bson:"comment"`
 	Tags        []string      `bson:"tags"`
+	Misses      []missDoc     `bson:"misses,omitempty"`
 	CreatedAt   time.Time     `bson:"createdAt"`
 	UpdatedAt   time.Time     `bson:"updatedAt"`
+}
+
+type missDoc struct {
+	IngredientKey string `bson:"ingredientKey"`
+	Name          string `bson:"name"`
+	Part          string `bson:"part,omitempty"`
+	Reason        string `bson:"reason"`
 }
 
 func (d ratingDoc) toRating() Rating {
@@ -61,6 +69,9 @@ func (d ratingDoc) toRating() Rating {
 	}
 	for _, t := range d.Tags {
 		r.Tags = append(r.Tags, Tag(t))
+	}
+	for _, m := range d.Misses {
+		r.Misses = append(r.Misses, Miss{IngredientKey: m.IngredientKey, Name: m.Name, Part: m.Part, Reason: MissReason(m.Reason)})
 	}
 	return r
 }
@@ -100,6 +111,10 @@ func (s *MongoStore) Upsert(ctx context.Context, r Rating) (Rating, *Rating, err
 	for _, t := range r.Tags {
 		tags = append(tags, string(t))
 	}
+	misses := make([]missDoc, 0, len(r.Misses))
+	for _, m := range r.Misses {
+		misses = append(misses, missDoc{IngredientKey: m.IngredientKey, Name: m.Name, Part: m.Part, Reason: string(m.Reason)})
+	}
 	for attempt := 0; ; attempt++ {
 		id := bson.NewObjectID()
 		update := bson.D{
@@ -107,6 +122,7 @@ func (s *MongoStore) Upsert(ctx context.Context, r Rating) (Rating, *Rating, err
 				{Key: "score", Value: r.Score},
 				{Key: "comment", Value: r.Comment},
 				{Key: "tags", Value: tags},
+				{Key: "misses", Value: misses},
 				{Key: "updatedAt", Value: r.UpdatedAt},
 			}},
 			{Key: "$setOnInsert", Value: bson.D{{Key: "_id", Value: id}, {Key: "createdAt", Value: r.CreatedAt}}},
@@ -116,6 +132,9 @@ func (s *MongoStore) Upsert(ctx context.Context, r Rating) (Rating, *Rating, err
 			options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.Before)).Decode(&prev)
 		saved := r
 		saved.Tags = nilIfEmpty(r.Tags)
+		if len(r.Misses) == 0 {
+			saved.Misses = nil
+		}
 		switch {
 		case errors.Is(err, mongo.ErrNoDocuments):
 			saved.ID = id.Hex()

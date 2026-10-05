@@ -43,11 +43,53 @@ const (
 	TagTooBland       Tag = "too-bland"
 	TagTooMuchWork    Tag = "too-much-work"
 	TagGreatLeftovers Tag = "great-leftovers"
+	// What could have been better, asked after a rating under five.
+	TagTooSalty        Tag = "too-salty"
+	TagTooSweet        Tag = "too-sweet"
+	TagTookTooLong     Tag = "took-too-long"
+	TagTooDry          Tag = "too-dry"
+	TagTooSoggy        Tag = "too-soggy"
+	TagPortionTooSmall Tag = "portion-too-small"
+	TagPortionTooBig   Tag = "portion-too-big"
 )
 
 var allTags = []Tag{
 	TagMakeAgain, TagNeverAgain, TagKidFavorite, TagKidsDisliked,
 	TagTooSpicy, TagTooBland, TagTooMuchWork, TagGreatLeftovers,
+	TagTooSalty, TagTooSweet, TagTookTooLong, TagTooDry, TagTooSoggy, TagPortionTooSmall, TagPortionTooBig,
+}
+
+// MissReason is what was wrong with one ingredient.
+type MissReason string
+
+// Miss reasons.
+const (
+	// MissDidntLike: the member doesn't like the ingredient; Autopilot leans
+	// away from other meals with it.
+	MissDidntLike MissReason = "didnt-like"
+	MissTooMuch   MissReason = "too-much"
+	MissTooLittle MissReason = "too-little"
+	// MissProduct: the ingredient was fine, the product bought for it wasn't
+	// ("pre-cut sprouts were dry"); the saved product gets flagged to pick a
+	// different one, and the recipe isn't held against it.
+	MissProduct MissReason = "product"
+)
+
+var missReasons = []MissReason{MissDidntLike, MissTooMuch, MissTooLittle, MissProduct}
+
+// MaxMisses bounds the ingredients one rating can name.
+const MaxMisses = 20
+
+// Miss is one ingredient that didn't work, optionally one part of it ("the
+// onions" in the sauce).
+type Miss struct {
+	// IngredientKey is the recipe line's key: a catalog ID or "name:" and
+	// the normalized name.
+	IngredientKey string
+	Name          string
+	// Part is the piece of a made ingredient that was the problem, or "".
+	Part   string
+	Reason MissReason
 }
 
 // Tags returns the allowed tags in their canonical order.
@@ -62,7 +104,10 @@ type Rating struct {
 	Score       int
 	Comment     string
 	// Tags are distinct and in canonical (Tags) order.
-	Tags      []Tag
+	Tags []Tag
+	// Misses are the ingredients that didn't work, from the follow-up to a
+	// rating under five.
+	Misses    []Miss
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -96,12 +141,16 @@ type RateInput struct {
 	Score   int
 	Comment string
 	Tags    []string
+	// Misses nil keeps the saved ones (an app that doesn't ask sends none);
+	// empty clears them.
+	Misses *[]Miss
 }
 
 type validInput struct {
 	score   int
 	comment string
 	tags    []Tag
+	misses  *[]Miss
 }
 
 // validate trims the comment and returns tags distinct and in canonical order.
@@ -127,7 +176,35 @@ func (in RateInput) validate() (validInput, error) {
 		return validInput{}, invalid("tags make-again and never-again can't be used together")
 	}
 	slices.SortFunc(tags, func(a, b Tag) int { return slices.Index(allTags, a) - slices.Index(allTags, b) })
-	return validInput{score: in.Score, comment: comment, tags: tags}, nil
+	v := validInput{score: in.Score, comment: comment, tags: tags}
+	if in.Misses != nil {
+		misses, err := validMisses(*in.Misses)
+		if err != nil {
+			return validInput{}, err
+		}
+		v.misses = &misses
+	}
+	return v, nil
+}
+
+func validMisses(in []Miss) ([]Miss, error) {
+	if len(in) > MaxMisses {
+		return nil, invalid(fmt.Sprintf("at most %d ingredients can be named", MaxMisses))
+	}
+	out := []Miss{}
+	for _, m := range in {
+		m.IngredientKey, m.Name, m.Part = strings.TrimSpace(m.IngredientKey), strings.TrimSpace(m.Name), strings.TrimSpace(m.Part)
+		if m.Name == "" || utf8.RuneCountInString(m.Name) > 200 || utf8.RuneCountInString(m.Part) > 200 || len(m.IngredientKey) > 300 {
+			return nil, invalid("each ingredient needs a name of at most 200 characters")
+		}
+		if !slices.Contains(missReasons, m.Reason) {
+			return nil, invalid(fmt.Sprintf("reason %q is not one of didnt-like, too-much, too-little, product", m.Reason))
+		}
+		if !slices.ContainsFunc(out, func(o Miss) bool { return o == m }) {
+			out = append(out, m)
+		}
+	}
+	return out, nil
 }
 
 func joinTags(tags []Tag) string {

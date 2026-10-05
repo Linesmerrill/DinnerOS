@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/Linesmerrill/DinnerOS/api/internal/ratings"
 	"slices"
 	"strings"
 	"time"
@@ -167,7 +168,20 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 		for _, t := range rating.Tags {
 			tags = append(tags, string(t))
 		}
-		in.Ratings = append(in.Ratings, autopilot.Rating{ItemID: rating.RecipeID, MemberID: rating.UserID, Score: rating.Score, Tags: tags})
+		var disliked []string
+		for _, miss := range rating.Misses {
+			if miss.Reason != ratings.MissDidntLike {
+				continue
+			}
+			if miss.Part != "" {
+				disliked = append(disliked, miss.Part)
+			} else {
+				disliked = append(disliked, miss.Name)
+			}
+		}
+		in.Ratings = append(in.Ratings, autopilot.Rating{
+			ItemID: rating.RecipeID, MemberID: rating.UserID, Score: rating.Score, Tags: tags, Disliked: disliked,
+		})
 	}
 	for _, p := range plans {
 		if p.Week == w {

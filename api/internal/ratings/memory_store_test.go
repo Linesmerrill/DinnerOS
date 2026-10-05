@@ -20,6 +20,7 @@ type memoryStore struct {
 
 func cloneRating(r Rating) Rating {
 	r.Tags = nilIfEmpty(slices.Clone(r.Tags))
+	r.Misses = nilIfEmpty(slices.Clone(r.Misses))
 	return r
 }
 

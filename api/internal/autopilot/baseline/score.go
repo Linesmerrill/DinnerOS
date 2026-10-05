@@ -132,7 +132,12 @@ func (m *model) score(s *slot, it *item) cand {
 	// Structured feedback.
 	weeknight := m.prefs.weeknights[s.day]
 	feedback := 0.6*flag(st.makeAgain) + 0.4*flag(st.kidFavorite) + 0.2*flag(st.greatLeftovers) -
-		0.4*flag(st.kidsDisliked) - 0.3*flag(st.tooSpicy) - 0.2*flag(st.tooBland)
+		0.4*flag(st.kidsDisliked) - 0.3*flag(st.tooSpicy) - 0.2*flag(st.tooBland) -
+		0.2*flag(st.tooSalty) - 0.2*flag(st.tooSweet) - 0.2*flag(st.tooDry) - 0.2*flag(st.tooSoggy)
+	// An ingredient a member didn't like in another meal.
+	if m.hasDisliked(it) {
+		feedback -= 0.5
+	}
 	if weeknight {
 		feedback -= 0.6 * flag(st.tooMuchWork)
 	} else {
@@ -548,4 +553,17 @@ func displayName(v string) string {
 		words[i] = strings.ToUpper(word[:1]) + word[1:]
 	}
 	return strings.Join(words, " ")
+}
+
+// hasDisliked reports whether the item uses an ingredient a member said they
+// didn't like.
+func (m *model) hasDisliked(it *item) bool {
+	for _, phrase := range m.disliked {
+		for _, name := range it.ingredients {
+			if containsPhrase(name, phrase) {
+				return true
+			}
+		}
+	}
+	return false
 }

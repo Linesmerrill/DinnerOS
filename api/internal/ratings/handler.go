@@ -58,17 +58,29 @@ type RateRequest struct {
 	Score   int      `json:"score"`
 	Comment string   `json:"comment,omitempty"`
 	Tags    []string `json:"tags,omitempty"`
+	// Misses are the ingredients that didn't work. Omitted keeps the saved
+	// ones; an empty list clears them.
+	Misses *[]MissJSON `json:"misses,omitempty"`
+}
+
+// MissJSON is one ingredient that didn't work.
+type MissJSON struct {
+	IngredientKey string `json:"ingredientKey"`
+	Name          string `json:"name"`
+	Part          string `json:"part,omitempty"`
+	Reason        string `json:"reason"`
 }
 
 // RatingResponse is one member's rating.
 type RatingResponse struct {
-	RecipeID  string    `json:"recipeId"`
-	UserID    string    `json:"userId"`
-	Score     int       `json:"score"`
-	Comment   string    `json:"comment"`
-	Tags      []string  `json:"tags"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	RecipeID  string     `json:"recipeId"`
+	UserID    string     `json:"userId"`
+	Score     int        `json:"score"`
+	Comment   string     `json:"comment"`
+	Tags      []string   `json:"tags"`
+	Misses    []MissJSON `json:"misses"`
+	CreatedAt time.Time  `json:"createdAt"`
+	UpdatedAt time.Time  `json:"updatedAt"`
 }
 
 // HouseholdRatingResponse is a recipe's aggregate rating in a household.
@@ -99,6 +111,10 @@ func NewRatingResponse(r Rating) RatingResponse {
 	for _, t := range r.Tags {
 		resp.Tags = append(resp.Tags, string(t))
 	}
+	resp.Misses = make([]MissJSON, 0, len(r.Misses))
+	for _, m := range r.Misses {
+		resp.Misses = append(resp.Misses, MissJSON{IngredientKey: m.IngredientKey, Name: m.Name, Part: m.Part, Reason: string(m.Reason)})
+	}
 	return resp
 }
 
@@ -119,7 +135,15 @@ func (h *Handler) rate(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	saved, err := h.opts.Service.Rate(r.Context(), actor, chi.URLParam(r, "recipeId"), RateInput(req))
+	in := RateInput{Score: req.Score, Comment: req.Comment, Tags: req.Tags}
+	if req.Misses != nil {
+		misses := make([]Miss, 0, len(*req.Misses))
+		for _, m := range *req.Misses {
+			misses = append(misses, Miss{IngredientKey: m.IngredientKey, Name: m.Name, Part: m.Part, Reason: MissReason(m.Reason)})
+		}
+		in.Misses = &misses
+	}
+	saved, err := h.opts.Service.Rate(r.Context(), actor, chi.URLParam(r, "recipeId"), in)
 	if h.writeServiceError(w, r, "rate recipe failed", err) {
 		return
 	}

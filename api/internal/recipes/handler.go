@@ -111,6 +111,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(edit).Put("/households/{householdId}/recipes/{recipeId}/sharing", h.setSharing)
 		r.With(view).Get("/households/{householdId}/recipes/{recipeId}", h.get)
 		r.With(view).Get("/households/{householdId}/recipes/{recipeId}/instructions", h.instructions)
+		r.With(view).Get("/households/{householdId}/recipes/{recipeId}/rating-questions", h.ratingQuestions)
 		imports := households.RequirePermission(h.opts.Authorizer, households.PermRecipesImport, h.logger)
 		// Review items are import bookkeeping, so whoever may import may read
 		// them. The static path wins over /{recipeId} in chi.

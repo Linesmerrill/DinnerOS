@@ -20,6 +20,8 @@ struct MealRatingRow: View {
     @State private var isSaving = false
     @State private var failed = false
     @State private var savedCount = 0
+    /// Asks what could have been better after a rating under five.
+    @State private var asksWhy = false
 
     private var score: Int { recipe.myRating?.score ?? 0 }
 
@@ -36,6 +38,19 @@ struct MealRatingRow: View {
             }
             StarRatingControl(score: binding)
                 .disabled(isSaving)
+            // Under five, the answers can be given or changed any time.
+            if (1...4).contains(score) {
+                Button(
+                    recipe.myRating?.misses?.isEmpty == false || hasFollowUpTags
+                        ? "Edit What Could Be Better" : "What Could Be Better?"
+                ) {
+                    asksWhy = true
+                }
+                .font(.footnote.weight(.semibold))
+                .buttonStyle(.plain)
+                .foregroundStyle(.tint)
+                .padding(.top, 2)
+            }
             if failed {
                 Text("Couldn't save that rating. Tap a star to try again.")
                     .font(.caption)
@@ -43,6 +58,19 @@ struct MealRatingRow: View {
             }
         }
         .sensoryFeedback(.success, trigger: savedCount)
+        .sheet(isPresented: $asksWhy) {
+            RatingFeedbackSheet(
+                recipeID: recipe.id, recipeName: recipe.name, score: score, rating: recipe.myRating)
+        }
+    }
+
+    /// Whether the saved rating already has answers from the follow-up questions.
+    private var hasFollowUpTags: Bool {
+        let followUp: Set<RatingTag> = [
+            .tooSalty, .tooSweet, .tooSpicy, .tooBland, .tooDry, .tooSoggy, .tookTooLong, .tooMuchWork,
+            .portionTooSmall, .portionTooBig,
+        ]
+        return recipe.myRating?.tags.contains(where: followUp.contains) == true
     }
 
     /// Reads the saved score and saves on a tap. `StarRatingControl` is the recipe screen's own
@@ -67,6 +95,8 @@ struct MealRatingRow: View {
                     recipeID: recipe.id, mine: saved,
                     household: library.cachedRecipe(id: recipe.id)?.householdRating)
                 savedCount += 1
+                // Under five: ask what could have been better, once, right away.
+                if value < 5 { asksWhy = true }
             } catch is CancellationError {
                 return
             } catch {

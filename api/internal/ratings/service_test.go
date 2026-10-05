@@ -351,7 +351,44 @@ func TestSummaryAverage(t *testing.T) {
 			t.Errorf("%+v.Average() = %v, %v; want %v, %v", tt.s, got, ok, tt.want, tt.ok)
 		}
 	}
-	if got := Tags(); len(got) != 8 || got[0] != TagMakeAgain {
+	if got := Tags(); len(got) != 15 || got[0] != TagMakeAgain {
 		t.Errorf("Tags() = %v", got)
+	}
+}
+
+// The follow-up to a rating under five: new tags, and the ingredients that
+// didn't work. A save that doesn't send misses keeps them (an older app sends
+// none); an empty list clears them.
+func TestRateKeepsWhatDidntWork(t *testing.T) {
+	env := newTestEnv(t)
+	ada := member(hhA, userAda)
+	sauce := Miss{IngredientKey: "name:creamy thyme sauce", Name: "Creamy Thyme Sauce", Part: "Onions", Reason: MissDidntLike}
+	sprouts := Miss{IngredientKey: "id1", Name: "Brussels Sprouts", Reason: MissProduct}
+	misses := []Miss{sauce, sprouts, sauce}
+	got := mustRate(t, env, ada, tacos, RateInput{Score: 4, Tags: []string{"too-salty", "took-too-long"}, Misses: &misses})
+	if len(got.Misses) != 2 || got.Misses[0] != sauce || got.Misses[1] != sprouts {
+		t.Fatalf("misses = %+v", got.Misses)
+	}
+	if len(got.Tags) != 2 || got.Tags[0] != TagTooSalty || got.Tags[1] != TagTookTooLong {
+		t.Errorf("tags = %v", got.Tags)
+	}
+	// Changing the stars alone keeps them.
+	again := mustRate(t, env, ada, tacos, RateInput{Score: 3, Tags: []string{"too-salty"}})
+	if len(again.Misses) != 2 {
+		t.Errorf("after a score change, misses = %+v", again.Misses)
+	}
+	none := []Miss{}
+	cleared := mustRate(t, env, ada, tacos, RateInput{Score: 5, Misses: &none})
+	if cleared.Misses != nil {
+		t.Errorf("cleared misses = %+v", cleared.Misses)
+	}
+	var ve *ValidationError
+	bad := []Miss{{Name: "Onion", Reason: "meh"}}
+	if _, err := env.svc.Rate(context.Background(), ada, tacos, RateInput{Score: 4, Misses: &bad}); !errors.As(err, &ve) {
+		t.Errorf("bad reason err = %v", err)
+	}
+	unnamed := []Miss{{Reason: MissTooMuch}}
+	if _, err := env.svc.Rate(context.Background(), ada, tacos, RateInput{Score: 4, Misses: &unnamed}); !errors.As(err, &ve) {
+		t.Errorf("unnamed err = %v", err)
 	}
 }
