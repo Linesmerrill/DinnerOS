@@ -745,6 +745,34 @@ func amounts(list []Amount) ([]AmountResponse, string) {
 	return out, strings.Join(texts, " + ")
 }
 
+// haveText says what's at home when the pantry has some but not enough:
+// "You have 12 oz of the 20 oz needed." Empty otherwise.
+func haveText(s LineSource) string {
+	if s.OnHand == nil || s.Needed == nil {
+		return ""
+	}
+	_, have := amounts([]Amount{*s.OnHand})
+	_, need := amounts([]Amount{*s.Needed})
+	if have == "" || need == "" {
+		return ""
+	}
+	// No-break spaces keep "10 oz" on one line when the row wraps.
+	keep := strings.NewReplacer(" ", "\u00a0")
+	return "You have " + keep.Replace(have) + " of the " + keep.Replace(need) + " needed."
+}
+
+// packagesText is the count to buy: "1 × 16 oz", or "2 packages" when the
+// size is unknown.
+func packagesText(packages int, size *ingredients.Amount) string {
+	if size != nil && !size.Quantity.IsZero() {
+		return fmt.Sprintf("%d × %s", packages, providers.AmountText(*size))
+	}
+	if packages == 1 {
+		return "1 package"
+	}
+	return fmt.Sprintf("%d packages", packages)
+}
+
 // searchTermsResponse renders the search suggested for a line. The slices
 // are never null, so clients can render them without a nil check.
 func searchTermsResponse(name, category string) SearchTermsResponse {
@@ -772,6 +800,10 @@ func (h *Handler) lineResponse(provider providers.Key, l HandoffLine, stored boo
 	count, size := l.PackageCount(), amountFromSize(l.PackageSize)
 	count.Packages = l.Packages
 	resp.CoverageText = providers.CoverageText(count, size)
+	if have := haveText(l.LineSource); have != "" {
+		// "1 × 16 oz covers 8 oz" reads as buying 8 oz; say what's at home.
+		resp.CoverageText = packagesText(l.Packages, size) + ". " + have
+	}
 	resp.Coverage, resp.CoversWeek = l.Coverage, count.CoversWeek
 	resp.SearchTerms = searchTermsResponse(l.Name, l.Category)
 	resp.PriceCents = l.PriceCents
@@ -904,6 +936,9 @@ func (h *Handler) proposalResponse(p Proposal, stored bool) ProposalResponse {
 			er.Check = lineCheckResponse(e.Check)
 		}
 		er.Amounts, er.QuantityText = amounts(e.Amounts)
+		if have := haveText(e.LineSource); have != "" {
+			er.QuantityText = have
+		}
 		if e.GroceryStatus != "" {
 			status := e.GroceryStatus
 			er.GroceryStatus = &status

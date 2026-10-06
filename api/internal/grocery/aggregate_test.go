@@ -362,8 +362,14 @@ func TestHavingSomeIsNotHavingEnough(t *testing.T) {
 			if item.Status != c.wantStatus || len(item.Amounts) != 1 || item.Amounts[0].Quantity.String() != c.wantBuy || item.Amounts[0].Unit.Code != "oz" {
 				t.Errorf("item = %s %v, want %s %s oz", item.Status, item.Amounts, c.wantStatus, c.wantBuy)
 			}
-			if (item.OnHand != nil) != (c.wantStatus == StatusToBuy) {
-				t.Errorf("on hand = %+v", item.OnHand)
+			if (item.OnHand != nil) != (c.wantStatus == StatusToBuy) || (item.Needed != nil) != (c.wantStatus == StatusToBuy) {
+				t.Errorf("on hand = %+v, needed = %+v", item.OnHand, item.Needed)
+			}
+			// Nobody shops for 8 oz of pork: the line keeps the week's whole
+			// need and what's at home, in the same unit, to say so.
+			if item.OnHand != nil && (item.OnHand.Quantity.String() != "12" || item.OnHand.Unit.Code != "oz" ||
+				item.Needed.Quantity.String() != "20" || item.Needed.Unit.Code != "oz") {
+				t.Errorf("have %v of %v, want 12 oz of 20 oz", item.OnHand, item.Needed)
 			}
 			// Each meal's share still says what that meal needs.
 			for _, share := range item.Shares {

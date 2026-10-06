@@ -275,10 +275,11 @@ type GroceryItemResponse struct {
 	IngredientKey string                  `json:"ingredientKey"`
 	Name          string                  `json:"name"`
 	Amounts       []GroceryAmountResponse `json:"amounts"`
-	// QuantityText joins the amounts for display ("1 onion + 8 oz").
+	// QuantityText joins the amounts for display ("1 onion + 8 oz"). With
+	// OnHandText it is the week's whole need ("20 oz"), not the rest.
 	QuantityText string `json:"quantityText"`
 	// OnHandText is set when the pantry has some but not enough, and the
-	// amounts are the rest to buy: "12 oz at home".
+	// amounts are the rest to buy: "You have 12 oz. Buy more."
 	OnHandText   string                  `json:"onHandText,omitempty"`
 	Unquantified bool                    `json:"unquantified"`
 	Status       grocery.Status          `json:"status"`
@@ -440,7 +441,7 @@ func newGroceryItemResponse(item grocery.Item) GroceryItemResponse {
 		Recipes: make([]GroceryRecipeResponse, 0, len(item.Sources)),
 	}
 	if item.OnHand != nil {
-		ir.OnHandText = amountText(*item.OnHand) + " at home"
+		ir.OnHandText = "You have " + strings.ReplaceAll(amountText(*item.OnHand), " ", "\u00a0") + ". Buy more."
 	}
 	texts := make([]string, 0, len(item.Amounts))
 	for _, a := range item.Amounts {
@@ -451,6 +452,10 @@ func newGroceryItemResponse(item grocery.Item) GroceryItemResponse {
 		})
 	}
 	ir.QuantityText = strings.Join(texts, " + ")
+	if item.Needed != nil {
+		// What's left to buy isn't a size anyone shops for; the week's need is.
+		ir.QuantityText = amountText(*item.Needed)
+	}
 	for _, src := range item.Sources {
 		ir.Recipes = append(ir.Recipes, GroceryRecipeResponse{ID: src.RecipeID, Name: src.RecipeName})
 	}

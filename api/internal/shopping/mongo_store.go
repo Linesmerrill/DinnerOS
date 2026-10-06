@@ -458,6 +458,8 @@ type sourceDoc struct {
 	GroceryStatus string      `bson:"groceryStatus,omitempty"`
 	// Recipes is absent on handoffs stored before it was recorded.
 	Recipes []recipeRefDoc `bson:"recipes,omitempty"`
+	OnHand  *amountDoc     `bson:"onHand,omitempty"`
+	Needed  *amountDoc     `bson:"needed,omitempty"`
 }
 
 type recipeRefDoc struct {
@@ -541,6 +543,10 @@ func newSourceDoc(s LineSource) sourceDoc {
 	for _, r := range s.Recipes {
 		d.Recipes = append(d.Recipes, recipeRefDoc(r))
 	}
+	if s.OnHand != nil && s.Needed != nil {
+		onHand, needed := newAmountDoc(s.OnHand.Quantity, s.OnHand.Unit), newAmountDoc(s.Needed.Quantity, s.Needed.Unit)
+		d.OnHand, d.Needed = &onHand, &needed
+	}
 	return d
 }
 
@@ -551,6 +557,10 @@ func (d sourceDoc) source() LineSource {
 	}
 	for _, r := range d.Recipes {
 		s.Recipes = append(s.Recipes, RecipeRef(r))
+	}
+	if d.OnHand != nil && d.Needed != nil {
+		s.OnHand = &Amount{Quantity: d.OnHand.Quantity, Unit: d.OnHand.Unit}
+		s.Needed = &Amount{Quantity: d.Needed.Quantity, Unit: d.Needed.Unit}
 	}
 	return s
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
+	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 )
 
@@ -169,5 +170,32 @@ func TestGroceryLinesWithoutUsableAmounts(t *testing.T) {
 	}
 	if _, err := grocery.Aggregate([]grocery.RecipeSelection{{RecipeID: r.ID, RecipeName: r.Name, RecipeServings: 2, TargetServings: 2, Lines: lines}}, nil); err != nil {
 		t.Errorf("Aggregate() error = %v; unusable amounts must not fail the list", err)
+	}
+}
+
+// Short of pork, the list says the week's 20 oz and the 12 oz at home rather
+// than "8 oz": nobody shops for 8 oz of pork (decision 623).
+func TestGroceryItemShortOfWhatTheWeekNeeds(t *testing.T) {
+	oz, err := ingredients.LookupUnit("oz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	amount := func(n int64) grocery.Amount { return grocery.Amount{Quantity: ingredients.NewQuantity(n, 1), Unit: oz} }
+	have, need := amount(12), amount(20)
+	item := grocery.Item{IngredientKey: "pork", Name: "Ground Pork", Status: grocery.StatusToBuy,
+		Amounts: []grocery.Amount{amount(8)}, OnHand: &have, Needed: &need}
+
+	got := newGroceryItemResponse(item)
+	if got.QuantityText != "20 oz" || got.OnHandText != "You have 12\u00a0oz. Buy more." {
+		t.Errorf("text = %q / %q", got.QuantityText, got.OnHandText)
+	}
+	// The amounts are still the rest, which sizes the packages.
+	if len(got.Amounts) != 1 || got.Amounts[0].Quantity != "8" {
+		t.Errorf("amounts = %+v", got.Amounts)
+	}
+
+	item.OnHand, item.Needed = nil, nil
+	if got := newGroceryItemResponse(item); got.QuantityText != "8 oz" || got.OnHandText != "" {
+		t.Errorf("covered text = %q / %q", got.QuantityText, got.OnHandText)
 	}
 }

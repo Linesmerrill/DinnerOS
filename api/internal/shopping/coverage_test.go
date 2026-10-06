@@ -56,3 +56,26 @@ func TestNormalizeCoverage(t *testing.T) {
 		}
 	}
 }
+
+// Short of pork, a line reads "1 × 16 oz. You have 12 oz of the 20 oz
+// needed." rather than "covers 8 oz": nobody shops for 8 oz (decision 623).
+func TestShortLineSaysWhatsAtHome(t *testing.T) {
+	src := LineSource{OnHand: &Amount{Quantity: "12", Unit: "oz"}, Needed: &Amount{Quantity: "20", Unit: "oz"}}
+	if got := haveText(src); got != "You have 12\u00a0oz of the 20\u00a0oz needed." {
+		t.Errorf("haveText = %q", got)
+	}
+	if got := haveText(LineSource{}); got != "" {
+		t.Errorf("covered haveText = %q", got)
+	}
+	oz, _ := ingredients.LookupUnit("oz")
+	size := &ingredients.Amount{Quantity: ingredients.NewQuantity(16, 1), Unit: oz}
+	for _, c := range []struct {
+		packages int
+		size     *ingredients.Amount
+		want     string
+	}{{1, size, "1 × 16 oz"}, {1, nil, "1 package"}, {2, nil, "2 packages"}} {
+		if got := packagesText(c.packages, c.size); got != c.want {
+			t.Errorf("packagesText(%d) = %q, want %q", c.packages, got, c.want)
+		}
+	}
+}

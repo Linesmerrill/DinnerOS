@@ -286,6 +286,11 @@ type LineSource struct {
 	Shares []grocery.Share
 	// SkipScope is set on an ExcludedSkipped line. Not stored.
 	SkipScope grocery.SkipScope
+	// OnHand and Needed are set when the pantry has some but not enough
+	// (grocery.Item.OnHand): Amounts are then the rest to buy, which sizes
+	// the packages, while the line says "you have 12 oz of the 20 oz needed".
+	OnHand *Amount
+	Needed *Amount
 }
 
 // RecipeRef names a recipe a line is for.

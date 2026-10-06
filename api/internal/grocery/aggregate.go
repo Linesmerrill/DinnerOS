@@ -149,6 +149,9 @@ type Item struct {
 	// The item is then toBuy, and its convertible amount is the rest still
 	// to buy (decision 623).
 	OnHand *Amount
+	// Needed is what the week needs in all, set with OnHand: the list says
+	// "20 oz, you have 12 oz", since nobody buys 8 oz of pork.
+	Needed *Amount
 	// Shares split the item by the recipe each part is for, in the order of
 	// Sources: how much of it each meal needs. The list shows an item under
 	// every meal that uses it, with that meal's own amount, while it stays one
@@ -764,9 +767,12 @@ func shortOf(item *Item, pantry StockedPantry) {
 			return
 		}
 		rest := new(big.Rat).Sub(need.Quantity.Rat(), haveInNeed.Rat())
+		needed := need
+		item.Needed = &needed
 		item.Amounts[i] = Amount{Quantity: ingredients.NewQuantity(1, 1).MulRat(rest), Unit: need.Unit}
 		item.Status = StatusToBuy
-		item.OnHand = &have
+		// In the need's unit, so the line reads "2 lb of the 2 ¼ lb", not "32 oz".
+		item.OnHand = &Amount{Quantity: haveInNeed, Unit: need.Unit}
 		return
 	}
 }

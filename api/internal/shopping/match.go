@@ -290,5 +290,9 @@ func lineSource(category string, item grocery.Item) LineSource {
 		src.Recipes = append(src.Recipes, RecipeRef{ID: s.RecipeID, Name: s.RecipeName})
 	}
 	src.Shares = item.Shares
+	if item.OnHand != nil && item.Needed != nil {
+		src.OnHand = &Amount{Quantity: item.OnHand.Quantity.String(), Unit: item.OnHand.Unit.Code}
+		src.Needed = &Amount{Quantity: item.Needed.Quantity.String(), Unit: item.Needed.Unit.Code}
+	}
 	return src
 }

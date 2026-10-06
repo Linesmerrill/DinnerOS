@@ -475,6 +475,10 @@ func TestIntegrationHandoffAndConfirm(t *testing.T) {
 		reasons(next)[f.keys["Kidney Beans"]] != ExcludedInPantry {
 		t.Errorf("match after confirming = %+v, %v", next, err)
 	}
+	// It says what's at home, in the need's unit, rather than "covers ¼ lb".
+	if beef := next.Lines[0]; beef.OnHand == nil || beef.Needed == nil || haveText(beef.LineSource) != "You have 2\u00a0lb of the 2\u00a0¼\u00a0lb needed." {
+		t.Errorf("beef have/need = %+v / %+v (%q)", beef.OnHand, beef.Needed, haveText(beef.LineSource))
+	}
 
 	// Skip the rest, then confirm a skipped line later.
 	// Answering every line closed the first handoff, so this send starts a
