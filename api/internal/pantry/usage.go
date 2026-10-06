@@ -527,7 +527,11 @@ func needsAutoLow(item Item, e *Estimate) bool {
 
 func (e *Estimate) summary() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "About %d%% left", e.PercentRemaining)
+	if e.PercentRemaining <= 0 {
+		b.WriteString("None left by our count")
+	} else {
+		fmt.Fprintf(&b, "About %d%% left", e.PercentRemaining)
+	}
 	var parts []string
 	if e.RecipeUses > 0 {
 		parts = append(parts, fmt.Sprintf("%s used %s", countText(e.RecipeUses, "recipe", "recipes"), amountText(e.RecipeUsed, e.Unit)))

@@ -201,7 +201,7 @@ func TestPurchaseCookAndAlertFlow(t *testing.T) {
 		t.Fatalf("after crossing = %+v", got)
 	}
 	alerts := f.notifier.all()
-	if len(alerts) != 1 || alerts[0].Type != notifications.TypePantryLow || alerts[0].Title != "Butter is running low" ||
+	if len(alerts) != 1 || alerts[0].Type != notifications.TypePantryLow || alerts[0].Title != "Butter: running low" ||
 		alerts[0].Subject.ID != butter.ID || alerts[0].DedupeKey != LowAlertDedupeKey(butter.ID, res.Purchase.ID) ||
 		alerts[0].Body != "About 19% left: 4 recipes used 0.81 cup." {
 		t.Fatalf("alerts = %+v", alerts)

@@ -456,6 +456,16 @@ func (s *Service) ListPurchases(ctx context.Context, householdID, itemID string)
 
 // --- Alerts -------------------------------------------------------------------
 
+// LowAlertTitle names the item first, so a plural reads right ("Flour
+// Tortillas: running low", not "Flour Tortillas is"), and says "probably out"
+// once the estimate reaches nothing left: "running low" at 0% read as a joke.
+func LowAlertTitle(name string, percentRemaining int) string {
+	if percentRemaining <= 0 {
+		return name + ": probably out"
+	}
+	return name + ": running low"
+}
+
 // LowAlertDedupeKey is the notification dedupe key for an item's low alert in
 // one cycle.
 func LowAlertDedupeKey(itemID, cycleID string) string {
@@ -475,7 +485,7 @@ func (s *Service) checkLow(ctx context.Context, item Item, threshold int) (Item,
 		if s.notifier != nil {
 			_, _, err := s.notifier.Create(ctx, notifications.New{
 				HouseholdID: item.HouseholdID, Type: notifications.TypePantryLow,
-				Title:     item.DisplayName + " is running low",
+				Title:     LowAlertTitle(item.DisplayName, e.PercentRemaining),
 				Body:      e.Summary,
 				Subject:   notifications.Subject{Kind: notifications.SubjectPantryItem, ID: item.ID},
 				DedupeKey: LowAlertDedupeKey(item.ID, e.CycleID),

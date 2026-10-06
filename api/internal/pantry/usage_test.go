@@ -306,3 +306,18 @@ func TestRestockCarriesInStockLeftovers(t *testing.T) {
 		t.Errorf("crumb segment = %+v", h)
 	}
 }
+
+// At nothing left the alert says so: "Flour Tortillas is running low / About
+// 0% left" read as a joke, and "Tortillas is" as a typo.
+func TestLowAlertAtNothingLeftSaysProbablyOut(t *testing.T) {
+	if got := LowAlertTitle("Flour Tortillas", 0); got != "Flour Tortillas: probably out" {
+		t.Errorf("title at 0%% = %q", got)
+	}
+	if got := LowAlertTitle("Butter", 18); got != "Butter: running low" {
+		t.Errorf("title at 18%% = %q", got)
+	}
+	e := Estimate{PercentRemaining: 0, RecipeUses: 2, RecipeUsed: big.NewRat(12, 1), Unit: "count"}
+	if got := e.summary(); got != "None left by our count: 2 recipes used 12." {
+		t.Errorf("summary at 0%% = %q", got)
+	}
+}
