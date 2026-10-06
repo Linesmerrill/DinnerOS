@@ -183,7 +183,7 @@ func run() error {
 		Pantry:  pantryService,
 		Logger:  logger,
 	})
-	pantryService.SetKeyResolver(substitutesService)
+	pantryService.SetKeyResolver(substitutesService).SetCookSpecialties(substitutesService)
 	behavior := newBehavior(db, recipeService, userService, householdService, tokens, logger, pantryService.CookedListener())
 	// A strategy change is a household preference signal, like an Autopilot
 	// one, so it is recorded server-side.

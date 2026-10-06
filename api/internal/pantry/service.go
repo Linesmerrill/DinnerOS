@@ -50,8 +50,10 @@ type Service struct {
 	adjuster CookAdjuster
 	// shelfLife is set by SetShelfLife; it's optional.
 	shelfLife ShelfLife
-	logger    *slog.Logger
-	now       func() time.Time
+	// specialties is set by SetCookSpecialties; it's optional.
+	specialties CookSpecialties
+	logger      *slog.Logger
+	now         func() time.Time
 	// newID generates purchase and cycle IDs.
 	newID func() string
 }

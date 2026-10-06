@@ -606,3 +606,14 @@ func (a *accumulator) itemVia() []ItemVia {
 	}
 	return out
 }
+
+// StoreAlternativeLines is line replaced by its store alternative's
+// ingredients, scaled to the line's amount, when the household's choice for
+// spec is a store alternative; false otherwise. Cooking deducts these, so
+// the tomato paste stirred into a Tex-Mex Paste swap counts down the jar.
+func StoreAlternativeLines(line Line, spec *Specialty) ([]Line, bool) {
+	if spec == nil || spec.Choice == nil || spec.Choice.Type != ChoiceStoreAlternative {
+		return nil, false
+	}
+	return storeLines(line, spec, spec.Choice), true
+}

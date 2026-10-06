@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
+	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
+	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 )
@@ -554,5 +556,71 @@ func TestRecordUseTakesAnAmountOffTheEstimate(t *testing.T) {
 	}
 	if _, err := f.svc.RecordUse(f.ctx, households.Membership{HouseholdID: testHousehold, UserID: testUser, Role: "viewer"}, jar.Item.ID, "1", "oz"); !errors.Is(err, ErrForbidden) {
 		t.Errorf("viewer err = %v", err)
+	}
+}
+
+// fakeCookSpecialties buys Tex-Mex Paste as its store alternative: per packet
+// (2 Tbsp), 1 tsp chipotle base and 2 tsp tomato paste.
+type fakeCookSpecialties struct{}
+
+func (fakeCookSpecialties) GrocerySpecialties(_ context.Context, _ string, lines []grocery.Line) (grocery.Specialties, error) {
+	one, two := ingredients.NewQuantity(1, 1), ingredients.NewQuantity(2, 1)
+	out := grocery.Specialties{}
+	for _, l := range lines {
+		if !strings.EqualFold(l.Name, "Tex-Mex Paste") {
+			continue
+		}
+		out[l.IngredientKey] = &grocery.Specialty{
+			ID: "tex-mex-paste", Name: "Tex-Mex Paste",
+			UnitSizes: []grocery.UnitSize{{Unit: "count", Quantity: two, SizeUnit: "tbsp"}},
+			Choice: &grocery.Choice{
+				Type: grocery.ChoiceStoreAlternative, OptionID: "tex-mex-paste.store",
+				Per: grocery.Measure{Quantity: one, Unit: "count"},
+				Components: []grocery.Component{
+					{IngredientKey: "name:smoky chipotle bouillon base", Name: "Smoky Chipotle Bouillon Base", Quantity: &one, Unit: "tsp"},
+					{IngredientKey: "name:tomato paste", Name: "Tomato Paste", Quantity: &two, Unit: "tsp"},
+				},
+			},
+		}
+	}
+	return out, nil
+}
+
+// The tomato paste in a Tex-Mex Paste swap comes out of the can: cooking used
+// to deduct nothing for a specialty bought as its store alternative, so three
+// taco nights left the can at 100% (decision 628).
+func TestCookDeductsWhatWentIntoASpecialtySwap(t *testing.T) {
+	f := newUsageFixture(t)
+	const tacos = "66e5a1f2c3b4a5d6e7f80e04"
+	recipe := recipes.Recipe{ID: tacos, Name: "Santa Fe Pork Tacos", Servings: []int{2},
+		Ingredients: []recipes.RecipeIngredient{
+			{Name: "Tex-Mex Paste", Amounts: amounts("count", map[int]string{2: "1"})},
+		}}
+	f.svc.WithUsage(UsageOptions{Store: f.usage, Notifier: f.notifier, Recipes: fakeRecipes{testHousehold + "/" + tacos: recipe}})
+	can, err := f.svc.RecordPurchase(f.ctx, f.actor, PurchaseInput{
+		Name: "Tomato Paste", Source: PurchaseManual, Quantity: "1", Unit: "package", UnitSizeQuantity: "4.56", UnitSizeUnit: "oz",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.advance(time.Hour)
+
+	// Without the household's choices the swap is invisible, as before.
+	if _, applied, err := f.svc.ApplyCooked(f.ctx, CookedMeal{HouseholdID: testHousehold, RecipeID: tacos, EntryID: "before", Servings: 2, OccurredAt: *f.clock}); err != nil || applied {
+		t.Fatalf("cook without specialties = %v, %v; want nothing to deduct", applied, err)
+	}
+
+	f.svc.SetCookSpecialties(fakeCookSpecialties{})
+	u, applied, err := f.svc.ApplyCooked(f.ctx, CookedMeal{HouseholdID: testHousehold, RecipeID: tacos, EntryID: "tacos", Servings: 2, OccurredAt: *f.clock})
+	if err != nil || !applied || len(u.Lines) != 1 {
+		t.Fatalf("cook = %+v, %v, %v", u.Lines, applied, err)
+	}
+	l := u.Lines[0]
+	if l.ItemID != can.Item.ID || l.Ingredient != "Tomato Paste" || l.Quantity != "2" || l.Unit != "tsp" || l.SkipReason != "" || !l.Estimated {
+		t.Fatalf("tomato paste line = %+v", l)
+	}
+	// 2 tsp of paste is about a third of an ounce.
+	if d := ratOf(l.Deducted); d.Cmp(big.NewRat(1, 4)) < 0 || d.Cmp(big.NewRat(1, 2)) > 0 {
+		t.Errorf("deducted = %s oz", l.Deducted)
 	}
 }

@@ -180,6 +180,7 @@ func (s *Service) ApplyCooked(ctx context.Context, m CookedMeal) (usage CookUsag
 		return CookUsage{}, false, err
 	}
 	needs, scaledFrom := recipeNeeds(recipe, m.Servings)
+	needs = s.swapSpecialties(ctx, m.HouseholdID, needs)
 	lines, err := s.matchNeeds(ctx, m, needs)
 	if err != nil || len(lines) == 0 {
 		return CookUsage{}, false, err
