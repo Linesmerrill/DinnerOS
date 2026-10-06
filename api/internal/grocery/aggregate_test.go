@@ -3,6 +3,7 @@ package grocery
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"math/rand"
 	"strings"
 	"testing"
@@ -376,6 +377,70 @@ func TestHavingSomeIsNotHavingEnough(t *testing.T) {
 				if len(share.Amounts) != 1 || share.Amounts[0].Quantity.String() != "10" {
 					t.Errorf("share = %+v", share)
 				}
+			}
+		})
+	}
+}
+
+// stockWith is a PantryStock holding pork under key "pork" in amount, with a
+// converter that knows a packet of paste is 2 tbsp and 1 tbsp is ½ oz.
+func stockWith(amount Amount, uncertain bool) PantryStock {
+	oz, _ := ingredients.LookupUnit("oz")
+	return PantryStock{
+		InStock:   map[string]bool{"paste": true},
+		Amounts:   map[string]Amount{"paste": amount},
+		Uncertain: map[string]bool{"paste": uncertain},
+		Convert: func(_, _ string, need Amount, to ingredients.Unit) (*big.Rat, bool) {
+			if to != oz {
+				return nil, false
+			}
+			switch need.Unit.Code {
+			case "tbsp":
+				return new(big.Rat).Mul(need.Quantity.Rat(), big.NewRat(1, 2)), true
+			case "count":
+				return need.Quantity.Rat(), true // 2 tbsp = 1 oz
+			}
+			return nil, false
+		},
+	}
+}
+
+// Spoons and packets against a can in ounces are compared, not assumed
+// covered; and what the pantry can't measure is bought (decision 629).
+func TestNeverAssumeThereIsEnough(t *testing.T) {
+	oz, _ := ingredients.LookupUnit("oz")
+	paste := func(q *ingredients.Quantity, unit string) []RecipeSelection {
+		return []RecipeSelection{{RecipeID: "r", RecipeName: "Ragù", RecipeServings: 2, TargetServings: 2,
+			Lines: []Line{line("paste", "Tomato Paste", "pantry", q, unit)}}}
+	}
+	cases := []struct {
+		name       string
+		lines      []RecipeSelection
+		stock      PantryStock
+		wantStatus Status
+		wantUnsure bool
+	}{
+		// A can with 0.4 oz left can't cover a packet (1 oz).
+		{"packet against a nearly empty can", paste(q(1, 1), "count"), stockWith(Amount{Quantity: ingredients.NewQuantity(2, 5), Unit: oz}, false), StatusToBuy, false},
+		{"packet against a full can", paste(q(1, 1), "count"), stockWith(Amount{Quantity: ingredients.NewQuantity(114, 25), Unit: oz}, false), StatusInPantry, false},
+		{"spoons against a nearly empty can", paste(q(2, 1), "tbsp"), stockWith(Amount{Quantity: ingredients.NewQuantity(2, 5), Unit: oz}, false), StatusToBuy, false},
+		// A use the pantry couldn't count: the estimate is too high, so buy.
+		{"uncounted use", paste(q(1, 1), "tbsp"), stockWith(Amount{Quantity: ingredients.NewQuantity(114, 25), Unit: oz}, true), StatusToBuy, true},
+		// A unit nothing converts: buy, don't guess.
+		{"unit that won't convert", paste(q(1, 1), "clove"), stockWith(Amount{Quantity: ingredients.NewQuantity(114, 25), Unit: oz}, false), StatusToBuy, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			list, err := Aggregate(c.lines, c.stock)
+			if err != nil || len(list.Items) != 1 {
+				t.Fatalf("list = %+v, %v", list.Items, err)
+			}
+			item := list.Items[0]
+			if item.Status != c.wantStatus || item.Unsure != c.wantUnsure {
+				t.Errorf("item = %s unsure %v, want %s unsure %v", item.Status, item.Unsure, c.wantStatus, c.wantUnsure)
+			}
+			if c.wantStatus == StatusToBuy && !c.wantUnsure && (item.OnHand == nil || item.Needed == nil) {
+				t.Errorf("short item without what's at home: %+v", item)
 			}
 		})
 	}

@@ -3,6 +3,7 @@ package pantry
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"slices"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
@@ -72,6 +73,10 @@ func (s *Service) GroceryPantry(ctx context.Context, householdID string) (grocer
 	// never calls it short on a guess.
 	onHand := map[string]*grocery.Amount{}
 	unknown := map[string]bool{}
+	// uncertain keys are at home in an amount that can't be trusted; byKey
+	// is an item for each key, for converting a recipe's amount to it.
+	uncertain := map[string]bool{}
+	byKey := map[string]Item{}
 	for _, item := range items {
 		var set map[string]bool
 		switch item.Status {
@@ -97,12 +102,21 @@ func (s *Service) GroceryPantry(ctx context.Context, householdID string) (grocer
 			}
 		}
 		amount, known := s.onHand(item, settings)
+		// A cooked use since the amount was set that couldn't be counted
+		// means the estimate is too high by an unknown amount.
+		trusted := known && (item.Tracking == nil || item.Tracking.SegmentSkippedUses == 0)
 		for _, key := range keys {
 			set[key] = true
 			if item.Status != StatusInStock {
 				continue
 			}
 			addOnHand(onHand, unknown, key, amount, known)
+			if !trusted && !item.IsStaple {
+				uncertain[key] = true
+			}
+			if _, ok := byKey[key]; !ok {
+				byKey[key] = item
+			}
 		}
 	}
 	stock.Amounts = map[string]grocery.Amount{}
@@ -110,6 +124,14 @@ func (s *Service) GroceryPantry(ctx context.Context, householdID string) (grocer
 		if !unknown[key] {
 			stock.Amounts[key] = *a
 		}
+	}
+	stock.Uncertain = uncertain
+	stock.Convert = func(key, name string, need grocery.Amount, to ingredients.Unit) (*big.Rat, bool) {
+		item, ok := byKey[key]
+		if !ok {
+			return nil, false
+		}
+		return convertNeed(item, name, need.Quantity.Rat(), need.Unit.Code, to.Code)
 	}
 	return stock, nil
 }
@@ -131,7 +153,7 @@ func pantryKeys(item Item) []string {
 }
 
 // onHand is how much of an item is at home: the usage estimate when it's
-// tracked, else the amount recorded, when that's a weight or volume.
+// tracked, else the amount recorded.
 func (s *Service) onHand(item Item, settings Settings) (grocery.Amount, bool) {
 	quantity, unit := item.Quantity, item.Unit
 	if est := s.Estimate(item, settings); est != nil && est.Remaining != nil {
@@ -140,8 +162,10 @@ func (s *Service) onHand(item Item, settings Settings) (grocery.Amount, bool) {
 	if quantity == "" || unit == "" {
 		return grocery.Amount{}, false
 	}
+	// A count is an amount too: 4 poblanos cover a recipe's 1, and a count
+	// the recipe can't be compared with is caught by the list (Unsure).
 	u, err := ingredients.LookupUnit(unit)
-	if err != nil || u.Discrete() {
+	if err != nil {
 		return grocery.Amount{}, false
 	}
 	q, err := ingredients.ParseQuantity(quantity)
@@ -170,4 +194,21 @@ func addOnHand(totals map[string]*grocery.Amount, unknown map[string]bool, key s
 		return
 	}
 	total.Quantity = total.Quantity.Add(converted)
+}
+
+// convertNeed puts a recipe amount in unit to for item the way cooking
+// deducts it (matchNeeds): exactly through the item's package size, else a
+// meal kit's packet as what it holds ("1 tomato paste" is 2 Tbsp, "1 black
+// beans" a 13.4 oz carton), else by the ingredient's typical density.
+func convertNeed(item Item, name string, q *big.Rat, from, to string) (*big.Rat, bool) {
+	if converted, ok := convertAmount(q, from, to, item.UnitSize); ok {
+		return converted, true
+	}
+	if size, unit, found := ingredients.PacketSizeFor(name, from); found {
+		q, from = new(big.Rat).Mul(q, size), unit
+		if converted, ok := convertAmount(q, from, to, item.UnitSize); ok {
+			return converted, true
+		}
+	}
+	return estimateAmount(q, from, to, item)
 }

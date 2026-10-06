@@ -291,6 +291,9 @@ type LineSource struct {
 	// the packages, while the line says "you have 12 oz of the 20 oz needed".
 	OnHand *Amount
 	Needed *Amount
+	// Unsure is grocery.Item.Unsure: at home in an amount the pantry can't
+	// measure, so bought.
+	Unsure bool
 }
 
 // RecipeRef names a recipe a line is for.

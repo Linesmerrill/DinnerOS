@@ -624,3 +624,148 @@ func TestCookDeductsWhatWentIntoASpecialtySwap(t *testing.T) {
 		t.Errorf("deducted = %s oz", l.Deducted)
 	}
 }
+
+// pasteList is the week's list for one recipe needing 1 packet of tomato paste.
+func pasteList(t *testing.T, f *usageFixture) grocery.Item {
+	t.Helper()
+	stock, err := f.svc.GroceryPantry(f.ctx, testHousehold)
+	if err != nil {
+		t.Fatal(err)
+	}
+	one := ingredients.NewQuantity(1, 1)
+	list, err := grocery.Aggregate([]grocery.RecipeSelection{{RecipeID: "r", RecipeName: "Ragù", RecipeServings: 2, TargetServings: 2,
+		Lines: []grocery.Line{{IngredientKey: UnresolvedKeyPrefix + "tomato paste", Name: "Tomato Paste", Quantity: &one, UnitCode: "count"}}}}, stock)
+	if err != nil || len(list.Items) != 1 {
+		t.Fatalf("list = %+v, %v", list.Items, err)
+	}
+	return list.Items[0]
+}
+
+// The household's own case, end to end with the real conversions: a 4.56 oz
+// can covers a packet (2 Tbsp, about an ounce); nearly empty it doesn't, and
+// the list buys it; a cooked use the pantry couldn't count makes it unsure,
+// and setting the amount makes it measurable again (decision 629).
+func TestTheGroceryListNeverAssumesTheCanIsFull(t *testing.T) {
+	f := newUsageFixture(t)
+	can, err := f.svc.RecordPurchase(f.ctx, f.actor, PurchaseInput{
+		Name: "Tomato Paste", Source: PurchaseManual, Quantity: "1", Unit: "package", UnitSizeQuantity: "4.56", UnitSizeUnit: "oz",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item := pasteList(t, f); item.Status != grocery.StatusInPantry || item.Unsure {
+		t.Fatalf("full can = %s unsure %v, want in pantry", item.Status, item.Unsure)
+	}
+
+	// 7 Tbsp used: about 0.4 oz left, less than a packet. Below the low line
+	// the can is marked low, and the list buys it.
+	if _, err := f.svc.RecordUse(f.ctx, f.actor, can.Item.ID, "7", "tbsp"); err != nil {
+		t.Fatal(err)
+	}
+	if item := pasteList(t, f); item.Status != grocery.StatusToBuy || item.Unsure {
+		t.Fatalf("nearly empty can = %s unsure %v, want toBuy", item.Status, item.Unsure)
+	}
+
+	// Above the low line but under a packet still buys: half an ounce left
+	// of a household's threshold set to nothing.
+	zero := 0
+	if _, err := f.svc.Update(f.ctx, f.actor, can.Item.ID, UpdateInput{Quantity: ptr("0.5"), Unit: ptr("oz"), Status: ptrStatus(StatusInStock), LowThresholdPercent: &zero}); err != nil {
+		t.Fatal(err)
+	}
+	item := pasteList(t, f)
+	if item.Status != grocery.StatusToBuy || item.Unsure || item.OnHand == nil || item.Needed == nil || item.Needed.Unit.Code != "count" {
+		t.Fatalf("half an ounce = %s unsure %v on hand %+v needed %+v, want toBuy with what's left", item.Status, item.Unsure, item.OnHand, item.Needed)
+	}
+	if left := item.OnHand.Quantity.Rat(); left.Cmp(big.NewRat(1, 2)) != 0 || item.OnHand.Unit.Code != "oz" {
+		t.Errorf("on hand = %s %s, want 0.5 oz", item.OnHand.Quantity, item.OnHand.Unit.Code)
+	}
+
+	// Refill the can, then cook a use the pantry can't count.
+	if _, err := f.svc.Update(f.ctx, f.actor, can.Item.ID, UpdateInput{Quantity: ptr("4.56"), Unit: ptr("oz")}); err != nil {
+		t.Fatal(err)
+	}
+	const odd = "66e5a1f2c3b4a5d6e7f80e05"
+	recipe := recipes.Recipe{ID: odd, Name: "Odd Measure", Servings: []int{2},
+		Ingredients: []recipes.RecipeIngredient{{Name: "Tomato Paste", Amounts: amounts("bunch", map[int]string{2: "1"})}}}
+	f.svc.WithUsage(UsageOptions{Store: f.usage, Notifier: f.notifier, Recipes: fakeRecipes{testHousehold + "/" + odd: recipe}})
+	f.advance(time.Hour)
+	if _, _, err := f.svc.ApplyCooked(f.ctx, CookedMeal{HouseholdID: testHousehold, RecipeID: odd, EntryID: "odd", Servings: 2, OccurredAt: *f.clock}); err != nil {
+		t.Fatal(err)
+	}
+	if item := pasteList(t, f); item.Status != grocery.StatusToBuy || !item.Unsure {
+		t.Fatalf("after an uncounted use = %s unsure %v, want bought and unsure", item.Status, item.Unsure)
+	}
+
+	// Saying how much is left makes it measurable again.
+	f.advance(time.Hour)
+	if _, err := f.svc.Update(f.ctx, f.actor, can.Item.ID, UpdateInput{Quantity: ptr("3"), Unit: ptr("oz")}); err != nil {
+		t.Fatal(err)
+	}
+	if item := pasteList(t, f); item.Status != grocery.StatusInPantry || item.Unsure {
+		t.Fatalf("after setting the amount = %s unsure %v, want in pantry", item.Status, item.Unsure)
+	}
+}
+
+func ptrStatus(s Status) *Status { return &s }
+
+// Replaying a meal deducted before the counting improved catches the pantry
+// up with what it missed, once; and an item a person set the amount of after
+// the meal is left as they set it (decision 630).
+func TestRecountCatchesThePantryUpOnce(t *testing.T) {
+	f := newUsageFixture(t)
+	const tacos = "66e5a1f2c3b4a5d6e7f80e06"
+	recipe := recipes.Recipe{ID: tacos, Name: "Santa Fe Pork Tacos", Servings: []int{2},
+		Ingredients: []recipes.RecipeIngredient{
+			{Name: "Tex-Mex Paste", Amounts: amounts("count", map[int]string{2: "1"})},
+			{Name: "Flour Tortillas", Amounts: amounts("count", map[int]string{2: "6"})},
+		}}
+	f.svc.WithUsage(UsageOptions{Store: f.usage, Notifier: f.notifier, Recipes: fakeRecipes{testHousehold + "/" + tacos: recipe}})
+	can, err := f.svc.RecordPurchase(f.ctx, f.actor, PurchaseInput{
+		Name: "Tomato Paste", Source: PurchaseManual, Quantity: "1", Unit: "package", UnitSizeQuantity: "4.56", UnitSizeUnit: "oz",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.RecordPurchase(f.ctx, f.actor, PurchaseInput{Name: "Flour Tortillas", Source: PurchaseManual, Quantity: "12", Unit: "count"}); err != nil {
+		t.Fatal(err)
+	}
+	f.advance(time.Hour)
+	// Cooked before swaps were counted: only the tortillas come off.
+	old, applied, err := f.svc.ApplyCooked(f.ctx, CookedMeal{HouseholdID: testHousehold, RecipeID: tacos, EntryID: "tacos", Servings: 2, OccurredAt: *f.clock})
+	if err != nil || !applied || len(old.Lines) != 1 {
+		t.Fatalf("first cook = %+v, %v, %v", old.Lines, applied, err)
+	}
+
+	f.svc.SetCookSpecialties(fakeCookSpecialties{})
+	dry, err := f.svc.RecountCooked(f.ctx, old, false)
+	if err != nil || len(dry.Added) != 1 || dry.Added[0].ItemID != can.Item.ID || len(dry.Lines) != 2 {
+		t.Fatalf("dry run = %+v, %v", dry, err)
+	}
+	if item, _ := f.store.GetItem(f.ctx, testHousehold, can.Item.ID); item.Tracking.RecipeUses != 0 {
+		t.Fatalf("a dry run wrote: %+v", item.Tracking)
+	}
+	res, err := f.svc.RecountCooked(f.ctx, old, true)
+	if err != nil || len(res.Added) != 1 {
+		t.Fatalf("recount = %+v, %v", res, err)
+	}
+	item, _ := f.store.GetItem(f.ctx, testHousehold, can.Item.ID)
+	if item.Tracking.RecipeUses != 1 || ratOf(item.Tracking.RecipeUsed).Sign() <= 0 {
+		t.Fatalf("can after recount = %+v", item.Tracking)
+	}
+	// Replaying the updated record adds nothing more.
+	old.Lines = res.Lines
+	if again, err := f.svc.RecountCooked(f.ctx, old, true); err != nil || len(again.Added) != 0 {
+		t.Errorf("second recount = %+v, %v", again.Added, err)
+	}
+
+	// A meal cooked before a person set the amount is already in that amount.
+	f.advance(time.Hour)
+	second := CookUsage{HouseholdID: testHousehold, RecipeID: tacos, EntryID: "earlier", Servings: 2, OccurredAt: f.clock.Add(-30 * time.Minute),
+		Lines: []CookLine{old.Lines[0]}}
+	if _, err := f.svc.Update(f.ctx, f.actor, can.Item.ID, UpdateInput{Quantity: ptr("2"), Unit: ptr("oz")}); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := f.svc.RecountCooked(f.ctx, second, true); err != nil || len(res.Added) != 0 {
+		t.Errorf("recount before the correction = %+v, %v; want nothing deducted", res.Added, err)
+	}
+}

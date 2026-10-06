@@ -431,6 +431,10 @@ func newGroceryListResponse(g GroceryList) GroceryListResponse {
 	return resp
 }
 
+// UnsureText is the note on an item the pantry has but can't measure: it's
+// bought rather than assumed to be enough (decision 629).
+const UnsureText = "In your pantry, but we couldn't tell how much is left."
+
 // newGroceryItemResponse renders one aggregated item. Skipped items go through
 // it too, so the review screen sees the same amounts, recipes, and provenance
 // as the list would have shown.
@@ -440,7 +444,10 @@ func newGroceryItemResponse(item grocery.Item) GroceryItemResponse {
 		Amounts: make([]GroceryAmountResponse, 0, len(item.Amounts)),
 		Recipes: make([]GroceryRecipeResponse, 0, len(item.Sources)),
 	}
-	if item.OnHand != nil {
+	switch {
+	case item.Unsure:
+		ir.OnHandText = UnsureText
+	case item.OnHand != nil:
 		ir.OnHandText = "You have " + strings.ReplaceAll(amountText(*item.OnHand), " ", "\u00a0") + ". Buy more."
 	}
 	texts := make([]string, 0, len(item.Amounts))

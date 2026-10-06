@@ -152,6 +152,11 @@ type Item struct {
 	// Needed is what the week needs in all, set with OnHand: the list says
 	// "20 oz, you have 12 oz", since nobody buys 8 oz of pork.
 	Needed *Amount
+	// Unsure is set when the pantry has the ingredient but can't tell how
+	// much: no amount recorded, a cooked use it couldn't count, or an amount
+	// it can't compare with the recipe's. The item is then toBuy: assuming
+	// there's enough is the failure that leaves a cook short (decision 629).
+	Unsure bool
 	// Shares split the item by the recipe each part is for, in the order of
 	// Sources: how much of it each meal needs. The list shows an item under
 	// every meal that uses it, with that meal's own amount, while it stays one
@@ -235,6 +240,15 @@ type FrozenPantry interface {
 type StockedPantry interface {
 	Pantry
 	OnHand(ingredientKey string) (Amount, bool)
+	// Unmeasured reports an ingredient at home whose amount can't be
+	// trusted: none recorded, or a cooked use since it was set that couldn't
+	// be counted. Staples are never unmeasured; they keep their own line.
+	Unmeasured(ingredientKey string) bool
+	// ConvertNeed puts a recipe amount in the unit the pantry tracks the
+	// ingredient in when the units alone can't ("1 packet" or "2 tsp" of
+	// tomato paste against a can in ounces): the same kitchen measures and
+	// densities cooking deducts with.
+	ConvertNeed(ingredientKey, name string, need Amount, to ingredients.Unit) (*big.Rat, bool)
 }
 
 // PantryStock is a household pantry snapshot. Keys match Line.IngredientKey.
@@ -250,6 +264,22 @@ type PantryStock struct {
 	// Amounts are how much of an in-stock or frozen ingredient is at home,
 	// when every item for it has a known amount; absent means unknown.
 	Amounts map[string]Amount
+	// Uncertain holds in-stock keys whose amount can't be trusted
+	// (StockedPantry.Unmeasured).
+	Uncertain map[string]bool
+	// Convert backs ConvertNeed; nil converts nothing beyond the units.
+	Convert func(ingredientKey, name string, need Amount, to ingredients.Unit) (*big.Rat, bool)
+}
+
+// Unmeasured implements StockedPantry.
+func (p PantryStock) Unmeasured(key string) bool { return p.Uncertain[key] }
+
+// ConvertNeed implements StockedPantry.
+func (p PantryStock) ConvertNeed(key, name string, need Amount, to ingredients.Unit) (*big.Rat, bool) {
+	if p.Convert == nil {
+		return nil, false
+	}
+	return p.Convert(key, name, need, to)
 }
 
 // OnHand implements StockedPantry.
@@ -747,32 +777,73 @@ func normalizeCategory(c string) string {
 }
 
 // shortOf turns a covered item into one to buy when the week needs more than
-// is at home: "20 oz ground pork" with 12 oz in the freezer buys 8 oz. Only
-// an amount that converts to the pantry's is compared; anything else stays
-// covered, since the pantry can't say.
+// is at home: "20 oz ground pork" with 12 oz in the freezer buys 8 oz. Every
+// amount is put in the pantry's unit, by units or else by the pantry's
+// kitchen measures and densities. When that can't be done, or the pantry
+// can't say how much it has, the item is bought and marked Unsure: never
+// assumed to be enough (decision 629). A pantry that knows no amounts at all
+// (not a StockedPantry) leaves the item covered.
 func shortOf(item *Item, pantry StockedPantry) {
 	if pantry == nil {
 		return
 	}
+	if pantry.Unmeasured(item.IngredientKey) {
+		unsure(item)
+		return
+	}
 	have, ok := pantry.OnHand(item.IngredientKey)
 	if !ok {
+		// A staple, or an ingredient the pantry has no item for by this key.
 		return
+	}
+	if len(item.Amounts) == 0 {
+		if item.Unquantified {
+			return // "salt to taste": having some is having enough.
+		}
+		unsure(item)
+		return
+	}
+	total := new(big.Rat)
+	for _, need := range item.Amounts {
+		var inHave *big.Rat
+		if need.Unit.CanConvertTo(have.Unit) {
+			if q, err := ingredients.Convert(need.Quantity, need.Unit, have.Unit); err == nil {
+				inHave = q.Rat()
+			}
+		}
+		if inHave == nil {
+			inHave, ok = pantry.ConvertNeed(item.IngredientKey, item.Name, need, have.Unit)
+			if !ok {
+				unsure(item)
+				return
+			}
+		}
+		total.Add(total, inHave)
+	}
+	if total.Cmp(have.Quantity.Rat()) <= 0 {
+		return
+	}
+	// The rest, as a share of each amount in its own unit.
+	share := new(big.Rat).Quo(new(big.Rat).Sub(total, have.Quantity.Rat()), total)
+	if len(item.Amounts) == 1 {
+		needed := item.Amounts[0]
+		item.Needed = &needed
+		if item.Amounts[0].Unit.CanConvertTo(have.Unit) {
+			// In the need's unit, so the line reads "2 lb of the 2 ¼ lb", not "32 oz".
+			if q, err := ingredients.Convert(have.Quantity, have.Unit, needed.Unit); err == nil {
+				have = Amount{Quantity: q, Unit: needed.Unit}
+			}
+		}
 	}
 	for i, need := range item.Amounts {
-		if !need.Unit.CanConvertTo(have.Unit) {
-			continue
-		}
-		haveInNeed, err := ingredients.Convert(have.Quantity, have.Unit, need.Unit)
-		if err != nil || need.Quantity.Cmp(haveInNeed) <= 0 {
-			return
-		}
-		rest := new(big.Rat).Sub(need.Quantity.Rat(), haveInNeed.Rat())
-		needed := need
-		item.Needed = &needed
-		item.Amounts[i] = Amount{Quantity: ingredients.NewQuantity(1, 1).MulRat(rest), Unit: need.Unit}
-		item.Status = StatusToBuy
-		// In the need's unit, so the line reads "2 lb of the 2 ¼ lb", not "32 oz".
-		item.OnHand = &Amount{Quantity: haveInNeed, Unit: need.Unit}
-		return
+		item.Amounts[i] = Amount{Quantity: need.Quantity.MulRat(share), Unit: need.Unit}
 	}
+	item.Status = StatusToBuy
+	item.OnHand = &have
+}
+
+// unsure buys an item the pantry has but can't measure.
+func unsure(item *Item) {
+	item.Status = StatusToBuy
+	item.Unsure = true
 }

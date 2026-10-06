@@ -85,7 +85,7 @@ func runGroceryPantryScenario(t *testing.T, svc *Service, catalog *fakeCatalog) 
 		id("Salt"):                           grocery.StatusToBuy,    // out, even though the recipe flags it
 		id("Lime"):                           grocery.StatusToBuy,    // only another household has it
 		sesameID:                             grocery.StatusInPantry, // resolved against the catalog at read time
-		UnresolvedKeyPrefix + "za'atar":      grocery.StatusInPantry, // free text, no catalog ID
+		UnresolvedKeyPrefix + "za'atar":      grocery.StatusToBuy,    // at home, but no amount: never assumed enough
 		UnresolvedKeyPrefix + "black pepper": grocery.StatusInPantry, // default staple not in the catalog
 		vegetableOilID:                       grocery.StatusInPantry, // the Cooking Oil staple, under its alias
 	}
@@ -95,6 +95,15 @@ func runGroceryPantryScenario(t *testing.T, svc *Service, catalog *fakeCatalog) 
 	for _, item := range list.Items {
 		if item.Status != want[item.IngredientKey] {
 			t.Errorf("%s (%s) status = %s, want %s", item.Name, item.IngredientKey, item.Status, want[item.IngredientKey])
+		}
+	}
+
+	for _, item := range list.Items {
+		if item.IngredientKey == UnresolvedKeyPrefix+"za'atar" && !item.Unsure {
+			t.Errorf("za'atar = %+v, want Unsure", item)
+		}
+		if item.Unsure && item.IngredientKey != UnresolvedKeyPrefix+"za'atar" {
+			t.Errorf("%s is unsure; staples and measured items aren't", item.Name)
 		}
 	}
 

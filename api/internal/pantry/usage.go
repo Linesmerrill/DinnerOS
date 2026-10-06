@@ -87,6 +87,10 @@ type Tracking struct {
 	// SkippedUses counts cooked recipes that used the item but couldn't be
 	// deducted (no amount, or units that don't convert).
 	SkippedUses int
+	// SegmentSkippedUses counts those since SegmentStartedAt: a person
+	// setting the amount clears it. While it's above zero the estimate can't
+	// be trusted, so the grocery list doesn't count the item as enough.
+	SegmentSkippedUses int
 }
 
 // Segment is a closed stretch of usage, kept to learn the rate. Amounts are
@@ -410,6 +414,7 @@ func applyPersonEdit(before Item, after *Item, now time.Time, newCycleID func() 
 	after.Tracking.SegmentStart = converted.RatString()
 	after.Tracking.SegmentStartedAt = now
 	after.Tracking.SegmentRecipeUsed = "0"
+	after.Tracking.SegmentSkippedUses = 0
 }
 
 // --- Learned rate -------------------------------------------------------------

@@ -173,14 +173,10 @@ func (s *Service) ApplyCooked(ctx context.Context, m CookedMeal) (usage CookUsag
 	if err != nil {
 		return CookUsage{}, false, fmt.Errorf("load cooked recipe: %w", err)
 	}
-	if recipe, err = s.adjustCooked(ctx, m, recipe); err != nil {
+	needs, scaledFrom, err := s.cookNeeds(ctx, m, recipe)
+	if err != nil {
 		return CookUsage{}, false, err
 	}
-	if recipe, err = s.withoutLeftOut(ctx, m.HouseholdID, recipe); err != nil {
-		return CookUsage{}, false, err
-	}
-	needs, scaledFrom := recipeNeeds(recipe, m.Servings)
-	needs = s.swapSpecialties(ctx, m.HouseholdID, needs)
 	lines, err := s.matchNeeds(ctx, m, needs)
 	if err != nil || len(lines) == 0 {
 		return CookUsage{}, false, err
@@ -212,6 +208,21 @@ func (s *Service) ApplyCooked(ctx context.Context, m CookedMeal) (usage CookUsag
 		}
 	}
 	return usage, true, errors.Join(errs...)
+}
+
+// cookNeeds is what a cooked meal used: the recipe as cooked (customized,
+// without what was left out), for its servings, with specialty swaps
+// replaced by what went into them.
+func (s *Service) cookNeeds(ctx context.Context, m CookedMeal, recipe recipes.Recipe) ([]recipeNeed, int, error) {
+	recipe, err := s.adjustCooked(ctx, m, recipe)
+	if err != nil {
+		return nil, 0, err
+	}
+	if recipe, err = s.withoutLeftOut(ctx, m.HouseholdID, recipe); err != nil {
+		return nil, 0, err
+	}
+	needs, scaledFrom := recipeNeeds(recipe, m.Servings)
+	return s.swapSpecialties(ctx, m.HouseholdID, needs), scaledFrom, nil
 }
 
 // matchNeeds matches recipe needs to the household's pantry items and decides
@@ -290,13 +301,13 @@ func (s *Service) matchNeeds(ctx context.Context, m CookedMeal, needs []recipeNe
 			for i := 0; !ok && hasResolved && i < len(r.UnitSizes); i++ {
 				converted, ok = convertAmount(n.quantity, n.unit, t.Unit, &r.UnitSizes[i])
 			}
-			// A meal kit's packet ("1 tomato paste") is a kitchen measure
-			// (2 Tbsp), the same one the steps show, so it counts against a
-			// jar bought by weight instead of being skipped as a count.
+			// A meal kit's packet ("1 tomato paste", "1 coconut milk") is what
+			// it holds (2 Tbsp, a 13.5 fl oz can), so it counts against a jar
+			// bought by size instead of being skipped as a count.
 			quantity, unit := n.quantity, n.unit
 			if !ok {
-				if km, found := ingredients.KitchenMeasureFor(n.name, n.unit); found {
-					quantity, unit = new(big.Rat).Mul(n.quantity, km.PerPacket), km.Unit
+				if size, sizeUnit, found := ingredients.PacketSizeFor(n.name, n.unit); found {
+					quantity, unit = new(big.Rat).Mul(n.quantity, size), sizeUnit
 					converted, ok = convertAmount(quantity, unit, t.Unit, item.UnitSize)
 				}
 			}
@@ -366,6 +377,7 @@ func (s *Service) deductItem(ctx context.Context, m CookedMeal, itemID string, l
 			next.Tracking.RecipeUses++
 		} else if skipped {
 			next.Tracking.SkippedUses++
+			next.Tracking.SegmentSkippedUses++
 		} else {
 			return nil
 		}

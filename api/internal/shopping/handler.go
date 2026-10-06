@@ -748,6 +748,9 @@ func amounts(list []Amount) ([]AmountResponse, string) {
 // haveText says what's at home when the pantry has some but not enough:
 // "You have 12 oz of the 20 oz needed." Empty otherwise.
 func haveText(s LineSource) string {
+	if s.Unsure {
+		return planning.UnsureText
+	}
 	if s.OnHand == nil || s.Needed == nil {
 		return ""
 	}
@@ -937,6 +940,10 @@ func (h *Handler) proposalResponse(p Proposal, stored bool) ProposalResponse {
 		}
 		er.Amounts, er.QuantityText = amounts(e.Amounts)
 		if have := haveText(e.LineSource); have != "" {
+			if e.Unsure && er.QuantityText != "" {
+				// The amount still matters when nothing's known about what's at home.
+				have = er.QuantityText + ". " + have
+			}
 			er.QuantityText = have
 		}
 		if e.GroceryStatus != "" {

@@ -83,6 +83,8 @@ type trackingDoc struct {
 	RecipeUsed        string    `bson:"recipeUsed"`
 	RecipeUses        int       `bson:"recipeUses"`
 	SkippedUses       int       `bson:"skippedUses"`
+	// SegmentSkippedUses is absent on items tracked before it was recorded.
+	SegmentSkippedUses int `bson:"segmentSkippedUses,omitempty"`
 }
 
 type unitSizeDoc struct {
@@ -133,7 +135,7 @@ func newUsageItemFields(item Item) usageItemFields {
 		f.Tracking = &trackingDoc{
 			CycleID: t.CycleID, CycleSource: string(t.CycleSource), CycleStartedAt: t.CycleStartedAt, Unit: t.Unit,
 			Reference: t.Reference, SegmentStart: t.SegmentStart, SegmentStartedAt: t.SegmentStartedAt,
-			SegmentRecipeUsed: t.SegmentRecipeUsed, RecipeUsed: t.RecipeUsed, RecipeUses: t.RecipeUses, SkippedUses: t.SkippedUses,
+			SegmentRecipeUsed: t.SegmentRecipeUsed, RecipeUsed: t.RecipeUsed, RecipeUses: t.RecipeUses, SkippedUses: t.SkippedUses, SegmentSkippedUses: t.SegmentSkippedUses,
 		}
 	}
 	if s := item.UnitSize; s != nil {
@@ -157,7 +159,7 @@ func (f usageItemFields) applyTo(item *Item) {
 		item.Tracking = &Tracking{
 			CycleID: t.CycleID, CycleSource: CycleSource(t.CycleSource), CycleStartedAt: t.CycleStartedAt.UTC(), Unit: t.Unit,
 			Reference: t.Reference, SegmentStart: t.SegmentStart, SegmentStartedAt: t.SegmentStartedAt.UTC(),
-			SegmentRecipeUsed: t.SegmentRecipeUsed, RecipeUsed: t.RecipeUsed, RecipeUses: t.RecipeUses, SkippedUses: t.SkippedUses,
+			SegmentRecipeUsed: t.SegmentRecipeUsed, RecipeUsed: t.RecipeUsed, RecipeUses: t.RecipeUses, SkippedUses: t.SkippedUses, SegmentSkippedUses: t.SegmentSkippedUses,
 		}
 	}
 	if s := f.UnitSize; s != nil {
@@ -427,6 +429,62 @@ func (s *MongoStore) ListCookUsageByEntries(ctx context.Context, householdID str
 		out = append(out, d.toCookUsage())
 	}
 	return out, nil
+}
+
+// ListCookUsageSince returns the household's cook records for meals cooked at
+// or after since, oldest first. For catching a pantry up (RecountCooked).
+func (s *MongoStore) ListCookUsageSince(ctx context.Context, householdID string, since time.Time) ([]CookUsage, error) {
+	hid, err := householdOID(householdID)
+	if err != nil {
+		return nil, err
+	}
+	cur, err := s.cookUsage.Find(ctx, bson.D{{Key: "householdId", Value: hid}, {Key: "occurredAt", Value: bson.D{{Key: "$gte", Value: since}}}},
+		options.Find().SetSort(bson.D{{Key: "occurredAt", Value: 1}, {Key: "_id", Value: 1}}))
+	if err != nil {
+		return nil, translate(err)
+	}
+	var docs []cookUsageDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	out := make([]CookUsage, 0, len(docs))
+	for _, d := range docs {
+		out = append(out, d.toCookUsage())
+	}
+	return out, nil
+}
+
+// ReplaceCookUsageLines sets a cook record's lines, after RecountCooked.
+func (s *MongoStore) ReplaceCookUsageLines(ctx context.Context, householdID, id string, lines []CookLine) error {
+	hid, err := householdOID(householdID)
+	if err != nil {
+		return err
+	}
+	oid, err := mongodb.ParseID(id)
+	if err != nil {
+		return fmt.Errorf("pantry: cook usage id: %w", err)
+	}
+	docs := make([]cookLineDoc, 0, len(lines))
+	for _, line := range lines {
+		itemID, err := mongodb.ParseID(line.ItemID)
+		if err != nil {
+			return fmt.Errorf("pantry: line itemId: %w", err)
+		}
+		docs = append(docs, cookLineDoc{
+			ItemID: itemID, Ingredient: line.Ingredient, Quantity: line.Quantity, Unit: line.Unit,
+			Deducted: line.Deducted, TrackingUnit: line.TrackingUnit, CycleID: line.CycleID, Estimated: line.Estimated,
+			SkipReason: string(line.SkipReason),
+		})
+	}
+	res, err := s.cookUsage.UpdateOne(ctx, bson.D{{Key: "_id", Value: oid}, {Key: "householdId", Value: hid}},
+		bson.D{{Key: "$set", Value: bson.D{{Key: "lines", Value: docs}}}})
+	if err != nil {
+		return translate(err)
+	}
+	if res.MatchedCount == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // SetPurchasePrice implements UsageStore.

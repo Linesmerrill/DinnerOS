@@ -115,7 +115,9 @@ func newFixture(t *testing.T) *fixture {
 	pantryStore := pantry.NewMongoStore(db)
 	pantrySvc := pantry.NewService(pantryStore, recipeSvc).WithUsage(pantry.UsageOptions{Store: pantryStore, Recipes: recipeSvc})
 	actor := memberOf(testUser)
-	if _, _, err := pantrySvc.Add(ctx, actor, pantry.AddInput{Name: "Tomato Paste"}); err != nil {
+	// A 6 oz can covers the tacos' 1 Tbsp; with no amount it would be bought
+	// (decision 629).
+	if _, _, err := pantrySvc.Add(ctx, actor, pantry.AddInput{Name: "Tomato Paste", Quantity: "6", Unit: "oz"}); err != nil {
 		t.Fatal(err)
 	}
 	plans := planning.NewService(planning.NewMongoStore(db), recipeSvc).WithPantry(pantrySvc)
