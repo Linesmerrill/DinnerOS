@@ -148,7 +148,7 @@ func TestHandlersFlow(t *testing.T) {
 	tex := list.Items[0]
 	if tex.DefaultOptionID != "tex-mex-paste.store" || len(tex.Options) != 2 || !tex.Options[0].IsDefault || tex.Options[0].Per == nil ||
 		tex.Options[0].Per.Text != "1" || tex.Options[0].Ingredients[0].Text != "1 tsp Smoky Chipotle Bouillon Base" ||
-		tex.Options[0].Summary != "1 packet = 1 tsp Smoky Chipotle Bouillon Base + 5 tsp Tomato Paste" ||
+		tex.Options[0].Summary != "1 packet = 1 tsp Smoky Chipotle Bouillon Base + 2 tsp Tomato Paste + 1 tsp Chili Powder + ½ tsp Smoked Paprika + ¼ tsp Ground Cumin + ¼ tsp Garlic Powder + ¼ tsp Onion Powder" ||
 		tex.Options[1].ShelfLifeDays == nil || *tex.Options[1].ShelfLifeDays != 14 || tex.Options[1].Summary != "Makes about 8 Tbsp and keeps 14 days." ||
 		len(tex.UnitSizes) != 2 || tex.UnitSizes[0].Text != "2 Tbsp" || tex.Batch != nil || tex.Aliases == nil {
 		t.Errorf("tex-mex = %+v", tex)

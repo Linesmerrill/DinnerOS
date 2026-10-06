@@ -275,13 +275,13 @@ func TestIntegrationGroceryAndBatchDeduction(t *testing.T) {
 	if _, ok := items["Tex-Mex Paste"]; ok {
 		t.Error("Tex-Mex Paste is still listed")
 	}
-	// 2 Tbsp of paste is one packet, 5 tsp of tomato paste, plus the bowls' own 1 Tbsp.
-	if paste := items["Tomato Paste"]; len(paste.Amounts) != 1 || amountsOf(paste)[0] != "8/3 tbsp" || len(paste.Via) != 1 || len(paste.Sources) != 2 {
+	// 2 Tbsp of paste is one packet, 2 tsp of tomato paste, plus the bowls' own 1 Tbsp.
+	if paste := items["Tomato Paste"]; len(paste.Amounts) != 1 || amountsOf(paste)[0] != "5/3 tbsp" || len(paste.Via) != 1 || len(paste.Sources) != 2 {
 		t.Errorf("tomato paste = %+v", paste)
 	}
-	// The store route for the paste is a bouillon base now, so cumin comes only from the batch.
-	if cumin := items["Ground Cumin"]; len(cumin.Via) != 1 {
-		t.Errorf("cumin = %+v, want the batch provenance", cumin)
+	// Cumin comes from both: the blend's batch and the paste's chili spices.
+	if cumin := items["Ground Cumin"]; len(cumin.Via) != 2 {
+		t.Errorf("cumin = %+v, want the batch and the paste", cumin)
 	}
 	if b := g.Batches[0]; b.Status != grocery.BatchMake || b.Reason != grocery.BatchMissing || b.Batches != 1 || b.Needed == nil ||
 		b.Needed.Quantity.String() != "2" || len(b.Recipes) != 2 {
@@ -314,10 +314,9 @@ func TestIntegrationGroceryAndBatchDeduction(t *testing.T) {
 	if blend.Status != grocery.StatusInPantry || blend.Specialty == nil || !blend.Specialty.HouseMade || len(blend.Sources) != 2 {
 		t.Errorf("batch line = %+v", blend)
 	}
-	// The batch covers the blend and the paste's store route is a bouillon base, so nothing on
-	// the list calls for cumin any more.
-	if cumin, ok := items["Ground Cumin"]; ok {
-		t.Errorf("cumin with a batch in the pantry = %+v, want it off the list", cumin)
+	// The batch covers the blend, so only the paste's ¼ tsp of cumin is left to buy.
+	if cumin := items["Ground Cumin"]; len(cumin.Amounts) != 1 || amountsOf(cumin)[0] != "1/4 tsp" || len(cumin.Via) != 1 {
+		t.Errorf("cumin with a batch in the pantry = %+v, want only the paste's", cumin)
 	}
 
 	// Cooking deducts: 1 packet (1 Tbsp) for the tacos, and 1 Tbsp named by the

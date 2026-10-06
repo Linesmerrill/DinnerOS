@@ -293,6 +293,9 @@ func TestSeedBouillonBaseIsAtMostOneTeaspoonPerPacket(t *testing.T) {
 	}
 }
 
+// A packet is red chile, onion and salt with a little tomato (its label), so
+// the swap is 1 tsp of base, 2 tsp tomato paste and chili spices; 5 tsp of
+// tomato paste tasted of tomato, not Tex-Mex.
 func TestSeedTexMexPasteIsOneTeaspoonOfBasePerPacket(t *testing.T) {
 	seed, err := LoadSeed()
 	if err != nil {
@@ -304,8 +307,9 @@ func TestSeedTexMexPasteIsOneTeaspoonOfBasePerPacket(t *testing.T) {
 		}
 		o := sp.Options[0]
 		if o.ID != "tex-mex-paste.store" || o.Per == nil || o.Per.Quantity != "1" || o.Per.Unit != "count" ||
-			len(o.Ingredients) != 2 || o.Ingredients[0].Quantity != "1" || o.Ingredients[0].Unit != "tsp" ||
-			o.Ingredients[1].Name != "Tomato Paste" || o.Ingredients[1].Quantity != "5" || o.Ingredients[1].Unit != "tsp" {
+			len(o.Ingredients) != 7 || o.Ingredients[0].Quantity != "1" || o.Ingredients[0].Unit != "tsp" ||
+			o.Ingredients[1].Name != "Tomato Paste" || o.Ingredients[1].Quantity != "2" || o.Ingredients[1].Unit != "tsp" ||
+			o.Ingredients[2].Name != "Chili Powder" || o.Ingredients[2].Quantity != "1" {
 			t.Errorf("tex-mex store option = %+v per %+v", o.Ingredients, o.Per)
 		}
 		return

@@ -486,15 +486,20 @@ func TestGrocerySpecialties(t *testing.T) {
 	}
 	tex := specs[texID]
 	if tex.ID != "tex-mex-paste" || tex.Choice == nil || tex.Choice.Type != grocery.ChoiceStoreAlternative || tex.Choice.Per.Unit != "count" ||
-		len(tex.UnitSizes) != 2 || len(tex.Choice.Components) != 2 {
+		len(tex.UnitSizes) != 2 || len(tex.Choice.Components) != 7 {
 		t.Fatalf("tex-mex = %+v choice %+v", tex, tex.Choice)
 	}
 	base, paste := tex.Choice.Components[0], tex.Choice.Components[1]
 	if base.Name != "Smoky Chipotle Bouillon Base" || base.Category != "condiments" || quantityOf(base.Quantity) != "1" || base.Unit != "tsp" {
 		t.Errorf("chipotle base = %+v", base)
 	}
-	if paste.IngredientKey != f.catalog.id("Tomato Paste") || paste.Name != "Tomato Paste" || quantityOf(paste.Quantity) != "5" || paste.Unit != "tsp" {
+	if paste.IngredientKey != f.catalog.id("Tomato Paste") || paste.Name != "Tomato Paste" || quantityOf(paste.Quantity) != "2" || paste.Unit != "tsp" {
 		t.Errorf("tomato paste = %+v", paste)
+	}
+	// The packet is chile-led with a little tomato: more chili than tomato
+	// paste would be wrong, and so would tomato paste drowning the chile.
+	if chili := tex.Choice.Components[2]; chili.Name != "Chili Powder" || quantityOf(chili.Quantity) != "1" || chili.Unit != "tsp" {
+		t.Errorf("chili powder = %+v", chili)
 	}
 	sw := specs[southwestID]
 	if c := sw.Choice; c == nil || c.Type != grocery.ChoiceHouseMadeBatch || c.PantryKey != "name:southwest spice blend" || c.Yield.Quantity.String() != "4" ||

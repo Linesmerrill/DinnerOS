@@ -226,7 +226,7 @@
       "id": "tex-mex-paste",
       "name": "Tex-Mex Paste",
       "category": "condiments",
-      "note": "The easiest store route is a smoky chipotle bouillon base (Better Than Bouillon make one) loosened with tomato paste; canned chipotles in adobo, for the jar, are in the Latin or canned-vegetable aisle. A packet is 2 tbsp: 1 tsp of the base (as for stock concentrates) and tomato paste for the rest.",
+      "note": "The packet is mostly red chile, onion and salt, with a little tomato. A smoky chipotle bouillon base (Better Than Bouillon make one) brings the salt and smoke; chipotles in adobo, for the jar, are in the Latin aisle.",
       "unitSizes": [
         { "per": "count", "quantity": "2", "unit": "tbsp" },
         { "per": "package", "quantity": "2", "unit": "tbsp" }
@@ -236,12 +236,17 @@
         {
           "id": "tex-mex-paste.store",
           "type": "store_alternative",
-          "name": "Smoky chipotle base loosened with tomato paste",
-          "notes": "The base is very concentrated, so it goes in with a little tomato paste rather than straight. A chipotle pepper paste works too, but it is more chipotle-forward and less of a rounded Tex-Mex flavour.",
+          "name": "Smoky chipotle base with tomato paste and chili spices",
+          "notes": "Chile leads and tomato stays in the background, as in the packet; the base brings its salt. A chipotle pepper paste works too, but it is more chipotle-forward and less of a rounded Tex-Mex flavour.",
           "per": { "quantity": "1", "unit": "count" },
           "ingredients": [
             { "name": "Smoky Chipotle Bouillon Base", "quantity": "1", "unit": "tsp", "category": "condiments" },
-            { "name": "Tomato Paste", "quantity": "5", "unit": "tsp" }
+            { "name": "Tomato Paste", "quantity": "2", "unit": "tsp" },
+            { "name": "Chili Powder", "quantity": "1", "unit": "tsp" },
+            { "name": "Smoked Paprika", "quantity": "1/2", "unit": "tsp" },
+            { "name": "Ground Cumin", "quantity": "1/4", "unit": "tsp" },
+            { "name": "Garlic Powder", "quantity": "1/4", "unit": "tsp" },
+            { "name": "Onion Powder", "quantity": "1/4", "unit": "tsp" }
           ]
         },
         {
@@ -250,19 +255,20 @@
           "name": "Tex-Mex paste (house blend)",
           "notes": "Two weeks in the fridge, but the frozen portions keep for months, so a batch goes a long way.",
           "ingredients": [
-            { "name": "Tomato Paste", "quantity": "8", "unit": "tbsp" },
+            { "name": "Tomato Paste", "quantity": "3", "unit": "tbsp" },
             { "name": "Chipotle Peppers in Adobo", "quantity": "2", "unit": "tbsp", "category": "pantry" },
             { "name": "Adobo Sauce", "quantity": "1", "unit": "tbsp", "category": "pantry" },
             { "name": "Apple Cider Vinegar", "quantity": "1", "unit": "tbsp" },
             { "name": "Olive Oil", "quantity": "1", "unit": "tbsp" },
+            { "name": "Chili Powder", "quantity": "1", "unit": "tbsp" },
             { "name": "Smoked Paprika", "quantity": "2", "unit": "tsp" },
             { "name": "Ground Cumin", "quantity": "2", "unit": "tsp" },
             { "name": "Brown Sugar", "quantity": "2", "unit": "tsp" },
-            { "name": "Chili Powder", "quantity": "1", "unit": "tsp" },
             { "name": "Garlic Powder", "quantity": "1", "unit": "tsp" },
             { "name": "Onion Powder", "quantity": "1", "unit": "tsp" },
+            { "name": "Cocoa Powder", "quantity": "1", "unit": "tsp" },
             { "name": "Dried Oregano", "quantity": "1/2", "unit": "tsp" },
-            { "name": "Salt", "quantity": "1/2", "unit": "tsp" }
+            { "name": "Salt", "quantity": "1", "unit": "tsp" }
           ],
           "steps": [
             "Blend the chipotles and their adobo sauce completely smooth.",
