@@ -2,6 +2,7 @@ package pantry
 
 import (
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 )
@@ -119,7 +120,7 @@ func TestEstimateExplainsRecipeAndOtherUse(t *testing.T) {
 		t.Errorf("untracked estimate = %+v", e)
 	}
 	skipped := trackedButter()
-	skipped.Tracking.SkippedUses = 1
+	skipped.Tracking.SkippedUses, skipped.Tracking.SegmentSkippedUses = 1, 1
 	if e := estimateItem(skipped, 0, testNow); e.Summary != "About 100% left. 1 recipe couldn't be counted." || e.ThresholdPct != DefaultLowThresholdPercent {
 		t.Errorf("skipped summary = %q (threshold %d)", e.Summary, e.ThresholdPct)
 	}
@@ -319,5 +320,15 @@ func TestLowAlertAtNothingLeftSaysProbablyOut(t *testing.T) {
 	e := Estimate{PercentRemaining: 0, RecipeUses: 2, RecipeUsed: big.NewRat(12, 1), Unit: "count"}
 	if got := e.summary(); got != "None left by our count: 2 recipes used 12." {
 		t.Errorf("summary at 0%% = %q", got)
+	}
+}
+
+// A use that couldn't be counted stops being reported once a person says how
+// much is left: their amount already accounts for it.
+func TestUncountedUsesClearWhenTheAmountIsSet(t *testing.T) {
+	item := trackedButter()
+	item.Tracking.SkippedUses, item.Tracking.SegmentSkippedUses = 1, 0
+	if e := estimateItem(item, 0, testNow); e.SkippedUses != 0 || strings.Contains(e.Summary, "couldn't be counted") {
+		t.Errorf("estimate after a correction = %+v", e)
 	}
 }

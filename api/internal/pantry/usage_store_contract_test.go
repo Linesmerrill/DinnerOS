@@ -36,7 +36,7 @@ func runTrackingContract(t *testing.T, store Store) {
 		CreatedAt: testNow, UpdatedBy: testUser, UpdatedAt: testNow,
 	}
 	startCycle(&item, "66e5a1f2c3b4a5d6e7f80f01", CycleGroceryList, ratOf("16"), "oz", testNow)
-	item.Tracking.SegmentRecipeUsed, item.Tracking.RecipeUsed, item.Tracking.RecipeUses, item.Tracking.SkippedUses = "5/2", "5/2", 2, 1
+	item.Tracking.SegmentRecipeUsed, item.Tracking.RecipeUsed, item.Tracking.RecipeUses, item.Tracking.SkippedUses, item.Tracking.SegmentSkippedUses = "5/2", "5/2", 2, 1, 1
 
 	saved, err := store.InsertItem(ctx, item)
 	if err != nil {

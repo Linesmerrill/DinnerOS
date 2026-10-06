@@ -475,13 +475,15 @@ func estimateItem(item Item, householdPercent int, now time.Time) *Estimate {
 	if t == nil {
 		return nil
 	}
+	// Uses that couldn't be counted are reported since the amount was last
+	// set: a person saying what's left already accounts for the earlier ones.
 	ref := ratOf(t.Reference)
 	if ref.Sign() <= 0 {
 		return nil
 	}
 	e := &Estimate{
 		CycleID: t.CycleID, CycleSource: t.CycleSource, CycleStartedAt: t.CycleStartedAt, Unit: t.Unit,
-		Reference: ref, RecipeUsed: ratOf(t.RecipeUsed), RecipeUses: t.RecipeUses, SkippedUses: t.SkippedUses,
+		Reference: ref, RecipeUsed: ratOf(t.RecipeUsed), RecipeUses: t.RecipeUses, SkippedUses: t.SegmentSkippedUses,
 		OtherUsed: new(big.Rat), EstimatedAt: now,
 	}
 	if t.SegmentStartedAt.After(t.CycleStartedAt) {
