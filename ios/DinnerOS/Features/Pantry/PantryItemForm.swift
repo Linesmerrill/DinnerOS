@@ -17,7 +17,7 @@ struct PantryItemFields: View {
 
     var body: some View {
         Section("Status") {
-            Picker("Status", selection: $draft.status) {
+            Picker("Status", selection: Binding(get: { draft.status }, set: { draft.setStatus($0) })) {
                 ForEach(PantryStatus.allCases) { status in
                     Text(status.title).tag(status)
                 }
@@ -27,16 +27,17 @@ struct PantryItemFields: View {
         }
 
         Section {
-            TextField("Amount", text: $draft.quantityText, prompt: Text("For example, 1 1/2"))
-                .keyboardType(.numbersAndPunctuation)
-                .autocorrectionDisabled()
-                .disabled(!draft.allowsAmount)
+            TextField(
+                "Amount", text: Binding(get: { draft.quantityText }, set: { draft.typeAmount($0) }),
+                prompt: Text(draft.allowsAmount ? "For example, 1 1/2" : "Enter an amount")
+            )
+            .keyboardType(.numbersAndPunctuation)
+            .autocorrectionDisabled()
             Picker("Unit", selection: $draft.unit) {
                 ForEach(PantryUnit.options(including: draft.unit), id: \.self) { code in
                     Text(PantryUnit.pickerLabel(code)).tag(code)
                 }
             }
-            .disabled(!draft.allowsAmount)
             if draft.allowsAmount, let error = draft.quantityError {
                 FormErrorLabel(message: error)
             }
@@ -46,7 +47,7 @@ struct PantryItemFields: View {
             if draft.allowsAmount {
                 Text("Optional. Leave it empty if you have some but didn't measure.")
             } else {
-                Text("Items that are out have no amount.")
+                Text("Out. Type an amount and it's back in stock.")
             }
         }
 

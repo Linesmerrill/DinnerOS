@@ -36,7 +36,8 @@ nonisolated struct PantryItemDraft: Equatable, Sendable {
     init(item: PantryItem, today: Date = .now, timeZone: TimeZone = .autoupdatingCurrent) {
         self.init(today: today, timeZone: timeZone)
         status = item.status
-        quantityText = PantryQuantity.editingText(item.quantity)
+        // An item that's out has no amount; an old one showing in a dimmed field read as broken.
+        quantityText = item.status == .out ? "" : PantryQuantity.editingText(item.quantity)
         unit = item.unit ?? PantryUnit.defaultCode
         isStaple = item.isStaple
         storage = item.storage
@@ -62,6 +63,21 @@ nonisolated struct PantryItemDraft: Equatable, Sendable {
 
     /// An item that's out has no amount; the API rejects one.
     var allowsAmount: Bool { status != .out }
+
+    /// Sets the typed amount. Typing one into an item that's out means there's some again, so it
+    /// becomes in stock rather than leaving a field that ignores what's typed.
+    mutating func typeAmount(_ text: String) {
+        quantityText = text
+        if status == .out, !text.trimmingCharacters(in: .whitespaces).isEmpty {
+            status = .inStock
+        }
+    }
+
+    /// Sets the status. Out clears the amount, since an item that's out has none.
+    mutating func setStatus(_ new: PantryStatus) {
+        status = new
+        if new == .out { quantityText = "" }
+    }
 
     /// The exact quantity to send, or `nil` for no amount.
     func exactQuantity() throws(PantryQuantityError) -> String? {
