@@ -466,10 +466,13 @@ func TestIntegrationHandoffAndConfirm(t *testing.T) {
 		t.Errorf("confirm event = %+v", f.events.list[1])
 	}
 
-	// Confirmed purchases put those items in the pantry, so the default list
-	// now leaves them out.
+	// Confirmed purchases put those items in the pantry. The beans cover the
+	// week; two 16 oz packs of beef don't cover 1 lb + 20 oz, so only the last
+	// ¼ lb is still to buy (having some is not having enough).
 	next, err := f.svc.Match(ctx, testHousehold, testWeek, "walmart", MatchInput{})
-	if err != nil || len(next.Lines) != 1 || next.Lines[0].Name != "Milk" || reasons(next)[f.keys["Ground Beef"]] != ExcludedInPantry {
+	if err != nil || len(next.Lines) != 2 || next.Lines[0].Name != "Ground Beef" || next.Lines[1].Name != "Milk" ||
+		len(next.Lines[0].Amounts) != 1 || next.Lines[0].Amounts[0].Quantity != "1/4" || next.Lines[0].Amounts[0].Unit != "lb" ||
+		reasons(next)[f.keys["Kidney Beans"]] != ExcludedInPantry {
 		t.Errorf("match after confirming = %+v, %v", next, err)
 	}
 

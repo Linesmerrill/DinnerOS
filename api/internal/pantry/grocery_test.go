@@ -110,3 +110,35 @@ func runGroceryPantryScenario(t *testing.T, svc *Service, catalog *fakeCatalog) 
 		t.Error("GroceryPantry without a household succeeded")
 	}
 }
+
+// The pantry says how much is at home, so the list buys the rest: 12 oz of
+// ground pork in the freezer against two meals of 10 oz each puts 8 oz on the
+// list. An item with no amount leaves its ingredient unmeasured.
+func TestGroceryPantryBuysWhatTheWeekNeedsBeyondWhatsAtHome(t *testing.T) {
+	svc, _, catalog := newTestService(t, "Ground Pork", "Oregano")
+	ctx := context.Background()
+	pork := mustAdd(t, svc, testHousehold, AddInput{Name: "Ground Pork", Quantity: "12", Unit: "oz", Storage: StorageFreezer})
+	mustAdd(t, svc, testHousehold, AddInput{Name: "Oregano"})
+	stock, err := svc.GroceryPantry(ctx, testHousehold)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := stock.OnHand(pork.IngredientID); !ok || got.Quantity.String() != "12" || got.Unit.Code != "oz" {
+		t.Fatalf("on hand = %+v, %v", got, ok)
+	}
+	if _, ok := stock.OnHand(catalog.id("Oregano")); ok {
+		t.Error("oregano with no amount has an on-hand amount")
+	}
+	ten := ingredients.NewQuantity(10, 1)
+	porkLine := grocery.Line{IngredientKey: pork.IngredientID, Name: "Ground Pork", Quantity: &ten, UnitCode: "oz"}
+	list, err := grocery.Aggregate([]grocery.RecipeSelection{
+		{RecipeID: "r1", RecipeName: "Moo Shu Pork Bowls", RecipeServings: 2, TargetServings: 2, Lines: []grocery.Line{porkLine}},
+		{RecipeID: "r2", RecipeName: "Santa Fe Pork Tacos", RecipeServings: 2, TargetServings: 2, Lines: []grocery.Line{porkLine}},
+	}, stock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item := list.Items[0]; item.Status != grocery.StatusToBuy || item.Amounts[0].Quantity.String() != "8" || item.OnHand == nil {
+		t.Errorf("pork = %s %v (on hand %+v), want 8 oz to buy", item.Status, item.Amounts, item.OnHand)
+	}
+}

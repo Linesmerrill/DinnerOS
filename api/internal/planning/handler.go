@@ -276,7 +276,10 @@ type GroceryItemResponse struct {
 	Name          string                  `json:"name"`
 	Amounts       []GroceryAmountResponse `json:"amounts"`
 	// QuantityText joins the amounts for display ("1 onion + 8 oz").
-	QuantityText string                  `json:"quantityText"`
+	QuantityText string `json:"quantityText"`
+	// OnHandText is set when the pantry has some but not enough, and the
+	// amounts are the rest to buy: "12 oz at home".
+	OnHandText   string                  `json:"onHandText,omitempty"`
 	Unquantified bool                    `json:"unquantified"`
 	Status       grocery.Status          `json:"status"`
 	Recipes      []GroceryRecipeResponse `json:"recipes"`
@@ -435,6 +438,9 @@ func newGroceryItemResponse(item grocery.Item) GroceryItemResponse {
 		IngredientKey: item.IngredientKey, Name: item.Name, Unquantified: item.Unquantified, Status: item.Status,
 		Amounts: make([]GroceryAmountResponse, 0, len(item.Amounts)),
 		Recipes: make([]GroceryRecipeResponse, 0, len(item.Sources)),
+	}
+	if item.OnHand != nil {
+		ir.OnHandText = amountText(*item.OnHand) + " at home"
 	}
 	texts := make([]string, 0, len(item.Amounts))
 	for _, a := range item.Amounts {

@@ -145,6 +145,10 @@ type Item struct {
 	// SkipScope is set only on an item the household skipped, and says which
 	// lifetime skipped it. Empty on every item in List.Items.
 	SkipScope SkipScope
+	// OnHand is set when the pantry has some but not enough: what's at home.
+	// The item is then toBuy, and its convertible amount is the rest still
+	// to buy (decision 623).
+	OnHand *Amount
 	// Shares split the item by the recipe each part is for, in the order of
 	// Sources: how much of it each meal needs. The list shows an item under
 	// every meal that uses it, with that meal's own amount, while it stays one
@@ -222,6 +226,14 @@ type FrozenPantry interface {
 	Frozen(ingredientKey string) bool
 }
 
+// StockedPantry is a Pantry that also knows how much of an ingredient is at
+// home. An in-stock or frozen item whose amount the week needs more than that
+// is bought: the rest, not none.
+type StockedPantry interface {
+	Pantry
+	OnHand(ingredientKey string) (Amount, bool)
+}
+
 // PantryStock is a household pantry snapshot. Keys match Line.IngredientKey.
 // OutOfStock holds everything the household marked low or out: both mean buy
 // it. InFreezer holds what is in stock in the freezer; those lines are neither
@@ -232,6 +244,15 @@ type PantryStock struct {
 	InStock    map[string]bool
 	OutOfStock map[string]bool
 	InFreezer  map[string]bool
+	// Amounts are how much of an in-stock or frozen ingredient is at home,
+	// when every item for it has a known amount; absent means unknown.
+	Amounts map[string]Amount
+}
+
+// OnHand implements StockedPantry.
+func (p PantryStock) OnHand(key string) (Amount, bool) {
+	a, ok := p.Amounts[key]
+	return a, ok
 }
 
 // Has implements Pantry.
@@ -377,6 +398,7 @@ func AggregateWith(selections []RecipeSelection, pantry Pantry, skips Skips) (Li
 	outPantry, _ := pantry.(OutPantry)
 	isOut := func(key string) bool { return outPantry != nil && outPantry.Out(key) }
 	frozenPantry, _ := pantry.(FrozenPantry)
+	stockedPantry, _ := pantry.(StockedPantry)
 	isFrozen := func(key string) bool { return frozenPantry != nil && frozenPantry.Frozen(key) }
 	acc := map[string]*accumulator{}
 	// held are the parts of items left out line by line — of one recipe, or
@@ -438,6 +460,9 @@ func AggregateWith(selections []RecipeSelection, pantry Pantry, skips Skips) (Li
 		if isSkipped {
 			list.SkippedItems = append(list.SkippedItems, item)
 			continue
+		}
+		if item.Status == StatusInPantry || item.Status == StatusFromFreezer {
+			shortOf(&item, stockedPantry)
 		}
 		list.Items = append(list.Items, item)
 	}
@@ -716,4 +741,32 @@ func normalizeCategory(c string) string {
 		}
 	}
 	return "other"
+}
+
+// shortOf turns a covered item into one to buy when the week needs more than
+// is at home: "20 oz ground pork" with 12 oz in the freezer buys 8 oz. Only
+// an amount that converts to the pantry's is compared; anything else stays
+// covered, since the pantry can't say.
+func shortOf(item *Item, pantry StockedPantry) {
+	if pantry == nil {
+		return
+	}
+	have, ok := pantry.OnHand(item.IngredientKey)
+	if !ok {
+		return
+	}
+	for i, need := range item.Amounts {
+		if !need.Unit.CanConvertTo(have.Unit) {
+			continue
+		}
+		haveInNeed, err := ingredients.Convert(have.Quantity, have.Unit, need.Unit)
+		if err != nil || need.Quantity.Cmp(haveInNeed) <= 0 {
+			return
+		}
+		rest := new(big.Rat).Sub(need.Quantity.Rat(), haveInNeed.Rat())
+		item.Amounts[i] = Amount{Quantity: ingredients.NewQuantity(1, 1).MulRat(rest), Unit: need.Unit}
+		item.Status = StatusToBuy
+		item.OnHand = &have
+		return
+	}
 }

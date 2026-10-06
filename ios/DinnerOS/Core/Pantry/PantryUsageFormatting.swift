@@ -31,15 +31,18 @@ nonisolated enum PantryUsageFormat {
         return String(localized: "About \(percentText) left, about \(left)")
     }
 
-    /// The remaining amount rounded for a glance: "8 oz", "2.5 oz", "1 ½ cups". An estimate
+    /// The remaining amount rounded for a glance: "8 oz", "2.5 oz", "0.75 lb". An estimate
     /// isn't exact, so "5.33 oz" would claim precision it doesn't have. `nil` when there is
     /// no amount to show, or it would only repeat a bare count.
     static func remainingGlance(_ estimate: PantryEstimate, locale: Locale = .autoupdatingCurrent) -> String? {
         let value = estimate.remaining.quantityValue
         guard value > 0, !estimate.unit.isEmpty else { return nil }
-        let rounded = (value * 2).rounded() / 2
+        // Under 2, to the nearest quarter: ¾ lb is 12 oz, and rounding it to "1 lb" claimed
+        // a third more than was there. Above that, to the nearest half.
+        let step = value < 2 ? 4.0 : 2.0
+        let rounded = (value * step).rounded() / step
         let shown = rounded > 0 ? rounded : value
-        let number = shown.formatted(.number.precision(.fractionLength(0...1)).locale(locale))
+        let number = shown.formatted(.number.precision(.fractionLength(0...2)).locale(locale))
         let label = RecipeFormat.unitLabel(estimate.unit, sourceUnit: estimate.unit, plural: shown != 1)
         return label.isEmpty ? nil : "\(number) \(label)"
     }

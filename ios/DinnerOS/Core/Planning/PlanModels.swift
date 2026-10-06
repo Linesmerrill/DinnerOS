@@ -495,6 +495,8 @@ nonisolated struct GroceryItem: Decodable, Equatable, Sendable, Identifiable {
     var skipText: String?
     /// The item split by meal, in `recipes` order. Empty from a server without meal grouping.
     var shares: [GroceryShare] = []
+    /// "12 oz at home" when the pantry has some but not enough; the amounts are then the rest.
+    var onHandText: String? = nil
 
     /// A skipped item and a listed one can share an ingredient (one meal left it out, another
     /// didn't), so a skipped item's identity includes how it was skipped.
@@ -519,7 +521,7 @@ nonisolated struct GroceryItem: Decodable, Equatable, Sendable, Identifiable {
 extension GroceryItem {
     private enum CodingKeys: String, CodingKey {
         case ingredientKey, name, amounts, quantityText, unquantified, status, recipes, specialty,
-            specialtyDetail, via, extras, skipScope, skipText, shares
+            specialtyDetail, via, extras, skipScope, skipText, shares, onHandText
     }
 
     /// The specialty fields are additive, so they're read leniently, like `GroceryList`'s.
@@ -540,6 +542,7 @@ extension GroceryItem {
             skipScope: (try? container.decodeIfPresent(GrocerySkipScope.self, forKey: .skipScope)) ?? nil,
             skipText: (try? container.decodeIfPresent(String.self, forKey: .skipText)) ?? nil,
             shares: container.decodeLossyArray(GroceryShare.self, forKey: .shares))
+        onHandText = (try? container.decodeIfPresent(String.self, forKey: .onHandText)) ?? nil
     }
 }
 

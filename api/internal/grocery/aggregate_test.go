@@ -320,3 +320,57 @@ func TestEmptySelectionsYieldEmptyList(t *testing.T) {
 		t.Errorf("items = %d, want 0", len(l.Items))
 	}
 }
+
+// Two meals each need 10 oz of ground pork and the freezer holds 12 oz: the
+// list must buy the other 8 oz. Having some is not having enough — marking
+// it covered left a household short at the stove (decision 623).
+func TestHavingSomeIsNotHavingEnough(t *testing.T) {
+	oz, err := ingredients.LookupUnit("oz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lb, _ := ingredients.LookupUnit("lb")
+	selections := []RecipeSelection{
+		{RecipeID: "r1", RecipeName: "Moo Shu Pork Bowls", RecipeServings: 2, TargetServings: 2,
+			Lines: []Line{line("pork", "Ground Pork", "meat", q(10, 1), "oz")}},
+		{RecipeID: "r2", RecipeName: "One-Pan Santa Fe Pork Tacos", RecipeServings: 2, TargetServings: 2,
+			Lines: []Line{line("pork", "Ground Pork", "meat", q(10, 1), "oz")}},
+	}
+	cases := []struct {
+		name       string
+		stock      PantryStock
+		wantStatus Status
+		wantBuy    string
+	}{
+		{"12 oz in the freezer", PantryStock{InFreezer: map[string]bool{"pork": true}, Amounts: map[string]Amount{"pork": {Quantity: ingredients.NewQuantity(12, 1), Unit: oz}}}, StatusToBuy, "8"},
+		{"¾ lb in the fridge", PantryStock{InStock: map[string]bool{"pork": true}, Amounts: map[string]Amount{"pork": {Quantity: ingredients.NewQuantity(3, 4), Unit: lb}}}, StatusToBuy, "8"},
+		{"enough at home", PantryStock{InFreezer: map[string]bool{"pork": true}, Amounts: map[string]Amount{"pork": {Quantity: ingredients.NewQuantity(24, 1), Unit: oz}}}, StatusFromFreezer, "20"},
+		{"exactly enough", PantryStock{InStock: map[string]bool{"pork": true}, Amounts: map[string]Amount{"pork": {Quantity: ingredients.NewQuantity(20, 1), Unit: oz}}}, StatusInPantry, "20"},
+		// Without a known amount the pantry can't say it's short.
+		{"amount unknown", PantryStock{InStock: map[string]bool{"pork": true}}, StatusInPantry, "20"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			list, err := Aggregate(selections, c.stock)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(list.Items) != 1 {
+				t.Fatalf("items = %+v", list.Items)
+			}
+			item := list.Items[0]
+			if item.Status != c.wantStatus || len(item.Amounts) != 1 || item.Amounts[0].Quantity.String() != c.wantBuy || item.Amounts[0].Unit.Code != "oz" {
+				t.Errorf("item = %s %v, want %s %s oz", item.Status, item.Amounts, c.wantStatus, c.wantBuy)
+			}
+			if (item.OnHand != nil) != (c.wantStatus == StatusToBuy) {
+				t.Errorf("on hand = %+v", item.OnHand)
+			}
+			// Each meal's share still says what that meal needs.
+			for _, share := range item.Shares {
+				if len(share.Amounts) != 1 || share.Amounts[0].Quantity.String() != "10" {
+					t.Errorf("share = %+v", share)
+				}
+			}
+		})
+	}
+}

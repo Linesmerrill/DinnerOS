@@ -28,6 +28,16 @@ struct PantryUsageFormattingTests {
         #expect(PantryUsageFormat.remainingShort(empty, locale: locale) == "~0% left")
     }
 
+    /// ¾ lb of pork is 12 oz, and "1 lb" claimed a third more than was there. Small amounts
+    /// round to the quarter; larger ones still round to the half.
+    @Test func aSmallAmountKeepsItsQuarter() {
+        let pork = PantryFixtures.estimate(percentRemaining: 75, unit: "lb", start: 1, remaining: 0.75)
+        #expect(PantryUsageFormat.remainingShort(pork, locale: locale) == "~75% left (0.75 lb)")
+
+        let rice = PantryFixtures.estimate(percentRemaining: 55, unit: "lb", start: 5, remaining: 2.74)
+        #expect(PantryUsageFormat.remainingShort(rice, locale: locale) == "~55% left (2.5 lb)")
+    }
+
     @Test func levelFollowsTheThreshold() {
         #expect(PantryUsageFormat.level(PantryFixtures.estimate()) == .plenty)
         #expect(PantryUsageFormat.level(PantryFixtures.estimate(percentRemaining: 15, belowThreshold: true)) == .low)

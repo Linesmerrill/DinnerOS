@@ -486,6 +486,12 @@ private struct GroceryItemRow: View {
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
+                            // Some at home, not enough: the amount above is the rest.
+                            if let onHand = item.onHandText {
+                                Label(onHand, systemImage: "house")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
                             ForEach(Array(item.via.enumerated()), id: \.offset) { _, via in
                                 Text(via.text)
                                     .font(.footnote)
@@ -597,6 +603,9 @@ private struct GroceryItemRow: View {
         var parts = [item.name]
         if let amount {
             parts.append(amount)
+        }
+        if let onHand = item.onHandText {
+            parts.append(onHand)
         }
         parts += item.via.map(\.text)
         parts += item.extras.map(\.text)
