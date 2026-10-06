@@ -24,6 +24,9 @@ type HandlerOptions struct {
 	Authorizer households.Authorizer
 	Tokens     auth.AccessTokenValidator
 	Logger     *slog.Logger
+	// Outcomes reads the cooked and skipped answers the plan carries; nil
+	// leaves them out.
+	Outcomes EventLister
 }
 
 // Handler serves the week plan endpoints.
@@ -90,6 +93,9 @@ type EntryResponse struct {
 	Origin Origin `json:"origin"`
 	// Customizations are the meal's protein choices; omitted when none.
 	Customizations []EntryCustomizationResponse `json:"customizations,omitempty"`
+	// Outcome is the household's "did you make it?" answer, whoever gave it;
+	// omitted until someone answers.
+	Outcome *EntryOutcomeResponse `json:"outcome,omitempty"`
 }
 
 // EntryCustomizationResponse is one customized ingredient line of an entry.
@@ -706,7 +712,9 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "get plan failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, newPlanResponse(p))
+	resp := newPlanResponse(p)
+	h.withOutcomes(r.Context(), actor.HouseholdID, &resp)
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) groceryList(w http.ResponseWriter, r *http.Request) {

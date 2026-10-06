@@ -166,7 +166,7 @@ struct WeekView: View {
     /// Marking a meal cooked or skipped only records an event, so any member can do it,
     /// in a finalized week too. Editing still needs `plan.edit` and a draft.
     private func row(_ entry: PlanEntry) -> some View {
-        let outcome = events.outcomes[entry.id]
+        let outcome = events.outcome(for: entry)
         return Group {
             if canEditEntries {
                 Button {

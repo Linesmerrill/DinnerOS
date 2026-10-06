@@ -293,3 +293,34 @@ func TestRedactExcerptKeepsShapeAndDropsAnythingTokenish(t *testing.T) {
 		t.Errorf("the excerpt is %d runes; it must be bounded", len([]rune(long)))
 	}
 }
+
+// A card labeled 4 and 6 whose amounts exactly double is the 2- and 4-person
+// box; a real 4 and 6 card (half again), or one with too little to compare,
+// keeps its labels.
+func TestDoubledFourAndSixAreTwoAndFour(t *testing.T) {
+	amountsAt := func(byServings map[int]map[string]float64) func(int) map[string]float64 {
+		return func(size int) map[string]float64 { return byServings[size] }
+	}
+	doubled := map[int]map[string]float64{
+		4: {"pasta": 6, "sausage": 9, "onion": 1, "paste": 1.5},
+		6: {"pasta": 12, "sausage": 18, "onion": 2, "paste": 3},
+	}
+	got := doubledSizes(map[int]bool{4: true, 6: true}, amountsAt(doubled))
+	if got[4] != 2 || got[6] != 4 {
+		t.Errorf("doubled = %v, want 4→2, 6→4", got)
+	}
+	halfAgain := map[int]map[string]float64{
+		4: {"rice": 1.5, "beef": 20, "carrots": 8},
+		6: {"rice": 2.25, "beef": 30, "carrots": 12},
+	}
+	if got := doubledSizes(map[int]bool{4: true, 6: true}, amountsAt(halfAgain)); got != nil {
+		t.Errorf("half again = %v, want labels kept", got)
+	}
+	few := map[int]map[string]float64{4: {"a": 1, "b": 2}, 6: {"a": 2, "b": 4}}
+	if got := doubledSizes(map[int]bool{4: true, 6: true}, amountsAt(few)); got != nil {
+		t.Errorf("two lines = %v, want labels kept", got)
+	}
+	if got := doubledSizes(map[int]bool{2: true, 4: true}, amountsAt(doubled)); got != nil {
+		t.Errorf("2 and 4 = %v, want labels kept", got)
+	}
+}

@@ -106,6 +106,35 @@ struct EventReporterTests {
         return Harness(reporter: reporter, server: server, clock: clock)
     }
 
+    /// Another member's Cooked, from the plan, shows on this phone; this phone's own answer wins
+    /// while it may not have reached the server yet.
+    @Test func aHouseholdMembersAnswerShowsHere() async throws {
+        let harness = try await makeHarness()
+        var shared = entry(id: "shared")
+        shared.outcome = .cooked
+        #expect(harness.reporter.outcome(for: shared) == .cooked)
+        #expect(harness.reporter.outcome(for: entry(id: "unanswered")) == nil)
+        harness.reporter.recipeSkipped(shared, week: week, reason: nil)
+        #expect(harness.reporter.outcome(for: shared) == .skipped(nil))
+    }
+
+    @Test func thePlanDecodesEachMealsOutcome() throws {
+        let json = """
+            {"id":"e1","recipe":{"id":"r1","name":"Tacos"},"day":"mon","date":"2026-09-14","servings":2,"note":"",
+             "addedBy":"u1","addedAt":"2026-09-10T00:00:00Z","outcome":{"kind":"skipped","reason":"ate-out","by":"u2","at":"2026-09-14T20:00:00Z"}}
+            """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let decoded = try decoder.decode(PlanEntry.self, from: Data(json.utf8))
+        #expect(decoded.outcome == .skipped(.ateOut))
+        let older = try decoder.decode(
+            PlanEntry.self,
+            from: Data(
+                #"{"id":"e1","recipe":{"id":"r1","name":"Tacos"},"servings":2,"note":"","addedBy":"u1","addedAt":"2026-09-10T00:00:00Z"}"#
+                    .utf8))
+        #expect(older.outcome == nil)
+    }
+
     private func entry(id: String = "66e5a1f2c3b4a5d6e7f80c01", date: String? = "2026-09-14") -> PlanEntry {
         PlanEntry(
             id: id,

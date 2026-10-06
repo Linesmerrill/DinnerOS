@@ -47,7 +47,7 @@ extension ClientEventType {
 ///
 /// Only ever set from an answer someone gave. Nothing infers it: a week going by doesn't cook a
 /// meal, and a rating says the food was good, not that this household made it that night.
-nonisolated enum MealOutcome: Equatable, Sendable {
+nonisolated enum MealOutcome: Hashable, Sendable {
     case cooked
     case skipped(SkipReason?)
 }

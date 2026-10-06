@@ -25,7 +25,7 @@ struct MealOutcomeRow: View {
     /// The delayed send, cancelled by Undo.
     @State private var send: Task<Void, Never>?
 
-    private var outcome: EventReporter.EntryOutcome? { events.outcomes[entry.id] }
+    private var outcome: EventReporter.EntryOutcome? { events.outcome(for: entry) }
 
     var body: some View {
         Group {

@@ -401,6 +401,33 @@ func normalize(o mealkit.OrderedRecipe, r hfRecipe, finalURL string) (recipes.Im
 			amounts[ya.ID] = append(amounts[ya.ID], amountRef{y.Yields, ya.Amount, ya.Unit})
 		}
 	}
+	// Some cards are labeled 4 and 6 while their amounts are the 2- and
+	// 4-person box: every amount at 6 is exactly twice the one at 4 (a 4 to 6
+	// box would be half again). They're read as 2 and 4, so a household of
+	// two can cook them and the 4 isn't half the food it says.
+	if relabel := doubledSizes(servingSet, func(size int) map[string]float64 {
+		got := map[string]float64{}
+		for id, refs := range amounts {
+			for _, ref := range refs {
+				if ref.servings == size && ref.amount != nil && *ref.amount > 0 {
+					got[id] = *ref.amount
+				}
+			}
+		}
+		return got
+	}); relabel != nil {
+		next := map[int]bool{}
+		for size := range servingSet {
+			next[relabel[size]] = true
+		}
+		servingSet = next
+		for id, refs := range amounts {
+			for i := range refs {
+				refs[i].servings = relabel[refs[i].servings]
+			}
+			amounts[id] = refs
+		}
+	}
 	for s := range servingSet {
 		out.Servings = append(out.Servings, s)
 	}
@@ -611,4 +638,30 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// doubledSizes returns how to relabel a card's serving sizes when it says 4
+// and 6 but every quantified amount at 6 is exactly twice the one at 4, with
+// at least three to go on: those are the 2- and 4-person amounts. nil leaves
+// the sizes as labeled.
+func doubledSizes(sizes map[int]bool, at func(size int) map[string]float64) map[int]int {
+	if len(sizes) != 2 || !sizes[4] || !sizes[6] {
+		return nil
+	}
+	small, large := at(4), at(6)
+	compared := 0
+	for id, a := range small {
+		b, ok := large[id]
+		if !ok {
+			continue
+		}
+		if math.Abs(b-2*a) > 1e-9 {
+			return nil
+		}
+		compared++
+	}
+	if compared < 3 {
+		return nil
+	}
+	return map[int]int{4: 2, 6: 4}
 }

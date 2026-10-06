@@ -208,6 +208,7 @@ func run() error {
 		Authorizer: householdService,
 		Tokens:     tokens,
 		Logger:     logger,
+		Outcomes:   behavior.events,
 	})
 	skipHandler := skips.NewHandler(skips.HandlerOptions{
 		Service:    skipsService,

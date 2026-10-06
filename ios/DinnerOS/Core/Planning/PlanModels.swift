@@ -93,11 +93,14 @@ nonisolated struct PlanEntry: Decodable, Hashable, Sendable, Identifiable {
     var origin: PlanEntryOrigin?
     /// Protein swaps or doubles chosen for this entry; empty when it's the original recipe.
     var customizations: [PlanEntryCustomization] = []
+    /// The household's "did you make it?" answer, whoever gave it, from the server; `nil` until
+    /// someone answers, or from an older server.
+    var outcome: MealOutcome? = nil
 
     var isFromAutopilot: Bool { origin == .autopilot }
 
     private enum CodingKeys: String, CodingKey {
-        case id, recipe, day, date, servings, note, addedBy, addedAt, origin, customizations
+        case id, recipe, day, date, servings, note, addedBy, addedAt, origin, customizations, outcome
     }
 }
 
@@ -115,7 +118,8 @@ nonisolated extension PlanEntry {
             addedBy: try container.decode(String.self, forKey: .addedBy),
             addedAt: try container.decode(Date.self, forKey: .addedAt),
             origin: try container.decodeIfPresent(PlanEntryOrigin.self, forKey: .origin),
-            customizations: container.decodeLossyArray(PlanEntryCustomization.self, forKey: .customizations))
+            customizations: container.decodeLossyArray(PlanEntryCustomization.self, forKey: .customizations),
+            outcome: container.decodeLenient(MealOutcome.self, forKey: .outcome))
     }
 }
 

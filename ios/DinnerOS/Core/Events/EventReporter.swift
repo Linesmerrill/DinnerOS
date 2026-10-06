@@ -31,9 +31,15 @@ final class EventReporter {
     /// what the cards keep showing.
     private(set) var recordedOutcomes: [String: RecordedOutcome] = [:]
 
-    /// Outcomes by plan entry ID.
+    /// Outcomes by plan entry ID, as answered on this device.
     var outcomes: [String: EntryOutcome] {
         recordedOutcomes.mapValues(\.outcome)
+    }
+
+    /// A planned meal's answer: this device's own when it gave one (it may not have reached the
+    /// server yet), else the household's, which another member may have given.
+    func outcome(for entry: PlanEntry) -> EntryOutcome? {
+        outcomes[entry.id] ?? entry.outcome
     }
 
     static let maxBatchSize = EventLimits.maxBatchSize

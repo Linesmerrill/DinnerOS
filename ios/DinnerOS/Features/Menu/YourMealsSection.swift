@@ -315,7 +315,7 @@ struct MealCard: View {
     @Environment(NotificationStore.self) private var notifications
     @Environment(MealSwapStore.self) private var swaps
 
-    private var outcome: EventReporter.EntryOutcome? { events.outcomes[entry.id] }
+    private var outcome: EventReporter.EntryOutcome? { events.outcome(for: entry) }
 
     /// The stars show the menu card's `myRating`, so they need one. Without it the row would ask
     /// again about a meal the member has already rated.
