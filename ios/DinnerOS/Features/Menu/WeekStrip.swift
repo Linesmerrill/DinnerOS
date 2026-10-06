@@ -25,6 +25,26 @@ nonisolated enum WeekStripMetrics {
 
     /// The text styles `WeekPill` stacks, top to bottom.
     private static let lineStyles: [UIFont.TextStyle] = [.caption2, .subheadline, .caption2]
+    /// On a wide screen the name sits beside the dates, so the pill is two lines.
+    private static let wideLineStyles: [UIFont.TextStyle] = [.subheadline, .caption2]
+
+    /// From this strip width (an iPad, either way up) the pills go to two lines and stop
+    /// widening. Two-fifths of a landscape iPad made each week about 540 points of mostly empty
+    /// pill, and with the third line the Menu's chrome took a third of the screen.
+    static let wideWidth: CGFloat = 700
+    /// The widest a week gets on a wide screen: dates and the meal count, with room to spare.
+    static let widePillWidth: CGFloat = 240
+
+    static func isWide(_ stripWidth: CGFloat) -> Bool { stripWidth >= wideWidth }
+
+    /// Two-fifths of the row per week on a phone: about two and a half weeks in view, and more
+    /// of the row at the larger text sizes so the dates still fit. On a wide screen, a fixed
+    /// width, so the extra room shows more weeks rather than bigger pills.
+    static func pillWidth(stripWidth: CGFloat, typeSize: DynamicTypeSize) -> CGFloat {
+        let share: CGFloat = typeSize >= .xxxLarge ? 0.62 : 0.4
+        let phone = max(140, ((stripWidth - 32) * share).rounded())
+        return isWide(stripWidth) ? min(widePillWidth + (typeSize >= .xxxLarge ? 80 : 0), phone) : phone
+    }
 
     /// The height to reserve for the pills at `size`: what the three lines actually measure at
     /// the clamped text size, plus the pill's own spacing and padding.
@@ -34,14 +54,15 @@ nonisolated enum WeekStripMetrics {
     /// same number still under-reserved what the pill draws, so pills clipped instead. Adding up
     /// the real line heights can't drift from the pill: whatever the text size, the box is as
     /// tall as its contents.
-    static func height(for size: DynamicTypeSize) -> CGFloat {
+    static func height(for size: DynamicTypeSize, wide: Bool = false) -> CGFloat {
         let traits = UITraitCollection(
             preferredContentSizeCategory: contentSizeCategory(for: min(size, largestTypeSize)))
         let lines =
-            lineStyles
+            (wide ? wideLineStyles : lineStyles)
             .map { UIFont.preferredFont(forTextStyle: $0, compatibleWith: traits).lineHeight }
             .reduce(0, +)
-        return (lines + lineSpacing * 2 + verticalPadding * 2).rounded(.up)
+        let spacing = lineSpacing * CGFloat((wide ? wideLineStyles : lineStyles).count - 1)
+        return (lines + spacing + verticalPadding * 2).rounded(.up)
     }
 
     /// The height to reserve for the collapsed strip at `size`: the one line it draws — the
@@ -105,8 +126,10 @@ struct WeekStrip: View {
 
     /// What the pills need at this text size, capped so the strip can't take the screen.
     private var pillHeight: CGFloat {
-        WeekStripMetrics.height(for: dynamicTypeSize)
+        WeekStripMetrics.height(for: dynamicTypeSize, wide: isWide)
     }
+
+    private var isWide: Bool { WeekStripMetrics.isWide(stripWidth) }
 
     var body: some View {
         Group {
@@ -116,7 +139,7 @@ struct WeekStrip: View {
                 collapsedBar
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, isWide ? 6 : 8)
         .background(.bar)
         .overlay(alignment: .bottom) { Divider() }
         .onChange(of: plans.week, initial: true) { _, week in
@@ -201,7 +224,7 @@ struct WeekStrip: View {
                     } label: {
                         WeekPill(
                             item: item, isSelected: item.week == plans.week,
-                            currentWeek: menu.currentWeek, weekStartsOn: menu.weekStartsOn)
+                            currentWeek: menu.currentWeek, weekStartsOn: menu.weekStartsOn, isWide: isWide)
                     }
                     .buttonStyle(WeekPillButtonStyle())
                     // An explicit width, not `containerRelativeFrame`: the lazy row estimates
@@ -239,11 +262,8 @@ struct WeekStrip: View {
         .dynamicTypeSize(...WeekStripMetrics.largestTypeSize)
     }
 
-    /// Two-fifths of the row per week: about two and a half weeks in view. At the larger text
-    /// sizes, a week gets more of the row so its dates still fit on one line.
     private var pillWidth: CGFloat {
-        let share: CGFloat = dynamicTypeSize >= .xxxLarge ? 0.62 : 0.4
-        return max(140, ((stripWidth - 32) * share).rounded())
+        WeekStripMetrics.pillWidth(stripWidth: stripWidth, typeSize: dynamicTypeSize)
     }
 
     private var pastButton: some View {
@@ -316,16 +336,20 @@ struct WeekPill: View {
     let isSelected: Bool
     let currentWeek: ISOWeek
     let weekStartsOn: PlanDay
+    /// Two lines, the name beside the dates (`WeekStripMetrics.wideWidth`).
+    var isWide = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(relativeName ?? item.week.monthAndYear())
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(
-                    isSelected ? AnyShapeStyle(Color.onAccent.opacity(0.9)) : AnyShapeStyle(Color.secondary))
-            Text(item.week.rangeLabel(weekStartsOn: weekStartsOn))
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(isSelected ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.primary))
+            if isWide {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    dates
+                    name
+                }
+            } else {
+                name
+                dates
+            }
             detail
         }
         .lineLimit(1)
@@ -346,6 +370,19 @@ struct WeekPill: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    private var name: some View {
+        Text(relativeName ?? item.week.monthAndYear())
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(
+                isSelected ? AnyShapeStyle(Color.onAccent.opacity(0.9)) : AnyShapeStyle(Color.secondary))
+    }
+
+    private var dates: some View {
+        Text(item.week.rangeLabel(weekStartsOn: weekStartsOn))
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(isSelected ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.primary))
     }
 
     private var relativeName: String? {

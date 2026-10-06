@@ -5,6 +5,7 @@ struct DinnerOSApp: App {
     /// Owns `AppDependencies`, so the push device token and tapped pushes reach them.
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
+    @State private var activation = PlanRefresh.Tracker()
 
     private var dependencies: AppDependencies { appDelegate.dependencies }
 
@@ -57,6 +58,17 @@ struct DinnerOSApp: App {
                     switch phase {
                     case .active:
                         events.appDidBecomeActive()
+                        // Another member may have moved meals while this device sat in the
+                        // background; the plan and menu reload without needing a pull.
+                        if activation.phaseChanged(to: phase) {
+                            let plans = dependencies.plans
+                            let menu = dependencies.menu
+                            Task {
+                                async let week: Void = plans.reload()
+                                await menu.reload()
+                                await week
+                            }
+                        }
                         let notifications = dependencies.notifications
                         Task { await notifications.refreshUnreadCount() }
                         // Notices permission changed in Settings, and re-registers so a
@@ -75,6 +87,7 @@ struct DinnerOSApp: App {
                             await prefetch.run()
                         }
                     case .background:
+                        _ = activation.phaseChanged(to: phase)
                         BackgroundActivity.run(named: "Send events") {
                             await events.appDidEnterBackground()
                         }

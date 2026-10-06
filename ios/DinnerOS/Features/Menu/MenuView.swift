@@ -15,6 +15,7 @@ struct MenuView: View {
     @Environment(PairingsStore.self) private var pairings
     @Environment(MealSwapStore.self) private var swaps
     @Environment(AuthSession.self) private var session
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// Optional so previews needn't supply them.
     @Environment(TabRouter.self) private var tabs: TabRouter?
     @Environment(MealKitImportStore.self) private var mealKit: MealKitImportStore?
@@ -199,6 +200,7 @@ struct MenuView: View {
             .task(id: household?.id) {
                 if welcomeDue { showsWelcome = true }
             }
+            .modifier(MenuAutoRefresh())
             .sheet(isPresented: $showsWelcome, onDismiss: finishWelcome) {
                 WelcomeView(
                     hasRecipes: !library.items.isEmpty,
@@ -276,11 +278,16 @@ struct MenuView: View {
             }
         }
         .refreshable {
-            async let menuReload: Void = menu.reload()
-            async let week: Void = plans.reload()
-            await autopilot.reloadWeek()
-            await week
-            await menuReload
+            let menu = menu
+            let plans = plans
+            let autopilot = autopilot
+            await PlanRefresh.uncancellable {
+                async let menuReload: Void = menu.reload()
+                async let week: Void = plans.reload()
+                await autopilot.reloadWeek()
+                await week
+                await menuReload
+            }
         }
     }
 
@@ -345,13 +352,17 @@ struct MenuView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
+        // On an iPad the principal item gets a row of its own under the tab bar; leading puts the
+        // switch in the tab bar's row instead, a whole row back for the meals.
+        ToolbarItem(placement: horizontalSizeClass == .regular ? .topBarLeading : .principal) {
             Picker("View", selection: $mode) {
                 ForEach(MenuMode.allCases) { mode in
                     Text(mode.title).tag(mode)
                 }
             }
             .pickerStyle(.segmented)
+            // A leading item is sized to its content, and a segmented picker reports almost none.
+            .frame(width: horizontalSizeClass == .regular ? 180 : nil)
             .frame(maxWidth: 220)
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
@@ -475,4 +486,25 @@ nonisolated enum MenuScroll {
     }
     .menuPreviewEnvironment()
     .environment(\.dynamicTypeSize, .accessibility2)
+}
+
+/// Reloads the shown week every `PlanRefresh.interval` while the Menu is on screen and the app is
+/// in front: a kitchen iPad left on the Menu for days still sees what a phone changed.
+private struct MenuAutoRefresh: ViewModifier {
+    @Environment(MenuStore.self) private var menu
+    @Environment(PlanStore.self) private var plans
+    @Environment(\.scenePhase) private var scenePhase
+
+    func body(content: Content) -> some View {
+        content.task(id: scenePhase == .active) {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: PlanRefresh.interval)
+                guard !Task.isCancelled else { return }
+                async let week: Void = plans.reload()
+                await menu.reload()
+                await week
+            }
+        }
+    }
 }

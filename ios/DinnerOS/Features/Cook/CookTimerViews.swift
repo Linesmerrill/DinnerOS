@@ -78,7 +78,10 @@ struct CookTimerChip: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(spoken(remaining: remaining)))
                 .accessibilityHint(Text(isFinished ? "Stops the timer" : "Shows the timer's controls"))
-                if isOpen || isFinished {
+                if isFinished {
+                    finishedControls
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                } else if isOpen {
                     controls
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -165,6 +168,37 @@ struct CookTimerChip: View {
         .padding(.leading, 8)
     }
 
+    /// A ringing timer gets two big buttons, a third for another minute and two thirds for Stop:
+    /// reached across a counter at a landscape iPad, the small capsules were missed most times.
+    private var finishedControls: some View {
+        HStack(spacing: 8) {
+            bigButton("1 Min", systemImage: "plus", width: CookTimerStyle.ringingAddWidth) {
+                timers.addMinute(timer.id)
+            }
+            .accessibilityLabel(Text("One minute more"))
+            bigButton("Stop", systemImage: "xmark", width: CookTimerStyle.ringingStopWidth) {
+                withAnimation(.snappy(duration: 0.25)) { timers.remove(timer.id) }
+            }
+        }
+        .padding(.leading, 8)
+    }
+
+    private func bigButton(
+        _ title: LocalizedStringKey, systemImage: String, width: CGFloat, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.title3.weight(.bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(width: width, height: CookTimerStyle.ringingButtonHeight)
+                .background(Capsule().fill(Color.white.opacity(0.24)))
+                .foregroundStyle(Color.white)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
     private func controlButton(
         _ title: LocalizedStringKey, systemImage: String, iconOnly: Bool = false, action: @escaping () -> Void
     ) -> some View {
@@ -208,6 +242,12 @@ enum CookTimerStyle {
     /// The last minute: warm, like a burner turning orange. Paired with the ring and numbers,
     /// never the only signal.
     static let urgent = Color(.systemOrange)
+
+    /// A ringing timer's buttons: a third for another minute, two thirds for Stop, and tall
+    /// enough to hit from across the counter. Together they fit a phone's width.
+    static let ringingAddWidth: CGFloat = 104
+    static let ringingStopWidth: CGFloat = 196
+    static let ringingButtonHeight: CGFloat = 60
 }
 
 /// The quick adjust for a tapped time: starts at the high end of the recipe's range ("2-3
