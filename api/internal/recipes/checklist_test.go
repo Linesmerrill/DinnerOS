@@ -120,13 +120,15 @@ func TestChecklistReadsTheStepsLikeACook(t *testing.T) {
 	if it := item(t, c, 2, "Lime wedges"); it.AmountText != "2" || it.Prep != "juiced" {
 		t.Errorf("lime wedges = %+v", it)
 	}
-	if it := item(t, c, 3, "Southwest Spice Blend"); it.Prep != "the rest" {
+	// What's left of the blend, measured: never "the rest" (decision 631).
+	if it := item(t, c, 3, "Southwest Spice Blend"); it.Prep != "" || it.AmountText != "2 ¾ tsp" {
 		t.Errorf("rest of the blend = %+v", it)
 	}
 	if it := item(t, c, 3, "Lime wedge"); it.AmountText != "1" {
 		t.Errorf("squeeze = %+v", it)
 	}
-	if it := item(t, c, 4, "Lime wedges"); it.Prep != "the rest" {
+	// Four wedges, two juiced and one squeezed: one left to serve.
+	if it := item(t, c, 4, "Lime wedge"); it.Prep != "" || it.AmountText != "1" {
 		t.Errorf("serving wedges = %+v", it)
 	}
 	for _, g := range c.ByStep {
@@ -145,10 +147,10 @@ func TestChecklistReadsTheStepsLikeACook(t *testing.T) {
 		t.Errorf("salt = %+v, want it under Have Ready with a stable ID", salt)
 	}
 	// All together: the onion's shares aren't whole-step amounts, so only the lime,
-	// named in wedges in two steps, opens into parts.
+	// named in wedges in three steps (the last, what's left), opens into parts.
 	for _, ci := range c.All {
-		if ci.Name == "Lime" && len(ci.Parts) != 2 {
-			t.Errorf("lime parts = %+v, want its two wedge shares", ci.Parts)
+		if ci.Name == "Lime" && len(ci.Parts) != 3 {
+			t.Errorf("lime parts = %+v, want its three wedge shares", ci.Parts)
 		}
 	}
 }

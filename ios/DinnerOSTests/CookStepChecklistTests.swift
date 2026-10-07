@@ -65,9 +65,11 @@ struct CookStepGroupTests {
         #expect(step1.items.first { $0.name == "Garlic" }?.prep == "thinly sliced into rounds")
     }
 
-    @Test func theRestOfSomethingSaysSo() throws {
+    /// "the rest" isn't an amount: the server sends what's left; without it the row says nothing.
+    @Test func remainingNeverReadsAsTheRest() throws {
         let step2 = try #require(try groups().first { $0.index == 2 })
-        #expect(step2.items.first { $0.name == "Garlic" }?.prep == "the rest")
+        let garlic = try #require(step2.items.first { $0.name == "Garlic" })
+        #expect(garlic.prep == nil)
     }
 
     @Test func aHomeMadeBlendIsMixedFirstSpiceBySpice() throws {

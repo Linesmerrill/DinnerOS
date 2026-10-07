@@ -95,9 +95,9 @@ func TestAnnotateReadsCitrusInWedges(t *testing.T) {
 		want     []string
 	}{
 		{2, []string{"Quarter 1 lime.", "Combine juice from 2 lime wedges and a pinch of sugar.",
-			"Stir in a squeeze of 1 lime wedge.", "Serve with remaining lime wedges."}},
+			"Stir in a squeeze of 1 lime wedge.", "Serve with remaining 1 lime wedge."}},
 		{6, []string{"Quarter 3 limes.", "Combine juice from 6 lime wedges and a pinch of sugar.",
-			"Stir in a squeeze of 3 lime wedges.", "Serve with remaining lime wedges."}},
+			"Stir in a squeeze of 3 lime wedges.", "Serve with remaining 3 lime wedges."}},
 	} {
 		in := Annotate(r, tc.servings, nil, true)
 		for i, want := range tc.want {
@@ -124,8 +124,12 @@ func TestAnnotateKeepsAFractionsWordsButListsTheShare(t *testing.T) {
 	if seg := ingredientSegments(in.Steps[1])[0]; seg.Amount == nil || seg.Amount.Text() != "¼" || !seg.Part {
 		t.Errorf("segment = %+v, want ¼ as this step's share", seg)
 	}
-	if seg := ingredientSegments(in.Steps[2])[0]; seg.Amount != nil {
-		t.Errorf("remaining = %+v, want no amount", seg)
+	// What's left is listed too: ¾ of the onion (decision 631).
+	if seg := ingredientSegments(in.Steps[2])[0]; seg.Amount == nil || seg.Amount.Text() != "¾" || !seg.Part {
+		t.Errorf("remaining = %+v, want ¾ left", seg)
+	}
+	if got, want := joined(in.Steps[2]), "Add remaining onion."; got != want {
+		t.Errorf("text = %q, want %q", got, want)
 	}
 }
 

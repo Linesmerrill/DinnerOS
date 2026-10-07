@@ -9,6 +9,7 @@ import (
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
+	"github.com/Linesmerrill/DinnerOS/api/internal/providers"
 )
 
 // This file renders a recipe's steps the way a member reads them while
@@ -209,13 +210,34 @@ func kitchenMeasure(name string, m *Measure) *Measure {
 	}
 	km, ok := ingredients.KitchenMeasureFor(name, m.Unit)
 	if !ok {
-		return m
+		return spooned(name, m)
 	}
 	q := m.Quantity.MulRat(km.PerPacket)
 	out := Measure{Quantity: q, Unit: km.Unit, Exact: true}
 	if km.Or != "" {
 		out.Or = km.Or
 	}
+	return &out
+}
+
+// spooned writes a weight of a thick ingredient a cook spoons out ("1.5 oz
+// tomato paste") in spoons, to the nearest half teaspoon: about 2½ Tbsp.
+// Anything else, and any amount over a cup, comes back as it was.
+func spooned(name string, m *Measure) *Measure {
+	u, err := ingredients.LookupUnit(m.Unit)
+	if err != nil || u.Kind != ingredients.KindMass || !ingredients.SpoonMeasured(name) {
+		return m
+	}
+	tsp, ok := providers.EstimateAmount(m.Quantity.Rat(), m.Unit, "tsp", providers.Item{Name: name})
+	if !ok || tsp.Cmp(big.NewRat(48, 1)) > 0 {
+		return m
+	}
+	halves := new(big.Rat).Mul(tsp, big.NewRat(2, 1))
+	n := new(big.Int).Quo(new(big.Int).Add(new(big.Int).Mul(halves.Num(), big.NewInt(2)), halves.Denom()), new(big.Int).Mul(halves.Denom(), big.NewInt(2)))
+	if n.Sign() == 0 {
+		n = big.NewInt(1)
+	}
+	out := Measure{Quantity: ingredients.NewQuantity(n.Int64(), 2), Unit: "tsp"}
 	return &out
 }
 
@@ -634,7 +656,7 @@ func AnnotateMeal(r Recipe, servings int, specs grocery.Specialties, applied boo
 	dedupeForms(mentions)
 	amounts := stepAmounts{
 		servings: servings, base: smallest(r.Servings), stated: statedMentions(r.Steps, mentions),
-		notedBefore: map[string]bool{}, seen: map[int]bool{}, home: home,
+		notedBefore: map[string]bool{}, seen: map[int]bool{}, used: map[int]*big.Rat{}, usedUnknown: map[int]bool{}, home: home,
 	}
 	for _, step := range r.Steps {
 		st := withHeatTimer(renderStep(step, mentions, amounts))

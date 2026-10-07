@@ -231,6 +231,13 @@ type stepAmounts struct {
 	// explained, and seen the ingredients an earlier step already named.
 	notedBefore map[string]bool
 	seen        map[int]bool
+	// used is how much of each ingredient earlier steps measured out, in
+	// its recipe unit, so "the remaining Italian Seasoning" can say how much
+	// is left (decision 631).
+	used map[int]*big.Rat
+	// usedUnknown holds the ingredients an earlier step used some of
+	// without saying how much: what's left of them can't be worked out.
+	usedUnknown map[int]bool
 	// home is set for a recipe written for one serving size: one a person
 	// added, not a meal-kit card.
 	home bool
@@ -258,6 +265,139 @@ var relativeWords = []string{
 	"glug of", "shake of", "shakes of", "squeeze of", "spoonful of", "scoop of",
 	// "Wash and dry produce (except green beans)".
 	"except",
+}
+
+// remainder is what's left of m's total once used is gone, for a mention that
+// follows "remaining" or "the rest of": nil when nothing earlier measured any
+// of it, when it's all used, or when the amount isn't one anyone measures.
+func remainder(before string, m mention, used *big.Rat) *Measure {
+	if used == nil || used.Sign() < 0 || m.amount == nil || m.leftOut || m.swapped || (!measuredUnits[m.amount.Unit] && !countedUnit(m.amount.Unit)) {
+		return nil
+	}
+	if !endsWithWord(before, "remaining") && !endsWithWord(before, "rest of the") && !endsWithWord(before, "rest of") {
+		return nil
+	}
+	left := new(big.Rat).Sub(m.amount.Quantity.Rat(), used)
+	if left.Sign() <= 0 {
+		return nil
+	}
+	q := ingredients.NewQuantity(1, 1).MulRat(left)
+	if countedUnit(m.amount.Unit) {
+		if m.wedges && m.amount.Unit == "count" {
+			// "Serve with remaining lime wedges": four to a lime.
+			return wedgesOf(q.Mul(ingredients.NewQuantity(4, 1)))
+		}
+		// What's left of a can, measured: "1 ½ cups" of coconut milk.
+		if size, unit, ok := ingredients.PacketSizeFor(m.name, m.amount.Unit); ok {
+			if u, err := ingredients.LookupUnit(unit); err == nil && u.Kind == ingredients.KindMass {
+				// "6.7 oz" of beans isn't measured: half the can is.
+				return &Measure{Quantity: q, Unit: "count"}
+			}
+			inside := Measure{Quantity: q.MulRat(size), Unit: unit}
+			if unit == "floz" {
+				inside = Measure{Quantity: inside.Quantity.MulRat(big.NewRat(1, 8)), Unit: "cup"}
+			}
+			share := kitchenSpoon(tidySpoons(inside))
+			return &share
+		}
+		return &Measure{Quantity: q, Unit: m.amount.Unit}
+	}
+	if lightWeight(*m.amount) {
+		// "⅛ oz" of cilantro isn't weighed: half the bunch is.
+		return &Measure{Quantity: ingredients.NewQuantity(1, 1).MulRat(new(big.Rat).Quo(left, m.amount.Quantity.Rat())), Unit: "count"}
+	}
+	share := kitchenSpoon(tidySpoons(Measure{Quantity: q, Unit: m.amount.Unit}))
+	return &share
+}
+
+func ratOrZero(r *big.Rat) *big.Rat {
+	if r == nil {
+		return new(big.Rat)
+	}
+	return r
+}
+
+// pinchBefore reports a mention right after "pinch of": "a pinch of cumin",
+// "a big pinch of chili powder".
+func pinchBefore(before string) bool {
+	return endsWithWord(before, "pinch of") || endsWithWord(before, "pinch of the")
+}
+
+// readyVerbs ready an ingredient without using any of it.
+var readyVerbs = map[string]bool{
+	"chop": true, "slice": true, "dice": true, "mince": true, "quarter": true, "halve": true, "zest": true,
+	"peel": true, "trim": true, "pick": true, "tear": true, "cut": true, "grate": true, "core": true, "seed": true,
+	"drain": true, "rinse": true, "shake": true, "wash": true, "dry": true, "pat": true, "open": true, "juice": true,
+}
+
+// readiesOnly reports a mention right after a verb that readies it ("Quarter
+// lime", "thinly slice onion", "drain and rinse beans").
+func readiesOnly(before string) bool {
+	words := strings.FieldsFunc(before, func(r rune) bool { return !unicode.IsLetter(r) })
+	for i := len(words) - 1; i >= 0 && i >= len(words)-4; i-- {
+		switch w := words[i]; {
+		case w == "the" || w == "and" || w == "thinly" || w == "roughly" || w == "finely" || w == "lightly" || w == "thoroughly":
+			continue
+		case readyVerbs[w]:
+			return true
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+// countedUnit is a unit counted in whole things: 1 onion, 1 bunch of basil,
+// 4 cloves of garlic. A share of one is still counted in it ("½ bunch").
+func countedUnit(code string) bool {
+	if code == "count" {
+		return true
+	}
+	u, err := ingredients.LookupUnit(code)
+	return err == nil && u.Discrete()
+}
+
+// usedOf is amount in m's total unit: by units, else through what one of
+// m's packets holds ("¼ cup" of a 13.5 fl oz can of coconut milk).
+func usedOf(amount Measure, m mention) (*big.Rat, bool) {
+	if q, ok := inUnitOf(amount, *m.amount); ok {
+		return q, true
+	}
+	size, unit, ok := ingredients.PacketSizeFor(m.name, m.amount.Unit)
+	if !ok {
+		return nil, false
+	}
+	inPacketUnit, ok := inUnitOf(amount, Measure{Unit: unit})
+	if !ok {
+		return nil, false
+	}
+	return inPacketUnit.Quo(inPacketUnit, size), true
+}
+
+// inUnitOf is amount in total's unit, when one converts to the other.
+func inUnitOf(amount, total Measure) (*big.Rat, bool) {
+	if amount.Unit == total.Unit {
+		return amount.Quantity.Rat(), true
+	}
+	if amount.Unit == "wedge" && total.Unit == "count" {
+		return new(big.Rat).Quo(amount.Quantity.Rat(), big.NewRat(4, 1)), true
+	}
+	// A clove of garlic minces to about a teaspoon.
+	if total.Unit == "clove" {
+		if tsp, ok := inUnitOf(amount, Measure{Unit: "tsp"}); ok {
+			return tsp, true
+		}
+	}
+	from, err1 := ingredients.LookupUnit(amount.Unit)
+	to, err2 := ingredients.LookupUnit(total.Unit)
+	if err1 != nil || err2 != nil || !from.CanConvertTo(to) {
+		return nil, false
+	}
+	q, err := ingredients.Convert(amount.Quantity, from, to)
+	if err != nil {
+		return nil, false
+	}
+	return q.Rat(), true
 }
 
 // fractionOf reads "half the", "half of the", or "¼ of the" at the end of the
@@ -433,6 +573,8 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 	var plain []rune
 	amountShown := map[int]bool{}
 	seenHere := map[int]bool{}
+	usedHere := map[int]*big.Rat{}
+	unknownHere := map[int]bool{}
 	noted := map[string]bool{}
 	flush := func() {
 		if len(plain) > 0 {
@@ -578,9 +720,25 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 				amount = nil
 			}
 		}
+		// "Add remaining Italian Seasoning": what earlier steps left of the
+		// total, as an amount to measure, never "the rest".
+		// The step keeps its words ("remaining Italian Seasoning"); the
+		// amount goes on its checklist row.
+		remaining := false
+		usedSoFar := amounts.used[hit]
+		if here := usedHere[hit]; here != nil {
+			usedSoFar = new(big.Rat).Add(here, ratOrZero(usedSoFar))
+		}
+		if usedSoFar == nil && amounts.seen[hit] && !amounts.usedUnknown[hit] && !unknownHere[hit] {
+			// Named before only to ready it ("Quarter 1 lime"): all of it is left.
+			usedSoFar = new(big.Rat)
+		}
+		if left := remainder(lowerBefore, m, usedSoFar); left != nil {
+			amount, part, remaining = left, true, true
+		}
 		// The text keeps its own words when the amount is only for the list:
 		// "¼ of the onion" is ¼ onion to have ready, and reads as written.
-		inText := true
+		inText := !remaining
 		fraction, fractionLen, isFraction := fractionOf(plain)
 		if !isFraction && carried != nil && !amountShown[hit] {
 			fraction, isFraction = carried, true
@@ -592,10 +750,14 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 		if isFraction && (carried != nil || sharedList(amounts.home, runes[i+length:])) {
 			listShare = fraction
 		}
+		// A share is used whether or not it's an amount anyone measures ("half
+		// the cilantro" of ¼ oz): what's left later depends on it.
+		fractionUsed := isFraction && m.amount != nil && !m.leftOut && !shownBefore
 		if isFraction {
 			amount = nil
-			if m.amount != nil && m.amount.Unit == "count" && !m.leftOut && !shownBefore {
-				share := &Measure{Quantity: m.amount.Quantity.MulRat(fraction), Unit: "count"}
+			if m.amount != nil && countedUnit(m.amount.Unit) && !m.leftOut && !shownBefore {
+				// "half the basil" of 1 bunch is ½ bunch to have ready.
+				share := &Measure{Quantity: m.amount.Quantity.MulRat(fraction), Unit: m.amount.Unit}
 				if m.wedges {
 					// "juice from half the lime" after "Quarter lime": 2 wedges.
 					share = wedgesOf(share.Quantity.Mul(ingredients.NewQuantity(4, 1)))
@@ -684,6 +846,35 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			plain = plain[:len(plain)-trailingAmountLen(plain)]
 			amountShown[hit] = true
 		}
+		// What this mention uses of the total: a share, or an amount less than
+		// all of it written in the step ("¼ tsp chili powder"). The whole
+		// amount isn't counted: "Quarter 1 lime" readies the lime, and its
+		// wedges are what later steps use.
+		if m.amount != nil && !remaining {
+			var q *big.Rat
+			switch {
+			case pinchBefore(lowerBefore):
+				// "a pinch of cumin (you'll use the rest later)": a sixteenth
+				// of a teaspoon.
+				if inTotal, ok := usedOf(Measure{Quantity: ingredients.NewQuantity(1, 16), Unit: "tsp"}, m); ok {
+					q = inTotal
+				}
+			case fractionUsed:
+				q = new(big.Rat).Mul(m.amount.Quantity.Rat(), fraction)
+			case amount != nil:
+				if inTotal, ok := usedOf(*amount, m); ok && (part || inTotal.Cmp(m.amount.Quantity.Rat()) < 0) {
+					q = inTotal
+				}
+			}
+			if q != nil {
+				if usedHere[hit] == nil {
+					usedHere[hit] = new(big.Rat)
+				}
+				usedHere[hit].Add(usedHere[hit], q)
+			} else if !readiesOnly(lowerBefore) {
+				unknownHere[hit] = true
+			}
+		}
 		movePrep := prep != "" && amount != nil && inText && amount.Unit != "wedge"
 		if !movePrep {
 			plain = append(plain, []rune(prep)...)
@@ -765,6 +956,19 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 	flush()
 	for hit := range seenHere {
 		amounts.seen[hit] = true
+	}
+	if amounts.usedUnknown != nil {
+		for hit := range unknownHere {
+			amounts.usedUnknown[hit] = true
+		}
+	}
+	if amounts.used != nil {
+		for hit, q := range usedHere {
+			if amounts.used[hit] == nil {
+				amounts.used[hit] = new(big.Rat)
+			}
+			amounts.used[hit].Add(amounts.used[hit], q)
+		}
 	}
 	var b strings.Builder
 	for _, s := range segments {

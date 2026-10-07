@@ -2,6 +2,7 @@ package recipes
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"unicode"
@@ -188,8 +189,17 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 			}
 			existing := slices.IndexFunc(items, func(it CookStepItem) bool { return it.Name == name })
 			// "Add remaining onion": what's left from an earlier step.
+			// When the steps can't work out what's left, the clause may still
+			// say: "1-2 Tbsp remaining flour" is an amount, and "as many
+			// remaining chili flakes as you like" is to taste. Never "the rest"
+			// (decision 631).
 			if prep == "" && endsWithRemaining(clause) && seg.Amount == nil && existing < 0 {
-				prep = "the rest"
+				switch {
+				case toTasteClause(clause):
+					prep = "to taste"
+				case clauseAmount(clause) != "":
+					amountText = clauseAmount(clause)
+				}
 			}
 			// "more lime juice if desired" after "juice from 2 lime wedges": the
 			// same ingredient again, with nothing new to measure or do.
@@ -474,6 +484,27 @@ func TrailingPrep(text string) string {
 		return strings.Join(words, " ")
 	}
 	return ""
+}
+
+// clauseAmountRe is an amount, a range allowed, right before "remaining":
+// "1-2 Tbsp remaining".
+var clauseAmountRe = regexp.MustCompile(`(?i)(\d[\d½¼¾⅓⅔⅛/.]*(?:\s*[-–]\s*\d[\d½¼¾⅓⅔⅛/.]*)?\s*(?:tbsp|tablespoons?|tsp|teaspoons?|cups?|oz|g))\s+remaining\s*$`)
+
+// clauseAmount is the amount a clause writes before "remaining", or "".
+func clauseAmount(clause string) string {
+	m := clauseAmountRe.FindStringSubmatch(clause)
+	if m == nil {
+		return ""
+	}
+	return strings.ReplaceAll(strings.ReplaceAll(m[1], "tablespoons", "Tbsp"), "tbsp", "Tbsp")
+}
+
+// toTasteClause reports "as many remaining", "as much remaining", "any
+// remaining": the cook decides how much.
+func toTasteClause(clause string) bool {
+	lower := strings.ToLower(clause)
+	// "drizzle with any remaining hot sauce if desired": a garnish, to taste.
+	return strings.Contains(lower, "as many") || strings.Contains(lower, "as much") || strings.HasSuffix(strings.TrimSpace(lower), "any remaining")
 }
 
 func endsWithRemaining(clause string) bool {

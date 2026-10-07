@@ -53,3 +53,20 @@ func PacketSizeFor(name, unitCode string) (*big.Rat, string, bool) {
 	}
 	return nil, "", false
 }
+
+// SpoonMeasured reports a thick ingredient a cook spoons out rather than
+// weighs: "1.5 oz tomato paste" can't be measured in a kitchen, "2½ Tbsp"
+// can. A recipe's weight of one reads in spoons (decision 631).
+func SpoonMeasured(name string) bool {
+	n := NormalizeName(name)
+	switch {
+	case strings.HasSuffix(n, " paste") || n == "paste":
+		// Tomato, curry, miso, chipotle, garlic, ginger, and the like.
+		return true
+	case n == "pesto" || strings.HasSuffix(n, " pesto"), n == "harissa", n == "gochujang", n == "tahini",
+		n == "miso", n == "white miso", n == "red miso", n == "peanut butter", n == "mayonnaise", n == "mayo",
+		n == "sour cream", n == "dijon mustard", n == "whole grain mustard", n == "honey":
+		return true
+	}
+	return false
+}

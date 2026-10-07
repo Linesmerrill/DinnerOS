@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 )
 
 // Step checks look at a rendered recipe the way a cook would read it and name
@@ -38,6 +40,13 @@ const (
 	FindingMarkup = "markup"
 	// FindingRunTogether: two numbers run together ("10-121½-inch").
 	FindingRunTogether = "run_together"
+	// FindingRestWithoutAmount is a checklist row that says "the rest"
+	// instead of how much: the total less what earlier steps used is known
+	// (decision 631).
+	FindingRestWithoutAmount = "rest_without_amount"
+	// FindingSpoonedByWeight is a thick ingredient a cook spoons out (tomato
+	// paste) given as a weight: nobody can measure 1.5 oz of paste.
+	FindingSpoonedByWeight = "spooned_by_weight"
 )
 
 // Finding is one thing that reads wrong in a rendered recipe.
@@ -140,5 +149,30 @@ func CheckSteps(in Instructions) []Finding {
 			out = append(out, Finding{Code: FindingUnusedIngredient, Detail: ing.Name})
 		}
 	}
+	for _, g := range in.Checklist.ByStep {
+		for _, it := range g.Items {
+			if strings.Contains(it.Prep, "the rest") {
+				out = append(out, Finding{Code: FindingRestWithoutAmount, Step: g.Index, Detail: it.Name})
+			}
+			if ingredients.SpoonMeasured(it.Name) && weightText(it.AmountText) {
+				out = append(out, Finding{Code: FindingSpoonedByWeight, Step: g.Index, Detail: it.AmountText + " " + it.Name})
+			}
+		}
+	}
+	for _, ing := range in.Ingredients {
+		if ing.Amount != nil && ingredients.SpoonMeasured(ing.Name) && weightText(ing.Amount.Text()) {
+			out = append(out, Finding{Code: FindingSpoonedByWeight, Detail: ing.Amount.Text() + " " + ing.Name})
+		}
+	}
 	return out
+}
+
+// weightText reports an amount written as a weight: "1 ½ oz", "40 g", "1 lb".
+func weightText(text string) bool {
+	for _, u := range []string{" oz", " g", " lb", " kg"} {
+		if strings.HasSuffix(text, u) {
+			return true
+		}
+	}
+	return false
 }

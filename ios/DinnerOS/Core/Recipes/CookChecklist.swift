@@ -215,12 +215,9 @@ nonisolated extension CookChecklist {
                 if let tail = trailingPrep(after) {
                     prep = prep.map { "\($0) \(tail)" } ?? tail
                 }
-                // "Add remaining onion": what's left from an earlier step.
-                if prep == nil, endsWithRemaining(clause), segment.amount == nil,
-                    !items.contains(where: { $0.name == name })
-                {
-                    prep = String(localized: "the rest")
-                }
+                // "Add remaining onion": the server works out how much is left and sends it
+                // as the amount. Without it this reading says nothing rather than "the rest",
+                // which isn't an amount anyone can measure.
                 let parts = splitParts(after, name: ingredient.name)
                 if let existing = items.firstIndex(where: { $0.name == name }) {
                     // Named again in the same step ("zest the lemon … halve lemon"): add what's done.
@@ -309,11 +306,6 @@ nonisolated extension CookChecklist {
         "strips", "pieces", "wedges", "rounds", "cubes", "chunks", "slices", "halves", "quarters", "florets",
         "coins", "matchsticks", "planks", "rings", "thirds", "bites", "segments",
     ]
-
-    private static func endsWithRemaining(_ clause: String) -> Bool {
-        let words = clause.lowercased().split { !$0.isLetter }
-        return words.last == "remaining" || words.suffix(3) == ["rest", "of", "the"]
-    }
 
     /// The text since the last sentence or clause break.
     private static func lastClause(_ text: String) -> String {

@@ -48,8 +48,9 @@ func TestThaiCurryReadsLikeACook(t *testing.T) {
 		{5, "Coconut Milk", "⅔ cup", ""},
 		{5, "Sweet Thai Chili Sauce", "2 Tbsp", ""},
 		{6, "Lime zest", "", ""},
-		// Half of ¼ oz of herbs isn't something to weigh: the card's words stay.
-		{6, "Cilantro", "", ""},
+		// Half of ¼ oz of herbs isn't something to weigh: what's left reads as
+		// a share of the bunch (decision 631).
+		{6, "Cilantro", "½", ""},
 	}
 	for _, tc := range checks {
 		it := item(t, c, tc.step, tc.name)
