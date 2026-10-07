@@ -515,8 +515,35 @@ func wedgesOf(n ingredients.Quantity) *Measure {
 }
 
 // waterPhrase is an amount of water a step asks for: "¾ cup water", "1 ½ cups
-// hot water", "2 TBSP of water".
-var waterPhrase = regexp.MustCompile(`(?i)(?:\d+(?:[./]\d+)?\s*)?[\d½¼¾⅓⅔⅛]+\s*(?:cups?|tbsp|tablespoons?|tsp|teaspoons?|ml|fl oz|oz|quarts?|qt)\s+(?:of\s+)?(?:(?:hot|warm|cold|boiling|lukewarm)\s+)?water\b`)
+// hot water", "2 TBSP of water", and the cooking water kept from a pot:
+// "1½ cups pasta cooking water", "1 cup reserved pasta cooking water".
+var waterPhrase = regexp.MustCompile(`(?i)(?:\d+(?:[./]\d+)?\s*)?[\d½¼¾⅓⅔⅛]+\s*(?:cups?|tbsp|tablespoons?|tsp|teaspoons?|ml|fl oz|oz|quarts?|qt)\s+(?:of\s+)?(?:(?:hot|warm|cold|boiling|lukewarm|reserved|pasta|noodle|potato|cooking|starchy|the)\s+){0,4}(?:water|liquid)\b`)
+
+// waterName is what an amount of water is called on the checklist: "Pasta
+// cooking water" for water kept from a pot, "Water" otherwise.
+func waterName(phrase string) string {
+	lower := strings.ToLower(phrase)
+	for _, kind := range []string{"pasta", "noodle", "potato"} {
+		if strings.Contains(lower, kind) {
+			name := kind
+			if strings.Contains(lower, "cooking") {
+				name += " cooking"
+			}
+			noun := " water"
+			if strings.HasSuffix(lower, "liquid") {
+				noun = " liquid"
+			}
+			return strings.ToUpper(name[:1]) + name[1:] + noun
+		}
+	}
+	if strings.Contains(lower, "cooking water") {
+		return "Cooking water"
+	}
+	if strings.HasSuffix(lower, "liquid") {
+		return "Cooking liquid"
+	}
+	return "Water"
+}
 
 // NoIngredient is Segment.Ingredient for a mention that isn't one of the
 // recipe's ingredients (water).
@@ -537,10 +564,16 @@ func markWater(segments []Segment) []Segment {
 			if loc == nil {
 				break
 			}
+			// "liquid" only as a pot's cooking liquid, not "1 cup liquid" of anything.
+			if phrase := strings.ToLower(text[loc[0]:loc[1]]); strings.HasSuffix(phrase, "liquid") && !strings.Contains(phrase, "cooking") {
+				out = append(out, Segment{Kind: SegmentText, Text: text[:loc[1]]})
+				text = text[loc[1]:]
+				continue
+			}
 			if loc[0] > 0 {
 				out = append(out, Segment{Kind: SegmentText, Text: text[:loc[0]]})
 			}
-			out = append(out, Segment{Kind: SegmentIngredient, Text: text[loc[0]:loc[1]], Name: "Water", Ingredient: NoIngredient})
+			out = append(out, Segment{Kind: SegmentIngredient, Text: text[loc[0]:loc[1]], Name: waterName(text[loc[0]:loc[1]]), Ingredient: NoIngredient})
 			text = text[loc[1]:]
 		}
 		if text != "" {

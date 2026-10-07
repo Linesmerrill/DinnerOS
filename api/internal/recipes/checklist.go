@@ -131,6 +131,16 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 				clause = lastClause(clause + seg.Text)
 				continue
 			}
+			// Water the step measures out, or keeps from the pasta pot: on the
+			// list too, so "reserve 1 ½ cups pasta cooking water" isn't missed
+			// before the pot is drained (decision 632).
+			if seg.Ingredient == NoIngredient {
+				if item, ok := waterItem(seg.Text, seg.Name, clause, step.Index, len(items)); ok {
+					items = append(items, item)
+				}
+				clause = ""
+				continue
+			}
 			ing, ok := byIndex[seg.Ingredient]
 			if !ok {
 				continue
@@ -484,6 +494,42 @@ func TrailingPrep(text string) string {
 		return strings.Join(words, " ")
 	}
 	return ""
+}
+
+// waterAmountRe splits an amount of water into its amount and the rest:
+// "1 ½ cups" and "reserved pasta cooking water".
+var waterAmountRe = regexp.MustCompile(`(?i)^(.*?(?:cups?|tbsp|tablespoons?|tsp|teaspoons?|ml|fl oz|oz|quarts?|qt))\s+(?:of\s+)?(.*)$`)
+
+// waterNumberRe splits "1½ cups" into "1½" and "cups".
+var waterNumberRe = regexp.MustCompile(`^([\d½¼¾⅓⅔⅛ ./]+?)\s*([A-Za-z].*)$`)
+
+// waterItem is the checklist row for an amount of water in a step: "1 ½
+// cups | Pasta cooking water | set aside" when the step says to reserve it,
+// "1 cup | Pasta cooking water | reserved" when a later step uses it.
+func waterItem(text, name, clause string, step, n int) (CookStepItem, bool) {
+	m := waterAmountRe.FindStringSubmatch(strings.TrimSpace(text))
+	if m == nil {
+		return CookStepItem{}, false
+	}
+	amount := strings.TrimSpace(m[1])
+	amount = strings.NewReplacer("tablespoons", "Tbsp", "tablespoon", "Tbsp", "tbsp", "Tbsp", "TBSP", "Tbsp", "teaspoons", "tsp", "teaspoon", "tsp").Replace(amount)
+	// "1½ cups" reads like every other row: "1 ½ cups".
+	if n := waterNumberRe.FindStringSubmatch(amount); n != nil {
+		if q, err := ingredients.ParseQuantity(strings.TrimSpace(n[1])); err == nil {
+			amount = q.Format() + " " + n[2]
+		}
+	}
+	prep := ""
+	lowerClause := strings.ToLower(strings.TrimSpace(clause))
+	switch {
+	case strings.HasSuffix(lowerClause, "reserve") || strings.HasSuffix(lowerClause, "save") || strings.HasSuffix(lowerClause, "set aside"):
+		prep = "set aside before draining"
+	case strings.Contains(strings.ToLower(m[2]), "reserved"):
+		prep = "reserved"
+	}
+	return CookStepItem{
+		ID: fmt.Sprintf("water@%d-%d", step, n), IngredientIndex: NoIngredient, Name: name, AmountText: amount, Prep: prep,
+	}, true
 }
 
 // clauseAmountRe is an amount, a range allowed, right before "remaining":
