@@ -251,19 +251,21 @@ func TestAnnotateStoreAlternativeWithSeveralIngredientsExplainsItself(t *testing
 	}
 }
 
-func TestAnnotateStoreAlternativeWithoutAConvertibleAmount(t *testing.T) {
+// A packet measured by weight converts to the store ingredient's spoons by
+// density, to the half teaspoon, so the step names what to scoop instead of
+// "1 oz" and a note (decision 633).
+func TestAnnotateStoreAlternativeConvertsAWeightBySpoons(t *testing.T) {
 	spec := storeSpecialty(t, grocery.Component{Name: "Tomato Paste", Quantity: quantityPtr(t, "2"), Unit: "tsp"})
-	// The recipe measures the packet in ounces; the specialty only knows
-	// "1 count = 1 Tbsp", so no exact conversion exists.
 	r := instructionRecipe(
 		[]RecipeIngredient{instructionLine("ing-texmex", "Tex-Mex Paste", "1", "oz")},
 		"Stir in the Tex-Mex Paste.")
 	step := Annotate(r, 2, grocery.Specialties{"ing-texmex": spec}, true).Steps[0]
-	if len(step.Notes) != 1 || !strings.Contains(step.Notes[0].Text, "Tomato Paste") {
-		t.Fatalf("notes = %+v, want the swap spelled out when the amount can't convert", step.Notes)
+	seg := ingredientSegments(step)[0]
+	if seg.Name != "Tomato Paste" || seg.Amount == nil || strings.Contains(seg.Amount.Text(), "oz") {
+		t.Fatalf("segment = %+v, want tomato paste in spoons", seg)
 	}
-	if seg := ingredientSegments(step)[0]; seg.Name != "Tex-Mex Paste" {
-		t.Errorf("segment = %+v, want the original name kept", seg)
+	if len(step.Notes) != 0 {
+		t.Errorf("notes = %+v, want none for a one-for-one swap", step.Notes)
 	}
 }
 

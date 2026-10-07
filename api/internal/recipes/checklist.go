@@ -95,7 +95,13 @@ func checklistIngredients(r Recipe, in Instructions) []CookIngredient {
 			ci.AmountText = st.Amount.Text()
 		}
 		if st.Component != nil && !ci.LeftOut {
-			ci.Components = st.Component.Parts
+			if one := st.Component.Single; one != nil {
+				// Bought as one store ingredient: the list names it, with
+				// its amount, and there's nothing to mix.
+				ci.Name, ci.AmountText = one.Name, one.Amount.Text()
+			} else {
+				ci.Components = st.Component.Parts
+			}
 		}
 		var parts []CookPart
 		for _, step := range in.Steps {
@@ -268,16 +274,29 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 	}
 	// Things to get ready before cooking starts, for a later step. They stay
 	// in their own step too, to check off when they go in.
+	stepText := map[int]string{}
+	for _, st := range steps {
+		stepText[st.Index] = strings.ToLower(st.Text)
+	}
+	// One note per ingredient: "Spread with softened butter" in step 5 is the
+	// butter step 2 already set out, not more to cut up.
+	aheadDone := map[int]bool{}
 	for _, g := range groups {
 		if g.Index <= 1 {
 			continue
 		}
 		for _, it := range g.Items {
 			// "Stir in the melted butter": the step says how it's readied.
-			if it.LeftOut || strings.Contains(it.Prep, "melted") || strings.Contains(it.Prep, "softened") {
+			if it.LeftOut || strings.Contains(it.Prep, "melted") || strings.Contains(it.Prep, "softened") || aheadDone[it.IngredientIndex] {
+				continue
+			}
+			// "Bring 2 Tbsp butter to room temperature": the step readies it.
+			if text := stepText[g.Index]; strings.Contains(text, "room temperature") || strings.Contains(text, "softened "+strings.ToLower(it.Name)) {
+				aheadDone[it.IngredientIndex] = true
 				continue
 			}
 			if note := AheadNote(it.Name, g.Index); note != "" {
+				aheadDone[it.IngredientIndex] = true
 				ready = append(ready, CookStepItem{
 					ID: it.ID + "@ahead", IngredientIndex: it.IngredientIndex, Name: it.Name, AmountText: it.AmountText,
 					Prep: note, IngredientKey: it.IngredientKey,

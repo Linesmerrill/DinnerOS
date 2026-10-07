@@ -232,13 +232,27 @@ func spooned(name string, m *Measure) *Measure {
 	if !ok || tsp.Cmp(big.NewRat(48, 1)) > 0 {
 		return m
 	}
-	halves := new(big.Rat).Mul(tsp, big.NewRat(2, 1))
-	n := new(big.Int).Quo(new(big.Int).Add(new(big.Int).Mul(halves.Num(), big.NewInt(2)), halves.Denom()), new(big.Int).Mul(halves.Denom(), big.NewInt(2)))
-	if n.Sign() == 0 {
-		n = big.NewInt(1)
+	rounded := spoonRound(tsp)
+	if rounded.Sign() == 0 {
+		rounded = big.NewRat(1, 2)
 	}
-	out := Measure{Quantity: ingredients.NewQuantity(n.Int64(), 2), Unit: "tsp"}
+	out := Measure{Quantity: ingredients.NewQuantity(1, 1).MulRat(rounded), Unit: "tsp"}
 	return &out
+}
+
+// spoonRound rounds an estimated amount in teaspoons to what a cook spoons:
+// the half tablespoon from a tablespoon up ("2 Tbsp", not "1 Tbsp + 2 ½
+// tsp"), the half teaspoon below.
+func spoonRound(tsp *big.Rat) *big.Rat {
+	step := big.NewRat(1, 2)
+	if tsp.Cmp(big.NewRat(3, 1)) >= 0 {
+		step = big.NewRat(3, 2)
+	}
+	steps := new(big.Rat).Quo(tsp, step)
+	// Round half up: floor(steps + ½).
+	half := new(big.Rat).Add(steps, big.NewRat(1, 2))
+	n := new(big.Int).Quo(half.Num(), half.Denom())
+	return new(big.Rat).Mul(new(big.Rat).SetInt(n), step)
 }
 
 // Segment is one run of a rendered step. Joining every Text in order gives
@@ -356,6 +370,16 @@ type Component struct {
 	// Parts are the store ingredients, with amounts for the servings being
 	// cooked when a store alternative's amount converts ("2 tsp Sour Cream").
 	Parts []string
+	// Single is set when one store ingredient stands in for it at a known
+	// amount ("1 tsp Chicken Bouillon Base"): nothing to mix, so the
+	// checklist names the store ingredient.
+	Single *SingleSwap
+}
+
+// SingleSwap is the one store ingredient a specialty is bought as.
+type SingleSwap struct {
+	Name   string
+	Amount *Measure
 }
 
 // SpecialtyRef names a specialty ingredient a recipe uses.
@@ -793,6 +817,11 @@ func componentOf(spec *grocery.Specialty, amount *Measure) *Component {
 		ratio = storeRatio(amount, spec, choice)
 	}
 	c.Parts = componentTexts(choice.Components, ratio)
+	if choice.Type == grocery.ChoiceStoreAlternative && len(choice.Components) == 1 && ratio != nil {
+		if m := scaledComponent(choice.Components[0], ratio); m != nil {
+			c.Single = &SingleSwap{Name: choice.Components[0].Name, Amount: m}
+		}
+	}
 	return c
 }
 
@@ -864,7 +893,19 @@ func storeRatio(amount *Measure, spec *grocery.Specialty, choice *grocery.Choice
 	}
 	inPer, ok := grocery.ConvertMeasure(amount.Quantity.Rat(), amount.Unit, choice.Per.Unit, spec.UnitSizes)
 	if !ok {
-		return nil
+		// "1 oz Sweet Thai Chili Sauce" for a store sauce measured by the
+		// spoon: by the sauce's density, to the half teaspoon (2 Tbsp).
+		tsp, est := providers.EstimateAmount(amount.Quantity.Rat(), amount.Unit, "tsp", providers.Item{Name: spec.Name})
+		if !est {
+			return nil
+		}
+		rounded := spoonRound(tsp)
+		if rounded.Sign() == 0 {
+			return nil
+		}
+		if inPer, ok = grocery.ConvertMeasure(rounded, "tsp", choice.Per.Unit, spec.UnitSizes); !ok {
+			return nil
+		}
 	}
 	return inPer.Quo(inPer, choice.Per.Quantity.Rat())
 }
