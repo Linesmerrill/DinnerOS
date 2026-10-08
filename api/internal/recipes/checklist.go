@@ -258,21 +258,11 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 			groups = append(groups, CookStepGroup{Index: step.Index, Items: items})
 		}
 	}
-	var ready []CookStepItem
-	for _, ci := range all {
-		if !used[ci.ID] {
-			ready = append(ready, readyItem(ci))
-		}
-	}
-	// A sauce or blend made at home: mix it before cooking, spice by spice.
-	for _, ci := range all {
-		if used[ci.ID] && len(ci.Components) > 0 {
-			ready = append(ready, CookStepItem{
-				ID: ci.ID + "@mix", IngredientIndex: ci.Index, Name: ci.Name, AmountText: ci.AmountText,
-				Prep: "mix together first", Parts: ci.Components, IngredientKey: ci.IngredientKey,
-			})
-		}
-	}
+	// Have Ready leads every recipe: each ingredient with the whole recipe's
+	// amount, to gather before the first step (decision 635). A blend made at
+	// home says to mix it first; butter or cream cheese a later step uses says
+	// how to ready it, step by step.
+	ahead := map[int]CookStepItem{}
 	// Things to get ready before cooking starts, for a later step: butter to
 	// cut up or soften, cream cheese to soften. One row each, with the whole
 	// recipe's amount, and a line per step when several steps share it ("3
@@ -350,6 +340,15 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 				}
 				row.Parts = append(row.Parts, part)
 			}
+		}
+		ahead[idx] = row
+	}
+	ready := make([]CookStepItem, 0, len(all))
+	for _, ci := range all {
+		row := readyItem(ci)
+		if a, ok := ahead[ci.Index]; ok && !ci.LeftOut {
+			row.Prep, row.Parts = a.Prep, a.Parts
+			row.AmountText = cmp.Or(row.AmountText, a.AmountText)
 		}
 		ready = append(ready, row)
 	}

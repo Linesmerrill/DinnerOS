@@ -87,8 +87,14 @@ func TestHomeStepsPutTheAmountBeforeHowItsReadied(t *testing.T) {
 	wantStep(t, in, 2, "Stir in ⅓ cup melted butter, 1 beaten egg, and 1 peeled and diced onion.")
 	var group CookStepGroup
 	for _, g := range in.Checklist.ByStep {
+		// Have Ready lists the butter's amount, with no "cut into pieces":
+		// it's melted.
 		if g.Index == 0 {
-			t.Errorf("have-ready group = %+v, want nothing: melted butter isn't cut into pieces", g.Items)
+			for _, it := range g.Items {
+				if it.Name == "butter" && (it.AmountText != "⅓ cup" || it.Prep != "") {
+					t.Errorf("have-ready butter = %+v, want ⅓ cup and no prep: it's melted", it)
+				}
+			}
 		}
 		if g.Index == 2 {
 			group = g

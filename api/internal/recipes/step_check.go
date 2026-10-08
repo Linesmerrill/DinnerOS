@@ -47,6 +47,9 @@ const (
 	// FindingSpoonedByWeight is a thick ingredient a cook spoons out (tomato
 	// paste) given as a weight: nobody can measure 1.5 oz of paste.
 	FindingSpoonedByWeight = "spooned_by_weight"
+	// FindingHaveReadyMissing is a checklist that doesn't start with Have
+	// Ready listing every ingredient (decision 635).
+	FindingHaveReadyMissing = "have_ready_missing"
 )
 
 // Finding is one thing that reads wrong in a rendered recipe.
@@ -147,6 +150,11 @@ func CheckSteps(in Instructions) []Finding {
 		// A heading ("For the sauce:") names no ingredient.
 		if !named[ing.Index] && !alwaysOptional[strings.ToLower(trimNameTail(ing.Name))] && ing.Name != "" && !ingredientHeading(ing.Name) {
 			out = append(out, Finding{Code: FindingUnusedIngredient, Detail: ing.Name})
+		}
+	}
+	if len(in.Checklist.All) > 0 {
+		if g := in.Checklist.ByStep; len(g) == 0 || g[0].Index != 0 || len(g[0].Items) < len(in.Checklist.All) {
+			out = append(out, Finding{Code: FindingHaveReadyMissing})
 		}
 	}
 	for _, g := range in.Checklist.ByStep {
