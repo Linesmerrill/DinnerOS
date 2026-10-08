@@ -1,6 +1,7 @@
 package recipes
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
 	"slices"
@@ -272,37 +273,85 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 			})
 		}
 	}
-	// Things to get ready before cooking starts, for a later step. They stay
-	// in their own step too, to check off when they go in.
+	// Things to get ready before cooking starts, for a later step: butter to
+	// cut up or soften, cream cheese to soften. One row each, with the whole
+	// recipe's amount, and a line per step when several steps share it ("3
+	// Tbsp Butter: 1 Tbsp for step 1, melted; 2 Tbsp for step 2, softened").
+	// They stay in their own steps too, to check off when they go in.
 	stepText := map[int]string{}
 	for _, st := range steps {
 		stepText[st.Index] = strings.ToLower(st.Text)
 	}
-	// One note per ingredient: "Spread with softened butter" in step 5 is the
-	// butter step 2 already set out, not more to cut up.
-	aheadDone := map[int]bool{}
+	type use struct {
+		step             int
+		amount           string
+		softened, melted bool
+	}
+	uses := map[int][]use{}
+	first := map[int]CookStepItem{}
+	var order []int
 	for _, g := range groups {
-		if g.Index <= 1 {
+		for _, it := range g.Items {
+			if it.LeftOut || it.IngredientIndex == NoIngredient || AheadNote(it.Name, g.Index) == "" {
+				continue
+			}
+			if _, ok := uses[it.IngredientIndex]; !ok {
+				order = append(order, it.IngredientIndex)
+				first[it.IngredientIndex] = it
+			}
+			text, name := stepText[g.Index], strings.ToLower(it.Name)
+			uses[it.IngredientIndex] = append(uses[it.IngredientIndex], use{
+				step: g.Index, amount: it.AmountText,
+				softened: strings.Contains(it.Prep, "softened") || strings.Contains(text, "room temperature") || strings.Contains(text, "softened "+name),
+				melted:   strings.Contains(it.Prep, "melted") || strings.Contains(text, "melt "+it.AmountText) || strings.Contains(text, "melted "+name),
+			})
+		}
+	}
+	for _, idx := range order {
+		us := uses[idx]
+		later, allMelted := false, true
+		var stepNums []int
+		for _, u := range us {
+			later = later || u.step >= 2
+			allMelted = allMelted && u.melted
+			if !slices.Contains(stepNums, u.step) {
+				stepNums = append(stepNums, u.step)
+			}
+		}
+		// Used only at the start, or only melted in the pan: the step readies it.
+		if !later || allMelted {
 			continue
 		}
-		for _, it := range g.Items {
-			// "Stir in the melted butter": the step says how it's readied.
-			if it.LeftOut || strings.Contains(it.Prep, "melted") || strings.Contains(it.Prep, "softened") || aheadDone[it.IngredientIndex] {
-				continue
+		it := first[idx]
+		row := CookStepItem{ID: it.ID + "@ahead", IngredientIndex: idx, Name: it.Name, IngredientKey: it.IngredientKey}
+		total := byIndex[idx].AmountText
+		if len(stepNums) == 1 {
+			u := us[0]
+			row.AmountText = cmp.Or(u.amount, total)
+			row.Prep = AheadNote(it.Name, u.step)
+			if u.softened {
+				row.Prep = fmt.Sprintf("let soften, for step %d", u.step)
 			}
-			// "Bring 2 Tbsp butter to room temperature": the step readies it.
-			if text := stepText[g.Index]; strings.Contains(text, "room temperature") || strings.Contains(text, "softened "+strings.ToLower(it.Name)) {
-				aheadDone[it.IngredientIndex] = true
-				continue
-			}
-			if note := AheadNote(it.Name, g.Index); note != "" {
-				aheadDone[it.IngredientIndex] = true
-				ready = append(ready, CookStepItem{
-					ID: it.ID + "@ahead", IngredientIndex: it.IngredientIndex, Name: it.Name, AmountText: it.AmountText,
-					Prep: note, IngredientKey: it.IngredientKey,
-				})
+		} else {
+			row.AmountText = total
+			row.Prep = "for steps " + joinSteps(stepNums)
+			for _, u := range us {
+				if u.amount == "" {
+					continue
+				}
+				part := fmt.Sprintf("%s for step %d", u.amount, u.step)
+				switch {
+				case u.melted:
+					part += ", melted"
+				case u.softened:
+					part += ", softened"
+				case strings.HasPrefix(AheadNote(it.Name, u.step), "cut into pieces"):
+					part += ", cut into pieces"
+				}
+				row.Parts = append(row.Parts, part)
 			}
 		}
+		ready = append(ready, row)
 	}
 	if len(ready) > 0 {
 		groups = append([]CookStepGroup{{Index: 0, Items: ready}}, groups...)
@@ -311,6 +360,18 @@ func checklistByStep(steps []InstructionStep, all []CookIngredient) []CookStepGr
 }
 
 var oneQuantity = ingredients.NewQuantity(1, 1)
+
+// joinSteps is "1, 2 and 5".
+func joinSteps(steps []int) string {
+	texts := make([]string, len(steps))
+	for i, n := range steps {
+		texts[i] = fmt.Sprint(n)
+	}
+	if len(texts) == 1 {
+		return texts[0]
+	}
+	return strings.Join(texts[:len(texts)-1], ", ") + " and " + texts[len(texts)-1]
+}
 
 func readyItem(ci CookIngredient) CookStepItem {
 	it := CookStepItem{

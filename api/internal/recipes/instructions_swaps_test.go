@@ -68,10 +68,11 @@ func TestOneForOneSwapsReadAsTheStoreIngredient(t *testing.T) {
 	}
 }
 
-// Butter a step sets out to soften is readied by that step: no "cut into
-// pieces" for it in Have Ready, and none again for the softened butter a later
-// step spreads (decision 633).
-func TestSoftenedButterIsReadiedOnce(t *testing.T) {
+// Butter used across steps has one Have Ready row with the whole recipe's
+// amount and a line per step, so the cook sees all 3 Tbsp before starting;
+// the step that softens it says so instead of "cut into pieces" (decision
+// 634).
+func TestHaveReadyShowsAllTheButter(t *testing.T) {
 	r := tacoRecipe([]RecipeIngredient{
 		tacoLine("ing-butter", "Butter", "3", "6", "tbsp"),
 		tacoLine("ing-pita", "Whole Wheat Pitas", "2", "4", "count"),
@@ -80,14 +81,38 @@ func TestSoftenedButterIsReadiedOnce(t *testing.T) {
 		"Meanwhile, bring 2 Tbsp butter to room temperature.",
 		"Toast pitas until warm. Spread with softened butter, then cut each pita into quarters.")
 	in := Annotate(r, 2, nil, false)
+	var rows []CookStepItem
 	for _, g := range in.Checklist.ByStep {
 		if g.Index != 0 {
 			continue
 		}
 		for _, it := range g.Items {
 			if it.Name == "Butter" {
-				t.Errorf("Have Ready: %s Butter (%s), want the steps to ready it", it.AmountText, it.Prep)
+				rows = append(rows, it)
 			}
 		}
+	}
+	if len(rows) != 1 {
+		t.Fatalf("Have Ready butter rows = %+v, want one", rows)
+	}
+	b := rows[0]
+	if b.AmountText != "3 Tbsp" || b.Prep != "for steps 1, 2 and 3" ||
+		strings.Join(b.Parts, "|") != "1 Tbsp for step 1, melted|2 Tbsp for step 2, softened" {
+		t.Errorf("butter = %+v", b)
+	}
+}
+
+// Butter only one later step uses reads as before: that step's amount, cut
+// into pieces, for that step.
+func TestHaveReadyButterForOneStep(t *testing.T) {
+	r := tacoRecipe([]RecipeIngredient{
+		tacoLine("ing-pasta", "Cavatappi Pasta", "6", "9", "oz"),
+		tacoLine("ing-butter", "Butter", "1", "2", "tbsp"),
+	},
+		"Cook cavatappi until al dente; drain.",
+		"Stir drained cavatappi and 1 Tbsp butter into pan.")
+	in := Annotate(r, 2, nil, false)
+	if it := item(t, in.Checklist, 0, "Butter"); it.AmountText != "1 Tbsp" || it.Prep != "cut into pieces, for step 2" || len(it.Parts) != 0 {
+		t.Errorf("butter = %+v", it)
 	}
 }
