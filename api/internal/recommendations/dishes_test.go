@@ -69,3 +69,57 @@ func TestWeekdayRuleWithDishes(t *testing.T) {
 		t.Errorf("provider rules = %+v", in.Rules)
 	}
 }
+
+// A dish word that describes another dish isn't the meal: taco soup is a
+// soup, a burrito bowl is a bowl, and sweet chili pork is no chili. The
+// dish that ends a part of the name before "with" is (decision 638).
+func TestDishIsWhatTheNameEndsWith(t *testing.T) {
+	cases := []struct {
+		name    string
+		types   []string
+		notDish []string
+	}{
+		{"One-Pot Beefy Taco Soup", []string{"soup"}, []string{"taco"}},
+		{"Tex-Mex Taco Soup with Sour Cream", []string{"soup"}, []string{"taco"}},
+		{"Chipotle Chicken Burrito Bowls", []string{"bowl"}, []string{"burrito"}},
+		{"Creamy Pasta Salad", []string{"salad"}, []string{"pasta"}},
+		{"Sweet Chili Pork & Rice", nil, []string{"chili"}},
+		{"Chili Lime Chicken Tacos", []string{"taco"}, []string{"chili"}},
+		{"Pork Carnitas Tacos with Side Salad", []string{"taco"}, []string{"salad"}},
+		{"Beef Tacos & Cheesy Quesadillas", []string{"taco", "quesadilla"}, nil},
+		{"Turkey Chili and Cornbread", []string{"chili"}, nil},
+		{"Chicken Pad Thai", []string{"noodle"}, nil},
+		{"Beef Ramen", []string{"noodle"}, nil},
+		{"Hearty Beef Stew", []string{"soup"}, nil},
+	}
+	for _, c := range cases {
+		got := RecipeDishes(recipes.Recipe{Name: c.name})
+		types := dishTypes(got)
+		if !slices.Equal(types, c.types) {
+			t.Errorf("%q dish types = %v, want %v", c.name, types, c.types)
+		}
+		for _, d := range c.notDish {
+			if slices.Contains(got, d) {
+				t.Errorf("%q dishes = %v, must not include %q", c.name, got, d)
+			}
+		}
+	}
+}
+
+// Words that follow a dish without being the meal, and phrases that start
+// what comes with it, leave the dish as the meal (decision 638).
+func TestDishTrailersAndPhraseBreaks(t *testing.T) {
+	cases := map[string][]string{
+		"Mexican-Style Chicken Tacos De Canasta":  {"taco"},
+		"Southwest Chicken Taco Bar":              {"taco"},
+		"One-Pot Chicken Sausage Chili Verde":     {"chili"},
+		"Beef Chili Con Carne":                    {"chili"},
+		"Chicken & Mushroom Ramen in Dashi Broth": {"noodle"},
+		"Meatloaves with a Sweet Chili Glaze":     {"meatloaf"},
+	}
+	for name, want := range cases {
+		if got := dishTypes(RecipeDishes(recipes.Recipe{Name: name})); !slices.Equal(got, want) {
+			t.Errorf("%q dish types = %v, want %v", name, got, want)
+		}
+	}
+}

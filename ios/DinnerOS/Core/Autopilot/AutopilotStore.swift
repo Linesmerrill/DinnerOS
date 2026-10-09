@@ -373,6 +373,14 @@ final class AutopilotStore {
         Self.logger.info("Autopilot week generated with \(generated.slots.count, privacy: .public) meals")
     }
 
+    /// Picks the pending suggestions' week again from the top. The server steers away from
+    /// the meals it replaces and keeps what's already planned.
+    func shuffleWeek() async throws {
+        guard let proposal = pendingProposal, let target = ISOWeek(proposal.week) else { return }
+        try await generate(week: target)
+        Self.logger.info("Autopilot week shuffled")
+    }
+
     /// Switches a slot on or off for accepting.
     func setSlot(_ slotID: String, included: Bool) {
         guard pendingProposal?.slot(id: slotID) != nil else { return }

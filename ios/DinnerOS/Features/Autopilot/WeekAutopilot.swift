@@ -92,6 +92,19 @@ final class WeekAutopilotFlow {
         }
     }
 
+    /// The menu's Shuffle the Week: new suggestions for every open day, shown where they were.
+    func shuffleWeek(autopilot: AutopilotStore) {
+        Task {
+            do {
+                try await autopilot.shuffleWeek()
+            } catch is CancellationError {
+                return
+            } catch {
+                handle(error)
+            }
+        }
+    }
+
     /// Opens a week's suggestions that Siri planned.
     func showReview(week: ISOWeek, plans: PlanStore) {
         Task {
@@ -285,6 +298,8 @@ struct WeekAutopilotMenuItems: View {
                     autopilot.pendingProposal?.slots.isEmpty == false
                 {
                     Button("Review Suggestions", systemImage: "sparkles") { flow.sheet = .review }
+                    Button("Shuffle the Week", systemImage: "shuffle") { flow.shuffleWeek(autopilot: autopilot) }
+                        .disabled(autopilot.isGenerating)
                 } else {
                     Button("Plan with Autopilot", systemImage: "sparkles") {
                         flow.plan(autopilot: autopilot, plans: plans)

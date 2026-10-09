@@ -41,8 +41,19 @@ var DishOptions = []Option{
 var dishSynonyms = map[string]string{
 	"flatbread": "pizza", "stew": "soup", "chowder": "soup", "melt": "sandwich", "panini": "sandwich",
 	"sub": "sandwich", "wrap": "sandwich", "smashburger": "burger", "slider": "burger", "ramen": "noodle",
-	"lo mein": "noodle", "pad thai": "noodle", "udon": "noodle",
+	"lo mein": "noodle", "pad thai": "noodle", "udon": "noodle", "meatloave": "meatloaf",
 }
+
+// dishTrailers are words that can follow a dish without being the meal:
+// "Tacos De Canasta", "Taco Bar", "Chili Verde", "Chili Con Carne".
+var dishTrailers = map[string]bool{
+	"de": true, "canasta": true, "con": true, "carne": true, "verde": true, "rojo": true, "al": true,
+	"pastor": true, "bar": true, "night": true,
+}
+
+// dishPhraseBreaks end a name's main part, like "with": "Ramen in Dashi
+// Broth", "Chicken over Lemony Spaghetti".
+var dishPhraseBreaks = map[string]bool{"with": true, "in": true, "over": true, "on": true}
 
 // canonicalDish is a dish as a rule stores it and an item carries it:
 // lowercase, singular, "stir-fry" with its hyphen.
@@ -75,8 +86,13 @@ func singularDish(w string) string {
 }
 
 // recipeDishes are the dishes a recipe is: every word of its name, singular
-// (so a typed dish like "gnocchi" or "tostada" matches), the offered dish a
-// word stands for, and its meal categories ("pasta" for a rigatoni).
+// (so a typed dish like "gnocchi" or "tostada" matches), and its meal
+// categories ("pasta" for a rigatoni). An offered dish counts only where it
+// ends a part of the name before "with", "in", "over", or "on" (parts split
+// at "&", "and", and commas; "De Canasta" or "Verde" may follow it): that
+// word is what the meal is, and words before it describe it.
+// "Taco Soup" is a soup, "Sweet Chili Pork & Rice" no chili, and "Tacos
+// with Side Salad" tacos (decision 638).
 func recipeDishes(r recipes.Recipe, categories []string) []string {
 	var out []string
 	add := func(v string) {
@@ -86,20 +102,54 @@ func recipeDishes(r recipes.Recipe, categories []string) []string {
 	}
 	name := strings.ToLower(r.Name)
 	name = strings.ReplaceAll(name, "stir fry", "stir-fry")
-	words := strings.FieldsFunc(name, func(c rune) bool { return !unicode.IsLetter(c) && c != '-' })
-	for i, w := range words {
-		d := singularDish(w)
-		add(d)
-		if syn, ok := dishSynonyms[d]; ok {
-			add(syn)
+	name = strings.NewReplacer("&", " | ", ",", " | ", "+", " | ").Replace(name)
+	var words []string
+	for _, f := range strings.Fields(name) {
+		w := strings.TrimFunc(f, func(c rune) bool { return !unicode.IsLetter(c) && c != '-' && c != '|' })
+		if w == "and" {
+			w = "|"
 		}
-		if i+1 < len(words) {
-			if syn, ok := dishSynonyms[d+" "+singularDish(words[i+1])]; ok {
-				add(syn)
+		if w != "" {
+			words = append(words, w)
+		}
+	}
+	main, named := true, false
+	for i, w := range words {
+		if w == "|" {
+			continue
+		}
+		if dishPhraseBreaks[w] {
+			main = false
+		}
+		d := singularDish(w)
+		dish, span := offeredDishAt(words, i)
+		if dish == "" {
+			add(d)
+			continue
+		}
+		end := i + span
+		for end < len(words) && dishTrailers[words[end]] {
+			end++
+		}
+		if main && (end == len(words) || words[end] == "|" || dishPhraseBreaks[words[end]]) {
+			if isOfferedDish(d) {
+				add(d)
 			}
+			add(dish)
+			named = true
+		}
+		if !isOfferedDish(d) {
+			// A synonym word ("stew", "ramen") is still a word of the name.
+			add(d)
 		}
 	}
 	for _, c := range categories {
+		// When the name says what the meal is, a category guessed from
+		// another of its words ("salad" for a side salad, "stir-fry" for pad
+		// thai) is no second dish.
+		if d := canonicalDish(c); named && isOfferedDish(d) && !slices.Contains(out, d) {
+			continue
+		}
 		switch c {
 		case "tacos":
 			// The tacos category is "Tacos & Mexican": its dish words come
@@ -111,6 +161,29 @@ func recipeDishes(r recipes.Recipe, categories []string) []string {
 		}
 	}
 	return out
+}
+
+// offeredDishAt is the offered dish the name word at i stands for, and how
+// many words it takes: alone ("tacos", "stew") or with the next ("pad
+// thai"). It's "" when the word is no dish.
+func offeredDishAt(words []string, i int) (string, int) {
+	d := singularDish(words[i])
+	if i+1 < len(words) {
+		if syn, ok := dishSynonyms[d+" "+singularDish(words[i+1])]; ok {
+			return syn, 2
+		}
+	}
+	if isOfferedDish(d) {
+		return d, 1
+	}
+	if syn, ok := dishSynonyms[d]; ok {
+		return syn, 1
+	}
+	return "", 0
+}
+
+func isOfferedDish(d string) bool {
+	return slices.ContainsFunc(DishOptions, func(o Option) bool { return o.Value == d })
 }
 
 // RecipeDishes are the dishes a recipe is, for matching a weekday rule's
@@ -138,7 +211,7 @@ func DishLabel(v string) string {
 func dishTypes(dishes []string) []string {
 	var out []string
 	for _, d := range dishes {
-		if slices.ContainsFunc(DishOptions, func(o Option) bool { return o.Value == d }) {
+		if isOfferedDish(d) {
 			out = append(out, d)
 		}
 	}

@@ -208,6 +208,26 @@ struct AutopilotStoreTests {
         #expect(!store.isSaving)
     }
 
+    @Test func shuffleWeekPlansThePendingWeekAgain() async throws {
+        let harness = try await generated()
+        let store = harness.store
+        let line = "POST /households/household-1/autopilot/weeks/2026-W38/generate"
+
+        try await store.shuffleWeek()
+
+        #expect(harness.server.log.filter { $0 == line }.count == 2)
+        #expect(store.pendingProposal?.slots.isEmpty == false)
+        #expect(!store.isGenerating)
+    }
+
+    @Test func shuffleWeekDoesNothingWithoutSuggestions() async throws {
+        let harness = try await activated()
+
+        try await harness.store.shuffleWeek()
+
+        #expect(!harness.server.log.contains { $0.hasSuffix("/generate") })
+    }
+
     @Test func swapUpdatesTheSlotAndSendsTheCurrentVersion() async throws {
         let server = FakeAutopilotServer(
             .init(alternatives: [
