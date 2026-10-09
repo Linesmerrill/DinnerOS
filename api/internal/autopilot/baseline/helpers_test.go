@@ -116,3 +116,5 @@ func describe(res autopilot.WeekResult) string {
 	}
 	return b.String()
 }
+
+func dishes(d ...string) opt { return func(it *autopilot.Item) { it.Dishes, it.DishTypes = d, d } }

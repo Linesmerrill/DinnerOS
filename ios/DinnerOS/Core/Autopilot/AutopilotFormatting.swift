@@ -158,6 +158,9 @@ nonisolated enum AutopilotFormat {
         if !rule.proteins.isEmpty {
             parts.append(or(rule.proteins, vocabulary?.proteins ?? []))
         }
+        if !rule.dishes.isEmpty {
+            parts.append(or(rule.dishes, vocabulary?.dishOptions ?? []))
+        }
         if !rule.cuisines.isEmpty {
             parts.append(or(rule.cuisines, vocabulary?.cuisines ?? []))
         }

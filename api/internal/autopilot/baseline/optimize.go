@@ -143,7 +143,7 @@ func ruleCuisine(it *item, r *rule) string {
 // fullMatch reports whether the item matches every group the rule specifies.
 func fullMatch(it *item, r *rule) bool {
 	groups := 0
-	for _, g := range [][2][]string{{it.proteins, r.proteins}, {it.methods, r.methods}, {it.tags, r.tags}} {
+	for _, g := range [][2][]string{{it.proteins, r.proteins}, {it.methods, r.methods}, {it.tags, r.tags}, {it.dishes, r.dishes}} {
 		if len(g[1]) == 0 {
 			continue
 		}

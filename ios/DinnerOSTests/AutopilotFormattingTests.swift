@@ -60,7 +60,7 @@ struct AutopilotFormattingTests {
                 == "Tuesday")
         #expect(
             AutopilotFormat.ruleSummary(.tacoNight(on: .tue), vocabulary: vocabulary)
-                == "Mexican · At most once a week")
+                == "Tacos · Every week")
     }
 
     @Test func historyLinesDescribeEachChange() throws {

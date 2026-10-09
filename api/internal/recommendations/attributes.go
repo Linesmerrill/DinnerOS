@@ -258,9 +258,10 @@ func attributes(r recipes.Recipe, override *RecipeOverride, bands autopilot.Time
 // let preferences for a region match the region's cuisines, and its meal
 // categories let the week objective see "two pastas" (pairings_categories.go).
 func (a RecipeAttributes) item(r recipes.Recipe) autopilot.Item {
+	categories := recipeMealCategories(r, a.Override)
 	it := autopilot.Item{
 		ID: r.ID, Cuisines: a.Cuisines, CuisineRegions: a.CuisineRegions, Tags: a.Tags, Proteins: a.Proteins, CookMinutes: a.CookMinutes,
-		MealCategories: recipeMealCategories(r, a.Override), LongCook: a.LongCookCut != "",
+		MealCategories: categories, Dishes: recipeDishes(r, categories), DishTypes: dishTypes(recipeDishes(r, categories)), LongCook: a.LongCookCut != "",
 		Servings: slices.Clone(r.Servings), Allergens: a.Allergens, Diets: a.Diets, Spicy: a.Spicy,
 	}
 	for _, m := range a.Methods {

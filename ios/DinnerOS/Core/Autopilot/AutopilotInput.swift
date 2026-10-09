@@ -218,10 +218,14 @@ nonisolated extension AutopilotWeekdayRule {
             timeBand: .long, frequency: .everyWeek)
     }
 
-    /// "Taco night: Mexican, at most once a week".
+    /// "Taco night: tacos, every week": any tacos, Mexican or Korean.
     static func tacoNight(on day: PlanDay) -> AutopilotWeekdayRule {
-        AutopilotWeekdayRule(
-            day: day, label: String(localized: "Taco night"), cuisines: ["mexican"], frequency: .atMostOnce)
+        AutopilotWeekdayRule(day: day, label: String(localized: "Taco night"), dishes: ["taco"])
+    }
+
+    /// "Pasta night: pasta, every week".
+    static func pastaNight(on day: PlanDay) -> AutopilotWeekdayRule {
+        AutopilotWeekdayRule(day: day, label: String(localized: "Pasta night"), dishes: ["pasta"])
     }
 
     /// "Quick night: a quick meal, every week".

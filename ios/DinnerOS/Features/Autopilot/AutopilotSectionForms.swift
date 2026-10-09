@@ -472,6 +472,15 @@ struct WeekdayRuleEditor: View {
             } header: {
                 Text("Cooking Method")
             }
+            Section {
+                ValueChipGroup(
+                    options: vocabulary.dishOptions, selection: $rule.dishes, maxCount: limits.maxRuleValues,
+                    maxLength: limits.maxValueLength, addPrompt: "Add a dish", initialCount: 8)
+            } header: {
+                Text("Dishes")
+            } footer: {
+                Text("Tacos means any tacos, Mexican or Korean. Choose dishes, a cuisine, or both.")
+            }
             Section("Cuisines") {
                 ValueChipGroup(
                     options: vocabulary.cuisines, selection: $rule.cuisines, maxCount: limits.maxRuleValues,
@@ -525,6 +534,7 @@ struct WeekdayRuleEditor: View {
                 template(.smokerNight(on: day))
             }
             template(.tacoNight(on: day))
+            template(.pastaNight(on: day))
             template(.quickNight(on: day))
         } header: {
             Text("Start From")

@@ -71,6 +71,15 @@ type Item struct {
 	// vocabulary ("pasta", "soup"). Variety penalizes a week that repeats
 	// one, so two different pastas still read as a repeat.
 	MealCategories []string
+	// Dishes are what the item is called as a dish, singular and lowercase:
+	// the words of its name ("taco", "enchilada", "rigatoni") and its meal
+	// categories ("pasta"). A weekday rule's dishes match them, whatever the
+	// cuisine: "taco" is a Korean taco or a Mexican one (decision 637).
+	Dishes []string
+	// DishTypes are the Dishes that are kinds of meal people plan by
+	// ("taco", "pasta", "curry"), not every word of the name. Autopilot
+	// learns from them which dish a weekday leans on.
+	DishTypes []string
 	// Proteins are protein codes ("chicken", "pork", "tofu").
 	Proteins []string
 	// Methods are cooking methods or equipment the item suits ("smoker",
@@ -317,6 +326,10 @@ type WeekdayRule struct {
 	Tags           []string
 	Proteins       []string
 	Methods        []string
+	// Dishes are kinds of dish ("taco", "pasta"), singular and lowercase,
+	// matched against Item.Dishes. An every-week rule with dishes leans hard
+	// toward them: a meal that isn't one is a poor fit for the day.
+	Dishes []string
 	// TimeBand is "" for no preference, quick or medium to prefer meals at or
 	// under that band, or long to allow a long cook that day.
 	TimeBand  TimeBand

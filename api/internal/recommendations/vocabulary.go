@@ -34,6 +34,8 @@ type Vocabulary struct {
 	// MealCategories and PairingFrequencies are for pairing rules.
 	MealCategories     []Option
 	PairingFrequencies []Option
+	// Dishes are for weekday rules, with how many main meals are each.
+	Dishes []Option
 	// CatalogRecipes is how many main-meal recipes the counts cover.
 	CatalogRecipes int
 }
@@ -125,12 +127,15 @@ func buildVocabulary(catalog []recipes.Recipe) Vocabulary {
 		TimeBands: TimeBandOptions, Frequencies: FrequencyOptions, Days: DayOptions,
 	}
 	cuisines, tags := newCounter(cuisineValues), newCounter(tagValues)
-	proteinCounts := map[string]int{}
+	proteinCounts, dishCounts := map[string]int{}, map[string]int{}
 	for _, r := range catalog {
 		if r.IsAddon {
 			continue
 		}
 		v.CatalogRecipes++
+		for _, d := range recipeDishes(r, recipeMealCategories(r, nil)) {
+			dishCounts[d]++
+		}
 		cuisines.addAll(r.Cuisines)
 		tags.addAll(r.Tags)
 		for _, p := range classifyProteins(ingredientTokens(r)) {
@@ -142,6 +147,10 @@ func buildVocabulary(catalog []recipes.Recipe) Vocabulary {
 	for _, o := range ProteinOptions {
 		o.RecipeCount = proteinCounts[o.Value]
 		v.Proteins = append(v.Proteins, o)
+	}
+	for _, o := range DishOptions {
+		o.RecipeCount = dishCounts[o.Value]
+		v.Dishes = append(v.Dishes, o)
 	}
 	return v
 }

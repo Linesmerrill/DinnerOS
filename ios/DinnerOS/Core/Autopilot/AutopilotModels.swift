@@ -201,16 +201,20 @@ nonisolated struct AutopilotWeekdayRule: Codable, Hashable, Sendable, Identifiab
     /// `nil` for no preference; `long` means a long cook is OK.
     var timeBand: AutopilotTimeBand?
     var frequency: AutopilotRuleFrequency = .everyWeek
+    /// Kinds of dish, singular ("taco", "pasta"): matched by a recipe's name whatever its
+    /// cuisine. Empty from an older server.
+    var dishes: [String] = []
 
     var id: PlanDay { day }
 
-    /// The API needs at least one cuisine, tag, protein, method, or time band.
+    /// The API needs at least one cuisine, dish, tag, protein, method, or time band.
     var hasPreference: Bool {
-        !cuisines.isEmpty || !tags.isEmpty || !proteins.isEmpty || !methods.isEmpty || timeBand != nil
+        !cuisines.isEmpty || !dishes.isEmpty || !tags.isEmpty || !proteins.isEmpty || !methods.isEmpty
+            || timeBand != nil
     }
 
-    private enum CodingKeys: String, CodingKey {
-        case day, label, cuisines, tags, proteins, methods, timeBand, frequency
+    fileprivate enum CodingKeys: String, CodingKey {
+        case day, label, cuisines, tags, proteins, methods, timeBand, frequency, dishes
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -223,6 +227,25 @@ nonisolated struct AutopilotWeekdayRule: Codable, Hashable, Sendable, Identifiab
         try container.encode(methods, forKey: .methods)
         try container.encodeNullable(timeBand, forKey: .timeBand)
         try container.encode(frequency, forKey: .frequency)
+        try container.encode(dishes, forKey: .dishes)
+    }
+}
+
+/// Dishes are new, so they're read leniently; the decoder lives in an extension to keep the
+/// memberwise initializer.
+nonisolated extension AutopilotWeekdayRule {
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            day: try container.decode(PlanDay.self, forKey: .day),
+            label: try container.decodeIfPresent(String.self, forKey: .label) ?? "",
+            cuisines: try container.decodeIfPresent([String].self, forKey: .cuisines) ?? [],
+            tags: try container.decodeIfPresent([String].self, forKey: .tags) ?? [],
+            proteins: try container.decodeIfPresent([String].self, forKey: .proteins) ?? [],
+            methods: try container.decodeIfPresent([String].self, forKey: .methods) ?? [],
+            timeBand: try container.decodeIfPresent(AutopilotTimeBand.self, forKey: .timeBand),
+            frequency: try container.decodeIfPresent(AutopilotRuleFrequency.self, forKey: .frequency) ?? .everyWeek,
+            dishes: (try? container.decodeIfPresent([String].self, forKey: .dishes)) ?? [])
     }
 }
 
@@ -497,6 +520,9 @@ nonisolated struct AutopilotVocabulary: Decodable, Equatable, Sendable {
     /// Read leniently: a server without pairings sends none, and the closed list stands in.
     var mealCategories: [AutopilotOption] = []
     var pairingFrequencies: [AutopilotOption] = []
+    /// Dishes a weekday rule can name, with how many main meals are each. Empty from an
+    /// older server: the dish list this build knows stands in.
+    var dishes: [AutopilotOption] = []
     let catalogRecipeCount: Int
     let limits: AutopilotLimits
 
@@ -515,6 +541,15 @@ nonisolated struct AutopilotVocabulary: Decodable, Equatable, Sendable {
         }
     }
 
+    var dishOptions: [AutopilotOption] {
+        guard dishes.isEmpty else { return dishes }
+        return [
+            ("taco", "Tacos"), ("enchilada", "Enchiladas"), ("burrito", "Burritos"), ("pasta", "Pasta"),
+            ("pizza", "Pizza & flatbreads"), ("burger", "Burgers"), ("bowl", "Bowls"), ("stir-fry", "Stir-fries"),
+            ("curry", "Curries"), ("soup", "Soups & stews"), ("salad", "Salads"),
+        ].map { AutopilotOption(value: $0.0, label: $0.1, description: nil, recipeCount: nil) }
+    }
+
     var pairingFrequencyOptions: [AutopilotOption] {
         guard pairingFrequencies.isEmpty else { return pairingFrequencies }
         return PairingFrequency.known.map {
@@ -524,7 +559,7 @@ nonisolated struct AutopilotVocabulary: Decodable, Equatable, Sendable {
 
     fileprivate enum CodingKeys: String, CodingKey {
         case cuisines, tags, proteins, diets, allergens, equipment, novelty, timeBands, frequencies, days,
-            mealCategories, pairingFrequencies, catalogRecipeCount, limits
+            mealCategories, pairingFrequencies, dishes, catalogRecipeCount, limits
     }
 }
 
@@ -546,6 +581,7 @@ nonisolated extension AutopilotVocabulary {
             days: try container.decode([AutopilotOption].self, forKey: .days),
             mealCategories: container.decodeLossyArray(AutopilotOption.self, forKey: .mealCategories),
             pairingFrequencies: container.decodeLossyArray(AutopilotOption.self, forKey: .pairingFrequencies),
+            dishes: container.decodeLossyArray(AutopilotOption.self, forKey: .dishes),
             catalogRecipeCount: try container.decode(Int.self, forKey: .catalogRecipeCount),
             limits: try container.decode(AutopilotLimits.self, forKey: .limits))
     }

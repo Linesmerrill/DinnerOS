@@ -85,6 +85,7 @@ type ruleDoc struct {
 	Tags      []string `bson:"tags,omitempty"`
 	Proteins  []string `bson:"proteins,omitempty"`
 	Methods   []string `bson:"methods,omitempty"`
+	Dishes    []string `bson:"dishes,omitempty"`
 	TimeBand  string   `bson:"timeBand,omitempty"`
 	Frequency string   `bson:"frequency"`
 }
@@ -353,6 +354,7 @@ func (d profileDoc) toProfile() Profile {
 	p.CookTime = CookTime{c.QuickMaxMinutes, c.MediumMaxMinutes, c.MaxLongPerWeek, c.MinQuickPerWeek, c.AvoidConsecutiveLong}
 	for _, rule := range d.WeekdayRules {
 		rule.Cuisines, rule.Tags, rule.Proteins, rule.Methods = nilIfEmpty(rule.Cuisines), nilIfEmpty(rule.Tags), nilIfEmpty(rule.Proteins), nilIfEmpty(rule.Methods)
+		rule.Dishes = nilIfEmpty(rule.Dishes)
 		p.WeekdayRules = append(p.WeekdayRules, WeekdayRule(rule))
 	}
 	p.Pairings = pairingRulesFromDocs(d.Pairings)

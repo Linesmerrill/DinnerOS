@@ -122,12 +122,14 @@ type CookTimeJSON struct {
 
 // WeekdayRuleJSON is a weekday rule.
 type WeekdayRuleJSON struct {
-	Day       string   `json:"day"`
-	Label     string   `json:"label"`
-	Cuisines  []string `json:"cuisines"`
-	Tags      []string `json:"tags"`
-	Proteins  []string `json:"proteins"`
-	Methods   []string `json:"methods"`
+	Day      string   `json:"day"`
+	Label    string   `json:"label"`
+	Cuisines []string `json:"cuisines"`
+	Tags     []string `json:"tags"`
+	Proteins []string `json:"proteins"`
+	Methods  []string `json:"methods"`
+	// Dishes are kinds of dish ("taco", "pasta"); omitted by older apps.
+	Dishes    []string `json:"dishes"`
 	TimeBand  *string  `json:"timeBand"`
 	Frequency string   `json:"frequency"`
 }
@@ -437,6 +439,7 @@ type VocabularyResponse struct {
 	Frequencies        []OptionJSON `json:"frequencies"`
 	Days               []OptionJSON `json:"days"`
 	MealCategories     []OptionJSON `json:"mealCategories"`
+	Dishes             []OptionJSON `json:"dishes"`
 	PairingFrequencies []OptionJSON `json:"pairingFrequencies"`
 	CatalogRecipeCount int          `json:"catalogRecipeCount"`
 	Limits             LimitsJSON   `json:"limits"`
@@ -530,7 +533,7 @@ func newProfileResponse(p Profile, servings int) ProfileResponse {
 	}
 	for _, rule := range p.WeekdayRules {
 		resp.WeekdayRules = append(resp.WeekdayRules, WeekdayRuleJSON{
-			Day: rule.Day, Label: rule.Label, Cuisines: orEmptyStrings(rule.Cuisines), Tags: orEmptyStrings(rule.Tags),
+			Day: rule.Day, Label: rule.Label, Cuisines: orEmptyStrings(rule.Cuisines), Tags: orEmptyStrings(rule.Tags), Dishes: orEmptyStrings(rule.Dishes),
 			Proteins: orEmptyStrings(rule.Proteins), Methods: orEmptyStrings(rule.Methods), TimeBand: optionalString(rule.TimeBand),
 			Frequency: rule.Frequency,
 		})
@@ -579,7 +582,7 @@ func (req profileRequest) update() (ProfileUpdate, error) {
 				band = *r.TimeBand
 			}
 			rules = append(rules, WeekdayRule{
-				Day: r.Day, Label: r.Label, Cuisines: r.Cuisines, Tags: r.Tags, Proteins: r.Proteins, Methods: r.Methods,
+				Day: r.Day, Label: r.Label, Cuisines: r.Cuisines, Tags: r.Tags, Proteins: r.Proteins, Methods: r.Methods, Dishes: r.Dishes,
 				TimeBand: band, Frequency: r.Frequency,
 			})
 		}
@@ -800,7 +803,7 @@ func (h *Handler) vocabulary(w http.ResponseWriter, r *http.Request) {
 		Diets: optionsJSON(v.Diets, false), Allergens: optionsJSON(v.Allergens, false), Equipment: optionsJSON(v.Equipment, false),
 		Novelty: optionsJSON(v.Novelty, false), TimeBands: optionsJSON(v.TimeBands, false), Frequencies: optionsJSON(v.Frequencies, false),
 		Days: optionsJSON(v.Days, false), CatalogRecipeCount: v.CatalogRecipes,
-		MealCategories: optionsJSON(v.MealCategories, true), PairingFrequencies: optionsJSON(v.PairingFrequencies, false),
+		MealCategories: optionsJSON(v.MealCategories, true), Dishes: optionsJSON(v.Dishes, true), PairingFrequencies: optionsJSON(v.PairingFrequencies, false),
 		Limits: LimitsJSON{
 			MaxListValues: MaxListValues, MaxExcludedIngredients: MaxExcludedIngredient, MaxValueLength: MaxValueLength,
 			MaxIngredientLength: MaxIngredientLength, MaxRuleValues: MaxRuleValues, MaxLabelLength: MaxLabelLength,

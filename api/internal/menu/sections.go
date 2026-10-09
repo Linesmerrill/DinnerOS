@@ -269,6 +269,7 @@ func (s *snapshot) matchRule(it *item, rule recommendations.WeekdayRule) (ruleMa
 		{it.attrs.Proteins, rule.Proteins, proteinName},
 		{it.withRegions, rule.Cuisines, cuisineName},
 		{it.attrs.Tags, rule.Tags, titleWords},
+		{recommendations.RecipeDishes(it.recipe), rule.Dishes, recommendations.DishLabel},
 	} {
 		if len(g.want) == 0 {
 			continue

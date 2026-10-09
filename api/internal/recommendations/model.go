@@ -143,6 +143,9 @@ type WeekdayRule struct {
 	// Methods are cooking methods or equipment; each must be in the
 	// profile's Equipment.
 	Methods []string
+	// Dishes are kinds of dish ("taco", "pasta"), singular: matched by the
+	// recipe's name, whatever its cuisine (dishes.go).
+	Dishes []string
 	// TimeBand is "" (no preference), quick, medium, or long (long cook OK).
 	TimeBand  string
 	Frequency string

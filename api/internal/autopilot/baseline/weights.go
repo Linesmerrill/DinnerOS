@@ -20,6 +20,9 @@ const (
 	// SignalWeekdayAffinity is the share of the meal's planned days that
 	// were this weekday, 0..1.
 	SignalWeekdayAffinity = "weekdayAffinity"
+	// SignalDayTheme is how strongly the day's past meals lean on the dish
+	// or cuisine this meal is (0.5..1), with no weekday rule that day.
+	SignalDayTheme = "dayTheme"
 	// SignalTaste is liked and disliked cuisines, tags, and proteins, in
 	// -1..1.
 	SignalTaste = "taste"
@@ -76,6 +79,7 @@ type Weights struct {
 	Conversion      float64
 	Recency         float64
 	WeekdayAffinity float64
+	DayTheme        float64
 	Taste           float64
 	// ColdStartTasteBoost scales Taste up when history is thin: the taste
 	// weight is Taste × (1 + ColdStartTasteBoost × (1 − confidence)).
@@ -132,6 +136,7 @@ func DefaultWeights() Weights {
 		Conversion:          0.10,
 		Recency:             0.25,
 		WeekdayAffinity:     0.10,
+		DayTheme:            0.25,
 		Taste:               0.25,
 		ColdStartTasteBoost: 1.0,
 		Rule:                0.45,

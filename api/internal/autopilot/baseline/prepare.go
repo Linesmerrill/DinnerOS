@@ -34,6 +34,9 @@ type model struct {
 	coldStart  bool
 	// dayCounts is how often the household planned meals on each weekday.
 	dayCounts [7]int
+	// dayThemes are what each weekday's past meals lean on, a dish or a
+	// cuisine, when one clearly does (dayTheme); nil when none does.
+	dayThemes [7]*dayTheme
 
 	// weekStart is the first day of the week being planned, and firstDay its
 	// index in Days (0 for Monday), from Input.WeekStart.
@@ -91,6 +94,7 @@ type rule struct {
 	// recipe may be labeled with instead ("italian" → "southern european").
 	cuisines, regions       []string
 	tags, proteins, methods []string
+	dishes                  []string
 	band                    autopilot.TimeBand
 	freq                    autopilot.RuleFrequency
 }
@@ -126,6 +130,8 @@ type item struct {
 	tags, proteins, methods, allergen []string
 	// categories are the kinds of dish the item is ("pasta"), for variety.
 	categories  []string
+	dishes      []string
+	dishTypes   []string
 	diets       []string
 	ingredients [][]string // tokenized names
 	minutes     int
@@ -228,7 +234,7 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 		}
 		it := &item{
 			id: ci.ID, cuisines: normAll(ci.Cuisines), withRegions: normAll(append(slices.Clone(ci.Cuisines), ci.CuisineRegions...)),
-			tags: normAll(ci.Tags), proteins: normAll(ci.Proteins), categories: normAll(ci.MealCategories),
+			tags: normAll(ci.Tags), proteins: normAll(ci.Proteins), categories: normAll(ci.MealCategories), dishes: normAll(ci.Dishes), dishTypes: normAll(ci.DishTypes),
 			methods: normAll(ci.Methods), allergen: normAll(ci.Allergens), diets: normAll(ci.Diets),
 			minutes: max(ci.CookMinutes, 0), servings: sortedPositive(ci.Servings),
 			tie: hashString(fmt.Sprintf("%d|%s", m.seed, ci.ID)), st: stats{nearest: -1},
@@ -295,6 +301,8 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 	}
 
 	distances := map[string]int{}
+	themes := newThemeCounts()
+	defer func() { m.dayThemes = themes.themes() }()
 	for _, h := range in.History {
 		d, ok := distances[h.Week]
 		if !ok {
@@ -315,6 +323,9 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 		it := m.byID[h.ItemID]
 		if it == nil {
 			continue
+		}
+		if h.Kind == autopilot.KindPlanned && day >= 0 {
+			themes.add(day, it)
 		}
 		switch h.Kind {
 		case autopilot.KindOrdered:
@@ -478,7 +489,7 @@ func normalizePrefs(in autopilot.Preferences) (prefs, error) {
 		nr := &rule{
 			day: day, label: strings.TrimSpace(r.Label), cuisines: normAll(r.Cuisines),
 			regions: normAll(r.CuisineRegions), tags: normAll(r.Tags),
-			proteins: normAll(r.Proteins), band: r.TimeBand, freq: r.Frequency,
+			proteins: normAll(r.Proteins), dishes: normAll(r.Dishes), band: r.TimeBand, freq: r.Frequency,
 		}
 		// A method the household has no equipment for can't be asked of a
 		// meal, so the rule is scored without it.

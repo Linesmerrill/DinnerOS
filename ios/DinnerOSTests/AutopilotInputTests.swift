@@ -147,7 +147,9 @@ struct AutopilotInputTests {
 
     @Test func ruleTemplatesAreValidRules() {
         #expect(AutopilotWeekdayRule.smokerNight(on: .sun).hasPreference)
-        #expect(AutopilotWeekdayRule.tacoNight(on: .tue).frequency == .atMostOnce)
+        // Taco night is the day's menu every week: any tacos, Mexican or Korean.
+        #expect(AutopilotWeekdayRule.tacoNight(on: .tue).frequency == .everyWeek)
+        #expect(AutopilotWeekdayRule.pastaNight(on: .mon).hasPreference)
         #expect(AutopilotWeekdayRule.quickNight(on: .wed).timeBand == .quick)
         #expect(!AutopilotWeekdayRule(day: .mon, label: "Just a label").hasPreference)
     }

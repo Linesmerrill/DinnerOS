@@ -212,6 +212,9 @@ func normalizeProfile(p Profile) (Profile, error) {
 		if nr.Cuisines, err = freeValues(field+".cuisines", rule.Cuisines, MaxRuleValues, MaxValueLength, canonicalCuisine); err != nil {
 			return Profile{}, err
 		}
+		if nr.Dishes, err = freeValues(field+".dishes", rule.Dishes, MaxRuleValues, MaxValueLength, canonicalDish); err != nil {
+			return Profile{}, err
+		}
 		if nr.Tags, err = freeValues(field+".tags", rule.Tags, MaxRuleValues, MaxValueLength, canonicalTag); err != nil {
 			return Profile{}, err
 		}
@@ -237,7 +240,7 @@ func normalizeProfile(p Profile) (Profile, error) {
 		if !slices.Contains(optionValues(FrequencyOptions), nr.Frequency) {
 			return Profile{}, invalidf("%s.frequency must be every_week or at_most_once", field)
 		}
-		if len(nr.Cuisines)+len(nr.Tags)+len(nr.Proteins)+len(nr.Methods) == 0 && nr.TimeBand == "" {
+		if len(nr.Cuisines)+len(nr.Tags)+len(nr.Proteins)+len(nr.Methods)+len(nr.Dishes) == 0 && nr.TimeBand == "" {
 			return Profile{}, invalidf("%s needs at least one cuisine, tag, protein, method, or time band", field)
 		}
 		if nr.Label == "" {
@@ -347,7 +350,7 @@ func boolText(b bool) string { return strconv.FormatBool(b) }
 
 func (r WeekdayRule) summary() string {
 	parts := []string{r.Label}
-	for _, values := range [][]string{r.Proteins, r.Methods, r.Cuisines, r.Tags} {
+	for _, values := range [][]string{r.Proteins, r.Methods, r.Cuisines, r.Dishes, r.Tags} {
 		if len(values) > 0 {
 			parts = append(parts, strings.Join(values, "/"))
 		}
@@ -522,7 +525,7 @@ func (p Profile) preferences(householdServings int) autopilot.Preferences {
 	for _, r := range p.WeekdayRules {
 		out.Rules = append(out.Rules, autopilot.WeekdayRule{
 			Day: autopilot.Day(r.Day), Label: r.Label, Cuisines: r.Cuisines, CuisineRegions: cuisineRegions(r.Cuisines),
-			Tags: r.Tags, Proteins: r.Proteins,
+			Tags: r.Tags, Proteins: r.Proteins, Dishes: r.Dishes,
 			Methods: r.Methods, TimeBand: autopilot.TimeBand(r.TimeBand), Frequency: autopilot.RuleFrequency(r.Frequency),
 		})
 	}

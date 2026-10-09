@@ -207,6 +207,15 @@ func (m *model) score(s *slot, it *item) cand {
 	}
 	explain("weekday", affinityText, add(SignalWeekdayAffinity, affinity, w.WeekdayAffinity), false)
 
+	// What the day's past meals lean on: tacos most Tuesdays, Italian most
+	// Mondays. A weekday rule says it outright, so it wins (decision 637).
+	var theme float64
+	var themeText string
+	if t := m.dayThemes[s.day]; t != nil && s.rule == nil && t.matches(it) {
+		theme, themeText = t.share, t.text(day)
+	}
+	explain("dayTheme", themeText, add(SignalDayTheme, theme, w.DayTheme), false)
+
 	// Taste profile. Its weight grows when history is thin (cold start).
 	var taste float64
 	var tasteText string
@@ -274,6 +283,7 @@ func (m *model) score(s *slot, it *item) cand {
 			{r.methods, func() string { return intersect(it.methods, r.methods) }, true},
 			{r.cuisines, func() string { return ruleCuisine(it, r) }, false},
 			{r.tags, func() string { return intersect(it.tags, r.tags) }, false},
+			{r.dishes, func() string { return intersect(it.dishes, r.dishes) }, false},
 		} {
 			if len(g.want) == 0 {
 				continue
@@ -282,13 +292,22 @@ func (m *model) score(s *slot, it *item) cand {
 			if v := g.match(); v != "" {
 				matched++
 				if !g.quiet {
+					// A dish reads as the night's food: "Tacos", not "Taco".
+					if len(r.dishes) > 0 && slices.Contains(r.dishes, v) {
+						v = dishPlural(v)
+					}
 					parts = append(parts, displayName(v))
 				}
 			}
 		}
 		methodMiss := len(r.methods) > 0 && !suitsMethod(it, r)
+		// "Tacos on Tuesday": an every-week dish rule is the day's menu, so a
+		// meal that isn't one of its dishes is a poor fit, like a method miss.
+		dishMiss := len(r.dishes) > 0 && intersect(it.dishes, r.dishes) == ""
 		switch {
 		case methodMiss && r.freq == autopilot.EveryWeek:
+			ruleValue = -1
+		case dishMiss && r.freq == autopilot.EveryWeek:
 			ruleValue = -1
 		case methodMiss:
 		case groups > 0 && matched == 0 && r.freq == autopilot.EveryWeek:
