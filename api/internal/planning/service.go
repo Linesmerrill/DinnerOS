@@ -85,8 +85,11 @@ type Service struct {
 	frozen       FrozenSource
 	households   HouseholdSource
 	thawNotifier ThawNotifier
-	logger       *slog.Logger
-	now          func() time.Time
+	// outcomes is set by WithOutcomes; without it thaw reminders don't know
+	// which meals were already cooked.
+	outcomes EventLister
+	logger   *slog.Logger
+	now      func() time.Time
 }
 
 // NewService returns a Service.

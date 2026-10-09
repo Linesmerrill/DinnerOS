@@ -198,7 +198,7 @@ func run() error {
 	planService := planning.NewService(planning.NewMongoStore(db.Database()), recipeService).
 		WithPantry(pantryService).WithSpecialties(substitutesService).WithSkips(skipsService).
 		WithEvents(behavior.events, logger).WithWeekStart(householdService).
-		WithFreezer(pantryService, householdService, notificationService)
+		WithFreezer(pantryService, householdService, notificationService).WithOutcomes(behavior.events)
 	householdService.WithWeekStartListener(planService)
 	// A frozen item needed by one of today's meals is a reminder derived on
 	// read, like the pantry's low-stock check and the weekly order reminder.

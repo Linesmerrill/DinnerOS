@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/events"
+	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
@@ -129,9 +131,13 @@ func (s *Service) ThawDue(ctx context.Context, householdID string) (ThawDue, err
 	if err != nil {
 		return ThawDue{}, fmt.Errorf("load plan: %w", err)
 	}
+	// A meal already cooked or skipped needs nothing thawed (decision 636).
+	answered := s.answeredEntries(ctx, householdID, plan)
+	var today []Entry
 	var todayIDs []string
 	for _, e := range plan.Entries {
-		if plan.DateOf(e.Day) == out.Date {
+		if plan.DateOf(e.Day) == out.Date && !answered[e.ID] {
+			today = append(today, e)
 			todayIDs = append(todayIDs, e.RecipeID)
 		}
 	}
@@ -141,6 +147,30 @@ func (s *Service) ThawDue(ctx context.Context, householdID string) (ThawDue, err
 	byID, err := s.recipesByID(ctx, householdID, todayIDs)
 	if err != nil {
 		return ThawDue{}, err
+	}
+	// The meals as they'll be cooked: a swapped protein ("Chicken Breast
+	// Strips" for the card's thighs) is the bag to thaw.
+	var entries []Entry
+	var selections []grocery.RecipeSelection
+	customized := false
+	for _, e := range today {
+		r, ok := byID[e.RecipeID]
+		if !ok {
+			continue
+		}
+		entries = append(entries, e)
+		selections = append(selections, grocery.RecipeSelection{
+			RecipeID: r.ID, RecipeName: r.Name, RecipeServings: e.Servings, TargetServings: e.Servings,
+			Lines: groceryLines(r, e.Servings),
+		})
+		customized = customized || len(e.Customizations) > 0
+	}
+	if customized && s.customizations != nil {
+		if swapped, err := s.customizations.CustomizeGrocery(ctx, householdID, entries, selections); err == nil {
+			selections = swapped
+		} else {
+			s.logger.WarnContext(ctx, "thaw: apply meal customizations", "error", err)
+		}
 	}
 	// With two bags of the same meat, the oldest one is the one to thaw:
 	// first in, first out, and the one the member's label says to grab.
@@ -167,14 +197,14 @@ func (s *Service) ThawDue(ctx context.Context, householdID string) (ThawDue, err
 	}
 
 	needed := map[string]*ThawItem{}
-	for _, id := range todayIDs {
-		r, ok := byID[id]
-		if !ok {
-			continue
-		}
-		for _, ing := range r.Ingredients {
-			key := thawKey(ing.IngredientID, ing.Name)
+	for _, sel := range selections {
+		for _, line := range sel.Lines {
+			key := line.IngredientKey
 			f, ok := byKey[key]
+			if !ok {
+				key = thawKey("", line.Name)
+				f, ok = byKey[key]
+			}
 			if !ok || keptOut[key] {
 				continue
 			}
@@ -183,9 +213,16 @@ func (s *Service) ThawDue(ctx context.Context, householdID string) (ThawDue, err
 				item = newThawItem(f, out.Date, now)
 				needed[f.Item.ID] = item
 			}
-			if !slices.Contains(item.Recipes, r.Name) {
-				item.Recipes = append(item.Recipes, r.Name)
+			if !slices.Contains(item.Recipes, sel.RecipeName) {
+				item.Recipes = append(item.Recipes, sel.RecipeName)
 			}
+		}
+	}
+	// Past late morning a bag that needed to go in this morning can't thaw by
+	// dinner: "Move it to the fridge this morning" at 7 PM helps no one.
+	for id, item := range needed {
+		if item.Overnight && now.Hour() >= thawTooLateHour {
+			delete(needed, id)
 		}
 	}
 	for _, item := range needed {
@@ -200,6 +237,47 @@ func (s *Service) ThawDue(ctx context.Context, householdID string) (ThawDue, err
 		return out.Items[i].ItemID < out.Items[j].ItemID
 	})
 	return out, nil
+}
+
+// thawTooLateHour is when a reminder to move a bag "this morning" stops
+// being worth sending.
+const thawTooLateHour = 11
+
+// WithOutcomes lets thaw reminders skip meals already cooked or skipped, and
+// returns s.
+func (s *Service) WithOutcomes(events EventLister) *Service {
+	s.outcomes = events
+	return s
+}
+
+// answeredEntries are the plan's entries a member marked cooked or skipped.
+// A failed lookup answers none: the reminder still goes out.
+func (s *Service) answeredEntries(ctx context.Context, householdID string, p Plan) map[string]bool {
+	out := map[string]bool{}
+	if s.outcomes == nil {
+		return out
+	}
+	start, err := time.Parse(time.DateOnly, p.DateOf(p.First()))
+	if err != nil {
+		return out
+	}
+	list, err := s.outcomes.List(ctx, events.Query{
+		HouseholdID: householdID, Types: []events.Type{events.TypeRecipeCooked, events.TypeRecipeSkipped},
+		Since: start.Add(-outcomeLookback),
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "thaw: load meal outcomes", "error", err)
+		return out
+	}
+	for _, e := range list {
+		switch p := e.Payload.(type) {
+		case events.RecipeCooked:
+			out[p.EntryID] = p.EntryID != ""
+		case events.RecipeSkipped:
+			out[p.EntryID] = p.EntryID != ""
+		}
+	}
+	return out
 }
 
 // thawKey is the grocery key a recipe ingredient answers to, matching
