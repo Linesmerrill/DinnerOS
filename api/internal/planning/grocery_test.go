@@ -199,3 +199,20 @@ func TestGroceryItemShortOfWhatTheWeekNeeds(t *testing.T) {
 		t.Errorf("covered text = %q / %q", got.QuantityText, got.OnHandText)
 	}
 }
+
+// An uncatalogued "Yellow Onion" line is keyed as the onion, so it merges
+// with the week's other onions (decision 640).
+func TestGroceryLinesKeySameIngredientNamesTogether(t *testing.T) {
+	r := recipes.Recipe{ID: "r", Name: "Soup", Servings: []int{2}, Ingredients: []recipes.RecipeIngredient{
+		ingredientLine("", "Yellow Onion", "produce", false, amt(2, "1", "count")),
+		ingredientLine("", "Onion", "produce", false, amt(2, "1", "count")),
+	}}
+	lines := groceryLines(r, 2)
+	if len(lines) != 2 || lines[0].IngredientKey != "name:onion" || lines[1].IngredientKey != "name:onion" {
+		t.Fatalf("lines = %+v", lines)
+	}
+	list, err := grocery.Aggregate([]grocery.RecipeSelection{{RecipeID: r.ID, RecipeName: r.Name, RecipeServings: 2, TargetServings: 2, Lines: lines}}, nil)
+	if err != nil || len(list.Items) != 1 || list.Items[0].Amounts[0].Quantity.String() != "2" {
+		t.Errorf("list = %+v, %v; want one line of 2 onions", list.Items, err)
+	}
+}

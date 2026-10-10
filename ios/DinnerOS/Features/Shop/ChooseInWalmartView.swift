@@ -38,6 +38,10 @@ struct ChooseInWalmartView: View {
                 finished
             }
         }
+        // Choosing one product (a re-choose) goes straight back once it's saved.
+        .onChange(of: chooser.isFinished) { _, finished in
+            if finished, chooser.items.count == 1, !chooser.chosen.isEmpty { dismiss() }
+        }
         .onChange(of: chooser.current?.id, initial: true) { _, _ in
             if let url = chooser.searchURL { page.load(url) }
         }
@@ -121,7 +125,10 @@ struct ChooseInWalmartView: View {
         } description: {
             Text(
                 chooser.chosen.isEmpty
-                    ? "No products chosen." : "Saved \(chooser.chosen.count) products. They go in the cart next time."
+                    ? "No products chosen."
+                    : chooser.chosen.count == 1
+                        ? "Saved 1 product. It goes in the cart next time."
+                        : "Saved \(chooser.chosen.count) products. They go in the cart next time."
             )
         } actions: {
             Button("Done") { dismiss() }

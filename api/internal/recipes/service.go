@@ -399,7 +399,9 @@ type lineKey struct {
 func lineKeyOf(source string, ing ImportIngredient) lineKey {
 	return lineKey{
 		ref: SourceRef{Source: source, SourceIngredientID: strings.TrimSpace(ing.SourceIngredientID)},
-		key: ingredients.NormalizeName(ing.Name),
+		// A variant's name ("Yellow Onion") resolves to the ingredient it is
+		// the same as (decision 640).
+		key: ingredients.SameIngredientKey(ingredients.NormalizeName(ing.Name)),
 	}
 }
 

@@ -190,6 +190,7 @@ struct PantryEditSheet: View {
                     Text("Records a purchase. The estimate starts over from the amount you bought.")
                 }
                 PantryItemFields(draft: $draft, name: item.displayName, category: item.category)
+                PantryAlsoCountsAsSection(names: $draft.alsoCountsAs)
                 PantryThresholdFields(draft: $draft, householdPercent: pantry.settings?.lowThresholdPercent)
                 PantryUsageSections(item: current, canRecordUse: true)
                 Section {
@@ -270,6 +271,48 @@ struct PantryEditSheet: View {
                 errorMessage = HouseholdStore.message(for: error)
             }
         }
+    }
+}
+
+/// Other ingredients one item counts as: a jar of "Thyme" kept dried answers for a recipe's
+/// "Dried Thyme", so the list doesn't buy what's already here.
+struct PantryAlsoCountsAsSection: View {
+    @Binding var names: [String]
+
+    @State private var newName = ""
+    static let maxNames = 10
+
+    private var trimmed: String {
+        newName.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    var body: some View {
+        Section {
+            ForEach(names, id: \.self) { name in
+                Text(name)
+            }
+            .onDelete { names.remove(atOffsets: $0) }
+            if names.count < Self.maxNames {
+                HStack {
+                    TextField("Add a name", text: $newName)
+                        .textInputAutocapitalization(.words)
+                        .submitLabel(.done)
+                        .onSubmit(add)
+                    Button("Add", action: add)
+                        .disabled(trimmed.isEmpty)
+                }
+            }
+        } header: {
+            Text("Also Counts As")
+        } footer: {
+            Text("Recipes that call for these use this item, like Dried Thyme for a jar of thyme. Swipe to remove one.")
+        }
+    }
+
+    private func add() {
+        guard !trimmed.isEmpty else { return }
+        names = PantryItemDraft.cleaned(names + [trimmed])
+        newName = ""
     }
 }
 

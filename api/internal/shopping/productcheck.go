@@ -195,13 +195,15 @@ func lineCheck(pref Preference, reports map[string]ProductCheckReport) *LineChec
 }
 
 // blocks reports whether a line with this check can't simply be sent: its
-// product is gone, or unchecked without Send Anyway, or the member left it
-// out.
+// product is gone, or the member left it out. A product the check couldn't
+// read (blocked, out of time, renumbered) is sent: the household picked it
+// on Walmart, and only Walmart saying it's gone means it's wrong (decision
+// 639).
 func (c *LineCheck) blocks() bool {
 	if c == nil {
 		return false
 	}
-	return c.Decision == DecisionLeaveOut || c.Status == ProductGone || (c.Status == ProductUnknown && c.Decision != DecisionSendAnyway)
+	return c.Decision == DecisionLeaveOut || c.Status == ProductGone
 }
 
 // checkExclusion is the exclusion reason for a line whose check blocks it.

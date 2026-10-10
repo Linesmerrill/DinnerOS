@@ -253,7 +253,7 @@ func (s *Service) validateAddition(ctx context.Context, in AddInput) (addition, 
 		}
 		// Link free text to the catalog when the name is a catalog ingredient,
 		// so grocery lists keyed by catalog ID find it.
-		found, err := s.catalog.IngredientsByKey(ctx, []string{a.key})
+		found, err := s.catalog.IngredientsByKey(ctx, []string{ingredients.SameIngredientKey(a.key)})
 		if err != nil {
 			return addition{}, fmt.Errorf("look up catalog ingredient: %w", err)
 		}
@@ -464,6 +464,11 @@ func applyUpdate(item Item, in UpdateInput) (Item, error) {
 	}
 	if in.Note != nil {
 		if item.Note, err = normalizeNote(*in.Note); err != nil {
+			return Item{}, err
+		}
+	}
+	if in.AlsoCountsAs != nil {
+		if item.AlsoCountsAs, err = normalizeAlsoCountsAs(*in.AlsoCountsAs, item.Key); err != nil {
 			return Item{}, err
 		}
 	}

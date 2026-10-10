@@ -211,6 +211,10 @@ private struct ShopWeekList: View {
                 RequestStoreRow { isRequestingStore = true }
             }
         }
+        // Choosing in Walmart, for every line without a product or one line's re-choose.
+        .fullScreenCover(item: $walmartChoices) { choices in
+            ChooseInWalmartView(items: choices.items)
+        }
         .refreshable {
             await shopping.reload()
             await shopping.loadWeekCost()
@@ -295,9 +299,6 @@ private struct ShopWeekList: View {
                             : String(localized: "Choose \(proposal.needsProduct.count) Products in Walmart"),
                         systemImage: "cart.badge.plus")
                 }
-                .fullScreenCover(item: $walmartChoices) { choices in
-                    ChooseInWalmartView(items: choices.items)
-                }
             } footer: {
                 Text("Walmart opens here with each item along the top. Tap a product, then Use This.")
             }
@@ -337,7 +338,7 @@ private struct ShopWeekList: View {
         if !proposal.linesInCart.isEmpty || !proposal.otherInCart.isEmpty {
             InWalmartCartSection(
                 proposal: proposal, packages: packagesBinding(for:),
-                changeProduct: { choose(ProductChoice(line: $0)) })
+                changeProduct: { walmartChoices = WalmartChoices(items: [WalmartChooser.Item(line: $0)]) })
         }
         if !notIncluded.isEmpty {
             Section {
@@ -384,7 +385,7 @@ private struct ShopWeekList: View {
             case .line(let line) where row.isPrimary:
                 ReadyLineRow(
                     line: line, packages: packagesBinding(for: line), canEdit: shopping.canEdit,
-                    changeProduct: { choose(ProductChoice(line: line)) },
+                    changeProduct: { walmartChoices = WalmartChoices(items: [WalmartChooser.Item(line: line)]) },
                     fixPackageSize: { choose(ProductChoice(line: line, packageSizeFix: $0)) },
                     mealNote: ShopMealText.note(for: row), remove: options)
             case .line(let line):
@@ -395,7 +396,7 @@ private struct ShopWeekList: View {
                 NeedsProductRow(
                     line: line, canChoose: shopping.canEdit, mealNote: ShopMealText.note(for: row), remove: options
                 ) {
-                    choose(ProductChoice(excluded: line))
+                    walmartChoices = WalmartChoices(items: [WalmartChooser.Item(line: line)])
                 }
             case .needsProduct:
                 SharedLineRow(
@@ -404,7 +405,7 @@ private struct ShopWeekList: View {
             case .needsDecision(let line) where row.isPrimary:
                 NeedsDecisionRow(
                     line: line, canChoose: shopping.canEdit, mealNote: ShopMealText.note(for: row), remove: options,
-                    rechoose: { choose(ProductChoice(rechoosing: line)) },
+                    rechoose: { walmartChoices = WalmartChoices(items: [WalmartChooser.Item(line: line)]) },
                     leaveOut: { Task { await shopping.leaveOut(line) } })
             case .needsDecision:
                 SharedLineRow(

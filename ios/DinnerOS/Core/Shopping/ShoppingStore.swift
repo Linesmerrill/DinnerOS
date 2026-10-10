@@ -200,7 +200,7 @@ final class ShoppingStore {
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let openURL: @MainActor (URL) async -> Bool
     /// Checks saved products on Walmart from this phone. Without one (previews), every product
-    /// is unknown, so nothing is sent without the member deciding.
+    /// is unknown and still goes in: only a product Walmart says is gone holds the cart.
     @ObservationIgnored private let productCheck: (any WalmartProductChecking)?
     @ObservationIgnored private var timeZone: TimeZone = .autoupdatingCurrent
     /// The user the state was loaded for, so another sign-in never sees it.
@@ -617,9 +617,9 @@ final class ShoppingStore {
     /// link opens and `linkNotice` says everything is already in the cart. The week is matched
     /// again afterwards so the sent lines move under "In Walmart Cart" on every phone.
     ///
-    /// First this phone checks the products the cart sends on Walmart. A gone line, or one it
-    /// couldn't check, must be decided in "Before Opening Walmart" (`isReviewingProducts`), and
-    /// nothing opens until each is. The results and decisions go with the hand-off, and the API
+    /// First this phone checks the products the cart sends on Walmart. A gone line must be
+    /// re-chosen or left out in "Before Opening Walmart" (`isReviewingProducts`), and nothing
+    /// opens until each is. One it couldn't check goes in: the household picked it (decision 639). The results and decisions go with the hand-off, and the API
     /// never puts a gone or left-out product in a link.
     func openInWalmart() async throws {
         _ = try requireHousehold()

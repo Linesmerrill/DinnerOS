@@ -240,7 +240,13 @@ func (s *Service) matchNeeds(ctx context.Context, m CookedMeal, needs []recipeNe
 		if it.IngredientID != "" {
 			byIngredientID[it.IngredientID] = it
 		}
-		byKey[it.Key] = it
+		// Every name the item answers for, its own key winning over another
+		// item's other name.
+		for i, k := range pantryKeys(it) {
+			if _, taken := byKey[k]; !taken || i == 0 {
+				byKey[k] = it
+			}
+		}
 	}
 	var ids []string
 	for _, n := range needs {

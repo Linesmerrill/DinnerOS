@@ -89,12 +89,14 @@ func TestBuildProposalAppliesDecisions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Unknown and undecided: held for a decision. Unavailable: sent.
-	if got := reasons(p)[beefKey]; got != ExcludedProductUnverified || len(p.NeedsDecision()) != 1 {
+	// Unknown and undecided: sent, because the household picked it on
+	// Walmart and only "gone" means it's wrong (decision 639). Unavailable:
+	// sent.
+	if got, ok := reasons(p)[beefKey]; ok || len(p.NeedsDecision()) != 0 {
 		t.Errorf("undecided unknown = %q, needs decision %d", got, len(p.NeedsDecision()))
 	}
-	if len(p.Lines) != 1 || p.Lines[0].IngredientKey != onionKey || p.Lines[0].Check.Status != ProductUnavailable {
-		t.Errorf("lines = %+v", p.Lines)
+	if len(p.Lines) != 2 || !strings.Contains(linkItems(p.Links), "100000001") {
+		t.Errorf("lines = %+v, links %q", p.Lines, linkItems(p.Links))
 	}
 
 	// Send Anyway sends an unknown product, recorded as such; Leave Out
@@ -130,13 +132,13 @@ func TestBuildProposalAppliesDecisions(t *testing.T) {
 		t.Errorf("excludeKeys on a gone product = %q", got)
 	}
 
-	// A report for a product the member has since replaced is unknown and
-	// undecided, whatever it says.
+	// A report for a product the member has since replaced says nothing
+	// about the new one, which the member just picked: it's sent.
 	p, _ = buildProposal(w, Settings{}, testList(t), testPrefs(), checkedInput(t, MatchInput{Checks: []ProductCheckReport{
-		report(beefKey, "199999999", ProductFound, DecisionSendAnyway),
+		report(beefKey, "199999999", ProductGone, ""),
 	}}))
-	if got := reasons(p)[beefKey]; got != ExcludedProductUnverified {
-		t.Errorf("report for another product = %q", got)
+	if got, ok := reasons(p)[beefKey]; ok || !strings.Contains(linkItems(p.Links), "100000001") {
+		t.Errorf("report for another product = %q, links %q", got, linkItems(p.Links))
 	}
 
 	// A line that isn't being bought (in the pantry) needs no decision.

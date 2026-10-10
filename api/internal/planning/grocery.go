@@ -186,7 +186,7 @@ func groceryLines(r recipes.Recipe, servings int) []grocery.Line {
 			if normalized == "" {
 				continue
 			}
-			key = unnamedKeyPrefix + normalized
+			key = unnamedKeyPrefix + ingredients.SameIngredientKey(normalized)
 		}
 		line := grocery.Line{IngredientKey: key, Name: ing.Name, Category: ing.Category, PantryStaple: ing.PantryStaple}
 		for _, a := range ing.Amounts {

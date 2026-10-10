@@ -126,6 +126,11 @@ type Item struct {
 	// ExpiresOn is a calendar date (DateLayout) or empty.
 	ExpiresOn string
 	Note      string
+	// AlsoCountsAs are other ingredients this item is, as the household
+	// named them: "Thyme" kept dried also counts as a recipe's "Dried
+	// Thyme". A grocery line or a cooked meal for any of them uses this
+	// item (decision 641).
+	AlsoCountsAs []string
 
 	// Storage is where the item is kept; empty means StoragePantry. A
 	// freezer item covers a grocery line without being bought again
@@ -212,14 +217,16 @@ type AddInput struct {
 // ExpiresOn, and Note an empty string clears the value (clearing Quantity also
 // clears Unit). LowThresholdPercent 0 clears the item's override.
 type UpdateInput struct {
-	DisplayName         *string
-	Category            *string
-	Quantity            *string
-	Unit                *string
-	Status              *Status
-	IsStaple            *bool
-	ExpiresOn           *string
-	Note                *string
+	DisplayName *string
+	Category    *string
+	Quantity    *string
+	Unit        *string
+	Status      *Status
+	IsStaple    *bool
+	ExpiresOn   *string
+	Note        *string
+	// AlsoCountsAs replaces the item's other names; empty clears them.
+	AlsoCountsAs        *[]string
 	LowThresholdPercent *int
 	// Storage moves the item (into the freezer, say), and StoredOn is when.
 	// Moving it without an ExpiresOn gives it the new place's best-by date.
@@ -370,6 +377,35 @@ func normalizeDate(s string) (string, error) {
 		return "", invalid("expiresOn must be a date in YYYY-MM-DD form")
 	}
 	return s, nil
+}
+
+// MaxAlsoCountsAs is how many other ingredients one item can count as.
+const MaxAlsoCountsAs = 10
+
+// normalizeAlsoCountsAs trims and de-duplicates an item's other names,
+// dropping any that are the item itself or the same ingredient as it.
+func normalizeAlsoCountsAs(names []string, key string) ([]string, error) {
+	own := ingredients.SameIngredientKeys(key)
+	var out []string
+	seen := map[string]bool{}
+	for _, n := range names {
+		n = strings.Join(strings.Fields(n), " ")
+		k := ingredients.NormalizeName(n)
+		switch {
+		case k == "":
+			continue
+		case utf8.RuneCountInString(n) > MaxNameLength:
+			return nil, invalid("alsoCountsAs: each name must be at most %d characters", MaxNameLength)
+		case slices.Contains(own, k) || slices.Contains(own, ingredients.SameIngredientKey(k)) || seen[k]:
+			continue
+		}
+		seen[k] = true
+		out = append(out, n)
+	}
+	if len(out) > MaxAlsoCountsAs {
+		return nil, invalid("alsoCountsAs holds at most %d names", MaxAlsoCountsAs)
+	}
+	return out, nil
 }
 
 func normalizeNote(s string) (string, error) {

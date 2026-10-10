@@ -697,21 +697,27 @@ found.
 | `found` | Sent |
 | `unavailable` | Sent, with "Out of stock on Walmart. It may come back." |
 | `gone` | **Never sent.** Re-choose it or Leave Out |
-| `unknown` | Check Again, Re-choose, Leave Out, or **Send Anyway**. Never sent silently |
+| `unknown` | Sent. The household picked this product on Walmart, so only Walmart saying it's gone means it's wrong (decision 639) |
 
-When any line is gone or unknown and undecided, the app shows **Before
-Opening Walmart** instead of opening anything. Gone lines are under "No
-Longer on Walmart" with Re-choose and Leave Out. Unknown lines are under
-"Couldn't Check" with Re-choose, Leave Out, Send Anyway, and See It on
-Walmart, and a Check Again button. Out-of-stock lines are listed as going in
-anyway. **Open Walmart** stays disabled until every gone and unknown line is
-decided. Send Anyway is for a member who has seen the item on Walmart
-themselves; it is asked again on each send. A left-out line stays left out
-for the week.
+Until 2026-10-10 an `unknown` product needed Send Anyway. Walmart's bot wall,
+the time budget, and renumbered items made that most of the list most weeks,
+including products saved minutes earlier, so the household was asked to
+re-verify the same tomatoes every week. Now only `gone` holds the cart.
+
+When any line is gone and undecided, the app shows **Before Opening
+Walmart** instead of opening anything. Gone lines are under "No Longer on
+Walmart" with Re-choose and Leave Out. Out-of-stock lines are listed as going
+in anyway. **Open Walmart** stays disabled until every gone line is decided.
+A left-out line stays left out for the week.
+
+Re-choose opens **Choose in Walmart** (the in-app Walmart page with the line
+along the top), the same as choosing a product the first time; choosing one
+product goes straight back. Changing a ready line's product and re-choosing a
+product under Saved Products' "Needs Re-choosing" open it too.
 
 The Shop tab shows the same states: a line waiting on a decision sits under
-its meal ("No longer on Walmart" or "Couldn't check it on Walmart") with
-Re-choose and Leave Out, and the bar under Open in Walmart counts them.
+its meal ("No longer on Walmart") with Re-choose and Leave Out, and the bar
+under Open in Walmart counts them.
 
 ### What the server does
 
@@ -720,10 +726,10 @@ The app sends every result and decision with the match and the hand-off
 Walmart. It:
 
 - **enforces the rule on every link it builds.** A `gone` product is never a
-  cart line, even when the request selects it. An `unknown` one is a line only
-  with `send_anyway`. An undecided gone or unknown line is `409
-  products_need_decision`, and nothing is sent. A report for a product the
-  member has since replaced counts as undecided `unknown`.
+  cart line, even when the request selects it. An `unknown` one is sent. An
+  undecided gone line is `409 products_need_decision`, and nothing is sent. A
+  report for a product the member has since replaced counts as `unknown`: the
+  member just picked the new one.
 - **records** each line's check and decision on the hand-off, and reports
   left-out lines under Not Included as `left_out_gone` ("Left out. No longer
   on Walmart.") or `left_out_unverified`.
@@ -750,8 +756,8 @@ A found or unavailable check with a price updates the saved product's price:
 - The page shows stock at Walmart's default store for the phone, which may
   not be the household's store. Whether an item exists doesn't depend on the
   store, and that is what the rule rests on.
-- A changed page reads as `unknown`, so the failure mode is members asked to
-  decide, not dead items sent.
+- A changed page reads as `unknown` and is sent, so a dead item can reach the
+  cart link only if Walmart stops answering 404 for missing items.
 
 ## Order reminders
 

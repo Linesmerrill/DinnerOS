@@ -6,6 +6,8 @@ struct SavedProductsView: View {
     @Environment(HouseholdStore.self) private var households
 
     @State private var editing: ProductChoice?
+    /// A product Walmart no longer lists, re-chosen inside Walmart.
+    @State private var rechoosing: WalmartChoices?
     @State private var actionError: String?
 
     var body: some View {
@@ -17,6 +19,9 @@ struct SavedProductsView: View {
             }
             .sheet(item: $editing) { choice in
                 ChooseProductSheet(choice: choice)
+            }
+            .fullScreenCover(item: $rechoosing) { choices in
+                ChooseInWalmartView(items: choices.items)
             }
             .alert("Couldn't Remove the Product", isPresented: Binding(presenting: $actionError)) {
                 Button("OK", role: .cancel) {}
@@ -119,7 +124,11 @@ struct SavedProductsView: View {
     private func row(_ preference: ShoppingPreference) -> some View {
         if shopping.canEdit {
             Button {
-                editing = ProductChoice(preference: preference)
+                if preference.needsRechoosing {
+                    rechoosing = WalmartChoices(items: [WalmartChooser.Item(preference: preference)])
+                } else {
+                    editing = ProductChoice(preference: preference)
+                }
             } label: {
                 SavedProductRow(preference: preference)
             }

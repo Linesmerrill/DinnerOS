@@ -53,10 +53,10 @@ nonisolated struct ProductCheckLine: Hashable, Sendable, Identifiable {
 /// decisions. Pure; `ShoppingStore` holds one per shown week.
 ///
 /// The rule it enforces (docs/shopping-providers.md#checking-saved-products): a gone product is
-/// never sent, so it must be re-chosen or left out. An unknown one must be checked again,
-/// re-chosen, left out, or sent with an explicit Send Anyway. It is never sent silently.
-/// Unavailable goes in with a note. Walmart stays closed until every gone and unknown line is
-/// decided.
+/// never sent, so it must be re-chosen or left out. Walmart stays closed until every gone line is
+/// decided. Every saved product is one the household picked on Walmart, so a page the check
+/// couldn't read (blocked, out of time, renumbered) goes in like a found one (decision 639).
+/// Unavailable goes in with a note.
 nonisolated struct ProductCheckReview: Hashable, Sendable {
     private(set) var lines: [ProductCheckLine]
     private(set) var decisions: [String: ProductCheckDecision] = [:]
@@ -85,9 +85,9 @@ nonisolated struct ProductCheckReview: Hashable, Sendable {
         lines.filter { $0.result.status == .unavailable && decision(for: $0) == nil }
     }
 
-    /// Gone or unknown lines without a decision. Walmart doesn't open until this is empty.
+    /// Gone lines without a decision. Walmart doesn't open until this is empty.
     var needsDecision: [ProductCheckLine] {
-        lines.filter { ($0.result.status == .gone || $0.result.status == .unknown) && decision(for: $0) == nil }
+        lines.filter { $0.result.status == .gone && decision(for: $0) == nil }
     }
 
     var canOpen: Bool { needsDecision.isEmpty }
@@ -97,7 +97,7 @@ nonisolated struct ProductCheckReview: Hashable, Sendable {
         lines.contains { line in
             switch line.result.status {
             case .found, .unavailable: decision(for: line) != .leaveOut
-            case .unknown: decision(for: line) == .sendAnyway
+            case .unknown: decision(for: line) != .leaveOut
             case .gone: false
             }
         }

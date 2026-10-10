@@ -20,6 +20,30 @@ nonisolated struct WalmartChooser: Equatable, Sendable {
             searchQuery = line.searchTerms.query
         }
 
+        /// Changes the product of a line that has one.
+        init(line: ShoppingHandoffLine) {
+            ingredientKey = line.ingredientKey
+            name = line.name
+            amountText = line.quantityText
+            searchQuery = line.searchTerms.query
+        }
+
+        /// Re-chooses a saved product Walmart no longer lists.
+        init(preference: ShoppingPreference) {
+            ingredientKey = preference.ingredientKey
+            name = preference.ingredientName
+            amountText = ""
+            searchQuery = preference.ingredientName
+        }
+
+        /// Re-chooses the product of a line from "Before Opening Walmart".
+        init(rechoosing line: ProductCheckLine) {
+            ingredientKey = line.ingredientKey
+            name = line.name
+            amountText = ""
+            searchQuery = line.name
+        }
+
         init(ingredientKey: String, name: String, amountText: String, searchQuery: String) {
             self.ingredientKey = ingredientKey
             self.name = name

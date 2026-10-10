@@ -70,6 +70,9 @@ nonisolated struct PantryItem: Decodable, Hashable, Sendable, Identifiable {
     let frozen: PantryFrozen?
     /// When it was put away where it is (`YYYY-MM-DD`), the start of its best-by date.
     var storedOn: String? = nil
+    /// Other ingredients this item is, as the household named them: "Thyme" kept dried also
+    /// counts as a recipe's "Dried Thyme".
+    var alsoCountsAs: [String] = []
 
     init(
         id: String, householdID: String, ingredientID: String?, key: String, displayName: String, category: String,
@@ -117,7 +120,8 @@ nonisolated struct PantryItem: Decodable, Hashable, Sendable, Identifiable {
         case householdID = "householdId"
         case ingredientID = "ingredientId"
         case key, displayName, category, quantity, quantityValue, unit, status, isStaple, expiresOn, note, updatedBy,
-            createdAt, updatedAt, statusSource, lowThresholdPercent, unitSize, estimate, storage, frozen, storedOn
+            createdAt, updatedAt, statusSource, lowThresholdPercent, unitSize, estimate, storage, frozen, storedOn,
+            alsoCountsAs
     }
 
     /// The usage fields are additive, so they're read leniently: a response without them, or
@@ -148,6 +152,7 @@ nonisolated struct PantryItem: Decodable, Hashable, Sendable, Identifiable {
             storage: (try? container.decodeIfPresent(PantryStorage.self, forKey: .storage)) ?? .pantry,
             frozen: (try? container.decodeIfPresent(PantryFrozen.self, forKey: .frozen)) ?? nil)
         storedOn = try? container.decodeIfPresent(String.self, forKey: .storedOn)
+        alsoCountsAs = (try? container.decodeIfPresent([String].self, forKey: .alsoCountsAs)) ?? []
     }
 }
 
@@ -203,13 +208,15 @@ nonisolated struct PantryItemChanges: Encodable, Equatable, Sendable {
     /// Moves the item; without `expiresOn` the API gives it the new place's best-by date.
     var storage: PantryStorage?
     var storedOn: String?
+    /// Replaces the item's other names; `[]` clears them.
+    var alsoCountsAs: [String]?
 
     /// The API rejects a PATCH that changes nothing.
     var isEmpty: Bool { self == PantryItemChanges() }
 
     private enum CodingKeys: String, CodingKey {
         case displayName, category, quantity, unit, status, isStaple, expiresOn, note, lowThresholdPercent
-        case storage, storedOn
+        case storage, storedOn, alsoCountsAs
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -224,6 +231,7 @@ nonisolated struct PantryItemChanges: Encodable, Equatable, Sendable {
         try container.encodeIfPresent(note, forKey: .note)
         try container.encodeIfPresent(storage, forKey: .storage)
         try container.encodeIfPresent(storedOn, forKey: .storedOn)
+        try container.encodeIfPresent(alsoCountsAs, forKey: .alsoCountsAs)
         switch lowThresholdPercent {
         case .household: try container.encodeNil(forKey: .lowThresholdPercent)
         case .percent(let percent): try container.encode(percent, forKey: .lowThresholdPercent)

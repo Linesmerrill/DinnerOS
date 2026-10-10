@@ -139,7 +139,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/ingredients` `?q&limit` → `{items: [{id, key, name, category, categoryConfident, imageUrl?}]}` | bearer | 7 | ✅ |
 | GET | `/api/v1/households/{householdId}/pantry` `?status&category&staple&q` → `{items}` | `household.view` | 7 | ✅ |
 | POST | `/api/v1/households/{householdId}/pantry` `{ingredientId? or name, category?, quantity?, unit?, status?, isStaple?, expiresOn?, note?}` → `201` item, or `200` when merged | `pantry.edit` | 7 | ✅ |
-| PATCH | `/api/v1/households/{householdId}/pantry/{itemId}` `{displayName?, category?, quantity?, unit?, status?, isStaple?, expiresOn?, note?, lowThresholdPercent?}` → item | `pantry.edit` | 7 | ✅ |
+| PATCH | `/api/v1/households/{householdId}/pantry/{itemId}` `{displayName?, category?, quantity?, unit?, status?, isStaple?, expiresOn?, note?, alsoCountsAs?, lowThresholdPercent?}` → item | `pantry.edit` | 7 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/pantry/{itemId}` → `204` | `pantry.edit` | 7 | ✅ |
 | POST | `/api/v1/households/{householdId}/pantry/bulk` `{items: [{id, status}]}` → `{items, missing}` | `pantry.edit` | 7 | ✅ |
 | POST | `/api/v1/households/{householdId}/pantry/staples/defaults` → `{items, skipped}` | `pantry.edit` | 7 | ✅ |
@@ -1284,7 +1284,10 @@ Requires `pantry.edit`.
 - `PATCH .../pantry/{itemId}` changes the fields you send: `displayName`,
   `category`, `quantity`, `unit`, `status`, `isStaple`, `expiresOn`, or
   `note`. Send `null` (or `""`) for `quantity`, `expiresOn`, or `note` to
-  clear it; clearing `quantity` also clears `unit`.
+  clear it; clearing `quantity` also clears `unit`. `alsoCountsAs` (up to 10
+  names, `null` or `[]` clears) replaces the other ingredients the item
+  counts as: `["Dried Thyme"]` on "Thyme" makes grocery lines and cooked meals
+  for dried thyme use it. Items always return `alsoCountsAs` as a list.
 - `DELETE .../pantry/{itemId}` returns `204`.
 - `POST .../pantry/bulk` `{"items": [{"id": "...", "status": "in_stock"}]}`
   sets up to 200 statuses at once, for example after shopping. It returns

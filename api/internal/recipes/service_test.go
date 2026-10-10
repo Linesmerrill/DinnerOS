@@ -666,3 +666,33 @@ func TestSameRecipeInFindsAnotherHouseholdsCopy(t *testing.T) {
 		t.Errorf("a household without the dish = %q, want none", got)
 	}
 }
+
+// A recipe's "Yellow Onion" is the onion already in the catalog: one catalog
+// ingredient, so the grocery list and saved products have one onion
+// (decision 640).
+func TestImportResolvesSameIngredientNames(t *testing.T) {
+	store := newMemoryStore()
+	svc := NewService(store)
+	r1 := testRecipe("r1", "Tacos")
+	r1.Ingredients = []ImportIngredient{{SourceIngredientID: "ing-onion", Name: "Onion"}}
+	r2 := testRecipe("r2", "Soup")
+	r2.Ingredients = []ImportIngredient{{SourceIngredientID: "ing-yellow-onion", Name: "Yellow Onion"}, {Name: "Red Onion"}}
+	mustImport(t, svc, "hh", testFile(r1))
+	mustImport(t, svc, "hh", testFile(r2))
+	keys := map[string]string{}
+	for _, ing := range store.ingredients {
+		keys[ing.Key] = ing.ID
+	}
+	if _, ok := keys["yellow onion"]; ok || keys["onion"] == "" || keys["red onion"] == "" {
+		t.Fatalf("catalog keys = %v, want onion and red onion only", keys)
+	}
+	for _, r := range store.recipes {
+		if r.SourceRecipeID == "r2" && r.Ingredients[0].IngredientID != keys["onion"] {
+			t.Errorf("yellow onion resolved to %q, want onion %q", r.Ingredients[0].IngredientID, keys["onion"])
+		}
+	}
+	onion, _ := store.FindIngredients(context.Background(), nil, []string{"onion"})
+	if len(onion) != 1 || len(onion[0].SourceRefs) != 2 {
+		t.Errorf("onion = %+v, want both source refs", onion)
+	}
+}

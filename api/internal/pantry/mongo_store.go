@@ -65,6 +65,7 @@ type itemDoc struct {
 	IsStaple      bool           `bson:"isStaple"`
 	ExpiresOn     string         `bson:"expiresOn,omitempty"`
 	Note          string         `bson:"note,omitempty"`
+	AlsoCountsAs  []string       `bson:"alsoCountsAs,omitempty"`
 	Storage       string         `bson:"storage,omitempty"`
 	FrozenOn      string         `bson:"frozenOn,omitempty"`
 	Portions      int            `bson:"portions,omitempty"`
@@ -87,7 +88,7 @@ func newItemDoc(item Item, id, householdID bson.ObjectID) (itemDoc, error) {
 	d := itemDoc{
 		ID: id, HouseholdID: householdID, Key: item.Key, DisplayName: item.DisplayName, Category: item.Category,
 		Quantity: item.Quantity, Unit: item.Unit, Status: string(item.Status), IsStaple: item.IsStaple,
-		ExpiresOn: item.ExpiresOn, Note: item.Note, Version: item.Version,
+		ExpiresOn: item.ExpiresOn, Note: item.Note, AlsoCountsAs: item.AlsoCountsAs, Version: item.Version,
 		Storage: string(item.Storage), FrozenOn: item.FrozenOn, Portions: item.Portions, FrozenFrom: item.FrozenFrom,
 		KeptOut: item.KeptOutThrough, StoredOn: item.StoredOn,
 		CreatedAt: item.CreatedAt, UpdatedBy: updatedBy, UpdatedAt: item.UpdatedAt,
@@ -115,7 +116,7 @@ func (d itemDoc) toItem() Item {
 	item := Item{
 		ID: d.ID.Hex(), HouseholdID: d.HouseholdID.Hex(), Key: d.Key, DisplayName: d.DisplayName, Category: d.Category,
 		Quantity: d.Quantity, Unit: d.Unit, Status: Status(d.Status), IsStaple: d.IsStaple,
-		ExpiresOn: d.ExpiresOn, Note: d.Note, Version: d.Version,
+		ExpiresOn: d.ExpiresOn, Note: d.Note, AlsoCountsAs: d.AlsoCountsAs, Version: d.Version,
 		Storage: Storage(d.Storage), FrozenOn: d.FrozenOn, Portions: d.Portions, FrozenFrom: d.FrozenFrom,
 		KeptOutThrough: d.KeptOut, StoredOn: d.StoredOn,
 		CreatedAt: d.CreatedAt.UTC(), UpdatedBy: d.UpdatedBy.Hex(), UpdatedAt: d.UpdatedAt.UTC(),
@@ -302,6 +303,7 @@ func (s *MongoStore) UpdateItem(ctx context.Context, item Item) (Item, error) {
 	optional("unit", doc.Unit, doc.Unit != "")
 	optional("expiresOn", doc.ExpiresOn, doc.ExpiresOn != "")
 	optional("note", doc.Note, doc.Note != "")
+	optional("alsoCountsAs", doc.AlsoCountsAs, len(doc.AlsoCountsAs) > 0)
 	optional("storage", doc.Storage, doc.Storage != "")
 	optional("frozenOn", doc.FrozenOn, doc.FrozenOn != "")
 	optional("portions", doc.Portions, doc.Portions != 0)

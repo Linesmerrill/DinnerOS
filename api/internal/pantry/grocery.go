@@ -136,20 +136,35 @@ func (s *Service) GroceryPantry(ctx context.Context, householdID string) (grocer
 	return stock, nil
 }
 
-// pantryKeys are the normalized names an item answers for: its own key, plus,
-// when it is a default staple under any of that staple's names, all of them.
+// pantryKeys are the normalized names an item answers for: its own key; when
+// it is a default staple under any of that staple's names, all of them; every
+// name the household said it also counts as (decision 641); and for each, the
+// names that are the same ingredient ("onion" and "yellow onion", decision
+// 640). Its own key comes first.
 func pantryKeys(item Item) []string {
-	name := ingredients.NormalizeName(item.DisplayName)
-	for _, d := range defaultStaples {
-		keys := d.keys()
-		if slices.Contains(keys, item.Key) || slices.Contains(keys, name) {
-			if !slices.Contains(keys, item.Key) {
-				keys = append(keys, item.Key)
+	keys := []string{item.Key}
+	add := func(k string) {
+		for _, same := range ingredients.SameIngredientKeys(k) {
+			if same != "" && !slices.Contains(keys, same) {
+				keys = append(keys, same)
 			}
-			return keys
 		}
 	}
-	return []string{item.Key}
+	add(item.Key)
+	name := ingredients.NormalizeName(item.DisplayName)
+	for _, d := range defaultStaples {
+		staple := d.keys()
+		if slices.Contains(staple, item.Key) || slices.Contains(staple, name) {
+			for _, k := range staple {
+				add(k)
+			}
+			break
+		}
+	}
+	for _, n := range item.AlsoCountsAs {
+		add(ingredients.NormalizeName(n))
+	}
+	return keys
 }
 
 // onHand is how much of an item is at home: the usage estimate when it's

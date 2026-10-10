@@ -37,8 +37,9 @@ func TestIntegrationHandoffEnforcesProductChecks(t *testing.T) {
 	f.save(t, "Yellow Onion", "https://www.walmart.com/ip/100000002", &PackageSize{Quantity: "3", Unit: "count"})
 	f.save(t, "Kidney Beans", "https://www.walmart.com/ip/Test-Beans/100000005", &PackageSize{Quantity: "1", Unit: "can"})
 
-	// Undecided: beef is gone and beans couldn't be checked. Nothing is sent,
-	// and the results are recorded anyway.
+	// Undecided: beef is gone and beans couldn't be checked. Only the gone
+	// beef holds the send (an unchecked product the household picked goes in,
+	// decision 639), and the results are recorded anyway.
 	in := MatchInput{
 		// The client lists the gone beef with a count: it must still never
 		// be sent.
@@ -55,7 +56,7 @@ func TestIntegrationHandoffEnforcesProductChecks(t *testing.T) {
 	}
 	_, _, err := f.svc.CreateHandoff(ctx, f.actor, testWeek, "walmart", in)
 	var decision *DecisionNeededError
-	if !errors.As(err, &decision) || len(decision.Lines) != 2 || decision.Names() != "Ground Beef, Kidney Beans" {
+	if !errors.As(err, &decision) || len(decision.Lines) != 1 || decision.Names() != "Ground Beef" {
 		t.Fatalf("undecided send = %v", err)
 	}
 	if list, _ := f.svc.ListHandoffs(ctx, testHousehold, HandoffFilter{}); len(list) != 0 {
@@ -117,14 +118,15 @@ func TestIntegrationHandoffEnforcesProductChecks(t *testing.T) {
 	}
 
 	// Re-chosen: the old check says nothing about the new product, and a
-	// report for the old product counts as unchecked.
+	// report for the old product counts as unchecked. The member just picked
+	// it, so it's sent (decision 639).
 	f.saveMeasured(t, "Ground Beef", "https://www.walmart.com/ip/Test-Beef-New/100000009", &PackageSize{Quantity: "16", Unit: "oz"})
 	if p := f.preference(t, "Ground Beef"); p.NeedsRechoosing() || p.CurrentCheck() != nil {
 		t.Errorf("re-chosen beef = %+v", p.Check)
 	}
-	_, _, err = f.svc.CreateHandoff(ctx, f.actor, testWeek, "walmart", MatchInput{Checks: []ProductCheckReport{f.check("Ground Beef", "100000001", ProductFound, "")}})
-	if !errors.As(err, &decision) || decision.Names() != "Ground Beef" {
-		t.Errorf("stale report = %v", err)
+	h, _, err = f.svc.CreateHandoff(ctx, f.actor, testWeek, "walmart", MatchInput{Checks: []ProductCheckReport{f.check("Ground Beef", "100000001", ProductGone, "")}})
+	if err != nil || !strings.Contains(linkItems(h.Links), "100000009") {
+		t.Errorf("stale report = %v, links %q", err, linkItems(h.Links))
 	}
 }
 

@@ -84,6 +84,8 @@ type PantryItemResponse struct {
 	IsStaple      bool     `json:"isStaple"`
 	ExpiresOn     *string  `json:"expiresOn"`
 	Note          string   `json:"note"`
+	// AlsoCountsAs are other ingredients the item answers for, as named.
+	AlsoCountsAs []string `json:"alsoCountsAs"`
 	// Storage is pantry or freezer. Frozen is set only for a freezer item:
 	// when it was sealed, into how many portions, and how long one portion
 	// takes to thaw (docs/pantry-usage.md#the-freezer).
@@ -150,15 +152,17 @@ func (n *Nullable[T]) UnmarshalJSON(b []byte) error {
 // clear them; clearing quantity also clears unit. lowThresholdPercent null
 // returns the item to the household threshold.
 type UpdatePantryItemRequest struct {
-	DisplayName         Nullable[string] `json:"displayName"`
-	Category            Nullable[string] `json:"category"`
-	Quantity            Nullable[string] `json:"quantity"`
-	Unit                Nullable[string] `json:"unit"`
-	Status              Nullable[Status] `json:"status"`
-	IsStaple            Nullable[bool]   `json:"isStaple"`
-	ExpiresOn           Nullable[string] `json:"expiresOn"`
-	Note                Nullable[string] `json:"note"`
-	LowThresholdPercent Nullable[int]    `json:"lowThresholdPercent"`
+	DisplayName Nullable[string] `json:"displayName"`
+	Category    Nullable[string] `json:"category"`
+	Quantity    Nullable[string] `json:"quantity"`
+	Unit        Nullable[string] `json:"unit"`
+	Status      Nullable[Status] `json:"status"`
+	IsStaple    Nullable[bool]   `json:"isStaple"`
+	ExpiresOn   Nullable[string] `json:"expiresOn"`
+	Note        Nullable[string] `json:"note"`
+	// AlsoCountsAs replaces the item's other names; null or [] clears them.
+	AlsoCountsAs        Nullable[[]string] `json:"alsoCountsAs"`
+	LowThresholdPercent Nullable[int]      `json:"lowThresholdPercent"`
 	// Storage moves the item; without expiresOn it gets the new place's
 	// recommended best-by date, counted from storedOn (today when absent).
 	Storage  Nullable[Storage] `json:"storage"`
@@ -193,7 +197,7 @@ type DefaultStaplesResponse struct {
 func newItemResponse(item Item) PantryItemResponse {
 	resp := PantryItemResponse{
 		ID: item.ID, HouseholdID: item.HouseholdID, Key: item.Key, DisplayName: item.DisplayName, Category: item.Category,
-		Status: item.Status, IsStaple: item.IsStaple, Note: item.Note, UpdatedBy: item.UpdatedBy,
+		Status: item.Status, IsStaple: item.IsStaple, Note: item.Note, AlsoCountsAs: append([]string{}, item.AlsoCountsAs...), UpdatedBy: item.UpdatedBy,
 		Storage:      item.Storage.Or(),
 		StatusSource: item.StatusSource, UnitSize: unitSizeResponse(item.UnitSize),
 		CreatedAt: item.CreatedAt.UTC(), UpdatedAt: item.UpdatedAt.UTC(),
@@ -316,6 +320,13 @@ func (req UpdatePantryItemRequest) input() (UpdateInput, error) {
 	}
 	in.Quantity, in.Unit = clearable(req.Quantity), clearable(req.Unit)
 	in.ExpiresOn, in.Note = clearable(req.ExpiresOn), clearable(req.Note)
+	if req.AlsoCountsAs.Set {
+		names := req.AlsoCountsAs.Value
+		if req.AlsoCountsAs.Null || names == nil {
+			names = []string{}
+		}
+		in.AlsoCountsAs = &names
+	}
 	if in.Storage, err = nonNull(req.Storage, "storage"); err != nil {
 		return UpdateInput{}, err
 	}

@@ -1,16 +1,16 @@
 import SwiftUI
 
-/// "Before Opening Walmart": the products this phone found gone from Walmart, or couldn't check,
-/// just before the hand-off. A cart link with a dead item adds nothing for it and says nothing,
-/// so Walmart stays closed until each line is decided
-/// (docs/shopping-providers.md#checking-saved-products).
+/// "Before Opening Walmart": the products this phone found gone from Walmart just before the
+/// hand-off. A cart link with a dead item adds nothing for it and says nothing, so Walmart stays
+/// closed until each is re-chosen or left out. A product the check couldn't read still goes in:
+/// the household picked it on Walmart (docs/shopping-providers.md#checking-saved-products).
 struct ProductDecisionSheet: View {
     @Environment(ShoppingStore.self) private var shopping
     @Environment(HouseholdStore.self) private var households
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
-    @State private var choice: ProductChoice?
+    @State private var rechoosing: WalmartChooser.Item?
     @State private var errorMessage: String?
 
     private var review: ProductCheckReview? { shopping.productReview }
@@ -38,13 +38,13 @@ struct ProductDecisionSheet: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 openBar
             }
-            .sheet(
-                item: $choice,
+            .fullScreenCover(
+                item: $rechoosing,
                 onDismiss: {
                     Task { await shopping.productWasRechosen() }
                 },
-                content: { choice in
-                    ChooseProductSheet(choice: choice)
+                content: { item in
+                    ChooseInWalmartView(items: [item])
                 })
         }
     }
@@ -57,39 +57,13 @@ struct ProductDecisionSheet: View {
                 ForEach(gone) { line in
                     ProductDecisionRow(
                         line: line, decision: review.decision(for: line), canChoose: shopping.canEdit,
-                        rechoose: { choice = ProductChoice(rechoosing: line) },
+                        rechoose: { rechoosing = WalmartChooser.Item(rechoosing: line) },
                         decide: { decide($0, line) }, undo: { undo(line) })
                 }
             } header: {
                 Text("No Longer on Walmart")
             } footer: {
                 Text("These can't go in your cart. Choose a new product or leave them out.")
-            }
-        }
-        let unknown = review.unknown
-        if !unknown.isEmpty {
-            Section {
-                ForEach(unknown) { line in
-                    ProductDecisionRow(
-                        line: line, decision: review.decision(for: line), canChoose: shopping.canEdit,
-                        rechoose: { choice = ProductChoice(rechoosing: line) },
-                        decide: { decide($0, line) }, undo: { undo(line) },
-                        look: line.productURL.map { url in { openURL(url) } })
-                }
-                Button {
-                    Task { await shopping.checkAgain(Set(unknown.map(\.ingredientKey))) }
-                } label: {
-                    if shopping.isCheckingProducts {
-                        ProgressView()
-                    } else {
-                        Label("Check Again", systemImage: "arrow.clockwise")
-                    }
-                }
-                .disabled(shopping.isCheckingProducts)
-            } header: {
-                Text("Couldn't Check")
-            } footer: {
-                Text("Walmart didn't answer for these. Use Send Anyway only if you've seen it on Walmart.")
             }
         }
         let unavailable = review.unavailable

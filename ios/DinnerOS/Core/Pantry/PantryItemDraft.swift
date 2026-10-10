@@ -23,6 +23,8 @@ nonisolated struct PantryItemDraft: Equatable, Sendable {
     /// The item had a date of its own when the form opened.
     private(set) var startedWithOwnDate = false
     var note = ""
+    /// Other ingredients the item counts as ("Dried Thyme" for a jar of thyme).
+    var alsoCountsAs: [String] = []
     /// Off when the item has its own low-stock threshold.
     var usesHouseholdThreshold = true
     /// The item's own threshold, as percent used; sent only while `usesHouseholdThreshold` is off.
@@ -53,6 +55,7 @@ nonisolated struct PantryItemDraft: Equatable, Sendable {
             startedWithOwnDate = hasExpiry
         }
         note = item.note
+        alsoCountsAs = item.alsoCountsAs
         if let percent = item.lowThresholdPercent {
             usesHouseholdThreshold = false
             lowThresholdPercent = percent
@@ -166,6 +169,9 @@ nonisolated struct PantryItemDraft: Equatable, Sendable {
         if trimmedNote != item.note {
             changes.note = trimmedNote
         }
+        if Self.cleaned(alsoCountsAs) != item.alsoCountsAs {
+            changes.alsoCountsAs = Self.cleaned(alsoCountsAs)
+        }
         let percent = min(max(lowThresholdPercent, PantrySettings.thresholdRange.lowerBound), 100)
         switch (usesHouseholdThreshold, item.lowThresholdPercent) {
         case (true, .some):
@@ -176,6 +182,18 @@ nonisolated struct PantryItemDraft: Equatable, Sendable {
             break
         }
         return changes
+    }
+
+    /// The names as the API keeps them: trimmed, no blanks, no repeats ignoring case.
+    static func cleaned(_ names: [String]) -> [String] {
+        var out: [String] = []
+        for name in names {
+            let trimmed = name.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            if !trimmed.isEmpty, !out.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+                out.append(trimmed)
+            }
+        }
+        return out
     }
 
     private var trimmedNote: String {

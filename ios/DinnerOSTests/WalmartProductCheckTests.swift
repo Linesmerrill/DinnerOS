@@ -297,21 +297,21 @@ struct ProductCheckReviewTests {
             productURL: nil, result: WalmartProductResult(status: status, checkedAt: date))
     }
 
-    @Test func walmartStaysClosedUntilEveryGoneAndUnknownLineIsDecided() {
+    /// Only a product Walmart no longer lists holds the cart. One the check couldn't read was
+    /// picked by the household on Walmart, so it goes in (decision 639).
+    @Test func walmartStaysClosedOnlyUntilEveryGoneLineIsDecided() {
         var review = ProductCheckReview(lines: [
             line("beef", .found), line("onion", .gone), line("beans", .unknown), line("milk", .unavailable),
         ])
         #expect(!review.canOpen)
-        #expect(review.needsDecision.map(\.ingredientKey) == ["onion", "beans"])
+        #expect(review.needsDecision.map(\.ingredientKey) == ["onion"])
         #expect(review.unavailable.map(\.ingredientKey) == ["milk"])
 
         review.decide(.leaveOut, for: "onion")
-        #expect(!review.canOpen)
-        review.decide(.sendAnyway, for: "beans")
         #expect(review.canOpen)
         #expect(review.sendsAnything)
 
-        review.undecide("beans")
+        review.undecide("onion")
         #expect(!review.canOpen)
     }
 
@@ -330,17 +330,17 @@ struct ProductCheckReviewTests {
         #expect(report?.decision == .leaveOut)
     }
 
-    @Test func sendAnywaySendsAnUnknownProductAndSaysSo() {
+    @Test func anUnknownProductGoesInWithoutAskingAndCanStillBeLeftOut() {
         var review = ProductCheckReview(lines: [line("beans", .unknown)])
-        #expect(!review.sendsAnything)
-        review.decide(.sendAnyway, for: "beans")
+        #expect(review.canOpen)
         #expect(review.sendsAnything)
         #expect(
             review.reports == [
                 ShoppingProductCheckReport(
-                    ingredientKey: "beans", productID: "id-beans", status: .unknown, checkedAt: date,
-                    decision: .sendAnyway)
+                    ingredientKey: "beans", productID: "id-beans", status: .unknown, checkedAt: date)
             ])
+        review.decide(.leaveOut, for: "beans")
+        #expect(!review.sendsAnything)
     }
 
     @Test func checkingAgainDropsADecisionMadeAboutAnotherAnswer() {

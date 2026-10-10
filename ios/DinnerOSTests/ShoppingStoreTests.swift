@@ -445,34 +445,21 @@ struct ShoppingStoreTests {
         #expect(match["i-cilantro"]?["decision"] as? String == "leave_out")
     }
 
-    @Test func anUnknownProductIsSentOnlyWithSendAnyway() async throws {
+    /// A product the check couldn't read (Walmart blocked it, time ran out) was picked by the
+    /// household on Walmart, so it goes straight in: no "verify this" every week (decision 639).
+    @Test func anUnknownProductTheHouseholdPickedIsSentWithoutAsking() async throws {
         let harness = try await makeHarness()
         let store = harness.store
         harness.productCheck.statuses = ["100000001": .unknown]
         await store.load()
 
         try await store.openInWalmart()
-        #expect(store.isReviewingProducts)
-        #expect(store.productReview?.needsDecision.map(\.ingredientKey) == ["i-beef"])
 
-        // Check Again asks the check to skip its cache for that product.
-        await store.checkAgain(["i-beef"])
-        #expect(harness.productCheck.calls.last?.refreshing == ["100000001"])
-        #expect(store.productReview?.canOpen == false)
-
-        await store.decide(.sendAnyway, for: "i-beef")
-        try await store.openReviewedInWalmart()
-
+        #expect(!store.isReviewingProducts)
         let checks = productChecks(harness.server.bodies(Self.handoffRoute).last)
         #expect(checks["i-beef"]?["status"] as? String == "unknown")
-        #expect(checks["i-beef"]?["decision"] as? String == "send_anyway")
+        #expect(checks["i-beef"]?["decision"] == nil)
         #expect(!harness.recorder.opened.isEmpty)
-
-        // The next send asks again: Send Anyway is never carried over silently.
-        store.setPackages(5, for: try #require(store.readyLines.first { $0.ingredientKey == "i-beef" }))
-        try await store.openInWalmart()
-        #expect(store.isReviewingProducts)
-        #expect(store.productReview?.needsDecision.map(\.ingredientKey) == ["i-beef"])
     }
 
     @Test func onlyTheProductsThisCartSendsAreChecked() async throws {
@@ -487,7 +474,7 @@ struct ShoppingStoreTests {
         #expect(harness.productCheck.calls.count == 1)
     }
 
-    @Test func withoutAProductCheckNothingIsSentUndecided() async throws {
+    @Test func withoutAProductCheckTheCartStillOpens() async throws {
         let server = FakeShoppingServer()
         let transport = StubTransport { request in server.handle(request) }
         let client = APIClient(baseURL: try #require(URL(string: Fixtures.baseURLString)), transport: transport)
@@ -503,9 +490,9 @@ struct ShoppingStoreTests {
 
         try await store.openInWalmart()
 
-        #expect(store.isReviewingProducts)
+        #expect(!store.isReviewingProducts)
         #expect(store.productReview?.unknown.count == 2)
-        #expect(!server.log.contains { $0.hasSuffix("/handoffs") })
+        #expect(server.log.contains { $0.hasSuffix("/handoffs") })
     }
 
     // MARK: Handoff
