@@ -150,6 +150,10 @@ const (
 
 	// KindSwappedOut means a member swapped the item out of a proposed week.
 	KindSwappedOut InteractionKind = "swappedOut"
+	// KindNearby means another coming week holds the item: planned for a
+	// later week, or in another week's pending suggestions. It only spaces
+	// meals apart; it teaches nothing about taste or habits.
+	KindNearby InteractionKind = "nearby"
 	// KindAccepted means a proposed item was accepted into the plan.
 	KindAccepted InteractionKind = "accepted"
 	// KindRejected means a proposed item was left out when accepting a week,

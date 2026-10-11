@@ -25,6 +25,11 @@ import (
 // the recipes (it is small).
 const historyWeeks = 52
 
+// spacingWeeks is how many weeks on each side of the planned week count
+// toward spacing meals apart: the coming weeks' plans, and every nearby
+// week's pending suggestions.
+const spacingWeeks = 4
+
 // Learning reads the household's feedback events for learningWeeks (the
 // provider's window) and at most learningEventLimit of them, newest first.
 const (
@@ -115,6 +120,19 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 		<-learningDone
 		return autopilot.Input{}, inputData{}, fmt.Errorf("load plans: %w", err)
 	}
+	// The coming weeks' plans and the other weeks' pending suggestions keep
+	// meals apart: without them every future week suggests the same five
+	// (decision 642).
+	ahead, err := s.plans.ListPlans(ctx, householdID, w.AddWeeks(1).String(), w.AddWeeks(spacingWeeks).String())
+	if err != nil {
+		<-learningDone
+		return autopilot.Input{}, inputData{}, fmt.Errorf("load coming plans: %w", err)
+	}
+	pending, err := s.store.PendingProposals(ctx, householdID, w.AddWeeks(-spacingWeeks).String(), w.AddWeeks(spacingWeeks).String())
+	if err != nil {
+		<-learningDone
+		return autopilot.Input{}, inputData{}, fmt.Errorf("load other weeks' suggestions: %w", err)
+	}
 	outcomes, err := s.events.List(ctx, events.Query{
 		HouseholdID: householdID, Types: []events.Type{events.TypeRecipeCooked, events.TypeRecipeSkipped},
 		Since: w.StartOn(first).AddDate(0, 0, -7*historyWeeks), Limit: events.MaxListLimit,
@@ -189,6 +207,19 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 		}
 		for _, e := range p.Entries {
 			in.History = append(in.History, autopilot.Interaction{ItemID: e.RecipeID, Kind: autopilot.KindPlanned, Week: p.Week.String(), Day: autopilot.Day(e.Day)})
+		}
+	}
+	for _, p := range ahead {
+		for _, e := range p.Entries {
+			in.History = append(in.History, autopilot.Interaction{ItemID: e.RecipeID, Kind: autopilot.KindNearby, Week: p.Week.String(), Day: autopilot.Day(e.Day)})
+		}
+	}
+	for _, p := range pending {
+		if p.Week == w.String() {
+			continue
+		}
+		for _, sl := range p.Slots {
+			in.History = append(in.History, autopilot.Interaction{ItemID: sl.RecipeID, Kind: autopilot.KindNearby, Week: p.Week, Day: autopilot.Day(sl.Day)})
 		}
 	}
 	loc, err := time.LoadLocation(household.TimeZone)

@@ -217,3 +217,35 @@ func TestIntegrationSavedProposalReadsInTodaysWords(t *testing.T) {
 		t.Errorf("reasons = %+v, want %+v", got.Slots[0].Reasons, want)
 	}
 }
+
+// PendingProposals lists only the household's proposals still waiting, in the
+// weeks asked for, in week order (decision 642).
+func TestIntegrationPendingProposals(t *testing.T) {
+	store, _ := newTestMongoStore(t)
+	ctx := context.Background()
+	hh, other := bson.NewObjectID().Hex(), bson.NewObjectID().Hex()
+	save := func(household, week string, status ProposalStatus) {
+		t.Helper()
+		p := Proposal{ID: newID(), HouseholdID: household, Week: week, Status: status, Attempt: 1, ModelVersion: "baseline-test",
+			Slots: []Slot{{ID: "mon", Day: "mon", RecipeID: rCurry, RecipeName: "Curry", Servings: 2}}, GeneratedBy: userAda, GeneratedAt: testNow, UpdatedAt: testNow}
+		if _, err := store.SaveProposal(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	save(hh, "2026-W44", StatusProposed)
+	save(hh, "2026-W43", StatusProposed)
+	save(hh, "2026-W42", StatusAccepted)
+	save(hh, "2026-W50", StatusProposed)
+	save(other, "2026-W43", StatusProposed)
+	got, err := store.PendingProposals(ctx, hh, "2026-W40", "2026-W46")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var weeks []string
+	for _, p := range got {
+		weeks = append(weeks, p.Week)
+	}
+	if !slices.Equal(weeks, []string{"2026-W43", "2026-W44"}) || got[0].Slots[0].RecipeID != rCurry {
+		t.Errorf("pending = %v", weeks)
+	}
+}

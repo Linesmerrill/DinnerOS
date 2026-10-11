@@ -610,6 +610,33 @@ func (s *MongoStore) GetProposal(ctx context.Context, householdID, week string) 
 	return d.toProposal(), nil
 }
 
+// PendingProposals implements Store.
+func (s *MongoStore) PendingProposals(ctx context.Context, householdID, from, to string) ([]Proposal, error) {
+	hid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return nil, nil
+	}
+	cur, err := s.proposals.Find(ctx,
+		bson.D{
+			{Key: "householdId", Value: hid},
+			{Key: "week", Value: bson.D{{Key: "$gte", Value: from}, {Key: "$lte", Value: to}}},
+			{Key: "status", Value: string(StatusProposed)},
+		},
+		options.Find().SetSort(bson.D{{Key: "week", Value: 1}}))
+	if err != nil {
+		return nil, translate(err)
+	}
+	var docs []proposalDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	out := make([]Proposal, 0, len(docs))
+	for _, d := range docs {
+		out = append(out, d.toProposal())
+	}
+	return out, nil
+}
+
 // SaveProposal implements Store.
 func (s *MongoStore) SaveProposal(ctx context.Context, p Proposal) (Proposal, error) {
 	d, err := newProposalDoc(p)

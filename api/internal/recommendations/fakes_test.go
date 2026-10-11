@@ -194,6 +194,20 @@ func (m *memoryStore) GetProposal(_ context.Context, householdID, week string) (
 	return p, nil
 }
 
+func (m *memoryStore) PendingProposals(_ context.Context, householdID, from, to string) ([]Proposal, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []Proposal
+	for _, p := range m.proposals {
+		if p.HouseholdID == householdID && p.Week >= from && p.Week <= to && p.Status == StatusProposed {
+			p.Slots = slices.Clone(p.Slots)
+			out = append(out, p)
+		}
+	}
+	slices.SortFunc(out, func(a, b Proposal) int { return cmp.Compare(a.Week, b.Week) })
+	return out, nil
+}
+
 func (m *memoryStore) SaveProposal(_ context.Context, p Proposal) (Proposal, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

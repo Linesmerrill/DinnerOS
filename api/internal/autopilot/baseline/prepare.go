@@ -327,6 +327,15 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 		if h.Kind == autopilot.KindPlanned && day >= 0 {
 			themes.add(day, it)
 		}
+		if h.Kind == autopilot.KindNearby {
+			// Another coming week holds it: only far enough apart counts,
+			// so two coming weeks don't suggest the same meals (decision
+			// 642).
+			if d > 0 && (it.st.nearest < 0 || d < it.st.nearest) {
+				it.st.nearest = d
+			}
+			continue
+		}
 		switch h.Kind {
 		case autopilot.KindOrdered:
 			it.st.ordered++

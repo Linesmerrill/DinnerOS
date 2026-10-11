@@ -25,6 +25,9 @@ type Store interface {
 
 	// GetProposal returns the week's proposal, or ErrNotFound.
 	GetProposal(ctx context.Context, householdID, week string) (Proposal, error)
+	// PendingProposals returns the proposals still waiting on the household
+	// for the weeks from..to (ISO weeks, inclusive), in week order.
+	PendingProposals(ctx context.Context, householdID, from, to string) ([]Proposal, error)
 	// SaveProposal writes the week's proposal. Generating again saves a new
 	// proposal (new ID) over the old one with the old one's Version.
 	SaveProposal(ctx context.Context, p Proposal) (Proposal, error)
