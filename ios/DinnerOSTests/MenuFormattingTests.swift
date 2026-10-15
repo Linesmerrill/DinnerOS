@@ -110,4 +110,11 @@ struct MenuFormattingTests {
             MenuFormat.nutrientAmount(RecipeNutrient(name: "Sodium", amount: 1_250, unit: "mg"), locale: locale)
                 == "1,250 mg")
     }
+
+    /// Once a week has started its groceries are bought, so the grocery bar goes away.
+    @Test func theShopBarShowsOnlyForAWeekAhead() {
+        #expect(MenuFormat.showsShopBar(timing: .upcoming))
+        #expect(!MenuFormat.showsShopBar(timing: .current))
+        #expect(!MenuFormat.showsShopBar(timing: .past))
+    }
 }

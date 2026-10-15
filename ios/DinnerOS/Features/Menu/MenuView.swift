@@ -108,7 +108,11 @@ struct MenuView: View {
             .onChange(of: mode) { _, _ in
                 changeStrip { collapse.expand(offset: scrollOffset) }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) { MenuBottomBar() }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if MenuFormat.showsShopBar(timing: menu.selectedTiming) {
+                    MenuBottomBar()
+                }
+            }
             .overlay(alignment: .bottom) { toast }
             .toolbar { toolbar }
             .notificationsToolbar()

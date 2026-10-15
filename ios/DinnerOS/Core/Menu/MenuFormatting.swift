@@ -91,6 +91,12 @@ nonisolated enum MenuFormat {
         return meals + " · " + addOns(counts.addOns)
     }
 
+    /// The bar with the grocery list and Shop shows only for a week still ahead: once a week has
+    /// started, its groceries are bought.
+    static func showsShopBar(timing: WeekTiming) -> Bool {
+        timing != .current && timing != .past
+    }
+
     /// The bottom bar's title: "4 meals this week" for this week, "4 meals planned" otherwise.
     static func bottomBarTitle(count: Int, timing: WeekTiming) -> String {
         guard timing == .current else { return mealsPlanned(count) }
