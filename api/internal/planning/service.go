@@ -328,7 +328,10 @@ func (s *Service) AddEntries(ctx context.Context, householdID, userID, week stri
 	p, err := s.written(ctx, householdID, func() (Plan, error) {
 		p, added, err := s.store.AddEntries(ctx, householdID, w, entries, MaxEntriesPerWeek, now)
 		ids = added
-		return p, err
+		if err != nil {
+			return p, err
+		}
+		return s.oneMealADay(ctx, householdID, w, p, added)
 	})
 	if err != nil {
 		return Plan{}, nil, err
@@ -465,8 +468,68 @@ func (s *Service) UpdateEntry(ctx context.Context, householdID, week, entryID st
 		}
 	}
 	return s.written(ctx, householdID, func() (Plan, error) {
-		return s.store.UpdateEntry(ctx, householdID, w, entryID, c, s.now().UTC())
+		p, err := s.store.UpdateEntry(ctx, householdID, w, entryID, c, s.now().UTC())
+		if err != nil || c.Day == nil || *c.Day == "" {
+			return p, err
+		}
+		return s.oneMealADay(ctx, householdID, w, p, []string{entryID})
 	})
+}
+
+// oneMealADay gives the days of the entries in keep to those meals alone: any
+// other main meal on one of their days loses its day, so the week shows it
+// waiting for one ("Pick a Day") instead of two dinners on a night. Add-ons
+// go with a meal and neither take nor lose a day (decision 644).
+func (s *Service) oneMealADay(ctx context.Context, householdID string, w Week, p Plan, keep []string) (Plan, error) {
+	taken := map[Day]bool{}
+	for _, id := range keep {
+		if e, ok := p.entry(id); ok && e.Day != "" && !e.RecipeIsAddon {
+			taken[e.Day] = true
+		}
+	}
+	var clash []Entry
+	for _, e := range p.Entries {
+		if taken[e.Day] && !e.RecipeIsAddon && !slices.Contains(keep, e.ID) {
+			clash = append(clash, e)
+		}
+	}
+	if len(clash) == 0 {
+		return p, nil
+	}
+	// Entries stored before add-ons were marked say so only on the recipe.
+	ids := make([]string, 0, len(clash)+len(keep))
+	for _, e := range clash {
+		ids = append(ids, e.RecipeID)
+	}
+	for _, id := range keep {
+		if e, ok := p.entry(id); ok {
+			ids = append(ids, e.RecipeID)
+		}
+	}
+	live, err := s.recipes.GetMany(ctx, householdID, ids)
+	if err != nil {
+		return Plan{}, fmt.Errorf("planning: load recipes: %w", err)
+	}
+	addon := map[string]bool{}
+	for _, r := range live {
+		addon[r.ID] = r.IsAddon
+	}
+	taken = map[Day]bool{}
+	for _, id := range keep {
+		if e, ok := p.entry(id); ok && e.Day != "" && !e.RecipeIsAddon && !addon[e.RecipeID] {
+			taken[e.Day] = true
+		}
+	}
+	unscheduled := Day("")
+	for _, e := range clash {
+		if !taken[e.Day] || addon[e.RecipeID] {
+			continue
+		}
+		if p, err = s.store.UpdateEntry(ctx, householdID, w, e.ID, EntryChanges{Day: &unscheduled}, s.now().UTC()); err != nil {
+			return Plan{}, err
+		}
+	}
+	return p, nil
 }
 
 // ReplaceEntryRecipe swaps one entry's recipe in place, keeping the entry's

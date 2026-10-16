@@ -363,15 +363,20 @@ struct MealCard: View {
         RecipePhoto(url: summary.imageURL, pointWidth: MealCard.photoWidth)
             .overlay(alignment: .topLeading) {
                 HStack(spacing: 6) {
-                    MenuChip(text: dayLabel, systemImage: "calendar", isProminent: true)
-                        .background(.regularMaterial, in: .capsule)
+                    if entry.day == nil && !isAddOn {
+                        pickADay
+                    } else {
+                        MenuChip(text: dayLabel, systemImage: "calendar", isProminent: true)
+                            .background(.regularMaterial, in: .capsule)
+                            .accessibilityHidden(true)
+                    }
                     if isAddOn {
                         AddOnLabel()
                             .background(.regularMaterial, in: .capsule)
+                            .accessibilityHidden(true)
                     }
                 }
                 .padding(8)
-                .accessibilityHidden(true)
             }
             .overlay(alignment: .topTrailing) {
                 if entry.isFromAutopilot {
@@ -429,7 +434,34 @@ struct MealCard: View {
     }
 
     private var dayLabel: String {
-        entry.day?.name() ?? String(localized: "Unscheduled")
+        entry.day?.name() ?? String(localized: "Pick a day")
+    }
+
+    /// A meal without a day (another meal took its night) asks for one, and picks it right here.
+    @ViewBuilder
+    private var pickADay: some View {
+        let chip = Label("Pick a Day", systemImage: "exclamationmark.circle.fill")
+            .labelStyle(.titleAndIcon)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .foregroundStyle(.black)
+            .background(Color.orange, in: .capsule)
+        if isEditable {
+            Menu {
+                ForEach(PlanDay.week(startingOn: plans.weekStartsOn)) { day in
+                    Button(day.name()) {
+                        Task { await planner.move(entry, to: day) }
+                    }
+                }
+            } label: {
+                chip
+            }
+            .accessibilityLabel("Pick a day for \(entry.recipe.name)")
+        } else {
+            chip
+                .accessibilityHidden(true)
+        }
     }
 
     private var accessibilityLabel: String {
