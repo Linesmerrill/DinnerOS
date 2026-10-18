@@ -57,6 +57,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(edit).Post(plans+"/{week}/entries", h.addEntry)
 		r.With(edit).Patch(plans+"/{week}/entries/{entryId}", h.updateEntry)
 		r.With(edit).Delete(plans+"/{week}/entries/{entryId}", h.deleteEntry)
+		r.With(edit).Post(plans+"/{week}/entries/{entryId}/move", h.moveEntry)
 		r.With(edit).Put(plans+"/{week}/status", h.setStatus)
 		r.With(view).Get("/households/{householdId}/thaw", h.thawDue)
 	})
@@ -348,6 +349,22 @@ type updateEntryRequest struct {
 	Day      json.RawMessage `json:"day"`
 	Servings *int            `json:"servings"`
 	Note     *string         `json:"note"`
+}
+
+type moveEntryRequest struct {
+	// Week is the week to move the meal to.
+	Week string `json:"week"`
+	// Day is raw so an explicit null (no day) differs from an absent field
+	// (keep the meal's weekday when that night is free).
+	Day json.RawMessage `json:"day"`
+}
+
+// MoveEntryResponse is returned by POST .../entries/{entryId}/move: the meal
+// in its new week, and both weeks after the move.
+type MoveEntryResponse struct {
+	Entry EntryResponse `json:"entry"`
+	From  PlanResponse  `json:"from"`
+	To    PlanResponse  `json:"to"`
 }
 
 type setStatusRequest struct {
@@ -805,6 +822,44 @@ func (h *Handler) deleteEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) moveEntry(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	var req moveEntryRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.Week) == "" {
+		validationFailed(w, r, "week is required")
+		return
+	}
+	var day *Day
+	if len(req.Day) > 0 {
+		var raw *string
+		if err := json.Unmarshal(req.Day, &raw); err != nil {
+			httpx.WriteError(w, r, http.StatusBadRequest, "invalid_request", `field "day" has the wrong type`)
+			return
+		}
+		d := Day("")
+		if raw != nil {
+			if *raw == "" {
+				validationFailed(w, r, "day must be one of mon, tue, wed, thu, fri, sat, sun, or null")
+				return
+			}
+			d = Day(*raw)
+		}
+		day = &d
+	}
+	m, err := h.opts.Service.MoveEntryToWeek(r.Context(), actor.HouseholdID, chi.URLParam(r, "week"), chi.URLParam(r, "entryId"), req.Week, day)
+	if err != nil {
+		h.writeError(w, r, "move plan entry failed", err)
+		return
+	}
+	resp := MoveEntryResponse{Entry: newEntryResponse(m.To, m.Entry), From: newPlanResponse(m.From), To: newPlanResponse(m.To)}
+	h.withOutcomes(r.Context(), actor.HouseholdID, &resp.From)
+	h.withOutcomes(r.Context(), actor.HouseholdID, &resp.To)
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) setStatus(w http.ResponseWriter, r *http.Request) {

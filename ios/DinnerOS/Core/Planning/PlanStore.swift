@@ -199,6 +199,20 @@ final class PlanStore {
         try await updateEntry(id: id, changes: PlanEntryChanges(day: .some(day)))
     }
 
+    /// Moves an entry from the shown week to `target` and returns it there. Both weeks reach
+    /// `planDidChange`, so the week strip and the other week's cards update too.
+    @discardableResult
+    func moveEntry(id: String, toWeek target: ISOWeek) async throws -> PlanEntry {
+        let source = week
+        let response = try await mutate(week: source) { api, householdID, token in
+            try await api.moveEntry(householdID: householdID, week: source, entryID: id, to: target, accessToken: token)
+        }
+        apply(response.to, week: target)
+        apply(response.from, week: source)
+        Self.logger.info("Plan entry moved to another week")
+        return response.entry
+    }
+
     /// Removes the entry from the screen at once, then reloads. A failure puts it back.
     /// An entry someone else already removed (`404`) counts as removed.
     func deleteEntry(id: String) async throws {

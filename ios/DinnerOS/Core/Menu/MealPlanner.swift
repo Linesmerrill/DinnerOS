@@ -176,6 +176,41 @@ final class MealPlanner {
         }
     }
 
+    /// The weeks a meal in the shown week can move to: this week through three weeks out,
+    /// never a week that's over and never its own week.
+    var weeksToMoveTo: [ISOWeek] {
+        let current = plans.currentWeek
+        return (0..<4).map { current.adding(weeks: $0) }.filter { $0 != plans.week }
+    }
+
+    /// Whether `entry` can move to another week: a meal not yet cooked in a draft week, past
+    /// weeks included, since the meal that didn't get made is usually last week's.
+    func canMoveToAnotherWeek(_ entry: PlanEntry, isCooked: Bool) -> Bool {
+        canEdit && plans.isDraft && !isCooked && plans.plan?.entries.contains { $0.id == entry.id } == true
+    }
+
+    /// Moves a meal from the shown week to `week`, with a toast saying where it went.
+    func move(_ entry: PlanEntry, toWeek week: ISOWeek) async {
+        guard !busyEntryIDs.contains(entry.id) else { return }
+        busyEntryIDs.insert(entry.id)
+        defer { busyEntryIDs.remove(entry.id) }
+        do {
+            let moved = try await plans.moveEntry(id: entry.id, toWeek: week)
+            let name =
+                MenuFormat.relativeWeekName(week, current: plans.currentWeek)
+                ?? week.rangeLabel(weekStartsOn: plans.weekStartsOn)
+            toast = Toast(
+                message: moved.day == nil
+                    ? String(localized: "Moved to \(name). Pick a day there.")
+                    : String(localized: "Moved to \(name)"),
+                week: week, undo: nil)
+        } catch is CancellationError {
+            return
+        } catch {
+            report(error)
+        }
+    }
+
     // MARK: - Toast
 
     /// Reverses the change the toast describes.

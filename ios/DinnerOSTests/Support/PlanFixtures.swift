@@ -183,6 +183,32 @@ nonisolated final class FakePlanServer: Sendable {
                 state.weeks[weekKey] = week
                 let json = #"{"entry":\#(Self.entryJSON(entry)),"plan":\#(Self.planString(state, weekKey, week))}"#
                 return (201, Data(json.utf8))
+            case ("POST", "entries", 3) where tail[2] == "move":
+                // The API's move: keeps the night when free, otherwise no day.
+                guard let index = week.entries.firstIndex(where: { $0.id == tail[1] }) else {
+                    return (404, Fixtures.errorJSON(code: "not_found"))
+                }
+                guard let toKey = body["week"] as? String, ISOWeek(toKey) != nil, toKey != weekKey else {
+                    return (400, Fixtures.errorJSON(code: "validation_failed", message: "invalid week"))
+                }
+                var to = state.weeks[toKey] ?? Week()
+                guard week.status == "draft", to.status == "draft" else {
+                    return (409, Fixtures.errorJSON(code: "plan_finalized"))
+                }
+                var moved = week.entries.remove(at: index)
+                if body.keys.contains("day") {
+                    moved.day = body["day"] as? String
+                } else if to.entries.contains(where: { $0.day == moved.day }) {
+                    moved.day = nil
+                }
+                moved.id = "entry-\(state.nextID)"
+                state.nextID += 1
+                to.entries.append(moved)
+                state.weeks[weekKey] = week
+                state.weeks[toKey] = to
+                let json =
+                    #"{"entry":\#(Self.entryJSON(moved)),"from":\#(Self.planString(state, weekKey, week)),"to":\#(Self.planString(state, toKey, to))}"#
+                return (200, Data(json.utf8))
             case ("PATCH", "entries", 2), ("DELETE", "entries", 2):
                 guard let index = week.entries.firstIndex(where: { $0.id == tail[1] }) else {
                     return (404, Fixtures.errorJSON(code: "not_found"))

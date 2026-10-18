@@ -244,6 +244,10 @@ func (s *MongoStore) AddEntries(ctx context.Context, householdID string, w Week,
 			AddedBy: addedBy, AddedAt: e.AddedAt,
 			ProposalID: e.ProposalID,
 		}
+		// A meal moved from another week brings its customizations.
+		if len(e.Customizations) > 0 {
+			doc.Customizations = customizationDocs(e.Customizations)
+		}
 		if e.Origin == OriginAutopilot {
 			doc.Origin = string(OriginAutopilot)
 		}

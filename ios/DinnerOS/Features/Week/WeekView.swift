@@ -15,6 +15,7 @@ struct WeekView: View {
     @Environment(NotificationStore.self) private var notifications
     @Environment(AutopilotStore.self) private var autopilot
     @Environment(MealSwapStore.self) private var swaps
+    @Environment(MealPlanner.self) private var planner
 
     @State private var editingEntry: PlanEntry?
     @State private var isAddingRecipes = false
@@ -212,6 +213,11 @@ struct WeekView: View {
                     Button("Skip Without a Reason") {
                         events.recipeSkipped(entry, week: plans.week, reason: nil)
                     }
+                }
+            }
+            if planner.canMoveToAnotherWeek(entry, isCooked: outcome == .cooked) {
+                Section {
+                    MoveToWeekMenu(entry: entry)
                 }
             }
             if canEditEntries {

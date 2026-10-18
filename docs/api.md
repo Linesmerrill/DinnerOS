@@ -129,6 +129,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/households/{householdId}/plans/{week}/entries` `{recipeId, day?, servings, note?}` → `201 {entry, plan}` | `plan.edit` | 6 | ✅ |
 | PATCH | `/api/v1/households/{householdId}/plans/{week}/entries/{entryId}` `{day?, servings?, note?}` → plan | `plan.edit` | 6 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/plans/{week}/entries/{entryId}` → `204` | `plan.edit` | 6 | ✅ |
+| POST | `/api/v1/households/{householdId}/plans/{week}/entries/{entryId}/move` `{week, day?}` → `{entry, from, to}` (moves the meal and its add-ons to another week; no `day` keeps its night when free) | `plan.edit` | 6 | ✅ |
 | PUT | `/api/v1/households/{householdId}/plans/{week}/status` `{status}` → plan | `plan.edit` | 6 | ✅ |
 | GET | `/api/v1/households/{householdId}/plans/{week}/grocery` → `{week, status, pantryApplied, categories, skipped, skippedItems, meals}` | `household.view` | 6 | ✅ |
 | GET | `/api/v1/households/{householdId}/grocery-skips` → `{items}` | `household.view` | 6 | ✅ |

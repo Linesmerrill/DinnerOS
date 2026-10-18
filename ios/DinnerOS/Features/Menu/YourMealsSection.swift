@@ -506,6 +506,12 @@ struct MealCard: View {
                 }
             }
         }
+        // Open on a past week too: the meal that didn't get made is usually last week's.
+        if planner.canMoveToAnotherWeek(entry, isCooked: outcome == .cooked) {
+            Section {
+                MoveToWeekMenu(entry: entry)
+            }
+        }
         if isEditable {
             Section {
                 if swaps.canSwap(entry, isDraft: plans.isDraft, isCooked: outcome == .cooked) {
@@ -546,6 +552,31 @@ struct MealCard: View {
             await pantry.refresh()
             await notifications.refreshUnreadCount()
         }
+    }
+}
+
+/// "Move to Another Week" with the weeks a meal can go to, for a meal that didn't get made:
+/// "Next Week (Oct 18 – 24)", and so on.
+struct MoveToWeekMenu: View {
+    let entry: PlanEntry
+
+    @Environment(PlanStore.self) private var plans
+    @Environment(MealPlanner.self) private var planner
+
+    var body: some View {
+        Menu("Move to Another Week", systemImage: "calendar.badge.clock") {
+            ForEach(planner.weeksToMoveTo, id: \.self) { week in
+                Button(title(week)) {
+                    Task { await planner.move(entry, toWeek: week) }
+                }
+            }
+        }
+    }
+
+    private func title(_ week: ISOWeek) -> String {
+        let range = week.rangeLabel(weekStartsOn: plans.weekStartsOn)
+        guard let name = MenuFormat.relativeWeekName(week, current: plans.currentWeek) else { return range }
+        return "\(name) (\(range))"
     }
 }
 

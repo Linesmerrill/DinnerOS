@@ -136,4 +136,53 @@ struct MealPlannerTests {
         planner.activate(householdID: "household-1")
         #expect(planner.toast == nil)
     }
+
+    @Test func aMealThatDidntGetMadeMovesToNextWeek() async throws {
+        let harness = try await makeHarness()
+        let planner = harness.planner
+        let plans = harness.plans
+        let thisWeek = plans.week
+        let entry = try #require(
+            await planner.add(recipeID: "recipe-1", name: "Tacos", to: thisWeek, day: .thu, servings: 2))
+
+        #expect(planner.weeksToMoveTo == [1, 2, 3].map { thisWeek.adding(weeks: $0) })
+        #expect(planner.canMoveToAnotherWeek(entry, isCooked: false))
+        #expect(!planner.canMoveToAnotherWeek(entry, isCooked: true))
+
+        await planner.move(entry, toWeek: thisWeek.next)
+
+        #expect(plans.week == thisWeek)
+        #expect(plans.plan?.entries.isEmpty == true)
+        #expect(harness.planServer.week(thisWeek.next.description)?.entries.map(\.day) == ["thu"])
+        #expect(planner.toast?.message == "Moved to Next Week")
+        #expect(planner.toast?.undo == nil)
+        #expect(planner.busyEntryIDs.isEmpty)
+    }
+
+    @Test func aMealMovedOntoATakenNightAsksForADay() async throws {
+        let harness = try await makeHarness()
+        let planner = harness.planner
+        let thisWeek = harness.plans.week
+        await planner.add(recipeID: "recipe-2", name: "Soup", to: thisWeek.adding(weeks: 2), day: .thu, servings: 2)
+        let entry = try #require(
+            await planner.add(recipeID: "recipe-1", name: "Tacos", to: thisWeek, day: .thu, servings: 2))
+
+        await planner.move(entry, toWeek: thisWeek.adding(weeks: 2))
+
+        #expect(planner.toast?.message.hasSuffix("Pick a day there.") == true)
+        #expect(harness.planServer.week(thisWeek.adding(weeks: 2).description)?.entries.map(\.day) == ["thu", nil])
+    }
+
+    @Test func aFailedMoveKeepsTheMealAndShowsAnError() async throws {
+        let harness = try await makeHarness()
+        let planner = harness.planner
+        let entry = try #require(
+            await planner.add(recipeID: "recipe-1", name: "Tacos", to: harness.plans.week, servings: 2))
+        harness.planServer.failNext()
+
+        await planner.move(entry, toWeek: harness.plans.week.next)
+
+        #expect(planner.errorMessage != nil)
+        #expect(harness.plans.plan?.entries.map(\.id) == [entry.id])
+    }
 }

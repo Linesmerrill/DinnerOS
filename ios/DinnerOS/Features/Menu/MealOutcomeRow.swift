@@ -17,6 +17,7 @@ struct MealOutcomeRow: View {
 
     @Environment(PlanStore.self) private var plans
     @Environment(EventReporter.self) private var events
+    @Environment(MealPlanner.self) private var planner
     @Environment(PantryStore.self) private var pantry
     @Environment(NotificationStore.self) private var notifications
 
@@ -82,6 +83,15 @@ struct MealOutcomeRow: View {
         }
         .accessibilityLabel("Cooked")
         Menu {
+            if let later = laterWeek {
+                // Didn't make it, but still will: the meat's in the freezer for next week.
+                Section {
+                    Button(laterTitle(later), systemImage: "calendar.badge.clock") {
+                        Task { await planner.move(entry, toWeek: later) }
+                    }
+                    MoveToWeekMenu(entry: entry)
+                }
+            }
             ForEach(SkipReason.allCases) { reason in
                 Button(reason.title) {
                     answer(.skipped(reason)) { events.recipeSkipped(entry, week: plans.week, reason: reason) }
@@ -95,6 +105,17 @@ struct MealOutcomeRow: View {
                 .labelStyle(OutcomeLabelStyle(iconOnly: iconOnly))
         }
         .accessibilityLabel("Skip")
+    }
+
+    /// The week to make a meal in when it didn't get made: next week for this week's meal, this
+    /// week for a past one. `nil` for a week still ahead, or when the meal can't move.
+    private var laterWeek: ISOWeek? {
+        guard plans.week <= plans.currentWeek, planner.canMoveToAnotherWeek(entry, isCooked: false) else { return nil }
+        return planner.weeksToMoveTo.first
+    }
+
+    private func laterTitle(_ week: ISOWeek) -> String {
+        week == plans.currentWeek ? String(localized: "Make It This Week") : String(localized: "Make It Next Week")
     }
 
     /// Undo is the whole reason marking cooked can be a plain button: the event is held for

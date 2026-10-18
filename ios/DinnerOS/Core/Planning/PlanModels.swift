@@ -212,7 +212,21 @@ nonisolated struct AddPlanEntryResponse: Decodable, Equatable, Sendable {
     let plan: Plan
 }
 
+/// Response to `POST .../plans/{week}/entries/{entryId}/move`: the meal in its new week, and
+/// both weeks after the move.
+nonisolated struct MovePlanEntryResponse: Decodable, Equatable, Sendable {
+    let entry: PlanEntry
+    let from: Plan
+    let to: Plan
+}
+
 // MARK: - Requests
+
+/// Body of `POST .../plans/{week}/entries/{entryId}/move`. Without a day the API keeps the
+/// meal's night when it's free in the new week.
+nonisolated struct MovePlanEntryRequest: Encodable, Equatable, Sendable {
+    var week: String
+}
 
 /// Body of `POST .../plans/{week}/entries`. A `nil` day or empty note is omitted.
 nonisolated struct NewPlanEntry: Encodable, Equatable, Sendable {

@@ -148,6 +148,28 @@ struct PlansAPITests {
         #expect(!PlanEntryChanges(day: .some(nil)).isEmpty)
     }
 
+    @Test func moveEntryPostsTheWeekAndDecodesBothWeeks() async throws {
+        let entry = PlanFixtures.entry(id: "e2", day: "thu", date: "2026-09-24")
+        let response =
+            #"{"entry":\#(entry),"from":\#(PlanFixtures.plan()),"to":\#(PlanFixtures.plan(week: "2026-W39", entries: [entry]))}"#
+        let transport = StubTransport { _ in (200, Data(response.utf8)) }
+
+        let result = try await makeAPI(transport).moveEntry(
+            householdID: "household-1", week: try #require(week), entryID: "entry-7",
+            to: try #require(ISOWeek("2026-W39")), accessToken: "t")
+
+        let request = try #require(transport.requests.first)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.path() == "/api/v1/households/household-1/plans/2026-W38/entries/entry-7/move")
+        let body = try jsonBody(request)
+        #expect(Set(body.keys) == ["week"])
+        #expect(body["week"] as? String == "2026-W39")
+        #expect(result.entry.id == "e2")
+        #expect(result.entry.day == .thu)
+        #expect(result.from.week == "2026-W38")
+        #expect(result.to.entries.map(\.id) == ["e2"])
+    }
+
     @Test func deleteEntryAcceptsNoContent() async throws {
         let transport = StubTransport { _ in (204, Data()) }
 

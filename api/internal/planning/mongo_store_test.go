@@ -277,3 +277,29 @@ func TestIntegrationConcurrentEditsAllPersist(t *testing.T) {
 		}
 	}
 }
+
+// A meal moved to another week keeps its customizations in the stored
+// document, and leaves its old week (decision 645).
+func TestIntegrationMoveEntryToWeek(t *testing.T) {
+	store, db := newTestMongoStore(t)
+	svc, _ := newTestService(t, store)
+	ctx := context.Background()
+	_, soup := mustAdd(t, svc, hhAda, userAda, testWeek, NewEntry{RecipeID: recipeSoup, Day: "thu", Servings: 2})
+	custom := []Customization{{IngredientKey: "name:chicken", ChoiceID: "double", Label: "2x Chicken"}}
+	if _, err := svc.SetEntryCustomizations(ctx, hhAda, testWeek, soup.ID, custom); err != nil {
+		t.Fatal(err)
+	}
+	m, err := svc.MoveEntryToWeek(ctx, hhAda, testWeek, soup.ID, "2026-W39", nil)
+	if err != nil {
+		t.Fatalf("MoveEntryToWeek() error = %v", err)
+	}
+	if !slices.Equal(m.Entry.Customizations, custom) || m.Entry.Day != Thursday {
+		t.Errorf("moved entry = %+v", m.Entry)
+	}
+	if raw := loadRawPlan(t, db, hhAda, "2026-W39"); len(raw.Entries) != 1 || raw.Entries[0]["customizations"] == nil {
+		t.Errorf("raw next week = %+v", raw)
+	}
+	if raw := loadRawPlan(t, db, hhAda, testWeek); len(raw.Entries) != 0 {
+		t.Errorf("raw old week = %+v", raw)
+	}
+}
