@@ -557,6 +557,8 @@ func AnnotateWith(r Recipe, servings int, specs grocery.Specialties, applied boo
 // protein: the steps name the protein being cooked, at its amount, so nobody
 // reads "pork*" and has to remember they bought beef.
 func AnnotateMeal(r Recipe, servings int, specs grocery.Specialties, applied bool, leftOut grocery.LeftOutSet, leftOutApplied bool, swaps Swaps) Instructions {
+	// Butter a card measures only in its steps reads as one of its lines (step_staples.go).
+	r = withStepStaples(r)
 	out := Instructions{
 		RecipeID: r.ID, RecipeName: r.Name, Servings: servings,
 		ServingOptions: append([]int(nil), r.Servings...), SpecialtiesApplied: applied,
