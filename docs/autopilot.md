@@ -324,6 +324,7 @@ signals.
 | `familiarity` | 0…1 | log₂(1 + ordered + planned + cooked) / log₂ 9 | 0.10 |
 | `conversion` | −1…1 | 2 × (cooked + 1) / (cooked + skipped + 2) − 1, counting only skips that were about the meal. A skip whose reason was `ate-out`, `missing-ingredients`, or `no-time` is left out of both sides: it is evidence of neither. A skip with no reason, `not-in-the-mood`, or `other` counts as before | 0.10 |
 | `recency` | −1…0.3 | nearest week had: ≤1 → −1, 2 → −0.6, 3 → −0.4, 4 → −0.25, ≤8 → −0.1; ≥10 weeks for a familiar, well-rated meal → +0.3 | 0.25 |
+| `rotation` | −1…0 | [the rotation](#the-rotation): a meal had before waits on its kind's stack: −1 just had, rising to −0.5 as other meals of its kind are had (or with time), then 0 on its turn; never had → 0 | 1.00 |
 | `weekdayAffinity` | 0…1 | share of the meal's planned days that were this weekday (needs 2) | 0.10 |
 | `taste` | −1…1 | liked cuisine +0.4, tag +0.4, protein +0.3; each disliked −0.5 | 0.25 × (1 + (1 − confidence)) |
 | `rule` | −1…1 | the day's rule: matched groups / set groups; −0.3 for no match on an every-week rule. When the rule sets methods and the meal suits none: −1 on an every-week rule, 0 on an at-most-once rule, whatever else matches | 0.45 |
@@ -335,6 +336,27 @@ signals.
 | `learned` | −1…1 | [learning from feedback](#learning-from-feedback), never more than half the meal's `taste` contribution in the other direction | 0.10 |
 | `context` | −1…1 | [context calculators](#context-engine), clamped sum | 0.15 |
 | `objective` | ±0.2 | tenant business boost (DinnerOS sends none) | 1 |
+
+### The rotation
+
+Rating, familiarity, and habit all favor meals already had, so on their own
+the same favorites win every week and each win makes them likelier next time.
+The rotation breaks that loop: every meal the household orders, plans, or
+cooks goes to the bottom of its kind's stack and comes back only after enough
+other meals of that kind have been had since.
+
+- A meal's kind is the most specific thing it is: its dishes ("taco"), else
+  its meal categories ("pasta"), else its cuisines, else the whole library. A
+  pasta waits for other pastas, not tacos; with several kinds at that level,
+  the least-turned one counts.
+- Its turn comes when `min(meals of its kind − 1, 6)` other meals of its kind
+  have been had since, so a kind of three cycles through all three, or 16
+  weeks after it was last had, for a kind the household rarely has.
+- Until then its signal is −1 rising to −0.5, worth more than a five-star
+  favorite's rating, feedback, and familiarity together; on its turn it is 0,
+  like a meal never had.
+- Meals had by the planned week count, and so do coming weeks before it.
+  Skips and weeks after it don't (those space meals through `recency`).
 
 The day's soft limit is, in order: none on a long-cook rule day, the quick band
 on a busy week's weeknights, the day's rule band, or the weeknight limit on
@@ -455,7 +477,7 @@ couldn't be filled are listed as `unfilled` (`no_candidates`,
   household ID, week, attempt, model version, and item ID. Learning sorts
   the interactions it uses before summing, and a test shuffles history and
   catalog with learning and every context signal present.
-- `modelVersion` (`baseline-2026.7`) is stored on every proposal and event.
+- `modelVersion` (`baseline-2026.10`) is stored on every proposal and event.
   `inputsHash` fingerprints the provider request, so identical inputs can be
   recognized.
 - **Tuning:** change `baseline.DefaultWeights` (or pass `Options.Weights`) and

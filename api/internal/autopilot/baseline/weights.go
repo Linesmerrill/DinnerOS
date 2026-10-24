@@ -17,6 +17,10 @@ const (
 	// SignalRecency penalizes meals had recently (-1..0) and gives a small
 	// boost to familiar meals not had in a long time.
 	SignalRecency = "recency"
+	// SignalRotation is how far a meal had before has come back up its
+	// kind's stack: −1 just had, up to −0.5 while it waits, 0 on its turn
+	// or never had (rotation.go).
+	SignalRotation = "rotation"
 	// SignalWeekdayAffinity is the share of the meal's planned days that
 	// were this weekday, 0..1.
 	SignalWeekdayAffinity = "weekdayAffinity"
@@ -78,6 +82,7 @@ type Weights struct {
 	Familiarity     float64
 	Conversion      float64
 	Recency         float64
+	Rotation        float64
 	WeekdayAffinity float64
 	DayTheme        float64
 	Taste           float64
@@ -135,6 +140,7 @@ func DefaultWeights() Weights {
 		Familiarity:         0.10,
 		Conversion:          0.10,
 		Recency:             0.25,
+		Rotation:            1.00,
 		WeekdayAffinity:     0.10,
 		DayTheme:            0.25,
 		Taste:               0.25,

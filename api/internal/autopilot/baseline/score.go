@@ -196,6 +196,9 @@ func (m *model) score(s *slot, it *item) cand {
 	}
 	explain("notRecently", recencyText, add(SignalRecency, recency, w.Recency), false)
 
+	// The rotation: a meal had before waits for other meals of its kind.
+	add(SignalRotation, rotationSignal(it), w.Rotation)
+
 	// Weekday affinity.
 	var affinity float64
 	var affinityText string

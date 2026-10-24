@@ -144,6 +144,10 @@ type item struct {
 	tie      uint64
 	isNew    bool
 	st       stats
+	// last is when the household last had it, and ready how far it has come
+	// back up its stacks, 0..1 (rotation.go).
+	last  had
+	ready float64
 }
 
 type stats struct {
@@ -237,7 +241,7 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 			tags: normAll(ci.Tags), proteins: normAll(ci.Proteins), categories: normAll(ci.MealCategories), dishes: normAll(ci.Dishes), dishTypes: normAll(ci.DishTypes),
 			methods: normAll(ci.Methods), allergen: normAll(ci.Allergens), diets: normAll(ci.Diets),
 			minutes: max(ci.CookMinutes, 0), servings: sortedPositive(ci.Servings),
-			tie: hashString(fmt.Sprintf("%d|%s", m.seed, ci.ID)), st: stats{nearest: -1},
+			tie: hashString(fmt.Sprintf("%d|%s", m.seed, ci.ID)), st: stats{nearest: -1}, ready: 1,
 		}
 		it.spicy = ci.Spicy || slices.Contains(it.tags, "spicy")
 		it.band = m.prefs.bands.Of(it.minutes)
@@ -324,6 +328,9 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 		if it == nil {
 			continue
 		}
+		if between, ok := autopilot.WeeksBetween(in.Week, h.Week); ok {
+			it.noteHad(h, between)
+		}
 		if h.Kind == autopilot.KindPlanned && day >= 0 {
 			themes.add(day, it)
 		}
@@ -398,6 +405,7 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 		}
 		m.eligible = append(m.eligible, it)
 	}
+	m.rotate()
 	return m, nil
 }
 
