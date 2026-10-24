@@ -104,3 +104,24 @@ func TestSameIngredientNamesMatchThePantry(t *testing.T) {
 		}
 	}
 }
+
+// A pantry's "Pineapple Chunks" are the recipe's "Pineapple": the list
+// doesn't buy pineapple the household has.
+func TestPineappleChunksAreThePineapple(t *testing.T) {
+	ctx := context.Background()
+	svc, _, catalog := newTestService(t, "Pineapple", "Pineapple Juice")
+	mustAdd(t, svc, testHousehold, AddInput{Name: "Pineapple Chunks", Quantity: "12", Unit: "oz"})
+	stock, err := svc.GroceryPantry(ctx, testHousehold)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !stock.Has(catalog.id("Pineapple")) {
+		t.Error("pineapple chunks don't answer for pineapple")
+	}
+	if a, ok := stock.Amounts[catalog.id("Pineapple")]; !ok || a.Unit.Code != "oz" || a.Quantity.Rat().RatString() != "12" {
+		t.Errorf("pineapple on hand = %+v, %v; want 12 oz", a, ok)
+	}
+	if stock.Has(catalog.id("Pineapple Juice")) {
+		t.Error("pineapple chunks answered for pineapple juice")
+	}
+}

@@ -97,7 +97,9 @@ func (s *Service) GroceryPantry(ctx context.Context, householdID string) (grocer
 		}
 		for _, key := range pantryKeys(item) {
 			keys = append(keys, UnresolvedKeyPrefix+key)
-			if id := catalogIDs[key]; id != "" {
+			// A name of the same ingredient resolves to the ID the item is
+			// already linked to; counting it twice doubles what's at home.
+			if id := catalogIDs[key]; id != "" && !slices.Contains(keys, id) {
 				keys = append(keys, id)
 			}
 		}

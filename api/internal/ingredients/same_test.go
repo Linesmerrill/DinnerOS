@@ -12,6 +12,7 @@ func TestSameIngredient(t *testing.T) {
 		"yellow onion": "onion", "onion": "onion", "red onion": "red onion",
 		"roma tomato": "tomato", "grape tomatoes": "grape tomatoes",
 		"persian cucumber": "mini cucumber", "sweet potatoes": "sweet potatoes",
+		"pineapple chunks": "pineapple", "pineapple juice": "pineapple juice",
 	} {
 		if got := SameIngredientKey(in); got != want {
 			t.Errorf("SameIngredientKey(%q) = %q, want %q", in, got, want)
