@@ -105,23 +105,25 @@ func TestSameIngredientNamesMatchThePantry(t *testing.T) {
 	}
 }
 
-// A pantry's "Pineapple Chunks" are the recipe's "Pineapple": the list
-// doesn't buy pineapple the household has.
-func TestPineappleChunksAreThePineapple(t *testing.T) {
+// A pantry's "Pineapple Chunks" are the recipe's "Pineapple", and its "Diced
+// Mango" the recipe's "Mango": the list doesn't buy fruit the household has.
+func TestCutFruitIsTheFruit(t *testing.T) {
 	ctx := context.Background()
-	svc, _, catalog := newTestService(t, "Pineapple", "Pineapple Juice")
+	svc, _, catalog := newTestService(t, "Pineapple", "Pineapple Juice", "Mango", "Mango Chutney")
 	mustAdd(t, svc, testHousehold, AddInput{Name: "Pineapple Chunks", Quantity: "12", Unit: "oz"})
+	mustAdd(t, svc, testHousehold, AddInput{Name: "Diced Mango", Quantity: "12", Unit: "oz"})
 	stock, err := svc.GroceryPantry(ctx, testHousehold)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !stock.Has(catalog.id("Pineapple")) {
-		t.Error("pineapple chunks don't answer for pineapple")
+	for _, fruit := range []string{"Pineapple", "Mango"} {
+		if a, ok := stock.Amounts[catalog.id(fruit)]; !ok || a.Unit.Code != "oz" || a.Quantity.Rat().RatString() != "12" {
+			t.Errorf("%s on hand = %+v, %v; want 12 oz", fruit, a, ok)
+		}
 	}
-	if a, ok := stock.Amounts[catalog.id("Pineapple")]; !ok || a.Unit.Code != "oz" || a.Quantity.Rat().RatString() != "12" {
-		t.Errorf("pineapple on hand = %+v, %v; want 12 oz", a, ok)
-	}
-	if stock.Has(catalog.id("Pineapple Juice")) {
-		t.Error("pineapple chunks answered for pineapple juice")
+	for _, other := range []string{"Pineapple Juice", "Mango Chutney"} {
+		if stock.Has(catalog.id(other)) {
+			t.Errorf("cut fruit answered for %s", other)
+		}
 	}
 }

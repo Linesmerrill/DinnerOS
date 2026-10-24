@@ -14,6 +14,7 @@ var sameIngredients = [][]string{
 	{"chicken cutlets", "organic chicken cutlets"},
 	{"mini cucumber", "persian cucumber"},
 	{"pineapple", "pineapple chunks", "diced pineapple", "pineapple tidbits"},
+	{"mango", "mango chunks", "diced mango", "mango cubes", "frozen mango chunks"},
 }
 
 // sameAs maps each variant's key to its kept key.
