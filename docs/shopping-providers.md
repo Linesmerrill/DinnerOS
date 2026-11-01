@@ -224,6 +224,14 @@ household.
 Fry's is built (decision 649). It turns on when the Kroger credentials are
 set, and nothing else changes for Walmart households.
 
+**Verified end to end on 2026-11-01** in production, build 83: a household
+signed in to Fry's, the server renewed the expired access token with the
+refresh token, searched products at the household's store, and wrote two
+items to the real Fry's cart, which showed them in the Fry's app. No order
+was placed. Kroger's public API can't read a cart, so the store's own app is
+the only way to confirm a write landed. Items sold by weight (produce) are
+added as one unit and priced by the store at its estimated weight.
+
 1. **developer.kroger.com:** create a **production** application with the
    Cart and Products APIs, and the redirect URL
    `https://api.tlps.dev/api/v1/shopping/kroger/callback`.
