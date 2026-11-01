@@ -171,8 +171,20 @@ final class ShoppingStore {
     var kroger: ShoppingProvider? { providers.first { $0.key == ShoppingProviderKey.kroger && $0.isSupported } }
     /// The household's store as the API describes it.
     var activeProvider: ShoppingProvider? { providers.first { $0.key == provider } }
-    /// "Walmart" or "Fry's", for the Shop tab's words.
-    var providerName: String { activeProvider?.name ?? "Walmart" }
+    /// "Walmart", "Fry's", or the Kroger banner of the household's store ("Ralphs"), for the
+    /// Shop tab's words.
+    var providerName: String {
+        if let name = settings?.providerName, !name.isEmpty, settings?.provider == provider { return name }
+        return activeProvider?.name ?? "Walmart"
+    }
+    /// The Kroger store's name in setup: the household's own brand once it picked a store
+    /// ("Ralphs"), otherwise the provider's ("Fry's", or "Kroger" when it serves several).
+    var krogerName: String {
+        if settings?.provider == ShoppingProviderKey.kroger, let name = settings?.providerName, !name.isEmpty {
+            return name
+        }
+        return kroger?.name ?? "Fry's"
+    }
     /// The store fills its cart from the API (Fry's): no links to open, no product checks.
     var writesCart: Bool { activeProvider?.writesCart == true }
     var isSignedIn: Bool { connection?.connected == true }

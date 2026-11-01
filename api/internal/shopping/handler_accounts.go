@@ -36,6 +36,10 @@ type StoreResponse struct {
 	StoreID string `json:"storeId"`
 	Name    string `json:"name"`
 	Address string `json:"address"`
+	// Banner is the store's brand in the Kroger family ("ralphs"), or
+	// absent for other providers. Saving the store sets the household's
+	// banner.
+	Banner string `json:"banner,omitempty"`
 }
 
 // StoreListResponse lists stores.

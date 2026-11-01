@@ -189,7 +189,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/autopilot/learning` → `{modelVersion, interactions, adjustments, resetAt, resetBy}` | `household.view` | 11 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/autopilot/learning` → learning (empty) | `plan.edit` | 11 | ✅ |
 | GET | `/api/v1/shopping/providers` → `{items: [{key, name, affiliateTracked, capabilities}]}` | bearer | 8a | ✅ |
-| GET | `/api/v1/households/{householdId}/shopping/settings` → `{provider, storeId, updatedBy, updatedAt}` | `household.view` | 8a | ✅ |
+| GET | `/api/v1/households/{householdId}/shopping/settings` → `{provider, storeId, storeName, banner, providerName, updatedBy, updatedAt}` | `household.view` | 8a | ✅ |
 | PUT | `/api/v1/households/{householdId}/shopping/settings` `{provider, storeId?}` → settings | `shopping.edit` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/{provider}/preferences` → `{items}` | `household.view` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}` → saved product | `household.view` | 8a | ✅ |
@@ -1682,11 +1682,16 @@ Kroger fails it returns `503 provider_error` and records nothing.
 | `POST /households/{id}/shopping/kroger/connection` | `shopping.edit` | `{authorizeUrl, callbackScheme}`: open it in a web authentication session |
 | `DELETE /households/{id}/shopping/kroger/connection` | `shopping.edit` | Forgets the account, `204` |
 | `GET /shopping/kroger/callback?code=&state=` | public (signed state) | Finishes the sign-in and redirects to `<scheme>://shopping/connected?provider=kroger&result=connected\|cancelled\|failed` |
-| `GET /households/{id}/shopping/kroger/stores?zip=85001` | `household.view` | `{items: [{storeId, name, address}]}`, the banner's stores nearest first |
+| `GET /households/{id}/shopping/kroger/stores?zip=85001` | `household.view` | `{items: [{storeId, name, address, banner}]}`, the offered banners' stores nearest first (`banner` is `frys`, `ralphs`, …) |
 | `GET /households/{id}/shopping/kroger/products?q=pineapple` | `household.view` | `{items: [{productId, name, brand, size, packageSize, imageUrl, url, priceCents, stock}]}` at the household's store; `q` is 3–100 characters, at most 8 words |
 
 `PUT .../shopping/settings` also takes an optional `storeName` (at most 100
-characters, kept with a store ID), which settings return. Saving a product
+characters, kept with a store ID), which settings return. For Kroger, saving a
+store also sets the household's `banner` from Kroger's own record of that
+store, and settings return it with `providerName` ("Ralphs"), the name to show
+for the store from then on (decision 652). A store of a banner that isn't
+offered is `400`. When the server offers several banners, the providers list
+names the Kroger provider "Kroger" and adds `banners` (their names). Saving a product
 from search is the usual `PUT .../kroger/preferences/{ingredientKey}` with
 `productId` set to the 13-digit UPC.
 
@@ -1718,7 +1723,8 @@ handoff button only then.
 (`shopping.edit`):
 
 ```json
-{ "provider": "walmart", "storeId": "5435", "updatedBy": "66e5a1f2c3b4a5d6e7f80912", "updatedAt": "2026-09-15T18:30:00Z" }
+{ "provider": "walmart", "storeId": "5435", "storeName": null, "banner": null, "providerName": "Walmart",
+  "updatedBy": "66e5a1f2c3b4a5d6e7f80912", "updatedAt": "2026-09-15T18:30:00Z" }
 ```
 
 All fields are `null` until someone sets them. `PUT` takes `{"provider":

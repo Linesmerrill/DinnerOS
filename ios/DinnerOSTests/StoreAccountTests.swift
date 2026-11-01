@@ -29,6 +29,33 @@ struct StoreAccountTests {
         #expect(old.isSupported && !old.writesCart && !old.capabilities.customerAccount)
     }
 
+    @Test func aProviderServingSeveralBannersListsThem() throws {
+        let json = Data(
+            #"""
+            {"key":"kroger","name":"Kroger","affiliateTracked":false,"banners":["Fry's","Ralphs","King Soopers","Smith's"],
+             "capabilities":{"handoff":"cart_write","pasteProductLink":true,"storeId":true}}
+            """#.utf8)
+        let kroger = try decoder().decode(ShoppingProvider.self, from: json)
+        #expect(kroger.name == "Kroger" && kroger.isSupported)
+        #expect(kroger.bannerSummary == "Fry's, Ralphs, King Soopers, and 1 more")
+        let three = ShoppingProvider(
+            key: "kroger", name: "Kroger", affiliateTracked: false, capabilities: kroger.capabilities,
+            banners: ["Fry's", "Ralphs", "Dillons"])
+        #expect(three.bannerSummary == "Fry's, Ralphs, and Dillons")
+        let one = ShoppingProvider(
+            key: "kroger", name: "Fry's", affiliateTracked: false, capabilities: kroger.capabilities, banners: nil)
+        #expect(one.bannerSummary == nil)
+    }
+
+    @Test func settingsNameTheHouseholdsBanner() throws {
+        let json = Data(
+            #"{"provider":"kroger","storeId":"70300001","storeName":"Ralphs Test St","banner":"ralphs","providerName":"Ralphs","updatedBy":null,"updatedAt":null}"#
+                .utf8)
+        #expect(try decoder().decode(ShoppingSettings.self, from: json).providerName == "Ralphs")
+        let older = Data(#"{"provider":"kroger","storeId":"66000123","updatedBy":null,"updatedAt":null}"#.utf8)
+        #expect(try decoder().decode(ShoppingSettings.self, from: older).providerName == nil)
+    }
+
     @Test func settingsCarryTheStoreName() throws {
         let json = Data(
             #"{"provider":"kroger","storeId":"66000123","storeName":"Fry's Test Store","updatedBy":null,"updatedAt":null}"#

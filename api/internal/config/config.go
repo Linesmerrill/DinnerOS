@@ -161,8 +161,12 @@ type Kroger struct {
 	RedirectURL string
 	// APIBase is the API origin: production, or certification for testing.
 	APIBase string
-	// Banner is the household's Kroger store family ("frys").
+	// Banner is the default Kroger store family ("frys").
 	Banner string
+	// Banners are the other families to offer (KROGER_BANNERS, a comma list
+	// or "all"); a household's family follows the store it picks. Empty
+	// offers Banner alone.
+	Banners []string
 }
 
 // Enabled reports whether the Kroger application is configured.
@@ -436,6 +440,7 @@ func loadShopping(cfg *Config, get func(key, fallback string) string) []error {
 		RedirectURL:  strings.TrimSpace(get("KROGER_REDIRECT_URL", "")),
 		APIBase:      strings.TrimRight(strings.TrimSpace(get("KROGER_API_BASE", DefaultKrogerAPIBase)), "/"),
 		Banner:       strings.ToLower(strings.TrimSpace(get("KROGER_BANNER", "frys"))),
+		Banners:      krogerBanners(get("KROGER_BANNERS", "")),
 	}
 	k := cfg.Kroger
 	switch {
@@ -582,4 +587,23 @@ func RedactURI(raw string) string {
 		return "<unparseable>"
 	}
 	return u.Redacted()
+}
+
+// krogerBanners reads KROGER_BANNERS: "all" for every known family, or
+// comma-separated keys. Unknown keys are dropped by the provider.
+func krogerBanners(v string) []string {
+	v = strings.ToLower(strings.TrimSpace(v))
+	if v == "" {
+		return nil
+	}
+	if v == "all" {
+		return []string{"all"}
+	}
+	var out []string
+	for _, k := range strings.Split(v, ",") {
+		if k = strings.TrimSpace(k); k != "" {
+			out = append(out, k)
+		}
+	}
+	return out
 }

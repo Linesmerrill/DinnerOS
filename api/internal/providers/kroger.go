@@ -3,6 +3,7 @@ package providers
 import (
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -50,10 +51,8 @@ var krogerBanners = []KrogerBanner{
 // KrogerBannerFor returns the banner named key, or Fry's when key is unknown
 // or empty.
 func KrogerBannerFor(key string) KrogerBanner {
-	for _, b := range krogerBanners {
-		if b.Key == strings.ToLower(strings.TrimSpace(key)) {
-			return b
-		}
+	if b, ok := krogerBanner(key); ok {
+		return b
 	}
 	return krogerBanners[0]
 }
@@ -71,15 +70,85 @@ var (
 // Kroger is the pure half of the Kroger provider: product IDs, links, and
 // stores, with no I/O. internal/kroger adds search, stores, the member's
 // account, and cart writes around it.
+//
+// One provider serves every enabled banner. A household's banner comes from
+// the store it picked, so saved products and the sign-in stay under one
+// provider key whichever banner it shops at; WithBanner gives the view for
+// that household.
 type Kroger struct {
 	banner KrogerBanner
+	// banners are the enabled banners, the default first.
+	banners []KrogerBanner
 }
 
-// NewKroger returns the Kroger provider for a banner key ("frys").
-func NewKroger(banner string) *Kroger { return &Kroger{banner: KrogerBannerFor(banner)} }
+// NewKroger returns the Kroger provider for a default banner key ("frys")
+// and any other banners to enable. Unknown keys are ignored.
+func NewKroger(banner string, others ...string) *Kroger {
+	k := &Kroger{banner: KrogerBannerFor(banner)}
+	k.banners = []KrogerBanner{k.banner}
+	for _, key := range others {
+		b, ok := krogerBanner(key)
+		if ok && !slices.ContainsFunc(k.banners, func(e KrogerBanner) bool { return e.Key == b.Key }) {
+			k.banners = append(k.banners, b)
+		}
+	}
+	return k
+}
+
+// KrogerBannerKeys returns every banner DinnerOS knows, for "all".
+func KrogerBannerKeys() []string {
+	out := make([]string, 0, len(krogerBanners))
+	for _, b := range krogerBanners {
+		out = append(out, b.Key)
+	}
+	return out
+}
+
+func krogerBanner(key string) (KrogerBanner, bool) {
+	for _, b := range krogerBanners {
+		if b.Key == strings.ToLower(strings.TrimSpace(key)) {
+			return b, true
+		}
+	}
+	return KrogerBanner{}, false
+}
 
 // Banner is the store brand the provider shows.
 func (k *Kroger) Banner() KrogerBanner { return k.banner }
+
+// Banners are the enabled banners, the default first.
+func (k *Kroger) Banners() []KrogerBanner { return slices.Clone(k.banners) }
+
+// BannerFor returns the enabled banner named key.
+func (k *Kroger) BannerFor(key string) (KrogerBanner, bool) {
+	for _, b := range k.banners {
+		if b.Key == strings.ToLower(strings.TrimSpace(key)) {
+			return b, true
+		}
+	}
+	return KrogerBanner{}, false
+}
+
+// BannerForChain returns the enabled banner whose Locations API chain code
+// is chain ("FRYS").
+func (k *Kroger) BannerForChain(chain string) (KrogerBanner, bool) {
+	for _, b := range k.banners {
+		if strings.EqualFold(b.Chain, strings.TrimSpace(chain)) {
+			return b, true
+		}
+	}
+	return KrogerBanner{}, false
+}
+
+// WithBanner returns the provider as a household at banner key sees it: its
+// name, website, and links. An empty or disabled key keeps the default.
+func (k *Kroger) WithBanner(key string) *Kroger {
+	b, ok := k.BannerFor(key)
+	if !ok {
+		return k
+	}
+	return &Kroger{banner: b, banners: k.banners}
+}
 
 // Key implements GroceryProvider.
 func (*Kroger) Key() Key { return KeyKroger }
@@ -87,8 +156,14 @@ func (*Kroger) Key() Key { return KeyKroger }
 // Name implements GroceryProvider: the banner's name ("Fry's").
 func (k *Kroger) Name() string { return k.banner.Name }
 
-// CatalogKeys implements CatalogListed: the banner's catalog entry.
-func (k *Kroger) CatalogKeys() []string { return []string{k.banner.CatalogKey} }
+// CatalogKeys implements CatalogListed: every enabled banner's catalog entry.
+func (k *Kroger) CatalogKeys() []string {
+	out := make([]string, 0, len(k.banners))
+	for _, b := range k.banners {
+		out = append(out, b.CatalogKey)
+	}
+	return out
+}
 
 // HandoffKind implements GroceryProvider.
 func (*Kroger) HandoffKind() HandoffKind { return HandoffCartWrite }

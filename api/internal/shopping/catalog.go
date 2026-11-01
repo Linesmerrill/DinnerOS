@@ -381,8 +381,9 @@ func withLiveStores(entries []CatalogEntry, enabled []providers.GroceryProvider)
 			continue
 		}
 		out[i].Status = StatusAvailable
+		// The row's own name: one Kroger provider covers several banners.
 		if p.HandoffKind() == providers.HandoffCartWrite {
-			out[i].Note = "Sign in and DinnerOS adds your list to your " + p.Name() + " cart"
+			out[i].Note = "Sign in and DinnerOS adds your list to your " + e.Name + " cart"
 		}
 	}
 	slices.SortStableFunc(out, func(a, b CatalogEntry) int {

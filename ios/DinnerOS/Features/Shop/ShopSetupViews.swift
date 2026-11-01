@@ -19,7 +19,7 @@ struct ShopSetupView: View {
         return shopping.walmart != nil && ShoppingStoreNumber.error(storeNumber) == nil
     }
 
-    private var storeName: String { choice.isKroger ? shopping.kroger?.name ?? "Fry's" : "Walmart" }
+    private var storeName: String { choice.isKroger ? shopping.krogerName : "Walmart" }
 
     var body: some View {
         Form {
@@ -138,8 +138,15 @@ struct ShopStoreFields: View {
                     choice = ShopStoreChoice(provider: provider.key)
                 } label: {
                     HStack {
-                        Text(provider.name)
-                            .foregroundStyle(Color.primary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(provider.name)
+                                .foregroundStyle(Color.primary)
+                            if let summary = provider.bannerSummary {
+                                Text(summary)
+                                    .font(.footnote)
+                                    .foregroundStyle(Color.secondary)
+                            }
+                        }
                         Spacer()
                         if selected {
                             Image(systemName: "checkmark")
@@ -288,7 +295,7 @@ struct KrogerStoreFields: View {
     @State private var errorMessage: String?
     @State private var signInService = StoreSignInService()
 
-    private var name: String { shopping.kroger?.name ?? "Fry's" }
+    private var name: String { shopping.krogerName }
     private var isValidZip: Bool { zip.count == 5 && zip.allSatisfy { $0.isASCII && $0.isNumber } }
 
     var body: some View {

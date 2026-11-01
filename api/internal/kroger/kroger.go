@@ -53,6 +53,9 @@ var (
 	ErrUnauthorized = fmt.Errorf("kroger: sign-in expired: %w", providers.ErrCustomerSignedOut)
 	// ErrUnavailable means the API failed or is rate limiting.
 	ErrUnavailable = errors.New("kroger: service unavailable")
+	// ErrStoreNotOffered means a store belongs to a banner DinnerOS hasn't
+	// turned on.
+	ErrStoreNotOffered = providers.ErrStoreNotOffered
 )
 
 // Options configures the client.
@@ -62,8 +65,11 @@ type Options struct {
 	RedirectURL  string
 	// APIBase is the API origin (https://api.kroger.com).
 	APIBase string
-	// Banner is the store brand ("frys").
+	// Banner is the default store brand ("frys").
 	Banner string
+	// Banners are other brands to enable beside it; a household's brand
+	// follows the store it picks.
+	Banners []string
 	// HTTPClient defaults to one with a 15-second timeout.
 	HTTPClient *http.Client
 	Now        func() time.Time
@@ -76,23 +82,30 @@ type Provider struct {
 	opts Options
 	http *http.Client
 	now  func() time.Time
+	// app is shared by every banner's view of the provider.
+	app *appToken
+}
 
-	mu       sync.Mutex
-	appToken string
-	appUntil time.Time
+// appToken caches the application token for products and stores.
+type appToken struct {
+	mu    sync.Mutex
+	token string
+	until time.Time
 }
 
 var (
-	_ providers.GroceryProvider = (*Provider)(nil)
-	_ providers.ProductSearcher = (*Provider)(nil)
-	_ providers.StoreFinder     = (*Provider)(nil)
-	_ providers.CartWriter      = (*Provider)(nil)
-	_ providers.CustomerAccount = (*Provider)(nil)
+	_ providers.GroceryProvider   = (*Provider)(nil)
+	_ providers.ProductSearcher   = (*Provider)(nil)
+	_ providers.StoreFinder       = (*Provider)(nil)
+	_ providers.CartWriter        = (*Provider)(nil)
+	_ providers.CustomerAccount   = (*Provider)(nil)
+	_ providers.Bannered          = (*Provider)(nil)
+	_ providers.StoreBannerLookup = (*Provider)(nil)
 )
 
 // New returns the Kroger provider.
 func New(o Options) *Provider {
-	p := &Provider{Kroger: providers.NewKroger(o.Banner), opts: o, http: o.HTTPClient, now: o.Now}
+	p := &Provider{Kroger: providers.NewKroger(o.Banner, o.Banners...), opts: o, http: o.HTTPClient, now: o.Now, app: &appToken{}}
 	p.opts.APIBase = strings.TrimRight(o.APIBase, "/")
 	if p.http == nil {
 		p.http = &http.Client{Timeout: 15 * time.Second}
@@ -101,6 +114,14 @@ func New(o Options) *Provider {
 		p.now = time.Now
 	}
 	return p
+}
+
+// ForBanner implements providers.Bannered: the provider as a household at
+// banner sees it, sharing this one's client and tokens.
+func (p *Provider) ForBanner(banner string) providers.GroceryProvider {
+	view := *p
+	view.Kroger = p.Kroger.WithBanner(banner)
+	return &view
 }
 
 // --- Tokens -------------------------------------------------------------------
@@ -135,18 +156,18 @@ func (p *Provider) token(ctx context.Context, form url.Values) (providers.Custom
 
 // app returns the application token for products and stores, cached until
 // shortly before it expires.
-func (p *Provider) app(ctx context.Context) (string, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.appToken != "" && p.now().Before(p.appUntil) {
-		return p.appToken, nil
+func (p *Provider) appTokenFor(ctx context.Context) (string, error) {
+	p.app.mu.Lock()
+	defer p.app.mu.Unlock()
+	if p.app.token != "" && p.now().Before(p.app.until) {
+		return p.app.token, nil
 	}
 	t, err := p.token(ctx, url.Values{"grant_type": {"client_credentials"}, "scope": {scopeProducts}})
 	if err != nil {
 		return "", err
 	}
-	p.appToken, p.appUntil = t.AccessToken, t.ExpiresAt.Add(-tokenSlack)
-	return p.appToken, nil
+	p.app.token, p.app.until = t.AccessToken, t.ExpiresAt.Add(-tokenSlack)
+	return p.app.token, nil
 }
 
 // AuthorizeURL implements providers.CustomerAccount.
@@ -177,25 +198,37 @@ func (p *Provider) RefreshCustomer(ctx context.Context, refreshToken string) (pr
 
 // --- Stores ---------------------------------------------------------------------
 
-type locationsResponse struct {
-	Data []struct {
-		LocationID string `json:"locationId"`
-		Name       string `json:"name"`
-		Address    struct {
-			AddressLine1 string `json:"addressLine1"`
-			City         string `json:"city"`
-			State        string `json:"state"`
-			ZipCode      string `json:"zipCode"`
-		} `json:"address"`
-	} `json:"data"`
+type location struct {
+	LocationID string `json:"locationId"`
+	Chain      string `json:"chain"`
+	Name       string `json:"name"`
+	Address    struct {
+		AddressLine1 string `json:"addressLine1"`
+		City         string `json:"city"`
+		State        string `json:"state"`
+		ZipCode      string `json:"zipCode"`
+	} `json:"address"`
 }
 
-// FindStores implements providers.StoreFinder: the banner's stores near a
-// ZIP code, nearest first.
+type locationsResponse struct {
+	Data []location `json:"data"`
+}
+
+type locationResponse struct {
+	Data location `json:"data"`
+}
+
+// FindStores implements providers.StoreFinder: the enabled banners' stores
+// near a ZIP code, nearest first, each named for its banner. With one banner
+// the API filters by its chain; with several it returns every Kroger-family
+// store nearby and those of other banners are dropped.
 func (p *Provider) FindStores(ctx context.Context, q providers.StoreQuery) ([]providers.Store, error) {
-	params := url.Values{
-		"filter.zipCode.near": {q.ZIPCode}, "filter.limit": {strconv.Itoa(maxStores)},
-		"filter.chain": {p.Banner().Chain},
+	banners := p.Banners()
+	params := url.Values{"filter.zipCode.near": {q.ZIPCode}, "filter.limit": {strconv.Itoa(maxStores)}}
+	if len(banners) == 1 {
+		params.Set("filter.chain", banners[0].Chain)
+	} else {
+		params.Set("filter.limit", strconv.Itoa(maxStores*3))
 	}
 	var out locationsResponse
 	if err := p.getApp(ctx, "/v1/locations", params, &out); err != nil {
@@ -203,6 +236,14 @@ func (p *Provider) FindStores(ctx context.Context, q providers.StoreQuery) ([]pr
 	}
 	stores := make([]providers.Store, 0, len(out.Data))
 	for _, l := range out.Data {
+		banner, ok := p.BannerForChain(l.Chain)
+		if !ok {
+			if len(banners) > 1 {
+				continue
+			}
+			// One banner was asked for by chain; trust the API's filter.
+			banner = banners[0]
+		}
 		a := l.Address
 		address := strings.TrimSpace(a.AddressLine1)
 		if a.City != "" {
@@ -211,9 +252,29 @@ func (p *Provider) FindStores(ctx context.Context, q providers.StoreQuery) ([]pr
 		if a.State != "" {
 			address += ", " + a.State
 		}
-		stores = append(stores, providers.Store{StoreID: l.LocationID, Name: storeName(p.Banner().Name, l.Name), Address: strings.TrimPrefix(address, ", ")})
+		stores = append(stores, providers.Store{
+			StoreID: l.LocationID, Name: storeName(banner.Name, l.Name), Address: strings.TrimPrefix(address, ", "), Banner: banner.Key,
+		})
+		if len(stores) == maxStores {
+			break
+		}
 	}
 	return stores, nil
+}
+
+// StoreBanner implements providers.StoreBannerLookup: the banner of the
+// store with location ID storeID. A store of a banner that isn't enabled is
+// ErrStoreNotOffered.
+func (p *Provider) StoreBanner(ctx context.Context, storeID string) (string, error) {
+	var out locationResponse
+	if err := p.getApp(ctx, "/v1/locations/"+url.PathEscape(storeID), url.Values{}, &out); err != nil {
+		return "", err
+	}
+	banner, ok := p.BannerForChain(out.Data.Chain)
+	if !ok {
+		return "", ErrStoreNotOffered
+	}
+	return banner.Key, nil
 }
 
 // storeName shortens a location's name to the banner and the part people
@@ -408,7 +469,7 @@ func (p *Provider) AddToCart(ctx context.Context, customerToken string, items []
 
 // getApp GETs a path with the application token.
 func (p *Provider) getApp(ctx context.Context, path string, params url.Values, out any) error {
-	token, err := p.app(ctx)
+	token, err := p.appTokenFor(ctx)
 	if err != nil {
 		return err
 	}
@@ -421,9 +482,9 @@ func (p *Provider) getApp(ctx context.Context, path string, params url.Values, o
 	err = p.do(req, out)
 	if errors.Is(err, ErrUnauthorized) {
 		// The cached app token was revoked early; the next call gets a new one.
-		p.mu.Lock()
-		p.appToken = ""
-		p.mu.Unlock()
+		p.app.mu.Lock()
+		p.app.token = ""
+		p.app.mu.Unlock()
 		return fmt.Errorf("%w: application token rejected", ErrUnavailable)
 	}
 	return err

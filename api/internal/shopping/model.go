@@ -76,6 +76,9 @@ type Settings struct {
 	// StoreName is the store's name as the provider's store finder gave it
 	// ("Fry's Food Store, 1 Main St"), or "".
 	StoreName string
+	// Banner is the store's brand in a Bannered provider ("ralphs"), set
+	// from the store; "" uses the provider's default (decision 652).
+	Banner string
 	// UpdatedBy and UpdatedAt are empty until someone sets them.
 	UpdatedBy string
 	UpdatedAt time.Time

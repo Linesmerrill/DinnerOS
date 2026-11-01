@@ -237,6 +237,24 @@ set, and nothing else changes for Walmart households.
    store by ZIP, Save. Choose a product per ingredient from Fry's search, then
    Add to Fry's Cart, and check out in the Fry's app or site.
 
+**More banners (decision 652).** `KROGER_BANNERS` (a comma list or `all`)
+offers other Kroger banners beside `KROGER_BANNER`, all through the same
+provider key, app credentials, and sign-in. The store finder then returns
+every offered banner's stores near the ZIP (no chain filter; other chains are
+dropped), and saving a store asks Kroger's Locations API for its chain, so the
+household's banner always matches its store and is never taken from the app.
+From then on its name ("Ralphs"), product pages, and cart link are that
+banner's (`Service.ProviderFor`, `providers.Bannered`); saved products and the
+sign-in carry over when it switches banners, because Kroger product IDs and
+accounts are the same across them. The providers list calls the provider
+"Kroger" with the banner names when it serves several, and the settings carry
+the household's own `providerName`.
+
+Before turning a banner on: sign in with a real Kroger account in a TestFlight
+build, pick a store of that banner, choose one product, Add to Cart, and check
+that it lands in that banner's cart on its site. Kroger's cart API is
+account-wide, and this has only been confirmed for Fry's.
+
 How it works:
 
 - `internal/providers/kroger.go` is the pure part: banners, UPC and link

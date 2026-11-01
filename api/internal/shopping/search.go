@@ -69,7 +69,7 @@ func (s *Service) SearchProducts(ctx context.Context, householdID, provider, ter
 	if householdID == "" {
 		return nil, errHouseholdRequired
 	}
-	p, err := s.Provider(provider)
+	p, err := s.ProviderFor(ctx, householdID, provider)
 	if err != nil {
 		return nil, err
 	}

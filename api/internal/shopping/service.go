@@ -165,6 +165,31 @@ func (s *Service) Provider(key string) (providers.GroceryProvider, error) {
 	return nil, ErrUnknownProvider
 }
 
+// ProviderFor returns the enabled provider named key as the household sees
+// it: for a Bannered provider (Kroger), the banner of the store the household
+// picked, so its name, product pages, and cart are that store's.
+func (s *Service) ProviderFor(ctx context.Context, householdID, key string) (providers.GroceryProvider, error) {
+	p, err := s.Provider(key)
+	if err != nil {
+		return nil, err
+	}
+	b, ok := p.(providers.Bannered)
+	if !ok || householdID == "" {
+		return p, nil
+	}
+	settings, err := s.store.GetSettings(ctx, householdID)
+	if errors.Is(err, ErrNotFound) {
+		return p, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get shopping settings: %w", err)
+	}
+	if settings.Provider != p.Key() || settings.Banner == "" {
+		return p, nil
+	}
+	return b.ForBanner(settings.Banner), nil
+}
+
 // --- Settings -----------------------------------------------------------------
 
 // Settings returns the household's settings; unset settings have no
@@ -210,12 +235,29 @@ func (s *Service) UpdateStore(ctx context.Context, actor households.Membership, 
 		if len(next.StoreName) > MaxStoreNameLength {
 			return Settings{}, invalid("storeName must be at most %d characters", MaxStoreNameLength)
 		}
+		// The household shops at the picked store's banner: asked of the
+		// provider, never taken from the app.
+		if lookup, ok := p.(providers.StoreBannerLookup); ok {
+			if next.Banner, err = lookup.StoreBanner(ctx, next.StoreID); err != nil {
+				return Settings{}, storeBannerError(err)
+			}
+		}
 	}
 	saved, err := s.store.PutSettings(ctx, next)
 	if err != nil {
 		return Settings{}, fmt.Errorf("put shopping settings: %w", err)
 	}
 	return saved, nil
+}
+
+// storeBannerError explains a failed StoreBanner lookup: a store of a banner
+// that isn't offered yet is the member's to fix; anything else is the store
+// not answering.
+func storeBannerError(err error) error {
+	if errors.Is(err, providers.ErrStoreNotOffered) {
+		return invalid("That store isn't available in DinnerOS yet. Pick another store.")
+	}
+	return fmt.Errorf("%w: %w", ErrSearchUnavailable, err)
 }
 
 // --- Saved products -----------------------------------------------------------
@@ -237,7 +279,7 @@ func (s *Service) GetPreference(ctx context.Context, householdID, provider, ingr
 	if householdID == "" {
 		return Preference{}, errHouseholdRequired
 	}
-	p, err := s.Provider(provider)
+	p, err := s.ProviderFor(ctx, householdID, provider)
 	if err != nil {
 		return Preference{}, err
 	}
@@ -255,7 +297,7 @@ func (s *Service) PutPreference(ctx context.Context, actor households.Membership
 	if err := authorize(actor, households.PermShoppingEdit); err != nil {
 		return Preference{}, false, err
 	}
-	p, err := s.Provider(provider)
+	p, err := s.ProviderFor(ctx, actor.HouseholdID, provider)
 	if err != nil {
 		return Preference{}, false, err
 	}
@@ -428,7 +470,7 @@ func (s *Service) match(ctx context.Context, householdID, week, provider string,
 	if householdID == "" {
 		return Proposal{}, nil, nil, errHouseholdRequired
 	}
-	p, err := s.Provider(provider)
+	p, err := s.ProviderFor(ctx, householdID, provider)
 	if err != nil {
 		return Proposal{}, nil, nil, err
 	}
@@ -673,7 +715,7 @@ func (s *Service) sendTarget(ctx context.Context, actor households.Membership, w
 	if err := authorize(actor, households.PermShoppingEdit); err != nil {
 		return nil, err
 	}
-	p, err := s.Provider(provider)
+	p, err := s.ProviderFor(ctx, actor.HouseholdID, provider)
 	if err != nil {
 		return nil, err
 	}

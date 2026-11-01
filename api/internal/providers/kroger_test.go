@@ -76,3 +76,29 @@ func TestParseSize(t *testing.T) {
 		}
 	}
 }
+
+func TestKrogerServesSeveralBanners(t *testing.T) {
+	k := NewKroger("frys", "ralphs", "RALPHS", "harristeeter", "frys")
+	if got := len(k.Banners()); got != 2 || k.Banners()[0].Key != "frys" {
+		t.Fatalf("banners = %+v, want Fry's then Ralphs", k.Banners())
+	}
+	if keys := k.CatalogKeys(); len(keys) != 2 || keys[0] != "frys" || keys[1] != "ralphs" {
+		t.Errorf("catalog keys = %v", keys)
+	}
+	ralphs := k.WithBanner("ralphs")
+	if ralphs.Name() != "Ralphs" || ralphs.CartURL() != "https://www.ralphs.com/cart" || len(ralphs.Banners()) != 2 {
+		t.Errorf("Ralphs view = %s %s %d", ralphs.Name(), ralphs.CartURL(), len(ralphs.Banners()))
+	}
+	if k.WithBanner("dillons") != k || k.WithBanner("") != k {
+		t.Error("a banner that isn't on keeps the default")
+	}
+	if b, ok := k.BannerForChain("ralphs"); !ok || b.Key != "ralphs" {
+		t.Errorf("chain RALPHS = %+v, %v", b, ok)
+	}
+	if _, ok := k.BannerForChain("DILLONS"); ok {
+		t.Error("a chain that isn't on matched")
+	}
+	if len(KrogerBannerKeys()) != 15 {
+		t.Errorf("known banners = %v", KrogerBannerKeys())
+	}
+}

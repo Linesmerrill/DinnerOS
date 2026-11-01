@@ -143,6 +143,15 @@ type ProviderResponse struct {
 	// which the app must disclose next to the button.
 	AffiliateTracked bool                 `json:"affiliateTracked"`
 	Capabilities     CapabilitiesResponse `json:"capabilities"`
+	// Banners name the store brands a provider serves when it serves more
+	// than one ("Fry's", "Ralphs"); Name is then the family's ("Kroger"), and
+	// a household's own brand is its settings' providerName.
+	Banners []string `json:"banners,omitempty"`
+}
+
+// bannerLister is a provider serving several Kroger banners.
+type bannerLister interface {
+	Banners() []providers.KrogerBanner
 }
 
 // ProviderListResponse is returned by GET /shopping/providers.
@@ -155,8 +164,13 @@ type SettingsResponse struct {
 	Provider  *providers.Key `json:"provider"`
 	StoreID   *string        `json:"storeId"`
 	StoreName *string        `json:"storeName"`
-	UpdatedBy *string        `json:"updatedBy"`
-	UpdatedAt *time.Time     `json:"updatedAt"`
+	// Banner is the household's Kroger banner ("ralphs"), set from its
+	// store, or null; ProviderName is the store brand it shops at ("Ralphs"),
+	// which is what the app calls the store (decision 652).
+	Banner       *string    `json:"banner"`
+	ProviderName *string    `json:"providerName"`
+	UpdatedBy    *string    `json:"updatedBy"`
+	UpdatedAt    *time.Time `json:"updatedAt"`
 }
 
 // UpdateSettingsRequest is the body of PUT .../shopping/settings.
@@ -703,24 +717,56 @@ func packageSizeResponse(s *PackageSize) *PackageSizeResponse {
 	return &PackageSizeResponse{Quantity: s.Quantity, QuantityValue: a.Quantity.Float64(), Unit: s.Unit, Text: providers.AmountText(*a)}
 }
 
-func (h *Handler) providerURL(key providers.Key, productID string) string {
-	if p, ok := h.opts.Service.providers.Get(key); ok {
+func (v *responseView) providerURL(key providers.Key, productID string) string {
+	if p, ok := v.provider(key); ok {
 		return p.ProductURL(productID)
 	}
 	return ""
 }
 
-func (h *Handler) providerName(key providers.Key) string {
-	if p, ok := h.opts.Service.providers.Get(key); ok {
+func (v *responseView) providerName(key providers.Key) string {
+	if p, ok := v.provider(key); ok {
 		return p.Name()
 	}
 	return string(key)
 }
 
-func (h *Handler) preferenceResponse(p Preference) PreferenceResponse {
+// responseView renders responses for one request's household, so a Kroger
+// banner's name and links are that household's (decision 652).
+type responseView struct {
+	h           *Handler
+	ctx         context.Context
+	householdID string
+	resolved    map[providers.Key]providers.GroceryProvider
+}
+
+// view returns the response view for r's household.
+func (h *Handler) view(r *http.Request) *responseView {
+	actor, _ := households.MembershipFromContext(r.Context())
+	return &responseView{h: h, ctx: r.Context(), householdID: actor.HouseholdID}
+}
+
+// provider is the enabled provider named key as the household sees it,
+// resolved once per request.
+func (v *responseView) provider(key providers.Key) (providers.GroceryProvider, bool) {
+	if p, ok := v.resolved[key]; ok {
+		return p, true
+	}
+	p, err := v.h.opts.Service.ProviderFor(v.ctx, v.householdID, string(key))
+	if err != nil {
+		return nil, false
+	}
+	if v.resolved == nil {
+		v.resolved = map[providers.Key]providers.GroceryProvider{}
+	}
+	v.resolved[key] = p
+	return p, true
+}
+
+func (v *responseView) preferenceResponse(p Preference) PreferenceResponse {
 	resp := PreferenceResponse{
 		ID: p.ID, Provider: p.Provider, IngredientKey: p.IngredientKey, IngredientID: optionalString(catalogID(p.IngredientKey)),
-		IngredientName: p.IngredientName, ProductID: p.ProductID, ProductURL: h.providerURL(p.Provider, p.ProductID),
+		IngredientName: p.IngredientName, ProductID: p.ProductID, ProductURL: v.providerURL(p.Provider, p.ProductID),
 		DisplayName: p.DisplayName, PackageSize: packageSizeResponse(p.PackageSize), Coverage: p.Coverage,
 		PriceCents: p.PriceCents, PriceUpdatedAt: optionalTime(p.PriceUpdatedAt), NeedsRechoosing: p.NeedsRechoosing(), ChangeRequested: p.WantsChange(),
 		CreatedBy: p.CreatedBy, CreatedAt: p.CreatedAt, UpdatedBy: p.UpdatedBy, UpdatedAt: p.UpdatedAt,
@@ -811,12 +857,12 @@ func searchTermsResponse(name, category string) SearchTermsResponse {
 	}
 }
 
-func (h *Handler) lineResponse(provider providers.Key, l HandoffLine, stored bool) HandoffLineResponse {
+func (v *responseView) lineResponse(provider providers.Key, l HandoffLine, stored bool) HandoffLineResponse {
 	resp := HandoffLineResponse{
 		ID: l.ID, IngredientKey: l.IngredientKey, IngredientID: optionalString(l.IngredientID()), Name: l.Name, Category: l.Category,
 		Unquantified: l.Unquantified, GroceryStatus: l.GroceryStatus,
 		Product: ProductResponse{
-			ProductID: l.ProductID, DisplayName: l.ProductName, ProductURL: h.providerURL(provider, l.ProductID), PackageSize: packageSizeResponse(l.PackageSize),
+			ProductID: l.ProductID, DisplayName: l.ProductName, ProductURL: v.providerURL(provider, l.ProductID), PackageSize: packageSizeResponse(l.PackageSize),
 			ChangeRequested: l.ChangeRequested,
 		},
 		ComputedPackages: l.ComputedPackages, Packages: l.Packages, PackagesOverridden: l.Packages != l.ComputedPackages,
@@ -887,8 +933,8 @@ func skippedText(e Excluded) string {
 	return "Left out"
 }
 
-func (h *Handler) sentText(provider providers.Key, l SentLine) string {
-	name := h.providerName(provider)
+func (v *responseView) sentText(provider providers.Key, l SentLine) string {
+	name := v.providerName(provider)
 	switch {
 	case l.RemovePackages > 0 && l.Reason == SentProductChanged:
 		return fmt.Sprintf("Replaced by another product; remove %d in the %s app", l.RemovePackages, name)
@@ -898,7 +944,7 @@ func (h *Handler) sentText(provider providers.Key, l SentLine) string {
 	return fmt.Sprintf("In %s cart · %d", name, l.SentPackages)
 }
 
-func (h *Handler) exclusionText(provider providers.Key, reason ExclusionReason) string {
+func (v *responseView) exclusionText(provider providers.Key, reason ExclusionReason) string {
 	switch reason {
 	case ExcludedInPantry:
 		return "In your pantry"
@@ -917,24 +963,24 @@ func (h *Handler) exclusionText(provider providers.Key, reason ExclusionReason) 
 	case ExcludedNotSelected:
 		return "Not selected"
 	case ExcludedNoProduct:
-		return "Choose a " + h.providerName(provider) + " product"
+		return "Choose a " + v.providerName(provider) + " product"
 	case ExcludedNotOnList:
 		return "No longer on this week's list"
 	case ExcludedOrdered:
 		return "Ordered this week"
 	case ExcludedProductGone:
-		return "No longer on " + h.providerName(provider) + ". Re-choose it or leave it out."
+		return "No longer on " + v.providerName(provider) + ". Re-choose it or leave it out."
 	case ExcludedProductUnverified:
-		return "Couldn't check it on " + h.providerName(provider) + "."
+		return "Couldn't check it on " + v.providerName(provider) + "."
 	case ExcludedLeftOutGone:
-		return "Left out. No longer on " + h.providerName(provider) + "."
+		return "Left out. No longer on " + v.providerName(provider) + "."
 	case ExcludedLeftOutUnverified:
-		return "Left out. Couldn't check it on " + h.providerName(provider) + "."
+		return "Left out. Couldn't check it on " + v.providerName(provider) + "."
 	}
 	return ""
 }
 
-func (h *Handler) proposalResponse(p Proposal, stored bool) ProposalResponse {
+func (v *responseView) proposalResponse(p Proposal, stored bool) ProposalResponse {
 	resp := ProposalResponse{
 		Provider: p.Provider, Week: p.Week, StoreID: optionalString(p.StoreID), AffiliateTracked: p.AffiliateTracked,
 		Lines:         make([]HandoffLineResponse, 0, len(p.Lines)),
@@ -944,12 +990,12 @@ func (h *Handler) proposalResponse(p Proposal, stored bool) ProposalResponse {
 		NeedsDecision: len(p.NeedsDecision()),
 	}
 	for _, l := range p.Lines {
-		resp.Lines = append(resp.Lines, h.lineResponse(p.Provider, l, stored))
+		resp.Lines = append(resp.Lines, v.lineResponse(p.Provider, l, stored))
 	}
 	for _, e := range p.Excluded {
 		er := ExcludedResponse{
 			IngredientKey: e.IngredientKey, IngredientID: optionalString(e.IngredientID()), Name: e.Name, Category: e.Category,
-			Unquantified: e.Unquantified, Reason: e.Reason, Text: h.exclusionText(p.Provider, e.Reason),
+			Unquantified: e.Unquantified, Reason: e.Reason, Text: v.exclusionText(p.Provider, e.Reason),
 			SearchTerms: searchTermsResponse(e.Name, e.Category),
 			Recipes:     recipeRefs(e.Recipes), Shares: planning.GroceryShares(e.Shares), SkipScope: e.SkipScope,
 			Added: e.Added,
@@ -959,7 +1005,7 @@ func (h *Handler) proposalResponse(p Proposal, stored bool) ProposalResponse {
 		}
 		er.NeedsDecision = e.Reason.NeedsDecision()
 		if e.ProductID != "" {
-			er.Product = &ProductResponse{ProductID: e.ProductID, DisplayName: e.ProductName, ProductURL: h.providerURL(p.Provider, e.ProductID)}
+			er.Product = &ProductResponse{ProductID: e.ProductID, DisplayName: e.ProductName, ProductURL: v.providerURL(p.Provider, e.ProductID)}
 			er.Check = lineCheckResponse(e.Check)
 		}
 		er.Amounts, er.QuantityText = amounts(e.Amounts)
@@ -985,10 +1031,10 @@ func (h *Handler) proposalResponse(p Proposal, stored bool) ProposalResponse {
 			cart.Other = append(cart.Other, SentLineResponse{
 				IngredientKey: l.IngredientKey, IngredientID: optionalString(l.IngredientID()), Name: l.Name, Category: l.Category,
 				Product: ProductResponse{
-					ProductID: l.ProductID, DisplayName: l.ProductName, ProductURL: h.providerURL(p.Provider, l.ProductID),
+					ProductID: l.ProductID, DisplayName: l.ProductName, ProductURL: v.providerURL(p.Provider, l.ProductID),
 					PackageSize: packageSizeResponse(l.PackageSize),
 				},
-				SentPackages: l.SentPackages, RemovePackages: l.RemovePackages, Reason: l.Reason, Text: h.sentText(p.Provider, l),
+				SentPackages: l.SentPackages, RemovePackages: l.RemovePackages, Reason: l.Reason, Text: v.sentText(p.Provider, l),
 			})
 		}
 		resp.Cart = cart
@@ -996,9 +1042,9 @@ func (h *Handler) proposalResponse(p Proposal, stored bool) ProposalResponse {
 	return resp
 }
 
-func (h *Handler) handoffResponse(ho Handoff) HandoffResponse {
+func (v *responseView) handoffResponse(ho Handoff) HandoffResponse {
 	resp := HandoffResponse{
-		ID: ho.ID, ProposalResponse: h.proposalResponse(ho.Proposal, true), Status: ho.Status(),
+		ID: ho.ID, ProposalResponse: v.proposalResponse(ho.Proposal, true), Status: ho.Status(),
 		Active: ho.Active, ClosedAt: optionalTime(ho.ClosedAt),
 		CreatedBy: ho.CreatedBy, CreatedAt: ho.CreatedAt, UpdatedAt: ho.UpdatedAt,
 	}
@@ -1029,19 +1075,32 @@ func (h *Handler) listProviders(w http.ResponseWriter, _ *http.Request) {
 	resp := ProviderListResponse{Items: []ProviderResponse{}}
 	for _, p := range h.opts.Service.Providers() {
 		c := providers.CapabilitiesOf(p)
-		resp.Items = append(resp.Items, ProviderResponse{
+		item := ProviderResponse{
 			Key: p.Key(), Name: p.Name(), AffiliateTracked: p.AffiliateTracked(),
 			Capabilities: CapabilitiesResponse(c),
-		})
+		}
+		if b, ok := p.(bannerLister); ok && len(b.Banners()) > 1 {
+			item.Name = "Kroger"
+			for _, banner := range b.Banners() {
+				item.Banners = append(item.Banners, banner.Name)
+			}
+		}
+		resp.Items = append(resp.Items, item)
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
-func settingsResponse(s Settings) SettingsResponse {
-	resp := SettingsResponse{StoreID: optionalString(s.StoreID), StoreName: optionalString(s.StoreName), UpdatedBy: optionalString(s.UpdatedBy), UpdatedAt: optionalTime(s.UpdatedAt)}
+func (v *responseView) settingsResponse(s Settings) SettingsResponse {
+	resp := SettingsResponse{
+		StoreID: optionalString(s.StoreID), StoreName: optionalString(s.StoreName), Banner: optionalString(s.Banner),
+		UpdatedBy: optionalString(s.UpdatedBy), UpdatedAt: optionalTime(s.UpdatedAt),
+	}
 	if s.Provider != "" {
 		p := s.Provider
 		resp.Provider = &p
+		if provider, ok := v.provider(s.Provider); ok {
+			resp.ProviderName = optionalString(provider.Name())
+		}
 	}
 	return resp
 }
@@ -1053,7 +1112,7 @@ func (h *Handler) getSettings(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "get shopping settings failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, settingsResponse(s))
+	httpx.WriteJSON(w, http.StatusOK, h.view(r).settingsResponse(s))
 }
 
 func (h *Handler) putSettings(w http.ResponseWriter, r *http.Request) {
@@ -1075,7 +1134,7 @@ func (h *Handler) putSettings(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "update shopping settings failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, settingsResponse(s))
+	httpx.WriteJSON(w, http.StatusOK, h.view(r).settingsResponse(s))
 }
 
 func (h *Handler) listPreferences(w http.ResponseWriter, r *http.Request) {
@@ -1086,8 +1145,9 @@ func (h *Handler) listPreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := PreferenceListResponse{Items: make([]PreferenceResponse, 0, len(prefs))}
+	view := h.view(r)
 	for _, p := range prefs {
-		resp.Items = append(resp.Items, h.preferenceResponse(p))
+		resp.Items = append(resp.Items, view.preferenceResponse(p))
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
@@ -1109,7 +1169,7 @@ func (h *Handler) getPreference(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "get saved product failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, h.preferenceResponse(p))
+	httpx.WriteJSON(w, http.StatusOK, h.view(r).preferenceResponse(p))
 }
 
 func (h *Handler) putPreference(w http.ResponseWriter, r *http.Request) {
@@ -1135,7 +1195,7 @@ func (h *Handler) putPreference(w http.ResponseWriter, r *http.Request) {
 	if created {
 		status = http.StatusCreated
 	}
-	httpx.WriteJSON(w, status, h.preferenceResponse(p))
+	httpx.WriteJSON(w, status, h.view(r).preferenceResponse(p))
 }
 
 func (h *Handler) deletePreference(w http.ResponseWriter, r *http.Request) {
@@ -1155,7 +1215,7 @@ func (h *Handler) flagPreference(flagged bool) http.HandlerFunc {
 			h.writeError(w, r, "flag saved product failed", err)
 			return
 		}
-		httpx.WriteJSON(w, http.StatusOK, h.preferenceResponse(p))
+		httpx.WriteJSON(w, http.StatusOK, h.view(r).preferenceResponse(p))
 	}
 }
 
@@ -1170,7 +1230,7 @@ func (h *Handler) match(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "match grocery list failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, h.proposalResponse(p, false))
+	httpx.WriteJSON(w, http.StatusOK, h.view(r).proposalResponse(p, false))
 }
 
 func (h *Handler) createHandoff(w http.ResponseWriter, r *http.Request) {
@@ -1188,7 +1248,7 @@ func (h *Handler) createHandoff(w http.ResponseWriter, r *http.Request) {
 	if created {
 		status = http.StatusCreated
 	}
-	httpx.WriteJSON(w, status, h.handoffResponse(ho))
+	httpx.WriteJSON(w, status, h.view(r).handoffResponse(ho))
 }
 
 func (h *Handler) startOver(w http.ResponseWriter, r *http.Request) {
@@ -1231,8 +1291,9 @@ func (h *Handler) listHandoffs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := HandoffListResponse{Items: make([]HandoffResponse, 0, len(list))}
+	view := h.view(r)
 	for _, ho := range list {
-		resp.Items = append(resp.Items, h.handoffResponse(ho))
+		resp.Items = append(resp.Items, view.handoffResponse(ho))
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
@@ -1244,7 +1305,7 @@ func (h *Handler) getHandoff(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "get shopping handoff failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, h.handoffResponse(ho))
+	httpx.WriteJSON(w, http.StatusOK, h.view(r).handoffResponse(ho))
 }
 
 func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
@@ -1262,7 +1323,7 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "confirm shopping order failed", err)
 		return
 	}
-	resp := ConfirmResponse{Handoff: h.handoffResponse(res.Handoff), Purchases: make([]ConfirmedPurchaseResponse, 0, len(res.Purchases))}
+	resp := ConfirmResponse{Handoff: h.view(r).handoffResponse(res.Handoff), Purchases: make([]ConfirmedPurchaseResponse, 0, len(res.Purchases))}
 	for _, p := range res.Purchases {
 		pr := ConfirmedPurchaseResponse{LineID: p.LineID, Created: p.Created, Purchase: pantry.NewPurchaseResponse(p.Purchase)}
 		if l, ok := res.Handoff.Line(p.LineID); ok {
@@ -1295,7 +1356,7 @@ func (h *Handler) setPrices(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, "set shopping prices failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, h.handoffResponse(ho))
+	httpx.WriteJSON(w, http.StatusOK, h.view(r).handoffResponse(ho))
 }
 
 func mealKitResponse(kit *households.MealKit) *MealKitResponse {

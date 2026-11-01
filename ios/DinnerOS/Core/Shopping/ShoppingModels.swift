@@ -57,8 +57,20 @@ nonisolated struct ShoppingProvider: Decodable, Hashable, Sendable, Identifiable
     /// Handoff links carry affiliate tracking, so the commission disclosure must be shown.
     let affiliateTracked: Bool
     let capabilities: ShoppingCapabilities
+    /// The store brands the provider serves when it serves several ("Fry's", "Ralphs"); `name`
+    /// is then the family's ("Kroger"). `nil` for one brand (decision 652).
+    var banners: [String]? = nil
 
     var id: String { key }
+
+    /// "Fry's, Ralphs, and King Soopers", or the first three and how many more; `nil` for one
+    /// brand.
+    var bannerSummary: String? {
+        guard let banners, banners.count > 1 else { return nil }
+        if banners.count <= 3 { return banners.formatted(.list(type: .and)) }
+        let more = banners.count - 3
+        return String(localized: "\(banners.prefix(3).joined(separator: ", ")), and \(more) more")
+    }
 
     /// Whether this build can hand a list off to the provider: Walmart cart links, or a Kroger
     /// store's cart filled by the API.
@@ -81,19 +93,26 @@ nonisolated struct ShoppingSettings: Decodable, Hashable, Sendable {
     let storeID: String?
     /// The picked store's name, from the store finder.
     let storeName: String?
+    /// The store brand the household shops at ("Ralphs"), set from its store; `nil` from an
+    /// older API or before a store is picked (decision 652).
+    var providerName: String? = nil
     let updatedBy: String?
     let updatedAt: Date?
 
-    init(provider: String?, storeID: String?, storeName: String? = nil, updatedBy: String?, updatedAt: Date?) {
+    init(
+        provider: String?, storeID: String?, storeName: String? = nil, providerName: String? = nil,
+        updatedBy: String?, updatedAt: Date?
+    ) {
         self.provider = provider
         self.storeID = storeID
         self.storeName = storeName
+        self.providerName = providerName
         self.updatedBy = updatedBy
         self.updatedAt = updatedAt
     }
 
     private enum CodingKeys: String, CodingKey {
-        case provider, storeName
+        case provider, storeName, providerName
         case storeID = "storeId"
         case updatedBy, updatedAt
     }

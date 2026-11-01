@@ -150,12 +150,19 @@ type Store struct {
 	StoreID string
 	Name    string
 	Address string
+	// Banner is the store's brand within a Bannered provider ("ralphs"), or
+	// "".
+	Banner string
 }
 
 // ErrCustomerSignedOut means the provider no longer accepts a member's
 // sign-in (a refused code or refresh token, or a revoked access token): the
 // member signs in again.
 var ErrCustomerSignedOut = errors.New("providers: customer signed out")
+
+// ErrStoreNotOffered means a store belongs to a banner DinnerOS hasn't
+// turned on (StoreBannerLookup).
+var ErrStoreNotOffered = errors.New("providers: store's banner isn't offered")
 
 // CustomerToken is a member's signed-in session with a provider. Both
 // tokens are secrets: never log them.
@@ -185,6 +192,11 @@ type (
 	StoreFinder interface {
 		FindStores(ctx context.Context, q StoreQuery) ([]Store, error)
 	}
+	// StoreBannerLookup says which banner one of a Bannered provider's
+	// stores belongs to, so a household's banner follows the store it picks.
+	StoreBannerLookup interface {
+		StoreBanner(ctx context.Context, storeID string) (string, error)
+	}
 	// CartWriter adds items to a signed-in customer's cart directly.
 	CartWriter interface {
 		AddToCart(ctx context.Context, customerToken string, items []CartItem) error
@@ -203,6 +215,12 @@ type (
 	// while the provider is enabled.
 	CatalogListed interface {
 		CatalogKeys() []string
+	}
+	// Bannered is a provider whose store brand differs by household (the
+	// Kroger family). ForBanner returns the provider as a household at that
+	// banner sees it; an unknown or disabled banner gives the default.
+	Bannered interface {
+		ForBanner(banner string) GroceryProvider
 	}
 	// OrderImporter reads what a customer ordered.
 	OrderImporter interface {

@@ -231,6 +231,7 @@ type settingsDoc struct {
 	Provider    string        `bson:"provider,omitempty"`
 	StoreID     string        `bson:"storeId,omitempty"`
 	StoreName   string        `bson:"storeName,omitempty"`
+	Banner      string        `bson:"banner,omitempty"`
 	UpdatedBy   bson.ObjectID `bson:"updatedBy"`
 	UpdatedAt   time.Time     `bson:"updatedAt"`
 }
@@ -245,7 +246,7 @@ func (s *MongoStore) GetSettings(ctx context.Context, householdID string) (Setti
 	if err := s.settings.FindOne(ctx, bson.D{{Key: "householdId", Value: hid}}).Decode(&d); err != nil {
 		return Settings{}, translate(err)
 	}
-	return Settings{HouseholdID: d.HouseholdID.Hex(), Provider: providers.Key(d.Provider), StoreID: d.StoreID, StoreName: d.StoreName, UpdatedBy: hexOrEmpty(d.UpdatedBy), UpdatedAt: d.UpdatedAt.UTC()}, nil
+	return Settings{HouseholdID: d.HouseholdID.Hex(), Provider: providers.Key(d.Provider), StoreID: d.StoreID, StoreName: d.StoreName, Banner: d.Banner, UpdatedBy: hexOrEmpty(d.UpdatedBy), UpdatedAt: d.UpdatedAt.UTC()}, nil
 }
 
 // PutSettings implements Store.
@@ -258,7 +259,7 @@ func (s *MongoStore) PutSettings(ctx context.Context, in Settings) (Settings, er
 	if err != nil {
 		return Settings{}, err
 	}
-	d := settingsDoc{HouseholdID: hid, Provider: string(in.Provider), StoreID: in.StoreID, StoreName: in.StoreName, UpdatedBy: uid, UpdatedAt: in.UpdatedAt}
+	d := settingsDoc{HouseholdID: hid, Provider: string(in.Provider), StoreID: in.StoreID, StoreName: in.StoreName, Banner: in.Banner, UpdatedBy: uid, UpdatedAt: in.UpdatedAt}
 	_, err = s.settings.ReplaceOne(ctx, bson.D{{Key: "householdId", Value: hid}}, d, options.Replace().SetUpsert(true))
 	if err != nil {
 		return Settings{}, translate(err)

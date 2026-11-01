@@ -651,10 +651,20 @@ func newMealKitRunner(cfg config.Config, db *mongo.Database, service *mealkit.Se
 func shoppingProviders(cfg config.Config, logger *slog.Logger) *providers.Registry {
 	ps := []providers.GroceryProvider{newWalmartProvider(cfg)}
 	if k := cfg.Kroger; k.Enabled() {
-		ps = append(ps, kroger.New(kroger.Options{
-			ClientID: k.ClientID, ClientSecret: k.ClientSecret, RedirectURL: k.RedirectURL, APIBase: k.APIBase, Banner: k.Banner,
-		}))
-		logger.Info("shopping provider enabled", "provider", providers.KeyKroger, "banner", k.Banner)
+		banners := k.Banners
+		if slices.Contains(banners, "all") {
+			banners = providers.KrogerBannerKeys()
+		}
+		p := kroger.New(kroger.Options{
+			ClientID: k.ClientID, ClientSecret: k.ClientSecret, RedirectURL: k.RedirectURL, APIBase: k.APIBase,
+			Banner: k.Banner, Banners: banners,
+		})
+		ps = append(ps, p)
+		var keys []string
+		for _, b := range p.Banners() {
+			keys = append(keys, b.Key)
+		}
+		logger.Info("shopping provider enabled", "provider", providers.KeyKroger, "banner", k.Banner, "banners", keys)
 	}
 	return providers.NewRegistry(ps...)
 }

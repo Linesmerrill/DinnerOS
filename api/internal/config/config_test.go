@@ -35,8 +35,15 @@ func TestLoadShopping(t *testing.T) {
 
 func TestLoadKroger(t *testing.T) {
 	cfg, err := Load(env(nil))
-	if err != nil || cfg.Kroger.Enabled() || cfg.Kroger.Banner != "frys" || cfg.Kroger.APIBase != DefaultKrogerAPIBase {
+	if err != nil || cfg.Kroger.Enabled() || cfg.Kroger.Banner != "frys" || cfg.Kroger.APIBase != DefaultKrogerAPIBase ||
+		cfg.Kroger.Banners != nil {
 		t.Fatalf("defaults: Kroger = %+v, %v", cfg.Kroger, err)
+	}
+	for in, want := range map[string]string{"all": "all", " Ralphs, smiths ,": "ralphs|smiths", "ALL": "all"} {
+		cfg, err := Load(env(map[string]string{"KROGER_BANNERS": in}))
+		if got := strings.Join(cfg.Kroger.Banners, "|"); err != nil || got != want {
+			t.Errorf("KROGER_BANNERS=%q: Banners = %q, %v; want %q", in, got, err, want)
+		}
 	}
 	all := map[string]string{
 		"KROGER_CLIENT_ID": "dinneros-test", "KROGER_CLIENT_SECRET": "not-a-real-secret",

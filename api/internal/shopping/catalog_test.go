@@ -118,6 +118,14 @@ func TestLiveStoresAreAvailable(t *testing.T) {
 	if s, _ := status(live, "ralphs"); s != StatusResearched {
 		t.Errorf("ralphs = %q, want researched while only Fry's is enabled", s)
 	}
+	// With Ralphs on too, its row is available and names Ralphs.
+	both := withLiveStores(CatalogEntries(), []providers.GroceryProvider{walmart, providers.NewKroger("frys", "ralphs")})
+	if s, note := status(both, "ralphs"); s != StatusAvailable || note != "Sign in and DinnerOS adds your list to your Ralphs cart" {
+		t.Errorf("ralphs enabled = %q %q", s, note)
+	}
+	if s, _ := status(both, "dillons"); s != StatusResearched {
+		t.Errorf("dillons = %q, want researched", s)
+	}
 	// The catalog itself is untouched.
 	if e, _ := CatalogEntryByKey("frys"); e.Status != StatusResearched {
 		t.Errorf("catalog frys = %q after withLiveStores; it must not be changed", e.Status)
