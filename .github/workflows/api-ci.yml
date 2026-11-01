@@ -22,15 +22,15 @@ concurrency:
 jobs:
   test:
     name: Lint, test, build
-    # MongoDB 8.0 won't start on Linux 6.19+ (SERVER-121912), which ubuntu-latest
-    # now runs. Stay on 24.04 until the mongo image is fixed.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: api
     services:
       mongo:
-        image: mongo:8.0
+        # MongoDB 8.0+ won't start on the runners' Linux 6.19+ kernel
+        # (SERVER-121912). Tests use 7.0 until a fixed 8.x image ships.
+        image: mongo:7.0
         ports:
           - 27017:27017
         options: >-
