@@ -80,6 +80,12 @@ struct ShoppingAPITests {
         let withoutStore = try jsonBody(requests[1])
         #expect(Set(withoutStore.keys) == ["provider", "storeId"])
         #expect(withoutStore["storeId"] is NSNull)
+
+        _ = try await api.updateSettings(
+            householdID: "household-1",
+            settings: UpdateShoppingSettingsRequest(provider: "kroger", storeID: "66000123", makeDefault: false),
+            accessToken: "t")
+        #expect(try jsonBody(transport.requests[2])["makeDefault"] as? Bool == false)
     }
 
     @Test(arguments: [("", nil), (" 5435 ", nil), ("012345", nil), ("1234567", "digits"), ("12a", "digits")])

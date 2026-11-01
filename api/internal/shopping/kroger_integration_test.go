@@ -190,7 +190,7 @@ func TestIntegrationKrogerFillsTheCart(t *testing.T) {
 	f := newFixture(t)
 	k := f.withKroger(t)
 	ctx := f.ctx
-	if _, err := f.svc.UpdateStore(ctx, f.actor, "kroger", "66000123", " Fry's   Test Store "); err != nil {
+	if _, err := f.svc.UpdateStore(ctx, f.actor, "kroger", "66000123", " Fry's   Test Store ", true); err != nil {
 		t.Fatal(err)
 	}
 	if s, _ := f.svc.Settings(ctx, testHousehold); s.StoreName != "Fry's Test Store" || s.StoreID != "66000123" {
@@ -290,7 +290,7 @@ func TestIntegrationKrogerRoutes(t *testing.T) {
 	f := newFixture(t)
 	k := f.withKroger(t)
 	ctx := f.ctx
-	if _, err := f.svc.UpdateStore(ctx, f.actor, "kroger", "66000123", "Fry's Test Store"); err != nil {
+	if _, err := f.svc.UpdateStore(ctx, f.actor, "kroger", "66000123", "Fry's Test Store", true); err != nil {
 		t.Fatal(err)
 	}
 	stores, err := f.svc.FindStores(ctx, testHousehold, "kroger", "85001")

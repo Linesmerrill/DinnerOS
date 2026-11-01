@@ -155,8 +155,8 @@ func buildProposal(p providers.GroceryProvider, settings Settings, g planning.Gr
 		HouseholdID: settings.HouseholdID, Week: g.Week.String(), Provider: p.Key(), AffiliateTracked: p.AffiliateTracked(),
 		Lines: []HandoffLine{}, Excluded: []Excluded{}, Links: []CartLink{}, Meals: g.Meals,
 	}
-	if settings.Provider == p.Key() {
-		out.StoreID = settings.StoreID
+	if store, ok := settings.Store(p.Key()); ok {
+		out.StoreID = store.StoreID
 	}
 	byKey := make(map[string]Preference, len(prefs))
 	for _, pref := range prefs {

@@ -200,28 +200,22 @@ struct ShopStoreFields: View {
     }
 }
 
-/// Changes the household's store number.
+/// The household's stores: which one is the default, each store's details, adding another,
+/// and removing one. Saved products stay with each store on the server.
 struct ShopStoreSettingsSheet: View {
     @Environment(ShoppingStore.self) private var shopping
     @Environment(HouseholdStore.self) private var households
     @Environment(\.dismiss) private var dismiss
 
-    @State private var storeNumber = ""
-    @State private var choice = ShopStoreChoice()
-    @State private var didStart = false
-    @State private var isSaving = false
+    @State private var working: String?
     @State private var errorMessage: String?
+    @State private var removing: ShoppingStoreChoice?
 
-    private var hasChanges: Bool {
-        if choice.provider != shopping.provider { return true }
-        if choice.isKroger { return choice.store != nil && choice.store?.storeID != shopping.settings?.storeID }
-        return ShoppingStoreNumber.normalized(storeNumber) != shopping.settings?.storeID
-    }
-
-    private var canSave: Bool {
-        guard shopping.canEdit, hasChanges, !isSaving else { return false }
-        if choice.isKroger { return choice.store != nil }
-        return ShoppingStoreNumber.error(storeNumber) == nil
+    /// Offered stores the household hasn't set up.
+    private var addable: [ShoppingProvider] {
+        shopping.providers.filter { provider in
+            provider.isSupported && shopping.settings?.store(for: provider.key) == nil
+        }
     }
 
     var body: some View {
@@ -232,27 +226,221 @@ struct ShopStoreSettingsSheet: View {
                         FormErrorLabel(message: errorMessage)
                     }
                 }
-                ShopStoreFields(storeNumber: $storeNumber, choice: $choice, isEditable: shopping.canEdit)
+                Section {
+                    ForEach(shopping.setUpStores) { store in
+                        NavigationLink {
+                            ShopStoreEditForm(provider: store.provider, isNew: false)
+                        } label: {
+                            storeRow(store)
+                        }
+                        .swipeActions {
+                            if shopping.canEdit {
+                                Button("Remove", role: .destructive) { removing = store }
+                                if !store.isDefault {
+                                    Button("Make Default") { makeDefault(store) }
+                                        .tint(.accentColor)
+                                }
+                            }
+                        }
+                        .contextMenu {
+                            if shopping.canEdit {
+                                if !store.isDefault {
+                                    Button("Make Default", systemImage: "star") { makeDefault(store) }
+                                }
+                                Button("Remove", systemImage: "trash", role: .destructive) { removing = store }
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Your Stores")
+                } footer: {
+                    if shopping.canSwitchStores {
+                        Text("Weeks shop at your default store. Change a week's store at the top of Shop.")
+                    }
+                }
+                if shopping.canEdit, !addable.isEmpty {
+                    Section {
+                        ForEach(addable) { provider in
+                            NavigationLink {
+                                ShopStoreEditForm(provider: provider.key, isNew: true)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Label("Add \(provider.name)", systemImage: "plus")
+                                    if let summary = provider.bannerSummary {
+                                        Text(summary)
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    } footer: {
+                        Text("Your other stores and their saved products stay as they are.")
+                    }
+                }
             }
             .navigationTitle("Store Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: save)
-                        .disabled(!canSave)
+                    Button("Done") { dismiss() }
                 }
             }
-            .disabled(isSaving)
-            .interactiveDismissDisabled(isSaving)
-            .onAppear {
-                guard !didStart else { return }
-                didStart = true
-                choice = ShopStoreChoice(provider: shopping.provider)
-                if !choice.isKroger {
-                    storeNumber = shopping.settings?.storeID ?? ""
+            .disabled(working != nil)
+            .confirmationDialog(
+                "Remove \(removing.map { shopping.name(of: $0.provider) } ?? "")?",
+                isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
+                titleVisibility: .visible, presenting: removing
+            ) { store in
+                Button("Remove", role: .destructive) { remove(store) }
+            } message: { _ in
+                Text("Its saved products are kept. Add the store again to use them.")
+            }
+        }
+    }
+
+    private func storeRow(_ store: ShoppingStoreChoice) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(shopping.name(of: store.provider))
+                if let detail = detail(store) {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            if working == store.provider {
+                ProgressView()
+            } else if store.isDefault {
+                Text("Default")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func detail(_ store: ShoppingStoreChoice) -> String? {
+        if let name = store.storeName, !name.isEmpty { return name }
+        if let id = store.storeID { return String(localized: "Store \(id)") }
+        return nil
+    }
+
+    private func makeDefault(_ store: ShoppingStoreChoice) {
+        run(store) { try await shopping.makeDefault(store.provider) }
+    }
+
+    private func remove(_ store: ShoppingStoreChoice) {
+        run(store) { try await shopping.removeStore(store.provider) }
+    }
+
+    private func run(_ store: ShoppingStoreChoice, _ action: @escaping @MainActor () async throws -> Void) {
+        Task {
+            working = store.provider
+            defer { working = nil }
+            errorMessage = nil
+            do {
+                try await action()
+            } catch is CancellationError {
+                return
+            } catch {
+                errorMessage = ShopErrors.message(for: error, households: households)
+            }
+        }
+    }
+}
+
+/// Adds one store, or changes one already set up: Walmart's optional store number, or the
+/// Kroger sign-in and store.
+struct ShopStoreEditForm: View {
+    let provider: String
+    let isNew: Bool
+
+    @Environment(ShoppingStore.self) private var shopping
+    @Environment(HouseholdStore.self) private var households
+    @Environment(\.appConfiguration) private var configuration
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var storeNumber = ""
+    @State private var krogerStore: ShoppingStoreLocation?
+    @State private var makeDefault = false
+    @State private var didStart = false
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    private var isKroger: Bool { provider == ShoppingProviderKey.kroger }
+    private var saved: ShoppingStoreChoice? { shopping.settings?.store(for: provider) }
+    private var name: String { isKroger ? shopping.krogerName : "Walmart" }
+
+    private var hasChanges: Bool {
+        if isNew || makeDefault { return true }
+        if isKroger { return krogerStore != nil && krogerStore?.storeID != saved?.storeID }
+        return ShoppingStoreNumber.normalized(storeNumber) != saved?.storeID
+    }
+
+    private var canSave: Bool {
+        guard shopping.canEdit, hasChanges, !isSaving else { return false }
+        if isKroger { return krogerStore != nil || (!isNew && saved?.storeID != nil) }
+        return ShoppingStoreNumber.error(storeNumber) == nil
+    }
+
+    var body: some View {
+        Form {
+            if let errorMessage {
+                Section {
+                    FormErrorLabel(message: errorMessage)
+                }
+            }
+            if isKroger {
+                KrogerStoreFields(store: $krogerStore, isEditable: shopping.canEdit)
+            } else {
+                walmartStoreNumber
+            }
+            if shopping.canEdit, saved?.isDefault != true, shopping.settings?.provider != nil {
+                Section {
+                    Toggle("Make Default", isOn: $makeDefault)
+                } footer: {
+                    Text("Weeks shop at your default store unless you pick another.")
+                }
+            }
+        }
+        .navigationTitle(isNew ? "Add \(name)" : name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button(isNew ? "Add" : "Save", action: save)
+                    .disabled(!canSave)
+            }
+        }
+        .disabled(isSaving)
+        .onAppear {
+            guard !didStart else { return }
+            didStart = true
+            if !isKroger {
+                storeNumber = saved?.storeID ?? ""
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var walmartStoreNumber: some View {
+        Section {
+            TextField("Store Number", text: $storeNumber, prompt: Text("Optional, for example 1234"))
+                .keyboardType(.numberPad)
+                .disabled(!shopping.canEdit)
+            if let error = ShoppingStoreNumber.error(storeNumber) {
+                FormErrorLabel(message: error)
+            }
+        } header: {
+            Text("Store Number")
+        } footer: {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(
+                    "Optional. Cart links use this store for pickup and delivery. It's printed near the top of a Walmart receipt (ST# 1234) and is the number in your store's web address, walmart.com/store/1234. Leave it empty to let Walmart choose."
+                )
+                if shopping.walmart?.affiliateTracked == true {
+                    Text("\(configuration.displayName) may earn a commission on Walmart purchases.")
                 }
             }
         }
@@ -264,10 +452,14 @@ struct ShopStoreSettingsSheet: View {
             defer { isSaving = false }
             errorMessage = nil
             do {
-                if choice.isKroger, let store = choice.store {
-                    try await shopping.saveStore(provider: ShoppingProviderKey.kroger, store: store)
+                if isKroger {
+                    if let krogerStore {
+                        try await shopping.saveStore(provider: provider, store: krogerStore, makeDefault: makeDefault)
+                    } else if makeDefault {
+                        try await shopping.makeDefault(provider)
+                    }
                 } else {
-                    try await shopping.saveSettings(storeNumber: storeNumber)
+                    try await shopping.saveSettings(storeNumber: storeNumber, makeDefault: makeDefault)
                 }
                 dismiss()
             } catch is CancellationError {
@@ -361,10 +553,10 @@ struct KrogerStoreFields: View {
 
     /// The store already saved, before another is picked.
     private var currentStore: ShoppingStoreLocation? {
-        guard shopping.settings?.provider == ShoppingProviderKey.kroger, let id = shopping.settings?.storeID else {
+        guard let saved = shopping.settings?.store(for: ShoppingProviderKey.kroger), let id = saved.storeID else {
             return nil
         }
-        return ShoppingStoreLocation(storeID: id, name: shopping.settings?.storeName ?? name, address: "")
+        return ShoppingStoreLocation(storeID: id, name: saved.storeName ?? name, address: "")
     }
 
     private func storeRow(_ location: ShoppingStoreLocation, selected: Bool) -> some View {

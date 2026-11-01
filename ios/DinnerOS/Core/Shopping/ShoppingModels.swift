@@ -89,6 +89,7 @@ nonisolated struct ShoppingProviderList: Decodable, Sendable {
 
 /// The household's provider and store (`ShoppingSettings`). Every field is `nil` until set.
 nonisolated struct ShoppingSettings: Decodable, Hashable, Sendable {
+    /// The default store, which weeks shop at unless a week picks another.
     let provider: String?
     let storeID: String?
     /// The picked store's name, from the store finder.
@@ -96,26 +97,108 @@ nonisolated struct ShoppingSettings: Decodable, Hashable, Sendable {
     /// The store brand the household shops at ("Ralphs"), set from its store; `nil` from an
     /// older API or before a store is picked (decision 652).
     var providerName: String? = nil
+    /// Every store the household set up, the default among them (decision 653).
+    var stores: [ShoppingStoreChoice] = []
+    /// Weeks that shop at a store other than the default.
+    var trips: [ShoppingTripStore] = []
     let updatedBy: String?
     let updatedAt: Date?
 
     init(
         provider: String?, storeID: String?, storeName: String? = nil, providerName: String? = nil,
-        updatedBy: String?, updatedAt: Date?
+        stores: [ShoppingStoreChoice]? = nil, trips: [ShoppingTripStore] = [], updatedBy: String?, updatedAt: Date?
     ) {
         self.provider = provider
         self.storeID = storeID
         self.storeName = storeName
         self.providerName = providerName
+        self.stores =
+            stores ?? Self.oneStore(provider: provider, storeID: storeID, storeName: storeName, name: providerName)
+        self.trips = trips
         self.updatedBy = updatedBy
         self.updatedAt = updatedAt
     }
 
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        provider = try c.decodeIfPresent(String.self, forKey: .provider)
+        storeID = try c.decodeIfPresent(String.self, forKey: .storeID)
+        storeName = try c.decodeIfPresent(String.self, forKey: .storeName)
+        providerName = try c.decodeIfPresent(String.self, forKey: .providerName)
+        updatedBy = try c.decodeIfPresent(String.self, forKey: .updatedBy)
+        updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
+        // An older API names one store; it is the household's only one.
+        stores =
+            try c.decodeIfPresent([ShoppingStoreChoice].self, forKey: .stores)
+            ?? Self.oneStore(provider: provider, storeID: storeID, storeName: storeName, name: providerName)
+        trips = try c.decodeIfPresent([ShoppingTripStore].self, forKey: .trips) ?? []
+    }
+
+    /// The household's entry for `provider`, when it set that store up.
+    func store(for provider: String) -> ShoppingStoreChoice? {
+        stores.first { $0.provider == provider }
+    }
+
+    /// The store `week` shops at: the week's pick while that store is set up, else the default.
+    func tripProvider(week: String) -> String? {
+        if let trip = trips.first(where: { $0.week == week }), store(for: trip.provider) != nil {
+            return trip.provider
+        }
+        return provider
+    }
+
+    private static func oneStore(
+        provider: String?, storeID: String?, storeName: String?, name: String?
+    ) -> [ShoppingStoreChoice] {
+        guard let provider else { return [] }
+        return [
+            ShoppingStoreChoice(
+                provider: provider, providerName: name ?? "", storeID: storeID, storeName: storeName, isDefault: true)
+        ]
+    }
+
     private enum CodingKeys: String, CodingKey {
-        case provider, storeName, providerName
+        case provider, storeName, providerName, stores, trips
         case storeID = "storeId"
         case updatedBy, updatedAt
     }
+}
+
+/// One store a household set up.
+nonisolated struct ShoppingStoreChoice: Decodable, Hashable, Sendable, Identifiable {
+    let provider: String
+    /// What the app calls the store: "Walmart", "Fry's", "Ralphs".
+    let providerName: String
+    let storeID: String?
+    let storeName: String?
+    var banner: String? = nil
+    let isDefault: Bool
+
+    var id: String { provider }
+
+    private enum CodingKeys: String, CodingKey {
+        case provider, providerName, storeName, banner, isDefault
+        case storeID = "storeId"
+    }
+}
+
+/// The store one week shops at, when it isn't the default.
+nonisolated struct ShoppingTripStore: Codable, Hashable, Sendable {
+    let week: String
+    let provider: String
+}
+
+/// The body of `PUT .../settings/default` and `PUT .../weeks/{week}/store`; `nil` goes back to
+/// the default.
+nonisolated struct ShoppingStoreProviderRequest: Encodable, Equatable, Sendable {
+    let provider: String?
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(provider, forKey: .provider)
+    }
+
+    private enum CodingKeys: String, CodingKey { case provider }
 }
 
 /// The body of `PUT .../shopping/settings`. A `nil` store is sent as `null`, which clears it.
@@ -124,9 +207,11 @@ nonisolated struct UpdateShoppingSettingsRequest: Encodable, Equatable, Sendable
     var storeID: String?
     /// The picked store's name, kept for display.
     var storeName: String?
+    /// False sets the store up without making it the default.
+    var makeDefault = true
 
     private enum CodingKeys: String, CodingKey {
-        case provider, storeName
+        case provider, storeName, makeDefault
         case storeID = "storeId"
     }
 
@@ -134,6 +219,10 @@ nonisolated struct UpdateShoppingSettingsRequest: Encodable, Equatable, Sendable
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(provider, forKey: .provider)
         try container.encodeIfPresent(storeName, forKey: .storeName)
+        // Absent means true to the API, as before several stores.
+        if !makeDefault {
+            try container.encode(false, forKey: .makeDefault)
+        }
         if let storeID {
             try container.encode(storeID, forKey: .storeID)
         } else {

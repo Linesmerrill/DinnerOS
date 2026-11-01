@@ -82,6 +82,9 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Get("/shopping/catalog", h.storeCatalog)
 		r.With(view).Get(base+"/settings", h.getSettings)
 		r.With(edit).Put(base+"/settings", h.putSettings)
+		r.With(edit).Put(base+"/settings/default", h.putDefaultStore)
+		r.With(edit).Delete(base+"/settings/stores/{provider}", h.deleteStore)
+		r.With(edit).Put(base+"/weeks/{week}/store", h.putTripStore)
 		r.With(view).Get(base+"/handoffs", h.listHandoffs)
 		r.With(view).Get(base+"/handoffs/{handoffId}", h.getHandoff)
 		r.With(view).Get(base+"/handoffs/{handoffId}/bulk-packs", h.bulkPacks)
@@ -167,18 +170,50 @@ type SettingsResponse struct {
 	// Banner is the household's Kroger banner ("ralphs"), set from its
 	// store, or null; ProviderName is the store brand it shops at ("Ralphs"),
 	// which is what the app calls the store (decision 652).
-	Banner       *string    `json:"banner"`
-	ProviderName *string    `json:"providerName"`
-	UpdatedBy    *string    `json:"updatedBy"`
-	UpdatedAt    *time.Time `json:"updatedAt"`
+	Banner       *string `json:"banner"`
+	ProviderName *string `json:"providerName"`
+	// Stores are every store the household set up, the default among them
+	// (decision 653); the fields above repeat the default's, for older apps.
+	Stores []StoreChoiceResponse `json:"stores"`
+	// Trips are the weeks that shop at a store other than the default.
+	Trips     []TripStoreResponse `json:"trips"`
+	UpdatedBy *string             `json:"updatedBy"`
+	UpdatedAt *time.Time          `json:"updatedAt"`
 }
 
-// UpdateSettingsRequest is the body of PUT .../shopping/settings.
+// StoreChoiceResponse is one store a household set up.
+type StoreChoiceResponse struct {
+	Provider providers.Key `json:"provider"`
+	// ProviderName is what the app calls the store ("Walmart", "Ralphs").
+	ProviderName string  `json:"providerName"`
+	StoreID      *string `json:"storeId"`
+	StoreName    *string `json:"storeName"`
+	Banner       *string `json:"banner"`
+	IsDefault    bool    `json:"isDefault"`
+}
+
+// TripStoreResponse is the store one week shops at.
+type TripStoreResponse struct {
+	Week     string        `json:"week"`
+	Provider providers.Key `json:"provider"`
+}
+
+// UpdateSettingsRequest is the body of PUT .../shopping/settings: sets up
+// one store, keeping the others.
 type UpdateSettingsRequest struct {
 	Provider string  `json:"provider"`
 	StoreID  *string `json:"storeId"`
 	// StoreName is the picked store's name, kept for display.
 	StoreName string `json:"storeName,omitempty"`
+	// MakeDefault makes the store the default; absent is true, as picking
+	// a store did when a household had one.
+	MakeDefault *bool `json:"makeDefault,omitempty"`
+}
+
+// StoreProviderRequest names a store: the body of PUT .../settings/default
+// and PUT .../weeks/{week}/store, where null goes back to the default.
+type StoreProviderRequest struct {
+	Provider *string `json:"provider"`
 }
 
 // PackageSizeRequest is a package size in a request.
@@ -1102,6 +1137,21 @@ func (v *responseView) settingsResponse(s Settings) SettingsResponse {
 			resp.ProviderName = optionalString(provider.Name())
 		}
 	}
+	resp.Stores = make([]StoreChoiceResponse, 0, len(s.Stores))
+	for _, c := range s.Stores {
+		item := StoreChoiceResponse{
+			Provider: c.Provider, ProviderName: string(c.Provider), StoreID: optionalString(c.StoreID),
+			StoreName: optionalString(c.StoreName), Banner: optionalString(c.Banner), IsDefault: c.Provider == s.Provider,
+		}
+		if provider, ok := v.provider(c.Provider); ok {
+			item.ProviderName = provider.Name()
+		}
+		resp.Stores = append(resp.Stores, item)
+	}
+	resp.Trips = make([]TripStoreResponse, 0, len(s.Trips))
+	for _, t := range s.Trips {
+		resp.Trips = append(resp.Trips, TripStoreResponse(t))
+	}
 	return resp
 }
 
@@ -1129,9 +1179,56 @@ func (h *Handler) putSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		storeID = *req.StoreID
 	}
-	s, err := h.opts.Service.UpdateStore(r.Context(), actor, req.Provider, storeID, req.StoreName)
+	makeDefault := req.MakeDefault == nil || *req.MakeDefault
+	s, err := h.opts.Service.UpdateStore(r.Context(), actor, req.Provider, storeID, req.StoreName, makeDefault)
 	if err != nil {
 		h.writeError(w, r, "update shopping settings failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, h.view(r).settingsResponse(s))
+}
+
+func (h *Handler) putDefaultStore(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	var req StoreProviderRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	if req.Provider == nil || strings.TrimSpace(*req.Provider) == "" {
+		h.writeError(w, r, "", invalid("provider is required"))
+		return
+	}
+	s, err := h.opts.Service.SetDefaultStore(r.Context(), actor, *req.Provider)
+	if err != nil {
+		h.writeError(w, r, "set default store failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, h.view(r).settingsResponse(s))
+}
+
+func (h *Handler) deleteStore(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	s, err := h.opts.Service.RemoveStore(r.Context(), actor, chi.URLParam(r, "provider"))
+	if err != nil {
+		h.writeError(w, r, "remove store failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, h.view(r).settingsResponse(s))
+}
+
+func (h *Handler) putTripStore(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	var req StoreProviderRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	provider := ""
+	if req.Provider != nil {
+		provider = strings.TrimSpace(*req.Provider)
+	}
+	s, err := h.opts.Service.SetTripStore(r.Context(), actor, chi.URLParam(r, "week"), provider)
+	if err != nil {
+		h.writeError(w, r, "set trip store failed", err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, h.view(r).settingsResponse(s))

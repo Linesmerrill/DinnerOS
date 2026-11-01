@@ -69,7 +69,9 @@ const (
 // Settings are a household's shopping settings.
 type Settings struct {
 	HouseholdID string
-	// Provider is the household's store, or "" when unset.
+	// Provider is the household's default store, or "" when unset. It and
+	// StoreID, StoreName, and Banner repeat the default's entry in Stores,
+	// which older apps read as the household's only store.
 	Provider providers.Key
 	// StoreID is the provider's store number, or "".
 	StoreID string
@@ -79,9 +81,68 @@ type Settings struct {
 	// Banner is the store's brand in a Bannered provider ("ralphs"), set
 	// from the store; "" uses the provider's default (decision 652).
 	Banner string
+	// Stores are every store the household set up, one per provider, in
+	// the order they were added (decision 653).
+	Stores []StoreChoice
+	// Trips are the weeks shopped at a store other than the default.
+	Trips []TripStore
 	// UpdatedBy and UpdatedAt are empty until someone sets them.
 	UpdatedBy string
 	UpdatedAt time.Time
+}
+
+// StoreChoice is one store a household set up: a provider and, optionally,
+// which of its stores.
+type StoreChoice struct {
+	Provider  providers.Key
+	StoreID   string
+	StoreName string
+	Banner    string
+}
+
+// TripStore is the store one week's trip shops at, when not the default.
+type TripStore struct {
+	Week     string
+	Provider providers.Key
+}
+
+// MaxTrips is how many weeks' store choices a household keeps; the oldest
+// go first.
+const MaxTrips = 12
+
+// Store returns the household's entry for provider. Settings with no
+// Stores have their default as the only store.
+func (s Settings) Store(provider providers.Key) (StoreChoice, bool) {
+	if len(s.Stores) == 0 && s.Provider != "" && s.Provider == provider {
+		return StoreChoice{Provider: s.Provider, StoreID: s.StoreID, StoreName: s.StoreName, Banner: s.Banner}, true
+	}
+	for _, c := range s.Stores {
+		if c.Provider == provider {
+			return c, true
+		}
+	}
+	return StoreChoice{}, false
+}
+
+// TripProvider is the store week shops at: the week's choice while that
+// store is still set up, else the default ("" when there is none).
+func (s Settings) TripProvider(week string) providers.Key {
+	for _, t := range s.Trips {
+		if t.Week == week {
+			if _, ok := s.Store(t.Provider); ok {
+				return t.Provider
+			}
+		}
+	}
+	return s.Provider
+}
+
+// withDefault returns s with provider as its default store, repeated in the
+// default fields; "" clears them.
+func (s Settings) withDefault(provider providers.Key) Settings {
+	c, _ := s.Store(provider)
+	s.Provider, s.StoreID, s.StoreName, s.Banner = c.Provider, c.StoreID, c.StoreName, c.Banner
+	return s
 }
 
 // PackageSize is how much one package of a product holds, exactly.

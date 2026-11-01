@@ -57,6 +57,31 @@ nonisolated struct ShoppingAPI: Sendable {
             try APIRequest.put(Self.path(householdID) + "/settings", body: settings).authorized(with: accessToken))
     }
 
+    /// Makes one of the household's stores the default.
+    func setDefaultStore(householdID: String, provider: String, accessToken: String) async throws -> ShoppingSettings {
+        try await client.send(
+            try APIRequest.put(
+                Self.path(householdID) + "/settings/default", body: ShoppingStoreProviderRequest(provider: provider)
+            ).authorized(with: accessToken))
+    }
+
+    /// Takes a store off the household's list; its saved products stay on the server.
+    func removeStore(householdID: String, provider: String, accessToken: String) async throws -> ShoppingSettings {
+        try await client.send(
+            APIRequest.delete(Self.path(householdID) + "/settings/stores/\(provider)").authorized(with: accessToken))
+    }
+
+    /// Picks the store a week shops at; `nil` goes back to the default.
+    func setTripStore(
+        householdID: String, week: ISOWeek, provider: String?, accessToken: String
+    ) async throws -> ShoppingSettings {
+        try await client.send(
+            try APIRequest.put(
+                Self.path(householdID) + "/weeks/\(week.description)/store",
+                body: ShoppingStoreProviderRequest(provider: provider)
+            ).authorized(with: accessToken))
+    }
+
     // MARK: Signed-in stores (Kroger)
 
     /// Whether the household signed in to the provider's store account.

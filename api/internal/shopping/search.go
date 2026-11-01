@@ -93,8 +93,8 @@ func (s *Service) SearchProducts(ctx context.Context, householdID, provider, ter
 		return nil, err
 	}
 	q := providers.SearchQuery{Term: term}
-	if settings.Provider == p.Key() {
-		q.StoreID = settings.StoreID
+	if store, ok := settings.Store(p.Key()); ok {
+		q.StoreID = store.StoreID
 	}
 	products, err := searcher.SearchProducts(ctx, q)
 	if err != nil {

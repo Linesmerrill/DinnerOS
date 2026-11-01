@@ -69,7 +69,7 @@ func TestIntegrationAHouseholdShopsAtItsStoresBanner(t *testing.T) {
 	k := f.withBannerKroger(t)
 	ctx := f.ctx
 
-	settings, err := f.svc.UpdateStore(ctx, f.actor, "kroger", "70300001", "Ralphs Test St")
+	settings, err := f.svc.UpdateStore(ctx, f.actor, "kroger", "70300001", "Ralphs Test St", true)
 	if err != nil || settings.Banner != "ralphs" {
 		t.Fatalf("settings = %+v, %v: the banner follows the store", settings, err)
 	}
@@ -102,7 +102,7 @@ func TestIntegrationAHouseholdShopsAtItsStoresBanner(t *testing.T) {
 		t.Errorf("cart = %+v", k.cart)
 	}
 
-	if settings, err = f.svc.UpdateStore(ctx, f.actor, "kroger", "66000123", "Fry's Test Store"); err != nil || settings.Banner != "frys" {
+	if settings, err = f.svc.UpdateStore(ctx, f.actor, "kroger", "66000123", "Fry's Test Store", true); err != nil || settings.Banner != "frys" {
 		t.Fatalf("back to Fry's = %+v, %v", settings, err)
 	}
 	if p, _ := f.svc.ProviderFor(ctx, testHousehold, "kroger"); p.Name() != "Fry's" {
@@ -113,7 +113,7 @@ func TestIntegrationAHouseholdShopsAtItsStoresBanner(t *testing.T) {
 	}
 
 	var validation *ValidationError
-	if _, err := f.svc.UpdateStore(ctx, f.actor, "kroger", "03500001", "Harris Teeter"); !errors.As(err, &validation) {
+	if _, err := f.svc.UpdateStore(ctx, f.actor, "kroger", "03500001", "Harris Teeter", true); !errors.As(err, &validation) {
 		t.Errorf("a store of a banner that isn't on = %v", err)
 	}
 }

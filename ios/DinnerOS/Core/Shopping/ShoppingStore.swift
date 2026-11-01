@@ -58,9 +58,12 @@ final class ShoppingStore {
         var isFinished: Bool { openedCount >= total }
     }
 
-    /// The household's store: Fry's (a Kroger store) when chosen and offered, else Walmart.
+    /// The store the shown week shops at: the week's pick, else the household's default. Fry's
+    /// (a Kroger store) only while the API offers it; otherwise Walmart.
     var provider: String {
-        if settings?.provider == ShoppingProviderKey.kroger, kroger != nil { return ShoppingProviderKey.kroger }
+        if settings?.tripProvider(week: week.description) == ShoppingProviderKey.kroger, kroger != nil {
+            return ShoppingProviderKey.kroger
+        }
         return ShoppingProviderKey.walmart
     }
 
@@ -173,22 +176,33 @@ final class ShoppingStore {
     var activeProvider: ShoppingProvider? { providers.first { $0.key == provider } }
     /// "Walmart", "Fry's", or the Kroger banner of the household's store ("Ralphs"), for the
     /// Shop tab's words.
-    var providerName: String {
-        if let name = settings?.providerName, !name.isEmpty, settings?.provider == provider { return name }
-        return activeProvider?.name ?? "Walmart"
-    }
+    var providerName: String { name(of: provider) }
     /// The Kroger store's name in setup: the household's own brand once it picked a store
     /// ("Ralphs"), otherwise the provider's ("Fry's", or "Kroger" when it serves several).
     var krogerName: String {
-        if settings?.provider == ShoppingProviderKey.kroger, let name = settings?.providerName, !name.isEmpty {
-            return name
-        }
+        if let name = settings?.store(for: ShoppingProviderKey.kroger)?.providerName, !name.isEmpty { return name }
         return kroger?.name ?? "Fry's"
     }
+    /// What the app calls one of the stores: the household's own brand, else the provider's.
+    func name(of provider: String) -> String {
+        if let name = settings?.store(for: provider)?.providerName, !name.isEmpty { return name }
+        return providers.first { $0.key == provider }?.name ?? "Walmart"
+    }
+    /// The stores the household set up that the API offers, default first.
+    var setUpStores: [ShoppingStoreChoice] {
+        let offered = (settings?.stores ?? []).filter { store in
+            store.provider == ShoppingProviderKey.kroger ? kroger != nil : walmart != nil
+        }
+        return offered.filter(\.isDefault) + offered.filter { !$0.isDefault }
+    }
+    /// More than one store is set up, so a week can pick which one it shops at.
+    var canSwitchStores: Bool { setUpStores.count > 1 }
+    /// The shown week shops at the default store.
+    var isDefaultTrip: Bool { settings?.provider == provider }
     /// The store fills its cart from the API (Fry's): no links to open, no product checks.
     var writesCart: Bool { activeProvider?.writesCart == true }
     var isSignedIn: Bool { connection?.connected == true }
-    var isConfigured: Bool { settings?.provider == provider }
+    var isConfigured: Bool { settings?.store(for: provider) != nil }
     var affiliateTracked: Bool { proposal?.affiliateTracked ?? walmart?.affiliateTracked ?? false }
     var readyLines: [ShoppingHandoffLine] { proposal?.lines ?? [] }
     var hasPackageEdits: Bool { !packageOverrides.isEmpty }
@@ -362,7 +376,11 @@ final class ShoppingStore {
     /// Shows `newWeek` and matches it. Changed package counts belong to the previous week.
     func show(week newWeek: ISOWeek) async {
         if newWeek != week {
+            let previous = provider
             resetWeek(to: newWeek)
+            if provider != previous {
+                forgetStoreState()
+            }
         }
         await load()
     }
@@ -401,8 +419,13 @@ final class ShoppingStore {
                 try await api.settings(householdID: householdID, accessToken: token)
             }
             guard started == scope else { return }
+            let previous = setupPhase == .loaded ? provider : nil
             providers = loadedProviders
             settings = loadedSettings
+            // Someone else may have picked another store for the week.
+            if let previous, previous != provider {
+                forgetStoreState()
+            }
             setupPhase = .loaded
             if kroger != nil {
                 await refreshConnection()
@@ -459,38 +482,106 @@ final class ShoppingStore {
 
     // MARK: - Store settings
 
-    /// Chooses Walmart with an optional store number; empty text clears the store.
-    func saveSettings(storeNumber: String) async throws {
-        let (api, householdID) = try requireHousehold()
+    /// Sets up Walmart with an optional store number; empty text clears the store. `makeDefault`
+    /// false adds Walmart without changing the default.
+    func saveSettings(storeNumber: String, makeDefault: Bool = true) async throws {
         let request = UpdateShoppingSettingsRequest(
-            provider: provider, storeID: ShoppingStoreNumber.normalized(storeNumber))
+            provider: ShoppingProviderKey.walmart, storeID: ShoppingStoreNumber.normalized(storeNumber),
+            makeDefault: makeDefault)
+        try await save(request)
+        Self.logger.info("Shopping store saved")
+    }
+
+    /// Sets up a store from the store finder (Fry's), keeping its name for display.
+    func saveStore(provider: String, store: ShoppingStoreLocation, makeDefault: Bool = true) async throws {
+        let request = UpdateShoppingSettingsRequest(
+            provider: provider, storeID: store.storeID,
+            storeName: String(store.name.prefix(ShoppingLimits.maxStoreNameLength)), makeDefault: makeDefault)
+        try await save(request)
+        Self.logger.info("Shopping store saved from the store finder")
+    }
+
+    private func save(_ request: UpdateShoppingSettingsRequest) async throws {
+        let (api, householdID) = try requireHousehold()
         let started = scope
         let saved = try await session.authorized { token in
             try await api.updateSettings(householdID: householdID, settings: request, accessToken: token)
         }
         guard started == scope else { return }
+        await apply(saved)
+    }
+
+    /// Shops the shown week at `provider`, one of the household's stores. The other store's
+    /// saved products and cart stay as they are.
+    func shop(at provider: String) async throws {
+        guard provider != self.provider else { return }
+        let (api, householdID) = try requireHousehold()
+        let week = week
+        let pick = provider == settings?.provider ? nil : provider
+        let started = scope
+        let saved = try await session.authorized { token in
+            try await api.setTripStore(householdID: householdID, week: week, provider: pick, accessToken: token)
+        }
+        guard started == scope else { return }
+        Self.logger.info("Shopping trip store changed")
+        await apply(saved)
+    }
+
+    /// Makes one of the household's stores the one weeks shop at.
+    func makeDefault(_ provider: String) async throws {
+        let (api, householdID) = try requireHousehold()
+        let started = scope
+        let saved = try await session.authorized { token in
+            try await api.setDefaultStore(householdID: householdID, provider: provider, accessToken: token)
+        }
+        guard started == scope else { return }
+        await apply(saved)
+    }
+
+    /// Takes a store off the household's list. Its saved products stay on the server, so
+    /// setting it up again brings them back.
+    func removeStore(_ provider: String) async throws {
+        let (api, householdID) = try requireHousehold()
+        let started = scope
+        let saved = try await session.authorized { token in
+            try await api.removeStore(householdID: householdID, provider: provider, accessToken: token)
+        }
+        guard started == scope else { return }
+        await apply(saved)
+    }
+
+    /// Shows saved settings. A new store for the shown week drops what belonged to the old one
+    /// and matches again; the same store still matches again, since its store number changes
+    /// every cart link.
+    private func apply(_ saved: ShoppingSettings) async {
+        let previous = provider
         settings = saved
-        Self.logger.info("Shopping store saved")
-        // The store changes every cart link.
-        await loadProposal(clearing: proposal == nil)
+        if provider != previous {
+            forgetStoreState()
+            await loadProposal(clearing: true)
+        } else {
+            await loadProposal(clearing: proposal == nil)
+        }
         await refreshOpenHandoff(presenting: false)
     }
 
-    /// Chooses a store from the store finder (Fry's), keeping its name for display.
-    func saveStore(provider: String, store: ShoppingStoreLocation) async throws {
-        let (api, householdID) = try requireHousehold()
-        let request = UpdateShoppingSettingsRequest(
-            provider: provider, storeID: store.storeID,
-            storeName: String(store.name.prefix(ShoppingLimits.maxStoreNameLength)))
-        let started = scope
-        let saved = try await session.authorized { token in
-            try await api.updateSettings(householdID: householdID, settings: request, accessToken: token)
-        }
-        guard started == scope else { return }
-        settings = saved
-        Self.logger.info("Shopping store saved from the store finder")
-        await loadProposal(clearing: true)
-        await refreshOpenHandoff(presenting: false)
+    /// Forgets what belongs to the store the shown week used to shop at: its match, cart
+    /// progress, product checks, and saved products. The server keeps all of it.
+    private func forgetStoreState() {
+        proposalGeneration += 1
+        proposal = nil
+        proposalPhase = .idle
+        refreshError = nil
+        packageOverrides = [:]
+        linkProgress = nil
+        linkError = nil
+        linkNotice = nil
+        openHandoff = nil
+        productReview = nil
+        isReviewingProducts = false
+        preferencesPhase = .idle
+        preferences = []
+        preferencesRefreshError = nil
     }
 
     // MARK: - Signed-in store

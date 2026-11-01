@@ -233,9 +233,12 @@ set, and nothing else changes for Walmart households.
    is enabled (`withLiveStores` in `internal/shopping/catalog.go`), so Fry's
    shows as available there with no catalog edit, and turning a store off puts
    it back to researched.
-3. **The app:** Shop → ⋯ → Store Settings → Fry's → Sign In to Fry's, find the
-   store by ZIP, Save. Choose a product per ingredient from Fry's search, then
-   Add to Fry's Cart, and check out in the Fry's app or site.
+3. **The app:** Shop → ⋯ → Store Settings → Add Kroger (or Fry's) → Sign In,
+   find the store by ZIP, Add. Walmart stays set up beside it with its saved
+   products (decision 653). Pick the store for a week at the top of Shop
+   ("Shopping at …"), or turn on Make Default. Choose a product per ingredient
+   from Fry's search, then Add to Fry's Cart, and check out in the Fry's app or
+   site.
 
 **More banners (decision 652).** `KROGER_BANNERS` (a comma list or `all`)
 offers other Kroger banners beside `KROGER_BANNER`, all through the same

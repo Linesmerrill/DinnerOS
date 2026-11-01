@@ -232,8 +232,24 @@ type settingsDoc struct {
 	StoreID     string        `bson:"storeId,omitempty"`
 	StoreName   string        `bson:"storeName,omitempty"`
 	Banner      string        `bson:"banner,omitempty"`
-	UpdatedBy   bson.ObjectID `bson:"updatedBy"`
-	UpdatedAt   time.Time     `bson:"updatedAt"`
+	// Stores is empty on documents written before a household could set up
+	// several stores; the one store above is then the only one.
+	Stores    []storeChoiceDoc `bson:"stores,omitempty"`
+	Trips     []tripStoreDoc   `bson:"trips,omitempty"`
+	UpdatedBy bson.ObjectID    `bson:"updatedBy"`
+	UpdatedAt time.Time        `bson:"updatedAt"`
+}
+
+type storeChoiceDoc struct {
+	Provider  string `bson:"provider"`
+	StoreID   string `bson:"storeId,omitempty"`
+	StoreName string `bson:"storeName,omitempty"`
+	Banner    string `bson:"banner,omitempty"`
+}
+
+type tripStoreDoc struct {
+	Week     string `bson:"week"`
+	Provider string `bson:"provider"`
 }
 
 // GetSettings implements Store.
@@ -246,7 +262,17 @@ func (s *MongoStore) GetSettings(ctx context.Context, householdID string) (Setti
 	if err := s.settings.FindOne(ctx, bson.D{{Key: "householdId", Value: hid}}).Decode(&d); err != nil {
 		return Settings{}, translate(err)
 	}
-	return Settings{HouseholdID: d.HouseholdID.Hex(), Provider: providers.Key(d.Provider), StoreID: d.StoreID, StoreName: d.StoreName, Banner: d.Banner, UpdatedBy: hexOrEmpty(d.UpdatedBy), UpdatedAt: d.UpdatedAt.UTC()}, nil
+	out := Settings{HouseholdID: d.HouseholdID.Hex(), Provider: providers.Key(d.Provider), StoreID: d.StoreID, StoreName: d.StoreName, Banner: d.Banner, UpdatedBy: hexOrEmpty(d.UpdatedBy), UpdatedAt: d.UpdatedAt.UTC()}
+	for _, c := range d.Stores {
+		out.Stores = append(out.Stores, StoreChoice{Provider: providers.Key(c.Provider), StoreID: c.StoreID, StoreName: c.StoreName, Banner: c.Banner})
+	}
+	if len(out.Stores) == 0 && out.Provider != "" {
+		out.Stores = []StoreChoice{{Provider: out.Provider, StoreID: out.StoreID, StoreName: out.StoreName, Banner: out.Banner}}
+	}
+	for _, t := range d.Trips {
+		out.Trips = append(out.Trips, TripStore{Week: t.Week, Provider: providers.Key(t.Provider)})
+	}
+	return out, nil
 }
 
 // PutSettings implements Store.
@@ -260,6 +286,12 @@ func (s *MongoStore) PutSettings(ctx context.Context, in Settings) (Settings, er
 		return Settings{}, err
 	}
 	d := settingsDoc{HouseholdID: hid, Provider: string(in.Provider), StoreID: in.StoreID, StoreName: in.StoreName, Banner: in.Banner, UpdatedBy: uid, UpdatedAt: in.UpdatedAt}
+	for _, c := range in.Stores {
+		d.Stores = append(d.Stores, storeChoiceDoc{Provider: string(c.Provider), StoreID: c.StoreID, StoreName: c.StoreName, Banner: c.Banner})
+	}
+	for _, t := range in.Trips {
+		d.Trips = append(d.Trips, tripStoreDoc{Week: t.Week, Provider: string(t.Provider)})
+	}
 	_, err = s.settings.ReplaceOne(ctx, bson.D{{Key: "householdId", Value: hid}}, d, options.Replace().SetUpsert(true))
 	if err != nil {
 		return Settings{}, translate(err)

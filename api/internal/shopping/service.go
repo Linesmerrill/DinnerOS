@@ -184,10 +184,11 @@ func (s *Service) ProviderFor(ctx context.Context, householdID, key string) (pro
 	if err != nil {
 		return nil, fmt.Errorf("get shopping settings: %w", err)
 	}
-	if settings.Provider != p.Key() || settings.Banner == "" {
+	store, ok := settings.Store(p.Key())
+	if !ok || store.Banner == "" {
 		return p, nil
 	}
-	return b.ForBanner(settings.Banner), nil
+	return b.ForBanner(store.Banner), nil
 }
 
 // --- Settings -----------------------------------------------------------------
@@ -210,12 +211,14 @@ func (s *Service) Settings(ctx context.Context, householdID string) (Settings, e
 
 // UpdateSettings sets the household's provider and optional store.
 func (s *Service) UpdateSettings(ctx context.Context, actor households.Membership, provider, storeID string) (Settings, error) {
-	return s.UpdateStore(ctx, actor, provider, storeID, "")
+	return s.UpdateStore(ctx, actor, provider, storeID, "", true)
 }
 
-// UpdateStore sets the household's provider, optional store, and the
-// store's display name.
-func (s *Service) UpdateStore(ctx context.Context, actor households.Membership, provider, storeID, storeName string) (Settings, error) {
+// UpdateStore sets up one of the household's stores: a provider, its
+// optional store, and the store's display name. Other stores, and every
+// store's saved products, stay. makeDefault also makes it the default, as
+// picking a store did when a household had only one.
+func (s *Service) UpdateStore(ctx context.Context, actor households.Membership, provider, storeID, storeName string, makeDefault bool) (Settings, error) {
 	if err := authorize(actor, households.PermShoppingEdit); err != nil {
 		return Settings{}, err
 	}
@@ -226,23 +229,143 @@ func (s *Service) UpdateStore(ctx context.Context, actor households.Membership, 
 	if err != nil {
 		return Settings{}, err
 	}
-	next := Settings{HouseholdID: actor.HouseholdID, Provider: p.Key(), UpdatedBy: actor.UserID, UpdatedAt: s.timestamp()}
+	choice := StoreChoice{Provider: p.Key()}
 	if strings.TrimSpace(storeID) != "" {
-		if next.StoreID, err = p.NormalizeStoreID(storeID); err != nil {
+		if choice.StoreID, err = p.NormalizeStoreID(storeID); err != nil {
 			return Settings{}, err
 		}
-		next.StoreName = strings.Join(strings.Fields(storeName), " ")
-		if len(next.StoreName) > MaxStoreNameLength {
+		choice.StoreName = strings.Join(strings.Fields(storeName), " ")
+		if len(choice.StoreName) > MaxStoreNameLength {
 			return Settings{}, invalid("storeName must be at most %d characters", MaxStoreNameLength)
 		}
 		// The household shops at the picked store's banner: asked of the
 		// provider, never taken from the app.
 		if lookup, ok := p.(providers.StoreBannerLookup); ok {
-			if next.Banner, err = lookup.StoreBanner(ctx, next.StoreID); err != nil {
+			if choice.Banner, err = lookup.StoreBanner(ctx, choice.StoreID); err != nil {
 				return Settings{}, storeBannerError(err)
 			}
 		}
 	}
+	return s.changeSettings(ctx, actor, func(next *Settings) error {
+		replaced := false
+		for i, c := range next.Stores {
+			if c.Provider == choice.Provider {
+				next.Stores[i], replaced = choice, true
+			}
+		}
+		if !replaced {
+			next.Stores = append(next.Stores, choice)
+		}
+		if makeDefault || next.Provider == "" || next.Provider == choice.Provider {
+			*next = next.withDefault(choice.Provider)
+		}
+		return nil
+	})
+}
+
+// SetDefaultStore makes one of the household's stores the one weeks shop at
+// unless a week picks another.
+func (s *Service) SetDefaultStore(ctx context.Context, actor households.Membership, provider string) (Settings, error) {
+	if err := authorize(actor, households.PermShoppingEdit); err != nil {
+		return Settings{}, err
+	}
+	return s.changeSettings(ctx, actor, func(next *Settings) error {
+		if _, ok := next.Store(providers.Key(provider)); !ok {
+			return errStoreNotSetUp
+		}
+		*next = next.withDefault(providers.Key(provider))
+		return nil
+	})
+}
+
+// RemoveStore takes a store off the household's list. Its saved products and
+// sign-in stay, so setting it up again brings them back. Removing the
+// default makes the first remaining store the default.
+func (s *Service) RemoveStore(ctx context.Context, actor households.Membership, provider string) (Settings, error) {
+	if err := authorize(actor, households.PermShoppingEdit); err != nil {
+		return Settings{}, err
+	}
+	key := providers.Key(provider)
+	return s.changeSettings(ctx, actor, func(next *Settings) error {
+		if _, ok := next.Store(key); !ok {
+			return errStoreNotSetUp
+		}
+		stores := make([]StoreChoice, 0, len(next.Stores))
+		for _, c := range next.Stores {
+			if c.Provider != key {
+				stores = append(stores, c)
+			}
+		}
+		next.Stores = stores
+		trips := make([]TripStore, 0, len(next.Trips))
+		for _, t := range next.Trips {
+			if t.Provider != key {
+				trips = append(trips, t)
+			}
+		}
+		next.Trips = trips
+		if next.Provider == key {
+			first := providers.Key("")
+			if len(stores) > 0 {
+				first = stores[0].Provider
+			}
+			*next = next.withDefault(first)
+		}
+		return nil
+	})
+}
+
+// SetTripStore picks the store one week's trip shops at; "" or the default
+// goes back to the default. Weeks keep their own handoffs per store, so
+// switching back and forth loses nothing.
+func (s *Service) SetTripStore(ctx context.Context, actor households.Membership, week, provider string) (Settings, error) {
+	if err := authorize(actor, households.PermShoppingEdit); err != nil {
+		return Settings{}, err
+	}
+	w, err := planning.ParseWeek(week)
+	if err != nil {
+		return Settings{}, invalid("week must be an ISO week like 2026-W05")
+	}
+	key := providers.Key(provider)
+	return s.changeSettings(ctx, actor, func(next *Settings) error {
+		if key != "" {
+			if _, ok := next.Store(key); !ok {
+				return errStoreNotSetUp
+			}
+		}
+		trips := make([]TripStore, 0, len(next.Trips)+1)
+		for _, t := range next.Trips {
+			if t.Week != w.String() {
+				trips = append(trips, t)
+			}
+		}
+		if key != "" && key != next.Provider {
+			trips = append(trips, TripStore{Week: w.String(), Provider: key})
+		}
+		slices.SortFunc(trips, func(a, b TripStore) int { return strings.Compare(a.Week, b.Week) })
+		if len(trips) > MaxTrips {
+			trips = trips[len(trips)-MaxTrips:]
+		}
+		next.Trips = trips
+		return nil
+	})
+}
+
+// errStoreNotSetUp is a store the household hasn't set up.
+var errStoreNotSetUp = invalid("Set up that store first.")
+
+// changeSettings applies change to the household's settings and saves them.
+func (s *Service) changeSettings(ctx context.Context, actor households.Membership, change func(*Settings) error) (Settings, error) {
+	next, err := s.Settings(ctx, actor.HouseholdID)
+	if err != nil {
+		return Settings{}, err
+	}
+	next.Stores = append([]StoreChoice(nil), next.Stores...)
+	next.Trips = append([]TripStore(nil), next.Trips...)
+	if err := change(&next); err != nil {
+		return Settings{}, err
+	}
+	next.UpdatedBy, next.UpdatedAt = actor.UserID, s.timestamp()
 	saved, err := s.store.PutSettings(ctx, next)
 	if err != nil {
 		return Settings{}, fmt.Errorf("put shopping settings: %w", err)

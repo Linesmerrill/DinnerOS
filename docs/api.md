@@ -189,8 +189,11 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/autopilot/learning` → `{modelVersion, interactions, adjustments, resetAt, resetBy}` | `household.view` | 11 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/autopilot/learning` → learning (empty) | `plan.edit` | 11 | ✅ |
 | GET | `/api/v1/shopping/providers` → `{items: [{key, name, affiliateTracked, capabilities}]}` | bearer | 8a | ✅ |
-| GET | `/api/v1/households/{householdId}/shopping/settings` → `{provider, storeId, storeName, banner, providerName, updatedBy, updatedAt}` | `household.view` | 8a | ✅ |
-| PUT | `/api/v1/households/{householdId}/shopping/settings` `{provider, storeId?}` → settings | `shopping.edit` | 8a | ✅ |
+| GET | `/api/v1/households/{householdId}/shopping/settings` → `{provider, storeId, storeName, banner, providerName, stores, trips, updatedBy, updatedAt}` | `household.view` | 8a | ✅ |
+| PUT | `/api/v1/households/{householdId}/shopping/settings` `{provider, storeId?, storeName?, makeDefault?}` → settings | `shopping.edit` | 8a | ✅ |
+| PUT | `/api/v1/households/{householdId}/shopping/settings/default` `{provider}` → settings | `shopping.edit` | 8a | ✅ |
+| DELETE | `/api/v1/households/{householdId}/shopping/settings/stores/{provider}` → settings | `shopping.edit` | 8a | ✅ |
+| PUT | `/api/v1/households/{householdId}/shopping/weeks/{week}/store` `{provider}` → settings | `shopping.edit` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/{provider}/preferences` → `{items}` | `household.view` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}` → saved product | `household.view` | 8a | ✅ |
 | PUT | `/api/v1/households/{householdId}/shopping/{provider}/preferences/{ingredientKey}` `{productUrl or productId, displayName, packageSize?, ingredientName?, coverage?, priceCents?}` → `201` saved product, or `200` when replaced | `shopping.edit` | 8a | ✅ |
@@ -1684,6 +1687,27 @@ Kroger fails it returns `503 provider_error` and records nothing.
 | `GET /shopping/kroger/callback?code=&state=` | public (signed state) | Finishes the sign-in and redirects to `<scheme>://shopping/connected?provider=kroger&result=connected\|cancelled\|failed` |
 | `GET /households/{id}/shopping/kroger/stores?zip=85001` | `household.view` | `{items: [{storeId, name, address, banner}]}`, the offered banners' stores nearest first (`banner` is `frys`, `ralphs`, …) |
 | `GET /households/{id}/shopping/kroger/products?q=pineapple` | `household.view` | `{items: [{productId, name, brand, size, packageSize, imageUrl, url, priceCents, stock}]}` at the household's store; `q` is 3–100 characters, at most 8 words |
+
+**Several stores (decision 653).** A household can set up one store per
+provider (Walmart and a Kroger banner) and keeps every store's saved products,
+carts, and sign-in. Settings carry `stores`, each
+`{provider, providerName, storeId, storeName, banner, isDefault}`, and `trips`,
+each `{week, provider}`: the weeks that shop at a store other than the default.
+The top-level `provider`, `storeId`, `storeName`, `banner`, and `providerName`
+are the default store's, so an app that knows one store still works.
+
+- `PUT .../shopping/settings` sets up one store and keeps the others.
+  `makeDefault` (absent is `true`, as before) also makes it the default.
+- `PUT .../shopping/settings/default` makes a set-up store the default; `400`
+  for one that isn't set up.
+- `DELETE .../shopping/settings/stores/{provider}` takes a store off the list
+  and drops its trips. Its saved products and sign-in stay, so setting it up
+  again brings them back. Removing the default makes the first remaining store
+  the default.
+- `PUT .../shopping/weeks/{week}/store` picks the store a week shops at;
+  `null` or the default goes back to the default. Only the newest 12 weeks'
+  picks are kept. Match, search, and handoffs already name their provider, and
+  each uses that provider's own store number and banner.
 
 `PUT .../shopping/settings` also takes an optional `storeName` (at most 100
 characters, kept with a store ID), which settings return. For Kroger, saving a

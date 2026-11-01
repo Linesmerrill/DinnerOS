@@ -43,7 +43,13 @@ struct ShopView: View {
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .top, spacing: 0) {
                 if isReady {
-                    ShopWeekSwitcher()
+                    VStack(spacing: 0) {
+                        ShopWeekSwitcher()
+                        if shopping.canSwitchStores {
+                            ShopTripStorePicker()
+                        }
+                    }
+                    .background(.bar)
                 }
             }
             .toolbar { toolbar }
@@ -1629,7 +1635,6 @@ private struct ShopWeekSwitcher: View {
         .font(.title3)
         .padding(.horizontal)
         .padding(.vertical, 8)
-        .background(.bar)
     }
 
     private func relativeName(_ week: ISOWeek) -> LocalizedStringKey? {
@@ -1639,6 +1644,79 @@ private struct ShopWeekSwitcher: View {
         case current.next: return "Next Week"
         case current.previous: return "Last Week"
         default: return nil
+        }
+    }
+}
+
+/// Which of the household's stores the shown week shops at. Each store keeps its own saved
+/// products and cart, so switching back and forth loses nothing.
+private struct ShopTripStorePicker: View {
+    @Environment(ShoppingStore.self) private var shopping
+    @Environment(HouseholdStore.self) private var households
+
+    @State private var isSwitching = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Menu {
+                Picker("Store", selection: selection) {
+                    ForEach(shopping.setUpStores) { store in
+                        Text(
+                            store.isDefault
+                                ? "\(shopping.name(of: store.provider)) (Default)" : shopping.name(of: store.provider)
+                        )
+                        .tag(store.provider)
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "storefront")
+                        .accessibilityHidden(true)
+                    Text("Shopping at \(shopping.providerName)")
+                    if isSwitching {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .font(.subheadline.weight(.medium))
+                .frame(minHeight: 32)
+            }
+            .disabled(!shopping.canEdit || isSwitching)
+            .accessibilityHint("Picks the store this week shops at")
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.bottom, 8)
+    }
+
+    private var selection: Binding<String> {
+        Binding(
+            get: { shopping.provider },
+            set: { provider in switchStore(to: provider) })
+    }
+
+    private func switchStore(to provider: String) {
+        Task {
+            isSwitching = true
+            defer { isSwitching = false }
+            errorMessage = nil
+            do {
+                try await shopping.shop(at: provider)
+            } catch is CancellationError {
+                return
+            } catch {
+                errorMessage = ShopErrors.message(for: error, households: households)
+            }
         }
     }
 }
