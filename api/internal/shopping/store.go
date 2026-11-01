@@ -130,6 +130,9 @@ type Store interface {
 	// CountStoreRequestsByKey counts requests per store key across every
 	// household: DinnerOS's own demand signal.
 	CountStoreRequestsByKey(ctx context.Context) (map[string]int, error)
+	// SummarizeStoreRequests totals requests per store key across every
+	// household, most asked for first.
+	SummarizeStoreRequests(ctx context.Context) ([]StoreRequestTally, error)
 	// UpsertStoreRequest saves r by (householdId, key), keeping an existing
 	// one's ID, RequestedBy, and RequestedAt, and reports whether it was
 	// created.

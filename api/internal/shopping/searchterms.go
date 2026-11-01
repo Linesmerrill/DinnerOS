@@ -54,7 +54,7 @@ var formProfiles = map[string]formProfile{
 	ingredients.CategoryProduce: {
 		qualifiers: []string{"fresh", "whole"},
 		avoid: []string{
-			"powder", "powdered", "granulated", "dried", "dehydrated", "minced", "chopped", "sliced",
+			"powder", "powdered", "granulated", "dried", "dehydrated", "minced", "chopped", "sliced", "diced",
 			"jarred", "canned", "frozen", "pickled", "roasted", "seasoning", "snack", "chips", "juice",
 		},
 		why: "Produce: the fresh whole item, not a dried, powdered or prepared form.",

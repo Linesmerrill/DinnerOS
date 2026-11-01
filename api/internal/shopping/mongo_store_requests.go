@@ -169,3 +169,63 @@ func (s *MongoStore) DeleteStoreRequest(ctx context.Context, householdID, id str
 	}
 	return nil
 }
+
+// SummarizeStoreRequests implements Store. Like CountStoreRequestsByKey it
+// groups the whole collection; it backs an operator's report, not a hot path.
+func (s *MongoStore) SummarizeStoreRequests(ctx context.Context) ([]StoreRequestTally, error) {
+	cur, err := s.storeRequests.Aggregate(ctx, mongo.Pipeline{
+		{{Key: "$sort", Value: bson.D{{Key: "updatedAt", Value: -1}}}},
+		{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: "$key"},
+			{Key: "name", Value: bson.D{{Key: "$first", Value: "$name"}}},
+			{Key: "households", Value: bson.D{{Key: "$sum", Value: 1}}},
+			{Key: "custom", Value: bson.D{{Key: "$max", Value: "$custom"}}},
+			{Key: "sources", Value: bson.D{{Key: "$push", Value: "$source"}}},
+			{Key: "places", Value: bson.D{{Key: "$push", Value: "$place"}}},
+			{Key: "notes", Value: bson.D{{Key: "$push", Value: "$note"}}},
+			{Key: "lastRequestedAt", Value: bson.D{{Key: "$max", Value: "$updatedAt"}}},
+		}}},
+		{{Key: "$sort", Value: bson.D{{Key: "households", Value: -1}, {Key: "lastRequestedAt", Value: -1}}}},
+	})
+	if err != nil {
+		return nil, translate(err)
+	}
+	var rows []struct {
+		Key             string          `bson:"_id"`
+		Name            string          `bson:"name"`
+		Households      int             `bson:"households"`
+		Custom          bool            `bson:"custom"`
+		Sources         []string        `bson:"sources"`
+		Places          []storePlaceDoc `bson:"places"`
+		Notes           []string        `bson:"notes"`
+		LastRequestedAt time.Time       `bson:"lastRequestedAt"`
+	}
+	if err := cur.All(ctx, &rows); err != nil {
+		return nil, translate(err)
+	}
+	out := make([]StoreRequestTally, 0, len(rows))
+	for _, r := range rows {
+		t := StoreRequestTally{
+			Key: r.Key, Name: r.Name, Households: r.Households, Custom: r.Custom,
+			Sources: map[string]int{}, LastRequestedAt: r.LastRequestedAt.UTC(),
+		}
+		for _, src := range r.Sources {
+			if src == "" {
+				src = SourceCatalog
+			}
+			t.Sources[src]++
+		}
+		for _, p := range r.Places {
+			if (p.Name != "" || p.Address != "") && len(t.Places) < maxTallyExamples {
+				t.Places = append(t.Places, StorePlace(p))
+			}
+		}
+		for _, n := range r.Notes {
+			if n != "" && len(t.Notes) < maxTallyExamples {
+				t.Notes = append(t.Notes, n)
+			}
+		}
+		out = append(out, t)
+	}
+	return out, nil
+}

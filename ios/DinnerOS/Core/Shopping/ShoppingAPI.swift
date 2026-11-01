@@ -14,6 +14,11 @@ nonisolated struct ShoppingAPI: Sendable {
 
     /// Every store DinnerOS knows about, supported or not. `query` is the API's `q` filter;
     /// the Shop tab loads the whole catalog once and filters as the member types.
+    /// Every household's store requests, totalled. `403` for anyone who doesn't run DinnerOS.
+    func storeRequestSummary(accessToken: String) async throws -> StoreRequestSummary {
+        try await client.send(APIRequest.get("/api/v1/shopping/requests/summary").authorized(with: accessToken))
+    }
+
     func catalog(query: String? = nil, accessToken: String) async throws -> [ShoppingCatalogItem] {
         var request = APIRequest.get("/api/v1/shopping/catalog")
         if let query, !query.isEmpty {
@@ -133,6 +138,17 @@ nonisolated struct ShoppingAPI: Sendable {
     }
 
     /// Saves (`201`) or replaces (`200`) the product for a grocery line's `ingredientKey`.
+    /// Products pre-picked at `provider` for what the household saved at `from`, a page at a time.
+    func matchSuggestions(
+        householdID: String, provider: String, from: String, after: String?, limit: Int, accessToken: String
+    ) async throws -> ShoppingMatchSuggestionPage {
+        var request = APIRequest.get(Self.path(householdID) + "/\(provider)/suggestions")
+        var items = [URLQueryItem(name: "from", value: from), URLQueryItem(name: "limit", value: String(limit))]
+        if let after { items.append(URLQueryItem(name: "after", value: after)) }
+        request.queryItems = items
+        return try await client.send(request.authorized(with: accessToken))
+    }
+
     func savePreference(
         householdID: String, provider: String, ingredientKey: String, preference: ShoppingPreferenceRequest,
         accessToken: String

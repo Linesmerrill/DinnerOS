@@ -12,6 +12,7 @@ struct ShopView: View {
     @State private var isShowingSavedProducts = false
     @State private var isShowingUsuals = false
     @State private var isAddingItem = false
+    @State private var isMatchingProducts = false
     /// The cost card's sheet is held and presented here, not on the card: the card is a list
     /// section that comes and goes with the week's cost (decision 510).
     @State private var weekCostSheet: WeekCostSheet?
@@ -53,6 +54,9 @@ struct ShopView: View {
                 }
             }
             .toolbar { toolbar }
+            .sheet(isPresented: $isMatchingProducts) {
+                MatchProductsSheet()
+            }
             .navigationDestination(isPresented: $isShowingSavedProducts) {
                 SavedProductsView()
             }
@@ -168,6 +172,11 @@ struct ShopView: View {
                     Button("Saved Products", systemImage: "bookmark") {
                         isShowingSavedProducts = true
                     }
+                    if shopping.canMatchFromWalmart {
+                        Button("Match Walmart Products", systemImage: "arrow.triangle.2.circlepath") {
+                            isMatchingProducts = true
+                        }
+                    }
                     if shopping.canEdit {
                         Button("Store Settings", systemImage: "storefront") {
                             isEditingStore = true
@@ -204,6 +213,7 @@ private struct ShopWeekList: View {
     @State private var working: Set<String> = []
     /// The lines to choose for in Walmart, while that screen is open.
     @State private var walmartChoices: WalmartChoices?
+    @State private var isMatchingFromWalmart = false
     @State private var leaveOutError: String?
     /// The skip revision this list already re-matched for, so its own changes don't match twice.
     @State private var handledSkipRevision: Int?
@@ -348,6 +358,17 @@ private struct ShopWeekList: View {
         // Every line without a product, chosen one after another inside Walmart.
         if shopping.canEdit, !proposal.needsProduct.isEmpty {
             Section {
+                // Fry's can start from what the household already buys at Walmart.
+                if shopping.writesCart, shopping.canMatchFromWalmart {
+                    Button {
+                        isMatchingFromWalmart = true
+                    } label: {
+                        Label("Use Your Walmart Products", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .sheet(isPresented: $isMatchingFromWalmart) {
+                        MatchProductsSheet()
+                    }
+                }
                 Button {
                     walmartChoices = WalmartChoices(items: proposal.needsProduct.map(WalmartChooser.Item.init(line:)))
                 } label: {
@@ -1698,6 +1719,11 @@ private struct ShopTripStorePicker: View {
             }
             .disabled(!shopping.canEdit || isSwitching)
             .accessibilityHint("Picks the store for this week")
+            if shopping.tripPickIsPending {
+                Text("Saves when you're back online.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             if let errorMessage {
                 Text(errorMessage)
                     .font(.footnote)

@@ -47,6 +47,8 @@ struct DinnerOSApp: App {
                             await dependencies.menu.reload()
                             await dependencies.pantry.refresh()
                             await dependencies.thaw.load()
+                            // A week's store picked offline goes before the Shop tab reloads.
+                            await dependencies.shopping.flushTripPicks()
                             await dependencies.shopping.reload()
                             // Items added offline go now.
                             await dependencies.usuals.flush()

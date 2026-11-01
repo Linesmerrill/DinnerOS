@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -142,11 +143,86 @@ func (h *Handler) searchProducts(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := SearchProductListResponse{Items: make([]SearchProductResponse, 0, len(results))}
 	for _, p := range results {
-		item := SearchProductResponse{
-			ProductID: p.ProductID, Name: p.Name, Brand: optionalString(p.Brand), Size: optionalString(p.Size),
-			ImageURL: optionalString(p.ImageURL), URL: p.URL, PriceCents: p.PriceCents, Stock: optionalString(string(p.Stock)),
+		resp.Items = append(resp.Items, searchProductResponse(p))
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+func searchProductResponse(p SearchResult) SearchProductResponse {
+	item := SearchProductResponse{
+		ProductID: p.ProductID, Name: p.Name, Brand: optionalString(p.Brand), Size: optionalString(p.Size),
+		ImageURL: optionalString(p.ImageURL), URL: p.URL, PriceCents: p.PriceCents, Stock: optionalString(string(p.Stock)),
+	}
+	item.PackageSize = packageSizeResponse(p.PackageSize)
+	return item
+}
+
+// MatchSuggestionResponse is one pre-picked product for an ingredient saved
+// at another store.
+type MatchSuggestionResponse struct {
+	IngredientKey  string `json:"ingredientKey"`
+	IngredientName string `json:"ingredientName"`
+	// From is the product saved at the other store.
+	From SuggestionSourceResponse `json:"from"`
+	// Product is the pick, or null when the store found nothing usable.
+	Product      *SearchProductResponse  `json:"product"`
+	Alternatives []SearchProductResponse `json:"alternatives"`
+}
+
+// SuggestionSourceResponse is the saved product a suggestion starts from.
+type SuggestionSourceResponse struct {
+	Provider    providers.Key        `json:"provider"`
+	ProductID   string               `json:"productId"`
+	DisplayName string               `json:"displayName"`
+	PackageSize *PackageSizeResponse `json:"packageSize"`
+}
+
+// MatchSuggestionPageResponse is returned by GET .../{provider}/suggestions.
+type MatchSuggestionPageResponse struct {
+	Items []MatchSuggestionResponse `json:"items"`
+	// Next is the ingredient key to send as after, or null on the last page.
+	Next *string `json:"next"`
+	// Total counts every ingredient still to match.
+	Total int `json:"total"`
+}
+
+func (h *Handler) matchSuggestions(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	from := q.Get("from")
+	if from == "" {
+		from = string(providers.KeyWalmart)
+	}
+	limit := 0
+	if v := q.Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", "limit must be a positive number")
+			return
 		}
-		item.PackageSize = packageSizeResponse(p.PackageSize)
+		limit = n
+	}
+	page, err := h.opts.Service.MatchSuggestions(r.Context(), chi.URLParam(r, "householdId"), chi.URLParam(r, "provider"), from, q.Get("after"), limit)
+	if err != nil {
+		h.writeError(w, r, "match suggestions failed", err)
+		return
+	}
+	resp := MatchSuggestionPageResponse{Items: make([]MatchSuggestionResponse, 0, len(page.Items)), Next: optionalString(page.Next), Total: page.Total}
+	for _, m := range page.Items {
+		item := MatchSuggestionResponse{
+			IngredientKey: m.IngredientKey, IngredientName: m.IngredientName,
+			From: SuggestionSourceResponse{
+				Provider: m.From.Provider, ProductID: m.From.ProductID, DisplayName: m.From.DisplayName,
+				PackageSize: packageSizeResponse(m.From.PackageSize),
+			},
+			Alternatives: make([]SearchProductResponse, 0, len(m.Alternatives)),
+		}
+		if m.Product != nil {
+			p := searchProductResponse(*m.Product)
+			item.Product = &p
+		}
+		for _, a := range m.Alternatives {
+			item.Alternatives = append(item.Alternatives, searchProductResponse(a))
+		}
 		resp.Items = append(resp.Items, item)
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)

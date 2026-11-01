@@ -216,3 +216,37 @@ nonisolated struct CreateShoppingStoreRequest: Encodable, Equatable, Sendable {
         try container.encodeIfPresent(place, forKey: .place)
     }
 }
+
+/// What every household asked DinnerOS to add, totalled per store
+/// (`GET /shopping/requests/summary`). Only the people who run DinnerOS can read it.
+nonisolated struct StoreRequestSummary: Decodable, Sendable {
+    let items: [StoreRequestTally]
+    let households: Int
+    let custom: Int
+}
+
+/// One store's requests across households.
+nonisolated struct StoreRequestTally: Decodable, Hashable, Sendable, Identifiable {
+    let key: String
+    let name: String
+    let status: ShoppingCatalogStatus
+    let inCatalog: Bool
+    /// A name someone typed that matched no known store, to match up by hand.
+    let custom: Bool
+    let households: Int
+    let sources: [String: Int]
+    let places: [ShoppingStorePlace]
+    let notes: [String]
+    let lastRequestedAt: Date
+
+    var id: String { key }
+
+    /// "2 picked nearby · 1 from the list · 1 typed"
+    var sourceSummary: String {
+        var parts: [String] = []
+        if let n = sources["nearby"], n > 0 { parts.append(String(localized: "\(n) picked nearby")) }
+        if let n = sources["catalog"], n > 0 { parts.append(String(localized: "\(n) from the list")) }
+        if let n = sources["typed"], n > 0 { parts.append(String(localized: "\(n) typed")) }
+        return parts.joined(separator: " · ")
+    }
+}

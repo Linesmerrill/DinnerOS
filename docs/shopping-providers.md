@@ -310,6 +310,30 @@ saves it; the next store screen starts with it.
   first with distance, before any typing (decision 655). See
   [the API contract](api.md) for how a pick rolls up to its chain.
 
+## Starting matches
+
+A household that adds Fry's beside Walmart doesn't start from nothing
+(decision 657). For each ingredient with a saved Walmart product and no Fry's
+product, the API searches Fry's at the household's store, for the ingredient
+(with the category's search words) and for the saved product's own words
+("Fresh Poblano" for Long Green Pepper), and picks the best result:
+
+- in stock, never out of stock;
+- the words it shares with the ingredient and the saved product, with brand,
+  size, and filler words ("fresh", "large") ignored, two-word spellings
+  matched ("Bread Crumbs" for breadcrumbs), and a few synonyms (scallions are
+  green onions);
+- fewer words the household's names don't have, so a product that merely
+  mentions the ingredient sinks ("Balsamic Vinegar & Basil Crackers");
+- a fresh saved product sinks jarred, canned, and diced results;
+- the closest package size, weakly.
+
+A result must name the same thing: half the ingredient's specific words, or
+all of the saved product's. Otherwise there is no pick, and the member chooses
+that item later. Checked against a real household's 76 Walmart products at a
+Fry's store: 72 picks, 4 left to choose. The member confirms every pick
+(Shop → Match Walmart Products); nothing is saved without them.
+
 ## Product matching
 
 A grocery line is an ingredient, amounts, and a category. A cart line is one

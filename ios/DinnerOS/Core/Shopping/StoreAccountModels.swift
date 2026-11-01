@@ -98,3 +98,59 @@ nonisolated struct ShoppingSearchProduct: Decodable, Hashable, Sendable, Identif
 nonisolated struct ShoppingSearchProductList: Decodable, Sendable {
     let items: [ShoppingSearchProduct]
 }
+
+/// A product pre-picked at one store for an ingredient the household saved a product for at
+/// another (`GET .../{provider}/suggestions`).
+nonisolated struct ShoppingMatchSuggestion: Decodable, Hashable, Sendable, Identifiable {
+    struct Source: Decodable, Hashable, Sendable {
+        let provider: String
+        let productID: String
+        let displayName: String
+        let packageSize: ShoppingAmount?
+
+        private enum CodingKeys: String, CodingKey {
+            case provider, displayName, packageSize
+            case productID = "productId"
+        }
+    }
+
+    let ingredientKey: String
+    let ingredientName: String
+    let from: Source
+    /// `nil` when the store found nothing that's clearly the same thing.
+    let product: ShoppingSearchProduct?
+    var alternatives: [ShoppingSearchProduct] = []
+
+    var id: String { ingredientKey }
+
+    private enum CodingKeys: String, CodingKey {
+        case ingredientKey, ingredientName, from, product, alternatives
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ingredientKey = try container.decode(String.self, forKey: .ingredientKey)
+        ingredientName = try container.decode(String.self, forKey: .ingredientName)
+        from = try container.decode(Source.self, forKey: .from)
+        product = try container.decodeIfPresent(ShoppingSearchProduct.self, forKey: .product)
+        alternatives = (try? container.decodeIfPresent([ShoppingSearchProduct].self, forKey: .alternatives)) ?? []
+    }
+
+    init(
+        ingredientKey: String, ingredientName: String, from: Source, product: ShoppingSearchProduct?,
+        alternatives: [ShoppingSearchProduct] = []
+    ) {
+        self.ingredientKey = ingredientKey
+        self.ingredientName = ingredientName
+        self.from = from
+        self.product = product
+        self.alternatives = alternatives
+    }
+}
+
+/// One page of suggestions. `next` is the ingredient key to continue after, `nil` at the end.
+nonisolated struct ShoppingMatchSuggestionPage: Decodable, Sendable {
+    let items: [ShoppingMatchSuggestion]
+    let next: String?
+    let total: Int
+}

@@ -185,9 +185,10 @@ struct StoreProductSearchView: View {
 }
 
 /// One search result: photo, name, size, price, and stock.
-private struct StoreProductRow: View {
+struct StoreProductRow: View {
     let product: ShoppingSearchProduct
     let isSaving: Bool
+    var hint: LocalizedStringKey = "Saves it for this item."
 
     var body: some View {
         HStack(spacing: 12) {
@@ -226,7 +227,7 @@ private struct StoreProductRow: View {
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
-        .accessibilityHint("Saves it for this item.")
+        .accessibilityHint(hint)
     }
 
     private var detail: String {

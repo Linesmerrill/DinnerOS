@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -47,7 +48,10 @@ type HandlerOptions struct {
 	Tokens     auth.AccessTokenValidator
 	// AppURLScheme is the app's URL scheme, where a provider sign-in ends.
 	AppURLScheme string
-	Logger       *slog.Logger
+	// Operators are the user IDs who may read store request totals across
+	// households (OPERATOR_USER_IDS).
+	Operators []string
+	Logger    *slog.Logger
 }
 
 // Handler serves the shopping endpoints.
@@ -80,6 +84,7 @@ func (h *Handler) Mount(r chi.Router) {
 		const base = "/households/{householdId}/shopping"
 		r.Get("/shopping/providers", h.listProviders)
 		r.Get("/shopping/catalog", h.storeCatalog)
+		r.Get("/shopping/requests/summary", h.storeRequestSummary)
 		r.With(view).Get(base+"/settings", h.getSettings)
 		r.With(edit).Put(base+"/settings", h.putSettings)
 		r.With(edit).Put(base+"/settings/default", h.putDefaultStore)
@@ -107,6 +112,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(edit).Delete(base+"/{provider}/connection", h.disconnect)
 		r.With(view).Get(base+"/{provider}/stores", h.findStores)
 		r.With(view).Get(base+"/{provider}/products", h.searchProducts)
+		r.With(view).Get(base+"/{provider}/suggestions", h.matchSuggestions)
 		r.With(view).Get(base+"/{provider}/preferences", h.listPreferences)
 		r.With(view).Get(base+"/{provider}/preferences/{ingredientKey}", h.getPreference)
 		r.With(edit).Put(base+"/{provider}/preferences/{ingredientKey}", h.putPreference)
@@ -1585,6 +1591,64 @@ func (h *Handler) storeCatalog(w http.ResponseWriter, r *http.Request) {
 	resp := StoreCatalogResponse{Items: make([]StoreCatalogItemResponse, 0, len(items))}
 	for _, i := range items {
 		resp.Items = append(resp.Items, storeCatalogItemResponse(i))
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+// StoreRequestTallyResponse is one store's demand across households.
+type StoreRequestTallyResponse struct {
+	Key        string      `json:"key"`
+	Name       string      `json:"name"`
+	Status     StoreStatus `json:"status"`
+	InCatalog  bool        `json:"inCatalog"`
+	Custom     bool        `json:"custom"`
+	Households int         `json:"households"`
+	// Sources counts how households found it: catalog, nearby, typed.
+	Sources         map[string]int   `json:"sources"`
+	Places          []StorePlaceJSON `json:"places"`
+	Notes           []string         `json:"notes"`
+	LastRequestedAt time.Time        `json:"lastRequestedAt"`
+}
+
+// StoreRequestSummaryResponse is returned by GET /shopping/requests/summary.
+type StoreRequestSummaryResponse struct {
+	Items []StoreRequestTallyResponse `json:"items"`
+	// Households and Custom total the rows, for the report's header.
+	Households int `json:"households"`
+	Custom     int `json:"custom"`
+}
+
+// storeRequestSummary is the operator's report of what households asked
+// for. Anyone else gets 403, which the app reads as "don't show it".
+func (h *Handler) storeRequestSummary(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.UserIDFromContext(r.Context())
+	if !slices.Contains(h.opts.Operators, userID) {
+		httpx.WriteError(w, r, http.StatusForbidden, "forbidden", "Only the people who run DinnerOS can see this.")
+		return
+	}
+	tallies, err := h.opts.Service.StoreRequestSummary(r.Context())
+	if err != nil {
+		h.writeError(w, r, "store request summary failed", err)
+		return
+	}
+	resp := StoreRequestSummaryResponse{Items: make([]StoreRequestTallyResponse, 0, len(tallies))}
+	for _, t := range tallies {
+		_, inCatalog := CatalogEntryByKey(t.Key)
+		item := StoreRequestTallyResponse{
+			Key: t.Key, Name: t.Name, Status: t.Status(), InCatalog: inCatalog, Custom: t.Custom, Households: t.Households,
+			Sources: t.Sources, Places: make([]StorePlaceJSON, 0, len(t.Places)), Notes: t.Notes, LastRequestedAt: t.LastRequestedAt,
+		}
+		if item.Notes == nil {
+			item.Notes = []string{}
+		}
+		for _, p := range t.Places {
+			item.Places = append(item.Places, StorePlaceJSON(p))
+		}
+		resp.Households += t.Households
+		if t.Custom {
+			resp.Custom++
+		}
+		resp.Items = append(resp.Items, item)
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }

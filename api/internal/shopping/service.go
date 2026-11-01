@@ -111,8 +111,10 @@ type Service struct {
 	events     events.Recorder
 	members    MembershipSource
 	tokens     *tokenBox
-	logger     *slog.Logger
-	now        func() time.Time
+	// suggestions caches pre-picked products (suggestions.go).
+	suggestions suggestionCache
+	logger      *slog.Logger
+	now         func() time.Time
 }
 
 // NewService returns a Service.

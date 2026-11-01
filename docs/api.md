@@ -211,6 +211,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | PUT | `/api/v1/households/{householdId}/shopping/weeks/{week}/spend` `{orderTotalCents}` (null clears) → week cost | `shopping.edit` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/savings` `?limit` → `{weeks, totalSavedCents, weeksCounted, mealKit}` | `household.view` | 8a | ✅ |
 | GET | `/api/v1/shopping/catalog` `?q` → `{items: [{key, name, kind, status, aliases, note, requestedByHousehold, requests}]}` | bearer | 8a | ✅ |
+| GET | `/api/v1/shopping/requests/summary` → `{items: [{key, name, status, inCatalog, custom, households, sources, places, notes, lastRequestedAt}], households, custom}`: every household's store requests totalled per store, most asked for first. Only users in `OPERATOR_USER_IDS`; anyone else gets `403` (decision 658) | bearer, operator | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/requests` → `{items}` | `household.view` | 8a | ✅ |
 | POST | `/api/v1/households/{householdId}/shopping/requests` `{key or name, note?, source?, place?}` → `201` `{request}`, or `200` when the note is updated | `household.view` | 8a | ✅ |
 | DELETE | `/api/v1/households/{householdId}/shopping/requests/{requestId}` → `204` | `household.view` | 8a | ✅ |
@@ -1688,6 +1689,7 @@ Kroger fails it returns `503 provider_error` and records nothing.
 | `GET /shopping/kroger/callback?code=&state=` | public (signed state) | Finishes the sign-in and redirects to `<scheme>://shopping/connected?provider=kroger&result=connected\|cancelled\|failed` |
 | `GET /households/{id}/shopping/kroger/stores?zip=85001` | `household.view` | `{items: [{storeId, name, address, banner}]}`, the offered banners' stores nearest first (`banner` is `frys`, `ralphs`, …) |
 | `GET /households/{id}/shopping/kroger/products?q=pineapple` | `household.view` | `{items: [{productId, name, brand, size, packageSize, imageUrl, url, priceCents, stock}]}` at the household's store; `q` is 3–100 characters, at most 8 words |
+| `GET /households/{id}/shopping/kroger/suggestions?from=walmart&after=&limit=12` | `household.view` | `{items: [{ingredientKey, ingredientName, from: {provider, productId, displayName, packageSize}, product, alternatives}], next, total}`: a Fry's product pre-picked for each ingredient the household saved at `from` (default `walmart`) but not yet at Fry's, in ingredient name order. `product` is `null` when nothing clearly names the same thing; `alternatives` are up to 3 runners-up. `limit` is 1–20 (default 12); `next` is the key to pass as `after`, `null` on the last page. Nothing is saved: confirming a pick is `PUT .../kroger/preferences/{ingredientKey}`. Picks are cached for 6 hours per store (decision 657) |
 
 **Several stores (decision 653).** A household can set up one store per
 provider (Walmart and a Kroger banner) and keeps every store's saved products,

@@ -17,8 +17,11 @@ struct HouseholdView: View {
     @Environment(\.appConfiguration) private var configuration
     @Environment(PushNotificationStore.self) private var push: PushNotificationStore?
     @Environment(\.openURL) private var openURL
+    @Environment(ShoppingStore.self) private var shopping: ShoppingStore?
 
     @State private var me: MeResponse?
+    /// Every household's store requests; `nil` for anyone who doesn't run DinnerOS.
+    @State private var storeRequests: StoreRequestSummary?
     @State private var isLoadingAccount = false
     @State private var accountError: String?
 
@@ -91,6 +94,19 @@ struct HouseholdView: View {
                 leaveSection
             }
             accountSection
+            if let storeRequests {
+                Section {
+                    NavigationLink {
+                        StoreRequestsReportView(summary: storeRequests)
+                    } label: {
+                        LabeledContent("Store Requests", value: storeRequests.households.formatted())
+                    }
+                } header: {
+                    Text("Running DinnerOS")
+                } footer: {
+                    Text("What households asked us to add. Only you can see this.")
+                }
+            }
             Section {
                 Button("Sign Out", role: .destructive) {
                     isConfirmingSignOut = true
@@ -125,6 +141,7 @@ struct HouseholdView: View {
             }
         }
         .task { await loadAccount() }
+        .task { storeRequests = try? await shopping?.storeRequestSummary() ?? nil }
         // Only for someone who could act on it: without `recipes.import` the row is hidden and
         // the request would be a guaranteed `403`.
         .task(id: households.current?.household.id) {

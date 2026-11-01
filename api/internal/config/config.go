@@ -54,6 +54,10 @@ type Config struct {
 
 	// AuthTokenSigningKey signs DinnerOS access tokens (HS256). Never log it.
 	AuthTokenSigningKey []byte
+	// OperatorUserIDs are the users who run DinnerOS and may read data across
+	// households, such as store request totals (OPERATOR_USER_IDS, a comma
+	// list of user IDs). Empty means nobody.
+	OperatorUserIDs []string
 	// AuthSigningKeyEphemeral is true when no key was configured in
 	// development and a random per-process key was generated instead.
 	AuthSigningKeyEphemeral bool
@@ -264,8 +268,9 @@ func Load(getenv func(string) string) (Config, error) {
 		AppName: get("APP_NAME", "DinnerOS"),
 		// Heroku exposes the deployed commit as HEROKU_BUILD_COMMIT (dyno metadata)
 		// or HEROKU_SLUG_COMMIT (buildpack builds). APP_VERSION overrides both.
-		Version:       get("APP_VERSION", get("HEROKU_BUILD_COMMIT", get("HEROKU_SLUG_COMMIT", "dev"))),
-		MongoDatabase: get("MONGODB_DATABASE", "dinneros"),
+		Version:         get("APP_VERSION", get("HEROKU_BUILD_COMMIT", get("HEROKU_SLUG_COMMIT", "dev"))),
+		MongoDatabase:   get("MONGODB_DATABASE", "dinneros"),
+		OperatorUserIDs: commaList(get("OPERATOR_USER_IDS", "")),
 	}
 
 	switch env := Environment(get("APP_ENV", string(Development))); env {
@@ -603,6 +608,17 @@ func krogerBanners(v string) []string {
 	for _, k := range strings.Split(v, ",") {
 		if k = strings.TrimSpace(k); k != "" {
 			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// commaList splits a comma-separated setting, dropping blanks.
+func commaList(v string) []string {
+	var out []string
+	for _, item := range strings.Split(v, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
 		}
 	}
 	return out

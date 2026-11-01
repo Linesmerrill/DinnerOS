@@ -186,6 +186,36 @@ func (s *Service) RequestStore(ctx context.Context, actor households.Membership,
 	return saved, created, nil
 }
 
+// maxTallyExamples bounds the places and notes a tally carries.
+const maxTallyExamples = 5
+
+// StoreRequestTally is one store's demand across every household: how many
+// asked, how they found it, a few of the locations they picked, and their
+// notes. Custom marks a typed name no catalog store matched, to reconcile.
+type StoreRequestTally struct {
+	Key             string
+	Name            string
+	Households      int
+	Custom          bool
+	Sources         map[string]int
+	Places          []StorePlace
+	Notes           []string
+	LastRequestedAt time.Time
+}
+
+// Status is the catalog's status for the store, or StatusUnsupported for one
+// the catalog doesn't list.
+func (t StoreRequestTally) Status() StoreStatus {
+	return StoreRequest{Key: t.Key}.Status()
+}
+
+// StoreRequestSummary totals every household's store requests, most asked
+// for first. It reads across households, so only an operator may call it
+// (the handler checks).
+func (s *Service) StoreRequestSummary(ctx context.Context) ([]StoreRequestTally, error) {
+	return s.store.SummarizeStoreRequests(ctx)
+}
+
 // ListStoreRequests returns the household's store requests, newest first.
 func (s *Service) ListStoreRequests(ctx context.Context, householdID string) ([]StoreRequest, error) {
 	if householdID == "" {

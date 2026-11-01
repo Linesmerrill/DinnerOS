@@ -183,6 +183,14 @@ nonisolated struct ShoppingStoreChoice: Decodable, Hashable, Sendable, Identifia
 }
 
 /// The store one week shops at, when it isn't the default.
+/// A week's store picked without a connection, waiting to be sent. `provider` is `nil` to go
+/// back to the default store.
+nonisolated struct PendingTripStore: Codable, Hashable, Sendable {
+    let householdID: String
+    let week: String
+    let provider: String?
+}
+
 nonisolated struct ShoppingTripStore: Codable, Hashable, Sendable {
     let week: String
     let provider: String

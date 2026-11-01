@@ -15,6 +15,8 @@ struct MultiStoreTests {
             var trips: [String: String] = [:]
             var log: [String] = []
             var bodies: [String: Data] = [:]
+            /// Store picks fail as if the phone had no connection.
+            var offline = false
         }
         let state: Mutex<State>
 
@@ -74,7 +76,8 @@ struct MultiStoreTests {
 
     /// "Now" is in 2026-W38 in Denver.
     private func makeHarness(
-        stores setUp: [String] = ["walmart", "kroger"], trips: [String: String] = [:]
+        stores setUp: [String] = ["walmart", "kroger"], trips: [String: String] = [:],
+        defaults: UserDefaults = UserDefaults(suiteName: "MultiStoreTests-\(UUID().uuidString)") ?? .standard
     ) async throws -> Harness {
         let stores = Stores(stores: setUp, trips: trips)
         let server = FakeShoppingServer(.init())
@@ -85,6 +88,9 @@ struct MultiStoreTests {
             let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
             let base = "/api/v1/households/household-1/shopping"
             if path.hasSuffix("/shopping/providers") { return (200, JSON.providers) }
+            if method == "PUT", path.hasSuffix("/store"), stores.state.withLock({ $0.offline }) {
+                throw URLError(.notConnectedToInternet)
+            }
             if path.hasSuffix("/kroger/connection") {
                 return (
                     200, Data(#"{"provider":"kroger","connected":true,"connectedBy":null,"connectedAt":null}"#.utf8)
@@ -125,7 +131,7 @@ struct MultiStoreTests {
         let instant = try #require(JSONCoding.parseDate("2026-09-16T12:00:00Z"))
         let store = ShoppingStore(
             session: session, api: ShoppingAPI(client: client), checks: InMemoryGroceryChecks(), now: { instant },
-            openURL: { _ in true }, productCheck: StubProductCheck())
+            openURL: { _ in true }, productCheck: StubProductCheck(), defaults: defaults)
         store.activate(
             householdID: "household-1", timeZone: TimeZone(identifier: "America/Denver") ?? .gmt, weekStartsOn: .mon)
         store.setPermissions(canEdit: true, canConfirm: true)
@@ -181,6 +187,50 @@ struct MultiStoreTests {
         try await store.shop(at: "walmart")
         #expect(harness.stores.body("PUT /weeks/2026-W38/store")["provider"] is NSNull)
         #expect(store.provider == "walmart")
+    }
+
+    @Test func aStorePickedOfflineShowsNowAndSendsWhenBackOnline() async throws {
+        let defaults = try #require(UserDefaults(suiteName: "MultiStoreTests-offline-\(UUID().uuidString)"))
+        let harness = try await makeHarness(defaults: defaults)
+        let store = harness.store
+        await store.load()
+        harness.stores.state.withLock { $0.offline = true }
+
+        try await store.shop(at: "kroger")
+
+        #expect(store.provider == "kroger" && store.tripPickIsPending)
+        #expect(harness.stores.state.withLock { $0.trips.isEmpty })
+        #expect(defaults.data(forKey: ShoppingStore.pendingTripsKey) != nil)
+        // Still offline: nothing is lost.
+        await store.flushTripPicks()
+        #expect(store.tripPickIsPending)
+
+        harness.stores.state.withLock { $0.offline = false }
+        await store.flushTripPicks()
+
+        #expect(harness.stores.state.withLock { $0.trips["2026-W38"] } == "kroger")
+        #expect(!store.tripPickIsPending && store.provider == "kroger")
+        #expect(defaults.data(forKey: ShoppingStore.pendingTripsKey) == nil)
+    }
+
+    @Test func aStorePickedOfflineSurvivesTheAppClosing() async throws {
+        let defaults = try #require(UserDefaults(suiteName: "MultiStoreTests-relaunch-\(UUID().uuidString)"))
+        let first = try await makeHarness(defaults: defaults)
+        await first.store.load()
+        first.stores.state.withLock { $0.offline = true }
+        try await first.store.shop(at: "kroger")
+
+        let relaunched = try await makeHarness(defaults: defaults)
+        await relaunched.store.load()
+        #expect(relaunched.store.provider == "kroger" && relaunched.store.tripPickIsPending)
+
+        // Picking again offline replaces the queued pick rather than adding a second.
+        relaunched.stores.state.withLock { $0.offline = true }
+        try await relaunched.store.shop(at: "walmart")
+        #expect(relaunched.store.provider == "walmart" && relaunched.store.pendingTrips.count == 1)
+
+        relaunched.store.reset()
+        #expect(defaults.data(forKey: ShoppingStore.pendingTripsKey) == nil)
     }
 
     @Test func addingAStoreKeepsTheDefault() async throws {

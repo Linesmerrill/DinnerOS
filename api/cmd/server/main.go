@@ -341,6 +341,7 @@ func run() error {
 		Households:   householdService,
 		Tokens:       tokens,
 		AppURLScheme: cfg.AppURLScheme,
+		Operators:    cfg.OperatorUserIDs,
 		Logger:       logger,
 	})
 	pantryHandler := pantry.NewHandler(pantry.HandlerOptions{

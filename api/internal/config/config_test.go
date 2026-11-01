@@ -436,3 +436,14 @@ func TestLoadAppLinks(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadOperators(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil || len(cfg.OperatorUserIDs) != 0 {
+		t.Fatalf("default operators = %v, %v", cfg.OperatorUserIDs, err)
+	}
+	cfg, err = Load(env(map[string]string{"OPERATOR_USER_IDS": " 6aa9406d7895ff325b65290f, ,abc "}))
+	if err != nil || len(cfg.OperatorUserIDs) != 2 || cfg.OperatorUserIDs[0] != "6aa9406d7895ff325b65290f" || cfg.OperatorUserIDs[1] != "abc" {
+		t.Fatalf("operators = %v, %v", cfg.OperatorUserIDs, err)
+	}
+}

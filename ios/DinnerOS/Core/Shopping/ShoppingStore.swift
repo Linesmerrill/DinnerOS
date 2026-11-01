@@ -61,7 +61,7 @@ final class ShoppingStore {
     /// The store the shown week shops at: the week's pick, else the household's default. Fry's
     /// (a Kroger store) only while the API offers it; otherwise Walmart.
     var provider: String {
-        if settings?.tripProvider(week: week.description) == ShoppingProviderKey.kroger, kroger != nil {
+        if tripChoice == ShoppingProviderKey.kroger, kroger != nil {
             return ShoppingProviderKey.kroger
         }
         return ShoppingProviderKey.walmart
@@ -69,6 +69,24 @@ final class ShoppingStore {
 
     private(set) var householdID: String?
     private(set) var week: ISOWeek
+
+    /// The store the shown week shops at: a pick made offline that hasn't been sent yet, or
+    /// the saved one.
+    private var tripChoice: String? {
+        if let pending = pendingTrip(week: week) {
+            return pending.provider ?? settings?.provider
+        }
+        return settings?.tripProvider(week: week.description)
+    }
+
+    /// Store picks for a week made without a connection, sent when it's back (`flushTripPicks`).
+    /// Saved on the phone so they survive the app closing.
+    private(set) var pendingTrips: [PendingTripStore] = []
+    /// The shown week's store pick is waiting for a connection.
+    var tripPickIsPending: Bool { pendingTrip(week: week) != nil }
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private var isFlushingTrips = false
+    static let pendingTripsKey = "shopping.pendingTripStores"
 
     /// Providers and store settings.
     private(set) var setupPhase: Phase = .idle
@@ -270,8 +288,14 @@ final class ShoppingStore {
     init(
         session: AuthSession, api: ShoppingAPI?, checks: any GroceryCheckStorage,
         now: @escaping () -> Date = Date.init, openURL: @escaping @MainActor (URL) async -> Bool,
-        productCheck: (any WalmartProductChecking)? = nil
+        productCheck: (any WalmartProductChecking)? = nil, defaults: UserDefaults = .standard
     ) {
+        self.defaults = defaults
+        if let data = defaults.data(forKey: Self.pendingTripsKey),
+            let saved = try? JSONDecoder().decode([PendingTripStore].self, from: data)
+        {
+            pendingTrips = saved
+        }
         self.session = session
         self.api = api
         self.checks = checks
@@ -519,12 +543,79 @@ final class ShoppingStore {
         let week = week
         let pick = provider == settings?.provider ? nil : provider
         let started = scope
-        let saved = try await session.authorized { token in
-            try await api.setTripStore(householdID: householdID, week: week, provider: pick, accessToken: token)
+        let previous = self.provider
+        do {
+            let saved = try await session.authorized { token in
+                try await api.setTripStore(householdID: householdID, week: week, provider: pick, accessToken: token)
+            }
+            guard started == scope else { return }
+            Self.logger.info("Shopping trip store changed")
+            dropPendingTrip(householdID: householdID, week: week.description)
+            await apply(saved)
+        } catch let error as APIError where UsualsStore.isUnreachable(error) {
+            // Offline: show the pick now and send it when the connection is back.
+            guard started == scope else { return }
+            dropPendingTrip(householdID: householdID, week: week.description)
+            pendingTrips.append(PendingTripStore(householdID: householdID, week: week.description, provider: pick))
+            if pendingTrips.count > 20 { pendingTrips.removeFirst(pendingTrips.count - 20) }
+            savePendingTrips()
+            Self.logger.notice("Shopping trip store queued until the API can be reached")
+            if self.provider != previous {
+                forgetStoreState()
+                await loadProposal(clearing: true)
+            }
         }
-        guard started == scope else { return }
-        Self.logger.info("Shopping trip store changed")
-        await apply(saved)
+    }
+
+    /// Sends store picks made offline. Stops at the first the API still can't be reached
+    /// for; one it refuses (the store was removed meanwhile) is dropped.
+    func flushTripPicks() async {
+        guard let api, !isFlushingTrips, !pendingTrips.isEmpty else { return }
+        isFlushingTrips = true
+        defer { isFlushingTrips = false }
+        while let next = pendingTrips.first {
+            guard let week = ISOWeek(next.week) else {
+                pendingTrips.removeFirst()
+                continue
+            }
+            do {
+                let saved = try await session.authorized { token in
+                    try await api.setTripStore(
+                        householdID: next.householdID, week: week, provider: next.provider, accessToken: token)
+                }
+                pendingTrips.removeFirst()
+                savePendingTrips()
+                if next.householdID == householdID { await apply(saved) }
+            } catch let error as APIError where UsualsStore.isUnreachable(error) {
+                return
+            } catch is CancellationError {
+                return
+            } catch {
+                Self.logger.notice("Dropped a queued store pick the API refused")
+                pendingTrips.removeFirst()
+                savePendingTrips()
+                if next.householdID == householdID { await reload() }
+            }
+        }
+    }
+
+    private func pendingTrip(week: ISOWeek) -> PendingTripStore? {
+        guard let householdID else { return nil }
+        return pendingTrips.last { $0.householdID == householdID && $0.week == week.description }
+    }
+
+    private func dropPendingTrip(householdID: String, week: String) {
+        let before = pendingTrips.count
+        pendingTrips.removeAll { $0.householdID == householdID && $0.week == week }
+        if pendingTrips.count != before { savePendingTrips() }
+    }
+
+    private func savePendingTrips() {
+        if pendingTrips.isEmpty {
+            defaults.removeObject(forKey: Self.pendingTripsKey)
+        } else if let data = try? JSONEncoder().encode(pendingTrips) {
+            defaults.set(data, forKey: Self.pendingTripsKey)
+        }
     }
 
     /// Makes one of the household's stores the one weeks shop at.
@@ -1390,10 +1481,13 @@ final class ShoppingStore {
 
     /// Saves the product for a grocery line, then matches the week again.
     @discardableResult
-    func savePreference(ingredientKey: String, request: ShoppingPreferenceRequest) async throws -> ShoppingPreference {
+    func savePreference(
+        ingredientKey: String, request: ShoppingPreferenceRequest, provider chosenProvider: String? = nil,
+        rematch: Bool = true
+    ) async throws -> ShoppingPreference {
         let (api, householdID) = try requireHousehold()
         let started = scope
-        let provider = provider
+        let provider = chosenProvider ?? provider
         let saved = try await session.authorized { token in
             try await api.savePreference(
                 householdID: householdID, provider: provider, ingredientKey: ingredientKey, preference: request,
@@ -1408,8 +1502,41 @@ final class ShoppingStore {
                 $0.ingredientName.localizedCaseInsensitiveCompare($1.ingredientName) == .orderedAscending
             }
         }
-        await loadProposal(clearing: false)
+        if rematch { await loadProposal(clearing: false) }
         return saved
+    }
+
+    /// The household has Walmart and Fry's both set up, so Walmart's saved products can start
+    /// Fry's.
+    var canMatchFromWalmart: Bool {
+        canEdit && kroger != nil && settings?.store(for: ShoppingProviderKey.walmart) != nil
+            && settings?.store(for: ShoppingProviderKey.kroger) != nil
+    }
+
+    /// A page of Fry's products pre-picked from the household's saved Walmart products.
+    func krogerSuggestions(after: String?, limit: Int = 12) async throws -> ShoppingMatchSuggestionPage {
+        let (api, householdID) = try requireHousehold()
+        return try await session.authorized { token in
+            try await api.matchSuggestions(
+                householdID: householdID, provider: ShoppingProviderKey.kroger, from: ShoppingProviderKey.walmart,
+                after: after, limit: limit, accessToken: token)
+        }
+    }
+
+    /// Every household's store requests, totalled, or `nil` for someone who doesn't run
+    /// DinnerOS (the API answers `403`), which hides the report.
+    func storeRequestSummary() async throws -> StoreRequestSummary? {
+        guard let api else { throw AuthSessionError.notConfigured }
+        do {
+            return try await session.authorized { token in try await api.storeRequestSummary(accessToken: token) }
+        } catch let error as APIError where error.status == 403 || error.status == 404 {
+            return nil
+        }
+    }
+
+    /// Matches the shown week again after products were saved without matching each time.
+    func rematch() async {
+        await loadProposal(clearing: false)
     }
 
     /// Flags an ingredient's saved product to pick a different one next time, or clears the flag.
@@ -1586,6 +1713,9 @@ final class ShoppingStore {
     /// Forgets everything, for sign-out.
     func reset() {
         clear()
+        // Picks made offline belong to the account signing out.
+        pendingTrips = []
+        savePendingTrips()
         householdID = nil
         userID = nil
         dismissedHandoffIDs = []
