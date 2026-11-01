@@ -77,7 +77,17 @@ type ServiceOptions struct {
 	// Events, when set, records shopping.handoff_created and
 	// shopping.order_confirmed (best effort).
 	Events events.Recorder
-	Logger *slog.Logger
+	// Members and TokenSecret turn on providers a member signs in to
+	// (accounts.go): Members checks who finished a sign-in, and TokenSecret
+	// (the server's signing key) derives the keys that encrypt the tokens.
+	Members     MembershipSource
+	TokenSecret []byte
+	Logger      *slog.Logger
+}
+
+// MembershipSource reads a member's role. *households.Service implements it.
+type MembershipSource interface {
+	GetMembership(ctx context.Context, householdID, userID string) (households.Membership, error)
 }
 
 // Service implements shopping handoffs. Reads take a household ID (routes
@@ -97,6 +107,8 @@ type Service struct {
 	households HouseholdSource
 	notifier   Notifier
 	events     events.Recorder
+	members    MembershipSource
+	tokens     *tokenBox
 	logger     *slog.Logger
 	now        func() time.Time
 }
@@ -107,11 +119,19 @@ func NewService(o ServiceOptions) *Service {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
-	return &Service{
+	svc := &Service{
 		store: o.Store, providers: o.Providers, grocery: o.Grocery, catalog: o.Catalog, pantry: o.Pantry,
 		frozen: o.Frozen, freezer: o.Freezer, leftovers: o.Leftovers, plans: o.Plans,
-		households: o.Households, notifier: o.Notifier, events: o.Events, logger: logger, now: time.Now,
+		households: o.Households, notifier: o.Notifier, events: o.Events, members: o.Members, logger: logger, now: time.Now,
 	}
+	if o.Members != nil {
+		box, err := newTokenBox(o.TokenSecret)
+		if err != nil {
+			logger.Error("provider sign-ins are off: token keys", "error", err)
+		}
+		svc.tokens = box
+	}
+	return svc
 }
 
 func (s *Service) timestamp() time.Time { return s.now().UTC().Truncate(time.Millisecond) }
@@ -163,6 +183,12 @@ func (s *Service) Settings(ctx context.Context, householdID string) (Settings, e
 
 // UpdateSettings sets the household's provider and optional store.
 func (s *Service) UpdateSettings(ctx context.Context, actor households.Membership, provider, storeID string) (Settings, error) {
+	return s.UpdateStore(ctx, actor, provider, storeID, "")
+}
+
+// UpdateStore sets the household's provider, optional store, and the
+// store's display name.
+func (s *Service) UpdateStore(ctx context.Context, actor households.Membership, provider, storeID, storeName string) (Settings, error) {
 	if err := authorize(actor, households.PermShoppingEdit); err != nil {
 		return Settings{}, err
 	}
@@ -177,6 +203,10 @@ func (s *Service) UpdateSettings(ctx context.Context, actor households.Membershi
 	if strings.TrimSpace(storeID) != "" {
 		if next.StoreID, err = p.NormalizeStoreID(storeID); err != nil {
 			return Settings{}, err
+		}
+		next.StoreName = strings.Join(strings.Fields(storeName), " ")
+		if len(next.StoreName) > MaxStoreNameLength {
+			return Settings{}, invalid("storeName must be at most %d characters", MaxStoreNameLength)
 		}
 	}
 	saved, err := s.store.PutSettings(ctx, next)
@@ -504,6 +534,15 @@ func (s *Service) CreateHandoff(ctx context.Context, actor households.Membership
 		if len(proposal.Lines) == 0 {
 			return Handoff{}, false, invalid("no grocery line has a saved product to add to the cart")
 		}
+		// A provider that writes the cart itself needs the household's
+		// sign-in before anything is recorded as sent.
+		writer, writes := p.(providers.CartWriter)
+		var customer string
+		if writes {
+			if customer, err = s.customerToken(ctx, actor.HouseholdID, p); err != nil {
+				return Handoff{}, false, err
+			}
+		}
 		now := s.timestamp()
 		if current == nil {
 			h, err := s.store.InsertHandoff(ctx, Handoff{Proposal: proposal, CreatedBy: actor.UserID, CreatedAt: now, UpdatedAt: now})
@@ -512,6 +551,14 @@ func (s *Service) CreateHandoff(ctx context.Context, actor households.Membership
 			}
 			if err != nil {
 				return Handoff{}, false, fmt.Errorf("insert handoff: %w", err)
+			}
+			if writes {
+				if err := s.writeCart(ctx, writer, actor.HouseholdID, p, customer, proposal.Links); err != nil {
+					if cerr := s.store.CloseHandoff(ctx, actor.HouseholdID, h.ID, ClosedCartFailed, now); cerr != nil {
+						s.logger.ErrorContext(ctx, "close handoff after a failed cart write", "householdId", actor.HouseholdID, "handoffId", h.ID, "error", cerr)
+					}
+					return Handoff{}, false, err
+				}
 			}
 			packages := 0
 			for _, l := range h.Lines {
@@ -537,6 +584,15 @@ func (s *Service) CreateHandoff(ctx context.Context, actor households.Membership
 		if err != nil {
 			return Handoff{}, false, fmt.Errorf("update handoff: %w", err)
 		}
+		if writes {
+			if err := s.writeCart(ctx, writer, actor.HouseholdID, p, customer, next.Links); err != nil {
+				// Nothing was added: put the handoff back as it was.
+				if _, rerr := s.store.UpdateHandoffSend(ctx, *current, saved.Revision); rerr != nil {
+					s.logger.ErrorContext(ctx, "restore handoff after a failed cart write", "householdId", actor.HouseholdID, "handoffId", current.ID, "error", rerr)
+				}
+				return Handoff{}, false, err
+			}
+		}
 		var sent []HandoffLine
 		for _, id := range lineIDs {
 			if l, ok := saved.Line(id); ok {
@@ -547,6 +603,30 @@ func (s *Service) CreateHandoff(ctx context.Context, actor households.Membership
 		return saved, false, nil
 	}
 	return Handoff{}, false, ErrConflict
+}
+
+// writeCart adds a send's items to the signed-in cart. A refused sign-in
+// forgets the account, so the member is asked to sign in again.
+func (s *Service) writeCart(ctx context.Context, writer providers.CartWriter, householdID string, p providers.GroceryProvider, customer string, links []CartLink) error {
+	var items []providers.CartItem
+	for _, l := range links {
+		for _, it := range l.Items {
+			items = append(items, providers.CartItem{ProductID: it.ProductID, Quantity: it.Quantity})
+		}
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	err := writer.AddToCart(ctx, customer, items)
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, providers.ErrCustomerSignedOut):
+		_ = s.store.DeleteProviderAccount(ctx, householdID, p.Key())
+		return ErrNotConnected
+	default:
+		return fmt.Errorf("%w: add to %s cart: %w", ErrCartUnavailable, p.Name(), err)
+	}
 }
 
 // recordReportedChecks validates the app's checks and records them on the

@@ -17,6 +17,14 @@ type Store interface {
 	// PutSettings creates or replaces the household's settings.
 	PutSettings(ctx context.Context, s Settings) (Settings, error)
 
+	// GetProviderAccount returns the household's signed-in account with a
+	// provider (tokens sealed), or ErrNotFound.
+	GetProviderAccount(ctx context.Context, householdID string, provider providers.Key) (StoredAccount, error)
+	// PutProviderAccount creates or replaces it.
+	PutProviderAccount(ctx context.Context, a StoredAccount) error
+	// DeleteProviderAccount removes it, or returns ErrNotFound.
+	DeleteProviderAccount(ctx context.Context, householdID string, provider providers.Key) error
+
 	// ListPreferences returns the household's saved products for a provider,
 	// ordered by ingredient name.
 	ListPreferences(ctx context.Context, householdID string, provider providers.Key) ([]Preference, error)

@@ -33,6 +33,31 @@ func TestLoadShopping(t *testing.T) {
 	}
 }
 
+func TestLoadKroger(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil || cfg.Kroger.Enabled() || cfg.Kroger.Banner != "frys" || cfg.Kroger.APIBase != DefaultKrogerAPIBase {
+		t.Fatalf("defaults: Kroger = %+v, %v", cfg.Kroger, err)
+	}
+	all := map[string]string{
+		"KROGER_CLIENT_ID": "dinneros-test", "KROGER_CLIENT_SECRET": "not-a-real-secret",
+		"KROGER_REDIRECT_URL": "https://api.example.test/api/v1/shopping/kroger/callback",
+	}
+	cfg, err = Load(env(all))
+	if err != nil || !cfg.Kroger.Enabled() || cfg.Kroger.RedirectURL != all["KROGER_REDIRECT_URL"] {
+		t.Fatalf("configured: Kroger = %+v, %v", cfg.Kroger.Enabled(), err)
+	}
+	for name, values := range map[string]map[string]string{
+		"id only":     {"KROGER_CLIENT_ID": "dinneros-test"},
+		"no redirect": {"KROGER_CLIENT_ID": "dinneros-test", "KROGER_CLIENT_SECRET": "not-a-real-secret"},
+		"http base": {"KROGER_CLIENT_ID": "dinneros-test", "KROGER_CLIENT_SECRET": "not-a-real-secret",
+			"KROGER_REDIRECT_URL": all["KROGER_REDIRECT_URL"], "KROGER_API_BASE": "http://api.kroger.com"},
+	} {
+		if _, err := Load(env(values)); err == nil || !strings.Contains(err.Error(), "KROGER_") {
+			t.Errorf("%s: Load() error = %v", name, err)
+		}
+	}
+}
+
 func TestLoadStarterRecipes(t *testing.T) {
 	cfg, err := Load(env(nil))
 	if err != nil || cfg.StarterRecipesHouseholdID != "" {

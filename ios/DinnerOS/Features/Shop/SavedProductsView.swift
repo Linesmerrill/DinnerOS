@@ -21,7 +21,11 @@ struct SavedProductsView: View {
                 ChooseProductSheet(choice: choice)
             }
             .fullScreenCover(item: $rechoosing) { choices in
-                ChooseInWalmartView(items: choices.items)
+                if shopping.writesCart {
+                    StoreProductSearchView(items: choices.items)
+                } else {
+                    ChooseInWalmartView(items: choices.items)
+                }
             }
             .alert("Couldn't Remove the Product", isPresented: Binding(presenting: $actionError)) {
                 Button("OK", role: .cancel) {}

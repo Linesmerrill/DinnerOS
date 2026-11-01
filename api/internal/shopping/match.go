@@ -269,7 +269,7 @@ func cartLinks(p providers.GroceryProvider, items []providers.CartItem, storeID 
 		return nil, err
 	}
 	for _, link := range links {
-		cl := CartLink{URL: link.URL, ItemCount: len(link.Items)}
+		cl := CartLink{URL: link.URL, ItemCount: len(link.Items), Items: link.Items}
 		for _, it := range link.Items {
 			cl.LineIDs = append(cl.LineIDs, it.LineIDs...)
 		}

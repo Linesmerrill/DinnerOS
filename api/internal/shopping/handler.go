@@ -45,7 +45,9 @@ type HandlerOptions struct {
 	// Households is optional; see HouseholdLister.
 	Households HouseholdLister
 	Tokens     auth.AccessTokenValidator
-	Logger     *slog.Logger
+	// AppURLScheme is the app's URL scheme, where a provider sign-in ends.
+	AppURLScheme string
+	Logger       *slog.Logger
 }
 
 // Handler serves the shopping endpoints.
@@ -65,6 +67,9 @@ func NewHandler(opts HandlerOptions) *Handler {
 
 // Mount registers the routes on r, which is expected to be the /api/v1 router.
 func (h *Handler) Mount(r chi.Router) {
+	// The provider's sign-in page returns here, outside the app: the signed
+	// state stands in for a DinnerOS token.
+	r.Get("/shopping/{provider}/callback", h.connectCallback)
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireAuth(h.opts.Tokens))
 		view := households.RequirePermission(h.opts.Authorizer, households.PermHouseholdView, h.logger)
@@ -92,6 +97,11 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(pantryEdit).Post(prep+"/cards/{cardId}/skip", h.skipPrepCard)
 		r.With(view).Get(base+"/weeks/{week}/order", h.getOrderReminder)
 		r.With(edit).Put(base+"/weeks/{week}/order", h.setWeekOrdered)
+		r.With(view).Get(base+"/{provider}/connection", h.getConnection)
+		r.With(edit).Post(base+"/{provider}/connection", h.connect)
+		r.With(edit).Delete(base+"/{provider}/connection", h.disconnect)
+		r.With(view).Get(base+"/{provider}/stores", h.findStores)
+		r.With(view).Get(base+"/{provider}/products", h.searchProducts)
 		r.With(view).Get(base+"/{provider}/preferences", h.listPreferences)
 		r.With(view).Get(base+"/{provider}/preferences/{ingredientKey}", h.getPreference)
 		r.With(edit).Put(base+"/{provider}/preferences/{ingredientKey}", h.putPreference)
@@ -118,6 +128,9 @@ type CapabilitiesResponse struct {
 	StoreFinder      bool                  `json:"storeFinder"`
 	CartWrite        bool                  `json:"cartWrite"`
 	OrderImport      bool                  `json:"orderImport"`
+	// CustomerAccount is true when a member signs in to the provider before
+	// the cart can be filled.
+	CustomerAccount bool `json:"customerAccount"`
 }
 
 // ProviderResponse is an enabled shopping provider.
@@ -139,6 +152,7 @@ type ProviderListResponse struct {
 type SettingsResponse struct {
 	Provider  *providers.Key `json:"provider"`
 	StoreID   *string        `json:"storeId"`
+	StoreName *string        `json:"storeName"`
 	UpdatedBy *string        `json:"updatedBy"`
 	UpdatedAt *time.Time     `json:"updatedAt"`
 }
@@ -147,6 +161,8 @@ type SettingsResponse struct {
 type UpdateSettingsRequest struct {
 	Provider string  `json:"provider"`
 	StoreID  *string `json:"storeId"`
+	// StoreName is the picked store's name, kept for display.
+	StoreName string `json:"storeName,omitempty"`
 }
 
 // PackageSizeRequest is a package size in a request.
@@ -1014,7 +1030,7 @@ func (h *Handler) listProviders(w http.ResponseWriter, _ *http.Request) {
 }
 
 func settingsResponse(s Settings) SettingsResponse {
-	resp := SettingsResponse{StoreID: optionalString(s.StoreID), UpdatedBy: optionalString(s.UpdatedBy), UpdatedAt: optionalTime(s.UpdatedAt)}
+	resp := SettingsResponse{StoreID: optionalString(s.StoreID), StoreName: optionalString(s.StoreName), UpdatedBy: optionalString(s.UpdatedBy), UpdatedAt: optionalTime(s.UpdatedAt)}
 	if s.Provider != "" {
 		p := s.Provider
 		resp.Provider = &p
@@ -1046,7 +1062,7 @@ func (h *Handler) putSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		storeID = *req.StoreID
 	}
-	s, err := h.opts.Service.UpdateSettings(r.Context(), actor, req.Provider, storeID)
+	s, err := h.opts.Service.UpdateStore(r.Context(), actor, req.Provider, storeID, req.StoreName)
 	if err != nil {
 		h.writeError(w, r, "update shopping settings failed", err)
 		return
@@ -1503,6 +1519,13 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 	var pantryValidation *pantry.ValidationError
 	var decision *DecisionNeededError
 	switch {
+	case errors.Is(err, ErrNotConnected):
+		httpx.WriteError(w, r, http.StatusConflict, "provider_not_connected", "Sign in to your store account first.")
+	case errors.Is(err, ErrBadConnectState):
+		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", "That sign-in expired. Try again.")
+	case errors.Is(err, ErrSearchUnavailable), errors.Is(err, ErrCartUnavailable):
+		h.logger.WarnContext(r.Context(), msg, "error", err)
+		httpx.WriteError(w, r, http.StatusServiceUnavailable, "provider_error", "The store isn't answering. Try again in a minute.")
 	case errors.Is(err, ErrEverythingLeftOut):
 		httpx.WriteError(w, r, http.StatusConflict, "nothing_to_send",
 			"Nothing to add to your cart. You left out every item with a product.")

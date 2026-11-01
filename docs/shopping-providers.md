@@ -206,8 +206,8 @@ household.
 ## Kroger Public API
 
 - OAuth 2.0: client credentials for products and locations, authorization
-  code with refresh tokens for the customer's cart. Scopes: `product.compact`,
-  `cart.basic:write`, `profile.compact`.
+  code with refresh tokens for the customer's cart. Scopes: `product.compact`
+  and `cart.basic:write`. DinnerOS never reads the Kroger profile.
 - Products (`/v1/products?filter.term=&filter.locationId=`): with a location
   ID it returns price, `stockLevel`, and `delivery`/`curbside` flags. Search
   is fuzzy and result order changes between calls. Limit: 10,000 calls a day.
@@ -218,6 +218,48 @@ household.
   kroger.com or in the app. No order history on the public tier.
 - Production (`api.kroger.com`) and certification (`api-ce.kroger.com`) each
   need their own registered application.
+
+## Implemented for Kroger
+
+Fry's is built (decision 649). It turns on when the Kroger credentials are
+set, and nothing else changes for Walmart households.
+
+1. **developer.kroger.com:** create a **production** application with the
+   Cart and Products APIs, and the redirect URL
+   `https://api.tlps.dev/api/v1/shopping/kroger/callback`.
+2. **Heroku:** set `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET` (a secret), and
+   `KROGER_REDIRECT_URL` to that callback. `KROGER_BANNER` defaults to `frys`.
+3. **The app:** Shop → ⋯ → Store Settings → Fry's → Sign In to Fry's, find the
+   store by ZIP, Save. Choose a product per ingredient from Fry's search, then
+   Add to Fry's Cart, and check out in the Fry's app or site.
+
+How it works:
+
+- `internal/providers/kroger.go` is the pure part: banners, UPC and link
+  parsing, location IDs, and the one "link" (the banner's cart page).
+  `internal/kroger` is the HTTP client: app token (cached) for stores and
+  products, the member's authorization code and refresh token, and
+  `PUT /v1/cart/add` for pickup. It never logs tokens, the secret, query
+  strings, or bodies.
+- Kroger's product search matches every word, so a term written for Walmart
+  ("fresh whole Asparagus") can find nothing. The client drops words from the
+  front until something matches, keeping the noun at the end. Store names lose
+  the repeated chain: "Fry's Food And Drug - Frys Food And Drug Phoenix" is
+  "Fry's Phoenix".
+- The member's tokens are sealed with AES-256-GCM in
+  `shopping_provider_accounts` (one per household and provider), with keys
+  derived from `AUTH_TOKEN_SIGNING_KEY`. Sign-in state is HMAC-signed, names
+  the household and member, and expires in 15 minutes; the member must still
+  have `shopping.edit` when it comes back.
+- Sending uses the Walmart hand-off unchanged: only new lines and extra
+  packages are sent. The hand-off is saved first and the cart written after;
+  if Kroger fails, the hand-off is put back (or closed `cart_failed` on a first
+  send), so nothing is counted as in the cart that isn't. A refused sign-in
+  forgets the account and the app asks to sign in again.
+- Search results carry the store's price and stock. The size Kroger states
+  ("20 oz", "1/2 gal") becomes the package size; gallons, quarts, and pints
+  count as fluid ounces. Saving a result also saves its price.
+- No phone-side product checks: Kroger's search already answers for the store.
 
 ## Product matching
 

@@ -2,8 +2,10 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 )
@@ -116,12 +118,30 @@ type Product struct {
 	Brand     string
 	Size      string
 	ImageURL  string
+	// PriceCents is the store's price for one package, the sale price when
+	// there is one, or nil when the provider gave none.
+	PriceCents *int64
+	// Stock is the store's stock level, or StockUnknown.
+	Stock StockLevel
 }
+
+// StockLevel is how much a store has of a product.
+type StockLevel string
+
+// Stock levels.
+const (
+	StockUnknown StockLevel = ""
+	StockHigh    StockLevel = "high"
+	StockLow     StockLevel = "low"
+	StockOut     StockLevel = "out"
+)
 
 // SearchQuery is a product search (Phase 8b).
 type SearchQuery struct {
 	Term    string
 	ZIPCode string
+	// StoreID prices and stocks results at that store, when the provider can.
+	StoreID string
 	Limit   int
 }
 
@@ -130,6 +150,19 @@ type Store struct {
 	StoreID string
 	Name    string
 	Address string
+}
+
+// ErrCustomerSignedOut means the provider no longer accepts a member's
+// sign-in (a refused code or refresh token, or a revoked access token): the
+// member signs in again.
+var ErrCustomerSignedOut = errors.New("providers: customer signed out")
+
+// CustomerToken is a member's signed-in session with a provider. Both
+// tokens are secrets: never log them.
+type CustomerToken struct {
+	AccessToken  string
+	RefreshToken string
+	ExpiresAt    time.Time
 }
 
 // StoreQuery finds stores near a ZIP code (Phase 8b).
@@ -156,6 +189,15 @@ type (
 	CartWriter interface {
 		AddToCart(ctx context.Context, customerToken string, items []CartItem) error
 	}
+	// CustomerAccount signs a member into the provider (OAuth authorization
+	// code), so CartWriter can use their cart.
+	CustomerAccount interface {
+		// AuthorizeURL is the provider's sign-in page; it redirects back with
+		// a code and state.
+		AuthorizeURL(state string) string
+		ExchangeCode(ctx context.Context, code string) (CustomerToken, error)
+		RefreshCustomer(ctx context.Context, refreshToken string) (CustomerToken, error)
+	}
 	// OrderImporter reads what a customer ordered.
 	OrderImporter interface {
 		ImportOrders(ctx context.Context, customerToken string) ([]CartItem, error)
@@ -174,6 +216,8 @@ type Capabilities struct {
 	StoreFinder   bool
 	CartWrite     bool
 	OrderImport   bool
+	// CustomerAccount is true when a member signs in to the provider.
+	CustomerAccount bool
 }
 
 // CapabilitiesOf returns p's capabilities, reading the optional ones from
@@ -184,9 +228,11 @@ func CapabilitiesOf(p GroceryProvider) Capabilities {
 	_, stores := p.(StoreFinder)
 	_, cart := p.(CartWriter)
 	_, orders := p.(OrderImporter)
+	_, account := p.(CustomerAccount)
 	return Capabilities{
 		Handoff: p.HandoffKind(), PasteProductLink: true, StoreID: true,
 		ProductSearch: search, ProductLookup: lookup, StoreFinder: stores, CartWrite: cart, OrderImport: orders,
+		CustomerAccount: account,
 	}
 }
 

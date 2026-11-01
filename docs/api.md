@@ -1661,9 +1661,34 @@ Walmart pages ([shopping-providers.md](shopping-providers.md)). The flow:
 store setup, save a product per ingredient, match, create a handoff and open
 its links, then confirm what was ordered.
 
-`{provider}` is `walmart`. A planned provider that isn't enabled
-(`instacart`, `kroger`) returns `503 provider_unavailable`; any other value
-returns `404 not_found`.
+`{provider}` is `walmart`, or `kroger` when the server has a Kroger
+application (`KROGER_CLIENT_ID`; it shows as the banner's name, Fry's). A
+planned provider that isn't enabled (`instacart`, or `kroger` without keys)
+returns `503 provider_unavailable`; any other value returns `404 not_found`.
+Kroger's routes are under [Signed-in stores](#signed-in-stores-kroger).
+
+### Signed-in stores (Kroger)
+
+Kroger's capabilities are `"handoff": "cart_write"`, `"customerAccount": true`,
+`"storeFinder": true`, and `"productSearch": true`. Its hand-off
+(`POST .../plans/{week}/shopping/kroger/handoffs`) adds the new lines to the
+signed-in cart itself, and its one link is the store's cart page. Without a
+sign-in it returns `409 provider_not_connected` and records nothing; when
+Kroger fails it returns `503 provider_error` and records nothing.
+
+| Route | Permission | Does |
+| --- | --- | --- |
+| `GET /households/{id}/shopping/kroger/connection` | `household.view` | `{provider, connected, connectedBy, connectedAt}`; never tokens |
+| `POST /households/{id}/shopping/kroger/connection` | `shopping.edit` | `{authorizeUrl, callbackScheme}`: open it in a web authentication session |
+| `DELETE /households/{id}/shopping/kroger/connection` | `shopping.edit` | Forgets the account, `204` |
+| `GET /shopping/kroger/callback?code=&state=` | public (signed state) | Finishes the sign-in and redirects to `<scheme>://shopping/connected?provider=kroger&result=connected\|cancelled\|failed` |
+| `GET /households/{id}/shopping/kroger/stores?zip=85001` | `household.view` | `{items: [{storeId, name, address}]}`, the banner's stores nearest first |
+| `GET /households/{id}/shopping/kroger/products?q=pineapple` | `household.view` | `{items: [{productId, name, brand, size, packageSize, imageUrl, url, priceCents, stock}]}` at the household's store; `q` is 3–100 characters, at most 8 words |
+
+`PUT .../shopping/settings` also takes an optional `storeName` (at most 100
+characters, kept with a store ID), which settings return. Saving a product
+from search is the usual `PUT .../kroger/preferences/{ingredientKey}` with
+`productId` set to the 13-digit UPC.
 
 ### Providers and store
 

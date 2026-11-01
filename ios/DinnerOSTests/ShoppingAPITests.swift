@@ -414,7 +414,7 @@ struct ShoppingAPITests {
                 if calls.value == 1 {
                     #expect(message == "short links aren't supported")
                 } else {
-                    #expect(message.contains("Walmart"))
+                    #expect(message == "This store isn't available right now. Try again later.")
                 }
             }
         }

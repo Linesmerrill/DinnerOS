@@ -213,7 +213,12 @@ private struct ShopWeekList: View {
         }
         // Choosing in Walmart, for every line without a product or one line's re-choose.
         .fullScreenCover(item: $walmartChoices) { choices in
-            ChooseInWalmartView(items: choices.items)
+            if shopping.writesCart {
+                // Fry's: its own catalog, searched here.
+                StoreProductSearchView(items: choices.items)
+            } else {
+                ChooseInWalmartView(items: choices.items)
+            }
         }
         .refreshable {
             await shopping.reload()
@@ -295,12 +300,16 @@ private struct ShopWeekList: View {
                 } label: {
                     Label(
                         proposal.needsProduct.count == 1
-                            ? String(localized: "Choose 1 Product in Walmart")
-                            : String(localized: "Choose \(proposal.needsProduct.count) Products in Walmart"),
+                            ? String(localized: "Choose 1 Product in \(shopping.providerName)")
+                            : String(
+                                localized: "Choose \(proposal.needsProduct.count) Products in \(shopping.providerName)"),
                         systemImage: "cart.badge.plus")
                 }
             } footer: {
-                Text("Walmart opens here with each item along the top. Tap a product, then Use This.")
+                Text(
+                    shopping.writesCart
+                        ? "Search \(shopping.providerName) for each item and tap the one to buy."
+                        : "Walmart opens here with each item along the top. Tap a product, then Use This.")
             }
         }
         let layout = ShopMealLayout(proposal: proposal)
@@ -352,7 +361,7 @@ private struct ShopWeekList: View {
                 }
             } footer: {
                 Text(
-                    "Items you already have at home, or already checked off on your grocery list, won't be added to your Walmart cart."
+                    "Items you already have at home, or already checked off on your grocery list, won't be added to your \(shopping.providerName) cart."
                 )
             }
         }
@@ -367,7 +376,7 @@ private struct ShopWeekList: View {
             if needsProduct {
                 Text(
                     shopping.canEdit
-                        ? "Choose a Walmart product once and it's used every week."
+                        ? "Choose a \(shopping.providerName) product once and it's used every week."
                         : "Your role can't choose products.")
             }
         }
@@ -1000,7 +1009,7 @@ private struct InWalmartCartSection: View {
             }
             ForEach(proposal.linesInCart) { line in
                 InCartLineRow(
-                    line: line, packages: packages(line), canEdit: shopping.canEdit,
+                    line: line, packages: packages(line), canEdit: shopping.canEdit, store: shopping.providerName,
                     sendAgain: { run { try await shopping.sendAgain(line) } },
                     changeProduct: { changeProduct(line) })
             }
@@ -1022,15 +1031,15 @@ private struct InWalmartCartSection: View {
                     Button("Cancel", role: .cancel) {}
                 } message: {
                     Text(
-                        "Only do this if your Walmart cart is empty. Every item is added again, so anything still in the cart would be doubled."
+                        "Only do this if your \(shopping.providerName) cart is empty. Every item is added again, so anything still in the cart would be doubled."
                     )
                 }
             }
         } header: {
-            Text("In Walmart Cart")
+            Text("In \(shopping.providerName) Cart")
         } footer: {
             Text(
-                "Already in your Walmart cart, so opening Walmart again won't add them twice. Once you mark the week ordered, the next list starts fresh."
+                "Already in your \(shopping.providerName) cart, so sending again won't add them twice. Once you mark the week ordered, the next list starts fresh."
             )
         }
     }
@@ -1053,6 +1062,7 @@ private struct InCartLineRow: View {
     let line: ShoppingHandoffLine
     @Binding var packages: Int
     let canEdit: Bool
+    let store: String
     let sendAgain: () -> Void
     let changeProduct: () -> Void
 
@@ -1065,10 +1075,13 @@ private struct InCartLineRow: View {
                     Text(line.product.displayName)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Label(ShoppingText.cartStatus(sent: line.sentPackages, wanted: packages), systemImage: "cart.fill")
-                        .font(.footnote)
-                        .foregroundStyle(
-                            packages < line.sentPackages ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.tint))
+                    Label(
+                        ShoppingText.cartStatus(sent: line.sentPackages, wanted: packages, store: store),
+                        systemImage: "cart.fill"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(
+                        packages < line.sentPackages ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.tint))
                 }
                 .accessibilityElement(children: .combine)
                 Spacer(minLength: 0)
@@ -1083,7 +1096,7 @@ private struct InCartLineRow: View {
                     }
                     .accessibilityLabel("Options for \(line.name)")
                     .accessibilityHint(
-                        "Send Again adds it to the Walmart cart next time, for when you removed it there.")
+                        "Send Again adds it to the \(store) cart next time, for when you removed it there.")
                 }
             }
             if canEdit {
@@ -1247,7 +1260,7 @@ private struct OrderReminderBanner: View {
             return String(localized: "Marked ordered, so nothing will remind you again until next week.")
         }
         guard let day = reminder.orderDayName else {
-            return String(localized: "Send your list to Walmart, then mark the week ordered.")
+            return String(localized: "Send your list to \(shopping.providerName), then mark the week ordered.")
         }
         return String(
             localized: "\(day) is your order day. Once you've placed the order, mark the week and this stops.")
@@ -1273,6 +1286,8 @@ private struct OpenHandoffBanner: View {
     let handoff: ShoppingHandoff
     let review: () -> Void
 
+    @Environment(ShoppingStore.self) private var shopping
+
     private var pendingCount: Int {
         handoff.lines.count { $0.confirmation?.status != .confirmed }
     }
@@ -1295,8 +1310,11 @@ private struct OpenHandoffBanner: View {
     private var summary: String {
         let sent = handoff.createdAt.formatted(.relative(presentation: .named))
         return pendingCount == 1
-            ? String(localized: "1 item went to Walmart \(sent). Add what you ordered to the pantry.")
-            : String(localized: "\(pendingCount) items went to Walmart \(sent). Add what you ordered to the pantry.")
+            ? String(localized: "1 item went to \(shopping.providerName) \(sent). Add what you ordered to the pantry.")
+            : String(
+                localized:
+                    "\(pendingCount) items went to \(shopping.providerName) \(sent). Add what you ordered to the pantry."
+            )
     }
 }
 
@@ -1309,6 +1327,9 @@ private struct ShopHandoffBar: View {
     @Environment(\.appConfiguration) private var configuration
 
     @State private var errorMessage: String?
+    @State private var signInService = StoreSignInService()
+
+    private var store: String { shopping.providerName }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -1318,9 +1339,31 @@ private struct ShopHandoffBar: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             if !shopping.canEdit {
-                Text("Your role can see this list but can't send it to Walmart.")
+                Text("Your role can see this list but can't send it to \(store).")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            } else if shopping.writesCart, !shopping.isSignedIn {
+                // Fry's fills the cart itself, so it needs the household's sign-in first.
+                Button(action: signIn) {
+                    Group {
+                        if shopping.isConnecting {
+                            ProgressView()
+                        } else {
+                            Label("Sign In to \(store)", systemImage: "person.crop.circle")
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(shopping.isConnecting)
+                Text(
+                    shopping.needsSignIn
+                        ? "Your \(store) sign-in ran out. Sign in again, then send your list."
+                        : "Sign in once so \(configuration.displayName) can fill your \(store) cart."
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             } else if let progress = shopping.weekLinkProgress, progress.openedCount > 0,
                 let next = progress.nextIndex
             {
@@ -1332,7 +1375,7 @@ private struct ShopHandoffBar: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                Text("Each link adds more items to the same Walmart cart.")
+                Text("Each link adds more items to the same \(store) cart.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else if let progress = shopping.weekLinkProgress, progress.isFinished, shopping.canConfirm,
@@ -1349,8 +1392,10 @@ private struct ShopHandoffBar: View {
                 if shopping.isEverythingInCart {
                     everythingInCart
                 } else {
-                    openButton(title: "Add New Items in Walmart")
-                        .buttonStyle(.bordered)
+                    openButton(
+                        title: shopping.writesCart ? "Add New Items to \(store) Cart" : "Add New Items in \(store)"
+                    )
+                    .buttonStyle(.bordered)
                     Text(summary)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -1362,7 +1407,7 @@ private struct ShopHandoffBar: View {
                 // Walmart's link would only add these a second time.
                 everythingInCart
             } else {
-                openButton(title: "Open in Walmart")
+                openButton(title: shopping.writesCart ? "Add to \(store) Cart" : "Open in \(store)")
                     .buttonStyle(.borderedProminent)
                 Text(summary)
                     .font(.footnote)
@@ -1386,7 +1431,7 @@ private struct ShopHandoffBar: View {
     }
 
     private var everythingInCart: some View {
-        Label(shopping.linkNotice ?? ShoppingText.everythingInCart, systemImage: "checkmark.circle")
+        Label(shopping.linkNotice ?? ShoppingText.everythingInCart(in: store), systemImage: "checkmark.circle")
             .font(.subheadline)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity)
@@ -1397,13 +1442,13 @@ private struct ShopHandoffBar: View {
         let count = shopping.linesToAdd.count
         if proposal.cart != nil {
             return count == 1
-                ? String(localized: "Adds 1 new item to your Walmart cart. What's already there isn't added again.")
+                ? String(localized: "Adds 1 new item to your \(store) cart. What's already there isn't added again.")
                 : String(
-                    localized: "Adds \(count) new items to your Walmart cart. What's already there isn't added again.")
+                    localized: "Adds \(count) new items to your \(store) cart. What's already there isn't added again.")
         }
         return count == 1
-            ? String(localized: "Adds 1 item to your Walmart cart. You check out in Walmart.")
-            : String(localized: "Adds \(count) items to your Walmart cart. You check out in Walmart.")
+            ? String(localized: "Adds 1 item to your \(store) cart. You check out in \(store).")
+            : String(localized: "Adds \(count) items to your \(store) cart. You check out in \(store).")
     }
 
     private func decisionNote(_ count: Int) -> String {
@@ -1412,7 +1457,7 @@ private struct ShopHandoffBar: View {
             : String(localized: "\(count) items need a decision first.")
     }
 
-    private func openButton(title: LocalizedStringKey) -> some View {
+    private func openButton(title: String) -> some View {
         Button(action: open) {
             Group {
                 if let progress = shopping.checkProgress {
@@ -1430,6 +1475,19 @@ private struct ShopHandoffBar: View {
         }
         .controlSize(.large)
         .disabled(shopping.isCreatingHandoff || shopping.isCheckingProducts)
+    }
+
+    private func signIn() {
+        errorMessage = nil
+        Task {
+            do {
+                try await shopping.signIn(using: signInService)
+            } catch is CancellationError {
+                return
+            } catch {
+                errorMessage = ShopErrors.message(for: error, households: households)
+            }
+        }
     }
 
     private func open() {

@@ -88,6 +88,10 @@ type Config struct {
 	// tracking links when all three IDs are set. Empty (the default) leaves
 	// links untracked; no Walmart setting is required.
 	WalmartImpact WalmartImpact
+	// Kroger connects a household's Kroger-family store account (Fry's by
+	// default) to fill its cart directly. Off unless the client ID and
+	// secret are set.
+	Kroger Kroger
 
 	// StarterRecipesHouseholdID is the household whose recipes are copied
 	// into every new household as a starter library. Empty (the default)
@@ -146,6 +150,26 @@ type WalmartImpact struct {
 
 // Enabled reports whether affiliate tracking is configured.
 func (w WalmartImpact) Enabled() bool { return w.PublisherID != "" }
+
+// Kroger holds the Kroger Public API application
+// (docs/shopping-providers.md#kroger-public-api). ClientSecret is a secret:
+// never log it.
+type Kroger struct {
+	ClientID     string
+	ClientSecret string
+	// RedirectURL is the OAuth callback registered with the application.
+	RedirectURL string
+	// APIBase is the API origin: production, or certification for testing.
+	APIBase string
+	// Banner is the household's Kroger store family ("frys").
+	Banner string
+}
+
+// Enabled reports whether the Kroger application is configured.
+func (k Kroger) Enabled() bool { return k.ClientID != "" && k.ClientSecret != "" }
+
+// DefaultKrogerAPIBase is the Kroger Public API's production origin.
+const DefaultKrogerAPIBase = "https://api.kroger.com"
 
 // Email providers.
 const (
@@ -398,15 +422,35 @@ func loadShopping(cfg *Config, get func(key, fallback string) string) []error {
 		AdID:        get("WALMART_IMPACT_AD_ID", ""),
 		CampaignID:  get("WALMART_IMPACT_CAMPAIGN_ID", ""),
 	}
+	var errs []error
 	w := cfg.WalmartImpact
-	if w.PublisherID == "" && w.AdID == "" && w.CampaignID == "" {
-		return nil
-	}
-	if !impactIDPattern.MatchString(w.PublisherID) || !impactIDPattern.MatchString(w.AdID) || !impactIDPattern.MatchString(w.CampaignID) {
+	if (w.PublisherID != "" || w.AdID != "" || w.CampaignID != "") &&
+		(!impactIDPattern.MatchString(w.PublisherID) || !impactIDPattern.MatchString(w.AdID) || !impactIDPattern.MatchString(w.CampaignID)) {
 		cfg.WalmartImpact = WalmartImpact{}
-		return []error{errors.New("WALMART_IMPACT_PUBLISHER_ID, WALMART_IMPACT_AD_ID, and WALMART_IMPACT_CAMPAIGN_ID must all be set to numeric Impact IDs, or all be empty")}
+		errs = append(errs, errors.New("WALMART_IMPACT_PUBLISHER_ID, WALMART_IMPACT_AD_ID, and WALMART_IMPACT_CAMPAIGN_ID must all be set to numeric Impact IDs, or all be empty"))
 	}
-	return nil
+
+	cfg.Kroger = Kroger{
+		ClientID:     strings.TrimSpace(get("KROGER_CLIENT_ID", "")),
+		ClientSecret: strings.TrimSpace(get("KROGER_CLIENT_SECRET", "")),
+		RedirectURL:  strings.TrimSpace(get("KROGER_REDIRECT_URL", "")),
+		APIBase:      strings.TrimRight(strings.TrimSpace(get("KROGER_API_BASE", DefaultKrogerAPIBase)), "/"),
+		Banner:       strings.ToLower(strings.TrimSpace(get("KROGER_BANNER", "frys"))),
+	}
+	k := cfg.Kroger
+	switch {
+	case k.ClientID == "" && k.ClientSecret == "":
+	case k.ClientID == "" || k.ClientSecret == "":
+		cfg.Kroger = Kroger{}
+		errs = append(errs, errors.New("KROGER_CLIENT_ID and KROGER_CLIENT_SECRET must both be set, or both be empty"))
+	case !strings.HasPrefix(k.RedirectURL, "https://") && !(cfg.Env == Development && strings.HasPrefix(k.RedirectURL, "http://")):
+		cfg.Kroger = Kroger{}
+		errs = append(errs, errors.New("KROGER_REDIRECT_URL must be the https callback registered with the Kroger application, e.g. https://api.tlps.dev/api/v1/shopping/kroger/callback"))
+	case !strings.HasPrefix(k.APIBase, "https://"):
+		cfg.Kroger = Kroger{}
+		errs = append(errs, errors.New("KROGER_API_BASE must be an https origin"))
+	}
+	return errs
 }
 
 // loadAuth reads authentication settings into cfg. cfg.Env must already be set.

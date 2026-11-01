@@ -189,6 +189,27 @@ var slugUnits = map[string]string{
 	"g": "g", "gram": "g", "grams": "g",
 	"ml": "ml", "milliliter": "ml", "milliliters": "ml",
 	"ct": "count", "count": "count", "each": "count",
+	"l": "l", "liter": "l", "liters": "l", "kg": "kg",
+}
+
+// ParseSize reads a package size a provider states ("20 oz", "46 fl oz",
+// "12 ct"): one number and a unit, nothing else. A range, a count of packs,
+// or a unit DinnerOS doesn't have is nil.
+func ParseSize(size string) *ingredients.Amount {
+	words := strings.Fields(size)
+	if n := len(words); n == 2 || (n == 3 && strings.EqualFold(words[1], "fl")) {
+		// Milk and juice come in gallons, quarts, and pints: fluid ounces.
+		if per, ok := map[string]int64{"gal": 128, "gallon": 128, "qt": 32, "quart": 32, "pt": 16, "pint": 16}[strings.ToLower(words[n-1])]; ok && n == 2 {
+			q, err := ingredients.ParseQuantity(words[0])
+			unit, uerr := ingredients.LookupUnit("floz")
+			if err != nil || uerr != nil || q.IsZero() {
+				return nil
+			}
+			return &ingredients.Amount{Quantity: q.Mul(ingredients.NewQuantity(per, 1)), Unit: unit}
+		}
+		return slugSize(words)
+	}
+	return nil
 }
 
 // slugSize reads a package size from a slug's trailing words: "Test-Rice-2-lb"

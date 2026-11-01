@@ -3,6 +3,8 @@ import Foundation
 /// Provider keys (`ShoppingProvider` path parameter). Phase 8a hands lists to Walmart only.
 nonisolated enum ShoppingProviderKey {
     static let walmart = "walmart"
+    /// The Kroger family of stores; the API names the banner (Fry's).
+    static let kroger = "kroger"
 }
 
 /// The API's shopping limits, mirrored for input validation.
@@ -13,6 +15,7 @@ nonisolated enum ShoppingLimits {
     static let maxKeys = 300
     static let maxDisplayNameLength = 100
     static let maxStoreNumberLength = 6
+    static let maxStoreNameLength = 100
 }
 
 // MARK: - Providers and store
@@ -23,9 +26,26 @@ nonisolated struct ShoppingCapabilities: Decodable, Hashable, Sendable {
     let handoff: String
     let pasteProductLink: Bool
     let storeID: Bool
+    /// A member signs in to the store before the cart can be filled (Kroger).
+    let customerAccount: Bool
+
+    init(handoff: String, pasteProductLink: Bool, storeID: Bool, customerAccount: Bool = false) {
+        self.handoff = handoff
+        self.pasteProductLink = pasteProductLink
+        self.storeID = storeID
+        self.customerAccount = customerAccount
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        handoff = try container.decode(String.self, forKey: .handoff)
+        pasteProductLink = try container.decode(Bool.self, forKey: .pasteProductLink)
+        storeID = try container.decode(Bool.self, forKey: .storeID)
+        customerAccount = try container.decodeIfPresent(Bool.self, forKey: .customerAccount) ?? false
+    }
 
     private enum CodingKeys: String, CodingKey {
-        case handoff, pasteProductLink
+        case handoff, pasteProductLink, customerAccount
         case storeID = "storeId"
     }
 }
@@ -40,10 +60,15 @@ nonisolated struct ShoppingProvider: Decodable, Hashable, Sendable, Identifiable
 
     var id: String { key }
 
-    /// Whether this build can hand a list off to the provider: Walmart cart links in 8a.
+    /// Whether this build can hand a list off to the provider: Walmart cart links, or a Kroger
+    /// store's cart filled by the API.
     var isSupported: Bool {
-        key == ShoppingProviderKey.walmart && capabilities.handoff == "cart_link"
+        (key == ShoppingProviderKey.walmart && capabilities.handoff == "cart_link")
+            || (key == ShoppingProviderKey.kroger && writesCart)
     }
+
+    /// The API adds the list to the member's signed-in cart itself; the link only opens it.
+    var writesCart: Bool { capabilities.handoff == "cart_write" }
 }
 
 nonisolated struct ShoppingProviderList: Decodable, Sendable {
@@ -54,11 +79,21 @@ nonisolated struct ShoppingProviderList: Decodable, Sendable {
 nonisolated struct ShoppingSettings: Decodable, Hashable, Sendable {
     let provider: String?
     let storeID: String?
+    /// The picked store's name, from the store finder.
+    let storeName: String?
     let updatedBy: String?
     let updatedAt: Date?
 
+    init(provider: String?, storeID: String?, storeName: String? = nil, updatedBy: String?, updatedAt: Date?) {
+        self.provider = provider
+        self.storeID = storeID
+        self.storeName = storeName
+        self.updatedBy = updatedBy
+        self.updatedAt = updatedAt
+    }
+
     private enum CodingKeys: String, CodingKey {
-        case provider
+        case provider, storeName
         case storeID = "storeId"
         case updatedBy, updatedAt
     }
@@ -68,15 +103,18 @@ nonisolated struct ShoppingSettings: Decodable, Hashable, Sendable {
 nonisolated struct UpdateShoppingSettingsRequest: Encodable, Equatable, Sendable {
     var provider: String
     var storeID: String?
+    /// The picked store's name, kept for display.
+    var storeName: String?
 
     private enum CodingKeys: String, CodingKey {
-        case provider
+        case provider, storeName
         case storeID = "storeId"
     }
 
     func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(provider, forKey: .provider)
+        try container.encodeIfPresent(storeName, forKey: .storeName)
         if let storeID {
             try container.encode(storeID, forKey: .storeID)
         } else {
@@ -870,13 +908,13 @@ nonisolated enum ShoppingText {
     }
 
     /// "In Walmart cart · 2".
-    static func inCart(_ count: Int) -> String {
-        String(localized: "In Walmart cart · \(count)")
+    static func inCart(_ count: Int, store: String = "Walmart") -> String {
+        String(localized: "In \(store) cart · \(count)")
     }
 
     /// A link can't take packages out of the cart, so the member does: "Remove 1 in the Walmart app".
-    static func removeInWalmart(_ count: Int) -> String {
-        String(localized: "Remove \(count) in the Walmart app")
+    static func removeInWalmart(_ count: Int, store: String = "Walmart") -> String {
+        String(localized: "Remove \(count) in the \(store) app")
     }
 
     /// What the next "Open in Walmart" adds to a line already in the cart: "Adds 1 more".
@@ -886,17 +924,26 @@ nonisolated enum ShoppingText {
 
     /// A sent line against the count wanted now: "In Walmart cart · 2", with "Adds 1 more" or
     /// "Remove 1 in the Walmart app" when they differ.
-    static func cartStatus(sent: Int, wanted: Int) -> String {
+    static func cartStatus(sent: Int, wanted: Int, store: String = "Walmart") -> String {
         if wanted > sent {
-            return "\(inCart(sent)) · \(addsMore(wanted - sent))"
+            return "\(inCart(sent, store: store)) · \(addsMore(wanted - sent))"
         }
         if wanted < sent {
-            return "\(inCart(sent)) · \(removeInWalmart(sent - wanted))"
+            return "\(inCart(sent, store: store)) · \(removeInWalmart(sent - wanted, store: store))"
         }
-        return inCart(sent)
+        return inCart(sent, store: store)
     }
 
-    static let everythingInCart = String(localized: "Everything is already in your Walmart cart")
+    static let everythingInCart = everythingInCart(in: "Walmart")
+
+    static func everythingInCart(in store: String) -> String {
+        String(localized: "Everything is already in your \(store) cart")
+    }
+
+    /// After the API filled a signed-in cart (Fry's): "Added to your Fry's cart".
+    static func addedToCart(in store: String) -> String {
+        String(localized: "Added to your \(store) cart. Check out there.")
+    }
 
     /// Under a line that went in although Walmart had it out of stock.
     static let mayBeUnavailable = String(localized: "Out of stock on Walmart. It may come back.")

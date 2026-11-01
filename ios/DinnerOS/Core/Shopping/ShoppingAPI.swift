@@ -57,6 +57,49 @@ nonisolated struct ShoppingAPI: Sendable {
             try APIRequest.put(Self.path(householdID) + "/settings", body: settings).authorized(with: accessToken))
     }
 
+    // MARK: Signed-in stores (Kroger)
+
+    /// Whether the household signed in to the provider's store account.
+    func connection(householdID: String, provider: String, accessToken: String) async throws -> ShoppingConnection {
+        try await client.send(
+            APIRequest.get(Self.path(householdID) + "/\(provider)/connection").authorized(with: accessToken))
+    }
+
+    /// Starts a sign-in: the provider's page to open, which ends on the app's URL scheme.
+    func connect(householdID: String, provider: String, accessToken: String) async throws -> ShoppingConnectStart {
+        try await client.send(
+            APIRequest(
+                method: .post, path: Self.path(householdID) + "/\(provider)/connection", body: nil, bearerToken: nil
+            )
+            .authorized(with: accessToken))
+    }
+
+    /// Forgets the household's store account (`204`).
+    func disconnect(householdID: String, provider: String, accessToken: String) async throws {
+        try await client.sendIgnoringBody(
+            APIRequest.delete(Self.path(householdID) + "/\(provider)/connection").authorized(with: accessToken))
+    }
+
+    /// The provider's stores near a ZIP code, nearest first.
+    func stores(householdID: String, provider: String, zip: String, accessToken: String) async throws
+        -> [ShoppingStoreLocation]
+    {
+        var request = APIRequest.get(Self.path(householdID) + "/\(provider)/stores")
+        request.queryItems = [URLQueryItem(name: "zip", value: zip)]
+        let response: ShoppingStoreLocationList = try await client.send(request.authorized(with: accessToken))
+        return response.items
+    }
+
+    /// Searches the provider's catalog at the household's store.
+    func searchProducts(householdID: String, provider: String, query: String, accessToken: String) async throws
+        -> [ShoppingSearchProduct]
+    {
+        var request = APIRequest.get(Self.path(householdID) + "/\(provider)/products")
+        request.queryItems = [URLQueryItem(name: "q", value: query)]
+        let response: ShoppingSearchProductList = try await client.send(request.authorized(with: accessToken))
+        return response.items
+    }
+
     /// Saved products, by ingredient name.
     func preferences(householdID: String, provider: String, accessToken: String) async throws -> [ShoppingPreference] {
         let response: ShoppingPreferenceList = try await client.send(

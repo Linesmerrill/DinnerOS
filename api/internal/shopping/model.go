@@ -73,6 +73,9 @@ type Settings struct {
 	Provider providers.Key
 	// StoreID is the provider's store number, or "".
 	StoreID string
+	// StoreName is the store's name as the provider's store finder gave it
+	// ("Fry's Food Store, 1 Main St"), or "".
+	StoreName string
 	// UpdatedBy and UpdatedAt are empty until someone sets them.
 	UpdatedBy string
 	UpdatedAt time.Time
@@ -424,6 +427,9 @@ type CartLink struct {
 	LineIDs []string
 	// ItemCount is the number of distinct products in the link.
 	ItemCount int
+	// Items are the products and packages the link adds. A cart-writing
+	// provider sends them itself; they aren't stored.
+	Items []providers.CartItem
 }
 
 // Proposal is a week's grocery list matched to a provider's products.
@@ -468,6 +474,9 @@ const (
 	// ClosedConfirmed: every line was confirmed or skipped, so the order was
 	// placed.
 	ClosedConfirmed CloseReason = "confirmed"
+	// ClosedCartFailed: the provider refused to add the first send to the
+	// cart, so nothing was sent (cart-writing providers).
+	ClosedCartFailed CloseReason = "cart_failed"
 )
 
 // Handoff is what a week's list sent to a provider's cart, with what was

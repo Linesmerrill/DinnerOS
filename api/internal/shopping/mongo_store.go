@@ -104,6 +104,13 @@ func Indexes() []mongodb.IndexSet {
 			}},
 		},
 		weekSpendIndexes(),
+		{
+			Collection: AccountsCollection,
+			Indexes: []mongo.IndexModel{{
+				Keys:    bson.D{{Key: "householdId", Value: 1}, {Key: "provider", Value: 1}},
+				Options: options.Index().SetUnique(true),
+			}},
+		},
 	}
 }
 
@@ -116,6 +123,7 @@ type MongoStore struct {
 	orderWeeks    *mongo.Collection
 	weekSpend     *mongo.Collection
 	prepCards     *mongo.Collection
+	accounts      *mongo.Collection
 }
 
 var _ Store = (*MongoStore)(nil)
@@ -130,6 +138,7 @@ func NewMongoStore(db *mongo.Database) *MongoStore {
 		orderWeeks:    db.Collection(OrderWeeksCollection),
 		prepCards:     db.Collection(PrepCardsCollection),
 		weekSpend:     db.Collection(WeekSpendCollection),
+		accounts:      db.Collection(AccountsCollection),
 	}
 }
 
@@ -215,6 +224,7 @@ type settingsDoc struct {
 	HouseholdID bson.ObjectID `bson:"householdId"`
 	Provider    string        `bson:"provider,omitempty"`
 	StoreID     string        `bson:"storeId,omitempty"`
+	StoreName   string        `bson:"storeName,omitempty"`
 	UpdatedBy   bson.ObjectID `bson:"updatedBy"`
 	UpdatedAt   time.Time     `bson:"updatedAt"`
 }
@@ -229,7 +239,7 @@ func (s *MongoStore) GetSettings(ctx context.Context, householdID string) (Setti
 	if err := s.settings.FindOne(ctx, bson.D{{Key: "householdId", Value: hid}}).Decode(&d); err != nil {
 		return Settings{}, translate(err)
 	}
-	return Settings{HouseholdID: d.HouseholdID.Hex(), Provider: providers.Key(d.Provider), StoreID: d.StoreID, UpdatedBy: hexOrEmpty(d.UpdatedBy), UpdatedAt: d.UpdatedAt.UTC()}, nil
+	return Settings{HouseholdID: d.HouseholdID.Hex(), Provider: providers.Key(d.Provider), StoreID: d.StoreID, StoreName: d.StoreName, UpdatedBy: hexOrEmpty(d.UpdatedBy), UpdatedAt: d.UpdatedAt.UTC()}, nil
 }
 
 // PutSettings implements Store.
@@ -242,7 +252,7 @@ func (s *MongoStore) PutSettings(ctx context.Context, in Settings) (Settings, er
 	if err != nil {
 		return Settings{}, err
 	}
-	d := settingsDoc{HouseholdID: hid, Provider: string(in.Provider), StoreID: in.StoreID, UpdatedBy: uid, UpdatedAt: in.UpdatedAt}
+	d := settingsDoc{HouseholdID: hid, Provider: string(in.Provider), StoreID: in.StoreID, StoreName: in.StoreName, UpdatedBy: uid, UpdatedAt: in.UpdatedAt}
 	_, err = s.settings.ReplaceOne(ctx, bson.D{{Key: "householdId", Value: hid}}, d, options.Replace().SetUpsert(true))
 	if err != nil {
 		return Settings{}, translate(err)
@@ -602,7 +612,7 @@ func newHandoffDoc(h Handoff, id, hid bson.ObjectID) (handoffDoc, error) {
 		})
 	}
 	for _, l := range h.Links {
-		d.Links = append(d.Links, linkDoc(l))
+		d.Links = append(d.Links, linkDoc{URL: l.URL, LineIDs: l.LineIDs, ItemCount: l.ItemCount})
 	}
 	return d, nil
 }
@@ -657,7 +667,7 @@ func (d handoffDoc) toHandoff() Handoff {
 		})
 	}
 	for _, l := range d.Links {
-		h.Links = append(h.Links, CartLink(l))
+		h.Links = append(h.Links, CartLink{URL: l.URL, LineIDs: l.LineIDs, ItemCount: l.ItemCount})
 	}
 	return h
 }

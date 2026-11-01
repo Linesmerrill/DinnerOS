@@ -27,6 +27,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/httpapi"
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/kroger"
 	"github.com/Linesmerrill/DinnerOS/api/internal/liveactivity"
 	"github.com/Linesmerrill/DinnerOS/api/internal/mealkit"
 	mealkitsources "github.com/Linesmerrill/DinnerOS/api/internal/mealkit/sources"
@@ -310,7 +311,7 @@ func run() error {
 	// Phase 8a; the Impact IDs only wrap its links when set.
 	shoppingService := shopping.NewService(shopping.ServiceOptions{
 		Store:      shopping.NewMongoStore(db.Database()),
-		Providers:  providers.NewRegistry(newWalmartProvider(cfg)),
+		Providers:  shoppingProviders(cfg, logger),
 		Grocery:    planService,
 		Catalog:    recipeService,
 		Pantry:     pantryService,
@@ -321,18 +322,24 @@ func run() error {
 		Households: householdService,
 		Notifier:   notificationService,
 		Events:     behavior.events,
-		Logger:     logger,
+		// A signed-in store account (Kroger) checks who finished the
+		// sign-in, and its tokens are sealed with keys derived from the
+		// signing key.
+		Members:     householdService,
+		TokenSecret: cfg.AuthTokenSigningKey,
+		Logger:      logger,
 	})
 	// The weekly order reminder is derived when notifications are read, the
 	// way the pantry's low-stock check is: no scheduler and nothing to drift.
 	notificationService.AddRefresher(shoppingService)
 	shoppingHandler := shopping.NewHandler(shopping.HandlerOptions{
-		Service:    shoppingService,
-		Pantry:     pantryService,
-		Authorizer: householdService,
-		Households: householdService,
-		Tokens:     tokens,
-		Logger:     logger,
+		Service:      shoppingService,
+		Pantry:       pantryService,
+		Authorizer:   householdService,
+		Households:   householdService,
+		Tokens:       tokens,
+		AppURLScheme: cfg.AppURLScheme,
+		Logger:       logger,
 	})
 	pantryHandler := pantry.NewHandler(pantry.HandlerOptions{
 		Service:    pantryService,
@@ -634,6 +641,20 @@ func newMealKitRunner(cfg config.Config, db *mongo.Database, service *mealkit.Se
 		},
 		BatchSize: batch,
 	})
+}
+
+// shoppingProviders returns the enabled shopping providers: Walmart always,
+// and the Kroger family (Fry's by default) when KROGER_CLIENT_ID and
+// KROGER_CLIENT_SECRET are set.
+func shoppingProviders(cfg config.Config, logger *slog.Logger) *providers.Registry {
+	ps := []providers.GroceryProvider{newWalmartProvider(cfg)}
+	if k := cfg.Kroger; k.Enabled() {
+		ps = append(ps, kroger.New(kroger.Options{
+			ClientID: k.ClientID, ClientSecret: k.ClientSecret, RedirectURL: k.RedirectURL, APIBase: k.APIBase, Banner: k.Banner,
+		}))
+		logger.Info("shopping provider enabled", "provider", providers.KeyKroger, "banner", k.Banner)
+	}
+	return providers.NewRegistry(ps...)
 }
 
 // newWalmartProvider returns the Walmart provider, with Impact affiliate

@@ -30,7 +30,7 @@ nonisolated struct PlanGrocerySignature: Equatable, Sendable {
     }
 }
 
-/// The current household's Walmart handoff: store setup, the week's match, cart links, and
+/// The current household's store handoff (Walmart, or Fry's through Kroger): store setup, the week's match, cart links, and
 /// "Did you order these?" (Phase 8a; docs/shopping-providers.md).
 ///
 /// Main-actor state that lives as long as the app, like `PlanStore`. The match is a preview
@@ -58,7 +58,11 @@ final class ShoppingStore {
         var isFinished: Bool { openedCount >= total }
     }
 
-    let provider = ShoppingProviderKey.walmart
+    /// The household's store: Fry's (a Kroger store) when chosen and offered, else Walmart.
+    var provider: String {
+        if settings?.provider == ShoppingProviderKey.kroger, kroger != nil { return ShoppingProviderKey.kroger }
+        return ShoppingProviderKey.walmart
+    }
 
     private(set) var householdID: String?
     private(set) var week: ISOWeek
@@ -87,6 +91,12 @@ final class ShoppingStore {
     private(set) var linkNotice: String?
     /// "Send Again" or "Start Over" is in flight.
     private(set) var isResending = false
+
+    /// The household's signed-in store account, for a store that fills the cart itself.
+    private(set) var connection: ShoppingConnection?
+    private(set) var isConnecting = false
+    /// Set when a send found the store account signed out: the Shop tab asks to sign in.
+    private(set) var needsSignIn = false
 
     /// The shown week's newest handoff with a line still pending, for the banner.
     private(set) var openHandoff: ShoppingHandoff?
@@ -156,7 +166,16 @@ final class ShoppingStore {
     var currentWeek: ISOWeek { .current(in: timeZone, weekStartsOn: weekStartsOn, now: now()) }
     /// The day the household's weeks start on, which decides the dates a week key covers.
     private(set) var weekStartsOn: PlanDay = PlanDay.defaultWeekStart
-    var walmart: ShoppingProvider? { providers.first { $0.key == provider } }
+    var walmart: ShoppingProvider? { providers.first { $0.key == ShoppingProviderKey.walmart } }
+    /// The Kroger store this API offers (Fry's), when it offers one.
+    var kroger: ShoppingProvider? { providers.first { $0.key == ShoppingProviderKey.kroger && $0.isSupported } }
+    /// The household's store as the API describes it.
+    var activeProvider: ShoppingProvider? { providers.first { $0.key == provider } }
+    /// "Walmart" or "Fry's", for the Shop tab's words.
+    var providerName: String { activeProvider?.name ?? "Walmart" }
+    /// The store fills its cart from the API (Fry's): no links to open, no product checks.
+    var writesCart: Bool { activeProvider?.writesCart == true }
+    var isSignedIn: Bool { connection?.connected == true }
     var isConfigured: Bool { settings?.provider == provider }
     var affiliateTracked: Bool { proposal?.affiliateTracked ?? walmart?.affiliateTracked ?? false }
     var readyLines: [ShoppingHandoffLine] { proposal?.lines ?? [] }
@@ -373,6 +392,9 @@ final class ShoppingStore {
             providers = loadedProviders
             settings = loadedSettings
             setupPhase = .loaded
+            if kroger != nil {
+                await refreshConnection()
+            }
         } catch is CancellationError {
             if started == scope, setupPhase == .loading { setupPhase = .idle }
         } catch {
@@ -440,6 +462,101 @@ final class ShoppingStore {
         // The store changes every cart link.
         await loadProposal(clearing: proposal == nil)
         await refreshOpenHandoff(presenting: false)
+    }
+
+    /// Chooses a store from the store finder (Fry's), keeping its name for display.
+    func saveStore(provider: String, store: ShoppingStoreLocation) async throws {
+        let (api, householdID) = try requireHousehold()
+        let request = UpdateShoppingSettingsRequest(
+            provider: provider, storeID: store.storeID,
+            storeName: String(store.name.prefix(ShoppingLimits.maxStoreNameLength)))
+        let started = scope
+        let saved = try await session.authorized { token in
+            try await api.updateSettings(householdID: householdID, settings: request, accessToken: token)
+        }
+        guard started == scope else { return }
+        settings = saved
+        Self.logger.info("Shopping store saved from the store finder")
+        await loadProposal(clearing: true)
+        await refreshOpenHandoff(presenting: false)
+    }
+
+    // MARK: - Signed-in store
+
+    /// Reads whether the household signed in to its Kroger store. Best effort.
+    func refreshConnection() async {
+        guard let api, let householdID, kroger != nil else { return }
+        let started = scope
+        do {
+            let loaded = try await session.authorized { token in
+                try await api.connection(
+                    householdID: householdID, provider: ShoppingProviderKey.kroger, accessToken: token)
+            }
+            guard started == scope else { return }
+            connection = loaded
+            if loaded.connected { needsSignIn = false }
+        } catch is CancellationError {
+        } catch {
+            Self.logger.notice("Store connection check failed: \(Self.describe(error), privacy: .public)")
+        }
+    }
+
+    /// Signs in to the Kroger store on its own page. Returns false when the member cancelled.
+    @discardableResult
+    func signIn(using service: StoreSignInService) async throws -> Bool {
+        let (api, householdID) = try requireHousehold()
+        guard !isConnecting else { return false }
+        isConnecting = true
+        defer { isConnecting = false }
+        let start = try await session.authorized { token in
+            try await api.connect(householdID: householdID, provider: ShoppingProviderKey.kroger, accessToken: token)
+        }
+        guard let url = start.authorizeURL else { throw StoreSignInService.SignInError.couldNotStart }
+        let callback: URL
+        do {
+            callback = try await service.signIn(at: url, callbackScheme: start.callbackScheme)
+        } catch StoreSignInService.SignInError.cancelled {
+            return false
+        }
+        switch ShoppingConnectResult(callback: callback) {
+        case .connected:
+            Self.logger.info("Store account connected")
+            await refreshConnection()
+            return true
+        case .cancelled:
+            return false
+        case .failed:
+            throw StoreConnectError.failed
+        }
+    }
+
+    /// Forgets the household's Kroger store account.
+    func signOut() async throws {
+        let (api, householdID) = try requireHousehold()
+        try await session.authorized { token in
+            try await api.disconnect(householdID: householdID, provider: ShoppingProviderKey.kroger, accessToken: token)
+        }
+        connection = connection.map {
+            ShoppingConnection(provider: $0.provider, connected: false, connectedBy: nil, connectedAt: nil)
+        }
+    }
+
+    /// The Kroger store's locations near a ZIP code.
+    func findStores(zip: String) async throws -> [ShoppingStoreLocation] {
+        let (api, householdID) = try requireHousehold()
+        return try await session.authorized { token in
+            try await api.stores(
+                householdID: householdID, provider: ShoppingProviderKey.kroger, zip: zip, accessToken: token)
+        }
+    }
+
+    /// Searches the household's store for products.
+    func searchProducts(_ query: String) async throws -> [ShoppingSearchProduct] {
+        let (api, householdID) = try requireHousehold()
+        let provider = provider
+        return try await session.authorized { token in
+            try await api.searchProducts(householdID: householdID, provider: provider, query: query, accessToken: token)
+        }
     }
 
     // MARK: - Package counts
@@ -626,6 +743,11 @@ final class ShoppingStore {
         guard !isCreatingHandoff, !isCheckingProducts else { return }
         linkError = nil
         linkNotice = nil
+        // A store whose cart the API fills checks its own products: nothing to read here.
+        if writesCart {
+            try await sendHandoff()
+            return
+        }
         // Send Anyway is asked again for each send; leaving a line out holds for the week.
         var previous = productReview
         for line in previous?.lines ?? [] where previous?.decision(for: line) == .sendAnyway {
@@ -671,6 +793,13 @@ final class ShoppingStore {
                 isReviewingProducts = true
             }
             return
+        } catch let error as APIError where error.code == "provider_not_connected" {
+            // The store's sign-in ran out: ask to sign in, then the member sends again.
+            guard started == scope else { return }
+            isCreatingHandoff = false
+            needsSignIn = true
+            connection = ShoppingConnection(provider: provider, connected: false, connectedBy: nil, connectedAt: nil)
+            return
         } catch let error as APIError where error.code == "nothing_to_send" {
             // Every line with a product was left out: say so on the Shop tab rather than
             // failing inside a sheet that has already closed.
@@ -692,12 +821,15 @@ final class ShoppingStore {
         }
         guard !handoff.cartLinks.isEmpty else {
             linkProgress = nil
-            linkNotice = ShoppingText.everythingInCart
+            linkNotice = ShoppingText.everythingInCart(in: providerName)
             await loadProposal(clearing: false)
             return
         }
         linkProgress = LinkProgress(handoff: handoff)
         dismissedHandoffIDs.remove(handoff.id)
+        if writesCart {
+            linkNotice = ShoppingText.addedToCart(in: providerName)
+        }
         await openNextCartLink()
         if handoff.week == self.week.description {
             await loadProposal(clearing: false)
@@ -758,7 +890,7 @@ final class ShoppingStore {
     func openNextCartLink() async {
         guard var progress = linkProgress, let index = progress.nextIndex else { return }
         guard let url = progress.handoff.cartLinks[index].url else {
-            linkError = String(localized: "This cart link is invalid. Try opening Walmart again.")
+            linkError = String(localized: "This cart link is invalid. Try opening \(providerName) again.")
             return
         }
         let opened = await openURL(url)
@@ -769,7 +901,7 @@ final class ShoppingStore {
             linkProgress = progress
             linkError = nil
         } else {
-            linkError = String(localized: "Couldn't open Walmart. Try again.")
+            linkError = String(localized: "Couldn't open \(providerName). Try again.")
         }
     }
 
@@ -1364,6 +1496,8 @@ final class ShoppingStore {
         setupPhase = .idle
         providers = []
         settings = nil
+        connection = nil
+        needsSignIn = false
         proposalPhase = .idle
         proposal = nil
         refreshError = nil
@@ -1421,8 +1555,11 @@ final class ShoppingStore {
 
     /// Like `HouseholdStore.message(for:)`, with shopping's meaning of `provider_unavailable`.
     static func message(for error: any Error) -> String {
+        if error is StoreConnectError || error is StoreSignInService.SignInError {
+            return String(localized: "Couldn't sign in to the store. Try again.")
+        }
         if (error as? APIError)?.code == "provider_unavailable" {
-            return String(localized: "Walmart isn't available right now. Try again later.")
+            return String(localized: "This store isn't available right now. Try again later.")
         }
         return HouseholdStore.message(for: error)
     }
@@ -1442,4 +1579,9 @@ final class ShoppingStore {
             String(describing: type(of: error))
         }
     }
+}
+
+/// A store sign-in that came back without connecting.
+enum StoreConnectError: Error {
+    case failed
 }
