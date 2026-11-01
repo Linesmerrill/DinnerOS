@@ -96,6 +96,9 @@ func (*Walmart) Key() Key { return KeyWalmart }
 // Name implements GroceryProvider.
 func (*Walmart) Name() string { return "Walmart" }
 
+// CatalogKeys implements CatalogListed.
+func (*Walmart) CatalogKeys() []string { return []string{"walmart"} }
+
 // HandoffKind implements GroceryProvider.
 func (*Walmart) HandoffKind() HandoffKind { return HandoffCartLink }
 

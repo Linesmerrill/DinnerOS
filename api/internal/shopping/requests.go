@@ -10,6 +10,7 @@ import (
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
+	"github.com/Linesmerrill/DinnerOS/api/internal/providers"
 )
 
 // This file holds "request a store": the households asking DinnerOS to
@@ -80,13 +81,14 @@ type CatalogItem struct {
 
 // StoreCatalog returns the curated catalog filtered by q, each entry carrying
 // its demand. An empty q returns the whole list, ordered by status then name.
+// A store is available exactly when an enabled provider covers it.
 // householdID may be empty (a user in no household), which leaves every
 // RequestedByHousehold false.
 func (s *Service) StoreCatalog(ctx context.Context, householdID, q string) ([]CatalogItem, error) {
 	if utf8.RuneCountInString(q) > MaxStoreNameLength {
 		return nil, invalid("q must be at most %d characters", MaxStoreNameLength)
 	}
-	entries := SearchCatalog(q)
+	entries := withLiveStores(SearchCatalog(q), s.Providers())
 	counts, err := s.store.CountStoreRequestsByKey(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("count store requests: %w", err)
@@ -116,7 +118,7 @@ func (s *Service) RequestStore(ctx context.Context, actor households.Membership,
 	if err := authorize(actor, households.PermHouseholdView); err != nil {
 		return StoreRequest{}, false, err
 	}
-	req, err := newStoreRequest(actor, in)
+	req, err := newStoreRequest(actor, in, s.Providers())
 	if err != nil {
 		return StoreRequest{}, false, err
 	}
@@ -172,8 +174,9 @@ func (s *Service) DeleteStoreRequest(ctx context.Context, actor households.Membe
 // both misleads the member and inflates the counts that decide what gets
 // built next. It covers an explicit key and a typed name alike, because
 // matchCatalogName resolves "walmart" onto the same entry the key names.
-func rejectSupported(e CatalogEntry) error {
-	if e.Status == StatusAvailable {
+// enabled is the providers turned on, which decide what "supported" means.
+func rejectSupported(e CatalogEntry, enabled []providers.GroceryProvider) error {
+	if withLiveStores([]CatalogEntry{e}, enabled)[0].Status == StatusAvailable {
 		return invalid("that store is already supported; %s is ready to set up in store settings", e.Name)
 	}
 	return nil
@@ -181,8 +184,9 @@ func rejectSupported(e CatalogEntry) error {
 
 // newStoreRequest validates and normalizes a request. A typed name is matched
 // against catalog names, keys, and aliases first, so "frys" records as Fry's
-// rather than a second entry for the same store.
-func newStoreRequest(actor households.Membership, in StoreRequestInput) (StoreRequest, error) {
+// rather than a second entry for the same store. A store an enabled provider
+// covers is refused.
+func newStoreRequest(actor households.Membership, in StoreRequestInput, enabled []providers.GroceryProvider) (StoreRequest, error) {
 	key, name := strings.TrimSpace(in.Key), strings.TrimSpace(in.Name)
 	if (key == "") == (name == "") {
 		return StoreRequest{}, invalid("send key for a store in the catalog, or name for one that isn't, not both")
@@ -194,7 +198,7 @@ func newStoreRequest(actor households.Membership, in StoreRequestInput) (StoreRe
 		if !ok {
 			return StoreRequest{}, invalid("key isn't a store in the catalog; send the name instead")
 		}
-		if err := rejectSupported(e); err != nil {
+		if err := rejectSupported(e, enabled); err != nil {
 			return StoreRequest{}, err
 		}
 		req.Key, req.Name = e.Key, e.Name
@@ -202,7 +206,7 @@ func newStoreRequest(actor households.Membership, in StoreRequestInput) (StoreRe
 		return StoreRequest{}, invalid("name must be at most %d characters", MaxStoreNameLength)
 	default:
 		if e, ok := matchCatalogName(name); ok {
-			if err := rejectSupported(e); err != nil {
+			if err := rejectSupported(e, enabled); err != nil {
 				return StoreRequest{}, err
 			}
 			req.Key, req.Name = e.Key, e.Name

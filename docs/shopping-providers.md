@@ -229,6 +229,10 @@ set, and nothing else changes for Walmart households.
    `https://api.tlps.dev/api/v1/shopping/kroger/callback`.
 2. **Heroku:** set `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET` (a secret), and
    `KROGER_REDIRECT_URL` to that callback. `KROGER_BANNER` defaults to `frys`.
+   The Request a Store list marks a store available only while its provider
+   is enabled (`withLiveStores` in `internal/shopping/catalog.go`), so Fry's
+   shows as available there with no catalog edit, and turning a store off puts
+   it back to researched.
 3. **The app:** Shop → ⋯ → Store Settings → Fry's → Sign In to Fry's, find the
    store by ZIP, Save. Choose a product per ingredient from Fry's search, then
    Add to Fry's Cart, and check out in the Fry's app or site.
@@ -1132,12 +1136,14 @@ endpoints in [api.md](api.md#request-a-store), the collection in
 - **The catalog is this document's conclusions, in code.**
   `GET /api/v1/shopping/catalog` returns a curated, committed list of the
   chains and services people actually ask for, each with a `status`:
-  - `available` — DinnerOS can hand a list to it today. Walmart only.
+  - `available` — DinnerOS can hand a list to it today. Not written in the
+    catalog: the API sets it for every store an enabled provider covers
+    (Walmart, and the `KROGER_BANNER` store when Kroger is configured).
   - `researched` — assessed in [Provider feasibility](#provider-feasibility):
     Instacart, Kroger, Albertsons, Target, Amazon Fresh and Whole Foods, and
     Shipt from the Target row. A banner inherits its parent's status, because
     the same API and the same terms cover it — Fry's, Ralphs, King Soopers,
-    Smith's, Fred Meyer, QFC, Harris Teeter, Dillons, City Market, Mariano's,
+    Smith's, Fred Meyer, QFC, Dillons, City Market, Mariano's,
     Pick 'n Save, Metro Market, Baker's, Food 4 Less, and Foods Co under
     Kroger; Safeway, Vons, Jewel-Osco, Acme, Shaw's, Star Market, Randalls,
     Tom Thumb, Pavilions, Haggen, Carrs, United Supermarkets, and Market

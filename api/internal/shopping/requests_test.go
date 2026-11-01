@@ -6,9 +6,15 @@ import (
 	"testing"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
+	"github.com/Linesmerrill/DinnerOS/api/internal/providers"
 )
 
 // These tests cover newStoreRequest, which is pure: no store, no Mongo.
+
+// liveWalmart is the enabled providers in these tests: Walmart only.
+func liveWalmart() []providers.GroceryProvider {
+	return []providers.GroceryProvider{providers.NewWalmart(providers.WalmartOptions{})}
+}
 
 func requestActor() households.Membership {
 	return households.Membership{HouseholdID: "66e5a1f2c3b4a5d6e7f80a01", UserID: "u-1", Role: households.RoleMember}
@@ -43,7 +49,7 @@ func TestNewStoreRequestRejectsSupportedStore(t *testing.T) {
 		{"with a note", StoreRequestInput{Key: "walmart", Note: "we shop here"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := newStoreRequest(requestActor(), tc.in)
+			_, err := newStoreRequest(requestActor(), tc.in, liveWalmart())
 			wantInvalid(t, err, "already supported")
 		})
 	}
@@ -61,7 +67,7 @@ func TestNewStoreRequestAcceptsUnsupportedStores(t *testing.T) {
 		{StoreRequestInput{Name: "krogers"}, "kroger", "Kroger"},
 		{StoreRequestInput{Name: "some local market"}, "some-local-market", "Some Local Market"},
 	} {
-		req, err := newStoreRequest(requestActor(), tc.in)
+		req, err := newStoreRequest(requestActor(), tc.in, liveWalmart())
 		if err != nil {
 			t.Errorf("newStoreRequest(%+v) = %v", tc.in, err)
 			continue
@@ -101,5 +107,19 @@ func TestMatchCatalogNameNewEntries(t *testing.T) {
 		if !ok || e.Key != want {
 			t.Errorf("matchCatalogName(%q) = %+v, %v; want %s", in, e, ok, want)
 		}
+	}
+}
+
+// TestStoreRequestsFollowTheEnabledStores: Fry's can be requested while no
+// Kroger provider is on, and is refused as supported once one is.
+func TestStoreRequestsFollowTheEnabledStores(t *testing.T) {
+	if _, err := newStoreRequest(requestActor(), StoreRequestInput{Key: "frys"}, liveWalmart()); err != nil {
+		t.Errorf("frys without Kroger enabled = %v, want it accepted", err)
+	}
+	withFrys := append(liveWalmart(), providers.NewKroger("frys"))
+	_, err := newStoreRequest(requestActor(), StoreRequestInput{Name: "Frys Food and Drug"}, withFrys)
+	wantInvalid(t, err, "already supported")
+	if _, err := newStoreRequest(requestActor(), StoreRequestInput{Key: "walmart"}, nil); err != nil {
+		t.Errorf("walmart with nothing enabled = %v, want it accepted", err)
 	}
 }

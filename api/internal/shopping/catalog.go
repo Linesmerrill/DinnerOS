@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+
+	"github.com/Linesmerrill/DinnerOS/api/internal/providers"
 )
 
 // This file holds the curated catalog of grocers and delivery services
@@ -28,13 +30,16 @@ const (
 	KindOther StoreKind = "other"
 )
 
-// StoreStatus says how far DinnerOS has got with a store. It comes from
-// docs/shopping-providers.md, not from live data.
+// StoreStatus says how far DinnerOS has got with a store. Researched and
+// unsupported come from docs/shopping-providers.md. Available is never
+// written here: Service.StoreCatalog sets it from the enabled providers, so
+// turning a store on or off updates the list by itself.
 type StoreStatus string
 
 // Store statuses, in the order the catalog lists them.
 const (
-	// StatusAvailable: a household can hand a list to it today.
+	// StatusAvailable: a household can hand a list to it today. Only
+	// withLiveStores sets it.
 	StatusAvailable StoreStatus = "available"
 	// StatusResearched: docs/shopping-providers.md assessed it and recorded
 	// what its APIs allow.
@@ -77,16 +82,17 @@ type CatalogEntry struct {
 // storeCatalog is the curated list. Keys are stable: they are stored on every
 // request, so renaming one would orphan the requests that point at it.
 //
-// Status follows docs/shopping-providers.md: Walmart ships today; the
-// providers that document assessed are "researched"; everything else is
-// "unsupported" until someone asks for it and the research happens. Banners
-// of an assessed chain (Kroger's and Albertsons') inherit the parent's
-// status, because the same API and the same terms cover them.
+// Status follows docs/shopping-providers.md: the providers that document
+// assessed are "researched"; everything else is "unsupported" until someone
+// asks for it and the research happens. Banners of an assessed chain
+// (Kroger's and Albertsons') inherit the parent's status, because the same API
+// and the same terms cover them. No entry is "available" here; see
+// withLiveStores.
 var storeCatalog = []CatalogEntry{
 	{
-		Key: "walmart", Name: "Walmart", Kind: KindGrocer, Status: StatusAvailable,
+		Key: "walmart", Name: "Walmart", Kind: KindGrocer, Status: StatusResearched,
 		Aliases: []string{"wal mart", "walmart supercenter", "walmart neighborhood market", "walmart plus", "walmart grocery"},
-		Note:    "Add-to-cart link handoff, built from products the household saved",
+		Note:    "Add-to-cart links built from products the household saved",
 	},
 
 	// Kroger and its banners: one public API with cart write.
@@ -128,7 +134,7 @@ var storeCatalog = []CatalogEntry{
 	{
 		Key: "harris-teeter", Name: "Harris Teeter", Kind: KindGrocer, Status: StatusResearched,
 		Aliases: []string{"harristeeter"},
-		Note:    "Kroger banner; covered by Kroger's cart-write API",
+		Note:    "Kroger-owned, but its stores aren't in Kroger's public API",
 	},
 	{
 		Key: "dillons", Name: "Dillons", Kind: KindGrocer, Status: StatusResearched,
@@ -351,6 +357,38 @@ func CatalogEntries() []CatalogEntry { return slices.Clone(storeCatalog) }
 func CatalogEntryByKey(key string) (CatalogEntry, bool) {
 	e, ok := catalogByKey[key]
 	return e, ok
+}
+
+// withLiveStores marks the entries an enabled provider covers as available,
+// with a note saying how that store works, and re-sorts so they come first.
+// It is the only place StatusAvailable is set.
+func withLiveStores(entries []CatalogEntry, enabled []providers.GroceryProvider) []CatalogEntry {
+	live := map[string]providers.GroceryProvider{}
+	for _, p := range enabled {
+		if l, ok := p.(providers.CatalogListed); ok {
+			for _, k := range l.CatalogKeys() {
+				live[k] = p
+			}
+		}
+	}
+	if len(live) == 0 {
+		return entries
+	}
+	out := slices.Clone(entries)
+	for i, e := range out {
+		p, ok := live[e.Key]
+		if !ok {
+			continue
+		}
+		out[i].Status = StatusAvailable
+		if p.HandoffKind() == providers.HandoffCartWrite {
+			out[i].Note = "Sign in and DinnerOS adds your list to your " + p.Name() + " cart"
+		}
+	}
+	slices.SortStableFunc(out, func(a, b CatalogEntry) int {
+		return cmp.Compare(statusRank(a.Status), statusRank(b.Status))
+	})
+	return out
 }
 
 // SearchCatalog returns the entries whose name, key, or one of whose aliases

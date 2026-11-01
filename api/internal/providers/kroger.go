@@ -22,18 +22,29 @@ type KrogerBanner struct {
 	Host string
 	// Chain is the banner's code in the Locations API ("FRYS").
 	Chain string
+	// CatalogKey is the banner's entry in the shopping store catalog.
+	CatalogKey string
 }
 
-// krogerBanners are the banners DinnerOS knows. Fry's is the default.
+// krogerBanners are the banners DinnerOS knows. Fry's is the default. Each
+// chain code was checked against the Locations API. Harris Teeter is left out:
+// the API lists only its fuel centers, not its grocery stores.
 var krogerBanners = []KrogerBanner{
-	{Key: "frys", Name: "Fry's", Host: "www.frysfood.com", Chain: "FRYS"},
-	{Key: "kroger", Name: "Kroger", Host: "www.kroger.com", Chain: "KROGER"},
-	{Key: "ralphs", Name: "Ralphs", Host: "www.ralphs.com", Chain: "RALPHS"},
-	{Key: "kingsoopers", Name: "King Soopers", Host: "www.kingsoopers.com", Chain: "KINGSOOPERS"},
-	{Key: "smiths", Name: "Smith's", Host: "www.smithsfoodanddrug.com", Chain: "SMITHS"},
-	{Key: "fredmeyer", Name: "Fred Meyer", Host: "www.fredmeyer.com", Chain: "FREDMEYER"},
-	{Key: "qfc", Name: "QFC", Host: "www.qfc.com", Chain: "QFC"},
-	{Key: "harristeeter", Name: "Harris Teeter", Host: "www.harristeeter.com", Chain: "HARRISTEETER"},
+	{Key: "frys", Name: "Fry's", Host: "www.frysfood.com", Chain: "FRYS", CatalogKey: "frys"},
+	{Key: "kroger", Name: "Kroger", Host: "www.kroger.com", Chain: "KROGER", CatalogKey: "kroger"},
+	{Key: "ralphs", Name: "Ralphs", Host: "www.ralphs.com", Chain: "RALPHS", CatalogKey: "ralphs"},
+	{Key: "kingsoopers", Name: "King Soopers", Host: "www.kingsoopers.com", Chain: "KINGSOOPERS", CatalogKey: "king-soopers"},
+	{Key: "smiths", Name: "Smith's", Host: "www.smithsfoodanddrug.com", Chain: "SMITHS", CatalogKey: "smiths"},
+	{Key: "fredmeyer", Name: "Fred Meyer", Host: "www.fredmeyer.com", Chain: "FRED", CatalogKey: "fred-meyer"},
+	{Key: "qfc", Name: "QFC", Host: "www.qfc.com", Chain: "QFC", CatalogKey: "qfc"},
+	{Key: "dillons", Name: "Dillons", Host: "www.dillons.com", Chain: "DILLONS", CatalogKey: "dillons"},
+	{Key: "citymarket", Name: "City Market", Host: "www.citymarket.com", Chain: "CITYMARKET", CatalogKey: "city-market"},
+	{Key: "marianos", Name: "Mariano's", Host: "www.marianos.com", Chain: "MARIANOS", CatalogKey: "marianos"},
+	{Key: "picknsave", Name: "Pick 'n Save", Host: "www.picknsave.com", Chain: "PICK N SAVE", CatalogKey: "pick-n-save"},
+	{Key: "metromarket", Name: "Metro Market", Host: "www.metromarket.net", Chain: "METRO MARKET", CatalogKey: "metro-market"},
+	{Key: "bakers", Name: "Baker's", Host: "www.bakersplus.com", Chain: "BAKERS", CatalogKey: "bakers"},
+	{Key: "food4less", Name: "Food 4 Less", Host: "www.food4less.com", Chain: "FOOD4LESS", CatalogKey: "food-4-less"},
+	{Key: "foodsco", Name: "Foods Co", Host: "www.foodsco.net", Chain: "FOODSCO", CatalogKey: "foods-co"},
 }
 
 // KrogerBannerFor returns the banner named key, or Fry's when key is unknown
@@ -75,6 +86,9 @@ func (*Kroger) Key() Key { return KeyKroger }
 
 // Name implements GroceryProvider: the banner's name ("Fry's").
 func (k *Kroger) Name() string { return k.banner.Name }
+
+// CatalogKeys implements CatalogListed: the banner's catalog entry.
+func (k *Kroger) CatalogKeys() []string { return []string{k.banner.CatalogKey} }
 
 // HandoffKind implements GroceryProvider.
 func (*Kroger) HandoffKind() HandoffKind { return HandoffCartWrite }

@@ -198,6 +198,12 @@ type (
 		ExchangeCode(ctx context.Context, code string) (CustomerToken, error)
 		RefreshCustomer(ctx context.Context, refreshToken string) (CustomerToken, error)
 	}
+	// CatalogListed names the shopping store-catalog entries a provider
+	// covers, so the Request a Store list shows them as available exactly
+	// while the provider is enabled.
+	CatalogListed interface {
+		CatalogKeys() []string
+	}
 	// OrderImporter reads what a customer ordered.
 	OrderImporter interface {
 		ImportOrders(ctx context.Context, customerToken string) ([]CartItem, error)
