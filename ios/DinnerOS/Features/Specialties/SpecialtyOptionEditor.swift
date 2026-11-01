@@ -59,7 +59,7 @@ struct SpecialtyOptionEditor: View {
                     Text(draft.type.title)
                 } footer: {
                     if isCustomizing {
-                        Text("A copy for your household, chosen when you save. The original stays available.")
+                        Text("Your household's own copy. It's chosen when you save, and the original stays.")
                     }
                 }
                 if draft.isStoreAlternative {
@@ -76,6 +76,7 @@ struct SpecialtyOptionEditor: View {
                         LabeledContent("Keeps (Days)") {
                             TextField("Days", value: $draft.shelfLifeDays, format: .number)
                                 .keyboardType(.numberPad)
+                                .keyboardDoneButton()
                                 .multilineTextAlignment(.trailing)
                         }
                     } header: {

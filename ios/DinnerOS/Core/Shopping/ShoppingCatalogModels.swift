@@ -141,10 +141,18 @@ nonisolated struct ShoppingStoreRequest: Decodable, Hashable, Sendable, Identifi
     let note: String?
     let requestedBy: String
     let requestedAt: Date
+    /// The store location picked from nearby stores, when there was one.
+    var place: ShoppingStorePlace? = nil
 
     private enum CodingKeys: String, CodingKey {
-        case id, key, name, status, note, requestedBy, requestedAt
+        case id, key, name, status, note, requestedBy, requestedAt, place
     }
+}
+
+/// One store location: its name and street address.
+nonisolated struct ShoppingStorePlace: Codable, Hashable, Sendable {
+    let name: String
+    let address: String
 }
 
 nonisolated struct ShoppingStoreRequestList: Decodable, Sendable {
@@ -161,20 +169,32 @@ nonisolated struct CreateShoppingStoreRequest: Encodable, Equatable, Sendable {
     var key: String?
     var name: String?
     var note: String?
+    /// How the member found it: `catalog`, `nearby`, or `typed`. `nil` lets the API decide.
+    var source: String? = nil
+    /// The location picked from nearby stores.
+    var place: ShoppingStorePlace? = nil
+
+    /// Asks for a store picked from the stores near the household.
+    static func nearby(_ store: NearbyGroceryStore) -> CreateShoppingStoreRequest {
+        CreateShoppingStoreRequest(
+            key: nil, name: String(store.name.prefix(ShoppingRequestLimits.maxNameLength)), note: nil,
+            source: "nearby",
+            place: ShoppingStorePlace(name: String(store.name.prefix(100)), address: String(store.address.prefix(200))))
+    }
 
     /// Asks for a catalog entry.
     static func key(_ key: String, note: String? = nil) -> CreateShoppingStoreRequest {
         CreateShoppingStoreRequest(key: key, name: nil, note: Self.trimmedNote(note))
     }
 
-    /// Asks for a store the catalog doesn't list.
+    /// Asks for a store by the name the member typed, the last resort.
     static func name(_ name: String, note: String? = nil) -> CreateShoppingStoreRequest {
         CreateShoppingStoreRequest(
             key: nil,
             name: String(
                 name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(
                     ShoppingRequestLimits.maxNameLength)),
-            note: Self.trimmedNote(note))
+            note: Self.trimmedNote(note), source: "typed")
     }
 
     /// The note within the API's limit, or `nil` when it's blank.
@@ -184,7 +204,7 @@ nonisolated struct CreateShoppingStoreRequest: Encodable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case key, name, note
+        case key, name, note, source, place
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -192,5 +212,7 @@ nonisolated struct CreateShoppingStoreRequest: Encodable, Equatable, Sendable {
         try container.encodeIfPresent(key, forKey: .key)
         try container.encodeIfPresent(name, forKey: .name)
         try container.encodeIfPresent(note, forKey: .note)
+        try container.encodeIfPresent(source, forKey: .source)
+        try container.encodeIfPresent(place, forKey: .place)
     }
 }

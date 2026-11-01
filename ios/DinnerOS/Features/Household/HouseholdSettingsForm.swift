@@ -283,6 +283,14 @@ struct HouseholdSettingsSections: View {
                     .onChange(of: focus) { old, _ in
                         if old == .mealKitAmount { settings.flush() }
                     }
+                    .toolbar {
+                        if focus == .mealKitAmount {
+                            ToolbarItemGroup(placement: .keyboard) {
+                                Spacer()
+                                Button("Done") { focus = nil }
+                            }
+                        }
+                    }
                 }
                 Stepper(value: binding(\.mealKitMeals), in: MealKitInput.mealsRange) {
                     LabeledContent("Meals per Week", value: draft.mealKitMeals.formatted())

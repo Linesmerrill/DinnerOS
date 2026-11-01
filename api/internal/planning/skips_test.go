@@ -110,8 +110,8 @@ func TestGroceryListRecipeSkipLeavesOutOneMealsShare(t *testing.T) {
 		t.Fatalf("SkippedItems = %+v, want the tacos' garlic", resp.SkippedItems)
 	}
 	left := resp.SkippedItems[0]
-	if left.SkipScope != grocery.SkipRecipe || left.QuantityText != "2 cloves" || left.SkipText != "Left out of Beef Tacos" {
-		t.Errorf("left-out garlic = %q %q %q, want recipe, 2 cloves, \"Left out of Beef Tacos\"", left.SkipScope, left.QuantityText, left.SkipText)
+	if left.SkipScope != grocery.SkipRecipe || left.QuantityText != "2 cloves" || left.SkipText != "Skipped in Beef Tacos" {
+		t.Errorf("left-out garlic = %q %q %q, want recipe, 2 cloves, \"Skipped in Beef Tacos\"", left.SkipScope, left.QuantityText, left.SkipText)
 	}
 	// Sour cream is shared too and nobody left it out: one line, two shares.
 	for _, c := range resp.Categories {

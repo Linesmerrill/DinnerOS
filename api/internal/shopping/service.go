@@ -236,7 +236,7 @@ func (s *Service) UpdateStore(ctx context.Context, actor households.Membership, 
 		}
 		choice.StoreName = strings.Join(strings.Fields(storeName), " ")
 		if len(choice.StoreName) > MaxStoreNameLength {
-			return Settings{}, invalid("storeName must be at most %d characters", MaxStoreNameLength)
+			return Settings{}, invalid("Store names can be up to %d characters.", MaxStoreNameLength)
 		}
 		// The household shops at the picked store's banner: asked of the
 		// provider, never taken from the app.
@@ -500,7 +500,7 @@ func (s *Service) PutPreference(ctx context.Context, actor households.Membership
 			return Preference{}, false, fmt.Errorf("count saved products: %w", err)
 		}
 		if n >= MaxPreferencesPerProvider {
-			return Preference{}, false, invalid("a household saves at most %d products per store", MaxPreferencesPerProvider)
+			return Preference{}, false, invalid("You can save up to %d products for each store.", MaxPreferencesPerProvider)
 		}
 	} else if err != nil {
 		return Preference{}, false, fmt.Errorf("get saved product: %w", err)
@@ -699,7 +699,7 @@ func (s *Service) CreateHandoff(ctx context.Context, actor households.Membership
 			return Handoff{}, false, ErrEverythingLeftOut
 		}
 		if len(proposal.Lines) == 0 {
-			return Handoff{}, false, invalid("no grocery line has a saved product to add to the cart")
+			return Handoff{}, false, invalid("Nothing on your list has a saved product to add to the cart.")
 		}
 		// A provider that writes the cart itself needs the household's
 		// sign-in before anything is recorded as sent.

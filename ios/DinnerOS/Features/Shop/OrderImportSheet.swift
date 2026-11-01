@@ -369,6 +369,7 @@ private struct ImportRow: View {
                         .accessibilityHidden(true)
                     TextField("Price", text: priceBinding, prompt: Text("Price"))
                         .keyboardType(.decimalPad)
+                        .keyboardDoneButton()
                         .multilineTextAlignment(.trailing)
                         .monospacedDigit()
                         .accessibilityLabel("Price for \(row.item.name)")

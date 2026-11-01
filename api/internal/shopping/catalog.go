@@ -294,6 +294,42 @@ var storeCatalog = []CatalogEntry{
 	{Key: "festival-foods", Name: "Festival Foods", Kind: KindGrocer, Status: StatusUnsupported},
 	{Key: "sedanos", Name: "Sedano's", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"sedanos supermarkets"}},
 
+	// Regional chains, so a search finds most stores a household names.
+	{Key: "food-city", Name: "Food City", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"food city supermarket"}},
+	{Key: "fareway", Name: "Fareway", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"fareway meat and grocery", "fareway stores"}},
+	{Key: "harmons", Name: "Harmons", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"harmons grocery"}},
+	{Key: "dierbergs", Name: "Dierbergs", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"dierbergs markets"}},
+	{Key: "lunds-byerlys", Name: "Lunds & Byerlys", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"lunds", "byerlys", "lunds and byerlys"}},
+	{Key: "kowalskis", Name: "Kowalski's", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"kowalskis markets"}},
+	{Key: "hornbachers", Name: "Hornbacher's", Kind: KindGrocer, Status: StatusUnsupported},
+	{Key: "rouses", Name: "Rouses Markets", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"rouses", "rouses supermarket"}},
+	{Key: "brookshire-brothers", Name: "Brookshire Brothers", Kind: KindGrocer, Status: StatusUnsupported},
+	{Key: "big-y", Name: "Big Y", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"big y world class market"}},
+	{Key: "key-food", Name: "Key Food", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"key food supermarket"}},
+	{Key: "foodtown", Name: "Foodtown", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"food town"}},
+	{Key: "fiesta-mart", Name: "Fiesta Mart", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"fiesta"}},
+	{Key: "el-super", Name: "El Super", Kind: KindGrocer, Status: StatusUnsupported},
+	{Key: "cardenas", Name: "Cardenas Markets", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"cardenas"}},
+	{Key: "vallarta", Name: "Vallarta Supermarkets", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"vallarta"}},
+	{Key: "northgate", Name: "Northgate Market", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"northgate gonzalez market", "northgate"}},
+	{Key: "food-bazaar", Name: "Food Bazaar", Kind: KindGrocer, Status: StatusUnsupported},
+	{Key: "99-ranch", Name: "99 Ranch Market", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"99 ranch", "ranch 99"}},
+	{Key: "h-mart", Name: "H Mart", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"hmart"}},
+	{Key: "fresh-thyme", Name: "Fresh Thyme Market", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"fresh thyme", "fresh thyme farmers market"}},
+	{Key: "earth-fare", Name: "Earth Fare", Kind: KindGrocer, Status: StatusUnsupported},
+	{Key: "woodmans", Name: "Woodman's Markets", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"woodmans", "woodmans food market"}},
+	{Key: "gelsons", Name: "Gelson's", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"gelsons markets"}},
+	{Key: "bristol-farms", Name: "Bristol Farms", Kind: KindGrocer, Status: StatusUnsupported},
+	{Key: "erewhon", Name: "Erewhon", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"erewhon market"}},
+	{Key: "nugget-markets", Name: "Nugget Markets", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"nugget"}},
+	{Key: "rosauers", Name: "Rosauers", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"rosauers supermarkets"}},
+	{Key: "yokes", Name: "Yoke's Fresh Market", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"yokes"}},
+	{Key: "super-1-foods", Name: "Super 1 Foods", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"super one foods"}},
+	{Key: "martins", Name: "Martin's Food Markets", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"martins food", "martins"}},
+	{Key: "strack-van-til", Name: "Strack & Van Til", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"strack and van til"}},
+	{Key: "foodmaxx", Name: "FoodMaxx", Kind: KindGrocer, Status: StatusUnsupported, Aliases: []string{"food maxx"}},
+	{Key: "superior-grocers", Name: "Superior Grocers", Kind: KindGrocer, Status: StatusUnsupported},
+
 	// Warehouse clubs.
 	{Key: "costco", Name: "Costco", Kind: KindWarehouse, Status: StatusUnsupported, Aliases: []string{"costco wholesale"}},
 	{Key: "sams-club", Name: "Sam's Club", Kind: KindWarehouse, Status: StatusUnsupported, Aliases: []string{"samsclub", "sams"}},
@@ -432,6 +468,63 @@ func matchCatalogName(name string) (CatalogEntry, bool) {
 		return CatalogEntry{}, false
 	}
 	return catalogByKey[key], true
+}
+
+// isDigits reports whether s is one or more ASCII digits.
+func isDigits(s string) bool {
+	return s != "" && strings.Trim(s, "0123456789") == ""
+}
+
+// resolveStoreName finds the catalog entry a store name belongs to: an exact
+// match on the chain part of the name (chainName), or else the longest
+// catalog name or alias that the name starts with, word for word. So
+// "Safeway Fuel Station" and "Sprouts Farmers Market #412" resolve to their
+// chains, while "Fresh" resolves to nothing.
+func resolveStoreName(name string) (CatalogEntry, bool) {
+	if e, ok := matchCatalogName(name); ok {
+		return e, true
+	}
+	chain := normalizeStoreText(chainName(name))
+	if e, ok := matchCatalogName(chain); ok {
+		return e, true
+	}
+	best, bestLen := "", 0
+	for alias, key := range catalogByAlias {
+		if len(alias) > bestLen && strings.HasPrefix(chain+" ", alias+" ") {
+			best, bestLen = key, len(alias)
+		}
+	}
+	if best == "" {
+		return CatalogEntry{}, false
+	}
+	return catalogByKey[best], true
+}
+
+// chainName drops what names one store rather than its chain: a store
+// number ("#622", "No. 12", "Store 1234"), and anything after " - ", " | ",
+// "(", or ",". "Bashas' - Chandler (Ray Rd)" becomes "Bashas'".
+func chainName(name string) string {
+	s := strings.TrimSpace(name)
+	for _, sep := range []string{" - ", " – ", " | ", "(", ","} {
+		if i := strings.Index(s, sep); i > 0 {
+			s = s[:i]
+		}
+	}
+	words := strings.Fields(s)
+	// A trailing store number: "#622", "# 622", or a bare number after
+	// "Store" or "No." ("Store 1234", "No. 12"), which go with it.
+	n := len(words)
+	switch {
+	case n > 1 && strings.HasPrefix(words[n-1], "#") && isDigits(strings.TrimPrefix(words[n-1], "#")):
+		words = words[:n-1]
+	case n > 2 && words[n-2] == "#" && isDigits(words[n-1]):
+		words = words[:n-2]
+	case n > 2 && isDigits(words[n-1]):
+		if w := strings.ToLower(strings.TrimSuffix(words[n-2], ".")); w == "store" || w == "no" {
+			words = words[:n-2]
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 // normalizeStoreText folds a store name for matching: lower case, "&" as

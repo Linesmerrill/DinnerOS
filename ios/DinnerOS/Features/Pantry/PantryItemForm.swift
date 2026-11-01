@@ -413,7 +413,7 @@ struct PantryAddSheet: View {
         if let existing = pantry.existingItem(named: trimmedName, ingredientID: selectedIngredient?.id) {
             Text("\(existing.displayName) is already in your pantry. Adding it again updates that item.")
         } else if let selectedIngredient {
-            Text("From the ingredient catalog, in \(PantryCategory.title(selectedIngredient.category)).")
+            Text("A common ingredient, listed under \(PantryCategory.title(selectedIngredient.category)).")
         }
     }
 
@@ -433,7 +433,7 @@ struct PantryAddSheet: View {
                         }
                         .contentShape(.rect)
                     }
-                    .accessibilityHint("Adds this catalog ingredient.")
+                    .accessibilityHint("Adds this ingredient.")
                 }
                 if suggestions.isSearching && suggestions.results.isEmpty {
                     HStack {

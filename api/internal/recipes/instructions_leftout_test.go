@@ -27,7 +27,7 @@ func TestAnnotateMarksALeftOutIngredientInsteadOfDeletingIt(t *testing.T) {
 	if len(segs) != 2 || segs[0].LeftOut || !segs[1].LeftOut || segs[1].Amount != nil || segs[1].Text != "cilantro" {
 		t.Errorf("segments = %+v, want rice as usual and cilantro marked left out without an amount", segs)
 	}
-	if len(first.Notes) != 1 || first.Notes[0].Kind != NoteLeftOut || first.Notes[0].Text != "You leave out the Cilantro." {
+	if len(first.Notes) != 1 || first.Notes[0].Kind != NoteLeftOut || first.Notes[0].Text != "You skip the Cilantro." {
 		t.Errorf("notes = %+v, want one left-out note", first.Notes)
 	}
 	if first.LeftOut {

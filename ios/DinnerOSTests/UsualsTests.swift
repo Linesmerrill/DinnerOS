@@ -94,7 +94,7 @@ struct UsualsTests {
     @Test func plainWords() throws {
         let usuals = try JSONDecoder().decode(WeekUsuals.self, from: UsualsFixtures.usualsJSON)
         #expect(UsualsText.why(usuals.items[0], window: 6) == "Pinned")
-        #expect(UsualsText.why(usuals.items[1], window: 6) == "Added 3 of your last 6 shopping weeks")
+        #expect(UsualsText.why(usuals.items[1], window: 6) == "On your list 3 of the last 6 weeks")
         #expect(UsualsText.nameAndCount("Eggs", count: 2) == "Eggs × 2")
         #expect(UsualsText.nameAndCount("Milk", count: 1) == "Milk")
         #expect(NewGroceryItem(name: "  paper   towels ").cleanName == "paper towels")

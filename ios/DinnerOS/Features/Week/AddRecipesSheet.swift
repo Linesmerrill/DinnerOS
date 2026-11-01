@@ -40,7 +40,7 @@ struct AddRecipesSheet: View {
                     ContentUnavailableView {
                         Label("Couldn't Load Recipes", systemImage: "exclamationmark.triangle")
                     } description: {
-                        Text("Recipes need your household. Try again in a moment.")
+                        Text("Couldn't load your household. Try again in a moment.")
                     } actions: {
                         Button("Try Again") {
                             Task { await start() }

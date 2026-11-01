@@ -251,7 +251,7 @@ struct YourUsualsView: View {
                     }
                 } footer: {
                     Text(
-                        "Items you add in \(weekUsuals.minWeeks) of your last \(weekUsuals.window) shopping weeks, and ones you pin."
+                        "Items on your list \(weekUsuals.minWeeks) of the last \(weekUsuals.window) weeks, plus ones you pin."
                     )
                 }
                 if canEdit {

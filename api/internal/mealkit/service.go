@@ -198,7 +198,7 @@ func (s *Service) StartImport(ctx context.Context, req ImportRequest) (Job, erro
 	}
 	src, err := s.Source(req.Source)
 	if err != nil {
-		return Job{}, invalid("%s imports are not available on this server", req.Source)
+		return Job{}, invalid("Recipe import isn't available yet.")
 	}
 	orders, err := normalizeOrders(src, req.Orders)
 	if err != nil {
@@ -218,7 +218,7 @@ func (s *Service) StartImport(ctx context.Context, req ImportRequest) (Job, erro
 		return Job{}, fmt.Errorf("get active import job: %w", err)
 	}
 	if other, err := s.store.AnyActiveJob(ctx, req.HouseholdID); err == nil {
-		return Job{}, invalid("an import from %s is already running for this household; it has to finish first", other.Source)
+		return Job{}, invalid("An import from %s is already running. Wait for it to finish.", displayName(other.Source))
 	} else if !errors.Is(err, ErrNotFound) {
 		return Job{}, fmt.Errorf("get active import job: %w", err)
 	}
@@ -263,10 +263,10 @@ func displayName(source string) string {
 // history should not cost a member their other two hundred recipes.
 func normalizeOrders(src Source, in []OrderedRecipe) ([]OrderedRecipe, error) {
 	if len(in) == 0 {
-		return nil, invalid("there were no recipes to import")
+		return nil, invalid("There were no recipes to import.")
 	}
 	if len(in) > MaxOrderedRecipes {
-		return nil, invalid("that is more than %d recipes; something is wrong with the order history", MaxOrderedRecipes)
+		return nil, invalid("That's more than %d recipes, which doesn't look right. Try again.", MaxOrderedRecipes)
 	}
 	out := make([]OrderedRecipe, 0, len(in))
 	seen := make(map[string]int, len(in))
@@ -283,7 +283,7 @@ func normalizeOrders(src Source, in []OrderedRecipe) ([]OrderedRecipe, error) {
 		out = append(out, o)
 	}
 	if len(out) == 0 {
-		return nil, invalid("none of those looked like %s recipes", SourceHelloFresh)
+		return nil, invalid("None of those looked like HelloFresh recipes.")
 	}
 	return out, nil
 }

@@ -11,3 +11,10 @@ End every turn with one line:
 
 - `Continuing with <X>`, or
 - `BLOCKED: <exact thing needed>`
+
+## UI copy reads like a person wrote it
+
+Every string a user sees (labels, helper text, empty states, buttons, alerts,
+API error messages that reach the app) must be something a normal person would
+say out loud: short, plain, human sentences. No internal model terms or jargon
+("weeks shop", "provider", "handoff", "trip", field names, codes).

@@ -34,7 +34,7 @@ func (s *Service) AddItems(ctx context.Context, actor households.Membership, wee
 		return nil, err
 	}
 	if len(in) == 0 || len(in) > MaxAddedItemsPerRequest {
-		return nil, invalid("add between 1 and %d items", MaxAddedItemsPerRequest)
+		return nil, invalid("Add between 1 and %d items at a time.", MaxAddedItemsPerRequest)
 	}
 	names := make([]string, 0, len(in))
 	for i, item := range in {
@@ -219,7 +219,7 @@ func (s *Service) SetUsual(ctx context.Context, actor households.Membership, in 
 		return UsualPref{}, err
 	}
 	if in.Pinned && in.NotUsual {
-		return UsualPref{}, invalid("An item can't be pinned and not a usual.")
+		return UsualPref{}, invalid("A pinned item has to stay in your usuals.")
 	}
 	if in.Count < 0 || in.Count > MaxAddedItemCount {
 		return UsualPref{}, invalid("Offer between 1 and %d of an item.", MaxAddedItemCount)

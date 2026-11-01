@@ -136,6 +136,39 @@ struct HouseholdStoreTests {
         #expect(message.localizedCaseInsensitiveContains("offline"))
     }
 
+    // MARK: ZIP code
+
+    @Test func rememberingAZIPSavesItToTheHousehold() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        try await store.createHousehold(name: "The Lovelace Kitchen", timeZone: "America/Denver")
+
+        await store.rememberZIP("85004")
+
+        let put = try #require(
+            harness.transport.requests(to: "/api/v1/households/household-created/zip").first {
+                $0.httpMethod == "PUT"
+            })
+        #expect(put.jsonBody == ["zip": "85004"])
+        #expect(put.bearerToken == "access-1")
+    }
+
+    @Test func aZIPThatCouldNotBeSavedIsStillOffered() async throws {
+        let harness = try await makeHarness(
+            overrides: [
+                "/api/v1/households/household-created/zip": (
+                    500, Data(#"{"error":{"code":"internal","message":"x"}}"#.utf8)
+                )
+            ])
+        let store = harness.store
+        try await store.createHousehold(name: "The Lovelace Kitchen", timeZone: "America/Denver")
+        #expect(store.storeFinderZIP == nil)
+
+        await store.rememberZIP("85004")
+
+        #expect(store.storeFinderZIP == "85004")
+    }
+
     // MARK: Joining
 
     @Test func acceptByCodeNormalizesAndSelectsHousehold() async throws {
@@ -302,7 +335,7 @@ struct HouseholdStoreTests {
             Issue.record("expected failed, got \(String(describing: harness.store.inviteStatus))")
             return
         }
-        #expect(message.localizedCaseInsensitiveContains("server"))
+        #expect(message.localizedCaseInsensitiveContains("on our end"))
         #expect(!harness.store.hasPendingInvite)
         #expect(harness.transport.requests(to: "/api/v1/invitations/accept").isEmpty)
     }

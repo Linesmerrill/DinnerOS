@@ -392,8 +392,18 @@ private struct ShopWeekList: View {
         }
         if !proposal.leftOut.isEmpty || !grocerySkips.items.isEmpty {
             Section {
-                Button("Everything You Leave Out", systemImage: "cart.badge.minus") {
+                Button {
                     showsLeftOut = true
+                } label: {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Skipped Items")
+                            Text("Things you already have or chose not to buy")
+                                .font(.footnote)
+                        }
+                    } icon: {
+                        Image(systemName: "cart.badge.minus")
+                    }
                 }
                 .foregroundStyle(.secondary)
             }
@@ -427,7 +437,7 @@ private struct ShopWeekList: View {
             // Only items added by hand: there's no meal to explain.
             if hasMeals {
                 Text(
-                    "An item several meals use is bought once, with the meal it's listed under first. We work out how many to buy from each product's size."
+                    "If several meals use an item, it's bought once and listed under the first meal. We work out how many to buy from the package size."
                 )
             }
             if needsProduct {
@@ -700,12 +710,12 @@ private struct NeedsDecisionRow: View {
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
                     : AnyLayout(HStackLayout(spacing: 12))
                 layout {
-                    Button("Re-choose", action: rechoose)
+                    Button("Choose Another", action: rechoose)
                         .buttonStyle(.bordered)
-                        .accessibilityLabel("Re-choose the product for \(line.name)")
-                    Button("Leave Out", action: leaveOut)
+                        .accessibilityLabel("Choose a different product for \(line.name)")
+                    Button("Skip", action: leaveOut)
                         .buttonStyle(.borderless)
-                        .accessibilityLabel("Leave \(line.name) out of this cart")
+                        .accessibilityLabel("Skip \(line.name) this time")
                     if let remove {
                         Spacer(minLength: 0)
                         ShopRemoveMenu(options: remove)
@@ -924,7 +934,7 @@ private struct LeftOutShopRow: View {
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(row.name), left out. \(text)")
+            .accessibilityLabel("\(row.name), skipped. \(text)")
             Spacer(minLength: 0)
             if isWorking {
                 ProgressView()
@@ -1043,7 +1053,7 @@ private struct ShopRemoveMenuItems: View {
             }
         }
         // Out of the dish itself: crossed out in its steps too.
-        Section("Leave Out of the Recipe") {
+        Section("Skip It in the Recipe") {
             if let justThisMeal = options.justThisMeal, let meal = options.mealName {
                 Button("Just for \(meal)", systemImage: "fork.knife", action: justThisMeal)
             }
@@ -1177,7 +1187,7 @@ private struct InCartLineRow: View {
                     }
                     .accessibilityLabel("Options for \(line.name)")
                     .accessibilityHint(
-                        "Send Again adds it to the \(store) cart next time, for when you removed it there.")
+                        "Removed it from your \(store) cart? Send Again adds it back next time.")
                 }
             }
             if canEdit {
@@ -1338,13 +1348,13 @@ private struct OrderReminderBanner: View {
 
     private var summary: String {
         if reminder.ordered {
-            return String(localized: "Marked ordered, so nothing will remind you again until next week.")
+            return String(localized: "Marked ordered. No more reminders until next week.")
         }
         guard let day = reminder.orderDayName else {
             return String(localized: "Send your list to \(shopping.providerName), then mark the week ordered.")
         }
         return String(
-            localized: "\(day) is your order day. Once you've placed the order, mark the week and this stops.")
+            localized: "\(day) is your order day. Mark the week ordered once you've placed your order.")
     }
 
     private func setOrdered(_ ordered: Bool) {
@@ -1542,8 +1552,8 @@ private struct ShopHandoffBar: View {
 
     private func decisionNote(_ count: Int) -> String {
         count == 1
-            ? String(localized: "1 item needs a decision first.")
-            : String(localized: "\(count) items need a decision first.")
+            ? String(localized: "Choose what to do with 1 item first.")
+            : String(localized: "Choose what to do with \(count) items first.")
     }
 
     private func openButton(title: String) -> some View {
@@ -1687,7 +1697,7 @@ private struct ShopTripStorePicker: View {
                 .frame(minHeight: 32)
             }
             .disabled(!shopping.canEdit || isSwitching)
-            .accessibilityHint("Picks the store this week shops at")
+            .accessibilityHint("Picks the store for this week")
             if let errorMessage {
                 Text(errorMessage)
                     .font(.footnote)

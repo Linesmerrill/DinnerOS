@@ -41,14 +41,14 @@ struct WeekContextSheet: View {
     /// One short line under the tiles, saying what the week is now.
     private var presetFooter: String {
         if draft.skip {
-            return String(localized: "Autopilot plans nothing, and the week says you're away.")
+            return String(localized: "Autopilot won't plan anything, and the week shows you're away.")
         }
         var parts: [String] = []
         if draft.busy {
-            parts.append(String(localized: "Quick weeknights; a smoker night still cooks long."))
+            parts.append(String(localized: "Quick weeknights. A smoker night can still take longer."))
         }
         if draft.isOn(.guests) {
-            parts.append(String(localized: "Bigger servings, and the grocery list follows."))
+            parts.append(String(localized: "Bigger servings, and a bigger grocery list."))
         }
         return parts.isEmpty ? String(localized: "Tap what's different about this week.") : parts.joined(separator: " ")
     }

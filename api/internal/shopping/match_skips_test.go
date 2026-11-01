@@ -80,7 +80,7 @@ func TestBuildProposalBuysASharedIngredientOnceAndRecountsWhenOneMealLeavesItOut
 		len(skipped.Recipes) != 1 || skipped.Recipes[0].Name != "Chili" {
 		t.Fatalf("excluded = %+v, want the chili's beef, skipped for that recipe", one.Excluded)
 	}
-	if got := skippedText(*skipped); got != "Left out of Chili" {
+	if got := skippedText(*skipped); got != "Skipped in Chili" {
 		t.Errorf("skipped text = %q", got)
 	}
 	// Only the line goes to Walmart.

@@ -379,7 +379,7 @@ func TestWeekConstraints(t *testing.T) {
 		// Rigatoni (prep 20, total 5), salmon (20), stir fry (prep 15 only),
 		// and the omelet (15) are ready within 20 minutes; garlic bread is an
 		// add-on.
-		want := "Only 4 quick recipes (≤20 min) match; planned 4 of 5 nights."
+		want := "Only 4 quick recipes (20 min or less) match, so we planned 4 of 5 nights."
 		if p.Planned != 4 || p.Candidates != 4 || p.Messages[0].Text != want || len(p.Unfilled) != 1 {
 			t.Fatalf("busy week = %+v", p)
 		}

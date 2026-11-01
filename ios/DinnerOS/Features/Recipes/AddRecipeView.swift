@@ -96,7 +96,7 @@ struct AddRecipeView: View {
                 } header: {
                     Text("Paste a Link")
                 } footer: {
-                    Text("We read the page on our server, never on your phone. You'll review what we find.")
+                    Text("We read the recipe page for you. You'll check what we found before saving.")
                 }
             }
             if let message = store.errorMessage {

@@ -17,7 +17,7 @@ struct RecipeLeftOutTests {
              {"kind":"text","text":" and top with "},
              {"kind":"ingredient","text":"cilantro","name":"Cilantro","leftOut":true},
              {"kind":"text","text":"."}],
-            "notes":[{"kind":"left_out","text":"You leave out the Cilantro."}]},
+            "notes":[{"kind":"left_out","text":"You skip the Cilantro."}]},
            {"index":2,"text":"Drizzle with the crema.","leftOut":true,"segments":[
              {"kind":"text","text":"Drizzle with the "},
              {"kind":"ingredient","text":"crema","name":"Smoky Red Pepper Crema","leftOut":true},
@@ -47,7 +47,7 @@ struct RecipeLeftOutTests {
         #expect(!first.leftOut)
         #expect(instructions.steps.last?.leftOut == true)
         // VoiceOver hears it, rather than relying on a strikethrough.
-        #expect(first.spokenText == "Simmer 1 cup coconut milk and top with cilantro (left out).")
+        #expect(first.spokenText == "Simmer 1 cup coconut milk and top with cilantro (skipped).")
         #expect(instructions.ingredient(at: 1)?.leftOut == InstructionLeftOut(skipID: "s-cilantro", scope: .recipe))
         #expect(instructions.ingredient(at: 2)?.component?.parts.count == 2)
     }
@@ -68,7 +68,7 @@ struct RecipeLeftOutTests {
             instructions: instructions)
 
         #expect(states.map(\.isLeftOut) == [false, true, true])
-        #expect(states[1].leftOutText == "Left out of this dish")
+        #expect(states[1].leftOutText == "Skipped in this dish")
         #expect(states[2].isComponent)
         #expect(states[2].leftOutText == "Never making this")
         // A line whose name doesn't match (instructions for an older copy) isn't touched.

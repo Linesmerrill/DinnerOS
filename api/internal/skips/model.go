@@ -163,9 +163,9 @@ func (s Skip) Text() string {
 		return "Never buying this"
 	case ScopeRecipe:
 		if s.RecipeName != "" {
-			return "Left out of " + s.RecipeName
+			return "Skipped in " + s.RecipeName
 		}
-		return "Left out of one recipe"
+		return "Skipped in one recipe"
 	}
 	return "Skipped this week"
 }

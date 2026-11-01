@@ -176,7 +176,7 @@ nonisolated enum ShoppingFixtures {
                         groceryStatus: "pantryHint"),
                     excludedJSON(key: "i-stock", name: "Stock", reason: "house_made", text: "House-made"),
                     excludedJSON(key: "i-lime", name: "Lime", reason: "checked_off", text: "Checked off"),
-                    excludedJSON(key: "i-onion", name: "Onion", reason: "excluded", text: "Left out"),
+                    excludedJSON(key: "i-onion", name: "Onion", reason: "excluded", text: "Skipped"),
                     excludedJSON(key: "i-kale", name: "Kale", reason: "not_selected", text: "Not selected"),
                     excludedJSON(
                         key: "i-gone", name: "", reason: "not_on_list", text: "Not on the list", groceryStatus: nil),

@@ -255,7 +255,7 @@ private struct OrderLineRow: View {
             .buttonStyle(.plain)
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(isSelected ? .isSelected : [])
-            .accessibilityHint(isSelected ? "Leaves it out" : "Marks it ordered")
+            .accessibilityHint(isSelected ? "Marks it not ordered" : "Marks it ordered")
 
             if isSelected {
                 Stepper(value: $packages, in: ShoppingLimits.packages) {
@@ -268,6 +268,7 @@ private struct OrderLineRow: View {
                 LabeledContent("Price") {
                     TextField("Price", text: $priceText, prompt: Text("Optional"))
                         .keyboardType(.decimalPad)
+                        .keyboardDoneButton()
                         .multilineTextAlignment(.trailing)
                         .frame(maxWidth: 120)
                 }

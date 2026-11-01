@@ -51,6 +51,7 @@ func (h *Handler) Mount(r chi.Router) {
 			r.Use(RequirePermission(h.svc, PermHouseholdView, h.logger))
 			r.Get("/households/{householdId}", h.get)
 			r.Patch("/households/{householdId}", h.update)
+			r.Put("/households/{householdId}/zip", h.putZIP)
 			r.Patch("/households/{householdId}/members/{userId}", h.changeRole)
 			r.Delete("/households/{householdId}/members/{userId}", h.removeMember)
 		})
@@ -77,6 +78,9 @@ type HouseholdResponse struct {
 	// bag's best-by date: vacuum_sealed (the default), freezer_bag, or
 	// store_package.
 	FreezerWrap string `json:"freezerWrap"`
+	// ZIP is the household's ZIP code for the store finders, null until
+	// given.
+	ZIP *string `json:"zip"`
 	// CatalogSharing is which recipes other households can find and add:
 	// off, all, or chosen.
 	CatalogSharing string `json:"catalogSharing"`
@@ -96,7 +100,7 @@ type MealKitJSON struct {
 	Meals       int   `json:"meals"`
 }
 
-// orderDayOrNil renders an unset order day as JSON null.
+// orderDayOrNil renders an unset order day (or ZIP) as JSON null.
 func orderDayOrNil(day string) *string {
 	if day == "" {
 		return nil
@@ -120,6 +124,7 @@ func NewHouseholdResponse(hh Household) HouseholdResponse {
 		ThawReminderHour: hh.ThawHour(),
 		FreezeMinOunces:  hh.FreezeMinOunces,
 		FreezerWrap:      hh.Wrap(),
+		ZIP:              orderDayOrNil(hh.ZIP),
 		CatalogSharing:   hh.Sharing(),
 		WeekStartsOn:     hh.FirstDay(),
 		CreatedBy:        hh.CreatedBy,
@@ -300,6 +305,30 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	hh, err := h.svc.Update(r.Context(), actor, in)
 	if err != nil {
 		h.writeError(w, r, "update household failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, NewHouseholdResponse(hh))
+}
+
+// zipRequest is the body of PUT /households/{id}/zip: a ZIP code, or null
+// or "" to clear it.
+type zipRequest struct {
+	ZIP *string `json:"zip"`
+}
+
+func (h *Handler) putZIP(w http.ResponseWriter, r *http.Request) {
+	actor, _ := MembershipFromContext(r.Context())
+	var req zipRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	zip := ""
+	if req.ZIP != nil {
+		zip = *req.ZIP
+	}
+	hh, err := h.svc.SetZIP(r.Context(), actor, zip)
+	if err != nil {
+		h.writeError(w, r, "set household zip failed", err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, NewHouseholdResponse(hh))

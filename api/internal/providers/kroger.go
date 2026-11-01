@@ -182,7 +182,7 @@ func (k *Kroger) ProductURL(productID string) string {
 func (k *Kroger) CartURL() string { return "https://" + k.banner.Host + "/cart" }
 
 func (k *Kroger) linkHelp() string {
-	return "paste a " + k.banner.Name + " product link such as https://" + k.banner.Host + "/p/product-name/0001111041700, or its UPC"
+	return "Paste a " + k.banner.Name + " product link, like https://" + k.banner.Host + "/p/product-name/0001111041700, or its UPC."
 }
 
 // ParseProduct implements GroceryProvider. It accepts a UPC (11 to 13
@@ -194,10 +194,10 @@ func (k *Kroger) ParseProduct(input string) (ProductRef, error) {
 	case s == "":
 		return ProductRef{}, invalid("%s", k.linkHelp())
 	case len(s) > MaxProductInputLength:
-		return ProductRef{}, invalid("a product link must be at most %d characters", MaxProductInputLength)
+		return ProductRef{}, invalid("That link is too long. Links can be up to %d characters.", MaxProductInputLength)
 	case digitsOnly.MatchString(s):
 		if !krogerUPC.MatchString(s) {
-			return ProductRef{}, invalid("a UPC is 11 to 13 digits")
+			return ProductRef{}, invalid("A UPC is 11 to 13 digits.")
 		}
 		id := padUPC(s)
 		return ProductRef{ProductID: id, URL: k.ProductURL(id)}, nil
@@ -221,11 +221,11 @@ func (k *Kroger) ParseProduct(input string) (ProductRef, error) {
 		}
 	}
 	if !known {
-		return ProductRef{}, invalid("only Kroger-family store links are supported; %s", k.linkHelp())
+		return ProductRef{}, invalid("That isn't a link from this store. %s", k.linkHelp())
 	}
 	segments := strings.Split(strings.Trim(u.Path, "/"), "/")
 	if len(segments) != 3 || segments[0] != "p" || !krogerProductID.MatchString(segments[2]) {
-		return ProductRef{}, invalid("that link isn't a product page; %s", k.linkHelp())
+		return ProductRef{}, invalid("That link isn't a product page. %s", k.linkHelp())
 	}
 	id := segments[2]
 	ref := ProductRef{ProductID: id, URL: k.ProductURL(id)}
@@ -244,7 +244,7 @@ func padUPC(s string) string { return strings.Repeat("0", 13-len(s)) + s }
 func (*Kroger) NormalizeStoreID(storeID string) (string, error) {
 	s := strings.TrimSpace(storeID)
 	if !krogerLocationID.MatchString(s) {
-		return "", invalid("storeId must be a Kroger location ID (8 letters or digits)")
+		return "", invalid("A store ID is 8 letters or digits.")
 	}
 	return strings.ToUpper(s), nil
 }

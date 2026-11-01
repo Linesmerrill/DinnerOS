@@ -228,7 +228,7 @@ nonisolated extension InstructionStep {
         guard !segments.isEmpty else { return text }
         return segments.reduce(into: "") { spoken, segment in
             switch (segment.isIngredient, segment.leftOut, segment.spicy) {
-            case (true, true, _): spoken += String(localized: "\(segment.text) (left out)")
+            case (true, true, _): spoken += String(localized: "\(segment.text) (skipped)")
             case (true, false, true): spoken += "spicy \(segment.text)"
             default: spoken += segment.text
             }

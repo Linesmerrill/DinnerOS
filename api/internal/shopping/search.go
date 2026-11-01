@@ -51,11 +51,11 @@ func (s *Service) FindStores(ctx context.Context, householdID, provider, zip str
 	}
 	finder, ok := p.(providers.StoreFinder)
 	if !ok {
-		return nil, invalid("%s has no store finder; type the store number", p.Name())
+		return nil, invalid("You can't search for %s stores here. Type the store number instead.", p.Name())
 	}
 	zip = strings.TrimSpace(zip)
 	if !zipCode.MatchString(zip) {
-		return nil, invalid("zip must be a 5-digit ZIP code")
+		return nil, invalid("Enter a 5-digit ZIP code.")
 	}
 	stores, err := finder.FindStores(ctx, providers.StoreQuery{ZIPCode: zip})
 	if err != nil {
@@ -75,7 +75,7 @@ func (s *Service) SearchProducts(ctx context.Context, householdID, provider, ter
 	}
 	searcher, ok := p.(providers.ProductSearcher)
 	if !ok {
-		return nil, invalid("%s has no product search; paste a product link", p.Name())
+		return nil, invalid("You can't search %s here. Paste a product link instead.", p.Name())
 	}
 	words := strings.Fields(term)
 	if len(words) > maxSearchWords {
@@ -84,9 +84,9 @@ func (s *Service) SearchProducts(ctx context.Context, householdID, provider, ter
 	term = strings.Join(words, " ")
 	switch n := utf8.RuneCountInString(term); {
 	case n < minSearchTermLength:
-		return nil, invalid("search for at least %d letters", minSearchTermLength)
+		return nil, invalid("Type at least %d letters.", minSearchTermLength)
 	case n > MaxSearchTermLength:
-		return nil, invalid("a search must be at most %d characters", MaxSearchTermLength)
+		return nil, invalid("Keep your search to %d characters or fewer.", MaxSearchTermLength)
 	}
 	settings, err := s.Settings(ctx, householdID)
 	if err != nil {

@@ -48,7 +48,7 @@ func TestLearnedMealFeedback(t *testing.T) {
 
 	for id, want := range map[string]string{
 		"swapped":  "You swapped this out twice recently",
-		"left-out": "You left this out once recently",
+		"left-out": "You skipped this once recently",
 		"kept":     "You kept it when Autopilot suggested it",
 		"viewed":   "You've looked at it 3 times lately",
 	} {

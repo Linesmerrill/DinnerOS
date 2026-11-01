@@ -39,7 +39,7 @@ struct SkippedIngredientsView: View {
 
     var body: some View {
         content
-            .navigationTitle("Left Out")
+            .navigationTitle("Skipped Items")
             .navigationBarTitleDisplayMode(.inline)
             .alert("Couldn't Change That", isPresented: Binding(presenting: $actionError)) {
                 Button("OK", role: .cancel) {}
@@ -77,9 +77,9 @@ struct SkippedIngredientsView: View {
             }
             if skips.items.isEmpty {
                 ContentUnavailableView(
-                    "Nothing Left Out", systemImage: "cart.badge.minus",
+                    "Nothing Skipped", systemImage: "cart.badge.minus",
                     description: Text(
-                        "Swipe a line on the grocery list, or remove an ingredient from a recipe, to leave it out.")
+                        "Swipe a line on the grocery list, or remove an ingredient from a recipe, to skip it.")
                 )
                 .listRowBackground(Color.clear)
             }
@@ -90,8 +90,8 @@ struct SkippedIngredientsView: View {
                 skips.thisWeek, title: String(localized: "Just This Week"),
                 footer: String(localized: "Back on the list next week, with nothing to do."))
             section(
-                skips.inRecipes, title: String(localized: "Left Out of One Dish"),
-                footer: String(localized: "Left out of that recipe every time it's planned. Other dishes still get it.")
+                skips.inRecipes, title: String(localized: "Skipped in One Dish"),
+                footer: String(localized: "Skipped in that recipe every time it's planned. Other dishes still use it.")
             )
         }
         .refreshable {
@@ -205,7 +205,7 @@ struct SkippedIngredientsView: View {
                     scope: .week, week: "2026-W38", text: "Skipped this week"),
                 GrocerySkip(
                     id: "skip-3", ingredientKey: "name:peanuts", key: "peanuts", name: "Peanuts",
-                    scope: .recipe, week: nil, text: "Left out of Thai Coconut Curry Chicken",
+                    scope: .recipe, week: nil, text: "Skipped in Thai Coconut Curry Chicken",
                     recipeID: "recipe-1", recipeName: "Thai Coconut Curry Chicken"),
             ]))
 }

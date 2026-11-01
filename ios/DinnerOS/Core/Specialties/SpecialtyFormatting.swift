@@ -96,7 +96,7 @@ nonisolated enum SpecialtyFormat {
     /// Why an ingredient nobody chose for still has a plan; `nil` when a member chose it.
     static func strategyNote(_ ingredient: SpecialtyIngredient) -> String? {
         guard ingredient.isResolvedByStrategy else { return nil }
-        return String(localized: "Nobody chose this — your household default picked it.")
+        return String(localized: "Nobody picked this. It's your household's default.")
     }
 
     /// "Changed by Ada Lovelace · Sep 15, 2026"; `nil` when nobody has ever set the strategy.

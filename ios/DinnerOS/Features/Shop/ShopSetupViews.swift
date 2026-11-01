@@ -181,22 +181,8 @@ struct ShopStoreFields: View {
         }
     }
 
-    @ViewBuilder
     private var walmartStoreNumber: some View {
-        Section {
-            TextField("Store Number", text: $storeNumber, prompt: Text("Optional, for example 1234"))
-                .keyboardType(.numberPad)
-                .disabled(!isEditable)
-            if let error = ShoppingStoreNumber.error(storeNumber) {
-                FormErrorLabel(message: error)
-            }
-        } header: {
-            Text("Store Number")
-        } footer: {
-            Text(
-                "Optional. Cart links use this store for pickup and delivery. It's printed near the top of a Walmart receipt (ST# 1234) and is the number in your store's web address, walmart.com/store/1234. Leave it empty to let Walmart choose."
-            )
-        }
+        WalmartStoreNumberSection(storeNumber: $storeNumber, isEditable: isEditable, showsCommission: false)
     }
 }
 
@@ -255,7 +241,9 @@ struct ShopStoreSettingsSheet: View {
                     Text("Your Stores")
                 } footer: {
                     if shopping.canSwitchStores {
-                        Text("Weeks shop at your default store. Change a week's store at the top of Shop.")
+                        Text(
+                            "Your shopping list goes to your default store. To use another store for one week, change it at the top of Shop."
+                        )
                     }
                 }
                 if shopping.canEdit, !addable.isEmpty {
@@ -393,7 +381,9 @@ struct ShopStoreEditForm: View {
                 }
             }
             if isKroger {
-                KrogerStoreFields(store: $krogerStore, isEditable: shopping.canEdit)
+                KrogerStoreFields(
+                    store: $krogerStore, isEditable: shopping.canEdit,
+                    confirm: StoreConfirm(title: isNew ? "Add \(name)" : "Save", isEnabled: canSave, action: save))
             } else {
                 walmartStoreNumber
             }
@@ -401,7 +391,7 @@ struct ShopStoreEditForm: View {
                 Section {
                     Toggle("Make Default", isOn: $makeDefault)
                 } footer: {
-                    Text("Weeks shop at your default store unless you pick another.")
+                    Text("Your shopping list goes to this store unless you choose a different one for a week.")
                 }
             }
         }
@@ -423,27 +413,10 @@ struct ShopStoreEditForm: View {
         }
     }
 
-    @ViewBuilder
     private var walmartStoreNumber: some View {
-        Section {
-            TextField("Store Number", text: $storeNumber, prompt: Text("Optional, for example 1234"))
-                .keyboardType(.numberPad)
-                .disabled(!shopping.canEdit)
-            if let error = ShoppingStoreNumber.error(storeNumber) {
-                FormErrorLabel(message: error)
-            }
-        } header: {
-            Text("Store Number")
-        } footer: {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(
-                    "Optional. Cart links use this store for pickup and delivery. It's printed near the top of a Walmart receipt (ST# 1234) and is the number in your store's web address, walmart.com/store/1234. Leave it empty to let Walmart choose."
-                )
-                if shopping.walmart?.affiliateTracked == true {
-                    Text("\(configuration.displayName) may earn a commission on Walmart purchases.")
-                }
-            }
-        }
+        WalmartStoreNumberSection(
+            storeNumber: $storeNumber, isEditable: shopping.canEdit,
+            showsCommission: shopping.walmart?.affiliateTracked == true)
     }
 
     private func save() {
@@ -471,27 +444,39 @@ struct ShopStoreEditForm: View {
     }
 }
 
+/// The button a store finder shows under the store just picked, so the next step is plain.
+struct StoreConfirm {
+    let title: String
+    let isEnabled: Bool
+    let action: () -> Void
+}
+
 /// Fry's: the household's sign-in, and its store from the store finder.
 struct KrogerStoreFields: View {
     @Binding var store: ShoppingStoreLocation?
     let isEditable: Bool
+    /// Shown under a newly picked store; `nil` when the screen's own button is right below.
+    var confirm: StoreConfirm? = nil
 
     @Environment(ShoppingStore.self) private var shopping
     @Environment(HouseholdStore.self) private var households
     @Environment(\.appConfiguration) private var configuration
 
-    @State private var zip = ""
-    @FocusState private var zipFocused: Bool
-    @State private var stores: [ShoppingStoreLocation] = []
-    @State private var isSearching = false
-    @State private var errorMessage: String?
+    @State private var finder = StoreFinderState()
+    @State private var didStart = false
+    @State private var signInError: String?
     @State private var signInService = StoreSignInService()
+    @State private var locator = CoreLocationZIPLocator()
 
     private var name: String { shopping.krogerName }
-    private var isValidZip: Bool { zip.count == 5 && zip.allSatisfy { $0.isASCII && $0.isNumber } }
+    private var selected: ShoppingStoreLocation? { store ?? currentStore }
+    private var pickedNew: Bool { store != nil && store?.storeID != currentStore?.storeID }
 
     var body: some View {
         Section {
+            if let signInError {
+                FormErrorLabel(message: signInError)
+            }
             if shopping.isSignedIn {
                 Label("Signed In", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.tint)
@@ -518,36 +503,64 @@ struct KrogerStoreFields: View {
             )
         }
         Section {
-            if let errorMessage {
-                FormErrorLabel(message: errorMessage)
-            }
-            if let current = store ?? currentStore {
-                storeRow(current, selected: true)
-            }
-            HStack {
-                TextField("ZIP Code", text: $zip, prompt: Text("ZIP code"))
-                    .keyboardType(.numberPad)
-                    .textContentType(.postalCode)
-                    .focused($zipFocused)
-                    .disabled(!isEditable)
-                Button("Find Stores", action: find)
-                    .disabled(!isEditable || !isValidZip || isSearching)
-            }
-            if isSearching {
-                ProgressView()
-            }
-            ForEach(stores.filter { $0.storeID != (store ?? currentStore)?.storeID }) { location in
+            StoreFinderMessage(finder: finder)
+            if let selected, !finder.isExpanded {
                 Button {
-                    store = location
+                    withAnimation { finder.isExpanded = true }
                 } label: {
-                    storeRow(location, selected: false)
+                    StoreLocationRow(location: selected, isSelected: true, showsChange: isEditable)
                 }
                 .disabled(!isEditable)
+                .accessibilityHint("Shows other stores to choose from")
+                if pickedNew, let confirm {
+                    Button(action: confirm.action) {
+                        Text(confirm.title)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(!confirm.isEnabled)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                }
+            } else {
+                StoreFinderZIPRow(finder: finder, isEditable: isEditable, find: find, locate: locate)
+                if finder.isBusy {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                }
+                if let selected, !finder.stores.contains(where: { $0.storeID == selected.storeID }) {
+                    Button {
+                        withAnimation { finder.didPick() }
+                    } label: {
+                        StoreLocationRow(location: selected, isSelected: true)
+                    }
+                    .disabled(!isEditable)
+                }
+                ForEach(finder.stores) { location in
+                    Button {
+                        store = location
+                        withAnimation { finder.didPick() }
+                    } label: {
+                        StoreLocationRow(location: location, isSelected: location.storeID == selected?.storeID)
+                    }
+                    .disabled(!isEditable)
+                }
             }
         } header: {
             Text("Your \(name)")
         } footer: {
-            Text("Your list goes to this store's cart for pickup or delivery.")
+            if finder.isExpanded, selected == nil || finder.hasSearched {
+                Text("Pick the store you shop at. Your list goes to its cart for pickup or delivery.")
+            } else {
+                Text("Your list goes to this store's cart for pickup or delivery.")
+            }
+        }
+        .onAppear {
+            guard !didStart else { return }
+            didStart = true
+            finder.start(savedZIP: households.storeFinderZIP, hasStore: selected != nil)
+            // Coming back to add a store: search the saved ZIP code straight away.
+            if selected == nil, finder.isValidZIP, isEditable { find() }
         }
     }
 
@@ -559,7 +572,44 @@ struct KrogerStoreFields: View {
         return ShoppingStoreLocation(storeID: id, name: saved.storeName ?? name, address: "")
     }
 
-    private func storeRow(_ location: ShoppingStoreLocation, selected: Bool) -> some View {
+    private func find() {
+        Task {
+            await finder.find(
+                using: { try await shopping.findStores(zip: $0) },
+                remember: { await households.rememberZIP($0) },
+                storeName: name,
+                message: { ShopErrors.message(for: $0, households: households) })
+        }
+    }
+
+    private func locate() {
+        Task {
+            if await finder.fillZIP(with: locator) { find() }
+        }
+    }
+
+    private func run(_ action: @escaping @MainActor () async throws -> Void) {
+        Task {
+            signInError = nil
+            do {
+                try await action()
+            } catch is CancellationError {
+                return
+            } catch {
+                signInError = ShopErrors.message(for: error, households: households)
+            }
+        }
+    }
+}
+
+/// One store in a finder's list: name, address, and a checkmark on the picked one. Folded
+/// down, it also says it can be tapped to change.
+struct StoreLocationRow: View {
+    let location: ShoppingStoreLocation
+    let isSelected: Bool
+    var showsChange = false
+
+    var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(location.name)
@@ -571,46 +621,172 @@ struct KrogerStoreFields: View {
                 }
             }
             Spacer()
-            if selected {
+            if showsChange {
+                Text("Change")
+                    .font(.subheadline)
+                    .foregroundStyle(.tint)
+            }
+            if isSelected {
                 Image(systemName: "checkmark")
                     .foregroundStyle(.tint)
                     .accessibilityHidden(true)
             }
         }
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+/// A store finder's error, with a way to Settings when location is off.
+struct StoreFinderMessage: View {
+    let finder: StoreFinderState
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        if let message = finder.errorMessage {
+            FormErrorLabel(message: message)
+            if finder.locationDenied, let url = URL(string: UIApplication.openSettingsURLString) {
+                Button("Open Settings") { openURL(url) }
+            }
+        }
+    }
+}
+
+/// The ZIP code field: type it or fill it in from where you are, then Find Stores. The number
+/// pad has no Return key, so a bar above it has Find Stores and Done.
+struct StoreFinderZIPRow: View {
+    @Bindable var finder: StoreFinderState
+    let isEditable: Bool
+    var findTitle: LocalizedStringKey = "Find Stores"
+    let find: () -> Void
+    let locate: () -> Void
+
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            TextField("ZIP Code", text: $finder.zip, prompt: Text("ZIP code"))
+                .keyboardType(.numberPad)
+                .textContentType(.postalCode)
+                .submitLabel(.search)
+                .focused($isFocused)
+                .onSubmit(search)
+            Button(action: useLocation) {
+                if finder.isLocating {
+                    ProgressView()
+                } else {
+                    Image(systemName: "location")
+                }
+            }
+            .buttonStyle(.borderless)
+            .disabled(finder.isBusy)
+            .accessibilityLabel("Use My Location")
+            Button(findTitle, action: search)
+                .buttonStyle(.borderless)
+                .disabled(!finder.isValidZIP || finder.isBusy)
+        }
+        .disabled(!isEditable)
+        .toolbar {
+            if isFocused {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Button(findTitle, action: search)
+                        .disabled(!finder.isValidZIP)
+                    Spacer()
+                    Button("Done") { isFocused = false }
+                }
+            }
+        }
+    }
+
+    private func search() {
+        guard finder.isValidZIP else { return }
+        isFocused = false
+        find()
+    }
+
+    private func useLocation() {
+        isFocused = false
+        locate()
+    }
+}
+
+/// Walmart's optional store number, and a way to look it up near a ZIP code on walmart.com.
+/// Walmart doesn't let apps list its stores, so the number is typed in.
+struct WalmartStoreNumberSection: View {
+    @Binding var storeNumber: String
+    let isEditable: Bool
+    let showsCommission: Bool
+
+    @Environment(HouseholdStore.self) private var households
+    @Environment(\.appConfiguration) private var configuration
+    @Environment(\.openURL) private var openURL
+
+    @State private var finder = StoreFinderState()
+    @State private var didStart = false
+    @State private var locator = CoreLocationZIPLocator()
+
+    var body: some View {
+        Section {
+            TextField("Store Number", text: $storeNumber, prompt: Text("Optional, for example 1234"))
+                .keyboardType(.numberPad)
+                .keyboardDoneButton()
+                .disabled(!isEditable)
+            if let error = ShoppingStoreNumber.error(storeNumber) {
+                FormErrorLabel(message: error)
+            }
+        } header: {
+            Text("Store Number")
+        } footer: {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(
+                    "Optional. Your cart uses this store for pickup and delivery. Leave it empty to let Walmart choose."
+                )
+                if showsCommission {
+                    Text("\(configuration.displayName) may earn a commission on Walmart purchases.")
+                }
+            }
+        }
+        if isEditable {
+            Section {
+                StoreFinderMessage(finder: finder)
+                StoreFinderZIPRow(finder: finder, isEditable: isEditable, find: find, locate: locate)
+            } header: {
+                Text("Find Your Store Number")
+            } footer: {
+                Text(
+                    "Opens Walmart's store finder. The number is on the store's page, in its web address (walmart.com/store/1234), and near the top of your receipt (ST# 1234)."
+                )
+            }
+            .onAppear {
+                guard !didStart else { return }
+                didStart = true
+                finder.start(savedZIP: households.storeFinderZIP, hasStore: false)
+            }
+        }
     }
 
     private func find() {
-        zipFocused = false
-        Task {
-            isSearching = true
-            defer { isSearching = false }
-            errorMessage = nil
-            do {
-                stores = try await shopping.findStores(zip: zip)
-                if stores.isEmpty {
-                    errorMessage = String(localized: "No \(name) stores near that ZIP code.")
-                }
-            } catch is CancellationError {
-                return
-            } catch {
-                errorMessage = ShopErrors.message(for: error, households: households)
-            }
-        }
+        guard let url = WalmartStoreFinder.url(zip: finder.zip) else { return }
+        openURL(url)
+        let zip = finder.zip
+        Task { await households.rememberZIP(zip) }
     }
 
-    private func run(_ action: @escaping @MainActor () async throws -> Void) {
+    private func locate() {
         Task {
-            errorMessage = nil
-            do {
-                try await action()
-            } catch is CancellationError {
-                return
-            } catch {
-                errorMessage = ShopErrors.message(for: error, households: households)
-            }
+            if await finder.fillZIP(with: locator) { find() }
         }
+    }
+}
+
+/// walmart.com's store finder, opened at a ZIP code.
+enum WalmartStoreFinder {
+    static func url(zip: String) -> URL? {
+        guard ZIPCode.isValid(zip) else { return nil }
+        var components = URLComponents(string: "https://www.walmart.com/store-finder")
+        components?.queryItems = [URLQueryItem(name: "location", value: zip)]
+        return components?.url
     }
 }
 

@@ -210,7 +210,7 @@ struct GetStartedSection: View {
 
     private func unavailable(_ reason: FirstRunRecipes.Unavailable) -> some View {
         blurb(
-            title: String(localized: "Start from the catalog"),
+            title: String(localized: "Start from our recipes"),
             detail: {
                 switch reason {
                 case .noPermission:
@@ -239,7 +239,7 @@ struct GetStartedSection: View {
     private var secondaryActions: some View {
         VStack(alignment: .leading, spacing: 12) {
             NavigationLink(value: DiscoverRoute()) {
-                Label("Browse the Catalog", systemImage: "sparkles")
+                Label("Browse Recipes", systemImage: "sparkles")
             }
             if canAddOwnRecipe {
                 Button {

@@ -186,7 +186,7 @@ struct IngredientRow: View {
                         Button("Never Make It", systemImage: "nosign") { leaveOut(.always) }
                     }
                 } else {
-                    Section("Leave Out \(line.name)") {
+                    Section("Skip \(line.name)") {
                         Button("Just This Dish", systemImage: "fork.knife") { leaveOut(.recipe) }
                         Button("Every Dish (Always)", systemImage: "nosign") { leaveOut(.always) }
                     }
@@ -197,7 +197,7 @@ struct IngredientRow: View {
                     .foregroundStyle(.secondary)
                     .frame(minWidth: 44, minHeight: 44)
             }
-            .accessibilityLabel(state?.isComponent == true ? "Don't Make \(line.name)" : "Leave Out \(line.name)")
+            .accessibilityLabel(state?.isComponent == true ? "Don't Make \(line.name)" : "Skip \(line.name)")
         }
     }
 

@@ -251,7 +251,7 @@ nonisolated enum ShopMealText {
     /// Under a meal that shares a line waiting on a decision under another meal.
     static func decideUnder(_ row: ShopMealLayout.Row) -> String {
         let meal = row.boughtWith ?? String(localized: "another meal")
-        return String(localized: "Decide on it under \(meal)")
+        return String(localized: "Choose what to do under \(meal)")
     }
 
     /// Under a meal that shares a purchase listed with another meal: where it's bought, and the

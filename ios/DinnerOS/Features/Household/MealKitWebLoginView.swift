@@ -433,7 +433,7 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
         phase = .failed(
             String(
                 localized:
-                    "We couldn't load the \(service.displayName) sign-in page. Check your connection. (Error \(code))"),
+                    "We couldn't load the \(service.displayName) sign-in page. Check your connection."),
             canRetry: true)
     }
 }

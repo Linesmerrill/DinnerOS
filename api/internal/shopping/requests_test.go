@@ -50,7 +50,7 @@ func TestNewStoreRequestRejectsSupportedStore(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := newStoreRequest(requestActor(), tc.in, liveWalmart())
-			wantInvalid(t, err, "already supported")
+			wantInvalid(t, err, "already available")
 		})
 	}
 }
@@ -118,7 +118,7 @@ func TestStoreRequestsFollowTheEnabledStores(t *testing.T) {
 	}
 	withFrys := append(liveWalmart(), providers.NewKroger("frys"))
 	_, err := newStoreRequest(requestActor(), StoreRequestInput{Name: "Frys Food and Drug"}, withFrys)
-	wantInvalid(t, err, "already supported")
+	wantInvalid(t, err, "already available")
 	if _, err := newStoreRequest(requestActor(), StoreRequestInput{Key: "walmart"}, nil); err != nil {
 		t.Errorf("walmart with nothing enabled = %v, want it accepted", err)
 	}

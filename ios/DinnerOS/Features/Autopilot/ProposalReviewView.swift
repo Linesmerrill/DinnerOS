@@ -293,10 +293,10 @@ struct ProposalSlotRow: View {
         .foregroundStyle(Color.primary)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
-        .accessibilityValue(isIncluded ? Text("Included") : Text("Left out"))
+        .accessibilityValue(isIncluded ? Text("Included") : Text("Skipped"))
         .accessibilityActions {
             if canEdit {
-                Button(isIncluded ? "Leave Out" : "Include") { setIncluded(!isIncluded) }
+                Button(isIncluded ? "Skip" : "Include") { setIncluded(!isIncluded) }
                 Button("Swap", action: swap)
                 ForEach(slot.pairings) { pairing in
                     let isChosen = isPairingChosen(pairing.id)

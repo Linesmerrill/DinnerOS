@@ -200,7 +200,7 @@ func TestIntegrationProductChecksHTTP(t *testing.T) {
 
 	code, body := do(http.MethodPost, handoffs, checks(""))
 	if errBody, _ := body["error"].(map[string]any); code != http.StatusConflict || errBody["code"] != "products_need_decision" ||
-		errBody["message"] != "Decide on these first: Ground Beef." {
+		errBody["message"] != "Choose what to do with these first: Ground Beef." {
 		t.Fatalf("undecided = %d %v", code, body)
 	}
 	if code, body = do(http.MethodPost, handoffs, checks(`,"decision":"send_anyway"`)); code != http.StatusBadRequest {
@@ -222,7 +222,7 @@ func TestIntegrationProductChecksHTTP(t *testing.T) {
 			left = e.(map[string]any)
 		}
 	}
-	if left["reason"] != "left_out_gone" || left["text"] != "Left out. No longer on Walmart." || left["product"].(map[string]any)["productId"] != "100000001" ||
+	if left["reason"] != "left_out_gone" || left["text"] != "Skipped. No longer on Walmart." || left["product"].(map[string]any)["productId"] != "100000001" ||
 		left["check"].(map[string]any)["decision"] != "leave_out" {
 		t.Errorf("not included = %v", left)
 	}

@@ -474,9 +474,9 @@ func TestPantryCapacity(t *testing.T) {
 		}
 	}
 	_, _, err := svc.Add(ctx, member(testHousehold), AddInput{Name: "One Too Many"})
-	wantValidation(t, err, "at most 1000 items")
+	wantValidation(t, err, "up to 1000 items")
 	_, err = svc.AddDefaultStaples(ctx, member(testHousehold))
-	wantValidation(t, err, "at most 1000 items")
+	wantValidation(t, err, "up to 1000 items")
 	// Merging into an existing item still works when full.
 	if _, created, err := svc.Add(ctx, member(testHousehold), AddInput{Name: "Item 7", Status: StatusLow}); err != nil || created {
 		t.Errorf("merge when full = created %v, %v", created, err)

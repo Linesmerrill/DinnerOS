@@ -44,7 +44,7 @@ struct MealKitImportOfferView: View {
                         title: "Add Recipes Myself",
                         detail: mealKit.isEnabled
                             ? "Skip the import. You can start it later from the Household tab."
-                            : "Recipe import isn't available on this server yet.",
+                            : "Recipe import isn't available yet.",
                         systemImage: "square.and.pencil")
                 }
             }

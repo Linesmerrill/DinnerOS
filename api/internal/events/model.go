@@ -404,6 +404,10 @@ type ShoppingStoreRequested struct {
 	// Catalog is true when Key names a curated catalog entry, and false when
 	// the member typed a store the catalog doesn't list.
 	Catalog bool `json:"catalog" bson:"catalog"`
+	// Source is how the member found it: catalog, nearby, or typed.
+	Source string `json:"source,omitempty" bson:"source,omitempty"`
+	// Custom is true for a typed name that matched no known store.
+	Custom bool `json:"custom,omitempty" bson:"custom,omitempty"`
 }
 
 // SpecialtyStrategyUpdated is the payload of specialty.strategy_updated: a

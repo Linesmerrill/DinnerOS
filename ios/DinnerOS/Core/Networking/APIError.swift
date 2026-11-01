@@ -111,16 +111,16 @@ extension APIError: LocalizedError {
                 String(localized: "Your sign-in couldn't be verified. Try again.")
             default:
                 status >= 500
-                    ? String(localized: "The server ran into a problem. Try again shortly.")
-                    : String(localized: "Something went wrong (\(code)).")
+                    ? String(localized: "Something went wrong on our end. Try again shortly.")
+                    : String(localized: "Something went wrong. Try again.")
             }
         case .transport(.notConnectedToInternet), .transport(.networkConnectionLost),
             .transport(.dataNotAllowed):
             String(localized: "You appear to be offline. Check your connection and try again.")
         case .transport:
-            String(localized: "Couldn't reach the server. Check your connection and try again.")
+            String(localized: "Couldn't connect. Check your connection and try again.")
         case .invalidResponse, .decoding:
-            String(localized: "The server sent an unexpected response.")
+            String(localized: "Something went wrong. Try again.")
         }
     }
 }

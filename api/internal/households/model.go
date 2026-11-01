@@ -116,6 +116,9 @@ type Household struct {
 	// the best-by date on a frozen bag (pantry.BestByWrapped). Read it
 	// through Wrap.
 	FreezerWrap string
+	// ZIP is the household's 5-digit US ZIP code, or "" when never given.
+	// The store finders prefill it (docs/shopping-providers.md#store-finder).
+	ZIP string
 	// CatalogSharing is what the household shares with other households'
 	// recipe browsing: CatalogSharingOff, CatalogSharingAll, or
 	// CatalogSharingChosen; "" is off. Read it through Sharing.
@@ -226,6 +229,8 @@ type HouseholdPatch struct {
 	FreezeMinOunces    *int
 	FreezerWrap        *string
 	CatalogSharing     *string
+	// ZIP sets the ZIP code, or removes it when it points at "".
+	ZIP *string
 	// SetMealKit sets MealKit, or removes it when MealKit is nil.
 	SetMealKit bool
 	MealKit    *MealKit
@@ -364,4 +369,17 @@ func validateServings(n int) error {
 		return invalid("defaultServings must be between 1 and 12")
 	}
 	return nil
+}
+
+// NormalizeZIP trims a ZIP code and checks it is five digits, or empty to
+// clear it.
+func NormalizeZIP(zip string) (string, error) {
+	zip = strings.TrimSpace(zip)
+	if zip == "" {
+		return "", nil
+	}
+	if len(zip) != 5 || strings.Trim(zip, "0123456789") != "" {
+		return "", invalid("Enter a 5-digit ZIP code.")
+	}
+	return zip, nil
 }

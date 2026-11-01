@@ -21,11 +21,11 @@ nonisolated struct RecipeIngredientState: Equatable, Sendable, Identifiable {
         switch leftOut?.scope {
         case .recipe?:
             isComponent
-                ? String(localized: "Not making this for this dish") : String(localized: "Left out of this dish")
+                ? String(localized: "Not making this for this dish") : String(localized: "Skipped in this dish")
         case .always?:
-            isComponent ? String(localized: "Never making this") : String(localized: "Left out of every dish")
+            isComponent ? String(localized: "Never making this") : String(localized: "Skipped in every dish")
         case nil: nil
-        default: String(localized: "Left out")
+        default: String(localized: "Skipped")
         }
     }
 

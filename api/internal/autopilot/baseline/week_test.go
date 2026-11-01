@@ -230,7 +230,7 @@ func TestMethodRules(t *testing.T) {
 			t.Errorf("pot pie rule reason = %q; want none", got)
 		}
 		i := slices.IndexFunc(res.Messages, func(m autopilot.Message) bool { return m.Code == "rule_method_unmet" })
-		if i < 0 || res.Messages[i].Text != "No smoker-friendly recipe fits Sunday; picked the best alternative." {
+		if i < 0 || res.Messages[i].Text != "No smoker-friendly recipe fits Sunday, so we picked the next best." {
 			t.Errorf("messages = %+v", res.Messages)
 		}
 
@@ -245,7 +245,7 @@ func TestMethodRules(t *testing.T) {
 			t.Fatalf("sunday = %s", describe(res))
 		}
 		i = slices.IndexFunc(res.Messages, func(m autopilot.Message) bool { return m.Code == "rule_method_unmet" })
-		if i < 0 || res.Messages[i].Text != "Sunday's smoker-friendly recipes didn't fit this week; picked the best alternative." {
+		if i < 0 || res.Messages[i].Text != "Sunday's smoker-friendly recipes didn't fit this week, so we picked the next best." {
 			t.Errorf("messages = %+v", res.Messages)
 		}
 	})
@@ -391,7 +391,7 @@ func TestFixedMealsAndShortCatalogs(t *testing.T) {
 	in.Preferences.PlanDays = autopilot.Days
 	in.Preferences.MealsPerWeek = 7
 	res = generate(t, p, in)
-	want := "Only 3 recipes match your preferences; planned 3 of 7 nights."
+	want := "Only 3 recipes match your preferences, so we planned 3 of 7 nights."
 	if res.Planned != 3 || len(res.Unfilled) != 4 || res.Messages[0].Text != want {
 		t.Errorf("short catalog = %s; want %q", describe(res), want)
 	}

@@ -400,10 +400,10 @@ struct GrocerySkipTests {
         skipper.stored = [
             GrocerySkip(
                 id: "s-curry", ingredientKey: "i-cilantro", key: "cilantro", name: "Cilantro", scope: .recipe,
-                week: nil, text: "Left out of Curry", recipeID: "r-curry"),
+                week: nil, text: "Skipped in Curry", recipeID: "r-curry"),
             GrocerySkip(
                 id: "s-tacos", ingredientKey: "i-cilantro", key: "cilantro", name: "Cilantro", scope: .recipe,
-                week: nil, text: "Left out of Tacos", recipeID: "r-tacos"),
+                week: nil, text: "Skipped in Tacos", recipeID: "r-tacos"),
             GrocerySkip(
                 id: "s-dill", ingredientKey: "name:dill", key: "dill", name: "Dill", scope: .always, week: nil,
                 text: "Never buying this"),
@@ -413,7 +413,7 @@ struct GrocerySkipTests {
         let leftOut = GroceryItem(
             ingredientKey: "i-cilantro", name: "Cilantro", amounts: [], quantityText: "¼ oz", unquantified: false,
             status: GroceryItemStatus(rawValue: "skipped"), recipes: [GroceryRecipe(id: "r-curry", name: "Curry")],
-            skipScope: .recipe, skipText: "Left out of Curry")
+            skipScope: .recipe, skipText: "Skipped in Curry")
 
         #expect(model.canPutBack(leftOut))
         await model.putBack(leftOut)
@@ -432,7 +432,7 @@ struct GrocerySkipTests {
         let skips = [
             GrocerySkip(
                 id: "s-crema", ingredientKey: "i-crema", key: "smoky red pepper crema", name: "Smoky Red Pepper Crema",
-                scope: .recipe, week: nil, text: "Left out of Tacos", recipeID: "r-tacos")
+                scope: .recipe, week: nil, text: "Skipped in Tacos", recipeID: "r-tacos")
         ]
 
         #expect(GrocerySkipMatching.skips(holdingBack: sourCream, in: skips).map(\.id) == ["s-crema"])
@@ -458,7 +458,7 @@ struct GrocerySkipTests {
              "skippedItems":[
                {"ingredientKey":"i-cilantro","name":"Cilantro","amounts":[],"quantityText":"¼ oz","unquantified":false,
                 "status":"skipped","recipes":[{"id":"r-curry","name":"Curry"}],"skipScope":"recipe",
-                "skipText":"Left out of Curry","shares":[]}]}
+                "skipText":"Skipped in Curry","shares":[]}]}
             """#.utf8)
         let list = try JSONDecoder().decode(GroceryList.self, from: json)
 

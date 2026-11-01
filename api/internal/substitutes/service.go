@@ -479,7 +479,7 @@ func (s *Service) CreateOption(ctx context.Context, actor households.Membership,
 		return Option{}, fmt.Errorf("count options: %w", err)
 	}
 	if n >= MaxOptionsPerSpecialty {
-		return Option{}, invalid("a specialty ingredient holds at most %d household options", MaxOptionsPerSpecialty)
+		return Option{}, invalid("You can add up to %d of your own options here.", MaxOptionsPerSpecialty)
 	}
 	now := s.timestamp()
 	o.HouseholdID, o.SpecialtyID, o.Source = actor.HouseholdID, sp.ID, SourceHousehold
@@ -592,7 +592,7 @@ func (s *Service) RecordBatch(ctx context.Context, actor households.Membership, 
 			}
 		}
 	}
-	notBatch := invalid("choose a house-made batch option for %s, or send its optionId", sp.Name)
+	notBatch := invalid("Choose a house-made batch for %s first.", sp.Name)
 	if optionID == "" || optionID == OptionAsIs {
 		return BatchResult{}, notBatch
 	}

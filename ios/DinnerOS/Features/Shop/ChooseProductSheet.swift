@@ -338,6 +338,7 @@ struct ChooseProductSheet: View {
         Section {
             TextField("Price", text: $draft.priceText, prompt: Text("Optional, for example 4.98"))
                 .keyboardType(.decimalPad)
+                .keyboardDoneButton()
                 .autocorrectionDisabled()
             if let error = draft.priceError {
                 FormErrorLabel(message: error)

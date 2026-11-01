@@ -221,7 +221,7 @@ func TestIntegrationSettingsAndPreferences(t *testing.T) {
 		t.Errorf("amazon error = %v", err)
 	}
 	_, err = f.svc.UpdateSettings(ctx, f.actor, "walmart", "store 12")
-	wantValidation(t, err, "storeId")
+	wantValidation(t, err, "store number")
 
 	beef := f.keys["Ground Beef"]
 	p, created, err := f.svc.PutPreference(ctx, f.actor, "walmart", beef, PreferenceInput{
@@ -360,7 +360,7 @@ func TestIntegrationHandoffAndConfirm(t *testing.T) {
 		t.Errorf("viewer error = %v", err)
 	}
 	_, _, err = f.svc.CreateHandoff(ctx, f.actor, testWeek, "walmart", MatchInput{Lines: []LineSelection{}})
-	wantValidation(t, err, "no grocery line")
+	wantValidation(t, err, "saved product")
 	h, isNew, err := f.svc.CreateHandoff(ctx, f.actor, testWeek, "walmart", MatchInput{CheckedOffKeys: []string{f.keys["Milk"]}})
 	if err != nil || !isNew || !h.Active || h.Revision != 1 {
 		t.Fatalf("CreateHandoff() = %+v, %v, %v", h, isNew, err)

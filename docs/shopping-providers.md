@@ -286,6 +286,22 @@ How it works:
   count as fluid ounces. Saving a result also saves its price.
 - No phone-side product checks: Kroger's search already answers for the store.
 
+## Store finder
+
+Finding a store starts from the household's ZIP code (`households.zip`,
+decision 654). Typing one, or tapping the location button (When In Use,
+reverse geocoded on the phone so only the ZIP code leaves it), searches and
+saves it; the next store screen starts with it.
+
+- **Kroger's banners:** the API's store finder lists stores near the ZIP code.
+  Picking one folds the list down to that store, with the Add button under
+  it; tapping the store opens the list again.
+- **Walmart:** Walmart doesn't let apps list its stores, so the ZIP code opens
+  walmart.com's store finder and the member types the store number.
+- **Request a Store:** Apple Maps' grocery stores near the ZIP code, closest
+  first with distance, before any typing (decision 655). See
+  [the API contract](api.md) for how a pick rolls up to its chain.
+
 ## Product matching
 
 A grocery line is an ingredient, amounts, and a category. A cart line is one

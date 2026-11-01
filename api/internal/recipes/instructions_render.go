@@ -953,7 +953,7 @@ func renderStep(step Step, mentions []mention, amounts stepAmounts) InstructionS
 			Prep: strings.TrimSpace(prep),
 		})
 		if m.leftOut {
-			note := "You leave out the " + m.name + "."
+			note := "You skip the " + m.name + "."
 			if !noted[note] {
 				noted[note] = true
 				out.Notes = append(out.Notes, StepNote{Kind: NoteLeftOut, SpecialtyID: m.specialtyID, Text: note})

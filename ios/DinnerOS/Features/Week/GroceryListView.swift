@@ -43,7 +43,7 @@ struct GroceryListView: View {
                 ContentUnavailableView {
                     Label("Couldn't Build the List", systemImage: "exclamationmark.triangle")
                 } description: {
-                    Text("This week's grocery list needs your household. Try again in a moment.")
+                    Text("Couldn't load your household. Try again in a moment.")
                 } actions: {
                     Button("Try Again") {
                         Task { await start() }
@@ -391,8 +391,16 @@ struct GroceryListContent: View {
                         showsSkipped = true
                     } label: {
                         HStack {
-                            Label("Everything You Leave Out", systemImage: "cart.badge.minus")
-                                .font(.subheadline)
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Skipped Items")
+                                    Text("Things you already have or chose not to buy")
+                                        .font(.footnote)
+                                }
+                            } icon: {
+                                Image(systemName: "cart.badge.minus")
+                            }
+                            .font(.subheadline)
                             Spacer(minLength: 0)
                             Image(systemName: "chevron.right")
                                 .font(.footnote)
@@ -403,7 +411,7 @@ struct GroceryListContent: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                 } header: {
-                    Text("Left Out")
+                    Text("Skipped")
                 } footer: {
                     Text("The recipes still call for these. You're just not buying them.")
                 }
@@ -461,7 +469,7 @@ struct GroceryListContent: View {
             if model.canSkip {
                 // "Just this dish": left out of one meal, and still bought for the others.
                 ForEach(item.recipes) { recipe in
-                    Button("Leave Out of \(recipe.name)", systemImage: "fork.knife") {
+                    Button("Skip in \(recipe.name)", systemImage: "fork.knife") {
                         Task { await model.skip(item, scope: .recipe, recipeID: recipe.id) }
                     }
                 }
@@ -719,7 +727,7 @@ struct LeftOutItemRow: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(
-                "\(item.name), left out. \(item.skipText ?? "")")
+                "\(item.name), skipped. \(item.skipText ?? "")")
             Spacer(minLength: 0)
             if isWorking {
                 ProgressView()

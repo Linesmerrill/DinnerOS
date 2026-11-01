@@ -320,6 +320,7 @@ struct PairingRuleEditor: View {
                 HStack {
                     TextField("Amount", text: $quantityText)
                         .keyboardType(.decimalPad)
+                        .keyboardDoneButton()
                         .onChange(of: quantityText) { _, text in
                             setQuantity(text)
                         }

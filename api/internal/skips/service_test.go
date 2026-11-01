@@ -283,7 +283,7 @@ func TestSetRecipeSkipIsOnePerIngredientAndRecipe(t *testing.T) {
 	if curry.IngredientKey != "name:fresh cilantro" {
 		t.Errorf("free-text key = %q, want it normalized like the list's", curry.IngredientKey)
 	}
-	if curry.RecipeID != testRecipe || curry.RecipeName != "Thai Coconut Curry Chicken" || curry.Text() != "Left out of Thai Coconut Curry Chicken" {
+	if curry.RecipeID != testRecipe || curry.RecipeName != "Thai Coconut Curry Chicken" || curry.Text() != "Skipped in Thai Coconut Curry Chicken" {
 		t.Errorf("recipe skip = %+v, want the curry's ID and name", curry)
 	}
 	again, created, err := svc.Set(ctx, editor(testHousehold), Input{

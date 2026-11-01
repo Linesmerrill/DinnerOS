@@ -459,7 +459,7 @@ struct SpecialtyBatchSheet: View {
                     Text(option.name)
                 } footer: {
                     Text(
-                        "The pantry starts a new estimate for \(ingredient.name) from this amount, and cooking recipes that use it counts against it."
+                        "We'll add \(ingredient.name) to the pantry with this amount and count it down as you cook."
                     )
                 }
             }

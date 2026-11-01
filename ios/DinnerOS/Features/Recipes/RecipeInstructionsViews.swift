@@ -179,7 +179,7 @@ struct InstructionStepRow: View {
                 InstructionStepText(step: step)
                     .opacity(step.leftOut ? 0.6 : 1)
                 if step.leftOut {
-                    Label("Nothing to do here: you leave out everything in this step.", systemImage: "forward")
+                    Label("Nothing to do here. You skip everything in this step.", systemImage: "forward")
                         .font(.footnote)
                         .foregroundStyle(Color.secondary)
                 }
@@ -248,7 +248,7 @@ struct InstructionNoteLabel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 10))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(note.isLeftOut ? "Left out. \(note.text)" : "Substitution. \(note.text)")
+        .accessibilityLabel(note.isLeftOut ? "Skipped. \(note.text)" : "Substitution. \(note.text)")
     }
 }
 
@@ -280,7 +280,7 @@ struct InstructionSubstitutionsFooter: View {
 
     @ViewBuilder
     private func unchosenRow(_ specialty: InstructionSpecialtyRef) -> some View {
-        let text = Text("\(specialty.name): no substitute chosen, so the steps read as the card wrote it.")
+        let text = Text("\(specialty.name): no swap chosen, so the steps match the recipe card.")
             .font(.footnote)
             .foregroundStyle(Color.secondary)
             .fixedSize(horizontal: false, vertical: true)

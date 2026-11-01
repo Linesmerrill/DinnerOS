@@ -16,21 +16,34 @@ import (
 // signal.
 
 type storeRequestDoc struct {
-	ID          bson.ObjectID `bson:"_id"`
-	HouseholdID bson.ObjectID `bson:"householdId"`
-	Key         string        `bson:"key"`
-	Name        string        `bson:"name"`
-	Note        string        `bson:"note,omitempty"`
-	RequestedBy bson.ObjectID `bson:"requestedBy"`
-	RequestedAt time.Time     `bson:"requestedAt"`
-	UpdatedAt   time.Time     `bson:"updatedAt"`
+	ID          bson.ObjectID  `bson:"_id"`
+	HouseholdID bson.ObjectID  `bson:"householdId"`
+	Key         string         `bson:"key"`
+	Name        string         `bson:"name"`
+	Note        string         `bson:"note,omitempty"`
+	Source      string         `bson:"source,omitempty"`
+	Custom      bool           `bson:"custom,omitempty"`
+	Place       *storePlaceDoc `bson:"place,omitempty"`
+	RequestedBy bson.ObjectID  `bson:"requestedBy"`
+	RequestedAt time.Time      `bson:"requestedAt"`
+	UpdatedAt   time.Time      `bson:"updatedAt"`
+}
+
+type storePlaceDoc struct {
+	Name    string `bson:"name,omitempty"`
+	Address string `bson:"address,omitempty"`
 }
 
 func (d storeRequestDoc) toStoreRequest() StoreRequest {
-	return StoreRequest{
+	r := StoreRequest{
 		ID: d.ID.Hex(), HouseholdID: d.HouseholdID.Hex(), Key: d.Key, Name: d.Name, Note: d.Note,
+		Source: d.Source, Custom: d.Custom,
 		RequestedBy: hexOrEmpty(d.RequestedBy), RequestedAt: d.RequestedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
 	}
+	if d.Place != nil {
+		r.Place = &StorePlace{Name: d.Place.Name, Address: d.Place.Address}
+	}
+	return r
 }
 
 // ListStoreRequests implements Store.
@@ -114,13 +127,19 @@ func (s *MongoStore) UpsertStoreRequest(ctx context.Context, r StoreRequest) (St
 	if err != nil {
 		return StoreRequest{}, false, err
 	}
+	set := bson.D{
+		{Key: "name", Value: r.Name}, {Key: "note", Value: r.Note}, {Key: "updatedAt", Value: r.UpdatedAt},
+		{Key: "source", Value: r.Source}, {Key: "custom", Value: r.Custom},
+	}
+	// A request without a place keeps the one picked before.
+	if r.Place != nil {
+		set = append(set, bson.E{Key: "place", Value: storePlaceDoc{Name: r.Place.Name, Address: r.Place.Address}})
+	}
 	update := bson.D{
 		{Key: "$setOnInsert", Value: bson.D{
 			{Key: "_id", Value: bson.NewObjectID()}, {Key: "requestedBy", Value: uid}, {Key: "requestedAt", Value: r.RequestedAt},
 		}},
-		{Key: "$set", Value: bson.D{
-			{Key: "name", Value: r.Name}, {Key: "note", Value: r.Note}, {Key: "updatedAt", Value: r.UpdatedAt},
-		}},
+		{Key: "$set", Value: set},
 	}
 	res, err := s.storeRequests.UpdateOne(ctx,
 		bson.D{{Key: "householdId", Value: hid}, {Key: "key", Value: r.Key}}, update, options.UpdateOne().SetUpsert(true))

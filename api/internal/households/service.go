@@ -230,6 +230,20 @@ func (s *Service) CatalogSharing(ctx context.Context, householdID string) (strin
 }
 
 // Update changes household settings. It requires household.update.
+// SetZIP saves the household's ZIP code for the store finders, or clears it
+// when zip is empty. Anyone who can set up shopping can change it, since
+// finding a store is where it's entered.
+func (s *Service) SetZIP(ctx context.Context, actor Membership, zip string) (Household, error) {
+	if !actor.Role.Can(PermShoppingEdit) {
+		return Household{}, ErrForbidden
+	}
+	zip, err := NormalizeZIP(zip)
+	if err != nil {
+		return Household{}, err
+	}
+	return s.store.UpdateHousehold(ctx, actor.HouseholdID, HouseholdPatch{ZIP: &zip}, s.now().UTC())
+}
+
 func (s *Service) Update(ctx context.Context, actor Membership, in UpdateInput) (Household, error) {
 	if !actor.Role.Can(PermHouseholdUpdate) {
 		return Household{}, ErrForbidden

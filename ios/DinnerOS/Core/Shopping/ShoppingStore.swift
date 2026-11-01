@@ -909,7 +909,7 @@ final class ShoppingStore {
             guard started == scope else { return }
             isCreatingHandoff = false
             isReviewingProducts = false
-            linkNotice = String(localized: "Nothing to add to your cart. You left out every item with a product.")
+            linkNotice = String(localized: "Nothing to add to your cart. You skipped every item that has a product.")
             await loadProposal(clearing: false)
             return
         } catch {

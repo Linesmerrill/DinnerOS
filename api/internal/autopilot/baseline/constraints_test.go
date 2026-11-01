@@ -101,7 +101,7 @@ func TestBusyWeekCaps(t *testing.T) {
 				t.Errorf("%s first reason = %+v, want %s", s.Day, s.Reasons, want)
 			}
 		}
-		want := "Only 3 quick recipes (≤20 min) match; planned 3 of 5 nights."
+		want := "Only 3 quick recipes (20 min or less) match, so we planned 3 of 5 nights."
 		if len(res.Messages) == 0 || res.Messages[0].Text != want {
 			t.Errorf("messages = %+v, want %q", res.Messages, want)
 		}
@@ -245,7 +245,7 @@ func TestSkippedWeeksAndDays(t *testing.T) {
 	if slotOn(res, autopilot.Wednesday) != nil || res.Planned != 4 {
 		t.Fatalf("skipping wednesday = %s", describe(res))
 	}
-	want := "Only 4 days are open this week; planned 4 of 5 meals."
+	want := "Only 4 days are open this week, so we planned 4 of 5 meals."
 	if !slices.ContainsFunc(res.Messages, func(m autopilot.Message) bool { return m.Text == want }) {
 		t.Errorf("messages = %+v, want %q", res.Messages, want)
 	}

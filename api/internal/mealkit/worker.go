@@ -512,7 +512,7 @@ func describe(err error, source string, retrying bool, at time.Time) *JobError {
 		return &JobError{Code: ErrCodeParse, Message: "We couldn't read " + name + "'s recipe pages. Nothing was changed in your recipes.", At: at}
 	}
 	if strings.Contains(err.Error(), "import fetched recipes") {
-		return &JobError{Code: ErrCodeImport, Message: "Saving your recipes failed." + next, At: at}
+		return &JobError{Code: ErrCodeImport, Message: "We couldn't save your recipes." + next, At: at}
 	}
 	return &JobError{Code: ErrCodeNetwork, Message: "We couldn't reach " + name + "." + next, At: at}
 }

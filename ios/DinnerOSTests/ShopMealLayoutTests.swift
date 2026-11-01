@@ -67,7 +67,7 @@ struct ShopMealLayoutTests {
     @Test func aMealsLeftOutShareIsStruckThroughUnderThatMealOnly() throws {
         let leftOut = with(
             ShoppingFixtures.excludedJSON(
-                key: "i-beef", name: "Ground Beef", reason: "skipped", text: "Left out of Chili",
+                key: "i-beef", name: "Ground Beef", reason: "skipped", text: "Skipped in Chili",
                 groceryStatus: "skipped"),
             #""skipScope":"recipe","recipes":[{"id":"r-chili","name":"Chili"}],"shares":[\#(share("r-chili", "Chili", "12 oz"))]"#
         )
@@ -115,7 +115,7 @@ struct ShopMealLayoutTests {
     @Test func aLeftOutComponentReadsAsNotMade() throws {
         let leftOut = with(
             ShoppingFixtures.excludedJSON(
-                key: "i-peppers", name: "Roasted Red Peppers", reason: "skipped", text: "Left out of Beef Tacos",
+                key: "i-peppers", name: "Roasted Red Peppers", reason: "skipped", text: "Skipped in Beef Tacos",
                 groceryStatus: "skipped"),
             #""skipScope":"recipe","shares":[\#(share("r-tacos", "Beef Tacos", "2 tsp", component: "Smoky Red Pepper Crema"))]"#
         )
@@ -159,7 +159,7 @@ struct ShopMealLayoutTests {
             from: Data(
                 with(
                     ShoppingFixtures.excludedJSON(
-                        key: "i-peppers", name: "Roasted Red Peppers", reason: "skipped", text: "Left out",
+                        key: "i-peppers", name: "Roasted Red Peppers", reason: "skipped", text: "Skipped",
                         groceryStatus: "skipped"),
                     #""skipScope":"recipe","shares":[\#(share("r-tacos", "Beef Tacos", "2 tsp", component: "Smoky Red Pepper Crema"))]"#
                 ).utf8))

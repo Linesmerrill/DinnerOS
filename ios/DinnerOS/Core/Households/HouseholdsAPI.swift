@@ -29,6 +29,13 @@ nonisolated struct HouseholdsAPI: Sendable {
             try APIRequest.patch("/api/v1/households/\(id)", body: changes).authorized(with: accessToken))
     }
 
+    /// Saves the household's ZIP code for the store finders; `nil` clears it.
+    func setZIP(householdID: String, zip: String?, accessToken: String) async throws -> Household {
+        try await client.send(
+            try APIRequest.put("/api/v1/households/\(householdID)/zip", body: HouseholdZIPBody(zip: zip))
+                .authorized(with: accessToken))
+    }
+
     func changeRole(householdID: String, userID: String, to role: HouseholdRole, accessToken: String)
         async throws -> HouseholdMember
     {
@@ -111,5 +118,15 @@ private nonisolated struct InvitationSecretBody: Encodable {
             token = nil
             code = value
         }
+    }
+}
+
+/// The body of `PUT /households/{id}/zip`; a `nil` ZIP is sent as null to clear it.
+nonisolated struct HouseholdZIPBody: Encodable, Sendable {
+    let zip: String?
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(["zip": zip])
     }
 }

@@ -70,7 +70,7 @@ struct AutopilotLearningView: View {
                 }
             } footer: {
                 Text(
-                    "Learning nudges suggestions a little. What you set in preferences always comes first, and allergies and exclusions are never overridden."
+                    "What Autopilot learns only nudges its picks. Your preferences come first, and it never ignores allergies or foods you excluded."
                 )
             }
             if canEdit {

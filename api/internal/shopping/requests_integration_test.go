@@ -161,9 +161,9 @@ func TestIntegrationStoreRequests(t *testing.T) {
 		{StoreRequestInput{}, "send key"},
 		{StoreRequestInput{Key: "kroger", Name: "Kroger"}, "not both"},
 		{StoreRequestInput{Key: "no-such-store"}, "catalog"},
-		{StoreRequestInput{Name: strings.Repeat("a", MaxStoreNameLength+1)}, "name must be at most"},
-		{StoreRequestInput{Name: "Kroger", Note: strings.Repeat("n", MaxStoreRequestNote+1)}, "note must be at most"},
-		{StoreRequestInput{Name: "!!!"}, "letter or digit"},
+		{StoreRequestInput{Name: strings.Repeat("a", MaxStoreNameLength+1)}, "up to 100 characters"},
+		{StoreRequestInput{Name: "Kroger", Note: strings.Repeat("n", MaxStoreRequestNote+1)}, "up to 280 characters"},
+		{StoreRequestInput{Name: "!!!"}, "Enter a store name"},
 	} {
 		_, _, err := f.svc.RequestStore(ctx, f.actor, tc.in)
 		wantValidation(t, err, tc.want)

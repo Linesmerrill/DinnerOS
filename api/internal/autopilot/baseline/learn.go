@@ -326,11 +326,11 @@ func times(n int) string {
 func itemText(il *itemLearning, value float64) string {
 	switch {
 	case value < 0 && il.swaps > 0 && il.rejects > 0:
-		return "You swapped this out " + times(il.swaps) + " and left it out " + times(il.rejects) + " recently"
+		return "You swapped this out " + times(il.swaps) + " and skipped it " + times(il.rejects) + " recently"
 	case value < 0 && il.swaps >= il.rejects:
 		return "You swapped this out " + times(il.swaps) + " recently"
 	case value < 0:
-		return "You left this out " + times(il.rejects) + " recently"
+		return "You skipped this " + times(il.rejects) + " recently"
 	case il.accepts == 1:
 		return "You kept it when Autopilot suggested it"
 	case il.accepts > 1:

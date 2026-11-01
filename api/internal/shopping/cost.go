@@ -355,10 +355,10 @@ func costSummary(c WeekCost) string {
 	var parts []string
 	switch {
 	case c.ItemsBought == 0 && c.OrderTotalCents != nil:
-		parts = append(parts, "Based on the order total; add item prices to see what's stocked for later.")
+		parts = append(parts, "Based on the order total. Add item prices to see what's stocked for later.")
 	case c.ItemsBought == 0:
 	case c.ItemsPriced == 0 && c.OrderTotalCents != nil:
-		parts = append(parts, fmt.Sprintf("No prices yet for the %s; the whole order total counts as used this week.", countWord(c.ItemsBought, "item", "items")))
+		parts = append(parts, fmt.Sprintf("No prices yet for the %s, so the whole order total counts as used this week.", countWord(c.ItemsBought, "item", "items")))
 	case c.ItemsPriced == 0:
 		parts = append(parts, "Add prices to see what this week cost.")
 	case c.ItemsPriced == c.ItemsBought:

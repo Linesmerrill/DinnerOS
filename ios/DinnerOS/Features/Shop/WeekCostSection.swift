@@ -163,6 +163,7 @@ struct OrderTotalSheet: View {
                 Section {
                     TextField("Order total (with fees, tax, and tip)", text: $text, prompt: Text("For example, 130.42"))
                         .keyboardType(.decimalPad)
+                        .keyboardDoneButton()
                     if let error = MoneyText.error(text) {
                         FormErrorLabel(message: error)
                     }
@@ -337,6 +338,7 @@ private struct LinePriceRow: View {
                 Spacer(minLength: 8)
                 TextField("Price", text: $text, prompt: Text("Price"))
                     .keyboardType(.decimalPad)
+                    .keyboardDoneButton()
                     .multilineTextAlignment(.trailing)
                     .frame(maxWidth: 100)
                     .accessibilityLabel("Price paid for \(line.name)")

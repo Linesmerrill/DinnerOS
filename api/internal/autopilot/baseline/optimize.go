@@ -175,9 +175,9 @@ func methodUnmet(s *slot) autopilot.Message {
 		names[i] = strings.ReplaceAll(method, "-", " ")
 	}
 	kind, day := strings.Join(names, " or ")+"-friendly", autopilot.Days[s.day].Name()
-	text := fmt.Sprintf("No %s recipe fits %s; picked the best alternative.", kind, day)
+	text := fmt.Sprintf("No %s recipe fits %s, so we picked the next best.", kind, day)
 	if slices.ContainsFunc(s.cands, func(c cand) bool { return suitsMethod(c.it, s.rule) }) {
-		text = fmt.Sprintf("%s's %s recipes didn't fit this week; picked the best alternative.", day, kind)
+		text = fmt.Sprintf("%s's %s recipes didn't fit this week, so we picked the next best.", day, kind)
 	}
 	return autopilot.Message{Code: "rule_method_unmet", Text: text}
 }
@@ -660,9 +660,9 @@ func (m *model) generate() autopilot.WeekResult {
 		msg := autopilot.Message{Code: "not_enough_candidates"}
 		switch {
 		case capMinutes > 0:
-			msg.Text = fmt.Sprintf("Only %s (≤%d min) %s; %s.", plural(matching, "quick recipe", "quick recipes"), capMinutes, verb(matching), nights)
+			msg.Text = fmt.Sprintf("Only %s (%d min or less) %s, so we %s.", plural(matching, "quick recipe", "quick recipes"), capMinutes, verb(matching), nights)
 		default:
-			msg.Text = fmt.Sprintf("Only %s %s your preferences; %s.", plural(matching, "recipe", "recipes"), verb(matching), nights)
+			msg.Text = fmt.Sprintf("Only %s %s your preferences, so we %s.", plural(matching, "recipe", "recipes"), verb(matching), nights)
 		}
 		res.Messages = append(res.Messages, msg)
 	}
@@ -674,7 +674,7 @@ func (m *model) generate() autopilot.WeekResult {
 	if len(days) < needed {
 		res.Messages = append(res.Messages, autopilot.Message{
 			Code: "not_enough_days",
-			Text: fmt.Sprintf("Only %s open this week; planned %d of %d meals.", plural(len(open), "day is", "days are"), res.Planned+len(m.fixed), res.Requested),
+			Text: fmt.Sprintf("Only %s open this week, so we planned %d of %d meals.", plural(len(open), "day is", "days are"), res.Planned+len(m.fixed), res.Requested),
 		})
 	}
 	if len(m.fixed) > 0 {
@@ -684,7 +684,7 @@ func (m *model) generate() autopilot.WeekResult {
 	}
 	if m.coldStart {
 		res.Messages = append(res.Messages, autopilot.Message{
-			Code: "cold_start", Text: "Autopilot is leaning on your taste profile until you rate and cook more meals.",
+			Code: "cold_start", Text: "Autopilot goes by your likes until you rate and cook more meals.",
 		})
 	}
 	res.Messages = append(res.Messages, m.contextMessages(slots)...)

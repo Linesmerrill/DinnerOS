@@ -108,7 +108,7 @@ func (w *Walmart) AffiliateTracked() bool { return w.affiliate != nil }
 // ProductURL implements GroceryProvider.
 func (*Walmart) ProductURL(productID string) string { return WalmartProductURL + productID }
 
-const walmartLinkHelp = "paste a Walmart product link such as https://www.walmart.com/ip/product-name/123456789, or its item ID"
+const walmartLinkHelp = "Paste a Walmart product link, like https://www.walmart.com/ip/product-name/123456789, or its item number."
 
 // ParseProduct implements GroceryProvider. It accepts a Walmart item ID, or
 // a walmart.com product link (/ip/<id> or /ip/<slug>/<id>, with any query
@@ -120,10 +120,10 @@ func (w *Walmart) ParseProduct(input string) (ProductRef, error) {
 	case s == "":
 		return ProductRef{}, invalid("%s", walmartLinkHelp)
 	case len(s) > MaxProductInputLength:
-		return ProductRef{}, invalid("a product link must be at most %d characters", MaxProductInputLength)
+		return ProductRef{}, invalid("That link is too long. Links can be up to %d characters.", MaxProductInputLength)
 	case digitsOnly.MatchString(s):
 		if !walmartItemID.MatchString(s) {
-			return ProductRef{}, invalid("a Walmart item ID is 5 to 15 digits")
+			return ProductRef{}, invalid("A Walmart item number is 5 to 15 digits.")
 		}
 		return ProductRef{ProductID: s, URL: w.ProductURL(s)}, nil
 	}
@@ -139,7 +139,7 @@ func (w *Walmart) ParseProduct(input string) (ProductRef, error) {
 		return ProductRef{}, invalid("%s", walmartLinkHelp)
 	}
 	if u.User != nil || u.Port() != "" || !walmartHosts[strings.ToLower(u.Hostname())] {
-		return ProductRef{}, invalid("only walmart.com product links are supported; %s", walmartLinkHelp)
+		return ProductRef{}, invalid("That isn't a Walmart link. %s", walmartLinkHelp)
 	}
 	segments := strings.Split(strings.TrimSuffix(strings.TrimPrefix(u.Path, "/"), "/"), "/")
 	var id, slug string
@@ -149,10 +149,10 @@ func (w *Walmart) ParseProduct(input string) (ProductRef, error) {
 	case len(segments) == 3 && segments[0] == "ip" && segments[1] != "":
 		id, slug = segments[2], segments[1]
 	default:
-		return ProductRef{}, invalid("that walmart.com link isn't a product page; %s", walmartLinkHelp)
+		return ProductRef{}, invalid("That Walmart link isn't a product page. %s", walmartLinkHelp)
 	}
 	if !walmartItemID.MatchString(id) {
-		return ProductRef{}, invalid("that walmart.com link has no item ID; %s", walmartLinkHelp)
+		return ProductRef{}, invalid("That Walmart link is missing the item number. %s", walmartLinkHelp)
 	}
 	ref := ProductRef{ProductID: id, URL: w.ProductURL(id)}
 	if words := slugWords(slug); len(words) > 0 {
@@ -269,7 +269,7 @@ func (*Walmart) NormalizeStoreID(storeID string) (string, error) {
 		s = strings.TrimLeft(s, "0")
 	}
 	if !walmartStoreID.MatchString(s) {
-		return "", invalid("storeId must be a Walmart store number (1 to 6 digits)")
+		return "", invalid("A Walmart store number is 1 to 6 digits.")
 	}
 	return s, nil
 }

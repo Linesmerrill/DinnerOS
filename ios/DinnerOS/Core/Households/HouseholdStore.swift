@@ -37,6 +37,8 @@ final class HouseholdStore {
     private(set) var phase: Phase = .idle
     private(set) var households: [HouseholdListItem] = []
     private(set) var current: HouseholdDetail?
+    /// A ZIP code typed into a store finder whose save hasn't reached the server.
+    private var pendingZIP: String?
     /// Pending invitations for `current`; empty without `members.invite`.
     private(set) var invitations: [HouseholdInvitation] = []
     /// Set when a reload failed while content stayed on screen.
@@ -369,6 +371,25 @@ final class HouseholdStore {
         ) { [weak self] changes in
             guard let self else { throw CancellationError() }
             return try await self.saveSettings(changes, householdID: householdID)
+        }
+    }
+
+    /// The ZIP code the store finders start with: the household's, or the last one typed here
+    /// when saving it hasn't reached the server yet.
+    var storeFinderZIP: String? { pendingZIP ?? current?.household.zip }
+
+    /// Saves the ZIP code a member used to find stores, so the next search starts with it.
+    /// Best effort: offline, or without permission, it's kept here until the app restarts.
+    func rememberZIP(_ zip: String) async {
+        guard let householdID = current?.household.id, zip != current?.household.zip else { return }
+        pendingZIP = zip
+        do {
+            _ = try await mutate { api, token in
+                try await api.setZIP(householdID: householdID, zip: zip, accessToken: token)
+            }
+            pendingZIP = nil
+        } catch {
+            Self.logger.notice("Saving the ZIP code failed: \(Self.describe(error), privacy: .public)")
         }
     }
 

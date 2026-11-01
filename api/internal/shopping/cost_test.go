@@ -132,7 +132,7 @@ func TestComputeWeekCost(t *testing.T) {
 	}
 	onlyTotal := computeWeekCost(costInput{week: "2026-W39", spend: &WeekSpend{OrderTotalCents: 13042}, meals: 4, kit: kit})
 	if *onlyTotal.UsedCents != 13042 || *onlyTotal.StockedCents != 0 || *onlyTotal.SavedCents != 4*2600-13042 ||
-		onlyTotal.Summary != "Based on the order total; add item prices to see what's stocked for later." {
+		onlyTotal.Summary != "Based on the order total. Add item prices to see what's stocked for later." {
 		t.Errorf("order total only = %+v", onlyTotal)
 	}
 }

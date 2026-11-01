@@ -117,7 +117,7 @@ struct RecipeLibraryTests {
             Issue.record("expected a failure, got \(library.phase)")
             return
         }
-        #expect(message.localizedCaseInsensitiveContains("server"))
+        #expect(message.localizedCaseInsensitiveContains("on our end"))
         #expect(library.items.isEmpty)
 
         await library.retry()

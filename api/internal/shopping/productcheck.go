@@ -153,7 +153,7 @@ func validateChecks(reports []ProductCheckReport, now time.Time) (map[string]Pro
 		case r.Decision != "" && r.Decision != DecisionSendAnyway && r.Decision != DecisionLeaveOut:
 			return nil, invalid("productChecks: decision must be send_anyway or leave_out")
 		case r.Status == ProductGone && r.Decision == DecisionSendAnyway:
-			return nil, invalid("productChecks: a product the provider no longer lists can't be sent; re-choose it or leave it out")
+			return nil, invalid("That product isn't sold there anymore. Choose another or skip it.")
 		case r.CheckedAt.IsZero():
 			return nil, invalid("productChecks: checkedAt is required")
 		case r.PriceCents != nil && (*r.PriceCents < 0 || *r.PriceCents > MaxPriceCents):

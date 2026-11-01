@@ -31,7 +31,7 @@ nonisolated struct HouseholdRole: RawRepresentable, Codable, Hashable, Sendable,
         switch self {
         case .admin: String(localized: "Can rename the household, invite people, and manage members.")
         case .member: String(localized: "Can plan meals, edit recipes, and update the pantry.")
-        default: String(localized: "Permissions are set by the server.")
+        default: String(localized: "What you can do depends on your role.")
         }
     }
 
@@ -107,10 +107,12 @@ nonisolated struct Household: Decodable, Equatable, Sendable, Identifiable {
     var freezerWrap: FreezerWrap = .vacuumSealed
     /// Which of the household's recipes other households can find and add. Off unless chosen.
     var catalogSharing: CatalogSharing = .off
+    /// The ZIP code last used to find a store, which the store finders fill in; `nil` until given.
+    var zip: String? = nil
 
     private enum CodingKeys: String, CodingKey {
         case id, name, defaultServings, timeZone, orderDay, createdBy, createdAt, updatedAt, mealKit, weekStartsOn,
-            thawReminderHour, freezeMinOunces, freezerWrap, catalogSharing
+            thawReminderHour, freezeMinOunces, freezerWrap, catalogSharing, zip
     }
 }
 
@@ -134,7 +136,8 @@ nonisolated extension Household {
                 ?? Household.defaultThawReminderHour,
             freezeMinOunces: try? container.decodeIfPresent(Int.self, forKey: .freezeMinOunces),
             freezerWrap: container.decodeLenient(FreezerWrap.self, forKey: .freezerWrap) ?? .vacuumSealed,
-            catalogSharing: container.decodeLenient(CatalogSharing.self, forKey: .catalogSharing) ?? .off)
+            catalogSharing: container.decodeLenient(CatalogSharing.self, forKey: .catalogSharing) ?? .off,
+            zip: try? container.decodeIfPresent(String.self, forKey: .zip))
     }
 
     /// The bag sizes the picker offers, in ounces. 0 stands for one dinner from the recipe.

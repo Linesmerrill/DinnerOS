@@ -219,7 +219,7 @@ struct PantryStoreTests {
             Issue.record("expected a failure, got \(store.phase)")
             return
         }
-        #expect(message.localizedCaseInsensitiveContains("server"))
+        #expect(message.localizedCaseInsensitiveContains("on our end"))
         #expect(store.items.isEmpty)
 
         await store.retry()

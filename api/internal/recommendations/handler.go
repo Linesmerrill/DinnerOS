@@ -1156,7 +1156,7 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 	case errors.Is(err, ErrProposalNotPending):
 		httpx.WriteError(w, r, http.StatusConflict, "proposal_not_pending", "the proposal was already accepted or rejected")
 	case errors.Is(err, ErrMealCooked):
-		httpx.WriteError(w, r, http.StatusConflict, "meal_cooked", "you've already cooked this meal; remove it instead")
+		httpx.WriteError(w, r, http.StatusConflict, "meal_cooked", "You already cooked this meal. Remove it instead.")
 	case errors.Is(err, ErrNoAlternative):
 		httpx.WriteError(w, r, http.StatusConflict, "no_alternative", publicMessage(err))
 	case errors.Is(err, ErrNothingToAccept):

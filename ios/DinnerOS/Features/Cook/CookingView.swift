@@ -490,7 +490,7 @@ struct CookIngredientList: View {
                         .strikethrough(isChecked || ingredient.isLeftOut)
                         .foregroundStyle(isChecked || ingredient.isLeftOut ? Color.secondary : Color.primary)
                     if ingredient.isLeftOut {
-                        Text("You leave this out")
+                        Text("You skip this")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

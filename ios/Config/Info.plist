@@ -30,7 +30,7 @@
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Autopilot checks how busy your evenings are to suggest quicker dinners on busy nights. Only "free", "some", or "busy" leaves your iPhone — never your events.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Autopilot uses your approximate location for the forecast, to suggest dinners that suit the weather. Your location never leaves your iPhone.</string>
+	<string>Your location helps suggest dinners that suit the weather and fills in your ZIP code when you look for a store. Only the ZIP code leaves your phone.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>Adds your week's grocery list to a Reminders list so you can use it while you shop.</string>
 	<key>NSSupportsLiveActivities</key>

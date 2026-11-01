@@ -161,7 +161,7 @@ struct ImportReviewView: View {
         } header: {
             Text("Other Gaps")
         } footer: {
-            Text("Things the recipe page left out. Nothing here can fill them in.")
+            Text("Things the recipe page didn't include. We can't fill them in.")
         }
     }
 

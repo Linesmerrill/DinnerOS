@@ -35,14 +35,14 @@ func (s *Service) RecordUse(ctx context.Context, actor households.Membership, id
 	}
 	est := s.Estimate(item, settings)
 	if est == nil || est.Remaining == nil {
-		return Item{}, invalid("there's no amount to take this from; set how much is left instead")
+		return Item{}, invalid("There's no amount to take this from. Set how much is left instead.")
 	}
 	used, ok := convertAmount(ratOf(quantity), unit, est.Unit, item.UnitSize)
 	if !ok {
 		used, ok = estimateAmount(ratOf(quantity), unit, est.Unit, item)
 	}
 	if !ok {
-		return Item{}, invalid("%s doesn't convert to %s; set how much is left instead", unit, est.Unit)
+		return Item{}, invalid("%s can't be converted to %s. Set how much is left instead.", unit, est.Unit)
 	}
 	left := roundRat(new(big.Rat).Sub(est.Remaining, used), 100)
 	if left.Sign() <= 0 {

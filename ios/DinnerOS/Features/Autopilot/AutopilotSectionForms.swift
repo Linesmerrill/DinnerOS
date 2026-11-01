@@ -288,7 +288,7 @@ private struct ScheduleSectionForm: View {
         } header: {
             Text("Weeknights")
         } footer: {
-            Text("A soft limit: Autopilot favors meals that fit on these nights.")
+            Text("Autopilot tries to pick meals that fit on these nights.")
         }
     }
 }

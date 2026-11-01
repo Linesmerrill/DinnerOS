@@ -105,7 +105,7 @@ func TestHandlerLeavesAnIngredientOutOfOneRecipe(t *testing.T) {
 		created.RecipeName == nil || *created.RecipeName != "Thai Coconut Curry Chicken" || created.Week != nil {
 		t.Errorf("created = %+v, want a recipe skip for the curry", created)
 	}
-	if created.Text != "Left out of Thai Coconut Curry Chicken" {
+	if created.Text != "Skipped in Thai Coconut Curry Chicken" {
 		t.Errorf("text = %q", created.Text)
 	}
 	// A household-wide skip says so with null recipe fields.

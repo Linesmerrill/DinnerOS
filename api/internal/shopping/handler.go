@@ -688,6 +688,17 @@ type StoreRequestRequest struct {
 	Key  string `json:"key"`
 	Name string `json:"name"`
 	Note string `json:"note"`
+	// Source is how the member found it: catalog, nearby, or typed.
+	// Absent reads as catalog with a key and typed with a name.
+	Source string `json:"source"`
+	// Place is the store location picked from nearby results.
+	Place *StorePlaceJSON `json:"place"`
+}
+
+// StorePlaceJSON is one store location.
+type StorePlaceJSON struct {
+	Name    string `json:"name"`
+	Address string `json:"address"`
 }
 
 // StoreRequestResponse is one household's request for a store.
@@ -697,6 +708,10 @@ type StoreRequestResponse struct {
 	Name   string      `json:"name"`
 	Status StoreStatus `json:"status"`
 	Note   *string     `json:"note"`
+	// Custom is true for a typed name that matched no known store.
+	Custom bool `json:"custom"`
+	// Place is the location picked from nearby stores, or null.
+	Place *StorePlaceJSON `json:"place"`
 	// RequestedBy and RequestedAt are the first request for this store.
 	RequestedBy string    `json:"requestedBy"`
 	RequestedAt time.Time `json:"requestedAt"`
@@ -724,10 +739,14 @@ func storeCatalogItemResponse(i CatalogItem) StoreCatalogItemResponse {
 }
 
 func storeRequestResponse(r StoreRequest) StoreRequestResponse {
-	return StoreRequestResponse{
-		ID: r.ID, Key: r.Key, Name: r.Name, Status: r.Status(), Note: optionalString(r.Note),
+	resp := StoreRequestResponse{
+		ID: r.ID, Key: r.Key, Name: r.Name, Status: r.Status(), Note: optionalString(r.Note), Custom: r.Custom,
 		RequestedBy: r.RequestedBy, RequestedAt: r.RequestedAt,
 	}
+	if r.Place != nil {
+		resp.Place = &StorePlaceJSON{Name: r.Place.Name, Address: r.Place.Address}
+	}
+	return resp
 }
 
 func optionalString(s string) *string {
@@ -962,19 +981,19 @@ func skippedText(e Excluded) string {
 			names = append(names, r.Name)
 		}
 		if len(names) > 0 {
-			return "Left out of " + strings.Join(names, ", ")
+			return "Skipped in " + strings.Join(names, ", ")
 		}
 	}
-	return "Left out"
+	return "Skipped"
 }
 
 func (v *responseView) sentText(provider providers.Key, l SentLine) string {
 	name := v.providerName(provider)
 	switch {
 	case l.RemovePackages > 0 && l.Reason == SentProductChanged:
-		return fmt.Sprintf("Replaced by another product; remove %d in the %s app", l.RemovePackages, name)
+		return fmt.Sprintf("Replaced by another product. Remove %d in the %s app.", l.RemovePackages, name)
 	case l.RemovePackages > 0:
-		return fmt.Sprintf("No longer on the list; remove %d in the %s app", l.RemovePackages, name)
+		return fmt.Sprintf("No longer on the list. Remove %d in the %s app.", l.RemovePackages, name)
 	}
 	return fmt.Sprintf("In %s cart · %d", name, l.SentPackages)
 }
@@ -994,7 +1013,7 @@ func (v *responseView) exclusionText(provider providers.Key, reason ExclusionRea
 	case ExcludedCheckedOff:
 		return "Already checked off"
 	case ExcludedByMember:
-		return "Left out"
+		return "Skipped"
 	case ExcludedNotSelected:
 		return "Not selected"
 	case ExcludedNoProduct:
@@ -1004,13 +1023,13 @@ func (v *responseView) exclusionText(provider providers.Key, reason ExclusionRea
 	case ExcludedOrdered:
 		return "Ordered this week"
 	case ExcludedProductGone:
-		return "No longer on " + v.providerName(provider) + ". Re-choose it or leave it out."
+		return "No longer on " + v.providerName(provider) + ". Choose another or skip it."
 	case ExcludedProductUnverified:
 		return "Couldn't check it on " + v.providerName(provider) + "."
 	case ExcludedLeftOutGone:
-		return "Left out. No longer on " + v.providerName(provider) + "."
+		return "Skipped. No longer on " + v.providerName(provider) + "."
 	case ExcludedLeftOutUnverified:
-		return "Left out. Couldn't check it on " + v.providerName(provider) + "."
+		return "Skipped. Couldn't check it on " + v.providerName(provider) + "."
 	}
 	return ""
 }
@@ -1576,7 +1595,11 @@ func (h *Handler) requestStore(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	saved, created, err := h.opts.Service.RequestStore(r.Context(), actor, StoreRequestInput(req))
+	in := StoreRequestInput{Key: req.Key, Name: req.Name, Note: req.Note, Source: req.Source}
+	if req.Place != nil {
+		in.Place = &StorePlace{Name: req.Place.Name, Address: req.Place.Address}
+	}
+	saved, created, err := h.opts.Service.RequestStore(r.Context(), actor, in)
 	if err != nil {
 		h.writeError(w, r, "request store failed", err)
 		return
@@ -1694,10 +1717,10 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 		httpx.WriteError(w, r, http.StatusServiceUnavailable, "provider_error", "The store isn't answering. Try again in a minute.")
 	case errors.Is(err, ErrEverythingLeftOut):
 		httpx.WriteError(w, r, http.StatusConflict, "nothing_to_send",
-			"Nothing to add to your cart. You left out every item with a product.")
+			"Nothing to add to your cart. You skipped every item that has a product.")
 	case errors.As(err, &decision):
 		httpx.WriteError(w, r, http.StatusConflict, "products_need_decision",
-			"Decide on these first: "+decision.Names()+".")
+			"Choose what to do with these first: "+decision.Names()+".")
 	case errors.As(err, &validation):
 		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", validation.Message)
 	case errors.As(err, &providerValidation):
@@ -1709,7 +1732,7 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, msg string,
 	case errors.Is(err, ErrUnknownProvider):
 		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "unknown shopping provider")
 	case errors.Is(err, ErrProviderUnavailable):
-		httpx.WriteError(w, r, http.StatusServiceUnavailable, "provider_unavailable", "this shopping provider isn't available yet")
+		httpx.WriteError(w, r, http.StatusServiceUnavailable, "provider_unavailable", "That store isn't available yet.")
 	case errors.Is(err, ErrNotFound), errors.Is(err, pantry.ErrNotFound):
 		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "saved product or handoff not found")
 	case errors.Is(err, ErrForbidden), errors.Is(err, pantry.ErrForbidden):

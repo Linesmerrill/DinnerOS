@@ -61,7 +61,7 @@ enum AutopilotPreviewData {
                            {"value":"soup","label":"Soup, stew & chili","recipeCount":44},
                            {"value":"tacos","label":"Tacos & Mexican","recipeCount":57},
                            {"value":"bowl","label":"Rice & grain bowls","recipeCount":47}],
-         "pairingFrequencies":[{"value":"always","label":"Always","description":"Included with the meal unless you leave it out"},
+         "pairingFrequencies":[{"value":"always","label":"Always","description":"Included with the meal unless you skip it"},
                                {"value":"suggest","label":"Suggest","description":"Offered with the meal"}],
          "catalogRecipeCount":3,
          "limits":{"maxListValues":30,"maxExcludedIngredients":50,"maxValueLength":40,"maxIngredientLength":60,

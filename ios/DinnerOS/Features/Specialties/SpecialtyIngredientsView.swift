@@ -129,7 +129,7 @@ struct SpecialtyIngredientsView: View {
                             settings: specialties.settings, error: specialties.settingsError)
                     }
                 } footer: {
-                    Text("What to do about the ones nobody has chosen an option for.")
+                    Text("What to do when nobody has picked an option.")
                 }
                 Section {
                     Text(

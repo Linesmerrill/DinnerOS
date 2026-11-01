@@ -368,7 +368,7 @@ func (s *Service) checkCapacity(ctx context.Context, householdID string, adding 
 		return fmt.Errorf("count pantry items: %w", err)
 	}
 	if n+adding > MaxItems {
-		return invalid("a pantry holds at most %d items", MaxItems)
+		return invalid("Your pantry can hold up to %d items.", MaxItems)
 	}
 	return nil
 }

@@ -684,9 +684,9 @@ func prepInstruction(card PrepCard) string {
 	reserved := amountText(card.Pack.Needed, card.Pack.Unit)
 	if !card.Pack.Freezable {
 		if len(card.Meals) == 0 {
-			return fmt.Sprintf("This week uses %s. Cook the rest again this week — it doesn't freeze back into itself.", reserved)
+			return fmt.Sprintf("This week uses %s. Cook the rest this week too. It doesn't freeze well.", reserved)
 		}
-		return fmt.Sprintf("Keep %s out for %s. Cook the rest again this week — it doesn't freeze back into itself.",
+		return fmt.Sprintf("Keep %s out for %s. Cook the rest this week too. It doesn't freeze well.",
 			reserved, mealsText(card.Meals))
 	}
 	each := amountText(card.Portions.PortionSize, card.Pack.Unit)

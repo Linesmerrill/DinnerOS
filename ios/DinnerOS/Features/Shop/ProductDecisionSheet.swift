@@ -63,7 +63,7 @@ struct ProductDecisionSheet: View {
             } header: {
                 Text("No Longer on Walmart")
             } footer: {
-                Text("These can't go in your cart. Choose a new product or leave them out.")
+                Text("These can't go in your cart. Choose a new product or skip them.")
             }
         }
         let unavailable = review.unavailable
@@ -105,8 +105,8 @@ struct ProductDecisionSheet: View {
             if remaining > 0 {
                 Text(
                     remaining == 1
-                        ? String(localized: "Decide on 1 item first.")
-                        : String(localized: "Decide on \(remaining) items first.")
+                        ? String(localized: "Choose what to do with 1 item first.")
+                        : String(localized: "Choose what to do with \(remaining) items first.")
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -168,7 +168,7 @@ private struct ProductDecisionRow: View {
                     .strikethrough(isGone)
                 if let decision {
                     Label(
-                        decision == .leaveOut ? "Left out of this cart" : "Sending anyway",
+                        decision == .leaveOut ? "Skipped this time" : "Sending anyway",
                         systemImage: decision == .leaveOut ? "minus.circle" : "checkmark.circle"
                     )
                     .font(.footnote.weight(.semibold))
@@ -196,16 +196,16 @@ private struct ProductDecisionRow: View {
             : AnyLayout(HStackLayout(spacing: 12))
         return VStack(alignment: .leading, spacing: 8) {
             layout {
-                Button("Re-choose", action: rechoose)
+                Button("Choose Another", action: rechoose)
                     .buttonStyle(.bordered)
-                    .accessibilityLabel("Re-choose the product for \(line.name)")
-                Button("Leave Out") { decide(.leaveOut) }
+                    .accessibilityLabel("Choose a different product for \(line.name)")
+                Button("Skip") { decide(.leaveOut) }
                     .buttonStyle(.bordered)
-                    .accessibilityLabel("Leave \(line.name) out of this cart")
+                    .accessibilityLabel("Skip \(line.name) this time")
                 if !isGone {
                     Button("Send Anyway") { decide(.sendAnyway) }
                         .buttonStyle(.bordered)
-                        .accessibilityLabel("Send \(line.name) without a check")
+                        .accessibilityLabel("Send \(line.name) anyway")
                 }
             }
             if let look {

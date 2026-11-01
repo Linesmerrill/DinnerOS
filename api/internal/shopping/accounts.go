@@ -232,7 +232,7 @@ func (s *Service) CompleteConnection(ctx context.Context, provider, state, code 
 		return Connection{}, err
 	}
 	if strings.TrimSpace(code) == "" {
-		return Connection{}, invalid("the sign-in returned no code")
+		return Connection{}, invalid("The sign-in didn't finish. Try again.")
 	}
 	token, err := account.ExchangeCode(ctx, code)
 	if err != nil {

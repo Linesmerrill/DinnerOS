@@ -137,7 +137,7 @@ struct AllMealsSection: View {
             ContentUnavailableView {
                 Label("No Recipes Yet", systemImage: "book.closed")
             } description: {
-                Text("Import the recipes you've ordered, browse the catalog, or type one in yourself.")
+                Text("Import the recipes you've ordered, browse our recipes, or type one in yourself.")
             } actions: {
                 if canEditRecipes {
                     NavigationLink(value: DiscoverRoute()) {

@@ -328,7 +328,7 @@ struct GroceryExportSection: View {
             Text("Export the List")
         } footer: {
             Text(
-                "A fallback when you're not ordering online: take the list to Reminders, AnyList, Messages, or Notes."
+                "Not ordering online? Send the list to Reminders, AnyList, Messages, or Notes."
             )
         }
     }
@@ -490,7 +490,7 @@ private struct ListAppExplainerSheet: View {
             List {
                 Section {
                     Text(
-                        "Copies the \(count) items you still need, one per line with their amounts. Nothing leaves your phone, and \(handoff.app.name) isn't opened for you."
+                        "Copies the \(count) items you still need, with amounts. Then open \(handoff.app.name) and paste."
                     )
                     .padding(.vertical, 2)
                     Text(handoff.app.pasteSteps)

@@ -560,9 +560,9 @@ func skipText(item grocery.Item) string {
 			names = append(names, s.RecipeName)
 		}
 		if len(names) == 0 {
-			return "Left out of one recipe"
+			return "Skipped in one recipe"
 		}
-		return "Left out of " + strings.Join(names, ", ")
+		return "Skipped in " + strings.Join(names, ", ")
 	}
 	return "Skipped this week"
 }

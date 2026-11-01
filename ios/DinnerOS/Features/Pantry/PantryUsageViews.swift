@@ -146,7 +146,7 @@ struct PantryUsageSections: View {
                 }
                 if item.isEstimatedLow {
                     Label(
-                        "The estimate marked this item low. Setting a status yourself replaces it.",
+                        "We guessed this is running low. Set a status yourself to change it.",
                         systemImage: "chart.line.downtrend.xyaxis"
                     )
                     .font(.footnote)
@@ -156,7 +156,7 @@ struct PantryUsageSections: View {
                 Text("Usage Estimate")
             } footer: {
                 Text(
-                    "Units that don't convert aren't guessed. Enter what you used, or correct the amount left above; your number wins."
+                    "Some amounts can't be converted, so they weren't counted. Enter what you used, or fix the amount left above."
                 )
             }
         } else {
@@ -546,7 +546,7 @@ struct PantryThresholdSheet: View {
                 }
             } footer: {
                 Text(
-                    "When an item with a recorded amount has used this much of what was bought, it's marked Estimated Low and the household is notified once per restock. An item can have its own threshold."
+                    "When this much of what you bought is used, the item is marked low and the household gets one alert. Each item can have its own amount."
                 )
             }
         } else if let loadError {
@@ -664,6 +664,7 @@ struct PantryRecordUseSheet: View {
                 Section {
                     TextField("Amount", text: $quantityText, prompt: Text("For example, 2"))
                         .keyboardType(.decimalPad)
+                        .keyboardDoneButton()
                     Picker("Unit", selection: $unit) {
                         ForEach(PantryUnit.options(including: unit), id: \.self) { code in
                             Text(PantryUnit.pickerLabel(code)).tag(code)

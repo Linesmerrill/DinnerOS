@@ -99,6 +99,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households` → `{items: [{household, role, permissions}]}` | bearer | 3 | ✅ |
 | GET | `/api/v1/households/{householdId}` → `{household, members, role, permissions}` | `household.view` | 3 | ✅ |
 | PATCH | `/api/v1/households/{householdId}` `{name?, timeZone?, defaultServings?, orderDay?, weekStartsOn?, mealKit?}` → household | `household.update` | 3 | ✅ |
+| PUT | `/api/v1/households/{householdId}/zip` `{zip: "85004" or null}` → household. The ZIP code the store finders fill in; `""` or `null` clears it, anything but 5 digits is `400` | `shopping.edit` | 8a | ✅ |
 | PATCH | `/api/v1/households/{householdId}/members/{userId}` `{role}` → member | `members.changeRole` | 3 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/members/{userId}` → `204` | `members.remove`, or your own ID to leave | 3 | ✅ |
 | POST | `/api/v1/households/{householdId}/invitations` `{email, role}` → `201 {invitation, code, emailDelivered}` | `members.invite`, rate limited | 3 | ✅ |
@@ -211,7 +212,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/shopping/savings` `?limit` → `{weeks, totalSavedCents, weeksCounted, mealKit}` | `household.view` | 8a | ✅ |
 | GET | `/api/v1/shopping/catalog` `?q` → `{items: [{key, name, kind, status, aliases, note, requestedByHousehold, requests}]}` | bearer | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/requests` → `{items}` | `household.view` | 8a | ✅ |
-| POST | `/api/v1/households/{householdId}/shopping/requests` `{key or name, note?}` → `201` `{request}`, or `200` when the note is updated | `household.view` | 8a | ✅ |
+| POST | `/api/v1/households/{householdId}/shopping/requests` `{key or name, note?, source?, place?}` → `201` `{request}`, or `200` when the note is updated | `household.view` | 8a | ✅ |
 | DELETE | `/api/v1/households/{householdId}/shopping/requests/{requestId}` → `204` | `household.view` | 8a | ✅ |
 | GET | `/api/v1/households/{householdId}/shopping/weeks/{week}/order` → `{week, orderDay, dueOn, due, remind, ordered, orderedBy, orderedAt}` | `household.view` | 8a | ✅ |
 | PUT | `/api/v1/households/{householdId}/shopping/weeks/{week}/order` `{ordered}` → order reminder | `shopping.edit` | 8a | ✅ |
@@ -2444,6 +2445,18 @@ withdraw one household's requests:
 - `GET` returns `{"items": [...]}` newest first. `DELETE` is `204`.
 - A household can ask for at most 25 stores; a new one past that is `409`.
   Updating a note still works at the cap.
+- `source` says how the member found the store: `catalog` (a catalog row),
+  `nearby` (a grocery store near the household from Apple Maps), or `typed`
+  (their own words, the last resort). Absent, it is `catalog` with a `key`
+  and `typed` with a `name`. A name, typed or from Maps, resolves to its chain
+  first: the store number and anything after ` - `, ` | `, `(`, or `,` are
+  dropped, then the longest catalog name or alias the rest starts with wins,
+  so `"Fry's Food Store #622"` records as Fry's and households asking for
+  different locations count as one store. A `typed` name that matches nothing
+  is saved with `custom: true`, to reconcile by hand.
+- `place` `{name, address}` (at most 100 and 200 characters) is the location
+  picked from nearby stores. A later request with a place replaces it; one
+  without keeps it. Responses carry `custom` and `place` (or `null`).
 
 ### Contract notes for iOS
 

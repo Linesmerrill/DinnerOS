@@ -90,7 +90,7 @@ struct AutopilotPreferencesView: View {
                 Text("Fine-tune Autopilot")
             } footer: {
                 Text(
-                    "Setup doesn't ask about these; Autopilot uses sensible defaults until you change them. Every change records who made it and when."
+                    "Setup doesn't ask about these. Autopilot uses the usual settings until you change them, and each change shows who made it."
                 )
             }
             // Per device and per member, so it shows whatever the member's role.

@@ -145,7 +145,7 @@ enum UsualsText {
     /// "Added 3 of your last 6 shopping weeks"
     static func why(_ item: UsualItem, window: Int) -> String {
         if item.pinned { return String(localized: "Pinned") }
-        return String(localized: "Added \(item.weeks) of your last \(window) shopping weeks")
+        return String(localized: "On your list \(item.weeks) of the last \(window) weeks")
     }
 
     /// "Milk", or "Milk × 2"

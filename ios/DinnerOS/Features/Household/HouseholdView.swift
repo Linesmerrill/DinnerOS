@@ -224,7 +224,7 @@ struct HouseholdView: View {
             Text(
                 mealKit.isEnabled
                     ? "Bring in the recipes you ordered. Nothing about your meal-kit account is saved — not your password, not your sign-in."
-                    : "Recipe import isn't switched on for this server."
+                    : "Recipe import isn't available yet."
             )
         }
     }
@@ -242,7 +242,7 @@ struct HouseholdView: View {
         } header: {
             Text("Imports")
         } footer: {
-            Text("Recipes the importer wasn't sure about. Tap one to decide.")
+            Text("Recipes we weren't sure about. Tap one to decide.")
         }
     }
 

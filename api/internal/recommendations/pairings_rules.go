@@ -76,7 +76,7 @@ const (
 
 // PairingFrequencyOptions are the rule frequencies.
 var PairingFrequencyOptions = []Option{
-	{Value: PairingAlways, Label: "Always", Description: "Included with the meal unless you leave it out"},
+	{Value: PairingAlways, Label: "Always", Description: "Included with the meal unless you skip it"},
 	{Value: PairingSuggest, Label: "Suggest", Description: "Offered with the meal"},
 }
 
