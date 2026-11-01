@@ -30,6 +30,8 @@ type GrocerySource interface {
 // Catalog resolves catalog ingredients. *recipes.Service implements it.
 type Catalog interface {
 	IngredientsByID(ctx context.Context, ids []string) ([]recipes.Ingredient, error)
+	// IngredientsByKey finds them by normalized name (Add Item).
+	IngredientsByKey(ctx context.Context, keys []string) ([]recipes.Ingredient, error)
 }
 
 // Pantry records confirmed orders and reads what weekly cost needs from them.

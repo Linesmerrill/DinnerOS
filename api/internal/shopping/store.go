@@ -136,4 +136,30 @@ type Store interface {
 	UpsertStoreRequest(ctx context.Context, r StoreRequest) (StoreRequest, bool, error)
 	// DeleteStoreRequest removes one of the household's store requests.
 	DeleteStoreRequest(ctx context.Context, householdID, id string) error
+
+	// ListAddedItems returns the household's added items for one week, or
+	// with week "" every one still kept, oldest first.
+	ListAddedItems(ctx context.Context, householdID, week string) ([]AddedItem, error)
+	// UpsertAddedItem saves a by (householdId, week, ingredientKey), keeping
+	// an existing one's ID, Name, and AddedBy, and reports whether it was
+	// created.
+	UpsertAddedItem(ctx context.Context, a AddedItem) (AddedItem, bool, error)
+	// DeleteAddedItem removes one of the household's added items.
+	DeleteAddedItem(ctx context.Context, householdID, id string) error
+	// DeleteAddedItemByKey removes the week's added item for an ingredient.
+	DeleteAddedItemByKey(ctx context.Context, householdID, week, ingredientKey string) error
+	// SentWeeks returns the weeks before before in which the household sent
+	// its list to a cart, in no order.
+	SentWeeks(ctx context.Context, householdID, before string) ([]string, error)
+	// ListUsualPrefs returns the household's pins and "not a usual" marks.
+	ListUsualPrefs(ctx context.Context, householdID string) ([]UsualPref, error)
+	// PutUsualPref creates or replaces one, by (householdId, ingredientKey).
+	PutUsualPref(ctx context.Context, p UsualPref) error
+	// DeleteUsualPref removes one, if it is there.
+	DeleteUsualPref(ctx context.Context, householdID, ingredientKey string) error
+	// GetUsualsPrompt returns the week's answered prompt, or ErrNotFound.
+	GetUsualsPrompt(ctx context.Context, householdID, week string) (UsualsPrompt, error)
+	// AnswerUsualsPrompt records the week's prompt as answered, keeping the
+	// first answer.
+	AnswerUsualsPrompt(ctx context.Context, p UsualsPrompt) error
 }

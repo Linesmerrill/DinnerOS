@@ -18,6 +18,7 @@ struct RootView: View {
     @Environment(EventReporter.self) private var events
     @Environment(NotificationStore.self) private var notifications
     @Environment(ShoppingStore.self) private var shopping
+    @Environment(UsualsStore.self) private var usuals: UsualsStore?
     @Environment(MenuStore.self) private var menu
     @Environment(MealPlanner.self) private var planner
     @Environment(PairingsStore.self) private var pairings
@@ -59,6 +60,8 @@ struct RootView: View {
                     // sign-out discards queued events.
                     if session.state == .signedOut {
                         events.reset()
+                        // Adds made offline belong to the user who made them.
+                        usuals?.reset()
                     }
                 }
             }

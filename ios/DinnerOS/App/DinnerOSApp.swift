@@ -30,6 +30,7 @@ struct DinnerOSApp: App {
                 .environment(dependencies.notifications)
                 .environment(dependencies.push)
                 .environment(dependencies.shopping)
+                .environment(dependencies.usuals)
                 .environment(dependencies.menu)
                 .environment(dependencies.planner)
                 .environment(dependencies.pairings)
@@ -47,6 +48,8 @@ struct DinnerOSApp: App {
                             await dependencies.pantry.refresh()
                             await dependencies.thaw.load()
                             await dependencies.shopping.reload()
+                            // Items added offline go now.
+                            await dependencies.usuals.flush()
                             await dependencies.recipes.refresh()
                             await dependencies.prefetch.run()
                         }

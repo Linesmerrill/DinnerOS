@@ -72,7 +72,7 @@ type Service struct {
 	// skips is optional; without it the household buys every ingredient.
 	skips SkipSource
 	// extras is optional; without it the list has only recipe lines.
-	extras ExtrasSource
+	extras []ExtrasSource
 	// customizations is optional; without it customized entries contribute
 	// their recipe as written (customization.go).
 	customizations CustomizationSource

@@ -521,6 +521,11 @@ nonisolated struct GroceryItem: Decodable, Equatable, Sendable, Identifiable {
         extras.filter { $0.origin == .pairing }
     }
 
+    /// The added items on this item (Add Item or usuals), which can be taken off the list.
+    var addedExtras: [GroceryExtra] {
+        extras.filter { $0.origin == .added }
+    }
+
     /// A specialty ingredient the household hasn't chosen an option for.
     var needsSpecialtyChoice: Bool {
         specialty && specialtyDetail != nil && specialtyDetail?.choiceType == nil
@@ -573,6 +578,8 @@ nonisolated struct GroceryExtra: Decodable, Equatable, Sendable, Identifiable {
 
         /// An accepted Autopilot pairing (docs/autopilot.md#add-on-pairings).
         static let pairing = Origin(rawValue: "pairing")
+        /// A member added it by hand, or from their usuals (decision 651).
+        static let added = Origin(rawValue: "added")
     }
 
     /// Identifies the extra where it is stored, so it can be removed.

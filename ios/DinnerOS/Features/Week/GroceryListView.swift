@@ -11,6 +11,7 @@ struct GroceryListView: View {
     @Environment(SpecialtyStore.self) private var specialties
     @Environment(GrocerySkipStore.self) private var grocerySkips
     @Environment(HouseholdStore.self) private var households
+    @Environment(UsualsStore.self) private var usuals: UsualsStore?
     /// `nil` outside the tab shell, where there is no Shop tab to switch to.
     @Environment(TabRouter.self) private var tabs: TabRouter?
     @State private var model: GroceryListModel?
@@ -74,6 +75,11 @@ struct GroceryListView: View {
             // The setup screen changed a choice or recorded a batch.
             Task { await model?.specialtiesDidChange() }
         }
+        // Added or removed items, or ones sent after being added offline.
+        .onChange(of: usuals?.revision) {
+            Task { await model?.load() }
+        }
+        .usualsPrompt(usuals, origin: .groceryList)
         .onChange(of: grocerySkips.revision) {
             // The review sheet resumed an ingredient or changed how long a skip lasts.
             Task { await model?.skipsDidChange() }
@@ -104,6 +110,13 @@ struct GroceryListView: View {
         // Lines confirmed as ordered on the Shop tab are checked off while this list was away.
         model.reloadChecks()
         await model.load()
+        // Building the week's list asks "Add your usuals?" once.
+        if let usuals, let householdID = households.current?.household.id {
+            await usuals.load(week: week, householdID: householdID)
+            if canEditPlan {
+                usuals.ask(week: week, householdID: householdID, from: .groceryList)
+            }
+        }
     }
 }
 
@@ -113,6 +126,7 @@ struct GroceryListContent: View {
     @Environment(EventReporter.self) private var events
     @Environment(PairingsStore.self) private var pairings
     @Environment(HouseholdStore.self) private var households
+    @Environment(UsualsStore.self) private var usuals: UsualsStore?
 
     /// Hiding the action is a convenience; the API enforces `plan.edit`.
     private var canEditPlan: Bool {
@@ -120,6 +134,18 @@ struct GroceryListContent: View {
     }
 
     @State private var removeError: String?
+    @State private var isAddingItem = false
+
+    /// Adding items is a convenience to hide; the API enforces `plan.edit`.
+    private var canAddItems: Bool {
+        usuals != nil && households.access?.can(.planEdit) == true && households.current != nil
+    }
+
+    /// Items added on this device while offline, not on the server's list yet.
+    private var pendingItems: [NewGroceryItem] {
+        guard let usuals, let householdID = households.current?.household.id else { return [] }
+        return usuals.pendingItems(for: model.week, householdID: householdID)
+    }
 
     /// Items whose contributing recipes are shown.
     @State private var expanded: Set<String> = []
@@ -146,6 +172,11 @@ struct GroceryListContent: View {
                         }
                     }
                 }
+                if canAddItems {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Add Item", systemImage: "plus") { isAddingItem = true }
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu("More", systemImage: "ellipsis.circle") {
                         // Share already has its own button next to this menu.
@@ -162,6 +193,11 @@ struct GroceryListContent: View {
                 }
             }
             .groceryExportPrompts(exportController)
+            .sheet(isPresented: $isAddingItem) {
+                if let householdID = households.current?.household.id {
+                    AddItemSheet(week: model.week, householdID: householdID)
+                }
+            }
             .sheet(item: $picker) { specialty in
                 SpecialtyQuickPicker(specialty: specialty, model: model)
             }
@@ -315,6 +351,24 @@ struct GroceryListContent: View {
                     }
                 }
             }
+            if !pendingItems.isEmpty {
+                Section {
+                    ForEach(pendingItems, id: \.self) { item in
+                        Text(UsualsText.nameAndCount(item.name, count: item.count))
+                            .swipeActions(edge: .trailing) {
+                                Button("Remove", systemImage: "trash", role: .destructive) {
+                                    if let householdID = households.current?.household.id {
+                                        usuals?.removePending(item, week: model.week, householdID: householdID)
+                                    }
+                                }
+                            }
+                    }
+                } header: {
+                    Text("Added Offline")
+                } footer: {
+                    Text("These go on the list when you're back online.")
+                }
+            }
             ForEach(layout.categories) { category in
                 Section(category.title) {
                     ForEach(category.items) { item in
@@ -356,6 +410,8 @@ struct GroceryListContent: View {
             }
         }
         .refreshable {
+            // Items added offline go first, so the list that comes back has them.
+            await usuals?.flush()
             await model.load()
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -424,16 +480,27 @@ struct GroceryListContent: View {
         }
     }
 
-    /// The pairing extras this member may take off the list.
+    /// The pairing extras and added items this member may take off the list.
     private func removableExtras(_ item: GroceryItem) -> [GroceryExtra] {
-        guard canEditPlan, !pairings.isForbidden else { return [] }
-        return item.pairingExtras
+        var out: [GroceryExtra] = []
+        if canEditPlan, !pairings.isForbidden {
+            out += item.pairingExtras
+        }
+        if canAddItems {
+            out += item.addedExtras
+        }
+        return out
     }
 
     private func remove(_ extra: GroceryExtra) {
         Task {
             do {
-                try await pairings.removeGroceryItem(id: extra.id)
+                if extra.origin == .added {
+                    guard let usuals, let householdID = households.current?.household.id else { return }
+                    try await usuals.remove(itemID: extra.id, week: model.week, householdID: householdID)
+                } else {
+                    try await pairings.removeGroceryItem(id: extra.id)
+                }
                 await model.load()
             } catch is CancellationError {
                 return

@@ -10,8 +10,12 @@ func TestCategorize(t *testing.T) {
 		"Black Pepper": CategorySpices,
 
 		// Specific phrases beat general words.
-		"Garlic Powder":             CategorySpices,
-		"Garlic":                    CategoryProduce,
+		"Garlic Powder": CategorySpices,
+		"Garlic":        CategoryProduce,
+		// Fruit a household adds by hand (Add Item).
+		"Bananas":                   CategoryProduce,
+		"Strawberries":              CategoryProduce,
+		"Banana Pepper":             CategoryProduce,
 		"Coconut Milk":              CategoryPantry,
 		"Chicken Stock Concentrate": CategoryPantry,
 		"Crispy Fried Onions":       CategoryPantry,

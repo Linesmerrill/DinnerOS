@@ -332,6 +332,8 @@ func run() error {
 	// The weekly order reminder is derived when notifications are read, the
 	// way the pantry's low-stock check is: no scheduler and nothing to drift.
 	notificationService.AddRefresher(shoppingService)
+	// Items a member added by hand join the week's list beside pairings.
+	planService.WithExtras(shoppingService)
 	shoppingHandler := shopping.NewHandler(shopping.HandlerOptions{
 		Service:      shoppingService,
 		Pantry:       pantryService,

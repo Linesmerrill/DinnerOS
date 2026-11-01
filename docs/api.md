@@ -2439,6 +2439,70 @@ withdraw one household's requests:
 | 409 | `conflict` | Another request is confirming the same line, or a pantry item kept changing; retry. Also a household past its 25-store request cap |
 | 503 | `provider_unavailable` | A planned provider that isn't enabled |
 
+### Your usuals
+
+Items a member adds to a week's list by hand, and the household's usuals
+worked out from them (decision 651). Everything is keyed to the DinnerOS
+household; nothing reads or stores a store account's profile.
+
+`POST /api/v1/households/{householdId}/shopping/weeks/{week}/items`
+(`plan.edit`) adds items. Each name resolves to a catalog ingredient when one
+matches, so "milk" merges with a recipe's milk and its saved product; other
+names get a `name:` key and are capitalized when typed all lower case. Adding
+an item the week already has sets its count and keeps its ID and name, so a
+retried offline add is safe. `fromUsuals: true` also answers the week's
+prompt.
+
+```json
+{"items": [{"name": "Eggs", "count": 2}], "fromUsuals": true}
+```
+
+```json
+{"items": [{"id": "…", "week": "2026-W45", "ingredientKey": "name:eggs", "name": "Eggs", "count": 2,
+            "fromUsuals": true, "addedBy": "…", "addedAt": "2026-11-01T12:00:00Z"}]}
+```
+
+At most 50 items a request and 100 a week; `count` is 1–20 (default 1);
+names are at most 80 characters. Added items join the week's grocery list as
+items for no meal, with an extra of origin `added` (text "You added this" or
+"From your usuals") and an amount in `count` units, and they're bought
+whatever the pantry says. On a match or handoff, a line only an added item
+asks for has `"added": true` and sends its count as its packages.
+
+`DELETE …/shopping/weeks/{week}/items/{itemId}` or
+`DELETE …/shopping/weeks/{week}/items?ingredientKey=…` (`plan.edit`, `204`)
+takes one off; one that isn't there is `404`.
+
+`GET …/shopping/weeks/{week}/usuals` (`household.view`):
+
+```json
+{
+  "week": "2026-W45", "prompt": true, "shoppingWeeks": 4, "window": 6, "minWeeks": 3,
+  "items": [
+    {"ingredientKey": "name:coffee", "name": "Coffee", "count": 1, "pinned": true, "weeks": 0, "onList": false},
+    {"ingredientKey": "name:eggs", "name": "Eggs", "count": 2, "pinned": false, "weeks": 3, "onList": false}
+  ],
+  "notUsual": [{"ingredientKey": "name:bread", "name": "Bread", "count": 0, "pinned": false, "notUsual": true}]
+}
+```
+
+A usual is an item added in at least `minWeeks` of the household's last
+`window` shopping weeks before `week`, or one a member pinned; "not a usual"
+hides one. A shopping week is one in which the household added an item or
+sent its list to a store's cart (Walmart's links or Fry's cart). `count` is
+the pin's amount or the one added most often; `onList` is true when the
+week's list already buys it. `prompt` is true while the week's "Add your
+usuals?" hasn't been answered and something isn't on the list.
+
+`POST …/shopping/weeks/{week}/usuals/dismiss` (`plan.edit`, `204`) answers
+the prompt with Not Now. `PUT …/shopping/usuals` (`plan.edit`) pins an item
+(`{"name": "Coffee", "pinned": true}`, optionally `ingredientKey` and
+`count`), marks it `notUsual`, or with neither puts it back; it returns
+`{"usual": {…}}`. A household keeps at most 200 pins and marks.
+
+Added items expire 26 weeks after they're added; added items, pins, and
+answered prompts are deleted with the household.
+
 ## Notifications
 
 Household notifications, such as "Butter is running low". Every member sees

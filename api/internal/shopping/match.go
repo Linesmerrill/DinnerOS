@@ -1,6 +1,8 @@
 package shopping
 
 import (
+	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -77,7 +79,21 @@ func needsOf(amounts []Amount) []ingredients.Amount {
 // PackageCount recomputes a line's package count from its stored amounts,
 // package size, and coverage rule.
 func (l HandoffLine) PackageCount() providers.PackageCount {
+	if l.Added {
+		return providers.PackageCount{Packages: addedPackages(l.Amounts)}
+	}
 	return providers.CountPackagesFor(needsOf(l.Amounts), amountFromSize(l.PackageSize), l.Coverage, providers.Item{Name: l.Name, Category: l.Category})
+}
+
+// addedPackages is an added item's count: whole packages, at least one.
+func addedPackages(amounts []Amount) int {
+	n := 0
+	for _, a := range needsOf(amounts) {
+		if a.Unit.Code == "count" {
+			n += int(math.Ceil(a.Quantity.Float64()))
+		}
+	}
+	return min(max(n, 1), providers.MaxPackages)
 }
 
 func validateMatchInput(in MatchInput) (MatchInput, error) {
@@ -291,6 +307,7 @@ func lineSource(category string, item grocery.Item) LineSource {
 	}
 	src.Shares = item.Shares
 	src.Unsure = item.Unsure
+	src.Added = len(item.Sources) == 0 && slices.ContainsFunc(item.Extras, func(e grocery.Extra) bool { return e.Origin == grocery.OriginAdded })
 	if item.OnHand != nil && item.Needed != nil {
 		src.OnHand = &Amount{Quantity: item.OnHand.Quantity.String(), Unit: item.OnHand.Unit.Code}
 		src.Needed = &Amount{Quantity: item.Needed.Quantity.String(), Unit: item.Needed.Unit.Code}

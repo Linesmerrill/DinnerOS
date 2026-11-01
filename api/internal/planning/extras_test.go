@@ -67,16 +67,48 @@ func TestGroceryListIncludesExtras(t *testing.T) {
 	}
 }
 
-func TestGroceryListWithoutEntriesSkipsExtras(t *testing.T) {
+func TestAnEmptyWeekStillListsAddedItems(t *testing.T) {
 	svc, _ := newTestService(t, newMemoryStore())
-	extras := &fakeExtras{lines: []grocery.Line{crackerLine()}}
-	svc.WithExtras(extras)
-	list, err := svc.GroceryList(context.Background(), hhAda, testWeek)
-	if err != nil || len(list.Categories) != 0 {
-		t.Fatalf("list = %+v, %v", list, err)
+	milk := grocery.Line{
+		IngredientKey: "name:milk", Name: "Milk", Category: "dairy", Quantity: qty("2"), UnitCode: "count",
+		Extra: &grocery.Extra{ID: "a1", Origin: grocery.OriginAdded, Text: "Added"},
 	}
-	if extras.plan.Entries != nil {
-		t.Errorf("an empty week shouldn't ask for extras: %+v", extras.plan)
+	pairings, added := &fakeExtras{}, &fakeExtras{lines: []grocery.Line{milk}}
+	svc.WithExtras(pairings, added)
+	list, err := svc.GroceryList(context.Background(), hhAda, testWeek)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := groceryItem(list, "name:milk")
+	if item.Name != "Milk" || item.Status != grocery.StatusToBuy || len(item.Sources) != 0 {
+		t.Fatalf("item = %+v", item)
+	}
+	if pairings.plan.Week != mustWeek(t, testWeek) {
+		t.Errorf("every source is asked: %+v", pairings.plan)
+	}
+}
+
+func TestExtrasFromSeveralSourcesShareTheList(t *testing.T) {
+	svc, _ := newTestService(t, newMemoryStore())
+	milk := grocery.Line{
+		IngredientKey: "name:milk", Name: "Milk", Category: "dairy",
+		Extra: &grocery.Extra{ID: "a1", Origin: grocery.OriginAdded, Text: "Added"},
+	}
+	svc.WithExtras(&fakeExtras{lines: []grocery.Line{crackerLine()}})
+	svc.WithExtras(&fakeExtras{lines: []grocery.Line{milk}})
+	mustAdd(t, svc, hhAda, userAda, testWeek, NewEntry{RecipeID: recipeTacos, Servings: 2})
+	list, err := svc.GroceryList(context.Background(), hhAda, testWeek)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if groceryItem(list, "name:milk").Name == "" || groceryItem(list, "name:club crackers").Name == "" {
+		t.Fatalf("both sources' lines belong on the list: %+v", list.Categories)
+	}
+
+	failing := &fakeExtras{err: errors.New("down")}
+	svc.WithExtras(failing)
+	if _, err := svc.GroceryList(context.Background(), hhAda, testWeek); err == nil {
+		t.Error("a failing source fails the list")
 	}
 }
 

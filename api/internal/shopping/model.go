@@ -297,6 +297,9 @@ type LineSource struct {
 	// Unsure is grocery.Item.Unsure: at home in an amount the pantry can't
 	// measure, so bought.
 	Unsure bool
+	// Added is true for an item a member added by hand and no meal needs:
+	// its amount is a count of packages (usuals.go).
+	Added bool
 }
 
 // RecipeRef names a recipe a line is for.

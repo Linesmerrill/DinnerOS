@@ -75,6 +75,8 @@ func (h *Handler) Mount(r chi.Router) {
 		view := households.RequirePermission(h.opts.Authorizer, households.PermHouseholdView, h.logger)
 		edit := households.RequirePermission(h.opts.Authorizer, households.PermShoppingEdit, h.logger)
 		pantryEdit := households.RequirePermission(h.opts.Authorizer, households.PermPantryEdit, h.logger)
+		planEdit := households.RequirePermission(h.opts.Authorizer, households.PermPlanEdit, h.logger)
+		h.mountUsuals(r, view, planEdit)
 		const base = "/households/{householdId}/shopping"
 		r.Get("/shopping/providers", h.listProviders)
 		r.Get("/shopping/catalog", h.storeCatalog)
@@ -358,6 +360,9 @@ type HandoffLineResponse struct {
 	// Check is the product check the line went with, or null when none was
 	// reported.
 	Check *LineCheckResponse `json:"check"`
+	// Added is true for an item a member added by hand that no meal needs
+	// (decision 651): its count is its packages, and it can be removed.
+	Added bool `json:"added"`
 }
 
 // RecipeRefResponse names a recipe a line is for.
@@ -444,6 +449,8 @@ type ExcludedResponse struct {
 	// left_out_gone, left_out_unverified), else absent.
 	Product *ProductResponse   `json:"product,omitempty"`
 	Check   *LineCheckResponse `json:"check,omitempty"`
+	// Added is as on a line.
+	Added bool `json:"added"`
 }
 
 // CartLinkResponse is one handoff URL.
@@ -813,7 +820,7 @@ func (h *Handler) lineResponse(provider providers.Key, l HandoffLine, stored boo
 			ChangeRequested: l.ChangeRequested,
 		},
 		ComputedPackages: l.ComputedPackages, Packages: l.Packages, PackagesOverridden: l.Packages != l.ComputedPackages,
-		Check: lineCheckResponse(l.Check),
+		Check: lineCheckResponse(l.Check), Added: l.Added,
 	}
 	resp.Amounts, resp.QuantityText = amounts(l.Amounts)
 	count, size := l.PackageCount(), amountFromSize(l.PackageSize)
@@ -945,6 +952,7 @@ func (h *Handler) proposalResponse(p Proposal, stored bool) ProposalResponse {
 			Unquantified: e.Unquantified, Reason: e.Reason, Text: h.exclusionText(p.Provider, e.Reason),
 			SearchTerms: searchTermsResponse(e.Name, e.Category),
 			Recipes:     recipeRefs(e.Recipes), Shares: planning.GroceryShares(e.Shares), SkipScope: e.SkipScope,
+			Added: e.Added,
 		}
 		if e.Reason == ExcludedSkipped {
 			er.Text = skippedText(e)

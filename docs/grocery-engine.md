@@ -146,6 +146,11 @@ that `Aggregate` takes:
   "Vegetable Oil", "Black Pepper" matches "Pepper" (`pantry/staples.go`). Other
   items match only their own name; guessing equivalences beyond that list
   would hide things a household needs to buy.
+- **An item a member added by hand is always bought** (Add Item or "Add your
+  usuals", decision 651). It joins the list as an extra of origin `added` for
+  no meal, so it has no sources or shares, and it is `toBuy` whatever the
+  pantry says, because the member just said they're out. A skip still wins.
+  Its amount is a count, which the Shop tab sends as packages.
 - **A member's status beats the recipe's staple hint.** Only `in_stock` keeps
   a line off the list; `low` and `out` always put it on, and `pantryHint`
   ("Usually on hand" on the Shop tab) is only for staples the pantry doesn't

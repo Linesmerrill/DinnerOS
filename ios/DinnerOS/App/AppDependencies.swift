@@ -38,6 +38,8 @@ final class AppDependencies {
     /// Push permission, this device's token, and tapped pushes.
     let push: PushNotificationStore
     let shopping: ShoppingStore
+    /// Add Item and "Your usuals" (decision 651).
+    let usuals: UsualsStore
     let menu: MenuStore
     let planner: MealPlanner
     let pairings: PairingsStore
@@ -173,6 +175,7 @@ final class AppDependencies {
             // server never fetches Walmart.
             productCheck: WalmartProductCheck())
         self.shopping = shopping
+        usuals = UsualsStore(session: session, api: client.map { ShoppingAPI(client: $0) })
         // Every plan the server returns patches the Menu screen's cards and week counts, and
         // re-matches the Shop tab when it changes what the week's grocery list asks for.
         let widgets = WidgetSync(plans: plans, library: recipes)

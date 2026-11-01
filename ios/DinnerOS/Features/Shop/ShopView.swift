@@ -5,10 +5,13 @@ import SwiftUI
 struct ShopView: View {
     @Environment(ShoppingStore.self) private var shopping
     @Environment(HouseholdStore.self) private var households
+    @Environment(UsualsStore.self) private var usuals: UsualsStore?
 
     @State private var choice: ProductChoice?
     @State private var isEditingStore = false
     @State private var isShowingSavedProducts = false
+    @State private var isShowingUsuals = false
+    @State private var isAddingItem = false
     /// The cost card's sheet is held and presented here, not on the card: the card is a list
     /// section that comes and goes with the week's cost (decision 510).
     @State private var weekCostSheet: WeekCostSheet?
@@ -24,6 +27,16 @@ struct ShopView: View {
         shopping.setupPhase == .loaded && shopping.isConfigured
     }
 
+    /// Hiding Add Item and usuals is a convenience; the API enforces `plan.edit`.
+    private var canEditPlan: Bool {
+        households.access?.can(.planEdit) == true
+    }
+
+    /// The shown week and household, for usuals.
+    private var usualsScope: String {
+        "\(household?.id ?? "")/\(shopping.week.description)/\(isReady)"
+    }
+
     var body: some View {
         content
             .navigationTitle("Shop")
@@ -36,6 +49,29 @@ struct ShopView: View {
             .toolbar { toolbar }
             .navigationDestination(isPresented: $isShowingSavedProducts) {
                 SavedProductsView()
+            }
+            .navigationDestination(isPresented: $isShowingUsuals) {
+                if let household {
+                    YourUsualsView(week: shopping.week, householdID: household.id, canEdit: canEditPlan)
+                }
+            }
+            .sheet(isPresented: $isAddingItem) {
+                if let household {
+                    AddItemSheet(week: shopping.week, householdID: household.id)
+                }
+            }
+            .usualsPrompt(usuals, origin: .shop)
+            // A new week on the Shop tab asks "Add your usuals?" once.
+            .task(id: usualsScope) {
+                guard isReady, let household, let usuals else { return }
+                await usuals.load(week: shopping.week, householdID: household.id)
+                if canEditPlan {
+                    usuals.ask(week: shopping.week, householdID: household.id, from: .shop)
+                }
+            }
+            // An added or removed item changes what the week buys.
+            .onChange(of: usuals?.revision) {
+                Task { await shopping.groceryDidChange() }
             }
             .sheet(item: $choice) { choice in
                 ChooseProductSheet(choice: choice)
@@ -113,6 +149,16 @@ struct ShopView: View {
         if isReady {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    if canEditPlan, usuals != nil {
+                        Button("Add Item", systemImage: "plus") {
+                            isAddingItem = true
+                        }
+                    }
+                    if usuals != nil {
+                        Button("Your Usuals", systemImage: "arrow.clockwise.heart") {
+                            isShowingUsuals = true
+                        }
+                    }
                     Button("Saved Products", systemImage: "bookmark") {
                         isShowingSavedProducts = true
                     }
@@ -143,6 +189,7 @@ private struct ShopWeekList: View {
     @Environment(SpecialtyStore.self) private var specialties
     @Environment(HouseholdStore.self) private var households
     @Environment(GrocerySkipStore.self) private var grocerySkips
+    @Environment(UsualsStore.self) private var usuals: UsualsStore?
 
     @State private var showsNotIncluded = false
     @State private var isRequestingStore = false
@@ -332,7 +379,8 @@ private struct ShopWeekList: View {
                 ShopMealHeader(group: group)
             } footer: {
                 if index == layout.groups.count - 1 {
-                    mealsFooter(needsProduct: !needsProduct.isEmpty)
+                    mealsFooter(
+                        needsProduct: !needsProduct.isEmpty, hasMeals: layout.groups.contains { $0.meal != nil })
                 }
             }
         }
@@ -368,11 +416,14 @@ private struct ShopWeekList: View {
     }
 
     @ViewBuilder
-    private func mealsFooter(needsProduct: Bool) -> some View {
+    private func mealsFooter(needsProduct: Bool, hasMeals: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(
-                "An item several meals use is bought once, with the meal it's listed under first. We work out how many to buy from each product's size."
-            )
+            // Only items added by hand: there's no meal to explain.
+            if hasMeals {
+                Text(
+                    "An item several meals use is bought once, with the meal it's listed under first. We work out how many to buy from each product's size."
+                )
+            }
             if needsProduct {
                 Text(
                     shopping.canEdit
@@ -436,9 +487,22 @@ private struct ShopWeekList: View {
     /// every recipe). `nil` when this member can't, or for a pairing, which is removed from the
     /// grocery list instead.
     private func removeOptions(for row: ShopMealLayout.Row, in group: ShopMealLayout.Group) -> ShopRemoveOptions? {
-        guard canLeaveOut, !row.isLeftOut, row.share?.extra != true else { return nil }
         let name = row.name
         let key = row.ingredientKey
+        // An item a member added comes off the list; there's no recipe to leave it out of.
+        if row.isAdded {
+            guard let usuals, let householdID = shopping.householdID, households.access?.can(.planEdit) == true
+            else { return nil }
+            var options = ShopRemoveOptions(name: name, mealName: nil, justThisMeal: nil, thisWeek: {}, always: {})
+            let week = shopping.week
+            options.removeFromList = {
+                change(rowID: row.id, keys: [key]) {
+                    try await usuals.remove(ingredientKey: key, week: week, householdID: householdID)
+                }
+            }
+            return options
+        }
+        guard canLeaveOut, !row.isLeftOut, row.share?.extra != true else { return nil }
         var options = ShopRemoveOptions(name: name, mealName: nil, justThisMeal: nil, thisWeek: {}, always: {})
         if let recipeID = row.recipeID, let meal = group.meal {
             options.mealName = meal.recipeName
@@ -948,12 +1012,23 @@ struct ShopRemoveOptions {
     /// Adds it to the pantry as a staple, so it stays off every list until it runs low.
     var alwaysHave: (() -> Void)? = nil
     var always: () -> Void
+    /// Set for an item a member added: it's taken off the list, and nothing else is offered.
+    var removeFromList: (() -> Void)? = nil
 }
 
 private struct ShopRemoveMenuItems: View {
     let options: ShopRemoveOptions
 
     var body: some View {
+        if let removeFromList = options.removeFromList {
+            Button("Remove from List", systemImage: "trash", role: .destructive, action: removeFromList)
+        } else {
+            leaveOutItems
+        }
+    }
+
+    @ViewBuilder
+    private var leaveOutItems: some View {
         // Off the list only: the recipe still calls for it, with its amount.
         Section("Already Have It") {
             Button("Have It This Week", systemImage: "checkmark.circle", action: options.thisWeek)
@@ -1324,9 +1399,12 @@ private struct ShopHandoffBar: View {
 
     @Environment(ShoppingStore.self) private var shopping
     @Environment(HouseholdStore.self) private var households
+    @Environment(UsualsStore.self) private var usuals: UsualsStore?
     @Environment(\.appConfiguration) private var configuration
 
     @State private var errorMessage: String?
+    /// The send waits for "Add your usuals?" to close, then goes.
+    @State private var sendsAfterUsuals = false
     @State private var signInService = StoreSignInService()
 
     private var store: String { shopping.providerName }
@@ -1428,6 +1506,11 @@ private struct ShopHandoffBar: View {
         .padding()
         .frame(maxWidth: .infinity)
         .background(.bar)
+        .onChange(of: usuals?.prompt == nil) { _, closed in
+            guard closed, sendsAfterUsuals else { return }
+            sendsAfterUsuals = false
+            open()
+        }
     }
 
     private var everythingInCart: some View {
@@ -1492,6 +1575,13 @@ private struct ShopHandoffBar: View {
 
     private func open() {
         errorMessage = nil
+        // Usuals not on the list yet are offered before the cart fills, once a week.
+        if let usuals, let householdID = shopping.householdID, households.access?.can(.planEdit) == true,
+            usuals.ask(week: shopping.week, householdID: householdID, from: .shop)
+        {
+            sendsAfterUsuals = true
+            return
+        }
         Task {
             do {
                 try await shopping.openInWalmart()

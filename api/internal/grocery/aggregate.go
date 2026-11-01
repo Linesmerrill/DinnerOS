@@ -380,7 +380,9 @@ type accumulator struct {
 	via                 map[string]*ItemVia
 	specialty           *LineSpecialty
 	extras              map[string]Extra
-	shares              map[shareKey]*shareAccumulator
+	// added is true when a member added the item by hand (OriginAdded).
+	added  bool
+	shares map[shareKey]*shareAccumulator
 }
 
 // shareKey identifies one recipe's part of an item. A recipe can need an
@@ -452,7 +454,7 @@ func AggregateWith(selections []RecipeSelection, pantry Pantry, skips Skips) (Li
 				return List{}, fmt.Errorf("%w: recipe %q has a line without an ingredient key", ErrInvalidSelection, sel.RecipeID)
 			}
 			lineSources := line.Sources
-			if len(lineSources) == 0 {
+			if len(lineSources) == 0 && !line.forNoMeal() {
 				lineSources = []Source{{RecipeID: sel.RecipeID, RecipeName: sel.RecipeName}}
 			}
 			into, accKey := acc, key
@@ -479,6 +481,10 @@ func AggregateWith(selections []RecipeSelection, pantry Pantry, skips Skips) (Li
 		// asked for this ingredient to stay off the list.
 		case isSkipped:
 			item.Status, item.SkipScope = StatusSkipped, skipScope
+		// A member added it by hand, so it's bought whatever the pantry
+		// says: they know they're out.
+		case a.added:
+			item.Status = StatusToBuy
 		case pantry.Has(a.key):
 			item.Status = StatusInPantry
 		// The freezer beats both the staple hint and buying it again, but
@@ -589,6 +595,7 @@ func accumulate(acc map[string]*accumulator, accKey, key string, line Line, line
 	}
 	a.addVia(line.Via, lineSources)
 	a.addExtra(line.Extra)
+	a.added = a.added || line.forNoMeal()
 	if s := line.Specialty; s != nil && (a.specialty == nil || s.less(*a.specialty)) {
 		c := *s
 		a.specialty = &c

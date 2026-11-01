@@ -43,6 +43,14 @@ nonisolated struct ShopMealLayout: Equatable, Sendable {
             return false
         }
 
+        /// A member added it by hand and no meal needs it, so it's removed rather than left out.
+        var isAdded: Bool {
+            switch kind {
+            case .line(let line): line.isAdded
+            case .needsProduct(let line), .needsDecision(let line), .leftOut(let line): line.isAdded
+            }
+        }
+
         /// The meal a row can be left out of ("just this dish"): its share's recipe, unless the
         /// share was made for several meals together or added as a pairing.
         var recipeID: String? {
