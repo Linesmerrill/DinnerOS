@@ -111,7 +111,8 @@ struct MealKitImportFlow: View {
                 self.harvest = harvest
                 Task { await queue(harvest) }
             },
-            onCancel: { dismiss() }
+            onCancel: { dismiss() },
+            onReport: { report in Task { await mealKit.reportSignIn(report) } }
         )
         .alert("Couldn't start the import", isPresented: showingError) {
             Button("Try Again") {

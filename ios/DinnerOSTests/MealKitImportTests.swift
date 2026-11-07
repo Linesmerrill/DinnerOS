@@ -398,17 +398,55 @@ struct MealKitImportTests {
     @Test func anAccountWithNoPlansHasNoPastDeliveries() {
         let empty = #"{"error":{"code":"empty","status":0,"stage":"plans"}}"#
         #expect(MealKitHarvestResult(json: empty, service: .helloFresh) == .failed(.empty))
-        #expect(MealKitHarvestResult.failedStage(json: empty) == "plans empty 0")
+        #expect(MealKitHarvestResult.failureDetail(json: empty)?.summary == "plans empty 0")
         // An answer this build can't read is still unreadable.
         let changed = #"{"error":{"code":"unreadable","status":0,"stage":"plans"}}"#
         #expect(MealKitHarvestResult(json: changed, service: .helloFresh) == .failed(.unreadable))
         // A read that worked has no failed step to log; an older script's error has no stage.
-        #expect(MealKitHarvestResult.failedStage(json: #"{"recipes":[]}"#) == nil)
-        #expect(MealKitHarvestResult.failedStage(json: #"{"error":{"code":"forbidden"}}"#) == "unknown forbidden 0")
+        #expect(MealKitHarvestResult.failureDetail(json: #"{"recipes":[]}"#) == nil)
+        #expect(
+            MealKitHarvestResult.failureDetail(json: #"{"error":{"code":"forbidden"}}"#)?.summary
+                == "unknown forbidden 0")
         // The script tells "no plans" from "plans in a shape we don't know".
         let script = MealKitHarvestScript.body
         #expect(script.contains(#"list.length === 0 ? "empty" : "unreadable""#))
         #expect(script.contains(#"stage = "deliveries";"#))
+    }
+
+    @Test func aSignInReportSendsCodesAndCountsOnly() throws {
+        var report = MealKitSignInReport(outcome: .failed)
+        report.reason = "unreadable"
+        report.stage = "deliveries"
+        report.httpStatus = 500
+        report.elapsedMs = 41_234
+        report.attempt = 2
+        report.retried = true
+        report.navigationError = "NSURLErrorDomain -1009"
+        let body = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(report)) as? [String: Any])
+        #expect(body["outcome"] as? String == "failed" && body["reason"] as? String == "unreadable")
+        #expect(body["stage"] as? String == "deliveries" && body["httpStatus"] as? Int == 500)
+        #expect(body["elapsedMs"] as? Int == 41_234 && body["attempt"] as? Int == 2 && body["retried"] as? Bool == true)
+        #expect(body["appVersion"] is String && body["osVersion"] is String)
+        // Nothing unset is sent, and there is nowhere for page text, a cookie, or a URL to go.
+        #expect(body["recipes"] == nil && body["pageCrashes"] == nil && body["phase"] == nil)
+        let allowed: Set<String> = [
+            "outcome", "reason", "stage", "httpStatus", "phase", "elapsedMs", "attempt", "retried", "pageCrashes",
+            "navigationError", "recipes", "weeks", "pages", "stopped", "appVersion", "osVersion", "device",
+        ]
+        #expect(Set(body.keys).isSubset(of: allowed))
+    }
+
+    @Test func outcomesUseTheServersNames() throws {
+        let names = try [MealKitSignInReport.Outcome.upToDate, .noSession, .pageCrashed, .pageFailed, .cancelled]
+            .map { try #require(String(data: JSONEncoder().encode($0), encoding: .utf8)) }
+        #expect(names == [#""up_to_date""#, #""no_session""#, #""page_crashed""#, #""page_failed""#, #""cancelled""#])
+    }
+
+    @Test func theReportNamesTheOSVersion() {
+        let version = MealKitSignInReport.currentOSVersion ?? ""
+        #expect(version.split(separator: ".").count >= 2)
+        #expect(version.allSatisfy { $0.isNumber || $0 == "." })
     }
 
     @Test func aCrashedSignInPageSaysWhatToDo() {

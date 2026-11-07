@@ -148,6 +148,20 @@ final class MealKitImportStore {
         await liveActivities?.importQueued(job, householdID: householdID, service: service)
     }
 
+    /// Sends a sign-in report for the server log. Best effort: a report that can't be sent is
+    /// dropped, never retried and never shown.
+    func reportSignIn(_ report: MealKitSignInReport) async {
+        guard let api, let householdID else { return }
+        do {
+            try await session.authorized { token in
+                try await api.reportSignIn(
+                    householdID: householdID, service: service, report: report, accessToken: token)
+            }
+        } catch {
+            Self.logger.notice("Meal-kit sign-in report wasn't sent")
+        }
+    }
+
     /// Stops every run in flight. Recipes already imported stay in the library.
     func stopImports() async throws {
         guard let api, let householdID else { return }

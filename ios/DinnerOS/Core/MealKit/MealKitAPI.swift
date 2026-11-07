@@ -43,6 +43,14 @@ nonisolated struct MealKitAPI: Sendable {
     }
 
     /// Stops every run in flight. Recipes already imported stay in the library.
+    /// Tells the server how a sign-in attempt ended, for its log. Codes and counts only.
+    func reportSignIn(
+        householdID: String, service: MealKitService, report: MealKitSignInReport, accessToken: String
+    ) async throws {
+        let request = try APIRequest.post(path(householdID, service, "/sign-in-reports"), body: report)
+        try await client.sendIgnoringBody(request.authorized(with: accessToken))
+    }
+
     func stopImports(householdID: String, service: MealKitService, accessToken: String) async throws {
         try await client.sendIgnoringBody(
             APIRequest.delete(path(householdID, service, "/imports")).authorized(with: accessToken))

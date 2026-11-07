@@ -20,6 +20,8 @@ struct MealKitWebLoginView: View {
     var onHarvest: (MealKitHarvest) -> Void
     /// Called when the member backs out without signing in.
     var onCancel: () -> Void = {}
+    /// Called once per attempt with how it ended, for the server log.
+    var onReport: (MealKitSignInReport) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
     @State private var model: MealKitWebLoginModel
@@ -29,11 +31,13 @@ struct MealKitWebLoginView: View {
     ///   too long for one sitting ever finishes.
     init(
         service: MealKitService, history: MealKitImportHistory? = nil,
-        onHarvest: @escaping (MealKitHarvest) -> Void, onCancel: @escaping () -> Void = {}
+        onHarvest: @escaping (MealKitHarvest) -> Void, onCancel: @escaping () -> Void = {},
+        onReport: @escaping (MealKitSignInReport) -> Void = { _ in }
     ) {
         self.service = service
         self.onHarvest = onHarvest
         self.onCancel = onCancel
+        self.onReport = onReport
         _model = State(initialValue: MealKitWebLoginModel(service: service, history: history))
     }
 
@@ -69,13 +73,18 @@ struct MealKitWebLoginView: View {
             }
         }
         // Keyed on the attempt, so Try Again starts watching for the sign-in afresh.
-        .task(id: model.attempt) { await model.start() }
+        .task(id: model.attempt) {
+            model.onReport = onReport
+            await model.start()
+        }
         .onChange(of: model.phase) { _, phase in
             guard case .done(let harvest) = phase else { return }
             onHarvest(harvest)
         }
         .onDisappear {
             let model = model
+            // Closing the sheet before the attempt ended is worth knowing about too.
+            model.reportCancelled()
             Task { await model.forgetEverything() }
         }
     }
@@ -178,6 +187,17 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
     private var retriedFirstLoad = false
     /// The page's process crashed and was reloaded once already.
     private var reloadedAfterCrash = false
+    /// Receives one report per attempt for the server log.
+    @ObservationIgnored var onReport: ((MealKitSignInReport) -> Void)?
+    /// When this attempt started, for the report's elapsed time.
+    private var attemptStartedAt: ContinuousClock.Instant?
+    /// This attempt's report has been sent.
+    private var reported = false
+    private var pageCrashes = 0
+    /// The last failed navigation that wasn't harmless, as "domain code".
+    private var lastNavigationError: String?
+    /// The failed step of the last read: code, stage and HTTP status.
+    private var lastReadFailure: MealKitHarvestResult.FailureDetail?
 
     private static let logger = Logger(subsystem: "DinnerOS", category: "meal-kit-import")
 
@@ -215,6 +235,7 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
                 String(localized: "We don't have a sign-in page for \(service.displayName) in this version."))
             return
         }
+        if attemptStartedAt == nil { attemptStartedAt = clock.now }
         if webView.url == nil {
             webView.load(URLRequest(url: url))
         }
@@ -229,6 +250,10 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
         harvesting = false
         retriedInterruptedHarvest = false
         reloadedAfterCrash = false
+        reported = false
+        lastReadFailure = nil
+        lastNavigationError = nil
+        attemptStartedAt = clock.now
         phase = .signingIn
         webView.load(URLRequest(url: url))
         // The previous watch ended with the failed read; this starts a new one.
@@ -261,6 +286,7 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
             }
             if let left = leftSignInAt, clock.now - left > Self.cookieTimeout {
                 Self.logger.notice("Meal-kit web sign-in produced no session before the timeout")
+                report(.noSession)
                 phase = .failed(
                     String(
                         localized: """
@@ -303,12 +329,14 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
         do {
             let result = try await webView.callAsyncJavaScript(
                 MealKitHarvestScript.body, arguments: arguments, in: nil, contentWorld: .defaultClient)
-            if let json = result as? String, let stage = MealKitHarvestResult.failedStage(json: json) {
+            if let json = result as? String, let detail = MealKitHarvestResult.failureDetail(json: json) {
                 // Our own step name and code only: the script never puts page text in them.
-                Self.logger.notice("Meal-kit order history read failed at: \(stage, privacy: .public)")
+                lastReadFailure = detail
+                Self.logger.notice("Meal-kit order history read failed at: \(detail.summary, privacy: .public)")
             }
             guard let json = result as? String else {
                 if cutOff() { return .interrupted }
+                report(.failed, reason: .unreadable)
                 phase = failure(for: .unreadable)
                 return .finished
             }
@@ -322,16 +350,24 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
                     \(harvest.weeks, privacy: .public) weeks, stopped \(harvest.stopped.rawValue, privacy: .public)
                     """
                 )
+                var done = MealKitSignInReport(outcome: .harvested)
+                done.recipes = harvest.recipes.count
+                done.weeks = harvest.weeks
+                done.pages = harvest.pages
+                done.stopped = harvest.stopped.rawValue
+                send(done)
                 phase = .done(harvest)
             case .failed(let reason):
                 Self.logger.notice("Meal-kit order history could not be read: \(reason.rawValue, privacy: .public)")
                 if reason == .unavailable, cutOff() { return .interrupted }
+                report(reason == .nothingNew ? .upToDate : .failed, reason: reason)
                 phase = failure(for: reason)
             }
         } catch {
             // Never the error's text: it can quote the page.
             Self.logger.notice("Meal-kit harvest script failed: \((error as NSError).code, privacy: .public)")
             if cutOff() { return .interrupted }
+            report(.failed, reason: .unavailable)
             phase = failure(for: .unavailable)
         }
         return .finished
@@ -481,6 +517,7 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
     /// service's page; reload once, then say so plainly instead of showing nothing.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         Self.logger.notice("Meal-kit sign-in page process ended")
+        pageCrashes += 1
         switch phase {
         case .done, .upToDate:
             return
@@ -496,6 +533,7 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
             webView.load(URLRequest(url: url))
             return
         }
+        report(.pageCrashed)
         phase = .failed(Self.pageCrashedMessage(service), canRetry: true)
     }
 
@@ -520,6 +558,7 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
         Self.logger.notice(
             "Meal-kit web sign-in navigation failed: \(nsError.domain, privacy: .public) \(code, privacy: .public)")
         if Self.isHarmless(nsError) { return }
+        lastNavigationError = "\(nsError.domain) \(code)"
         // Once a page is on screen, a failed follow-up navigation isn't a reason to cover it.
         if hasLoadedAPage { return }
         if !retriedFirstLoad, let url = service.loginURL {
@@ -527,11 +566,57 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
             webView.load(URLRequest(url: url))
             return
         }
+        report(.pageFailed)
         phase = .failed(
             String(
                 localized:
                     "We couldn't load the \(service.displayName) sign-in page. Check your connection."),
             canRetry: true)
+    }
+
+    // MARK: - Reports
+
+    /// Reports how this attempt ended, once.
+    private func report(_ outcome: MealKitSignInReport.Outcome, reason: MealKitHarvestFailure? = nil) {
+        var report = MealKitSignInReport(outcome: outcome)
+        report.reason = reason?.rawValue
+        if reason != nil, let detail = lastReadFailure {
+            report.stage = detail.stage
+            report.httpStatus = detail.status > 0 ? detail.status : nil
+        }
+        send(report)
+    }
+
+    /// The sheet closed before the attempt ended.
+    func reportCancelled() {
+        let place: String
+        switch phase {
+        case .signingIn: place = "signing_in"
+        case .reading: place = "reading"
+        case .harvesting: place = "harvesting"
+        case .failed: place = "failed"
+        case .done, .upToDate, .unavailable: return
+        }
+        guard !reported, attemptStartedAt != nil else { return }
+        var report = MealKitSignInReport(outcome: .cancelled)
+        report.phase = place
+        send(report)
+    }
+
+    private func send(_ report: MealKitSignInReport) {
+        guard !reported else { return }
+        reported = true
+        var report = report
+        if let started = attemptStartedAt {
+            let elapsed = clock.now - started
+            report.elapsedMs =
+                elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000
+        }
+        report.attempt = attempt + 1
+        report.retried = retriedInterruptedHarvest
+        report.pageCrashes = pageCrashes
+        report.navigationError = lastNavigationError
+        onReport?(report)
     }
 }
 

@@ -118,6 +118,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/households/{householdId}/meal-kit/{source}/imports` `{recipes:[{sourceRecipeId, name?, url?, weeks?, isAddon?}]}` → `202` job | `recipes.import` | — | ✅ |
 | DELETE | `/api/v1/households/{householdId}/meal-kit/{source}/imports` → `204` (cancels every run in flight) | `recipes.import` | — | ✅ |
 | GET | `/api/v1/households/{householdId}/meal-kit/{source}/imports` → `{items}`, newest first | `recipes.import` | — | ✅ |
+| POST | `/api/v1/households/{householdId}/meal-kit/{source}/sign-in-reports` `{outcome, reason?, stage?, httpStatus?, phase?, elapsedMs, attempt, retried?, pageCrashes?, navigationError?, recipes?, weeks?, pages?, stopped?, appVersion?, osVersion?, device?}` → `204`. How one sign-in attempt on the phone ended, written as one `meal-kit sign-in report` log line; every field is checked against an allow-list and nothing is stored. Works while imports are off | `recipes.import` | — | ✅ |
 | POST | `/api/v1/households/{householdId}/recipes/parse` `{text}` or `{url}` → recipe draft (nothing is stored) | `recipes.edit` | 4a | ✅ |
 | POST | `/api/v1/households/{householdId}/recipes` reviewed draft → `201` recipe (private to the household) | `recipes.edit` | 4a | ✅ |
 | PUT | `/api/v1/households/{householdId}/recipes/{recipeId}/sharing` `{sharedToCatalog}` → `{recipeId, sharedToCatalog, inCatalog}` | `recipes.edit` | 4a | ✅ |

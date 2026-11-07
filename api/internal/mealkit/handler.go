@@ -50,6 +50,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(imports).Post("/households/{householdId}/meal-kit/{source}/imports", h.start)
 		r.With(imports).Get("/households/{householdId}/meal-kit/{source}/imports", h.listJobs)
 		r.With(imports).Delete("/households/{householdId}/meal-kit/{source}/imports", h.stop)
+		r.With(imports).Post("/households/{householdId}/meal-kit/{source}/sign-in-reports", h.signInReport)
 	})
 }
 

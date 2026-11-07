@@ -615,6 +615,35 @@ It ends with `meal-kit import run finished` and counts: `claimed`, `succeeded`,
 feature off it logs that and exits 0, so the scheduled job is harmless on a
 deployment that has not enabled it.
 
+### Sign-in reports
+
+The sign-in and the order-history read happen on the phone, so the app sends
+one report per attempt, however it ended (decision 660). The server writes it
+as a single log line and stores nothing:
+
+```
+heroku logs -a dinneros-api -n 1500 | grep "meal-kit sign-in report"
+```
+
+- `outcome`: `harvested`, `up_to_date`, `failed`, `no_session` (the sign-in
+  was never picked up within 30 seconds), `page_crashed`, `page_failed` (the
+  sign-in page didn't load), or `cancelled` (the member closed the sheet;
+  `phase` says where: `signing_in`, `reading`, `harvesting`, `failed`).
+  Failures and crashes log at WARN.
+- On `failed`: `reason` (`forbidden`, `empty`, `unreadable`, `unavailable`),
+  `stage` (`plans` or `deliveries`), and `httpStatus`, the service's answer
+  to that step.
+- `elapsedMs`, `attempt` (Try Again taps + 1), `retried` (a read cut off by a
+  page change was tried again), `pageCrashes`, and `navigationError` (the last
+  failed page load, as `NSURLErrorDomain -1009`).
+- On `harvested`: `recipes`, `weeks`, `pages`, `stopped`.
+- `appVersion`, `osVersion`, `device`.
+
+Only codes, counts, and versions: never page text, URLs, cookies, tokens, or
+anything typed, and the server drops any value that isn't on its list. The
+import that follows a `harvested` report logs as before (`meal-kit import
+queued`, batches, retries).
+
 ### When a run goes wrong
 
 Everything below is read from the job documents. There is no token in a log
