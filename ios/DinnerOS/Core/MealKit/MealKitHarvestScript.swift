@@ -119,26 +119,35 @@ nonisolated enum MealKitHarvestScript {
             return "";
         }
 
-        async function findSubscription() {
-            if (/^\\d+$/.test(String(subscription || ""))) { return String(subscription); }
-            const plans = await getJSON(origin + "/gw/api/plans?includeCanceled=false");
-            const list = Array.isArray(plans) ? plans
+        function planList(plans) {
+            return Array.isArray(plans) ? plans
                 : (plans && Array.isArray(plans.items)) ? plans.items
                 : (plans && Array.isArray(plans.plans)) ? plans.plans
                 : null;
-            if (list === null) {
-                const shape = new Error("plans shape");
-                shape.code = "unreadable";
-                throw shape;
+        }
+
+        // Active plans first. A member who cancelled still has every past delivery, so with no
+        // active plan the cancelled ones are read too.
+        async function findSubscription() {
+            if (/^\\d+$/.test(String(subscription || ""))) { return String(subscription); }
+            let sawPlans = false;
+            for (const includeCanceled of ["false", "true"]) {
+                const list = planList(await getJSON(origin + "/gw/api/plans?includeCanceled=" + includeCanceled));
+                if (list === null) {
+                    const shape = new Error("plans shape");
+                    shape.code = "unreadable";
+                    throw shape;
+                }
+                if (list.length > 0) { sawPlans = true; }
+                for (const plan of list) {
+                    const id = subscriptionIDOf(plan);
+                    if (id) { return id; }
+                }
             }
-            for (const plan of list) {
-                const id = subscriptionIDOf(plan);
-                if (id) { return id; }
-            }
-            // A readable answer with no plan: an account that never subscribed, so there is no
-            // order history to read. Plans that exist but carry no id we know are a changed API.
+            // No plan at all, active or cancelled: an account that never subscribed, so there is
+            // no order history to read. Plans that exist but carry no id we know are a changed API.
             const none = new Error("no subscription");
-            none.code = list.length === 0 ? "empty" : "unreadable";
+            none.code = sawPlans ? "unreadable" : "empty";
             throw none;
         }
 

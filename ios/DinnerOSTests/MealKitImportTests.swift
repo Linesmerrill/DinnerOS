@@ -409,7 +409,10 @@ struct MealKitImportTests {
                 == "unknown forbidden 0")
         // The script tells "no plans" from "plans in a shape we don't know".
         let script = MealKitHarvestScript.body
-        #expect(script.contains(#"list.length === 0 ? "empty" : "unreadable""#))
+        #expect(script.contains(#"none.code = sawPlans ? "unreadable" : "empty""#))
+        // With no active plan, cancelled plans are read too: their past deliveries still count.
+        #expect(script.contains(#"for (const includeCanceled of ["false", "true"])"#))
+        #expect(script.contains(#"/gw/api/plans?includeCanceled=" + includeCanceled"#))
         #expect(script.contains(#"stage = "deliveries";"#))
     }
 
