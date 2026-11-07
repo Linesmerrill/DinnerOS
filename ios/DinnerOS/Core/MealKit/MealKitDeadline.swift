@@ -3,7 +3,7 @@ import Synchronization
 
 /// Runs work that may never finish against a time limit. WebKit's cookie store can leave a read
 /// unanswered, and the sign-in sheet must never wait on one forever.
-enum MealKitDeadline {
+nonisolated enum MealKitDeadline {
     /// The work's result, or `nil` when it hasn't answered within `limit`. Work that never
     /// answers is left behind rather than awaited: it can't be cancelled.
     static func value<T: Sendable>(
@@ -12,7 +12,8 @@ enum MealKitDeadline {
         await withCheckedContinuation { (continuation: CheckedContinuation<T?, Never>) in
             let once = ResumeOnce(continuation)
             Task { @MainActor in once.resume(await work()) }
-            Task {
+            // Off the main actor, so a busy main thread can't hold up the limit.
+            Task.detached {
                 try? await Task.sleep(for: limit)
                 once.resume(nil)
             }
@@ -20,7 +21,7 @@ enum MealKitDeadline {
     }
 
     /// Resumes a continuation with the first answer and ignores the rest.
-    private final class ResumeOnce<T: Sendable>: Sendable {
+    private nonisolated final class ResumeOnce<T: Sendable>: Sendable {
         private let continuation: Mutex<CheckedContinuation<T?, Never>?>
 
         init(_ continuation: CheckedContinuation<T?, Never>) {
