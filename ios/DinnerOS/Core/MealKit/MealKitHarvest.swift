@@ -138,6 +138,15 @@ nonisolated enum MealKitHarvestResult: Equatable, Sendable {
     ///
     /// `catchingUp` says this walk was only looking for new deliveries on a history already
     /// read, so finding nothing means "up to date" rather than "you have never ordered".
+    /// "plans 0" or "deliveries 500": the step and HTTP status of a failed read, for the log.
+    /// `nil` when the read didn't fail.
+    static func failedStage(json: String) -> String? {
+        guard let data = json.data(using: .utf8),
+            let failure = try? JSONDecoder().decode(ScriptFailure.self, from: data)
+        else { return nil }
+        return "\(failure.error.stage ?? "unknown") \(failure.error.code) \(failure.error.status ?? 0)"
+    }
+
     init(json: String, service: MealKitService, catchingUp: Bool = false) {
         guard let data = json.data(using: .utf8) else {
             self = .failed(.unreadable)
@@ -175,7 +184,11 @@ nonisolated enum MealKitHarvestResult: Equatable, Sendable {
     }
 
     private struct ScriptFailure: Decodable {
-        struct Detail: Decodable { let code: String }
+        struct Detail: Decodable {
+            let code: String
+            var status: Int? = nil
+            var stage: String? = nil
+        }
         let error: Detail
     }
 }

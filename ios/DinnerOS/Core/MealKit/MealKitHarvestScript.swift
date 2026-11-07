@@ -53,7 +53,9 @@ nonisolated enum MealKitHarvestScript {
         const auth = (tokenType || "Bearer") + " " + token;
         const origin = window.location.origin;
 
-        const fail = (code, status) => JSON.stringify({ error: { code: code, status: status || 0 } });
+        // `stage` is which of our own steps failed; it never carries page text.
+        let stage = "plans";
+        const fail = (code, status) => JSON.stringify({ error: { code: code, status: status || 0, stage: stage } });
         const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
         async function getJSON(url) {
@@ -123,18 +125,26 @@ nonisolated enum MealKitHarvestScript {
             const list = Array.isArray(plans) ? plans
                 : (plans && Array.isArray(plans.items)) ? plans.items
                 : (plans && Array.isArray(plans.plans)) ? plans.plans
-                : [];
+                : null;
+            if (list === null) {
+                const shape = new Error("plans shape");
+                shape.code = "unreadable";
+                throw shape;
+            }
             for (const plan of list) {
                 const id = subscriptionIDOf(plan);
                 if (id) { return id; }
             }
+            // A readable answer with no plan: an account that never subscribed, so there is no
+            // order history to read. Plans that exist but carry no id we know are a changed API.
             const none = new Error("no subscription");
-            none.code = "unreadable";
+            none.code = list.length === 0 ? "empty" : "unreadable";
             throw none;
         }
 
         try {
             const plan = await findSubscription();
+            stage = "deliveries";
             const byID = new Map();
             let pages = 0;
             let weeksSeen = 0;

@@ -395,6 +395,32 @@ struct MealKitImportTests {
         }
     }
 
+    @Test func anAccountWithNoPlansHasNoPastDeliveries() {
+        let empty = #"{"error":{"code":"empty","status":0,"stage":"plans"}}"#
+        #expect(MealKitHarvestResult(json: empty, service: .helloFresh) == .failed(.empty))
+        #expect(MealKitHarvestResult.failedStage(json: empty) == "plans empty 0")
+        // An answer this build can't read is still unreadable.
+        let changed = #"{"error":{"code":"unreadable","status":0,"stage":"plans"}}"#
+        #expect(MealKitHarvestResult(json: changed, service: .helloFresh) == .failed(.unreadable))
+        // A read that worked has no failed step to log; an older script's error has no stage.
+        #expect(MealKitHarvestResult.failedStage(json: #"{"recipes":[]}"#) == nil)
+        #expect(MealKitHarvestResult.failedStage(json: #"{"error":{"code":"forbidden"}}"#) == "unknown forbidden 0")
+        // The script tells "no plans" from "plans in a shape we don't know".
+        let script = MealKitHarvestScript.body
+        #expect(script.contains(#"list.length === 0 ? "empty" : "unreadable""#))
+        #expect(script.contains(#"stage = "deliveries";"#))
+    }
+
+    @Test func aCrashedSignInPageSaysWhatToDo() {
+        let message = MealKitWebLoginModel.pageCrashedMessage(.helloFresh)
+        #expect(message.contains("HelloFresh") && message.contains("Updating iOS"))
+    }
+
+    @Test func theSignInWaitsForThePageToSettleBeforeReading() {
+        #expect(MealKitWebLoginModel.settleTime > .zero)
+        #expect(MealKitWebLoginModel.settleTime < MealKitWebLoginModel.cookieTimeout)
+    }
+
     // MARK: - Wording
 
     @Test func theSummarySaysWhatIsHappeningForEveryState() {
