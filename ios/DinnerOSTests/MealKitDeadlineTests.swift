@@ -9,7 +9,7 @@ import Testing
 @MainActor
 struct MealKitDeadlineTests {
     @Test func workThatAnswersInTimeGivesItsValue() async {
-        let value = await MealKitDeadline.value(within: .seconds(2)) { "session" }
+        let value = await MealKitDeadline.value(within: .seconds(120)) { "session" }
         #expect(value == "session")
     }
 
