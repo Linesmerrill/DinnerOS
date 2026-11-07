@@ -148,6 +148,9 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
     /// How often the cookie store is checked while the sheet is open. The cookie is written
     /// without a navigation we can see, so there is nothing to observe instead.
     static let pollInterval: Duration = .milliseconds(750)
+    /// How long one read of the cookie store may take. WebKit can leave a read unanswered; past
+    /// this it counts as no cookie yet, so the sign-in timeout above still runs out.
+    static let cookieReadLimit: Duration = .seconds(5)
 
     /// Paths that are still part of signing in. Leaving them is what starts the clock.
     private static let signInPathFragments = ["login", "signin", "sign-in", "auth", "oauth", "sso", "register"]
@@ -349,7 +352,12 @@ final class MealKitWebLoginModel: NSObject, WKNavigationDelegate {
     }
 
     private func cookie(named name: String) async -> String? {
-        let cookies = await webView.configuration.websiteDataStore.httpCookieStore.allCookies()
+        let store = webView.configuration.websiteDataStore.httpCookieStore
+        guard let cookies = await MealKitDeadline.value(within: Self.cookieReadLimit, { await store.allCookies() })
+        else {
+            Self.logger.notice("Meal-kit cookie store didn't answer in time")
+            return nil
+        }
         return cookies.first { cookie in
             cookie.name == name
                 && (cookie.domain == service.cookieDomain || cookie.domain.hasSuffix("." + service.cookieDomain))
