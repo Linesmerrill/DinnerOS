@@ -399,7 +399,7 @@ private struct ShopWeekList: View {
                         leaveOut: { scope in leaveOut(component: component, in: group, scope: scope) },
                         putBack: { putBack(component: component) })
                     ForEach(component.rows) { row in
-                        mealRow(row, in: group, inComponent: true)
+                        mealRow(row, in: group, inComponent: true, componentLeftOut: component.isLeftOut)
                     }
                 }
             } header: {
@@ -473,10 +473,13 @@ private struct ShopWeekList: View {
     /// One line under a meal: the purchase itself where it's bought, a pointer to it under the
     /// other meals that use it, or a struck-through line the household left out.
     @ViewBuilder
-    private func mealRow(_ row: ShopMealLayout.Row, in group: ShopMealLayout.Group, inComponent: Bool = false)
-        -> some View
-    {
-        let options = inComponent ? nil : removeOptions(for: row, in: group)
+    private func mealRow(
+        _ row: ShopMealLayout.Row, in group: ShopMealLayout.Group, inComponent: Bool = false,
+        componentLeftOut: Bool = false
+    ) -> some View {
+        // A part of a sauce can be had or skipped on its own, like any other item. When the whole
+        // sauce is skipped, its header's Put Back is the one way back.
+        let options = componentLeftOut ? nil : removeOptions(for: row, in: group)
         Group {
             switch row.kind {
             case .line(let line) where row.isPrimary:
@@ -510,7 +513,7 @@ private struct ShopWeekList: View {
                     isWorking: working.contains(row.id), remove: options)
             case .leftOut(let line):
                 LeftOutShopRow(
-                    row: row, text: line.text, canPutBack: canLeaveOut && !inComponent,
+                    row: row, text: line.text, canPutBack: canLeaveOut && !componentLeftOut,
                     isWorking: working.contains(row.id)
                 ) {
                     putBack(line, rowID: row.id)

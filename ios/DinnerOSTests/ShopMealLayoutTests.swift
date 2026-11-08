@@ -123,6 +123,28 @@ struct ShopMealLayoutTests {
         #expect(layout.groups.first?.components.first?.isLeftOut == true)
     }
 
+    @Test func onePartOfAComponentCanBeSkippedOnItsOwn() throws {
+        let sourCream = with(
+            ShoppingFixtures.lineJSON(
+                id: "l1", key: "i-sour-cream", name: "Sour Cream", category: "dairy-eggs", quantityText: "4 tsp",
+                productID: "100000002", displayName: "Sour Cream 16 oz", size: nil, computed: 1),
+            #""shares":[\#(share("r-tacos", "Beef Tacos", "4 tsp", component: "Smoky Red Pepper Crema"))]"#
+        )
+        let peppers = with(
+            ShoppingFixtures.excludedJSON(
+                key: "i-peppers", name: "Roasted Red Peppers", reason: "skipped", text: "You have it this week",
+                groceryStatus: "skipped"),
+            #""skipScope":"week","shares":[\#(share("r-tacos", "Beef Tacos", "2 tsp", component: "Smoky Red Pepper Crema"))]"#
+        )
+        let layout = ShopMealLayout(proposal: try proposal(lines: [sourCream], excluded: [peppers]))
+
+        let crema = try #require(layout.groups.first?.components.first)
+        // Still made: only the peppers are struck through, and each part knows its meal.
+        #expect(!crema.isLeftOut)
+        #expect(crema.rows.map(\.isLeftOut) == [false, true])
+        #expect(crema.rows.allSatisfy { $0.recipeID == "r-tacos" })
+    }
+
     @Test func linesWithoutSharesAndPairingsHaveTheirOwnGroups() throws {
         let old = ShoppingFixtures.lineJSON(
             id: "l1", key: "i-rice", name: "Rice", productID: "100000003", displayName: "Rice", size: nil, computed: 1)
