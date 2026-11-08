@@ -168,3 +168,35 @@ func (s SameItems) Skips(rules SkipRules) SkipRules {
 	}
 	return out
 }
+
+// LeftOut returns set with each link's names answering for one another: a
+// "Just for this dish" skip made on the merged Shop line is saved under the
+// kept name, but the recipe's own line may carry the other name, and its
+// cooking steps should still cross it out. The stronger scope wins where both
+// names have an entry.
+func (s SameItems) LeftOut(set LeftOutSet) LeftOutSet {
+	if len(s) == 0 || len(set) == 0 {
+		return set
+	}
+	out := maps.Clone(set)
+	put := func(key string, lo LeftOut) {
+		if current, ok := out[key]; !ok || lo.Scope.Outranks(current.Scope) {
+			out[key] = lo
+		}
+	}
+	for _, link := range s {
+		names := append([]string{link.KeptKey}, link.VariantKeys...)
+		for _, from := range names {
+			lo, ok := set[from]
+			if !ok || from == "" {
+				continue
+			}
+			for _, to := range names {
+				if to != "" && to != from {
+					put(to, lo)
+				}
+			}
+		}
+	}
+	return out
+}

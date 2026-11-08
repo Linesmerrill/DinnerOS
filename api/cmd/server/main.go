@@ -196,10 +196,12 @@ func run() error {
 	// made from free text to the same ingredient reached through the catalog.
 	// Cook deductions skip what a recipe is cooked without.
 	skipsService := skips.NewService(skips.NewMongoStore(db.Database()), recipeService, logger).WithRecipes(recipeService)
-	pantryService.SetLeftOut(skipsService)
 	// Names the household says are one thing to buy ("Chipotle Powder" is
-	// "Chipotle Chili Powder"): one line, one product (decision 661).
+	// "Chipotle Chili Powder"): one line, one product (decision 661). A skip
+	// under either name covers both when the dish is cooked.
 	sameItemsService := sameitems.NewService(sameitems.NewMongoStore(db.Database()), recipeService)
+	recipeLeftOut := sameitems.LeftOut{Skips: skipsService, Same: sameItemsService}
+	pantryService.SetLeftOut(recipeLeftOut)
 	planService := planning.NewService(planning.NewMongoStore(db.Database()), recipeService).
 		WithPantry(pantryService).WithSpecialties(substitutesService).WithSkips(skipsService).WithSameItems(sameItemsService).
 		WithEvents(behavior.events, logger).WithWeekStart(householdService).
@@ -288,7 +290,7 @@ func run() error {
 	recipeHandler := recipes.NewHandler(recipes.HandlerOptions{
 		Service:     recipeService,
 		Specialties: substitutesService,
-		LeftOut:     skipsService,
+		LeftOut:     recipeLeftOut,
 		Swaps:       customizeService,
 		// What reads wrong in members' recipes is logged to be fixed.
 		Findings:       recipes.NewMongoStore(db.Database()),

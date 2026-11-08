@@ -150,3 +150,35 @@ func TestNoSameItemsChangeNothing(t *testing.T) {
 		t.Error("Pantry without links lost the stock")
 	}
 }
+
+// A "Just for this dish" skip made on the merged line is saved under the kept
+// name; the recipe that says "Chipotle Powder" still has it crossed out.
+func TestSameItemsLeftOutCoversBothNames(t *testing.T) {
+	recipe := LeftOut{SkipID: "s-1", Scope: SkipRecipe}
+	got := chipotle.LeftOut(LeftOutSet{"ing-ccp": recipe})
+	for _, k := range []string{"ing-ccp", "name:chipotle powder", "ing-cp"} {
+		if got[k] != recipe {
+			t.Errorf("%s = %+v, want the recipe skip", k, got[k])
+		}
+	}
+
+	// The other way: a skip under the variant covers the kept name, and an
+	// always-skip outranks a recipe one.
+	always := LeftOut{SkipID: "s-2", Scope: SkipAlways}
+	got = chipotle.LeftOut(LeftOutSet{"ing-ccp": recipe, "ing-cp": always})
+	if got["ing-ccp"] != always || got["name:chipotle powder"] != always {
+		t.Errorf("got %+v, want the always skip on every name", got)
+	}
+
+	// Unrelated names and empty sets are untouched.
+	other := LeftOutSet{"name:onion": recipe}
+	if got := chipotle.LeftOut(other); len(got) != 1 || got["name:onion"] != recipe {
+		t.Errorf("unrelated = %+v", got)
+	}
+	if got := chipotle.LeftOut(nil); got != nil {
+		t.Errorf("nil set = %+v", got)
+	}
+	if got := SameItems(nil).LeftOut(other); len(got) != 1 {
+		t.Errorf("no links = %+v", got)
+	}
+}

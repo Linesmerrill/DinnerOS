@@ -1182,7 +1182,9 @@ A household can say two names are one thing to buy: "Chipotle Powder" is the
 "Chipotle Chili Powder" it keeps (decision 661). The grocery list, and so the
 Shop tab, then buys the variant as the kept item: one line under the kept name
 with both amounts added up, one product, and the pantry and skips of either
-name apply to it. Recipes keep their own words.
+name apply to it. Recipes keep their own words, and a skip made under either
+name crosses out the other in a recipe's cooking steps and cook deductions
+(`sameitems.LeftOut` wraps the skips' `RecipeLeftOut`).
 
 `POST /api/v1/households/{householdId}/same-items` (`plan.edit`)
 `{variantKey, variantName, keptKey, keptName}` → `201` with the link, or `200`

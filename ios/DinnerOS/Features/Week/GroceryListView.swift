@@ -561,6 +561,11 @@ private struct GroceryItemRow: View {
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
+                            if let alsoCalled = item.alsoCalledText {
+                                Text(alsoCalled)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
                             // Some at home, not enough: the amount above is the rest.
                             if let onHand = item.onHandText {
                                 Label(onHand, systemImage: "house")
@@ -679,6 +684,9 @@ private struct GroceryItemRow: View {
         if let amount {
             parts.append(amount)
         }
+        if let alsoCalled = item.alsoCalledText {
+            parts.append(alsoCalled)
+        }
         if let onHand = item.onHandText {
             parts.append(onHand)
         }
@@ -719,6 +727,11 @@ struct LeftOutItemRow: View {
                         .strikethrough()
                         .foregroundStyle(.secondary)
                 }
+                if let alsoCalled = item.alsoCalledText {
+                    Text(alsoCalled)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 if let text = item.skipText {
                     Text(text)
                         .font(.footnote)
@@ -727,7 +740,8 @@ struct LeftOutItemRow: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(
-                "\(item.name), skipped. \(item.skipText ?? "")")
+                [item.name, String(localized: "skipped"), item.alsoCalledText, item.skipText]
+                    .compactMap { $0 }.joined(separator: ". "))
             Spacer(minLength: 0)
             if isWorking {
                 ProgressView()

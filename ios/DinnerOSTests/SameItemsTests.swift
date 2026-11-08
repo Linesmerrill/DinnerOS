@@ -37,6 +37,39 @@ struct SameItemsTests {
         #expect(row.alsoCalled.map(\.linkID) == ["link-2", "link-3"])
     }
 
+    @Test func theGroceryListSaysWhatElseAnItemIsCalled() throws {
+        let json = #"""
+            {"ingredientKey":"i-ccp","name":"Chipotle Chili Powder","amounts":[],"quantityText":"3 tsp",
+             "unquantified":false,"status":"toBuy","recipes":[],
+             "alsoCalled":[{"linkId":"link-1","name":"Chipotle Powder"}]}
+            """#
+        let item = try JSONDecoder().decode(GroceryItem.self, from: Data(json.utf8))
+        #expect(item.alsoCalled == [SameItemName(linkID: "link-1", name: "Chipotle Powder")])
+        #expect(item.alsoCalledText == "Also called Chipotle Powder")
+
+        // An older server sends none.
+        let old = #"""
+            {"ingredientKey":"i-ccp","name":"Chipotle Chili Powder","amounts":[],"quantityText":"",
+             "unquantified":false,"status":"toBuy","recipes":[]}
+            """#
+        let plain = try JSONDecoder().decode(GroceryItem.self, from: Data(old.utf8))
+        #expect(plain.alsoCalled.isEmpty && plain.alsoCalledText == nil)
+    }
+
+    @Test func aSkippedMergedRowStillKnowsItsOtherNames() throws {
+        let skipped = with(
+            ShoppingFixtures.excludedJSON(
+                key: "i-ccp", name: "Chipotle Chili Powder", reason: "skipped", text: "You have it this week",
+                groceryStatus: "skipped"),
+            #""skipScope":"week","alsoCalled":[{"linkId":"link-1","name":"Chipotle Powder"}]"#)
+        let json = "{" + ShoppingFixtures.proposalFields(lines: [], excluded: [skipped], links: []) + "}"
+        let proposal = try JSONDecoder().decode(ShoppingProposal.self, from: Data(json.utf8))
+        let row = try #require(ShopMealLayout(proposal: proposal).groups.flatMap(\.rows).first)
+        // Its menu offers "Chipotle Powder Isn't the Same" from this.
+        #expect(row.isLeftOut)
+        #expect(row.alsoCalled.map(\.name) == ["Chipotle Powder"])
+    }
+
     @Test func anOlderServerHasNoOtherNames() throws {
         let line = ShoppingFixtures.lineJSON(
             id: "l1", key: "i-ccp", name: "Chipotle Chili Powder", productID: "1", displayName: "Jar", size: nil,

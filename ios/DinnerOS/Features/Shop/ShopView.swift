@@ -522,7 +522,7 @@ private struct ShopWeekList: View {
             case .leftOut(let line):
                 LeftOutShopRow(
                     row: row, text: line.text, canPutBack: canLeaveOut && !componentLeftOut,
-                    isWorking: working.contains(row.id)
+                    isWorking: working.contains(row.id), notTheSame: notTheSame(for: row)
                 ) {
                     putBack(line, rowID: row.id)
                 }
@@ -581,14 +581,21 @@ private struct ShopWeekList: View {
                 sameItemTarget = SameItemTarget(
                     key: key, name: name, alsoCalled: row.alsoCalled.map(\.name), rowID: row.id)
             }
-            options.notTheSame = { other in
-                guard let sameItems, let householdID = shopping.householdID else { return }
-                change(rowID: row.id, keys: [key]) {
-                    try await sameItems.unlink(linkID: other.linkID, householdID: householdID)
-                }
-            }
+            options.notTheSame = notTheSame(for: row)
         }
         return options
+    }
+
+    /// Makes one of the row's other names its own item again; `nil` when this member can't.
+    private func notTheSame(for row: ShopMealLayout.Row) -> ((SameItemName) -> Void)? {
+        guard sameItems != nil, canLeaveOut else { return nil }
+        let key = row.ingredientKey
+        return { other in
+            guard let sameItems, let householdID = shopping.householdID else { return }
+            change(rowID: row.id, keys: [key]) {
+                try await sameItems.unlink(linkID: other.linkID, householdID: householdID)
+            }
+        }
     }
 
     /// This week's other items, then the pantry's, that `target` can be the same as.
@@ -996,6 +1003,8 @@ private struct LeftOutShopRow: View {
     let text: String
     let canPutBack: Bool
     let isWorking: Bool
+    /// Makes one of its other names its own item again; `nil` when this member can't.
+    var notTheSame: ((SameItemName) -> Void)? = nil
     let putBack: () -> Void
 
     var body: some View {
@@ -1010,6 +1019,11 @@ private struct LeftOutShopRow: View {
                         .strikethrough()
                         .foregroundStyle(.secondary)
                 }
+                if let alsoCalled = ShopMealText.alsoCalled(row.alsoCalled) {
+                    Text(alsoCalled)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 Label(text, systemImage: "minus.circle")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -1019,11 +1033,27 @@ private struct LeftOutShopRow: View {
             Spacer(minLength: 0)
             if isWorking {
                 ProgressView()
-            } else if canPutBack {
-                Button("Put Back", action: putBack)
-                    .buttonStyle(.bordered)
-                    .font(.subheadline)
-                    .accessibilityLabel("Put \(row.name) Back")
+            } else {
+                if canPutBack {
+                    Button("Put Back", action: putBack)
+                        .buttonStyle(.bordered)
+                        .font(.subheadline)
+                        .accessibilityLabel("Put \(row.name) Back")
+                }
+                if let notTheSame, !row.alsoCalled.isEmpty {
+                    Menu {
+                        ForEach(row.alsoCalled, id: \.linkID) { other in
+                            Button("\(other.name) Isn't the Same", systemImage: "arrow.uturn.backward") {
+                                notTheSame(other)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .imageScale(.large)
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel("Options for \(row.name)")
+                }
             }
         }
     }

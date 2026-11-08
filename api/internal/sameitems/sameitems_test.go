@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb/mongotest"
@@ -361,5 +363,33 @@ func TestIntegrationMongoStore(t *testing.T) {
 	}
 	if left, _ := store.ListLinks(ctx, testHousehold); len(left) != 0 {
 		t.Errorf("PurgeHousehold() left %d links", len(left))
+	}
+}
+
+type fakeLeftOut grocery.LeftOutSet
+
+func (f fakeLeftOut) RecipeLeftOut(context.Context, string, string) (grocery.LeftOutSet, error) {
+	return maps.Clone(grocery.LeftOutSet(f)), nil
+}
+
+// Cooking views read skips through the household's links: a skip saved under
+// the kept name crosses out the recipe's other name.
+func TestLeftOutReadsThroughLinks(t *testing.T) {
+	svc, _ := newTestService()
+	link(t, svc, "name:chipotle powder", "Chipotle Powder", "ing-ccp", "Chipotle Chili Powder")
+	skip := grocery.LeftOut{SkipID: "s-1", Scope: grocery.SkipRecipe}
+	src := LeftOut{Skips: fakeLeftOut{"ing-ccp": skip}, Same: svc}
+	got, err := src.RecipeLeftOut(context.Background(), editor.HouseholdID, "r-tacos")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["name:chipotle powder"] != skip {
+		t.Errorf("variant = %+v, want the kept name's skip", got["name:chipotle powder"])
+	}
+
+	// Without links, or with no service, it's the skips as they are.
+	bare := LeftOut{Skips: fakeLeftOut{"ing-ccp": skip}}
+	if got, _ := bare.RecipeLeftOut(context.Background(), editor.HouseholdID, "r-tacos"); len(got) != 1 {
+		t.Errorf("no service = %+v", got)
 	}
 }
