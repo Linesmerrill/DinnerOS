@@ -351,6 +351,9 @@ type LineSource struct {
 	// amount, and whether it is for a component of that meal. The line is
 	// still one purchase. Not stored.
 	Shares []grocery.Share
+	// AlsoCalled are the other names the household said are this item
+	// (grocery.Item.AlsoCalled). Not stored.
+	AlsoCalled []grocery.AlsoCalled
 	// SkipScope is set on an ExcludedSkipped line. Not stored.
 	SkipScope grocery.SkipScope
 	// OnHand and Needed are set when the pantry has some but not enough

@@ -173,6 +173,22 @@ func aggregateGroceryList(
 	return out, nil
 }
 
+// setAlsoCalled names, on each item, the other names it was bought under.
+func (g *GroceryList) setAlsoCalled(also map[string][]grocery.AlsoCalled) {
+	if len(also) == 0 {
+		return
+	}
+	for i := range g.Categories {
+		for j := range g.Categories[i].Items {
+			item := &g.Categories[i].Items[j]
+			item.AlsoCalled = also[item.IngredientKey]
+		}
+	}
+	for i := range g.SkippedItems {
+		g.SkippedItems[i].AlsoCalled = also[g.SkippedItems[i].IngredientKey]
+	}
+}
+
 // groceryLines converts a recipe's ingredient lines for one serving size.
 // A line without an authored amount for that size, or whose stored quantity
 // or unit is unusable, stays on the list without a quantity rather than

@@ -19,6 +19,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/ratings"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recommendations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/sameitems"
 	"github.com/Linesmerrill/DinnerOS/api/internal/shopping"
 	"github.com/Linesmerrill/DinnerOS/api/internal/skips"
 	"github.com/Linesmerrill/DinnerOS/api/internal/substitutes"
@@ -46,6 +47,7 @@ func newAccountService(db *mongo.Database, householdService *households.Service,
 			substitutes.NewMongoStore(db),
 			shopping.NewMongoStore(db),
 			skips.NewMongoStore(db),
+			sameitems.NewMongoStore(db),
 			ratingStore,
 			eventStore,
 			recommendations.NewMongoStore(db),

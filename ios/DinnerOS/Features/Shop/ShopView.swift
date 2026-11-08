@@ -205,8 +205,11 @@ private struct ShopWeekList: View {
     @Environment(HouseholdStore.self) private var households
     @Environment(GrocerySkipStore.self) private var grocerySkips
     @Environment(UsualsStore.self) private var usuals: UsualsStore?
+    @Environment(SameItemStore.self) private var sameItems: SameItemStore?
 
     @State private var showsNotIncluded = false
+    /// The item being linked to another, while the picker is open.
+    @State private var sameItemTarget: SameItemTarget?
     @State private var isRequestingStore = false
     @State private var showsLeftOut = false
     /// Lines with a leave-out or put-back in flight, by row ID.
@@ -297,6 +300,11 @@ private struct ShopWeekList: View {
         }
         .sheet(isPresented: $showsLeftOut) {
             SkippedIngredientsSheet(week: shopping.week)
+        }
+        .sheet(item: $sameItemTarget) { target in
+            SameItemSheet(target: target, choices: sameItemChoices(for: target)) { choice in
+                link(target, to: choice)
+            }
         }
         .alert("Couldn't Change That", isPresented: Binding(presenting: $leaveOutError)) {
             Button("OK", role: .cancel) {}
@@ -567,7 +575,41 @@ private struct ShopWeekList: View {
         options.always = {
             leaveOut(.always(ingredientKey: key, name: name), key: key, rowID: row.id)
         }
+        if sameItems != nil {
+            options.alsoCalled = row.alsoCalled
+            options.sameAs = {
+                sameItemTarget = SameItemTarget(
+                    key: key, name: name, alsoCalled: row.alsoCalled.map(\.name), rowID: row.id)
+            }
+            options.notTheSame = { other in
+                guard let sameItems, let householdID = shopping.householdID else { return }
+                change(rowID: row.id, keys: [key]) {
+                    try await sameItems.unlink(linkID: other.linkID, householdID: householdID)
+                }
+            }
+        }
         return options
+    }
+
+    /// This week's other items, then the pantry's, that `target` can be the same as.
+    private func sameItemChoices(for target: SameItemTarget) -> [SameItemChoice] {
+        let proposal = shopping.proposal
+        let list =
+            (proposal?.lines.map { (key: $0.ingredientKey, name: $0.name) } ?? [])
+            + (proposal?.excluded.map { (key: $0.ingredientKey, name: $0.name) } ?? [])
+        let stocked = pantry.items.map { (key: $0.ingredientID ?? "name:\($0.key)", name: $0.displayName) }
+        return SameItemChoice.choices(
+            for: target.key, name: target.name, alsoCalled: target.alsoCalled, listItems: list, pantryItems: stocked)
+    }
+
+    /// Buys `target` as `choice` from now on, then re-matches so the two show as one line.
+    private func link(_ target: SameItemTarget, to choice: SameItemChoice) {
+        guard let sameItems, let householdID = shopping.householdID else { return }
+        let request = SameItemRequest(
+            variantKey: target.key, variantName: target.name, keptKey: choice.key, keptName: choice.name)
+        change(rowID: target.rowID, keys: [target.key, choice.key]) {
+            try await sameItems.link(request, householdID: householdID)
+        }
     }
 
     private func leaveOut(
@@ -670,6 +712,11 @@ private struct NeedsProductRow: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+                if let alsoCalled = ShopMealText.alsoCalled(line.alsoCalled) {
+                    Text(alsoCalled)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 if let mealNote {
                     Text(mealNote)
                         .font(.footnote)
@@ -721,6 +768,11 @@ private struct NeedsDecisionRow: View {
                 )
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.orange)
+                if let alsoCalled = ShopMealText.alsoCalled(line.alsoCalled) {
+                    Text(alsoCalled)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 if let mealNote {
                     Text(mealNote)
                         .font(.footnote)
@@ -881,6 +933,11 @@ private struct ReadyLineRow: View {
             Text(productText)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            if let alsoCalled = ShopMealText.alsoCalled(line.alsoCalled) {
+                Text(alsoCalled)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             if let mealNote {
                 Text(mealNote)
                     .font(.footnote)
@@ -1054,6 +1111,11 @@ struct ShopRemoveOptions {
     var always: () -> Void
     /// Set for an item a member added: it's taken off the list, and nothing else is offered.
     var removeFromList: (() -> Void)? = nil
+    /// Opens the picker to buy this as something already on the list or in the pantry.
+    var sameAs: (() -> Void)? = nil
+    /// Other names this item goes by, each of which can be made its own item again.
+    var alsoCalled: [SameItemName] = []
+    var notTheSame: ((SameItemName) -> Void)? = nil
 }
 
 private struct ShopRemoveMenuItems: View {
@@ -1069,6 +1131,20 @@ private struct ShopRemoveMenuItems: View {
 
     @ViewBuilder
     private var leaveOutItems: some View {
+        if options.sameAs != nil || !options.alsoCalled.isEmpty {
+            Section {
+                if let sameAs = options.sameAs {
+                    Button("Same as Another Item…", systemImage: "link", action: sameAs)
+                }
+                if let notTheSame = options.notTheSame {
+                    ForEach(options.alsoCalled, id: \.linkID) { other in
+                        Button("\(other.name) Isn't the Same", systemImage: "arrow.uturn.backward") {
+                            notTheSame(other)
+                        }
+                    }
+                }
+            }
+        }
         // Off the list only: the recipe still calls for it, with its amount.
         Section("Already Have It") {
             Button("Have It This Week", systemImage: "checkmark.circle", action: options.thisWeek)
@@ -1782,4 +1858,74 @@ private struct ShopTripStorePicker: View {
 struct WalmartChoices: Identifiable {
     let id = UUID()
     let items: [WalmartChooser.Item]
+}
+
+/// The item "Same as Another Item…" was opened for.
+struct SameItemTarget: Identifiable, Hashable {
+    let key: String
+    let name: String
+    /// Names it already goes by, which aren't offered again.
+    let alsoCalled: [String]
+    let rowID: String
+
+    var id: String { key }
+}
+
+/// Picks what an item is the same as: this week's other items, then the pantry's, searchable.
+private struct SameItemSheet: View {
+    let target: SameItemTarget
+    let choices: [SameItemChoice]
+    let pick: (SameItemChoice) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(SameItemChoice.filter(choices, by: query)) { choice in
+                        Button {
+                            pick(choice)
+                            dismiss()
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(choice.name)
+                                    .foregroundStyle(Color.primary)
+                                Text(choice.detail)
+                                    .font(.footnote)
+                                    // Not `.secondary`: inside a button that takes the tint.
+                                    .foregroundStyle(Color.secondary)
+                            }
+                            .contentShape(.rect)
+                        }
+                        .accessibilityHint("Buys \(target.name) as \(choice.name)")
+                    }
+                } footer: {
+                    Text("Pick the item \(target.name) is the same as. You'll buy it once, with that item's product.")
+                }
+            }
+            .overlay {
+                if SameItemChoice.filter(choices, by: query).isEmpty {
+                    ContentUnavailableView(
+                        choices.isEmpty ? "Nothing to Pick" : "No Matches",
+                        systemImage: "magnifyingglass",
+                        description: Text(
+                            choices.isEmpty
+                                ? "Nothing else is on this week's list or in your pantry."
+                                : "Try another name."))
+                }
+            }
+            .searchable(text: $query, prompt: "Search")
+            .navigationTitle("Same as…")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+        // Full height, so the search field shows without dragging the sheet up first.
+        .presentationDetents([.large])
+    }
 }

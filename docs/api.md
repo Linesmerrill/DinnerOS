@@ -137,6 +137,9 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/grocery-skips` → `{items}` | `household.view` | 6 | ✅ |
 | POST | `/api/v1/households/{householdId}/grocery-skips` `{ingredientKey, name?, scope, week?, recipeId?}` → `201` skip, or `200` when it replaced the ingredient's skip | `plan.edit` | 6 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/grocery-skips/{skipId}` → `204` | `plan.edit` | 6 | ✅ |
+| GET | `/api/v1/households/{householdId}/same-items` → `{items}` | `household.view` | 8 | ✅ |
+| POST | `/api/v1/households/{householdId}/same-items` `{variantKey, variantName, keptKey, keptName}` → `201` link, or `200` when it replaced that name's link | `plan.edit` | 8 | ✅ |
+| DELETE | `/api/v1/households/{householdId}/same-items/{linkId}` → `204` | `plan.edit` | 8 | ✅ |
 | GET | `/api/v1/households/{householdId}/recipes/{recipeId}/customizations` `?servings&entryId&week` → `{recipeId, servings, groups}` | `household.view` | 6 | ✅ |
 | PUT | `/api/v1/households/{householdId}/plans/{week}/entries/{entryId}/customization` `{selections}` → plan | `plan.edit` | 6 | ✅ |
 | GET | `/api/v1/ingredients` `?q&limit` → `{items: [{id, key, name, category, categoryConfident, imageUrl?}]}` | bearer | 7 | ✅ |
@@ -1172,6 +1175,37 @@ two never disagree about what a meal needs.
 
 `DELETE /api/v1/households/{householdId}/grocery-skips/{skipId}` → `204`
 (`plan.edit`) resumes the ingredient: it is back on the next list built.
+
+### Same items
+
+A household can say two names are one thing to buy: "Chipotle Powder" is the
+"Chipotle Chili Powder" it keeps (decision 661). The grocery list, and so the
+Shop tab, then buys the variant as the kept item: one line under the kept name
+with both amounts added up, one product, and the pantry and skips of either
+name apply to it. Recipes keep their own words.
+
+`POST /api/v1/households/{householdId}/same-items` (`plan.edit`)
+`{variantKey, variantName, keptKey, keptName}` → `201` with the link, or `200`
+when the variant already had a link and it was replaced. Keys are grocery line
+keys (a catalog ingredient ID or `name:<normalized name>`).
+
+- Links never chain. Linking to an item that is itself a variant links to its
+  kept item; items that were kept as the new variant move to the new kept item.
+- `400 validation_failed` with a message the app can show: a name linked to
+  itself ("Pick a different item."), two names that are already one item
+  ("These are already the same item."), or more than 200 links.
+
+`GET .../same-items` (`household.view`) → `{items: [{id, variantKey,
+variantName, keptKey, keptName, createdBy, createdAt}]}`, oldest first.
+
+`DELETE .../same-items/{linkId}` (`plan.edit`) → `204`; the variant is its own
+item again on the next list built.
+
+Grocery items, Shop lines, and excluded Shop lines carry `alsoCalled:
+[{linkId, name}]`, the other names a meal this week used for that item (never
+null). A variant is matched under the key it was linked from, its
+`name:` spelling, and its catalog ID, like a skip. When the kept item has no
+saved product but a variant does, the Shop tab uses the variant's.
 
 **Matching.** A skip is registered under the key it was made from, under
 `name:<normalized name>`, and under the catalog ingredient ID for that name

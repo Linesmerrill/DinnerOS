@@ -305,6 +305,25 @@ type GroceryItemResponse struct {
 	// SkipText says what the skip does, in the words the app shows. Absent
 	// unless the item is skipped.
 	SkipText string `json:"skipText,omitempty"`
+	// AlsoCalled are other names the household said are this item, when a
+	// meal this week used one (decision 661). Never null.
+	AlsoCalled []AlsoCalledResponse `json:"alsoCalled"`
+}
+
+// AlsoCalledResponse is one other name for an item, with the link that made
+// it the same item, so the app can undo it.
+type AlsoCalledResponse struct {
+	LinkID string `json:"linkId"`
+	Name   string `json:"name"`
+}
+
+// AlsoCalled renders an item's other names; never null.
+func AlsoCalled(also []grocery.AlsoCalled) []AlsoCalledResponse {
+	out := make([]AlsoCalledResponse, 0, len(also))
+	for _, a := range also {
+		out = append(out, AlsoCalledResponse{LinkID: a.LinkID, Name: a.Name})
+	}
+	return out
 }
 
 // GroceryExtraResponse is an item added to the week directly.
@@ -484,6 +503,7 @@ func newGroceryItemResponse(item grocery.Item) GroceryItemResponse {
 		ir.Recipes = append(ir.Recipes, GroceryRecipeResponse{ID: src.RecipeID, Name: src.RecipeName})
 	}
 	ir.Shares = GroceryShares(item.Shares)
+	ir.AlsoCalled = AlsoCalled(item.AlsoCalled)
 	ir.Via = make([]GroceryViaResponse, 0, len(item.Via))
 	for _, v := range item.Via {
 		ir.Via = append(ir.Via, newGroceryViaResponse(v))

@@ -42,6 +42,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/push"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recommendations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/sameitems"
 	"github.com/Linesmerrill/DinnerOS/api/internal/shelflife"
 	"github.com/Linesmerrill/DinnerOS/api/internal/shopping"
 	"github.com/Linesmerrill/DinnerOS/api/internal/skips"
@@ -196,8 +197,11 @@ func run() error {
 	// Cook deductions skip what a recipe is cooked without.
 	skipsService := skips.NewService(skips.NewMongoStore(db.Database()), recipeService, logger).WithRecipes(recipeService)
 	pantryService.SetLeftOut(skipsService)
+	// Names the household says are one thing to buy ("Chipotle Powder" is
+	// "Chipotle Chili Powder"): one line, one product (decision 661).
+	sameItemsService := sameitems.NewService(sameitems.NewMongoStore(db.Database()), recipeService)
 	planService := planning.NewService(planning.NewMongoStore(db.Database()), recipeService).
-		WithPantry(pantryService).WithSpecialties(substitutesService).WithSkips(skipsService).
+		WithPantry(pantryService).WithSpecialties(substitutesService).WithSkips(skipsService).WithSameItems(sameItemsService).
 		WithEvents(behavior.events, logger).WithWeekStart(householdService).
 		WithFreezer(pantryService, householdService, notificationService).WithOutcomes(behavior.events)
 	householdService.WithWeekStartListener(planService)
@@ -213,6 +217,12 @@ func run() error {
 	})
 	skipHandler := skips.NewHandler(skips.HandlerOptions{
 		Service:    skipsService,
+		Authorizer: householdService,
+		Tokens:     tokens,
+		Logger:     logger,
+	})
+	sameItemsHandler := sameitems.NewHandler(sameitems.HandlerOptions{
+		Service:    sameItemsService,
 		Authorizer: householdService,
 		Tokens:     tokens,
 		Logger:     logger,
@@ -436,6 +446,7 @@ func run() error {
 				catalogHandler.Mount(r)
 				planHandler.Mount(r)
 				skipHandler.Mount(r)
+				sameItemsHandler.Mount(r)
 				customizeHandler.Mount(r)
 				autopilotHandler.Mount(r)
 				menuHandler.Mount(r)
@@ -514,6 +525,7 @@ func indexSets() []mongodb.IndexSet {
 		substitutes.Indexes(),
 		shopping.Indexes(),
 		skips.Indexes(),
+		sameitems.Indexes(),
 		mealkit.Indexes(),
 		behaviorIndexes(),
 		recommendations.Indexes(),

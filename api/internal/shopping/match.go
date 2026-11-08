@@ -162,6 +162,7 @@ func buildProposal(p providers.GroceryProvider, settings Settings, g planning.Gr
 	for _, pref := range prefs {
 		byKey[pref.IngredientKey] = pref
 	}
+	sameItemProducts(byKey, g)
 	var selected map[string]LineSelection
 	if in.Lines != nil {
 		selected = make(map[string]LineSelection, len(in.Lines))
@@ -294,6 +295,32 @@ func cartLinks(p providers.GroceryProvider, items []providers.CartItem, storeID 
 	return out, nil
 }
 
+// sameItemProducts lets an item the household linked other names to use a
+// product saved under one of those names, when it has none of its own: the
+// jar picked for "Chipotle Powder" is the one for "Chipotle Chili Powder"
+// (decision 661). A product saved for the item itself always wins.
+func sameItemProducts(byKey map[string]Preference, g planning.GroceryList) {
+	use := func(item grocery.Item) {
+		if _, ok := byKey[item.IngredientKey]; ok {
+			return
+		}
+		for _, also := range item.AlsoCalled {
+			if pref, ok := byKey[also.Key]; ok {
+				byKey[item.IngredientKey] = pref
+				return
+			}
+		}
+	}
+	for _, category := range g.Categories {
+		for _, item := range category.Items {
+			use(item)
+		}
+	}
+	for _, item := range g.SkippedItems {
+		use(item)
+	}
+}
+
 func lineSource(category string, item grocery.Item) LineSource {
 	src := LineSource{
 		IngredientKey: item.IngredientKey, Name: item.Name, Category: category, Unquantified: item.Unquantified,
@@ -306,6 +333,7 @@ func lineSource(category string, item grocery.Item) LineSource {
 		src.Recipes = append(src.Recipes, RecipeRef{ID: s.RecipeID, Name: s.RecipeName})
 	}
 	src.Shares = item.Shares
+	src.AlsoCalled = item.AlsoCalled
 	src.Unsure = item.Unsure
 	src.Added = len(item.Sources) == 0 && slices.ContainsFunc(item.Extras, func(e grocery.Extra) bool { return e.Origin == grocery.OriginAdded })
 	if item.OnHand != nil && item.Needed != nil {

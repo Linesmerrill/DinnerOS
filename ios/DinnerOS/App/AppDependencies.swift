@@ -32,6 +32,7 @@ final class AppDependencies {
     let specialties: SpecialtyStore
     /// Ingredients the household leaves off its grocery list on purpose.
     let grocerySkips: GrocerySkipStore
+    let sameItems: SameItemStore
     let autopilot: AutopilotStore
     let events: EventReporter
     let notifications: NotificationStore
@@ -117,6 +118,7 @@ final class AppDependencies {
             Task { await notifications.refreshUnreadCount() }
         }
         grocerySkips = GrocerySkipStore(session: session, api: client.map { GrocerySkipsAPI(client: $0) })
+        sameItems = SameItemStore(session: session, api: client.map { SameItemsAPI(client: $0) })
         specialties = SpecialtyStore(session: session, api: client.map { SpecialtiesAPI(client: $0) })
         // A recorded batch restocks its pantry item.
         specialties.onBatchRecorded = { [pantry] item, householdID in

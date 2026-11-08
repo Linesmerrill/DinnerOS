@@ -568,9 +568,13 @@ nonisolated struct ShoppingHandoffLine: Decodable, Hashable, Sendable, Identifia
     var check: ShoppingLineCheck? = nil
     /// Added by hand and needed by no meal (decision 651); `nil` from an older server.
     var addedRef: Bool? = nil
+    /// Other names the household said are this item (decision 661); `nil` from an older server.
+    var alsoCalledRefs: [SameItemName]? = nil
 
     /// An item a member added, which can be taken off the list.
     var isAdded: Bool { addedRef ?? false }
+
+    var alsoCalled: [SameItemName] { alsoCalledRefs ?? [] }
 
     /// Walmart had it out of stock for pickup and delivery at the check. It still goes in.
     var mayBeUnavailable: Bool { check?.status == WalmartProductStatus.unavailable.rawValue }
@@ -618,6 +622,7 @@ nonisolated struct ShoppingHandoffLine: Decodable, Hashable, Sendable, Identifia
         case shareRefs = "shares"
         case check
         case addedRef = "added"
+        case alsoCalledRefs = "alsoCalled"
     }
 }
 
@@ -774,10 +779,12 @@ nonisolated struct ShoppingExcludedLine: Decodable, Hashable, Sendable, Identifi
     var check: ShoppingLineCheck? = nil
     /// As on `ShoppingHandoffLine`.
     var addedRef: Bool? = nil
+    var alsoCalledRefs: [SameItemName]? = nil
 
     var recipes: [GroceryRecipe] { recipeRefs ?? [] }
     var shares: [GroceryShare] { shareRefs ?? [] }
     var isAdded: Bool { addedRef ?? false }
+    var alsoCalled: [SameItemName] { alsoCalledRefs ?? [] }
 
     var id: String { "\(reason.rawValue)|\(ingredientKey)|\(skipScope?.rawValue ?? "")" }
 
@@ -789,6 +796,7 @@ nonisolated struct ShoppingExcludedLine: Decodable, Hashable, Sendable, Identifi
         case shareRefs = "shares"
         case skipScope, product, check
         case addedRef = "added"
+        case alsoCalledRefs = "alsoCalled"
     }
 }
 

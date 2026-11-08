@@ -162,6 +162,10 @@ type Item struct {
 	// every meal that uses it, with that meal's own amount, while it stays one
 	// purchase.
 	Shares []Share
+	// AlsoCalled are the other names the household said are this item
+	// (SameItems), when a meal this week used one. Set by the caller after
+	// aggregation.
+	AlsoCalled []AlsoCalled
 }
 
 // Share is the part of an item one recipe needs.

@@ -407,6 +407,9 @@ type HandoffLineResponse struct {
 	// is for a component of that meal. The line stays one purchase with one
 	// package count. Empty on a stored handoff.
 	Shares []planning.GroceryShareResponse `json:"shares"`
+	// AlsoCalled are the other names the household said are this item
+	// (decision 661), never null. Empty on a stored handoff.
+	AlsoCalled []planning.AlsoCalledResponse `json:"alsoCalled"`
 	// PriceCents is what the line cost in all, or null.
 	PriceCents *int64 `json:"priceCents"`
 	// Pantry is null until confirmed; then tracked (a pantry purchase) or
@@ -492,6 +495,8 @@ type ExcludedResponse struct {
 	// Recipes and Shares are the meals the line is for, as on a line.
 	Recipes []RecipeRefResponse             `json:"recipes"`
 	Shares  []planning.GroceryShareResponse `json:"shares"`
+	// AlsoCalled is as on a line.
+	AlsoCalled []planning.AlsoCalledResponse `json:"alsoCalled"`
 	// SkipScope is week, always, or recipe on a skipped line, and absent
 	// otherwise. A recipe-scoped line holds only the left-out meals' part;
 	// the same ingredient can also be a line for other meals.
@@ -945,6 +950,7 @@ func (v *responseView) lineResponse(provider providers.Key, l HandoffLine, store
 	}
 	resp.Recipes = recipeRefs(l.Recipes)
 	resp.Shares = planning.GroceryShares(l.Shares)
+	resp.AlsoCalled = planning.AlsoCalled(l.AlsoCalled)
 	if l.Reason != "" {
 		reason := l.Reason
 		count.Reason = reason
@@ -1058,7 +1064,8 @@ func (v *responseView) proposalResponse(p Proposal, stored bool) ProposalRespons
 			Unquantified: e.Unquantified, Reason: e.Reason, Text: v.exclusionText(p.Provider, e.Reason),
 			SearchTerms: searchTermsResponse(e.Name, e.Category),
 			Recipes:     recipeRefs(e.Recipes), Shares: planning.GroceryShares(e.Shares), SkipScope: e.SkipScope,
-			Added: e.Added,
+			AlsoCalled: planning.AlsoCalled(e.AlsoCalled),
+			Added:      e.Added,
 		}
 		if e.Reason == ExcludedSkipped {
 			er.Text = skippedText(e)

@@ -43,6 +43,14 @@ nonisolated struct ShopMealLayout: Equatable, Sendable {
             return false
         }
 
+        /// Other names the household said this item is.
+        var alsoCalled: [SameItemName] {
+            switch kind {
+            case .line(let line): line.alsoCalled
+            case .needsProduct(let line), .needsDecision(let line), .leftOut(let line): line.alsoCalled
+            }
+        }
+
         /// A member added it by hand and no meal needs it, so it's removed rather than left out.
         var isAdded: Bool {
             switch kind {
@@ -246,6 +254,13 @@ nonisolated enum ShopMealText {
         let also = String(localized: "Also in \(row.alsoIn.formatted(.list(type: .and)))")
         guard let amount = row.share?.quantityText, !amount.isEmpty else { return also }
         return String(localized: "\(amount) for this meal · \(also)")
+    }
+
+    /// Under an item the household said is the same as others: "Also called Chipotle Powder".
+    /// `nil` when it goes by no other name.
+    static func alsoCalled(_ names: [SameItemName]) -> String? {
+        guard !names.isEmpty else { return nil }
+        return String(localized: "Also called \(names.map(\.name).formatted(.list(type: .and)))")
     }
 
     /// Under a meal that shares a line waiting on a decision under another meal.

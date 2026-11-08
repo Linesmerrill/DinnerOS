@@ -54,6 +54,12 @@ type SkipSource interface {
 	GrocerySkips(ctx context.Context, householdID, week string) (grocery.SkipRules, error)
 }
 
+// SameItemSource provides the names a household said are the same thing to
+// buy as another (decision 661). *sameitems.Service implements it.
+type SameItemSource interface {
+	GrocerySameItems(ctx context.Context, householdID string) (grocery.SameItems, error)
+}
+
 // WeekStartSource says which day a household's week starts on ("sun".."sat").
 // *households.Service implements it.
 type WeekStartSource interface {
@@ -71,6 +77,8 @@ type Service struct {
 	specialties SpecialtySource
 	// skips is optional; without it the household buys every ingredient.
 	skips SkipSource
+	// sameItems is optional; without it every name is its own item.
+	sameItems SameItemSource
 	// extras is optional; without it the list has only recipe lines.
 	extras []ExtrasSource
 	// customizations is optional; without it customized entries contribute
@@ -115,6 +123,13 @@ func (s *Service) WithSpecialties(source SpecialtySource) *Service {
 // not to buy, and returns s.
 func (s *Service) WithSkips(source SkipSource) *Service {
 	s.skips = source
+	return s
+}
+
+// WithSameItems makes GroceryList buy the names a household linked as one
+// item, and returns s.
+func (s *Service) WithSameItems(source SameItemSource) *Service {
+	s.sameItems = source
 	return s
 }
 
@@ -741,6 +756,20 @@ func (s *Service) GroceryList(ctx context.Context, householdID, week string) (Gr
 	if selections, err = s.appendExtras(ctx, p, selections); err != nil {
 		return GroceryList{}, fmt.Errorf("planning: load extra grocery items: %w", err)
 	}
+	// Names the household linked as one item become the kept one, so they
+	// add up to one line with one product. The pantry and skips then answer
+	// for the kept name with what they know under either.
+	var same grocery.SameItems
+	var alsoCalled map[string][]grocery.AlsoCalled
+	if s.sameItems != nil && len(selections) > 0 {
+		if same, err = s.sameItems.GrocerySameItems(ctx, householdID); err != nil {
+			return GroceryList{}, fmt.Errorf("planning: load same items: %w", err)
+		}
+		selections, alsoCalled = same.Apply(selections)
+		if stock, ok := pantry.(grocery.PantryStock); ok {
+			pantry = same.Pantry(stock)
+		}
+	}
 	// Skips resolve last, against the keys the list actually ends up with, so
 	// an ingredient a store alternative introduced can be skipped by its own
 	// name without disturbing the rest of that alternative.
@@ -750,12 +779,13 @@ func (s *Service) GroceryList(ctx context.Context, householdID, week string) (Gr
 		if err != nil {
 			return GroceryList{}, fmt.Errorf("planning: load skipped ingredients: %w", err)
 		}
-		skips = rules
+		skips = same.Skips(rules)
 	}
 	g, err := aggregateGroceryList(p, selections, skipped, pantry, skips)
 	if err != nil {
 		return GroceryList{}, err
 	}
+	g.setAlsoCalled(alsoCalled)
 	g.Batches = batches
 	g.PantryApplied = s.pantry != nil
 	g.SpecialtiesApplied = s.specialties != nil
