@@ -32,7 +32,8 @@ struct SameItemsTests {
         #expect(ShopMealText.alsoCalled([]) == nil)
 
         // Every row under a meal carries them, so its menu can undo each one.
-        let row = try #require(ShopMealLayout(proposal: proposal).groups.flatMap(\.rows).first { $0.name == "Garlic Powder" })
+        let row = try #require(
+            ShopMealLayout(proposal: proposal).groups.flatMap(\.rows).first { $0.name == "Garlic Powder" })
         #expect(row.alsoCalled.map(\.linkID) == ["link-2", "link-3"])
     }
 
@@ -67,11 +68,12 @@ struct SameItemsTests {
     }
 
     @Test func linkingSendsTheItemAndWhatItsTheSameAs() throws {
-        let body = try JSONSerialization.jsonObject(
-            with: JSONEncoder().encode(
-                SameItemRequest(
-                    variantKey: "name:chipotle powder", variantName: "Chipotle Powder", keptKey: "i-ccp",
-                    keptName: "Chipotle Chili Powder"))) as? [String: String]
+        let body =
+            try JSONSerialization.jsonObject(
+                with: JSONEncoder().encode(
+                    SameItemRequest(
+                        variantKey: "name:chipotle powder", variantName: "Chipotle Powder", keptKey: "i-ccp",
+                        keptName: "Chipotle Chili Powder"))) as? [String: String]
         #expect(
             body == [
                 "variantKey": "name:chipotle powder", "variantName": "Chipotle Powder", "keptKey": "i-ccp",
