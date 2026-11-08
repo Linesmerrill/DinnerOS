@@ -126,6 +126,7 @@ generic option names. Packet sizes are estimates.
 | Sweet and Smoky BBQ Seasoning, Tunisian, Cuban Spice Blend | batch, store |
 | Garlic Herb Butter | store (garlic and herb butter, 2 tbsp per 1 oz packet); batch recipe pending |
 | Beef Demi-Glace (alias Demi-Glace Concentrate), Chicken Demi-Glace | store (one 37.5 g concentrate sachet per packet; chicken size unverified) |
+| Crème Fraîche | store (sour cream with heavy cream, half and half), store (cream cheese with heavy cream, 2:1), batch (heavy cream cultured with buttermilk); for stores like Walmart that don't carry it |
 
 32 specialty ingredients, 20 with a batch. Plain store products (hoisin, BBQ,
 gochujang, soy sauce, tomato paste, hot sauce, Italian seasoning) and produce

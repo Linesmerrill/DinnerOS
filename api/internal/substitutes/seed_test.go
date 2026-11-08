@@ -96,6 +96,7 @@ func TestEmbeddedSeed(t *testing.T) {
 		"blackening-spice", "brown-sugar-bourbon-seasoning", "sesame-dressing", "miso-sauce-concentrate",
 		"cheese-roux-concentrate", "garlic-ginger-scallion-paste", "sweet-and-smoky-bbq-seasoning",
 		"tunisian-spice-blend", "cuban-spice-blend", "garlic-herb-butter", "beef-demi-glace", "chicken-demi-glace",
+		"creme-fraiche",
 	} {
 		if _, ok := ids[id]; !ok {
 			t.Errorf("seed is missing %s", id)

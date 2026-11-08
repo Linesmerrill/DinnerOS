@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "note": "Generic, general-knowledge approximations written for DinnerOS, except where a per-specialty note records a ratio the household confirmed. Packet sizes are estimates. Amounts are exact fractions in DinnerOS unit codes. Every entry carries a store alternative a normal grocery store can fill; a per-specialty note flags the ones whose store route needs a caveat.",
   "specialties": [
     {
@@ -1085,6 +1085,57 @@
           "notes": "One 37.5 g sachet per packet. The sachet is a 2x concentrate; stir it in where the recipe adds the packet, and taste before adding more.",
           "per": { "quantity": "1", "unit": "count" },
           "ingredients": [{ "name": "Chicken Demi-Glace Sachet", "quantity": "1", "unit": "count", "category": "pantry" }]
+        }
+      ]
+    },
+    {
+      "id": "creme-fraiche",
+      "name": "Crème Fraîche",
+      "category": "dairy-eggs",
+      "note": "Many stores, Walmart included, don't carry it. A packet is about 2 tbsp (estimate). A household that can buy it picks As Is.",
+      "unitSizes": [
+        { "per": "count", "quantity": "2", "unit": "tbsp" },
+        { "per": "package", "quantity": "2", "unit": "tbsp" }
+      ],
+      "defaultOptionId": "creme-fraiche.store",
+      "options": [
+        {
+          "id": "creme-fraiche.store",
+          "type": "store_alternative",
+          "name": "Sour cream with heavy cream",
+          "notes": "Stir them together until smooth. The cream helps it hold up in a warm sauce; stir it in off the heat.",
+          "per": { "quantity": "1", "unit": "tbsp" },
+          "ingredients": [
+            { "name": "Sour Cream", "quantity": "1/2", "unit": "tbsp", "category": "dairy-eggs" },
+            { "name": "Heavy Cream", "quantity": "1/2", "unit": "tbsp", "category": "dairy-eggs" }
+          ]
+        },
+        {
+          "id": "creme-fraiche.cream-cheese",
+          "type": "store_alternative",
+          "name": "Cream cheese with heavy cream",
+          "notes": "Soften the cream cheese and whisk in the cream until smooth. Milder than crème fraîche and won't split in a hot sauce. A squeeze of lemon adds the tang.",
+          "per": { "quantity": "1", "unit": "tbsp" },
+          "ingredients": [
+            { "name": "Cream Cheese", "quantity": "2", "unit": "tsp", "category": "dairy-eggs" },
+            { "name": "Heavy Cream", "quantity": "1", "unit": "tsp", "category": "dairy-eggs" }
+          ]
+        },
+        {
+          "id": "creme-fraiche.batch",
+          "type": "house_made_batch",
+          "name": "Crème fraîche (house batch)",
+          "ingredients": [
+            { "name": "Heavy Cream", "quantity": "1", "unit": "cup", "category": "dairy-eggs" },
+            { "name": "Buttermilk", "quantity": "2", "unit": "tbsp", "category": "dairy-eggs" }
+          ],
+          "steps": [
+            "Stir the buttermilk into the cream in a clean jar.",
+            "Cover loosely and leave it on the counter for 12 to 24 hours, until thick.",
+            "Stir, cover tightly, and refrigerate. It thickens more as it chills."
+          ],
+          "yield": { "quantity": "1", "unit": "cup" },
+          "shelfLifeDays": 10
         }
       ]
     }

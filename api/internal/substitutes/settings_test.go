@@ -313,3 +313,37 @@ func TestListReportsChoiceSource(t *testing.T) {
 		t.Errorf("under ask = %+v", r)
 	}
 }
+
+// TestCremeFraicheBecomesSourCreamAndHeavyCream: stores like Walmart don't
+// carry crème fraîche, so by default the list buys sour cream and heavy cream,
+// with cream cheese and a cultured batch as the other choices.
+func TestCremeFraicheBecomesSourCreamAndHeavyCream(t *testing.T) {
+	f := newFixture(t)
+	id := f.catalog.id("Crème Fraîche")
+	if _, err := f.svc.SetStrategy(f.ctx, f.actor, string(StrategySimilar)); err != nil {
+		t.Fatal(err)
+	}
+	specs, err := f.svc.GrocerySpecialties(f.ctx, testHousehold, []grocery.Line{{IngredientKey: id, Name: "Crème Fraîche"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := specs[id].Choice
+	if c == nil || c.OptionID != "creme-fraiche.store" || c.Type != grocery.ChoiceStoreAlternative {
+		t.Fatalf("choice = %+v, want the sour cream store alternative", c)
+	}
+	var names []string
+	for _, comp := range c.Components {
+		names = append(names, comp.Name)
+	}
+	if !slices.Equal(names, []string{"Sour Cream", "Heavy Cream"}) {
+		t.Errorf("components = %v", names)
+	}
+	sp := curatedSpecialty(t, f, "creme-fraiche")
+	var ids []string
+	for _, o := range sp.Options {
+		ids = append(ids, o.ID)
+	}
+	if !slices.Equal(ids, []string{"creme-fraiche.store", "creme-fraiche.cream-cheese", "creme-fraiche.batch"}) {
+		t.Errorf("options = %v", ids)
+	}
+}
