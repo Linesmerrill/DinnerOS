@@ -182,6 +182,10 @@ type RecipeCooked struct {
 	EntryID  string `json:"entryId,omitempty" bson:"entryId,omitempty"`
 	Date     string `json:"date,omitempty" bson:"date,omitempty"`
 	Servings int    `json:"servings,omitempty" bson:"servings,omitempty"`
+	// Implicit is set on a meal the server counted as made because its week
+	// ended with no answer (decision 662). Only the server sets it; nobody
+	// said they made it, so it never counts as feedback about the meal.
+	Implicit bool `json:"implicit,omitempty" bson:"implicit,omitempty"`
 }
 
 // RecipeSkipped is the payload of recipe.skipped (planned but not cooked).

@@ -52,13 +52,13 @@ struct PlanEntryRow: View {
     private var outcomeLabel: some View {
         switch outcome {
         case .cooked:
-            Label("Cooked", systemImage: "checkmark.circle.fill")
+            Label("Made", systemImage: "checkmark.circle.fill")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.tint)
         case .skipped(let reason):
             Label(
-                reason.map { String(localized: "Skipped: \($0.title)") } ?? String(localized: "Skipped"),
-                systemImage: "forward.fill"
+                reason.map { String(localized: "Not made: \($0.title)") } ?? String(localized: "Not made"),
+                systemImage: "xmark.circle.fill"
             )
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)

@@ -181,6 +181,24 @@ func runUsageStoreContract(t *testing.T, store UsageStore) {
 		t.Errorf("other household's cook usage = %+v", list)
 	}
 
+	// Deleting gives the record back once; the other household's copy stays.
+	deleted, err := store.DeleteCookUsage(ctx, testHousehold, "entry:e2")
+	if err != nil || deleted.EntryID != "e2" || len(deleted.Lines) != 1 || deleted.Lines[0].Deducted != "1047/1000" {
+		t.Fatalf("DeleteCookUsage() = %+v, %v", deleted, err)
+	}
+	if _, err := store.DeleteCookUsage(ctx, testHousehold, "entry:e2"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("second DeleteCookUsage() error = %v", err)
+	}
+	if _, err := store.DeleteCookUsage(ctx, otherHousehold, "entry:e2"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("DeleteCookUsage(other household, never stored) error = %v", err)
+	}
+	if list, _ := store.ListCookUsageByEntries(ctx, testHousehold, []string{"e1", "e2"}); len(list) != 1 || list[0].EntryID != "e1" {
+		t.Errorf("after delete = %+v", list)
+	}
+	if _, err := store.InsertCookUsage(ctx, estimated); err != nil {
+		t.Errorf("insert after delete error = %v", err)
+	}
+
 	price := int64(1298)
 	priced, err := store.SetPurchasePrice(ctx, testHousehold, fromHandoff.ID, &price)
 	if err != nil || priced.PriceCents == nil || *priced.PriceCents != 1298 || priced.ID != fromHandoff.ID {

@@ -220,10 +220,59 @@ func (s *Service) load(ctx context.Context, householdID, userID string, w, curre
 
 func (s *Service) cookedEvents(ctx context.Context, householdID string, since time.Time) ([]events.Event, error) {
 	list, err := s.opts.Events.List(ctx, events.Query{
-		HouseholdID: householdID, Types: []events.Type{events.TypeRecipeCooked}, Since: since, Limit: events.MaxListLimit,
+		HouseholdID: householdID, Types: []events.Type{events.TypeRecipeCooked, events.TypeRecipeSkipped}, Since: since, Limit: events.MaxListLimit,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("load cooked events: %w", err)
 	}
-	return list, nil
+	return stillCooked(list), nil
+}
+
+// stillCooked is the recipe.cooked events among list that a later
+// recipe.skipped for the same planned meal hasn't taken back: "didn't make
+// it" after all, including for a meal assumed made (decision 662).
+func stillCooked(list []events.Event) []events.Event {
+	newest := map[string]int{}
+	for i, e := range list {
+		id := entryOf(e)
+		if id == "" {
+			continue
+		}
+		j, ok := newest[id]
+		// A member's answer beats a meal assumed made, whenever it came.
+		switch {
+		case !ok, implicit(list[j]) && !implicit(e):
+			newest[id] = i
+		case implicit(e) && !implicit(list[j]):
+		case e.OccurredAt.After(list[j].OccurredAt),
+			e.OccurredAt.Equal(list[j].OccurredAt) && !e.RecordedAt.Before(list[j].RecordedAt):
+			newest[id] = i
+		}
+	}
+	var out []events.Event
+	for i, e := range list {
+		if e.Type != events.TypeRecipeCooked {
+			continue
+		}
+		if id := entryOf(e); id != "" && newest[id] != i {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+func implicit(e events.Event) bool {
+	p, ok := e.Payload.(events.RecipeCooked)
+	return ok && p.Implicit
+}
+
+func entryOf(e events.Event) string {
+	switch p := e.Payload.(type) {
+	case events.RecipeCooked:
+		return p.EntryID
+	case events.RecipeSkipped:
+		return p.EntryID
+	}
+	return ""
 }

@@ -788,6 +788,15 @@ included), so no meal changes date (decision 503).
 - A week nobody has planned returns `status: "draft"`, `entries: []`, and
   `null` timestamps. Nothing is stored until someone adds an entry or sets the
   status.
+- An entry with an answer carries `outcome: {kind, reason?, by, at,
+  implicit?}`: `cooked` or `skipped`, the newest answer wins, and any member's
+  answer beats `implicit`. `implicit: true` (with an empty `by`) is a meal
+  nobody answered for, counted as made when its week ended (decision 662):
+  reading a plan records that for the household's last two ended weeks, for
+  meals dated 2026-11-02 or later, as a server `recipe.cooked` event with
+  `implicit: true`, which deducts the pantry like any other. Send
+  `recipe.skipped` to say a meal wasn't made, before or after: it gives back
+  what the meal took from the pantry.
 
 ### List weeks
 
@@ -962,6 +971,11 @@ the pantry. The change is recorded as a `meal.customized`
   item is `in_stock`, `toBuy` when it's `out`, and otherwise `pantryHint` when
   every contributing recipe marks it as a pantry staple, or `toBuy`. Pantry
   amounts aren't compared with what the recipes need yet.
+- For a week after the current one, the pantry is read as it will be once
+  the current week's unanswered meals are made (decision 662): an amount at
+  home is less what they'll use, an ingredient they use up is bought in full,
+  and one whose use can't be compared is `unsure`. Meals already marked made
+  (deducted when marked) or not made don't count.
 - `pantryApplied` is `true` when the pantry decided the statuses. A server
   running without a pantry returns `false`, and statuses are then only
   `toBuy` or `pantryHint`.
@@ -1405,7 +1419,10 @@ bulk, staples, purchases) has these fields:
   a person's `status` always replaces an estimated one.
 - Cooking deducts automatically: a `recipe.cooked` event with `entryId` (or a
   `clientEventId`) and `servings` deducts once per entry. There's nothing
-  else to call.
+  else to call. A later `recipe.skipped` for that entry gives the deduction
+  back (if the item hasn't been restocked since), and cooking it again
+  deducts again. Meals nobody answered for are deducted when their week ends
+  (decision 662).
 
 ### Purchases
 
@@ -3686,7 +3703,7 @@ can observe.
 | Type | Recorded by | `recipeId` | Payload |
 | --- | --- | --- | --- |
 | `recipe.viewed` | app | required | `{surface?}`: `detail`, `plan`, `search`, `recommendation` |
-| `recipe.cooked` | app | required | `{entryId?, date?, servings?}` |
+| `recipe.cooked` | app; server at a week's end | required | `{entryId?, date?, servings?, implicit?}`: `implicit` is set only by the server, for a meal assumed made (decision 662); an app sending it is rejected |
 | `recipe.skipped` | app | required | `{entryId?, date?, reason?}`: `no-time`, `ate-out`, `missing-ingredients`, `not-in-the-mood`, `other` |
 | `grocery.item_checked` | app | — | `{ingredientId?, name?, checked}` (`ingredientId` or `name` required) |
 | `recipe.rated` | server (ratings) | required | `{score, previousScore?, tags?}` (comments are never copied) |

@@ -164,7 +164,7 @@ struct WeekView: View {
         }
     }
 
-    /// Marking a meal cooked or skipped only records an event, so any member can do it,
+    /// Marking a meal made or not made only records an event, so any member can do it,
     /// in a finalized week too. Editing still needs `plan.edit` and a draft.
     private func row(_ entry: PlanEntry) -> some View {
         let outcome = events.outcome(for: entry)
@@ -182,12 +182,12 @@ struct WeekView: View {
             }
         }
         .swipeActions(edge: .leading) {
-            Button("Cooked", systemImage: "checkmark") {
+            Button("Made It", systemImage: "checkmark") {
                 markCooked(entry)
             }
             .tint(.green)
-            Button("Skip", systemImage: "forward") {
-                events.recipeSkipped(entry, week: plans.week, reason: nil)
+            Button("Didn't Make It", systemImage: "xmark") {
+                markNotMade(entry, reason: nil)
             }
             .tint(.orange)
         }
@@ -200,19 +200,15 @@ struct WeekView: View {
         }
         .contextMenu {
             Section {
-                Button("Mark as Cooked", systemImage: "checkmark.circle") {
+                Button("I Made It", systemImage: "checkmark.circle") {
                     markCooked(entry)
                 }
                 .disabled(outcome == .cooked)
-                Menu("Skip", systemImage: "forward") {
+                Menu("Didn't Make It", systemImage: "xmark.circle") {
                     ForEach(SkipReason.allCases) { reason in
-                        Button(reason.title) {
-                            events.recipeSkipped(entry, week: plans.week, reason: reason)
-                        }
+                        Button(reason.title) { markNotMade(entry, reason: reason) }
                     }
-                    Button("Skip Without a Reason") {
-                        events.recipeSkipped(entry, week: plans.week, reason: nil)
-                    }
+                    Button("No Reason") { markNotMade(entry, reason: nil) }
                 }
             }
             if planner.canMoveToAnotherWeek(entry, isCooked: outcome == .cooked) {
@@ -255,6 +251,16 @@ struct WeekView: View {
     /// refreshed after the send instead of waiting for the next batch.
     private func markCooked(_ entry: PlanEntry) {
         events.recipeCooked(entry, week: plans.week)
+        sendNow()
+    }
+
+    /// The API gives back what a meal took from the pantry when it's marked not made.
+    private func markNotMade(_ entry: PlanEntry, reason: SkipReason?) {
+        events.recipeSkipped(entry, week: plans.week, reason: reason)
+        sendNow()
+    }
+
+    private func sendNow() {
         Task {
             await events.flush()
             await pantry.refresh()

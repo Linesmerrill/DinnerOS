@@ -344,8 +344,8 @@ struct MealCard: View {
                     decrease: { changeServings(-1) }, increase: { changeServings(1) })
             }
             // What happened comes before how it was: one is a fact about the night, the other an
-            // opinion about the food, and only the first may be recorded as `recipe.cooked`. Both
-            // are open on any day: plans move, and Thursday's dinner is often Tuesday's.
+            // opinion about the food. A meal counts as made unless someone says it wasn't
+            // (decision 662), so the row only offers that, once the night is over.
             MealOutcomeRow(entry: entry)
             if let feedbackRecipe {
                 MealRatingRow(recipe: feedbackRecipe)
@@ -411,12 +411,12 @@ struct MealCard: View {
     private var outcomeBadge: some View {
         switch outcome {
         case .cooked:
-            MenuChip(text: String(localized: "Cooked"), systemImage: "checkmark.circle.fill", isProminent: true)
+            MenuChip(text: String(localized: "Made"), systemImage: "checkmark.circle.fill", isProminent: true)
                 .background(.regularMaterial, in: .capsule)
         case .skipped(let reason):
             MenuChip(
-                text: reason.map { String(localized: "Skipped: \($0.title)") } ?? String(localized: "Skipped"),
-                systemImage: "forward.fill"
+                text: reason.map { String(localized: "Not made: \($0.title)") } ?? String(localized: "Not made"),
+                systemImage: "xmark.circle.fill"
             )
             .background(.regularMaterial, in: .capsule)
         case nil:
@@ -481,8 +481,8 @@ struct MealCard: View {
             parts.append(entry.note)
         }
         switch outcome {
-        case .cooked: parts.append(String(localized: "Cooked"))
-        case .skipped: parts.append(String(localized: "Skipped"))
+        case .cooked: parts.append(String(localized: "Made"))
+        case .skipped: parts.append(String(localized: "Not made"))
         case nil: break
         }
         return parts.joined(separator: ", ")
@@ -491,19 +491,15 @@ struct MealCard: View {
     @ViewBuilder
     private var menuItems: some View {
         Section {
-            Button("Mark as Cooked", systemImage: "checkmark.circle") {
+            Button("I Made It", systemImage: "checkmark.circle") {
                 markCooked()
             }
             .disabled(outcome == .cooked)
-            Menu("Skip", systemImage: "forward") {
+            Menu("Didn't Make It", systemImage: "xmark.circle") {
                 ForEach(SkipReason.allCases) { reason in
-                    Button(reason.title) {
-                        events.recipeSkipped(entry, week: plans.week, reason: reason)
-                    }
+                    Button(reason.title) { markNotMade(reason) }
                 }
-                Button("Skip Without a Reason") {
-                    events.recipeSkipped(entry, week: plans.week, reason: nil)
-                }
+                Button("No Reason") { markNotMade(nil) }
             }
         }
         // Open on a past week too: the meal that didn't get made is usually last week's.
@@ -547,6 +543,17 @@ struct MealCard: View {
     /// pantry when the event is stored.
     private func markCooked() {
         events.recipeCooked(entry, week: plans.week)
+        sendNow()
+    }
+
+    /// Records that the meal wasn't made and sends it right away: the API gives back what it
+    /// took from the pantry, if it was already counted as made.
+    private func markNotMade(_ reason: SkipReason?) {
+        events.recipeSkipped(entry, week: plans.week, reason: reason)
+        sendNow()
+    }
+
+    private func sendNow() {
         Task {
             await events.flush()
             await pantry.refresh()

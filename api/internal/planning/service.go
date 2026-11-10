@@ -94,10 +94,12 @@ type Service struct {
 	households   HouseholdSource
 	thawNotifier ThawNotifier
 	// outcomes is set by WithOutcomes; without it thaw reminders don't know
-	// which meals were already cooked.
+	// which meals were already cooked, and no meal is assumed made.
 	outcomes EventLister
-	logger   *slog.Logger
-	now      func() time.Time
+	// settled is the last ended week settled per household (settle.go).
+	settled settled
+	logger  *slog.Logger
+	now     func() time.Time
 }
 
 // NewService returns a Service.
@@ -713,74 +715,31 @@ func (s *Service) GroceryList(ctx context.Context, householdID, week string) (Gr
 	if err != nil {
 		return GroceryList{}, err
 	}
-	var ids []string
-	for _, e := range p.Entries {
-		if !slices.Contains(ids, e.RecipeID) {
-			ids = append(ids, e.RecipeID)
-		}
+	// Meals of ended weeks nobody answered for are made by now; recording
+	// that first lets the pantry below count them (decision 662).
+	if err := s.SettleEndedWeeks(ctx, householdID); err != nil {
+		s.log().WarnContext(ctx, "settle ended weeks", "householdId", householdID, "error", err)
 	}
-	var live []recipes.Recipe
-	var pantry grocery.Pantry = grocery.PantrySet{}
-	if len(ids) > 0 {
-		if live, err = s.recipes.GetMany(ctx, householdID, ids); err != nil {
-			return GroceryList{}, fmt.Errorf("planning: load recipes: %w", err)
-		}
-		if s.pantry != nil {
-			stock, err := s.pantry.GroceryPantry(ctx, householdID)
-			if err != nil {
-				return GroceryList{}, fmt.Errorf("planning: load pantry: %w", err)
-			}
-			pantry = stock
-		}
-	}
-	selections, skipped := grocerySelections(p, live)
-	// Customizations change the recipe's own lines, so they run before
-	// specialty ingredients handle what's left.
-	if selections, err = s.customizeGrocery(ctx, householdID, p, selections, skipped); err != nil {
+	needs, err := s.weekNeeds(ctx, householdID, p, true)
+	if err != nil {
 		return GroceryList{}, err
 	}
-	var batches []grocery.BatchPlan
-	if s.specialties != nil && len(selections) > 0 {
-		var lines []grocery.Line
-		for _, sel := range selections {
-			lines = append(lines, sel.Lines...)
-		}
-		specs, err := s.specialties.GrocerySpecialties(ctx, householdID, lines)
+	var pantry grocery.Pantry = grocery.PantrySet{}
+	if s.pantry != nil && len(p.Entries) > 0 {
+		stock, err := s.pantry.GroceryPantry(ctx, householdID)
 		if err != nil {
-			return GroceryList{}, fmt.Errorf("planning: load specialty ingredients: %w", err)
+			return GroceryList{}, fmt.Errorf("planning: load pantry: %w", err)
 		}
-		if selections, batches, err = grocery.ApplySpecialties(selections, specs); err != nil {
-			return GroceryList{}, err
-		}
-	}
-	if selections, err = s.appendExtras(ctx, p, selections); err != nil {
-		return GroceryList{}, fmt.Errorf("planning: load extra grocery items: %w", err)
-	}
-	// Names the household linked as one item become the kept one, so they
-	// add up to one line with one product. The pantry and skips then answer
-	// for the kept name with what they know under either.
-	var same grocery.SameItems
-	var alsoCalled map[string][]grocery.AlsoCalled
-	if s.sameItems != nil && len(selections) > 0 {
-		if same, err = s.sameItems.GrocerySameItems(ctx, householdID); err != nil {
-			return GroceryList{}, fmt.Errorf("planning: load same items: %w", err)
-		}
-		selections, alsoCalled = same.Apply(selections)
-		if stock, ok := pantry.(grocery.PantryStock); ok {
-			pantry = same.Pantry(stock)
-		}
-	}
-	// Skips resolve last, against the keys the list actually ends up with, so
-	// an ingredient a store alternative introduced can be skipped by its own
-	// name without disturbing the rest of that alternative.
-	var skips grocery.Skips
-	if s.skips != nil {
-		rules, err := s.skips.GrocerySkips(ctx, householdID, w.String())
+		stock = needs.same.Pantry(stock)
+		// This week's meals that nobody has said they didn't make will eat
+		// into the pantry before a later week's order arrives.
+		assumed, err := s.assumedMeals(ctx, householdID, w)
 		if err != nil {
-			return GroceryList{}, fmt.Errorf("planning: load skipped ingredients: %w", err)
+			s.log().WarnContext(ctx, "count meals assumed made", "householdId", householdID, "week", w.String(), "error", err)
 		}
-		skips = same.Skips(rules)
+		pantry = stock.Without(assumed)
 	}
+	selections, skipped, batches, skips, alsoCalled := needs.selections, needs.skipped, needs.batches, needs.skips, needs.alsoCalled
 	g, err := aggregateGroceryList(p, selections, skipped, pantry, skips)
 	if err != nil {
 		return GroceryList{}, err
@@ -790,6 +749,82 @@ func (s *Service) GroceryList(ctx context.Context, householdID, week string) (Gr
 	g.PantryApplied = s.pantry != nil
 	g.SpecialtiesApplied = s.specialties != nil
 	return g, nil
+}
+
+// weekNeeds is what a plan's meals need, before the pantry: the lines of
+// each recipe as customized, with specialty ingredients handled, linked names
+// merged, and the household's skips. withExtras adds the week's extra lines
+// (pairings, items added by hand), which a list buys but a meal doesn't use.
+type weekNeeds struct {
+	selections []grocery.RecipeSelection
+	skipped    []SkippedEntry
+	batches    []grocery.BatchPlan
+	same       grocery.SameItems
+	alsoCalled map[string][]grocery.AlsoCalled
+	skips      grocery.Skips
+}
+
+func (s *Service) weekNeeds(ctx context.Context, householdID string, p Plan, withExtras bool) (weekNeeds, error) {
+	var ids []string
+	for _, e := range p.Entries {
+		if !slices.Contains(ids, e.RecipeID) {
+			ids = append(ids, e.RecipeID)
+		}
+	}
+	var live []recipes.Recipe
+	var err error
+	if len(ids) > 0 {
+		if live, err = s.recipes.GetMany(ctx, householdID, ids); err != nil {
+			return weekNeeds{}, fmt.Errorf("planning: load recipes: %w", err)
+		}
+	}
+	var out weekNeeds
+	selections, skipped := grocerySelections(p, live)
+	out.skipped = skipped
+	// Customizations change the recipe's own lines, so they run before
+	// specialty ingredients handle what's left.
+	if selections, err = s.customizeGrocery(ctx, householdID, p, selections, skipped); err != nil {
+		return weekNeeds{}, err
+	}
+	if s.specialties != nil && len(selections) > 0 {
+		var lines []grocery.Line
+		for _, sel := range selections {
+			lines = append(lines, sel.Lines...)
+		}
+		specs, err := s.specialties.GrocerySpecialties(ctx, householdID, lines)
+		if err != nil {
+			return weekNeeds{}, fmt.Errorf("planning: load specialty ingredients: %w", err)
+		}
+		if selections, out.batches, err = grocery.ApplySpecialties(selections, specs); err != nil {
+			return weekNeeds{}, err
+		}
+	}
+	if withExtras {
+		if selections, err = s.appendExtras(ctx, p, selections); err != nil {
+			return weekNeeds{}, fmt.Errorf("planning: load extra grocery items: %w", err)
+		}
+	}
+	// Names the household linked as one item become the kept one, so they
+	// add up to one line with one product. The pantry and skips then answer
+	// for the kept name with what they know under either.
+	if s.sameItems != nil && len(selections) > 0 {
+		if out.same, err = s.sameItems.GrocerySameItems(ctx, householdID); err != nil {
+			return weekNeeds{}, fmt.Errorf("planning: load same items: %w", err)
+		}
+		selections, out.alsoCalled = out.same.Apply(selections)
+	}
+	// Skips resolve last, against the keys the list actually ends up with, so
+	// an ingredient a store alternative introduced can be skipped by its own
+	// name without disturbing the rest of that alternative.
+	if s.skips != nil {
+		rules, err := s.skips.GrocerySkips(ctx, householdID, p.Week.String())
+		if err != nil {
+			return weekNeeds{}, fmt.Errorf("planning: load skipped ingredients: %w", err)
+		}
+		out.skips = out.same.Skips(rules)
+	}
+	out.selections = selections
+	return out, nil
 }
 
 func (s *Service) parse(householdID, week string) (Week, error) {

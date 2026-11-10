@@ -404,6 +404,20 @@ func hexOrEmpty(id bson.ObjectID) string {
 	return id.Hex()
 }
 
+// DeleteCookUsage implements UsageStore.
+func (s *MongoStore) DeleteCookUsage(ctx context.Context, householdID, sourceKey string) (CookUsage, error) {
+	hid, err := householdOID(householdID)
+	if err != nil {
+		return CookUsage{}, err
+	}
+	var d cookUsageDoc
+	err = s.cookUsage.FindOneAndDelete(ctx, bson.D{{Key: "householdId", Value: hid}, {Key: "sourceKey", Value: sourceKey}}).Decode(&d)
+	if err != nil {
+		return CookUsage{}, translate(err)
+	}
+	return d.toCookUsage(), nil
+}
+
 // ListCookUsageByEntries implements UsageStore. Planned meals are keyed
 // "entry:<entryId>", which the unique sourceKey index serves.
 func (s *MongoStore) ListCookUsageByEntries(ctx context.Context, householdID string, entryIDs []string) ([]CookUsage, error) {

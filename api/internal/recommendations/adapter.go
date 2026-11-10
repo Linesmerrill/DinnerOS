@@ -228,10 +228,10 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 	}
 	data.loc = loc
 	for _, e := range outcomes {
-		kind, date, reason := autopilot.KindCooked, "", ""
+		kind, date, reason, implicit := autopilot.KindCooked, "", "", false
 		switch payload := e.Payload.(type) {
 		case events.RecipeCooked:
-			date = payload.Date
+			date, implicit = payload.Date, payload.Implicit
 		case events.RecipeSkipped:
 			kind, date, reason = autopilot.KindSkipped, payload.Date, payload.Reason
 		}
@@ -243,7 +243,7 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 			}
 			week = planning.WeekOfOn(day, first).String()
 		}
-		in.History = append(in.History, autopilot.Interaction{ItemID: e.RecipeID, Kind: kind, Week: week, Reason: reason, At: e.OccurredAt, Busy: busy[week]})
+		in.History = append(in.History, autopilot.Interaction{ItemID: e.RecipeID, Kind: kind, Week: week, Reason: reason, At: e.OccurredAt, Busy: busy[week], Implicit: implicit})
 	}
 	s.addFeedback(&in, &data, feedback, loc, first)
 	for _, e := range plan.Entries {

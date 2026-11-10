@@ -203,6 +203,10 @@ type Interaction struct {
 	Busy bool
 	// Score is the 1–5 rating of a KindRated interaction.
 	Score int
+	// Implicit marks a KindCooked meal nobody answered for: its week ended
+	// and it was counted as made. It keeps the meal recent for rotation but
+	// is no signal about the meal, so learning and conversion ignore it.
+	Implicit bool
 }
 
 // Assignment is a meal fixed on a day of the week being planned. Day is empty

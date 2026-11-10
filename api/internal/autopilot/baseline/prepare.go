@@ -353,6 +353,10 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 				it.st.dayTotal++
 			}
 		case autopilot.KindCooked:
+			// A week ending unanswered says nothing about the meal.
+			if h.Implicit {
+				continue
+			}
 			it.st.cooked++
 		case autopilot.KindSkipped:
 			it.st.skipped++

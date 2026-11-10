@@ -154,6 +154,18 @@ func (m *memoryUsageStore) ListCookUsageByEntries(_ context.Context, householdID
 	return out, nil
 }
 
+func (m *memoryUsageStore) DeleteCookUsage(_ context.Context, householdID, sourceKey string) (CookUsage, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, u := range m.cooks {
+		if u.HouseholdID == householdID && u.SourceKey == sourceKey {
+			m.cooks = slices.Delete(m.cooks, i, i+1)
+			return u, nil
+		}
+	}
+	return CookUsage{}, ErrNotFound
+}
+
 // cookUsages returns the stored cook usage records, oldest first.
 func (m *memoryUsageStore) cookUsages() []CookUsage {
 	m.mu.Lock()

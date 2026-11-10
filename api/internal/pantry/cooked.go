@@ -403,9 +403,121 @@ func (s *Service) deductItem(ctx context.Context, m CookedMeal, itemID string, l
 	return ErrConflict
 }
 
+// UndoCooked takes back a planned meal's deduction when the household says
+// it didn't make it after all (decision 662): what the meal took from each
+// item goes back, if the item is still on the cycle it was taken from, and
+// the cook record is removed so marking it made again deducts again. It
+// reports false when the meal was never deducted.
+//
+// The record is removed first: that claims the undo, so a second "didn't
+// make it" can't give the same amounts back twice.
+func (s *Service) UndoCooked(ctx context.Context, householdID, entryID string) (bool, error) {
+	if s.usage == nil {
+		return false, errUsageNotConfigured
+	}
+	if householdID == "" || entryID == "" {
+		return false, nil
+	}
+	usage, err := s.usage.DeleteCookUsage(ctx, householdID, "entry:"+entryID)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("delete cook usage: %w", err)
+	}
+	byItem := map[string][]CookLine{}
+	var order []string
+	for _, line := range usage.Lines {
+		if _, ok := byItem[line.ItemID]; !ok {
+			order = append(order, line.ItemID)
+		}
+		byItem[line.ItemID] = append(byItem[line.ItemID], line)
+	}
+	var errs []error
+	for _, itemID := range order {
+		if err := s.restoreItem(ctx, householdID, itemID, usage.OccurredAt, byItem[itemID]); err != nil {
+			errs = append(errs, fmt.Errorf("item %s: %w", itemID, err))
+		}
+	}
+	return true, errors.Join(errs...)
+}
+
+// restoreItem gives back what deductItem took for one item's lines.
+func (s *Service) restoreItem(ctx context.Context, householdID, itemID string, occurred time.Time, lines []CookLine) error {
+	for range maxWriteAttempts {
+		item, err := s.store.GetItem(ctx, householdID, itemID)
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		t := item.Tracking
+		if t == nil {
+			return nil
+		}
+		inSegment := !occurred.Before(t.SegmentStartedAt)
+		next := cloneItem(item)
+		restored, skipped := false, false
+		for _, line := range lines {
+			switch {
+			case line.Deducted != "":
+				if line.CycleID != t.CycleID || !inSegment {
+					continue
+				}
+				amount := ratOf(line.Deducted)
+				next.Tracking.SegmentRecipeUsed = nonNegative(new(big.Rat).Sub(ratOf(next.Tracking.SegmentRecipeUsed), amount)).RatString()
+				next.Tracking.RecipeUsed = nonNegative(new(big.Rat).Sub(ratOf(next.Tracking.RecipeUsed), amount)).RatString()
+				restored = true
+			case line.SkipReason == SkipNoAmount || line.SkipReason == SkipUnitMismatch:
+				skipped = true
+			}
+		}
+		switch {
+		case restored:
+			next.Tracking.RecipeUses = max(0, next.Tracking.RecipeUses-1)
+		case skipped:
+			next.Tracking.SkippedUses = max(0, next.Tracking.SkippedUses-1)
+			if inSegment {
+				next.Tracking.SegmentSkippedUses = max(0, next.Tracking.SegmentSkippedUses-1)
+			}
+		default:
+			return nil
+		}
+		if restored && next.Status == StatusLow && next.StatusSource == StatusSourceEstimate {
+			// Marked low by the estimate this meal pushed down: with its use
+			// given back, it's in stock again unless the estimate still says low.
+			settings, err := s.Settings(ctx, householdID)
+			if err != nil {
+				return err
+			}
+			if e := estimateItem(next, settings.LowThresholdPercent, s.timestamp()); e == nil || !e.BelowThreshold {
+				next.Status, next.StatusSetAt, next.LowAlertCycleID = StatusInStock, s.timestamp(), ""
+			}
+		}
+		_, err = s.store.UpdateItem(ctx, next)
+		if errors.Is(err, ErrConflict) {
+			continue
+		}
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	return ErrConflict
+}
+
+func nonNegative(r *big.Rat) *big.Rat {
+	if r.Sign() < 0 {
+		return new(big.Rat)
+	}
+	return r
+}
+
 // CookedListener returns an events.Listener that deducts every stored
-// recipe.cooked event from the pantry (ApplyCooked). Failures are logged and
-// never affect event ingestion.
+// recipe.cooked event from the pantry (ApplyCooked), and gives a planned
+// meal's deduction back when a recipe.skipped event says it wasn't made after
+// all (UndoCooked). Failures are logged and never affect event ingestion.
 func (s *Service) CookedListener() events.Listener {
 	return cookedListener{s: s}
 }
@@ -414,6 +526,17 @@ type cookedListener struct{ s *Service }
 
 func (l cookedListener) EventsStored(ctx context.Context, list []events.Event) {
 	for _, e := range list {
+		if skipped, ok := e.Payload.(events.RecipeSkipped); ok && e.Type == events.TypeRecipeSkipped {
+			undone, err := l.s.UndoCooked(ctx, e.HouseholdID, skipped.EntryID)
+			attrs := []any{"householdId", e.HouseholdID, "recipeId", e.RecipeID, "entryId", skipped.EntryID}
+			switch {
+			case err != nil:
+				l.s.logger.WarnContext(ctx, "give back a skipped meal's pantry use failed", append(attrs, "error", err)...)
+			case undone:
+				l.s.logger.InfoContext(ctx, "skipped meal's pantry use given back", attrs...)
+			}
+			continue
+		}
 		if e.Type != events.TypeRecipeCooked {
 			continue
 		}

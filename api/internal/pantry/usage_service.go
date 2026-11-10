@@ -137,6 +137,10 @@ type UsageStore interface {
 	PurchasesByIDs(ctx context.Context, householdID string, ids []string) ([]Purchase, error)
 	// ListCookUsageByEntries returns the cook records of these plan entries.
 	ListCookUsageByEntries(ctx context.Context, householdID string, entryIDs []string) ([]CookUsage, error)
+	// DeleteCookUsage removes the cook record with sourceKey and returns it,
+	// or ErrNotFound when there is none: the meal was never deducted, or its
+	// deduction was already taken back.
+	DeleteCookUsage(ctx context.Context, householdID, sourceKey string) (CookUsage, error)
 }
 
 // RecipeReader loads one of a household's recipes with its ingredient lines.

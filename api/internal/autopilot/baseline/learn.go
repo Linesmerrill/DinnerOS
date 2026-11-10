@@ -110,7 +110,7 @@ func (m *model) learn(history []autopilot.Interaction, since time.Time) {
 		default:
 			continue
 		}
-		if !since.IsZero() && (h.At.IsZero() || h.At.Before(since)) {
+		if h.Implicit || !since.IsZero() && (h.At.IsZero() || h.At.Before(since)) {
 			continue
 		}
 		if m.byID[h.ItemID] == nil {

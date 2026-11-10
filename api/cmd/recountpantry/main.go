@@ -141,13 +141,24 @@ func recount(ctx context.Context, db *mongo.Database, householdID string, since,
 	}
 
 	// Meals cooked with nothing deducted at all have no record.
-	cooked, err := events.NewMongoStore(db).List(ctx, events.Query{HouseholdID: householdID, Types: []events.Type{events.TypeRecipeCooked}, Since: since})
+	// A meal marked "didn't make it" after it was cooked had its record
+	// removed on purpose (decision 662); only the newest answer counts.
+	answers, err := events.NewMongoStore(db).List(ctx, events.Query{HouseholdID: householdID, Types: []events.Type{events.TypeRecipeCooked, events.TypeRecipeSkipped}, Since: since})
 	if err != nil {
 		return err
 	}
-	for _, e := range cooked {
-		p, _ := e.Payload.(events.RecipeCooked)
-		if p.EntryID == "" || recorded["entry:"+p.EntryID] {
+	takenBack := map[string]bool{}
+	for _, e := range answers {
+		switch p := e.Payload.(type) {
+		case events.RecipeCooked:
+			takenBack[p.EntryID] = false
+		case events.RecipeSkipped:
+			takenBack[p.EntryID] = true
+		}
+	}
+	for _, e := range answers {
+		p, ok := e.Payload.(events.RecipeCooked)
+		if !ok || p.EntryID == "" || recorded["entry:"+p.EntryID] || takenBack[p.EntryID] {
 			continue
 		}
 		name := recipeName(ctx, recipeService, householdID, e.RecipeID)

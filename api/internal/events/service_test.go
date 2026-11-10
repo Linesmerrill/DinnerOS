@@ -214,6 +214,8 @@ func TestIngestValidatesEachEvent(t *testing.T) {
 		15: {Type: string(TypeRecipeViewed), RecipeID: recipeA, OccurredAt: at, Payload: []byte(`{"surface":"` + strings.Repeat("x", MaxPayloadBytes) + `"}`)},
 		16: {Type: string(TypeRecipeViewed), RecipeID: recipeA, OccurredAt: at, Payload: []byte(`null`)},
 		17: {Type: string(TypeRecipeViewed), RecipeID: recipeA, OccurredAt: at, Payload: []byte(`{"surface":1}`)},
+		// Only the server assumes a meal was made (decision 662).
+		18: {Type: string(TypeRecipeCooked), RecipeID: recipeA, OccurredAt: at, Payload: []byte(`{"implicit":true}`)},
 	}
 	res, err := svc.Ingest(context.Background(), actor, batch)
 	if err != nil {
@@ -234,6 +236,7 @@ func TestIngestValidatesEachEvent(t *testing.T) {
 		14: "does not match a recipe in this household",
 		15: "payload must be at most 1024 bytes",
 		17: "payload is not valid for recipe.viewed",
+		18: "implicit is set by the server",
 	}
 	if res.Accepted != 4 || res.Duplicates != 0 || len(res.Rejected) != len(wantRejected) {
 		t.Fatalf("result = %+v", res)

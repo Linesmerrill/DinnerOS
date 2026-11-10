@@ -43,10 +43,9 @@ extension ClientEventType {
     }
 }
 
-/// What the household said happened to a planned meal.
-///
-/// Only ever set from an answer someone gave. Nothing infers it: a week going by doesn't cook a
-/// meal, and a rating says the food was good, not that this household made it that night.
+/// What happened to a planned meal: an answer someone gave, or, once its week ended with no
+/// answer, the server counting it as made (decision 662). A rating never sets it: it says the
+/// food was good, not that this household made it that night.
 nonisolated enum MealOutcome: Hashable, Sendable {
     case cooked
     case skipped(SkipReason?)
@@ -306,5 +305,17 @@ nonisolated struct EventsAPI: Sendable {
         let request = try APIRequest.post(
             "/api/v1/households/\(householdID)/events", body: IngestEventsRequest(events: events))
         return try await client.send(request.authorized(with: accessToken))
+    }
+}
+
+/// When a planned meal can be answered for.
+nonisolated enum MealNight {
+    /// Whether the meal's night is over: its date is before today. A meal without a date has no
+    /// night to pass.
+    static func hasPassed(date: String?, now: Date = .now, calendar: Calendar = .current) -> Bool {
+        guard let date, !date.isEmpty else { return false }
+        let today = calendar.dateComponents([.year, .month, .day], from: now)
+        guard let year = today.year, let month = today.month, let day = today.day else { return false }
+        return date < String(format: "%04d-%02d-%02d", year, month, day)
     }
 }

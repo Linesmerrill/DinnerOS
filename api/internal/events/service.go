@@ -280,6 +280,9 @@ func clientEvent(actor households.Membership, in ClientEvent, now time.Time) (Ev
 	if err != nil {
 		return Event{}, invalid(fmt.Sprintf("payload is not valid for %s: %s", t, strings.TrimPrefix(err.Error(), "json: ")))
 	}
+	if cooked, ok := payload.(RecipeCooked); ok && cooked.Implicit {
+		return Event{}, invalid("implicit is set by the server")
+	}
 	return normalize(Event{
 		HouseholdID:   actor.HouseholdID,
 		UserID:        actor.UserID,

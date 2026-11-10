@@ -762,6 +762,11 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	actor, _ := households.MembershipFromContext(r.Context())
+	// Last week's unanswered meals read as made from the first look after it
+	// ends (decision 662). A failure leaves them unanswered for now.
+	if err := h.opts.Service.SettleEndedWeeks(r.Context(), actor.HouseholdID); err != nil {
+		h.logger.WarnContext(r.Context(), "settle ended weeks", "householdId", actor.HouseholdID, "error", err)
+	}
 	p, err := h.opts.Service.Get(r.Context(), actor.HouseholdID, chi.URLParam(r, "week"))
 	if err != nil {
 		h.writeError(w, r, "get plan failed", err)

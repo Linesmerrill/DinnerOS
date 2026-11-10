@@ -356,3 +356,24 @@ func TestLearningOffWithZeroWeight(t *testing.T) {
 		t.Errorf("learning with zero weight: %v %v", r.Signals, reasonTexts(r.Reasons))
 	}
 }
+
+// A meal counted as made only because its week ended (decision 662) is no
+// feedback: it scores like a meal with no history at all, and teaches nothing.
+func TestImplicitCooksTeachNothing(t *testing.T) {
+	p := New(Options{})
+	in := input(meal("assumed"), meal("plain"))
+	implicit := interaction("assumed", autopilot.KindCooked, "2026-W37")
+	implicit.Implicit = true
+	in.History = []autopilot.Interaction{implicit, implicit, implicit}
+	res := rank(t, p, in, autopilot.Tuesday)
+	assumed := recommendationFor(t, res, "assumed")
+	if v, ok := assumed.Signals[SignalLearned]; ok {
+		t.Errorf("assumed meal learned = %v, want none", v)
+	}
+	plain := recommendationFor(t, res, "plain")
+	for _, signal := range []string{SignalLearned, SignalConversion} {
+		if assumed.Signals[signal] != plain.Signals[signal] {
+			t.Errorf("%s: assumed %v, plain %v", signal, assumed.Signals[signal], plain.Signals[signal])
+		}
+	}
+}

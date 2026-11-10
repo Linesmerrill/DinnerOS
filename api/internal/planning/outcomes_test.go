@@ -43,10 +43,13 @@ func TestPlanCarriesEachMealsOutcome(t *testing.T) {
 	// Newest first, as asked: the later skip of the soup wins over an
 	// earlier cook, and an event for another plan's entry is ignored.
 	outcomes.list = []events.Event{
+		// A member's answer beats a later assumption that the meal was made.
+		{Type: events.TypeRecipeCooked, OccurredAt: at.Add(5 * time.Hour), Payload: events.RecipeCooked{EntryID: soup.ID, Implicit: true}},
 		{UserID: userAda, Type: events.TypeRecipeSkipped, OccurredAt: at.Add(2 * time.Hour), Payload: events.RecipeSkipped{EntryID: soup.ID, Reason: "ate-out"}},
 		{UserID: userAda, Type: events.TypeRecipeCooked, OccurredAt: at.Add(time.Hour), Payload: events.RecipeCooked{EntryID: tacos.ID}},
 		{UserID: userAda, Type: events.TypeRecipeCooked, OccurredAt: at, Payload: events.RecipeCooked{EntryID: soup.ID}},
 		{UserID: userAda, Type: events.TypeRecipeCooked, OccurredAt: at, Payload: events.RecipeCooked{EntryID: "elsewhere"}},
+		{Type: events.TypeRecipeCooked, OccurredAt: at, Payload: events.RecipeCooked{EntryID: salad.ID, Implicit: true}},
 	}
 	got := decodeBody[PlanResponse](t, do(t, router, http.MethodGet, plan, "", userViewer))
 	byID := map[string]*EntryOutcomeResponse{}
@@ -59,8 +62,12 @@ func TestPlanCarriesEachMealsOutcome(t *testing.T) {
 	if o := byID[soup.ID]; o == nil || o.Kind != OutcomeSkipped || o.Reason != "ate-out" {
 		t.Errorf("soup outcome = %+v", o)
 	}
-	if byID[salad.ID] != nil {
-		t.Errorf("salad outcome = %+v, want none", byID[salad.ID])
+	// Nobody answered for the salad and its week ended: assumed made.
+	if o := byID[salad.ID]; o == nil || o.Kind != OutcomeCooked || !o.Implicit || o.By != "" {
+		t.Errorf("salad outcome = %+v, want assumed made", o)
+	}
+	if o := byID[tacos.ID]; o.Implicit {
+		t.Errorf("tacos outcome = %+v, marked made by a member", o)
 	}
 	if outcomes.got.HouseholdID != hhAda || !outcomes.got.Newest || len(outcomes.got.Types) != 2 || outcomes.got.Since.IsZero() {
 		t.Errorf("query = %+v", outcomes.got)

@@ -29,9 +29,12 @@ type EntryOutcomeResponse struct {
 	Kind string `json:"kind"`
 	// Reason is the skip reason, when one was given.
 	Reason string `json:"reason,omitempty"`
-	// By is the member who answered.
+	// By is the member who answered; empty for a meal assumed made.
 	By string    `json:"by"`
 	At time.Time `json:"at"`
+	// Implicit is true for a meal nobody answered for, counted as made when
+	// its week ended (decision 662).
+	Implicit bool `json:"implicit,omitempty"`
 }
 
 // outcomeLookback is how far before the week's first day an answer is looked
@@ -63,14 +66,16 @@ func (h *Handler) withOutcomes(ctx context.Context, householdID string, resp *Pl
 		outcome := EntryOutcomeResponse{By: e.UserID, At: e.OccurredAt.UTC()}
 		switch p := e.Payload.(type) {
 		case events.RecipeCooked:
-			entryID, outcome.Kind = p.EntryID, OutcomeCooked
+			entryID, outcome.Kind, outcome.Implicit = p.EntryID, OutcomeCooked, p.Implicit
 		case events.RecipeSkipped:
 			entryID, outcome.Kind, outcome.Reason = p.EntryID, OutcomeSkipped, p.Reason
 		}
 		if entryID == "" {
 			continue
 		}
-		if _, seen := newest[entryID]; !seen {
+		// Any member's answer beats the end of the week's assumption, even
+		// one that reached the server late from a phone that was offline.
+		if prev, seen := newest[entryID]; !seen || (prev.Implicit && !outcome.Implicit) {
 			newest[entryID] = outcome
 		}
 	}
