@@ -7,12 +7,12 @@ import Testing
 struct MealNightTests {
     private let calendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "America/Phoenix")!
+        calendar.timeZone = TimeZone(identifier: "America/Phoenix") ?? .gmt
         return calendar
     }()
 
     private func at(_ year: Int, _ month: Int, _ day: Int, hour: Int) -> Date {
-        calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
+        calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour)) ?? .distantPast
     }
 
     @Test func aNightIsOverTheDayAfter() {
