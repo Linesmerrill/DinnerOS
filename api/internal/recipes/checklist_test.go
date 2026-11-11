@@ -175,3 +175,52 @@ func TestStepTimersNameWhatsCooking(t *testing.T) {
 		t.Errorf("hours = %+v", got)
 	}
 }
+
+// TestAPanNamedByWhatWasInItAddsNothing: step 2 takes the zucchini out, and
+// step 3 cooks "in the pan used for the zucchini", so step 3's list mustn't
+// ask for zucchini again.
+func TestAPanNamedByWhatWasInItAddsNothing(t *testing.T) {
+	r := tacoRecipe(
+		[]RecipeIngredient{
+			tacoLine("ing-zucchini", "Zucchini", "1", "2", "count"),
+			tacoLine("ing-mushrooms", "Mushrooms", "4", "8", "oz"),
+			tacoLine("ing-oil", "Olive Oil", "1", "2", "tbsp"),
+		},
+		"Dice zucchini. Slice mushrooms.",
+		"Heat a drizzle of olive oil in a large pan. Add zucchini; cook until browned. Remove from pan.",
+		"In the pan used for the zucchini, heat another drizzle of olive oil. Add mushrooms; cook until browned.",
+		"Return zucchini to the pan with mushrooms.")
+	c := Annotate(r, 2, nil, true).Checklist
+	names := func(step int) []string {
+		for _, g := range c.ByStep {
+			if g.Index == step {
+				var out []string
+				for _, it := range g.Items {
+					out = append(out, it.Name)
+				}
+				return out
+			}
+		}
+		return nil
+	}
+	if got := names(3); slices.Contains(got, "Zucchini") || !slices.Contains(got, "Mushrooms") {
+		t.Errorf("step 3 = %v, want mushrooms and no zucchini", got)
+	}
+	// Putting it back is still a use of it.
+	if got := names(4); !slices.Contains(got, "Zucchini") {
+		t.Errorf("step 4 = %v, want the zucchini going back in", got)
+	}
+	for clause, want := range map[string]bool{
+		"In the pan used for the":       true,
+		"in the same skillet as the":    true,
+		"wipe out the pot you used for": true,
+		"to the pan with":               true,
+		"in the pot from the":           true,
+		"Add":                           false,
+		"toss with":                     false,
+	} {
+		if got := inPanWith(clause); got != want {
+			t.Errorf("inPanWith(%q) = %v, want %v", clause, got, want)
+		}
+	}
+}

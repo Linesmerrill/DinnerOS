@@ -650,14 +650,15 @@ func describes(after string) bool {
 // inPanWith reports whether the clause ends "to pan with ": the ingredient is
 // already in the pan.
 func inPanWith(clause string) bool {
-	lower := strings.ToLower(strings.TrimSpace(clause))
-	for _, vessel := range []string{"pan with", "pot with", "skillet with", "bowl with", "sheet with"} {
-		if strings.HasSuffix(lower, vessel) {
-			return true
-		}
-	}
-	return false
+	return vesselOf.MatchString(strings.ToLower(strings.TrimSpace(clause)))
 }
+
+// vesselOf ends a clause that names a pan by what was in it: "to pan with
+// bell pepper", "in the pan used for the zucchini", "in the same skillet as
+// the chicken", "pot from the pasta". The ingredient after it is already
+// cooked, often already out of the pan, so it isn't added in this step.
+var vesselOf = regexp.MustCompile(`\b(?:pan|pot|skillet|bowl|sheet|wok|saucepan|dutch oven|baking dish|dish)\s+` +
+	`(?:with|(?:you\s+)?used\s+(?:for|to\s+(?:cook|sear|brown|roast|toast|fry))|as|from)(?:\s+(?:the|your))?$`)
 
 func leadingPart(text string) string {
 	lower := strings.ToLower(text)
