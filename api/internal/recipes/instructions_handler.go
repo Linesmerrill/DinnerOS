@@ -74,6 +74,10 @@ type InstructionsResponse struct {
 	// SafeTemperaturesSource; empty when there's none.
 	SafeTemperatures       []SafeTemperatureResponse `json:"safeTemperatures"`
 	SafeTemperaturesSource string                    `json:"safeTemperaturesSource"`
+	// SaveForLater are the ingredients this meal shares with meals still to
+	// come this week: how much to use and what to keep (decision 663). Empty
+	// when it shares nothing or the plan couldn't be read.
+	SaveForLater []SaveForLaterResponse `json:"saveForLater"`
 }
 
 // SafeTemperatureResponse is one ingredient's safe minimum internal
@@ -410,7 +414,23 @@ func (h *Handler) instructions(w http.ResponseWriter, r *http.Request) {
 	swaps := h.mealSwaps(recipe, servings, r.URL.Query()["swap"])
 	in := AnnotateMeal(recipe, servings, specs, applied, leftOut, leftOutApplied, swaps)
 	h.findings.check(r.Context(), actor.HouseholdID, recipe, in)
-	httpx.WriteJSON(w, http.StatusOK, newInstructionsResponse(in))
+	resp := newInstructionsResponse(in)
+	resp.SaveForLater = saveForLaterResponses(h.saveForLater(r.Context(), actor.HouseholdID, recipe.ID), in)
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+// saveForLater loads what the meal shares with the rest of its week. A failed
+// lookup leaves it out: the steps are still right without it.
+func (h *Handler) saveForLater(ctx context.Context, householdID, recipeID string) []SaveForLater {
+	if h.opts.SaveForLater == nil {
+		return nil
+	}
+	notes, err := h.opts.SaveForLater.SaveForLater(ctx, householdID, recipeID)
+	if err != nil {
+		h.logger.WarnContext(ctx, "load what to save for later", "householdId", householdID, "recipeId", recipeID, "error", err)
+		return nil
+	}
+	return notes
 }
 
 // mealSwaps reads the swap parameters, each "<ingredientKey>=<choiceId>" as

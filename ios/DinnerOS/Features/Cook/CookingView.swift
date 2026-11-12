@@ -352,6 +352,10 @@ struct CookIngredientList: View {
                 .foregroundStyle(Color.accentColor)
                 .accessibilityAddTraits(.isHeader)
                 .padding(.bottom, 8)
+            if let notes = dish.instructions?.saveForLater, !notes.isEmpty {
+                CookSaveForLaterCard(notes: notes)
+                    .padding(.bottom, 8)
+            }
             switch layout {
             case .all:
                 ForEach(dish.ingredients) { ingredient in
@@ -410,6 +414,7 @@ struct CookIngredientList: View {
     private func stepItemRow(_ item: CookStepItem) -> some View {
         let isChecked = session.isChecked(item.id, recipe: dish.recipe.id)
         let quiet = isChecked || item.isLeftOut
+        let save = dish.instructions?.saveForLater(ingredientKey: item.ingredientKey)
         return Button {
             session.toggle(item, recipe: dish.recipe.id)
         } label: {
@@ -434,6 +439,9 @@ struct CookIngredientList: View {
                             .italic()
                             .foregroundStyle(.secondary)
                     }
+                    if let save, !item.isLeftOut {
+                        CookSaveBadge(text: save.short)
+                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -444,7 +452,11 @@ struct CookIngredientList: View {
         .disabled(item.isLeftOut)
         .modifier(CookFlagMenu(ingredientKey: item.ingredientKey, name: item.name))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text([item.amountText, item.name, item.prep].compactMap { $0 }.joined(separator: " ")))
+        .accessibilityLabel(
+            Text(
+                [item.amountText, item.name, item.prep, item.isLeftOut ? nil : save?.short].compactMap { $0 }
+                    .joined(separator: " "))
+        )
         .accessibilityAddTraits(isChecked ? [.isButton, .isSelected] : .isButton)
     }
 
@@ -480,6 +492,7 @@ struct CookIngredientList: View {
 
     private func ingredientRow(_ ingredient: CookIngredient) -> some View {
         let isChecked = session.isChecked(ingredient.id, recipe: dish.recipe.id)
+        let save = dish.instructions?.saveForLater(ingredientKey: ingredient.ingredientKey)
         return Button {
             session.toggle(ingredient, recipe: dish.recipe.id)
         } label: {
@@ -493,6 +506,8 @@ struct CookIngredientList: View {
                         Text("You skip this")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    } else if let save {
+                        CookSaveBadge(text: save.short)
                     }
                 }
                 Spacer(minLength: 0)
@@ -557,6 +572,43 @@ struct CookIngredientList: View {
     private func amountAndName(amount: String?, name: String) -> Text {
         guard let amount, !amount.isEmpty else { return Text(name) }
         return Text(amount).fontWeight(.semibold) + Text(" ") + Text(name)
+    }
+}
+
+/// What to keep for the week's later meals, at the top of the checklist: the mushrooms bought
+/// for two dinners shouldn't all go into the first.
+struct CookSaveForLaterCard: View {
+    let notes: [InstructionSaveForLater]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Save Some for Later", systemImage: "refrigerator")
+                .font(.headline)
+                .foregroundStyle(Color.orange)
+                .accessibilityAddTraits(.isHeader)
+            ForEach(notes) { note in
+                (Text(note.name).fontWeight(.semibold) + Text(": ") + Text(note.text))
+                    .font(.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.orange.opacity(0.12)))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.orange.opacity(0.35)))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// "Save 4 oz for Beef Stir Fry" under a checklist row.
+private struct CookSaveBadge: View {
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: "refrigerator")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.orange)
+            .labelStyle(.titleAndIcon)
     }
 }
 

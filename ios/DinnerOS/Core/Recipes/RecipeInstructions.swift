@@ -33,12 +33,15 @@ nonisolated struct RecipeInstructions: Decodable, Equatable, Sendable {
     /// `safeTemperaturesSource`. Empty from an older server, or when there's none.
     var safeTemperatures: [InstructionSafeTemperature] = []
     var safeTemperaturesSource = ""
+    /// What this meal shares with the week's meals still to come: how much to use and what to
+    /// keep. Empty from an older server, or when it shares nothing.
+    var saveForLater: [InstructionSaveForLater] = []
 
     private enum CodingKeys: String, CodingKey {
         case recipeID = "recipeId"
         case recipeName, servings, servingOptions, specialtiesApplied, steps, substitutions
         case unchosenSpecialties, leftOutApplied, ingredients, checklist
-        case safeTemperatures, safeTemperaturesSource
+        case safeTemperatures, safeTemperaturesSource, saveForLater
     }
 
     static let empty = RecipeInstructions(
@@ -160,7 +163,27 @@ nonisolated extension RecipeInstructions {
         checklist = container.decodeLenient(InstructionChecklist.self, forKey: .checklist)
         safeTemperatures = container.decodeLossyArray(InstructionSafeTemperature.self, forKey: .safeTemperatures)
         safeTemperaturesSource = (try? container.decode(String.self, forKey: .safeTemperaturesSource)) ?? ""
+        saveForLater = container.decodeLossyArray(InstructionSaveForLater.self, forKey: .saveForLater)
     }
+
+    /// The note for the recipe ingredient keyed `key`, when there is one.
+    func saveForLater(ingredientKey key: String?) -> InstructionSaveForLater? {
+        guard let key, !key.isEmpty else { return nil }
+        return saveForLater.first { $0.ingredientKey == key }
+    }
+}
+
+/// "Use 4 oz. Save 4 oz for Beef Stir Fry on Thursday.", from the server.
+nonisolated struct InstructionSaveForLater: Decodable, Equatable, Sendable, Identifiable {
+    /// The recipe ingredient it is, when the recipe lists it.
+    let ingredientIndex: Int?
+    /// That ingredient's key, as the checklist rows carry it.
+    let ingredientKey: String?
+    let name: String
+    let text: String
+    /// The step list's reminder: "Save 4 oz for Beef Stir Fry".
+    let short: String
+    var id: String { "\(ingredientIndex ?? -1)|\(name)" }
 }
 
 /// "Chicken Breasts: 165°F", from the server.

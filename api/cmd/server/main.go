@@ -292,6 +292,8 @@ func run() error {
 		Specialties: substitutesService,
 		LeftOut:     recipeLeftOut,
 		Swaps:       customizeService,
+		// What a meal shares with the rest of its week, to keep some of.
+		SaveForLater: planService,
 		// What reads wrong in members' recipes is logged to be fixed.
 		Findings:       recipes.NewMongoStore(db.Database()),
 		Ratings:        behavior.ratings,

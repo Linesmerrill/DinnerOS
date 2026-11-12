@@ -406,6 +406,18 @@ Two things happen that the plain recipe doesn't do:
   household makes from store ingredients (`specialtyName`, `optionName`,
   `type`, and `parts` with amounts for `servings`), so the ingredient list can
   clump a component and cross out what's left out without matching names.
+- **`saveForLater`** says what this meal shares with the week's meals still
+  to come (decision 663): `{ingredientIndex, ingredientKey, name, text,
+  short}`, where `text` is "Use 4 oz. Save 4 oz for Beef Stir Fry on
+  Thursday." and `short` is the checklist row's "Save 4 oz for Beef Stir
+  Fry". The meal is found in the household's current week, then last week,
+  then next week; the other meals are that week's entries nobody has marked
+  made or not made, read through the same grocery pipeline as the list
+  (customizations, specialty ingredients, linked names, skips). Staples and
+  amounts the recipe doesn't give ("salt to taste") get no note.
+  `ingredientIndex` and `ingredientKey` are absent when the recipe doesn't
+  list it under a name it was bought as. A failed plan read leaves the list
+  empty; the steps still load.
 
 Nothing is stored. The steps are rendered on each read from the recipe as
 imported plus the household's current choices, so changing a choice changes

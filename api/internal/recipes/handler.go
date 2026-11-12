@@ -56,6 +56,9 @@ type HandlerOptions struct {
 	// Swaps, when set, reads a meal's protein swaps (the swap query
 	// parameter) so the steps name the protein being cooked.
 	Swaps SwapSource
+	// SaveForLater, when set, says what a meal shares with the week's meals
+	// still to come, so the cook keeps some (decision 663).
+	SaveForLater SaveForLaterSource
 	// Findings, when set, records what reads wrong in rendered instructions
 	// (step_findings.go). It never changes the response.
 	Findings FindingRecorder
