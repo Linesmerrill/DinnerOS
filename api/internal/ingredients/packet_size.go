@@ -21,8 +21,7 @@ var packetSizes = []struct {
 	amount *big.Rat
 	unit   string
 }{
-	// Cans and cartons.
-	{names: []string{"coconut milk"}, amount: big.NewRat(27, 2), unit: "floz"},
+	// Cans and cartons. Coconut milk is a kitchen measure (⅔ cup a carton).
 	{names: []string{"crushed tomatoes", "diced tomatoes"}, amount: big.NewRat(344, 25), unit: "oz"},
 	{names: []string{"black beans", "cannellini beans", "kidney beans", "pinto beans", "chickpeas", "three bean blend", "three-bean blend"}, amount: big.NewRat(67, 5), unit: "oz"},
 	// Pouches.

@@ -32,6 +32,11 @@ func KitchenMeasureFor(name, unitCode string) (KitchenMeasure, bool) {
 		return KitchenMeasure{PerPacket: big.NewRat(2, 1), Unit: "tbsp"}, true
 	case strings.HasSuffix(n, "stock concentrate"), strings.HasSuffix(n, "broth concentrate"):
 		return KitchenMeasure{PerPacket: big.NewRat(1, 1), Unit: "tsp", Or: "bouillon cube"}, true
+	case n == "coconut milk", n == "lite coconut milk", n == "light coconut milk":
+		// A meal kit's carton for two is about 5 fl oz; its own cards pour
+		// "⅔ cup coconut milk" from one. A store can is twice that, so
+		// "half the coconut milk" means ⅓ cup, not half a can.
+		return KitchenMeasure{PerPacket: big.NewRat(2, 3), Unit: "cup"}, true
 	}
 	return KitchenMeasure{}, false
 }

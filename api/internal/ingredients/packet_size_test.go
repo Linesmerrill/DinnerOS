@@ -13,7 +13,7 @@ func TestPacketSizes(t *testing.T) {
 	}{
 		{"Tomato Paste", "count", "2", "tbsp"},
 		{"Chicken Stock Concentrate", "count", "1", "tsp"},
-		{"Coconut Milk", "count", "27/2", "floz"},
+		{"Coconut Milk", "count", "2/3", "cup"}, // a meal kit carton, not a store can
 		{"Crushed Tomatoes", "count", "344/25", "oz"},
 		{"Black Beans", "count", "67/5", "oz"},
 		{"Cannellini Beans", "count", "67/5", "oz"},
