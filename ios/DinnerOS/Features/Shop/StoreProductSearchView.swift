@@ -81,6 +81,11 @@ struct StoreProductSearchView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
+                    if !item.note.isEmpty {
+                        Text("Your note: \(item.note)")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.orange)
+                    }
                 }
                 .accessibilityElement(children: .combine)
                 HStack(spacing: 12) {

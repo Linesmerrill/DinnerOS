@@ -167,15 +167,19 @@ nonisolated struct ShoppingAPI: Sendable {
         try await client.sendIgnoringBody(request.withPercentEncodedPath().authorized(with: accessToken))
     }
 
-    /// Flags a saved product to pick a different one next time (`flagged`), or clears the flag.
+    /// Flags a saved product to pick a different one next time (`flagged`), with the member's note
+    /// for whoever picks it, or clears the flag.
     func setChangeRequest(
-        householdID: String, provider: String, ingredientKey: String, flagged: Bool, accessToken: String
+        householdID: String, provider: String, ingredientKey: String, flagged: Bool, note: String = "",
+        accessToken: String
     ) async throws -> ShoppingPreference {
         let path =
             Self.preferencePath(householdID: householdID, provider: provider, ingredientKey: ingredientKey)
             + "/change-request"
         let request =
-            flagged ? APIRequest(method: .put, path: path, body: nil, bearerToken: nil) : APIRequest.delete(path)
+            flagged
+            ? try APIRequest.put(path, body: ["note": note])
+            : APIRequest.delete(path)
         return try await client.send(request.withPercentEncodedPath().authorized(with: accessToken))
     }
 

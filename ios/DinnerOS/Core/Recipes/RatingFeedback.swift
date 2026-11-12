@@ -65,12 +65,35 @@ nonisolated struct RatingFeedback: Equatable, Sendable {
             return
         }
         let part = part(for: ingredient)
+        let note = note(for: ingredient)
         if let opposite = Self.opposites[reason] {
             misses.removeAll { mine($0) && $0.reason == opposite }
         }
         misses.append(
-            RatingMiss(ingredientKey: ingredient.ingredientKey, name: ingredient.name, part: part, reason: reason))
+            RatingMiss(
+                ingredientKey: ingredient.ingredientKey, name: ingredient.name, part: part, reason: reason, note: note))
     }
+
+    /// The member's note for next time about an ingredient, or empty.
+    func note(for ingredient: RatingQuestions.Ingredient) -> String {
+        misses(for: ingredient).first?.note ?? ""
+    }
+
+    /// Sets the note for next time on everything said about an ingredient. It needs an answer to
+    /// hang on, so an ingredient with none keeps no note.
+    mutating func setNote(_ note: String, for ingredient: RatingQuestions.Ingredient) {
+        let mine = Self.isFor(ingredient)
+        let text = String(note.prefix(Self.maxNoteLength))
+        misses = misses.map { miss in
+            guard mine(miss) else { return miss }
+            var changed = miss
+            changed.note = text
+            return changed
+        }
+    }
+
+    /// The server's limit on a note.
+    static let maxNoteLength = 200
 
     /// Narrows an ingredient's answers to one part ("Onions"); the same part again widens them
     /// back. With nothing picked yet, it means the part wasn't liked.
@@ -86,7 +109,8 @@ nonisolated struct RatingFeedback: Equatable, Sendable {
         }
         misses = misses.map { miss in
             guard mine(miss) else { return miss }
-            return RatingMiss(ingredientKey: miss.ingredientKey, name: miss.name, part: newPart, reason: miss.reason)
+            return RatingMiss(
+                ingredientKey: miss.ingredientKey, name: miss.name, part: newPart, reason: miss.reason, note: miss.note)
         }
     }
 
@@ -96,6 +120,17 @@ nonisolated struct RatingFeedback: Equatable, Sendable {
     }
 
     var isEmpty: Bool { tags.isEmpty && misses.isEmpty }
+
+    /// Ingredients whose product should be re-chosen next time, with the note to keep on the flag.
+    var productChanges: [(ingredientKey: String, note: String)] {
+        var seen = Set<String>()
+        return misses.filter { $0.reason == RatingMiss.product && !$0.ingredientKey.isEmpty }
+            .sorted { $0.ingredientKey < $1.ingredientKey }
+            .compactMap { miss in
+                guard seen.insert(miss.ingredientKey).inserted else { return nil }
+                return (miss.ingredientKey, miss.note.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+    }
 
     /// Ingredients whose product should be re-chosen next time.
     var productKeys: [String] {

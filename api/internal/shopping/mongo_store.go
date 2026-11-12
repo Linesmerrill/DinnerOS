@@ -441,6 +441,7 @@ func (s *MongoStore) UpsertPreference(ctx context.Context, p Preference) (Prefer
 
 type changeRequestDoc struct {
 	ProductID string        `bson:"productId"`
+	Note      string        `bson:"note,omitempty"`
 	By        bson.ObjectID `bson:"by"`
 	At        time.Time     `bson:"at"`
 }
@@ -449,7 +450,7 @@ func (d *changeRequestDoc) request() *ChangeRequest {
 	if d == nil {
 		return nil
 	}
-	return &ChangeRequest{ProductID: d.ProductID, By: hexOrEmpty(d.By), At: d.At.UTC()}
+	return &ChangeRequest{ProductID: d.ProductID, Note: d.Note, By: hexOrEmpty(d.By), At: d.At.UTC()}
 }
 
 // SetChangeRequest implements Store.
@@ -467,7 +468,7 @@ func (s *MongoStore) SetChangeRequest(
 			return err
 		}
 		update = bson.D{{Key: "$set", Value: bson.D{{Key: "changeRequest", Value: changeRequestDoc{
-			ProductID: req.ProductID, By: by, At: req.At,
+			ProductID: req.ProductID, Note: req.Note, By: by, At: req.At,
 		}}}}}
 	}
 	res, err := s.preferences.UpdateOne(ctx, preferenceFilter(hid, provider, ingredientKey), update)

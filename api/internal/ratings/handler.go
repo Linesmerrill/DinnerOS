@@ -69,6 +69,7 @@ type MissJSON struct {
 	Name          string `json:"name"`
 	Part          string `json:"part,omitempty"`
 	Reason        string `json:"reason"`
+	Note          string `json:"note,omitempty"`
 }
 
 // RatingResponse is one member's rating.
@@ -113,7 +114,7 @@ func NewRatingResponse(r Rating) RatingResponse {
 	}
 	resp.Misses = make([]MissJSON, 0, len(r.Misses))
 	for _, m := range r.Misses {
-		resp.Misses = append(resp.Misses, MissJSON{IngredientKey: m.IngredientKey, Name: m.Name, Part: m.Part, Reason: string(m.Reason)})
+		resp.Misses = append(resp.Misses, MissJSON{IngredientKey: m.IngredientKey, Name: m.Name, Part: m.Part, Reason: string(m.Reason), Note: m.Note})
 	}
 	return resp
 }
@@ -139,7 +140,7 @@ func (h *Handler) rate(w http.ResponseWriter, r *http.Request) {
 	if req.Misses != nil {
 		misses := make([]Miss, 0, len(*req.Misses))
 		for _, m := range *req.Misses {
-			misses = append(misses, Miss{IngredientKey: m.IngredientKey, Name: m.Name, Part: m.Part, Reason: MissReason(m.Reason)})
+			misses = append(misses, Miss{IngredientKey: m.IngredientKey, Name: m.Name, Part: m.Part, Reason: MissReason(m.Reason), Note: m.Note})
 		}
 		in.Misses = &misses
 	}

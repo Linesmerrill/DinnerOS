@@ -55,7 +55,7 @@ func TestIntegrationUpsertAndDelete(t *testing.T) {
 	ctx := context.Background()
 	created := time.Date(2026, 9, 15, 18, 0, 0, 0, time.UTC)
 	first := Rating{HouseholdID: hhA, RecipeID: tacos, UserID: userAda, Score: 3, Comment: "ok", Tags: []Tag{TagTooSpicy}, CreatedAt: created, UpdatedAt: created,
-		Misses: []Miss{{IngredientKey: "name:sauce", Name: "Sauce", Part: "Onions", Reason: MissDidntLike}, {IngredientKey: "id1", Name: "Brussels Sprouts", Reason: MissProduct}}}
+		Misses: []Miss{{IngredientKey: "name:sauce", Name: "Sauce", Part: "Onions", Reason: MissDidntLike}, {IngredientKey: "id1", Name: "Brussels Sprouts", Reason: MissProduct, Note: "Get the frozen ones"}}}
 
 	saved, previous, err := store.Upsert(ctx, first)
 	if err != nil || previous != nil || saved.ID == "" {

@@ -103,6 +103,36 @@ struct RatingFeedbackTests {
         #expect(feedback.reasons(for: sauce) == ["too-much"])
     }
 
+    /// "The product I bought" with a note: the note goes on every answer about the ingredient, on
+    /// the product flag, and on the recipe for next time.
+    @Test func aNoteForNextTimeTravelsWithTheAnswers() {
+        var feedback = RatingFeedback(rating: nil, questions: questions)
+        let sprouts = questions.ingredients[0]
+        feedback.setNote("ignored", for: sprouts)
+        #expect(feedback.note(for: sprouts).isEmpty)
+        feedback.toggleReason("too-little", for: sprouts)
+        feedback.setNote("Get lo mein noodles", for: sprouts)
+        feedback.toggleReason("product", for: sprouts)
+        #expect(feedback.misses(for: sprouts).map(\.note) == ["Get lo mein noodles", "Get lo mein noodles"])
+        #expect(feedback.productChanges.map(\.ingredientKey) == ["k1"])
+        #expect(feedback.productChanges.first?.note == "Get lo mein noodles")
+        feedback.setNote(String(repeating: "a", count: 300), for: sprouts)
+        #expect(feedback.note(for: sprouts).count == RatingFeedback.maxNoteLength)
+
+        feedback.setNote("Get lo mein noodles", for: sprouts)
+        var saved = rating(tags: [], misses: feedback.draft(score: 5).misses)
+        saved.misses?.append(RatingMiss(ingredientKey: "k2", name: "Creamy Sauce", reason: "too-much"))
+        #expect(saved.notesForNextTime.map(\.note) == ["Get lo mein noodles"])
+    }
+
+    @Test func aMissNoteDecodesAndOlderOnesHaveNone() throws {
+        let json =
+            #"[{"ingredientKey":"k1","name":"Ramen Noodles","reason":"product","note":"Get lo mein"},"#
+            + #"{"ingredientKey":"k2","name":"Peanuts","reason":"too-much"}]"#
+        let misses = try JSONDecoder().decode([RatingMiss].self, from: Data(json.utf8))
+        #expect(misses.map(\.note) == ["Get lo mein", ""])
+    }
+
     @Test func theRequestSendsMissesOnlyWhenAsked() throws {
         let plain =
             try JSONSerialization.jsonObject(with: JSONEncoder().encode(RatingDraft(score: 4).request))

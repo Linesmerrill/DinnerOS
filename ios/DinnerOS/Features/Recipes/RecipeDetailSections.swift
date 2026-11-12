@@ -23,6 +23,32 @@ struct RecipeCustomizationSection: View {
     }
 }
 
+// MARK: - Notes for next time
+
+/// What the member wrote for next time when rating it ("Ramen Noodles: Get lo mein noodles"),
+/// under the title, so it's seen when the meal is planned again.
+struct RecipeNotesForNextTime: View {
+    let notes: [RatingMiss]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Your Notes for Next Time", systemImage: "note.text")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.orange)
+                .accessibilityAddTraits(.isHeader)
+            ForEach(notes, id: \.self) { note in
+                (Text(note.name).fontWeight(.semibold) + Text(": ") + Text(note.note))
+                    .font(.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.12), in: .rect(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
+    }
+}
+
 // MARK: - Description
 
 /// What the meal is, what it's cooked with, how the household rated it, and when it was last

@@ -349,23 +349,30 @@ func TestIntegrationChangeRequest(t *testing.T) {
 	f := newFixture(t)
 	f.save(t, "Ground Beef", "https://www.walmart.com/ip/Test-Beef/100000001", &PackageSize{Quantity: "16", Unit: "oz"})
 	key := f.keys["Ground Beef"]
-	p, err := f.svc.SetChangeRequest(f.ctx, f.actor, "walmart", key, true)
-	if err != nil || !p.WantsChange() {
+	p, err := f.svc.SetChangeRequest(f.ctx, f.actor, "walmart", key, true, "  Get the 90/10 next time ")
+	if err != nil || !p.WantsChange() || p.ChangeNote() != "Get the 90/10 next time" {
 		t.Fatalf("flag = %+v, %v", p.ChangeRequest, err)
+	}
+	if stored, _ := f.store.GetPreference(f.ctx, testHousehold, "walmart", key); stored.ChangeNote() != "Get the 90/10 next time" {
+		t.Errorf("stored note = %q", stored.ChangeNote())
 	}
 	m, err := f.svc.Match(f.ctx, testHousehold, testWeek, "walmart", MatchInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if line := lineFor(t, m, "Ground Beef"); !line.ChangeRequested {
-		t.Error("the match line doesn't say the product was flagged")
+	if line := lineFor(t, m, "Ground Beef"); !line.ChangeRequested || line.ChangeNote != "Get the 90/10 next time" {
+		t.Errorf("the match line doesn't say the product was flagged and why: %+v", line)
 	}
 	f.save(t, "Ground Beef", "https://www.walmart.com/ip/Other-Beef/100000002", &PackageSize{Quantity: "16", Unit: "oz"})
 	got, err := f.store.GetPreference(f.ctx, testHousehold, "walmart", key)
 	if err != nil || got.WantsChange() {
 		t.Errorf("after choosing another product, still flagged: %+v, %v", got.ChangeRequest, err)
 	}
-	if _, err := f.svc.SetChangeRequest(f.ctx, f.actor, "walmart", "name:nothing saved", true); !errors.Is(err, ErrNotFound) {
+	if _, err := f.svc.SetChangeRequest(f.ctx, f.actor, "walmart", "name:nothing saved", true, ""); !errors.Is(err, ErrNotFound) {
 		t.Errorf("flagging an unsaved ingredient = %v, want ErrNotFound", err)
+	}
+	long := strings.Repeat("a", MaxChangeNoteLength+1)
+	if _, err := f.svc.SetChangeRequest(f.ctx, f.actor, "walmart", key, true, long); err == nil {
+		t.Error("a note over the limit was saved")
 	}
 }

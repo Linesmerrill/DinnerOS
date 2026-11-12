@@ -97,19 +97,22 @@ nonisolated struct RatingMiss: Codable, Hashable, Sendable {
     /// The part of a made ingredient ("Onions"), or empty.
     var part: String = ""
     let reason: String
+    /// The member's words for next time ("Get lo mein noodles"), or empty.
+    var note: String = ""
 
     static let didntLike = "didnt-like"
     static let product = "product"
 
     private enum CodingKeys: String, CodingKey {
-        case ingredientKey, name, part, reason
+        case ingredientKey, name, part, reason, note
     }
 
-    init(ingredientKey: String, name: String, part: String = "", reason: String) {
+    init(ingredientKey: String, name: String, part: String = "", reason: String, note: String = "") {
         self.ingredientKey = ingredientKey
         self.name = name
         self.part = part
         self.reason = reason
+        self.note = note
     }
 
     init(from decoder: any Decoder) throws {
@@ -118,6 +121,18 @@ nonisolated struct RatingMiss: Codable, Hashable, Sendable {
         name = try container.decode(String.self, forKey: .name)
         part = (try? container.decode(String.self, forKey: .part)) ?? ""
         reason = try container.decode(String.self, forKey: .reason)
+        note = (try? container.decode(String.self, forKey: .note)) ?? ""
+    }
+}
+
+nonisolated extension RecipeRating {
+    /// One note per ingredient the member wrote something for next time about, in name order.
+    var notesForNextTime: [RatingMiss] {
+        var seen = Set<String>()
+        return (misses ?? [])
+            .filter { !$0.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .sorted { $0.name < $1.name }
+            .filter { seen.insert($0.ingredientKey + "|" + $0.name).inserted }
     }
 }
 

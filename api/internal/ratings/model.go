@@ -92,7 +92,13 @@ type Miss struct {
 	// Part is the piece of a made ingredient that was the problem, or "".
 	Part   string
 	Reason MissReason
+	// Note is the member's own words for next time ("Get lo mein noodles"),
+	// the same on every answer about the ingredient; "" when none.
+	Note string
 }
+
+// MaxMissNoteLength bounds a note for next time.
+const MaxMissNoteLength = 200
 
 // Tags returns the allowed tags in their canonical order.
 func Tags() []Tag { return slices.Clone(allTags) }
@@ -196,6 +202,10 @@ func validMisses(in []Miss) ([]Miss, error) {
 	out := []Miss{}
 	for _, m := range in {
 		m.IngredientKey, m.Name, m.Part = strings.TrimSpace(m.IngredientKey), strings.TrimSpace(m.Name), strings.TrimSpace(m.Part)
+		m.Note = strings.TrimSpace(m.Note)
+		if !utf8.ValidString(m.Note) || utf8.RuneCountInString(m.Note) > MaxMissNoteLength {
+			return nil, invalid(fmt.Sprintf("a note for next time must be at most %d characters", MaxMissNoteLength))
+		}
 		if m.Name == "" || utf8.RuneCountInString(m.Name) > 200 || utf8.RuneCountInString(m.Part) > 200 || len(m.IngredientKey) > 300 {
 			return nil, invalid("each ingredient needs a name of at most 200 characters")
 		}

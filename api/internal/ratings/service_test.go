@@ -416,3 +416,19 @@ func TestRateKeepsSeveralAnswersForOneIngredient(t *testing.T) {
 		t.Errorf("too many answers err = %v", err)
 	}
 }
+
+// A note for next time is kept with the answer, trimmed, and bounded.
+func TestRateKeepsANoteForNextTime(t *testing.T) {
+	env := newTestEnv(t)
+	ada := member(hhA, userAda)
+	misses := []Miss{{IngredientKey: "id-ramen", Name: "Ramen Noodles", Reason: MissProduct, Note: "  Get lo mein noodles "}}
+	got := mustRate(t, env, ada, tacos, RateInput{Score: 5, Misses: &misses})
+	if len(got.Misses) != 1 || got.Misses[0].Note != "Get lo mein noodles" {
+		t.Fatalf("misses = %+v", got.Misses)
+	}
+	long := []Miss{{Name: "Ramen Noodles", Reason: MissProduct, Note: strings.Repeat("a", MaxMissNoteLength+1)}}
+	var ve *ValidationError
+	if _, err := env.svc.Rate(context.Background(), ada, tacos, RateInput{Score: 5, Misses: &long}); !errors.As(err, &ve) {
+		t.Errorf("long note err = %v", err)
+	}
+}

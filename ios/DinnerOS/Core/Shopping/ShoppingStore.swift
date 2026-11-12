@@ -1540,14 +1540,14 @@ final class ShoppingStore {
     }
 
     /// Flags an ingredient's saved product to pick a different one next time, or clears the flag.
-    func setChangeRequest(ingredientKey: String, flagged: Bool) async throws {
+    func setChangeRequest(ingredientKey: String, flagged: Bool, note: String = "") async throws {
         let (api, householdID) = try requireHousehold()
         let started = scope
         let provider = provider
         let saved = try await session.authorized { token in
             try await api.setChangeRequest(
                 householdID: householdID, provider: provider, ingredientKey: ingredientKey, flagged: flagged,
-                accessToken: token)
+                note: note, accessToken: token)
         }
         guard started == scope else { return }
         if let i = preferences.firstIndex(where: { $0.ingredientKey == saved.ingredientKey }) {

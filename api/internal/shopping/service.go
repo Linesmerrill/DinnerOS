@@ -514,12 +514,17 @@ func (s *Service) PutPreference(ctx context.Context, actor households.Membership
 // SetChangeRequest flags the saved product for an ingredient to replace next
 // time, or clears the flag. Flagging is how a member says "not these again"
 // while cooking; choosing another product answers it. ErrNotFound when the
-// ingredient has no saved product.
+// ingredient has no saved product. note is what the member wants instead,
+// kept with the flag so whoever picks the next product knows why.
 func (s *Service) SetChangeRequest(
-	ctx context.Context, actor households.Membership, provider, ingredientKey string, flagged bool,
+	ctx context.Context, actor households.Membership, provider, ingredientKey string, flagged bool, note string,
 ) (Preference, error) {
 	if err := authorize(actor, households.PermShoppingEdit); err != nil {
 		return Preference{}, err
+	}
+	note = strings.TrimSpace(note)
+	if !utf8.ValidString(note) || utf8.RuneCountInString(note) > MaxChangeNoteLength {
+		return Preference{}, invalid("A note can be up to %d characters.", MaxChangeNoteLength)
 	}
 	key := providers.Key(provider)
 	pref, err := s.store.GetPreference(ctx, actor.HouseholdID, key, ingredientKey)
@@ -528,7 +533,7 @@ func (s *Service) SetChangeRequest(
 	}
 	var req *ChangeRequest
 	if flagged {
-		req = &ChangeRequest{ProductID: pref.ProductID, By: actor.UserID, At: s.timestamp()}
+		req = &ChangeRequest{ProductID: pref.ProductID, Note: note, By: actor.UserID, At: s.timestamp()}
 	}
 	if err := s.store.SetChangeRequest(ctx, actor.HouseholdID, key, ingredientKey, req); err != nil {
 		return Preference{}, err

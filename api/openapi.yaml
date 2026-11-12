@@ -7432,6 +7432,10 @@ components:
         reason:
           type: string
           enum: [didnt-like, too-much, too-little, product]
+        note:
+          type: string
+          maxLength: 200
+          description: The member's words for next time ("Get lo mein noodles"), the same on every answer about the ingredient.
     ClientEvent:
       type: object
       additionalProperties: false
@@ -12468,11 +12472,15 @@ components:
             - $ref: "#/components/schemas/ShoppingProductCheck"
             - type: "null"
         needsRechoosing:
+          type: boolean
+          description: True when that check found the product gone from Walmart.
         changeRequested:
           type: boolean
           description: A member flagged this product to pick a different one next time. Choosing another product clears it.
-          type: boolean
-          description: True when that check found the product gone from Walmart.
+        changeNote:
+          type: string
+          maxLength: 200
+          description: What the member wants instead ("Get lo mein noodles"), omitted when they didn't say.
         createdBy:
           type: string
         createdAt:

@@ -343,6 +343,8 @@ nonisolated struct ShoppingPreference: Decodable, Hashable, Sendable, Identifiab
     var needsRechoosingFlag: Bool? = nil
     /// A member flagged it while cooking to pick a different one; `nil` from an older server.
     var changeRequested: Bool? = nil
+    /// The note on that flag ("Get lo mein noodles"); `nil` when none or from an older server.
+    var changeNote: String? = nil
 
     /// Gone from Walmart at the last check: it can't go in a cart until it's re-chosen.
     var needsRechoosing: Bool { needsRechoosingFlag ?? false }
@@ -354,7 +356,7 @@ nonisolated struct ShoppingPreference: Decodable, Hashable, Sendable, Identifiab
         case productID = "productId"
         case productURLString = "productUrl"
         case displayName, packageSize, createdBy, createdAt, updatedBy, updatedAt, priceCents, priceUpdatedAt
-        case priceSource, check, changeRequested
+        case priceSource, check, changeRequested, changeNote
         case needsRechoosingFlag = "needsRechoosing"
     }
 }
@@ -492,12 +494,14 @@ nonisolated struct ShoppingLineProduct: Decodable, Hashable, Sendable {
     let packageSize: ShoppingAmount?
     /// A member flagged this product while cooking: pick a different one. Older servers leave it out.
     var changeRequested = false
+    /// What they want instead, in their words ("Get lo mein noodles"); empty when they didn't say.
+    var changeNote = ""
 
     private enum CodingKeys: String, CodingKey {
         case productID = "productId"
         case displayName
         case productURLString = "productUrl"
-        case packageSize, changeRequested
+        case packageSize, changeRequested, changeNote
     }
 
     init(
@@ -518,6 +522,7 @@ nonisolated struct ShoppingLineProduct: Decodable, Hashable, Sendable {
         productURLString = try container.decode(String.self, forKey: .productURLString)
         packageSize = try container.decodeIfPresent(ShoppingAmount.self, forKey: .packageSize)
         changeRequested = container.decodeLenientBool(forKey: .changeRequested) ?? false
+        changeNote = (try? container.decode(String.self, forKey: .changeNote)) ?? ""
     }
 }
 

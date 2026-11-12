@@ -60,6 +60,7 @@ type missDoc struct {
 	Name          string `bson:"name"`
 	Part          string `bson:"part,omitempty"`
 	Reason        string `bson:"reason"`
+	Note          string `bson:"note,omitempty"`
 }
 
 func (d ratingDoc) toRating() Rating {
@@ -71,7 +72,7 @@ func (d ratingDoc) toRating() Rating {
 		r.Tags = append(r.Tags, Tag(t))
 	}
 	for _, m := range d.Misses {
-		r.Misses = append(r.Misses, Miss{IngredientKey: m.IngredientKey, Name: m.Name, Part: m.Part, Reason: MissReason(m.Reason)})
+		r.Misses = append(r.Misses, Miss{IngredientKey: m.IngredientKey, Name: m.Name, Part: m.Part, Reason: MissReason(m.Reason), Note: m.Note})
 	}
 	return r
 }
@@ -113,7 +114,7 @@ func (s *MongoStore) Upsert(ctx context.Context, r Rating) (Rating, *Rating, err
 	}
 	misses := make([]missDoc, 0, len(r.Misses))
 	for _, m := range r.Misses {
-		misses = append(misses, missDoc{IngredientKey: m.IngredientKey, Name: m.Name, Part: m.Part, Reason: string(m.Reason)})
+		misses = append(misses, missDoc{IngredientKey: m.IngredientKey, Name: m.Name, Part: m.Part, Reason: string(m.Reason), Note: m.Note})
 	}
 	for attempt := 0; ; attempt++ {
 		id := bson.NewObjectID()

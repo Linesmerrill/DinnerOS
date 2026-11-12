@@ -91,6 +91,12 @@ struct ChooseInWalmartView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
+                if !item.note.isEmpty {
+                    Text("Your note: \(item.note)")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.orange)
+                        .lineLimit(2)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)

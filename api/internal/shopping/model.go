@@ -202,8 +202,22 @@ type ChangeRequest struct {
 	// ProductID is the product that was flagged; choosing another one
 	// answers the flag without anyone clearing it.
 	ProductID string
-	By        string
-	At        time.Time
+	// Note is what the member wants instead, in their words ("Get lo mein
+	// noodles"); "" when they didn't say.
+	Note string
+	By   string
+	At   time.Time
+}
+
+// MaxChangeNoteLength bounds a change request's note.
+const MaxChangeNoteLength = 200
+
+// ChangeNote is the member's note on a flag for the saved product itself.
+func (p Preference) ChangeNote() string {
+	if !p.WantsChange() {
+		return ""
+	}
+	return p.ChangeRequest.Note
 }
 
 // WantsChange reports whether a member flagged the saved product itself.
@@ -387,7 +401,9 @@ type HandoffLine struct {
 	// ChangeRequested is true on a match when a member flagged the saved
 	// product to replace. Not stored.
 	ChangeRequested bool
-	PackageSize     *PackageSize
+	// ChangeNote is the member's note on that flag. Not stored.
+	ChangeNote  string
+	PackageSize *PackageSize
 	// Coverage is the rule the count was computed under, already resolved
 	// from the saved product and the line's category, so a stored handoff
 	// recomputes the same count later.

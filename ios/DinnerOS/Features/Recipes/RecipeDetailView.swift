@@ -88,6 +88,10 @@ struct RecipeDetailView: View {
                     titleBlock
                         .padding(.horizontal, 16)
                         .padding(.top, 16)
+                    if let notes = recipe?.myRating?.notesForNextTime, !notes.isEmpty {
+                        RecipeNotesForNextTime(notes: notes)
+                            .padding(.horizontal, 16)
+                    }
                     Section {
                         sectionContent
                             .padding(.horizontal, 16)

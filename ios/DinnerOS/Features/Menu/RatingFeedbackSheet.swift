@@ -195,6 +195,16 @@ struct RatingFeedbackSheet: View {
             }
         }
         if !picked.isEmpty {
+            TextField(
+                "Note for next time, like “Get lo mein noodles”",
+                text: Binding(
+                    get: { feedback?.note(for: ingredient) ?? "" },
+                    set: { feedback?.setNote($0, for: ingredient) }),
+                axis: .vertical
+            )
+            .lineLimit(1...3)
+            .textFieldStyle(.roundedBorder)
+            .font(.subheadline)
             Text("Something else? Pick another ingredient above.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -255,7 +265,9 @@ struct RatingFeedbackSheet: View {
             let title = reasonTitles[reason] ?? reason
             return title.prefix(1).lowercased() + title.dropFirst()
         }
-        return "\(what): \(text.joined(separator: ", "))"
+        let note = feedback.note(for: ingredient).trimmingCharacters(in: .whitespacesAndNewlines)
+        let said = "\(what): \(text.joined(separator: ", "))"
+        return note.isEmpty ? said : "\(said). “\(note)”"
     }
 
     private func load() async {
@@ -283,8 +295,9 @@ struct RatingFeedbackSheet: View {
                     recipeID: recipeID, mine: saved, household: library.cachedRecipe(id: recipeID)?.householdRating)
                 // "The product I bought": that ingredient's saved product gets re-chosen next time.
                 // An ingredient without a saved product has nothing to flag.
-                for key in feedback.productKeys {
-                    try? await shopping.setChangeRequest(ingredientKey: key, flagged: true)
+                for change in feedback.productChanges {
+                    try? await shopping.setChangeRequest(
+                        ingredientKey: change.ingredientKey, flagged: true, note: change.note)
                 }
                 dismiss()
             } catch is CancellationError {

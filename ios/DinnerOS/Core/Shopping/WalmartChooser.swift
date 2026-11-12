@@ -11,6 +11,8 @@ nonisolated struct WalmartChooser: Equatable, Sendable {
         /// "10 oz", or empty.
         let amountText: String
         let searchQuery: String
+        /// The member's note on a flag to change the product ("Get lo mein noodles"), or empty.
+        var note = ""
         var id: String { ingredientKey }
 
         init(line: ShoppingExcludedLine) {
@@ -26,6 +28,7 @@ nonisolated struct WalmartChooser: Equatable, Sendable {
             name = line.name
             amountText = line.quantityText
             searchQuery = line.searchTerms.query
+            note = line.product.changeRequested ? line.product.changeNote : ""
         }
 
         /// Re-chooses a saved product Walmart no longer lists.
@@ -34,6 +37,7 @@ nonisolated struct WalmartChooser: Equatable, Sendable {
             name = preference.ingredientName
             amountText = ""
             searchQuery = preference.ingredientName
+            note = preference.changeRequested == true ? preference.changeNote ?? "" : ""
         }
 
         /// Re-chooses the product of a line from "Before Opening Walmart".

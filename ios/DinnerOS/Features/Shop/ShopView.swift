@@ -883,9 +883,17 @@ private struct ReadyLineRow: View {
                 Button {
                     if canEdit { changeProduct() }
                 } label: {
-                    Label("You wanted a different one. Tap to change it.", systemImage: "flag.fill")
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label("You wanted a different one. Tap to change it.", systemImage: "flag.fill")
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(.orange)
+                        if !line.product.changeNote.isEmpty {
+                            Text("Your note: \(line.product.changeNote)")
+                                .font(.footnote)
+                                .foregroundStyle(.primary)
+                                .padding(.leading, 22)
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
                 .disabled(!canEdit)

@@ -277,11 +277,14 @@ type PreferenceResponse struct {
 	NeedsRechoosing bool `json:"needsRechoosing"`
 	// ChangeRequested is true when a member flagged this product to replace
 	// next time.
-	ChangeRequested bool      `json:"changeRequested"`
-	CreatedBy       string    `json:"createdBy"`
-	CreatedAt       time.Time `json:"createdAt"`
-	UpdatedBy       string    `json:"updatedBy"`
-	UpdatedAt       time.Time `json:"updatedAt"`
+	ChangeRequested bool `json:"changeRequested"`
+	// ChangeNote is the member's note on that flag ("Get lo mein noodles"),
+	// omitted when there is none.
+	ChangeNote string    `json:"changeNote,omitempty"`
+	CreatedBy  string    `json:"createdBy"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedBy  string    `json:"updatedBy"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 // ProductCheckResponse is a saved product's latest check on the provider's
@@ -350,11 +353,13 @@ type AmountResponse struct {
 // ProductResponse is the product a line hands off.
 type ProductResponse struct {
 	// ChangeRequested is true when a member flagged this product to replace.
-	ChangeRequested bool                 `json:"changeRequested,omitempty"`
-	ProductID       string               `json:"productId"`
-	DisplayName     string               `json:"displayName"`
-	ProductURL      string               `json:"productUrl"`
-	PackageSize     *PackageSizeResponse `json:"packageSize"`
+	ChangeRequested bool `json:"changeRequested,omitempty"`
+	// ChangeNote is the member's note on that flag, omitted when none.
+	ChangeNote  string               `json:"changeNote,omitempty"`
+	ProductID   string               `json:"productId"`
+	DisplayName string               `json:"displayName"`
+	ProductURL  string               `json:"productUrl"`
+	PackageSize *PackageSizeResponse `json:"packageSize"`
 }
 
 // ConfirmationResponse is a handoff line's confirmation state.
@@ -833,7 +838,7 @@ func (v *responseView) preferenceResponse(p Preference) PreferenceResponse {
 		ID: p.ID, Provider: p.Provider, IngredientKey: p.IngredientKey, IngredientID: optionalString(catalogID(p.IngredientKey)),
 		IngredientName: p.IngredientName, ProductID: p.ProductID, ProductURL: v.providerURL(p.Provider, p.ProductID),
 		DisplayName: p.DisplayName, PackageSize: packageSizeResponse(p.PackageSize), Coverage: p.Coverage,
-		PriceCents: p.PriceCents, PriceUpdatedAt: optionalTime(p.PriceUpdatedAt), NeedsRechoosing: p.NeedsRechoosing(), ChangeRequested: p.WantsChange(),
+		PriceCents: p.PriceCents, PriceUpdatedAt: optionalTime(p.PriceUpdatedAt), NeedsRechoosing: p.NeedsRechoosing(), ChangeRequested: p.WantsChange(), ChangeNote: p.ChangeNote(),
 		CreatedBy: p.CreatedBy, CreatedAt: p.CreatedAt, UpdatedBy: p.UpdatedBy, UpdatedAt: p.UpdatedAt,
 	}
 	if p.PriceCents != nil && p.PriceSource != "" {
@@ -928,7 +933,7 @@ func (v *responseView) lineResponse(provider providers.Key, l HandoffLine, store
 		Unquantified: l.Unquantified, GroceryStatus: l.GroceryStatus,
 		Product: ProductResponse{
 			ProductID: l.ProductID, DisplayName: l.ProductName, ProductURL: v.providerURL(provider, l.ProductID), PackageSize: packageSizeResponse(l.PackageSize),
-			ChangeRequested: l.ChangeRequested,
+			ChangeRequested: l.ChangeRequested, ChangeNote: l.ChangeNote,
 		},
 		ComputedPackages: l.ComputedPackages, Packages: l.Packages, PackagesOverridden: l.Packages != l.ComputedPackages,
 		Check: lineCheckResponse(l.Check), Added: l.Added,
@@ -1336,10 +1341,22 @@ func (h *Handler) deletePreference(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ChangeRequestRequest is the optional body of PUT
+// .../preferences/{ingredientKey}/change-request.
+type ChangeRequestRequest struct {
+	// Note is what the member wants instead ("Get lo mein noodles").
+	Note string `json:"note"`
+}
+
 func (h *Handler) flagPreference(flagged bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		actor, _ := households.MembershipFromContext(r.Context())
-		p, err := h.opts.Service.SetChangeRequest(r.Context(), actor, chi.URLParam(r, "provider"), ingredientKeyParam(r), flagged)
+		var req ChangeRequestRequest
+		// An app from before notes sends no body.
+		if flagged && r.ContentLength != 0 && !httpx.DecodeJSON(w, r, &req) {
+			return
+		}
+		p, err := h.opts.Service.SetChangeRequest(r.Context(), actor, chi.URLParam(r, "provider"), ingredientKeyParam(r), flagged, req.Note)
 		if err != nil {
 			h.writeError(w, r, "flag saved product failed", err)
 			return
