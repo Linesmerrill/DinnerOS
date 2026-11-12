@@ -61,6 +61,7 @@ struct RecipeEditView: View {
                     )
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Edit Recipe")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -108,6 +109,7 @@ struct RecipeEditView: View {
                         )
                         .keyboardType(.numbersAndPunctuation)
                         .frame(maxWidth: 110)
+                        .keyboardDoneButton()
                         Picker("Unit", selection: $line.unit) {
                             ForEach(units(for: line), id: \.self) { code in
                                 Text(RecipeUnit.label(code)).tag(code)
@@ -144,6 +146,7 @@ struct RecipeEditView: View {
                         .foregroundStyle(.secondary)
                     TextField("What to do", text: $draft.steps[index], axis: .vertical)
                         .lineLimit(2...12)
+                        .keyboardDoneButton()
                 }
                 .padding(.vertical, 2)
             }

@@ -45,6 +45,7 @@ struct RatingFeedbackSheet: View {
                 }
                 .padding(20)
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -205,6 +206,8 @@ struct RatingFeedbackSheet: View {
             .lineLimit(1...3)
             .textFieldStyle(.roundedBorder)
             .font(.subheadline)
+            // A note can run to several lines, so Return adds one: Done puts the keyboard away.
+            .keyboardDoneButton()
             Text("Something else? Pick another ingredient above.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)

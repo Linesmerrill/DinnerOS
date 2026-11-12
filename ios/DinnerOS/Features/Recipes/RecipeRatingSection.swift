@@ -46,6 +46,7 @@ struct RecipeRatingSection: View {
             TextField("Add a comment (optional)", text: $draft.comment, axis: .vertical)
                 .lineLimit(2...6)
                 .textFieldStyle(.roundedBorder)
+                .keyboardDoneButton()
             let length = draft.commentLength
             if length > RatingLimits.maxCommentLength - 100 {
                 Text("\(length) of \(RatingLimits.maxCommentLength) characters")
