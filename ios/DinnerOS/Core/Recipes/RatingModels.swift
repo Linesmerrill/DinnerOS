@@ -102,6 +102,18 @@ nonisolated struct RatingMiss: Codable, Hashable, Sendable {
 
     static let didntLike = "didnt-like"
     static let product = "product"
+    static let reasonOrder = [didntLike, "too-much", "too-little", product]
+
+    /// A reason as it reads after an ingredient's name: "not enough".
+    static func reasonText(_ reason: String) -> String {
+        switch reason {
+        case didntLike: String(localized: "didn't like it")
+        case "too-much": String(localized: "too much")
+        case "too-little": String(localized: "not enough")
+        case product: String(localized: "the product I bought")
+        default: reason
+        }
+    }
 
     private enum CodingKeys: String, CodingKey {
         case ingredientKey, name, part, reason, note
@@ -126,6 +138,35 @@ nonisolated struct RatingMiss: Codable, Hashable, Sendable {
 }
 
 nonisolated extension RecipeRating {
+    /// What was said about each ingredient, one line each, in name order: "Ramen Noodles: not
+    /// enough, the product I bought. “Get lo mein noodles”".
+    var ingredientFeedback: [String] {
+        var order: [String] = []
+        var byIngredient: [String: [RatingMiss]] = [:]
+        for miss in misses ?? [] {
+            let key = miss.ingredientKey + "|" + miss.name
+            if byIngredient[key] == nil { order.append(key) }
+            byIngredient[key, default: []].append(miss)
+        }
+        return order.compactMap { byIngredient[$0] }
+            .sorted { $0[0].name < $1[0].name }
+            .map { group in
+                let first = group[0]
+                let what = first.part.isEmpty ? first.name : "\(first.name) (\(first.part))"
+                let reasons =
+                    RatingMiss.reasonOrder.filter { reason in group.contains { $0.reason == reason } }
+                    + Set(group.map(\.reason)).subtracting(RatingMiss.reasonOrder).sorted()
+                let said = "\(what): " + reasons.map(RatingMiss.reasonText).joined(separator: ", ")
+                let note = group.map(\.note).first { !$0.isEmpty } ?? ""
+                return note.isEmpty ? said : "\(said). “\(note)”"
+            }
+    }
+
+    /// Whether there's anything to read beyond the stars.
+    var hasFeedback: Bool {
+        !tags.isEmpty || !comment.isEmpty || !(misses ?? []).isEmpty
+    }
+
     /// One note per ingredient the member wrote something for next time about, in name order.
     var notesForNextTime: [RatingMiss] {
         var seen = Set<String>()

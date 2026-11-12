@@ -97,18 +97,59 @@ struct HouseholdRatingsList: View {
     }
 }
 
+/// A member's rating: name, stars, and when. A rating with more to say (tags, a comment, what
+/// was wrong with an ingredient) opens to show it; one with only stars doesn't open.
 private struct MemberRatingRow: View {
     let item: MemberRating
     let isCurrentUser: Bool
 
+    @State private var isExpanded = false
+
     var body: some View {
+        if item.rating.hasFeedback {
+            Button {
+                withAnimation(.snappy) { isExpanded.toggle() }
+            } label: {
+                content
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(isExpanded ? "Hides what they said" : "Shows what they said")
+            .accessibilityAddTraits(isExpanded ? .isSelected : [])
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 Text(isCurrentUser ? String(localized: "\(item.name) (You)") : item.name)
                     .font(.headline)
                 Spacer(minLength: 8)
                 StarsLabel(score: item.rating.score)
+                if item.rating.hasFeedback {
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                        .accessibilityHidden(true)
+                }
             }
+            Text(item.rating.updatedAt.formatted(.relative(presentation: .named)))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if isExpanded {
+                feedback
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+
+    private var feedback: some View {
+        VStack(alignment: .leading, spacing: 8) {
             if !item.rating.tags.isEmpty {
                 FlowLayout(spacing: 6) {
                     ForEach(item.rating.tags) { tag in
@@ -119,16 +160,17 @@ private struct MemberRatingRow: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Tags: \(item.rating.tags.map(\.title).formatted(.list(type: .and)))")
             }
+            ForEach(item.rating.ingredientFeedback, id: \.self) { line in
+                Label(line, systemImage: "carrot")
+                    .font(.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if !item.rating.comment.isEmpty {
                 Text(item.rating.comment)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text(item.rating.updatedAt.formatted(.relative(presentation: .named)))
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
+        .padding(.top, 2)
     }
 }
 

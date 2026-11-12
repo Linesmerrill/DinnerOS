@@ -133,6 +133,30 @@ struct RatingFeedbackTests {
         #expect(misses.map(\.note) == ["Get lo mein", ""])
     }
 
+    /// The household ratings list opens a rating into what was said, one line per ingredient.
+    @Test func aRatingReadsBackItsIngredientFeedback() {
+        let saved = rating(
+            tags: [],
+            misses: [
+                RatingMiss(ingredientKey: "k1", name: "Ramen Noodles", reason: "product", note: "Get lo mein noodles"),
+                RatingMiss(ingredientKey: "k2", name: "Peanuts", reason: "too-much"),
+                RatingMiss(
+                    ingredientKey: "k1", name: "Ramen Noodles", reason: "too-little", note: "Get lo mein noodles"),
+                RatingMiss(ingredientKey: "k3", name: "Creamy Sauce", part: "Onions", reason: "didnt-like"),
+            ])
+        #expect(
+            saved.ingredientFeedback == [
+                "Creamy Sauce (Onions): didn't like it",
+                "Peanuts: too much",
+                "Ramen Noodles: not enough, the product I bought. “Get lo mein noodles”",
+            ])
+        #expect(saved.hasFeedback)
+        let starsOnly = RecipeRating(
+            recipeID: "r1", userID: "u1", score: 5, comment: "", tags: [], createdAt: .now, updatedAt: .now)
+        #expect(!starsOnly.hasFeedback)
+        #expect(starsOnly.ingredientFeedback.isEmpty)
+    }
+
     @Test func theRequestSendsMissesOnlyWhenAsked() throws {
         let plain =
             try JSONSerialization.jsonObject(with: JSONEncoder().encode(RatingDraft(score: 4).request))
