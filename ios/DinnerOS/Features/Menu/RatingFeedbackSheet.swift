@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// "What could have been better?" after a rating under five: a few kinds of problem as chips, each
-/// opening its choices, and "An Ingredient", which lists the meal's ingredients and asks what was
-/// wrong with the one picked (and which part, for something made from parts). Every question is
+/// "What could have been better?" after a rating under five, or "Anything you'd change?" on a five:
+/// a few kinds of problem as chips, each opening its choices, and "An Ingredient", which lists the
+/// meal's ingredients and asks everything that was wrong with the one picked (and which part, for
+/// something made from parts). Any number of ingredients can be answered, one after another. Every question is
 /// optional; Skip saves nothing. Answers teach Autopilot, and "The product I bought" flags that
 /// ingredient's saved product to pick a different one next time.
 struct RatingFeedbackSheet: View {
@@ -61,8 +62,12 @@ struct RatingFeedbackSheet: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(questions?.title ?? String(localized: "What could have been better?"))
-                .font(.title3.weight(.semibold))
+            Text(
+                score == 5
+                    ? String(localized: "Anything you'd change?")
+                    : questions?.title ?? String(localized: "What could have been better?")
+            )
+            .font(.title3.weight(.semibold))
             Text("\(recipeName) · \(String(repeating: "★", count: score))\(String(repeating: "☆", count: 5 - score))")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -137,7 +142,7 @@ struct RatingFeedbackSheet: View {
             .foregroundStyle(.secondary)
         FlowLayout(spacing: 8) {
             ForEach(questions.ingredients) { ingredient in
-                let answered = feedback?.miss(for: ingredient) != nil
+                let answered = feedback?.misses(for: ingredient).isEmpty == false
                 Button {
                     withAnimation(.snappy) { openIngredient = openIngredient == ingredient.id ? nil : ingredient.id }
                 } label: {
@@ -153,22 +158,24 @@ struct RatingFeedbackSheet: View {
 
     @ViewBuilder
     private func reasons(for ingredient: RatingQuestions.Ingredient, _ questions: RatingQuestions) -> some View {
-        let miss = feedback?.miss(for: ingredient)
-        Text("What was wrong with the \(ingredient.name)?")
+        let picked = feedback?.reasons(for: ingredient) ?? []
+        let part = feedback?.part(for: ingredient) ?? ""
+        Text("What was wrong with the \(ingredient.name)? Pick all that fit.")
             .font(.subheadline)
             .foregroundStyle(.secondary)
         FlowLayout(spacing: 8) {
             ForEach(questions.reasons) { reason in
                 Button {
-                    feedback?.setReason(reason.reason, for: ingredient)
+                    feedback?.toggleReason(reason.reason, for: ingredient)
                 } label: {
-                    TagChip(title: reason.title, isSelected: miss?.reason == reason.reason)
+                    TagChip(title: reason.title, isSelected: picked.contains(reason.reason))
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(picked.contains(reason.reason) ? .isSelected : [])
             }
         }
-        if let detail = questions.reasons.first(where: { $0.reason == miss?.reason })?.detail, !detail.isEmpty {
-            Label(detail, systemImage: "info.circle")
+        ForEach(questions.reasons.filter { picked.contains($0.reason) && !$0.detail.isEmpty }) { reason in
+            Label(reason.detail, systemImage: "info.circle")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -177,19 +184,25 @@ struct RatingFeedbackSheet: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             FlowLayout(spacing: 8) {
-                ForEach(ingredient.parts, id: \.self) { part in
+                ForEach(ingredient.parts, id: \.self) { item in
                     Button {
-                        feedback?.setPart(part, for: ingredient)
+                        feedback?.setPart(item, for: ingredient)
                     } label: {
-                        TagChip(title: part, isSelected: miss?.part == part)
+                        TagChip(title: item, isSelected: part == item)
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
+        if !picked.isEmpty {
+            Text("Something else? Pick another ingredient above.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
     }
 
-    /// What's been said so far, so answers in a closed category aren't forgotten.
+    /// What's been said so far, so answers in a closed category aren't forgotten. Each ingredient
+    /// is one line with everything said about it, and an X to take it back.
     @ViewBuilder
     private func summary(_ questions: RatingQuestions) -> some View {
         if let feedback, !feedback.isEmpty {
@@ -197,25 +210,52 @@ struct RatingFeedbackSheet: View {
                 questions.categories.flatMap(\.options).map { ($0.tag, $0.title) }, uniquingKeysWith: { a, _ in a })
             let reasonTitles = Dictionary(
                 questions.reasons.map { ($0.reason, $0.title) }, uniquingKeysWith: { a, _ in a })
-            let lines =
-                feedback.tags.sorted().compactMap { titles[$0] }
-                + feedback.misses.values.sorted { $0.name < $1.name }.map { miss in
-                    let what = miss.part.isEmpty ? miss.name : "\(miss.name) (\(miss.part))"
-                    let reason = reasonTitles[miss.reason] ?? miss.reason
-                    return "\(what): \(reason.prefix(1).lowercased() + reason.dropFirst())"
-                }
-            VStack(alignment: .leading, spacing: 4) {
+            let answered = questions.ingredients.filter { !feedback.misses(for: $0).isEmpty }
+            VStack(alignment: .leading, spacing: 6) {
                 Text("You said")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
-                ForEach(lines, id: \.self) { line in
+                ForEach(feedback.tags.sorted().compactMap { titles[$0] }, id: \.self) { line in
                     Text(line).font(.subheadline)
+                }
+                ForEach(answered) { ingredient in
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(summaryLine(ingredient, feedback: feedback, reasonTitles: reasonTitles, questions))
+                            .font(.subheadline)
+                        Spacer(minLength: 8)
+                        Button {
+                            withAnimation(.snappy) { self.feedback?.clear(ingredient) }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Remove what you said about \(ingredient.name)")
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
             .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 12))
         }
+    }
+
+    /// "Ramen Noodles: not enough, the product I bought", reasons in the order they're offered.
+    private func summaryLine(
+        _ ingredient: RatingQuestions.Ingredient, feedback: RatingFeedback, reasonTitles: [String: String],
+        _ questions: RatingQuestions
+    ) -> String {
+        let part = feedback.part(for: ingredient)
+        let what = part.isEmpty ? ingredient.name : "\(ingredient.name) (\(part))"
+        let picked = feedback.reasons(for: ingredient)
+        let reasons =
+            questions.reasons.map(\.reason).filter(picked.contains)
+            + picked.subtracting(questions.reasons.map(\.reason)).sorted()
+        let text = reasons.map { reason in
+            let title = reasonTitles[reason] ?? reason
+            return title.prefix(1).lowercased() + title.dropFirst()
+        }
+        return "\(what): \(text.joined(separator: ", "))"
     }
 
     private func load() async {

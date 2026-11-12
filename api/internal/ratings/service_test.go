@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"reflect"
 	"slices"
@@ -390,5 +391,28 @@ func TestRateKeepsWhatDidntWork(t *testing.T) {
 	unnamed := []Miss{{Reason: MissTooMuch}}
 	if _, err := env.svc.Rate(context.Background(), ada, tacos, RateInput{Score: 4, Misses: &unnamed}); !errors.As(err, &ve) {
 		t.Errorf("unnamed err = %v", err)
+	}
+}
+
+// One ingredient can be wrong in more than one way, on a meal rated five too:
+// the noodles were too few and the product was wrong, and both are kept.
+func TestRateKeepsSeveralAnswersForOneIngredient(t *testing.T) {
+	env := newTestEnv(t)
+	ada := member(hhA, userAda)
+	few := Miss{IngredientKey: "id-ramen", Name: "Ramen Noodles", Reason: MissTooLittle}
+	product := Miss{IngredientKey: "id-ramen", Name: "Ramen Noodles", Reason: MissProduct}
+	peanuts := Miss{IngredientKey: "id-peanuts", Name: "Peanuts", Reason: MissTooMuch}
+	misses := []Miss{few, product, peanuts}
+	got := mustRate(t, env, ada, tacos, RateInput{Score: 5, Misses: &misses})
+	if got.Score != 5 || len(got.Misses) != 3 || got.Misses[0] != few || got.Misses[1] != product || got.Misses[2] != peanuts {
+		t.Fatalf("rating = %+v", got)
+	}
+	many := make([]Miss, MaxMisses+1)
+	for i := range many {
+		many[i] = Miss{IngredientKey: fmt.Sprint(i), Name: fmt.Sprint("Item ", i), Reason: MissDidntLike}
+	}
+	var ve *ValidationError
+	if _, err := env.svc.Rate(context.Background(), ada, tacos, RateInput{Score: 4, Misses: &many}); !errors.As(err, &ve) {
+		t.Errorf("too many answers err = %v", err)
 	}
 }

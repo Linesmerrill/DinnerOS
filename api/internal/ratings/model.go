@@ -77,8 +77,10 @@ const (
 
 var missReasons = []MissReason{MissDidntLike, MissTooMuch, MissTooLittle, MissProduct}
 
-// MaxMisses bounds the ingredients one rating can name.
-const MaxMisses = 20
+// MaxMisses bounds the ingredient answers one rating can hold: one per
+// ingredient and reason, so several for one ingredient ("not enough" and "the
+// product I bought").
+const MaxMisses = 40
 
 // Miss is one ingredient that didn't work, optionally one part of it ("the
 // onions" in the sauce).
@@ -189,7 +191,7 @@ func (in RateInput) validate() (validInput, error) {
 
 func validMisses(in []Miss) ([]Miss, error) {
 	if len(in) > MaxMisses {
-		return nil, invalid(fmt.Sprintf("at most %d ingredients can be named", MaxMisses))
+		return nil, invalid(fmt.Sprintf("at most %d ingredient answers can be saved", MaxMisses))
 	}
 	out := []Miss{}
 	for _, m := range in {

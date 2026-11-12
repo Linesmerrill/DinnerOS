@@ -20,7 +20,7 @@ struct MealRatingRow: View {
     @State private var isSaving = false
     @State private var failed = false
     @State private var savedCount = 0
-    /// Asks what could have been better after a rating under five.
+    /// Asks what could have been better after a rating under five; a five asks only when tapped.
     @State private var asksWhy = false
 
     private var score: Int { recipe.myRating?.score ?? 0 }
@@ -38,12 +38,10 @@ struct MealRatingRow: View {
             }
             StarRatingControl(score: binding)
                 .disabled(isSaving)
-            // Under five, the answers can be given or changed any time.
-            if (1...4).contains(score) {
-                Button(
-                    recipe.myRating?.misses?.isEmpty == false || hasFollowUpTags
-                        ? "Edit What Could Be Better" : "What Could Be Better?"
-                ) {
+            // The answers can be given or changed any time, a five included: a meal that was
+            // great can still have had too few noodles, and that shouldn't cost it a star.
+            if (1...5).contains(score) {
+                Button(followUpTitle) {
                     asksWhy = true
                 }
                 .font(.footnote.weight(.semibold))
@@ -61,6 +59,16 @@ struct MealRatingRow: View {
         .sheet(isPresented: $asksWhy) {
             RatingFeedbackSheet(
                 recipeID: recipe.id, recipeName: recipe.name, score: score, rating: recipe.myRating)
+        }
+    }
+
+    private var followUpTitle: LocalizedStringKey {
+        let answered = recipe.myRating?.misses?.isEmpty == false || hasFollowUpTags
+        switch (score == 5, answered) {
+        case (true, true): return "Edit What You'd Change"
+        case (true, false): return "Anything to Change?"
+        case (false, true): return "Edit What Could Be Better"
+        case (false, false): return "What Could Be Better?"
         }
     }
 

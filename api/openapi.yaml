@@ -7405,9 +7405,11 @@ components:
             $ref: "#/components/schemas/RatingTag"
         misses:
           type: array
-          maxItems: 20
+          maxItems: 40
           description: |
-            Ingredients that didn't work, from the follow-up questions.
+            Ingredients that didn't work, from the follow-up questions: one
+            entry per ingredient and reason, so one ingredient can have
+            several ("too-little" and "product"). Allowed with any score.
             Omitted keeps the saved ones; an empty list clears them. A
             "didnt-like" leans Autopilot away from other meals with the
             ingredient (or its part); "product" means the product bought for
