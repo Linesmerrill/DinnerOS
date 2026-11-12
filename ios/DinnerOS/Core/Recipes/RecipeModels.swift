@@ -124,6 +124,8 @@ nonisolated struct Recipe: Decodable, Equatable, Sendable, Identifiable {
     /// recipes one by one), and whether others can find it now.
     var sharedToCatalog = false
     var inCatalog = false
+    /// When the household last changed its ingredients or steps; `nil` as imported.
+    var editedAt: Date? = nil
 
     var imageURL: URL? { imageURLString.flatMap { URL(string: $0) } }
     var sourceURL: URL? { sourceURLString.flatMap { URL(string: $0) } }
@@ -136,7 +138,7 @@ nonisolated struct Recipe: Decodable, Equatable, Sendable, Identifiable {
         case sourceURLString = "sourceUrl"
         case isAddon, servings, prepMinutes, totalMinutes, cookMinutes, difficulty, cuisines, tags, utensils,
             allergens, nutritionPerServing, nutrition, ingredients, steps, orderWeeks, timesOrdered, lastOrderedWeek,
-            createdAt, updatedAt, householdRating, myRating, sharedToCatalog, inCatalog
+            createdAt, updatedAt, householdRating, myRating, sharedToCatalog, inCatalog, editedAt
     }
 
     /// The time to show: `cookMinutes`, else the larger of prep and total time.
@@ -187,7 +189,8 @@ nonisolated extension Recipe {
             sourceURLString: container.decodeLenient(String.self, forKey: .sourceURLString),
             nutrition: container.decodeLossyArray(RecipeNutrient.self, forKey: .nutrition),
             sharedToCatalog: container.decodeLenientBool(forKey: .sharedToCatalog) ?? false,
-            inCatalog: container.decodeLenientBool(forKey: .inCatalog) ?? false)
+            inCatalog: container.decodeLenientBool(forKey: .inCatalog) ?? false,
+            editedAt: try? container.decodeIfPresent(Date.self, forKey: .editedAt))
     }
 }
 

@@ -358,6 +358,10 @@ func mergeStored(r, stored Recipe, released []ImportRecipe) Recipe {
 	// and the key is derived by the store on write. Carrying them over keeps
 	// a re-import of the same file "unchanged" rather than a rewrite.
 	r.SharedToCatalog, r.CatalogKey = stored.SharedToCatalog, stored.CatalogKey
+	// The household's own changes outlast the source's (decision 667).
+	if !stored.EditedAt.IsZero() {
+		r.EditedAt, r.Ingredients, r.Steps = stored.EditedAt, stored.Ingredients, stored.Steps
+	}
 	aliases, weeks := releaseIDs(
 		slices.Concat(stored.SourceAliases, r.SourceAliases, []string{stored.SourceRecipeID}),
 		slices.Concat(stored.OrderWeeks, r.OrderWeeks), r.OrderWeeks, released)

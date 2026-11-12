@@ -80,8 +80,12 @@ type Recipe struct {
 	// derives it from the recipe on every write (CatalogKey); it is never
 	// taken from a caller.
 	CatalogKey string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	// EditedAt is when the household last changed the recipe's ingredients
+	// or steps (Service.Edit); zero for a recipe as it was imported. An
+	// edited recipe keeps its ingredients and steps through a re-import.
+	EditedAt  time.Time
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // CookMinutes is the recipe's effective cook time (see CookMinutes).

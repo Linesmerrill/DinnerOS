@@ -423,6 +423,30 @@ Nothing is stored. The steps are rendered on each read from the recipe as
 imported plus the household's current choices, so changing a choice changes
 every recipe's instructions with no migration (decision 512).
 
+### Editing a recipe
+
+`PUT /api/v1/households/{householdId}/recipes/{recipeId}/edits` (`recipes.edit`)
+saves the household's version of a recipe's ingredients and steps (decision
+667): `{"ingredients": [{ingredientId?, name, pantryStaple, amounts:
+[{servings, quantity, unit}]}], "steps": ["…"]}`. A line keeps its catalog
+ingredient when it sends its own `ingredientId` with its name unchanged; a new
+or renamed line is matched by name, and a name the catalog doesn't know is
+added. Amounts are only for the recipe's serving sizes; quantities read like
+"1 1/2" or "0.5"; units are DinnerOS unit codes. Blank steps are dropped.
+Returns the recipe, with `editedAt`. An edited recipe keeps its ingredients and
+steps through a later import of the same source recipe, and is never published
+to the global catalog by the edit. Errors are `validation_failed` with a
+sentence to show.
+
+`POST /api/v1/households/{householdId}/recipes/swap-preview` (`recipes.edit`)
+stores nothing: `{oldName, newName, steps, minutes?}` returns the steps with
+the ingredient renamed (each `{text, changed}`), `cookTime` (`{lowMinutes,
+highMinutes, suggestedMinutes, text}`, "Lo mein noodles usually cook 4 to 6
+minutes.", or null when `ingredients.CookTimeFor` doesn't know it), and `times`
+(the cook times the steps give the new ingredient, `{step, text, minutes}`).
+With `minutes`, the first of those times is rewritten ("6 minutes"); send the
+steps from before the rename again, not the renamed ones.
+
 **Checking how steps read.** After rendering, the server runs `CheckSteps`
 (`internal/recipes/step_check.go`) on the result and records anything that
 reads wrong in `instruction_findings`, at most once an hour per recipe and

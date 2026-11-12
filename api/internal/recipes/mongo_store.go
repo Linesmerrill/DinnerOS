@@ -164,6 +164,7 @@ type recipeDoc struct {
 	LastOrderedWeek string                `bson:"lastOrderedWeek"` // "" when never ordered, so it sorts last
 	SharedToCatalog bool                  `bson:"sharedToCatalog,omitempty"`
 	CatalogKey      string                `bson:"catalogKey,omitempty"`
+	EditedAt        *time.Time            `bson:"editedAt,omitempty"`
 	CreatedAt       time.Time             `bson:"createdAt"`
 	UpdatedAt       time.Time             `bson:"updatedAt"`
 }
@@ -240,6 +241,10 @@ func newRecipeDoc(r Recipe, householdID, id bson.ObjectID) (recipeDoc, error) {
 		SharedToCatalog: r.SharedToCatalog, CatalogKey: CatalogKey(r),
 		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}
+	if !r.EditedAt.IsZero() {
+		edited := r.EditedAt
+		d.EditedAt = &edited
+	}
 	for _, n := range r.Nutrition {
 		d.Nutrition = append(d.Nutrition, nutrientDoc(n))
 	}
@@ -275,6 +280,9 @@ func (d recipeDoc) toRecipe() Recipe {
 		OrderWeeks: nilIfEmpty(d.OrderWeeks), TimesOrdered: d.TimesOrdered, LastOrderedWeek: d.LastOrderedWeek,
 		SharedToCatalog: d.SharedToCatalog, CatalogKey: d.CatalogKey,
 		CreatedAt: d.CreatedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
+	}
+	if d.EditedAt != nil {
+		r.EditedAt = d.EditedAt.UTC()
 	}
 	for _, n := range d.Nutrition {
 		r.Nutrition = append(r.Nutrition, Nutrient(n))

@@ -41,6 +41,12 @@ struct RecipeDetailView: View {
     @State private var leavingOut: Set<String> = []
     @State private var leaveOutError: String?
     @State private var showsCooking = false
+    @State private var showsEditor = false
+
+    /// Changing a recipe's ingredients and steps needs `recipes.edit`; the API enforces it.
+    private var canEditRecipe: Bool {
+        households.access?.can(.recipesEdit) == true
+    }
 
     /// Leaving an ingredient out changes what the week's list buys, so it needs `plan.edit`, like
     /// skipping one from the list. Hiding it is a convenience; the API enforces it.
@@ -88,6 +94,12 @@ struct RecipeDetailView: View {
                     titleBlock
                         .padding(.horizontal, 16)
                         .padding(.top, 16)
+                    if recipe?.editedAt != nil {
+                        Label("You edited this recipe", systemImage: "pencil")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 16)
+                    }
                     if let notes = recipe?.myRating?.notesForNextTime, !notes.isEmpty {
                         RecipeNotesForNextTime(notes: notes)
                             .padding(.horizontal, 16)
@@ -146,6 +158,17 @@ struct RecipeDetailView: View {
                     .accessibilityLabel("Start Cooking")
                 }
             }
+            if recipe != nil, canEditRecipe {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showsEditor = true
+                    } label: {
+                        Image(systemName: "pencil")
+                            .modifier(HeroToolbarButton(needsBackground: !showsNavigationBar))
+                    }
+                    .accessibilityLabel("Edit Recipe")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 ShareLink(item: shareURL ?? URL(string: "https://example.com").unsafelyUnwrapped, subject: Text(name)) {
                     Image(systemName: "square.and.arrow.up")
@@ -165,6 +188,14 @@ struct RecipeDetailView: View {
         .overlay(alignment: .bottom) { toast }
         .fullScreenCover(isPresented: $showsCooking) {
             CookingView(start: cookMeal, meals: weekMeals)
+        }
+        .sheet(isPresented: $showsEditor) {
+            if let recipe {
+                RecipeEditView(recipe: recipe, servings: servings) { saved in
+                    show(saved)
+                    Task { await loadInstructions() }
+                }
+            }
         }
         // Attached to the screen's root, never inside a section (decision 510).
         .sheet(isPresented: $showsSpecialtySetup, onDismiss: { Task { await loadInstructions() } }) {

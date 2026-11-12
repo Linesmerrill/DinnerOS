@@ -238,3 +238,33 @@ func TestIntegrationResolveImportReviews(t *testing.T) {
 	svc, _, _ := newTestMongoService(t)
 	runResolveContract(t, svc, bson.NewObjectID().Hex(), bson.NewObjectID().Hex())
 }
+
+// An edit is stored with when it was made, read back the same, and a
+// re-import of the source recipe leaves it as the household left it.
+func TestIntegrationEditOutlastsReimport(t *testing.T) {
+	svc, _, _ := newTestMongoService(t)
+	ctx := context.Background()
+	hh := bson.NewObjectID().Hex()
+	file := testFile(testRecipe("r1", "Tacos", "2026-W10"))
+	mustImport(t, svc, hh, file)
+	r := onlyRecipe(t, svc, hh)
+	edited, err := svc.Edit(ctx, hh, r.ID, EditInput{
+		Ingredients: []EditIngredient{{Name: "Lo Mein Noodles", Amounts: []EditAmount{{Servings: 2, Quantity: "6", Unit: "oz"}}}},
+		Steps:       []string{"Boil the lo mein noodles, 6 minutes."},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edited.EditedAt.IsZero() || len(edited.Ingredients) != 1 || edited.Ingredients[0].IngredientID == "" {
+		t.Fatalf("edited = %+v", edited)
+	}
+	again := mustImport(t, svc, hh, file)
+	if again.Unchanged != 1 {
+		t.Errorf("re-import = %+v, want unchanged", again)
+	}
+	after, err := svc.Get(ctx, hh, r.ID)
+	if err != nil || after.Ingredients[0].Name != "Lo Mein Noodles" || after.Steps[0].Text != "Boil the lo mein noodles, 6 minutes." ||
+		!after.EditedAt.Equal(edited.EditedAt) {
+		t.Errorf("after re-import = %+v, %v", after, err)
+	}
+}

@@ -112,6 +112,9 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(edit).Post("/households/{householdId}/recipes/parse", h.parseRecipe)
 		r.With(edit).Post("/households/{householdId}/recipes", h.createRecipe)
 		r.With(edit).Put("/households/{householdId}/recipes/{recipeId}/sharing", h.setSharing)
+		// Editing a recipe (decision 667): the swap preview stores nothing.
+		r.With(edit).Post("/households/{householdId}/recipes/swap-preview", h.swapPreview)
+		r.With(edit).Put("/households/{householdId}/recipes/{recipeId}/edits", h.editRecipe)
 		r.With(view).Get("/households/{householdId}/recipes/{recipeId}", h.get)
 		r.With(view).Get("/households/{householdId}/recipes/{recipeId}/instructions", h.instructions)
 		r.With(view).Get("/households/{householdId}/recipes/{recipeId}/rating-questions", h.ratingQuestions)
@@ -221,10 +224,13 @@ type RecipeResponse struct {
 	// SharedToCatalog is the household's opt-in for putting this recipe in the
 	// global catalog; InCatalog is whether it is in fact there, which is also
 	// true for a recipe from a public source.
-	SharedToCatalog bool      `json:"sharedToCatalog"`
-	InCatalog       bool      `json:"inCatalog"`
-	CreatedAt       time.Time `json:"createdAt"`
-	UpdatedAt       time.Time `json:"updatedAt"`
+	SharedToCatalog bool `json:"sharedToCatalog"`
+	InCatalog       bool `json:"inCatalog"`
+	// EditedAt is when the household last changed the ingredients or steps,
+	// null for a recipe as it was imported.
+	EditedAt  *time.Time `json:"editedAt"`
+	CreatedAt time.Time  `json:"createdAt"`
+	UpdatedAt time.Time  `json:"updatedAt"`
 	// HouseholdRating aggregates every member's rating; MyRating is the
 	// caller's own, or null.
 	HouseholdRating ratings.HouseholdRatingResponse `json:"householdRating"`
@@ -319,6 +325,10 @@ func newRecipeResponse(r Recipe, bands autopilot.TimeBands) RecipeResponse {
 		OrderWeeks:  orEmpty(r.OrderWeeks), TimesOrdered: r.TimesOrdered, LastOrderedWeek: r.LastOrderedWeek,
 		SharedToCatalog: r.SharedToCatalog, InCatalog: Publishable(r),
 		CreatedAt: r.CreatedAt.UTC(), UpdatedAt: r.UpdatedAt.UTC(),
+	}
+	if !r.EditedAt.IsZero() {
+		edited := r.EditedAt.UTC()
+		resp.EditedAt = &edited
 	}
 	for _, n := range r.Nutrition {
 		resp.Nutrition = append(resp.Nutrition, NutrientResponse(n))

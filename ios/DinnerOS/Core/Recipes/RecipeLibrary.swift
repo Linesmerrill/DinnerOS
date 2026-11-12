@@ -233,6 +233,27 @@ final class RecipeLibrary {
         }
     }
 
+    /// Saves the household's version of a recipe and keeps the cached copy in step. The
+    /// member's own rating comes back with it.
+    func editRecipe(recipeID: String, request: RecipeEditRequest) async throws -> Recipe {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        let saved = try await session.authorized { token in
+            try await api.editRecipe(householdID: householdID, recipeID: recipeID, request: request, accessToken: token)
+        }
+        if householdID == self.householdID {
+            details[recipeID] = saved
+        }
+        return saved
+    }
+
+    /// The steps with one ingredient renamed, and how long the new one cooks.
+    func swapPreview(_ request: RecipeSwapRequest) async throws -> RecipeSwapPreview {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        return try await session.authorized { token in
+            try await api.swapPreview(householdID: householdID, request: request, accessToken: token)
+        }
+    }
+
     // MARK: - Customizations and pairings
 
     /// The recipe's swappable ingredients. Empty when it has none, including a `404` from a
