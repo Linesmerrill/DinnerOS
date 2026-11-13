@@ -5714,8 +5714,9 @@ components:
       in: path
       required: true
       description: |
-        A shopping provider key. `walmart` is enabled; `instacart` and
-        `kroger` return 503 `provider_unavailable`; anything else 404.
+        A shopping provider key. `walmart` is always enabled; `kroger` and
+        `instacart` are enabled when the server has their keys, and return
+        503 `provider_unavailable` otherwise; anything else 404.
       schema:
         type: string
         example: walmart
@@ -12249,7 +12250,15 @@ components:
       properties:
         handoff:
           type: string
-          enum: [cart_link]
+          enum: [cart_link, cart_write, list_page]
+          description: |
+            How a list is handed off. `cart_link`: links that add saved
+            products to the cart (Walmart). `cart_write`: DinnerOS fills the
+            signed-in cart and the link opens it (Kroger family). `list_page`:
+            one link to a page the provider makes from the list's names and
+            amounts, where the member picks the store and checks out
+            (Instacart); lines need no saved product, and there is no product
+            to paste or store to pick.
         pasteProductLink:
           type: boolean
         storeId:

@@ -5,6 +5,8 @@ nonisolated enum ShoppingProviderKey {
     static let walmart = "walmart"
     /// The Kroger family of stores; the API names the banner (Fry's).
     static let kroger = "kroger"
+    /// Instacart: the list becomes a page on Instacart, where the member picks the store.
+    static let instacart = "instacart"
 }
 
 /// The API's shopping limits, mirrored for input validation.
@@ -77,7 +79,12 @@ nonisolated struct ShoppingProvider: Decodable, Hashable, Sendable, Identifiable
     var isSupported: Bool {
         (key == ShoppingProviderKey.walmart && capabilities.handoff == "cart_link")
             || (key == ShoppingProviderKey.kroger && writesCart)
+            || (key == ShoppingProviderKey.instacart && opensListPage)
     }
+
+    /// The API makes a page of the list on the store's site (Instacart): products are matched
+    /// there by name, so nothing is saved per ingredient and the store is picked there.
+    var opensListPage: Bool { capabilities.handoff == "list_page" }
 
     /// The API adds the list to the member's signed-in cart itself; the link only opens it.
     var writesCart: Bool { capabilities.handoff == "cart_write" }
@@ -1075,8 +1082,10 @@ nonisolated enum ShoppingText {
 
     static let everythingInCart = everythingInCart(in: "Walmart")
 
-    static func everythingInCart(in store: String) -> String {
-        String(localized: "Everything is already in your \(store) cart")
+    static func everythingInCart(in store: String, listPage: Bool = false) -> String {
+        listPage
+            ? String(localized: "Everything is already on your \(store) list")
+            : String(localized: "Everything is already in your \(store) cart")
     }
 
     /// After the API filled a signed-in cart (Fry's): "Added to your Fry's cart".

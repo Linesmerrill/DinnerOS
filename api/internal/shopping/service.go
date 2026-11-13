@@ -705,6 +705,9 @@ func (s *Service) CreateHandoff(ctx context.Context, actor households.Membership
 		if len(proposal.Lines) == 0 && slices.ContainsFunc(proposal.Excluded, func(e Excluded) bool { return e.Reason.ForProductCheck() }) {
 			return Handoff{}, false, ErrEverythingLeftOut
 		}
+		if len(proposal.Lines) == 0 && p.HandoffKind() == providers.HandoffListPage {
+			return Handoff{}, false, invalid("There's nothing left on your list to send.")
+		}
 		if len(proposal.Lines) == 0 {
 			return Handoff{}, false, invalid("Nothing on your list has a saved product to add to the cart.")
 		}
@@ -717,8 +720,14 @@ func (s *Service) CreateHandoff(ctx context.Context, actor households.Membership
 				return Handoff{}, false, err
 			}
 		}
+		pages, makesPages := p.(providers.ListPageMaker)
 		now := s.timestamp()
 		if current == nil {
+			if makesPages {
+				if err := s.makeListPages(ctx, pages, p, proposal.Lines, proposal.Links); err != nil {
+					return Handoff{}, false, err
+				}
+			}
 			h, err := s.store.InsertHandoff(ctx, Handoff{Proposal: proposal, CreatedBy: actor.UserID, CreatedAt: now, UpdatedAt: now})
 			if errors.Is(err, ErrDuplicate) {
 				continue // another member started the week's handoff first
@@ -750,6 +759,11 @@ func (s *Service) CreateHandoff(ctx context.Context, actor households.Membership
 			unchanged.Links = []CartLink{}
 			s.logger.InfoContext(ctx, "shopping handoff already in cart", "householdId", actor.HouseholdID, "handoffId", current.ID)
 			return unchanged, false, nil
+		}
+		if makesPages {
+			if err := s.makeListPages(ctx, pages, p, next.Lines, next.Links); err != nil {
+				return Handoff{}, false, err
+			}
 		}
 		saved, err := s.store.UpdateHandoffSend(ctx, next, current.Revision)
 		if errors.Is(err, ErrConflict) || errors.Is(err, ErrDuplicate) {
@@ -801,6 +815,48 @@ func (s *Service) writeCart(ctx context.Context, writer providers.CartWriter, ho
 	default:
 		return fmt.Errorf("%w: add to %s cart: %w", ErrCartUnavailable, p.Name(), err)
 	}
+}
+
+// makeListPages has a list-page provider (Instacart) make a page for each
+// link from the lines it carries, and puts each page's URL on its link.
+func (s *Service) makeListPages(ctx context.Context, maker providers.ListPageMaker, p providers.GroceryProvider, lines []HandoffLine, links []CartLink) error {
+	byID := make(map[string]HandoffLine, len(lines))
+	for _, l := range lines {
+		byID[l.ID] = l
+	}
+	// No date: the household's week may start on another day than the
+	// ISO Monday, and a wrong date reads worse than none.
+	const title = "Dinners for the week"
+	for i := range links {
+		items := make([]providers.ListItem, 0, len(links[i].LineIDs))
+		for _, id := range links[i].LineIDs {
+			l, ok := byID[id]
+			if !ok {
+				continue
+			}
+			items = append(items, providers.ListItem{Name: providers.InstacartItemName(l.Name), Measurements: providers.InstacartMeasurements(listAmounts(l))})
+		}
+		if len(items) == 0 {
+			continue
+		}
+		url, err := maker.MakeListPage(ctx, title, items)
+		if err != nil {
+			return fmt.Errorf("%w: make %s list: %w", ErrCartUnavailable, p.Name(), err)
+		}
+		links[i].URL = url
+	}
+	return nil
+}
+
+// listAmounts is what a line asks a list page to buy: what's still needed
+// after what's on hand, else its amounts.
+func listAmounts(l HandoffLine) []ingredients.Amount {
+	if l.Needed != nil {
+		if needed := needsOf([]Amount{*l.Needed}); len(needed) > 0 {
+			return needed
+		}
+	}
+	return needsOf(l.Amounts)
 }
 
 // recordReportedChecks validates the app's checks and records them on the
@@ -1192,6 +1248,14 @@ func providerPurchase(h Handoff, line HandoffLine, packages int) pantry.Provider
 		if ingredients.NormalizeName(line.Name) != name {
 			in.Name = name
 		}
+	}
+	if h.Provider == providers.KeyInstacart {
+		// A list-page line (Instacart) bought what the list asked for, not
+		// a package of a saved product.
+		if amounts := listAmounts(line); len(amounts) == 1 {
+			in.Quantity, in.Unit = amounts[0].Quantity.String(), amounts[0].Unit.Code
+		}
+		return in
 	}
 	if size := amountFromSize(line.PackageSize); size != nil {
 		if size.Unit.Discrete() {

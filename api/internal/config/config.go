@@ -96,6 +96,9 @@ type Config struct {
 	// default) to fill its cart directly. Off unless the client ID and
 	// secret are set.
 	Kroger Kroger
+	// Instacart makes Instacart shopping list pages from a week's list when
+	// INSTACART_ENABLED is true and INSTACART_API_KEY is set.
+	Instacart Instacart
 
 	// StarterRecipesHouseholdID is the household whose recipes are copied
 	// into every new household as a starter library. Empty (the default)
@@ -176,6 +179,29 @@ type Kroger struct {
 // Enabled reports whether the Kroger application is configured.
 func (k Kroger) Enabled() bool { return k.ClientID != "" && k.ClientSecret != "" }
 
+// Instacart holds the Instacart Developer Platform key. The key is a
+// secret: never log it.
+type Instacart struct {
+	// On is INSTACART_ENABLED: Instacart is offered only when it's true and
+	// the key is set. Off by default while there is no approved key.
+	On     bool
+	APIKey string
+	// APIBase is the API origin: production, or development for a
+	// development key.
+	APIBase string
+	// Affiliate says the key is tied to the Impact account, so Instacart
+	// adds affiliate tracking to page links and the app shows the
+	// disclosure (INSTACART_AFFILIATE=true).
+	Affiliate bool
+}
+
+// Enabled reports whether Instacart is configured.
+func (i Instacart) Enabled() bool { return i.On && i.APIKey != "" }
+
+// DefaultInstacartAPIBase is the Instacart Developer Platform's production
+// origin. A development key uses https://connect.dev.instacart.tools.
+const DefaultInstacartAPIBase = "https://connect.instacart.com"
+
 // DefaultKrogerAPIBase is the Kroger Public API's production origin.
 const DefaultKrogerAPIBase = "https://api.kroger.com"
 
@@ -245,6 +271,8 @@ func (c Config) LogValue() slog.Value {
 		slog.String("mongoURI", RedactURI(c.MongoURI)),
 		slog.String("mongoDatabase", c.MongoDatabase),
 		slog.Bool("walmartAffiliateLinks", c.WalmartImpact.Enabled()),
+		slog.Bool("instacart", c.Instacart.Enabled()),
+		slog.Bool("instacartAffiliateLinks", c.Instacart.Enabled() && c.Instacart.Affiliate),
 		slog.String("starterRecipesHouseholdId", c.StarterRecipesHouseholdID),
 		slog.Bool("apnsEnabled", c.APNs.Enabled()),
 		slog.String("apnsKeyId", c.APNs.KeyID),
@@ -459,6 +487,29 @@ func loadShopping(cfg *Config, get func(key, fallback string) string) []error {
 	case !strings.HasPrefix(k.APIBase, "https://"):
 		cfg.Kroger = Kroger{}
 		errs = append(errs, errors.New("KROGER_API_BASE must be an https origin"))
+	}
+
+	cfg.Instacart = Instacart{
+		APIKey:  strings.TrimSpace(get("INSTACART_API_KEY", "")),
+		APIBase: strings.TrimRight(strings.TrimSpace(get("INSTACART_API_BASE", DefaultInstacartAPIBase)), "/"),
+	}
+	for _, flag := range []struct {
+		name string
+		out  *bool
+	}{{"INSTACART_ENABLED", &cfg.Instacart.On}, {"INSTACART_AFFILIATE", &cfg.Instacart.Affiliate}} {
+		switch strings.ToLower(strings.TrimSpace(get(flag.name, ""))) {
+		case "", "false", "0":
+		case "true", "1":
+			*flag.out = true
+		default:
+			errs = append(errs, errors.New(flag.name+" must be true or false"))
+		}
+	}
+	// A local mock of Instacart is http, in development only.
+	if cfg.Instacart.Enabled() && !strings.HasPrefix(cfg.Instacart.APIBase, "https://") &&
+		!(cfg.Env == Development && strings.HasPrefix(cfg.Instacart.APIBase, "http://localhost")) {
+		cfg.Instacart = Instacart{}
+		errs = append(errs, errors.New("INSTACART_API_BASE must be an https origin"))
 	}
 	return errs
 }

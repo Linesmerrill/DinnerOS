@@ -59,10 +59,13 @@ final class ShoppingStore {
     }
 
     /// The store the shown week shops at: the week's pick, else the household's default. Fry's
-    /// (a Kroger store) only while the API offers it; otherwise Walmart.
+    /// (a Kroger store) or Instacart only while the API offers it; otherwise Walmart.
     var provider: String {
         if tripChoice == ShoppingProviderKey.kroger, kroger != nil {
             return ShoppingProviderKey.kroger
+        }
+        if tripChoice == ShoppingProviderKey.instacart, instacart != nil {
+            return ShoppingProviderKey.instacart
         }
         return ShoppingProviderKey.walmart
     }
@@ -190,6 +193,10 @@ final class ShoppingStore {
     var walmart: ShoppingProvider? { providers.first { $0.key == ShoppingProviderKey.walmart } }
     /// The Kroger store this API offers (Fry's), when it offers one.
     var kroger: ShoppingProvider? { providers.first { $0.key == ShoppingProviderKey.kroger && $0.isSupported } }
+    /// Instacart, when this API offers it.
+    var instacart: ShoppingProvider? {
+        providers.first { $0.key == ShoppingProviderKey.instacart && $0.isSupported }
+    }
     /// The household's store as the API describes it.
     var activeProvider: ShoppingProvider? { providers.first { $0.key == provider } }
     /// "Walmart", "Fry's", or the Kroger banner of the household's store ("Ralphs"), for the
@@ -209,7 +216,11 @@ final class ShoppingStore {
     /// The stores the household set up that the API offers, default first.
     var setUpStores: [ShoppingStoreChoice] {
         let offered = (settings?.stores ?? []).filter { store in
-            store.provider == ShoppingProviderKey.kroger ? kroger != nil : walmart != nil
+            switch store.provider {
+            case ShoppingProviderKey.kroger: kroger != nil
+            case ShoppingProviderKey.instacart: instacart != nil
+            default: walmart != nil
+            }
         }
         return offered.filter(\.isDefault) + offered.filter { !$0.isDefault }
     }
@@ -219,6 +230,8 @@ final class ShoppingStore {
     var isDefaultTrip: Bool { settings?.provider == provider }
     /// The store fills its cart from the API (Fry's): no links to open, no product checks.
     var writesCart: Bool { activeProvider?.writesCart == true }
+    /// The week's store makes a page of the list (Instacart) rather than filling a cart.
+    var opensListPage: Bool { activeProvider?.opensListPage == true }
     var isSignedIn: Bool { connection?.connected == true }
     var isConfigured: Bool { settings?.store(for: provider) != nil }
     var affiliateTracked: Bool { proposal?.affiliateTracked ?? walmart?.affiliateTracked ?? false }
@@ -514,6 +527,14 @@ final class ShoppingStore {
             makeDefault: makeDefault)
         try await save(request)
         Self.logger.info("Shopping store saved")
+    }
+
+    /// Sets up Instacart, which has no store of its own: the member picks one on Instacart.
+    func saveInstacart(makeDefault: Bool) async throws {
+        try await save(
+            UpdateShoppingSettingsRequest(
+                provider: ShoppingProviderKey.instacart, storeID: nil, makeDefault: makeDefault))
+        Self.logger.info("Instacart set up")
     }
 
     /// Sets up a store from the store finder (Fry's), keeping its name for display.
@@ -937,8 +958,9 @@ final class ShoppingStore {
         guard !isCreatingHandoff, !isCheckingProducts else { return }
         linkError = nil
         linkNotice = nil
-        // A store whose cart the API fills checks its own products: nothing to read here.
-        if writesCart {
+        // A store whose cart the API fills checks its own products, and Instacart matches by
+        // name: nothing to read here.
+        if writesCart || opensListPage {
             try await sendHandoff()
             return
         }
@@ -1015,7 +1037,7 @@ final class ShoppingStore {
         }
         guard !handoff.cartLinks.isEmpty else {
             linkProgress = nil
-            linkNotice = ShoppingText.everythingInCart(in: providerName)
+            linkNotice = ShoppingText.everythingInCart(in: providerName, listPage: opensListPage)
             await loadProposal(clearing: false)
             return
         }

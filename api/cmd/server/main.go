@@ -26,6 +26,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/customize"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/httpapi"
+	"github.com/Linesmerrill/DinnerOS/api/internal/instacart"
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
 	"github.com/Linesmerrill/DinnerOS/api/internal/kroger"
 	"github.com/Linesmerrill/DinnerOS/api/internal/liveactivity"
@@ -664,7 +665,7 @@ func newMealKitRunner(cfg config.Config, db *mongo.Database, service *mealkit.Se
 
 // shoppingProviders returns the enabled shopping providers: Walmart always,
 // and the Kroger family (Fry's by default) when KROGER_CLIENT_ID and
-// KROGER_CLIENT_SECRET are set.
+// KROGER_CLIENT_SECRET are set, and Instacart when INSTACART_API_KEY is.
 func shoppingProviders(cfg config.Config, logger *slog.Logger) *providers.Registry {
 	ps := []providers.GroceryProvider{newWalmartProvider(cfg)}
 	if k := cfg.Kroger; k.Enabled() {
@@ -682,6 +683,10 @@ func shoppingProviders(cfg config.Config, logger *slog.Logger) *providers.Regist
 			keys = append(keys, b.Key)
 		}
 		logger.Info("shopping provider enabled", "provider", providers.KeyKroger, "banner", k.Banner, "banners", keys)
+	}
+	if i := cfg.Instacart; i.Enabled() {
+		ps = append(ps, instacart.New(instacart.Options{APIKey: i.APIKey, APIBase: i.APIBase, Affiliate: i.Affiliate}))
+		logger.Info("shopping provider enabled", "provider", providers.KeyInstacart, "affiliate", i.Affiliate)
 	}
 	return providers.NewRegistry(ps...)
 }

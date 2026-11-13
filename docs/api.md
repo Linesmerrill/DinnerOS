@@ -1758,11 +1758,28 @@ Walmart pages ([shopping-providers.md](shopping-providers.md)). The flow:
 store setup, save a product per ingredient, match, create a handoff and open
 its links, then confirm what was ordered.
 
-`{provider}` is `walmart`, or `kroger` when the server has a Kroger
-application (`KROGER_CLIENT_ID`; it shows as the banner's name, Fry's). A
-planned provider that isn't enabled (`instacart`, or `kroger` without keys)
-returns `503 provider_unavailable`; any other value returns `404 not_found`.
+`{provider}` is `walmart`, `kroger` when the server has a Kroger
+application (`KROGER_CLIENT_ID`; it shows as the banner's name, Fry's), or
+`instacart` when `INSTACART_ENABLED=true` and it has an Instacart Developer
+Platform key (`INSTACART_API_KEY`). A planned provider that isn't enabled returns
+`503 provider_unavailable`; any other value returns `404 not_found`.
 Kroger's routes are under [Signed-in stores](#signed-in-stores-kroger).
+
+### Instacart shopping list pages
+
+Instacart's capabilities are `"handoff": "list_page"`, with
+`pasteProductLink` and `storeId` false. It matches products by name, so its
+match makes a line of every item to buy, no saved product needed (lines have
+an empty `productId`, one package, and no count to check), and the store is
+picked on Instacart: `PUT .../shopping/stores/instacart` takes no `storeId`,
+and saving a product for it is `400`. The hand-off calls Instacart's
+`POST /idp/v1/products/products_link` with each line's name and what's still
+needed in Instacart's units (`line_item_measurements`; cloves become heads,
+fluid ounces cups, an unmeasured item sends no amount), and its one link is
+the page Instacart returns, with Impact tracking when the key carries it
+(`affiliateTracked` follows `INSTACART_AFFILIATE`). A later send makes a new
+page of only what's new. When Instacart fails it returns
+`503 provider_error` and records nothing. The key stays on the server.
 
 ### Signed-in stores (Kroger)
 

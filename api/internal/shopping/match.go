@@ -170,6 +170,7 @@ func buildProposal(p providers.GroceryProvider, settings Settings, g planning.Gr
 			selected[sel.IngredientKey] = sel
 		}
 	}
+	listPage := p.HandoffKind() == providers.HandoffListPage
 	checkedOff, excluded := keySet(in.CheckedOffKeys), keySet(in.ExcludeKeys)
 	onList := map[string]bool{}
 
@@ -197,7 +198,8 @@ func buildProposal(p providers.GroceryProvider, settings Settings, g planning.Gr
 				reason = ExcludedInFreezer
 			case selected == nil && item.Status == grocery.StatusPantryHint:
 				reason = ExcludedPantryHint
-			case !hasPref:
+			case !hasPref && !listPage:
+				// A list page matches by name: no saved product needed.
 				reason = ExcludedNoProduct
 			}
 			var check *LineCheck
@@ -244,6 +246,11 @@ func buildProposal(p providers.GroceryProvider, settings Settings, g planning.Gr
 			count := line.PackageCount()
 			line.ComputedPackages, line.Packages = count.Packages, count.Packages
 			line.Reason, line.CoversWeek = count.Reason, count.CoversWeek
+			if listPage {
+				// The page asks for the amounts themselves and the store
+				// picks the package, so there is no count to check.
+				line.ComputedPackages, line.Packages, line.Reason, line.CoversWeek = 1, 1, "", false
+			}
 			if sel.Packages > 0 {
 				line.Packages = sel.Packages
 			}

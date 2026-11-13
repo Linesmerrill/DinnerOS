@@ -447,3 +447,31 @@ func TestLoadOperators(t *testing.T) {
 		t.Fatalf("operators = %v, %v", cfg.OperatorUserIDs, err)
 	}
 }
+
+func TestLoadInstacart(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil || cfg.Instacart.Enabled() || cfg.Instacart.Affiliate || cfg.Instacart.APIBase != DefaultInstacartAPIBase {
+		t.Fatalf("defaults: Instacart = %+v, %v", cfg.Instacart, err)
+	}
+	// A key alone isn't enough: the flag is off by default.
+	if cfg, _ := Load(env(map[string]string{"INSTACART_API_KEY": "not-a-real-key"})); cfg.Instacart.Enabled() {
+		t.Error("enabled without INSTACART_ENABLED")
+	}
+	cfg, err = Load(env(map[string]string{
+		"INSTACART_ENABLED": "true", "INSTACART_API_KEY": " not-a-real-key ", "INSTACART_API_BASE": "https://connect.dev.instacart.tools/",
+		"INSTACART_AFFILIATE": "true",
+	}))
+	if err != nil || !cfg.Instacart.Enabled() || cfg.Instacart.APIKey != "not-a-real-key" || !cfg.Instacart.Affiliate ||
+		cfg.Instacart.APIBase != "https://connect.dev.instacart.tools" {
+		t.Fatalf("configured: Instacart = %+v, %v", cfg.Instacart, err)
+	}
+	for name, values := range map[string]map[string]string{
+		"http base":     {"INSTACART_ENABLED": "true", "INSTACART_API_KEY": "k", "INSTACART_API_BASE": "http://connect.instacart.com"},
+		"bad affiliate": {"INSTACART_AFFILIATE": "yes please"},
+		"bad flag":      {"INSTACART_ENABLED": "on"},
+	} {
+		if _, err := Load(env(values)); err == nil || !strings.Contains(err.Error(), "INSTACART_") {
+			t.Errorf("%s: Load() error = %v", name, err)
+		}
+	}
+}

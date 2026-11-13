@@ -644,7 +644,10 @@ Walmart.
 | `WALMART_PRIVATE_KEY` | **yes** | Generated locally: base64 of the PKCS#8 PEM |
 | `WALMART_KEY_VERSION` | no | walmart.io (starts at `1`) |
 | `WALMART_IMPACT_PUBLISHER_ID`, `WALMART_IMPACT_AD_ID`, `WALMART_IMPACT_CAMPAIGN_ID` | no | Impact dashboard. Unset means untracked links. |
-| `INSTACART_API_KEY` | **yes** | Instacart developer dashboard (separate dev and production keys) |
+| `INSTACART_API_KEY` | **yes** | Instacart developer dashboard (separate dev and production keys). Unset means Instacart isn't offered. |
+| `INSTACART_ENABLED` | no | `true` to offer Instacart; off by default, so a key alone changes nothing |
+| `INSTACART_API_BASE` | no | `https://connect.instacart.com` by default; `https://connect.dev.instacart.tools` for a development key |
+| `INSTACART_AFFILIATE` | no | `true` once the key is tied to the Impact account (Instacart then adds tracking to page links and the app shows the disclosure) |
 | `KROGER_CLIENT_ID` / `KROGER_CLIENT_SECRET` | secret: **yes** | developer.kroger.com |
 | `PROVIDER_TOKEN_ENCRYPTION_KEY` | **yes** | `openssl rand -base64 32`; AES-GCM for stored Kroger refresh tokens |
 

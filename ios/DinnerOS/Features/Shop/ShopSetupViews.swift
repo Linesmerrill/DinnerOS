@@ -16,10 +16,27 @@ struct ShopSetupView: View {
     private var canSave: Bool {
         guard shopping.canEdit, !isSaving else { return false }
         if choice.isKroger { return shopping.kroger != nil && choice.store != nil }
+        if choice.isInstacart { return shopping.instacart != nil }
         return shopping.walmart != nil && ShoppingStoreNumber.error(storeNumber) == nil
     }
 
-    private var storeName: String { choice.isKroger ? shopping.krogerName : "Walmart" }
+    private var storeName: String {
+        if choice.isKroger { return shopping.krogerName }
+        return choice.isInstacart ? "Instacart" : "Walmart"
+    }
+
+    private var introText: String {
+        if choice.isInstacart {
+            return String(
+                localized:
+                    "Instacart finds each item for you. Pick a store and check out there, then tell \(configuration.displayName) what you ordered so the pantry stays current."
+            )
+        }
+        return String(
+            localized:
+                "Choose a \(storeName) product for each ingredient once. Then send the week's list to your \(storeName) cart, check out there, and tell \(configuration.displayName) what you ordered so the pantry stays current."
+        )
+    }
 
     var body: some View {
         Form {
@@ -32,10 +49,8 @@ struct ShopSetupView: View {
                         .accessibilityHidden(true)
                     Text("Send this week's list to \(storeName)")
                         .font(.title2.bold())
-                    Text(
-                        "Choose a \(storeName) product for each ingredient once. Then send the week's list to your \(storeName) cart, check out there, and tell \(configuration.displayName) what you ordered so the pantry stays current."
-                    )
-                    .foregroundStyle(.secondary)
+                    Text(introText)
+                        .foregroundStyle(.secondary)
                 }
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
@@ -74,7 +89,7 @@ struct ShopSetupView: View {
                 RequestStoreRow { isRequestingStore = true }
             } footer: {
                 Text(
-                    shopping.kroger == nil
+                    shopping.kroger == nil && shopping.instacart == nil
                         ? "Walmart is the only store we can send a list to today. Tell us where else you shop."
                         : "Tell us where else you shop.")
             }
@@ -96,6 +111,8 @@ struct ShopSetupView: View {
             do {
                 if choice.isKroger, let store = choice.store {
                     try await shopping.saveStore(provider: ShoppingProviderKey.kroger, store: store)
+                } else if choice.isInstacart {
+                    try await shopping.saveInstacart(makeDefault: true)
                 } else {
                     try await shopping.saveSettings(storeNumber: storeNumber)
                 }
@@ -114,6 +131,7 @@ struct ShopStoreChoice: Equatable {
     var store: ShoppingStoreLocation?
 
     var isKroger: Bool { provider == ShoppingProviderKey.kroger }
+    var isInstacart: Bool { provider == ShoppingProviderKey.instacart }
 }
 
 /// The store sections shared by the first run and Store Settings: the store to use, then
@@ -170,12 +188,14 @@ struct ShopStoreFields: View {
         } header: {
             Text("Store")
         } footer: {
-            if !choice.isKroger, shopping.walmart?.affiliateTracked == true {
+            if !choice.isKroger, !choice.isInstacart, shopping.walmart?.affiliateTracked == true {
                 Text("\(configuration.displayName) may earn a commission on Walmart purchases.")
             }
         }
         if choice.isKroger {
             KrogerStoreFields(store: $choice.store, isEditable: isEditable)
+        } else if choice.isInstacart {
+            InstacartStoreSection()
         } else {
             walmartStoreNumber
         }
@@ -358,17 +378,23 @@ struct ShopStoreEditForm: View {
     @State private var errorMessage: String?
 
     private var isKroger: Bool { provider == ShoppingProviderKey.kroger }
+    private var isInstacart: Bool { provider == ShoppingProviderKey.instacart }
     private var saved: ShoppingStoreChoice? { shopping.settings?.store(for: provider) }
-    private var name: String { isKroger ? shopping.krogerName : "Walmart" }
+    private var name: String {
+        if isKroger { return shopping.krogerName }
+        return isInstacart ? "Instacart" : "Walmart"
+    }
 
     private var hasChanges: Bool {
         if isNew || makeDefault { return true }
+        if isInstacart { return false }
         if isKroger { return krogerStore != nil && krogerStore?.storeID != saved?.storeID }
         return ShoppingStoreNumber.normalized(storeNumber) != saved?.storeID
     }
 
     private var canSave: Bool {
         guard shopping.canEdit, hasChanges, !isSaving else { return false }
+        if isInstacart { return shopping.instacart != nil }
         if isKroger { return krogerStore != nil || (!isNew && saved?.storeID != nil) }
         return ShoppingStoreNumber.error(storeNumber) == nil
     }
@@ -384,6 +410,8 @@ struct ShopStoreEditForm: View {
                 KrogerStoreFields(
                     store: $krogerStore, isEditable: shopping.canEdit,
                     confirm: StoreConfirm(title: isNew ? "Add \(name)" : "Save", isEnabled: canSave, action: save))
+            } else if isInstacart {
+                InstacartStoreSection()
             } else {
                 walmartStoreNumber
             }
@@ -407,7 +435,7 @@ struct ShopStoreEditForm: View {
         .onAppear {
             guard !didStart else { return }
             didStart = true
-            if !isKroger {
+            if !isKroger, !isInstacart {
                 storeNumber = saved?.storeID ?? ""
             }
         }
@@ -425,7 +453,13 @@ struct ShopStoreEditForm: View {
             defer { isSaving = false }
             errorMessage = nil
             do {
-                if isKroger {
+                if isInstacart {
+                    if isNew {
+                        try await shopping.saveInstacart(makeDefault: makeDefault)
+                    } else if makeDefault {
+                        try await shopping.makeDefault(provider)
+                    }
+                } else if isKroger {
                     if let krogerStore {
                         try await shopping.saveStore(provider: provider, store: krogerStore, makeDefault: makeDefault)
                     } else if makeDefault {
@@ -439,6 +473,25 @@ struct ShopStoreEditForm: View {
                 return
             } catch {
                 errorMessage = ShopErrors.message(for: error, households: households)
+            }
+        }
+    }
+}
+
+/// Instacart's part of store setup: there's no store to pick here.
+struct InstacartStoreSection: View {
+    @Environment(ShoppingStore.self) private var shopping
+    @Environment(\.appConfiguration) private var configuration
+
+    var body: some View {
+        Section {
+            Label("You pick the store on Instacart each time you shop.", systemImage: "storefront")
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Instacart finds a product for each item on your list. You can change any of them there.")
+                if shopping.instacart?.affiliateTracked == true {
+                    Text("\(configuration.displayName) may earn a commission on Instacart orders.")
+                }
             }
         }
     }

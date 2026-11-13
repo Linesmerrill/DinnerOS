@@ -466,7 +466,9 @@ private struct ShopWeekList: View {
             // Only items added by hand: there's no meal to explain.
             if hasMeals {
                 Text(
-                    "If several meals use an item, it's bought once and listed under the first meal. We work out how many to buy from the package size."
+                    shopping.opensListPage
+                        ? "If several meals use an item, it's bought once and listed under the first meal. \(shopping.providerName) picks the size."
+                        : "If several meals use an item, it's bought once and listed under the first meal. We work out how many to buy from the package size."
                 )
             }
             if needsProduct {
@@ -493,6 +495,7 @@ private struct ShopWeekList: View {
             case .line(let line) where row.isPrimary:
                 ReadyLineRow(
                     line: line, packages: packagesBinding(for: line), canEdit: shopping.canEdit,
+                    listPage: shopping.opensListPage,
                     changeProduct: { walmartChoices = WalmartChoices(items: [WalmartChooser.Item(line: line)]) },
                     fixPackageSize: { choose(ProductChoice(line: line, packageSizeFix: $0)) },
                     mealNote: ShopMealText.note(for: row), remove: options)
@@ -814,6 +817,9 @@ private struct ReadyLineRow: View {
     let line: ShoppingHandoffLine
     @Binding var packages: Int
     let canEdit: Bool
+    /// The store matches products by name on its own page (Instacart): the row shows the
+    /// amount, with no product, package count, or product to change.
+    var listPage = false
     let changeProduct: () -> Void
     /// Opens the product to fix the package size a Check Amount warning is about.
     let fixPackageSize: (ShoppingPackageSizeFix) -> Void
@@ -828,12 +834,14 @@ private struct ReadyLineRow: View {
     }
 
     private var productText: String {
+        if listPage { return line.quantityText }
         let size = line.product.packageSize?.text ?? String(localized: "size unknown")
         return "\(line.product.displayName) · \(size)"
     }
 
     /// The API's coverage for its own count; after a change, what the new count adds.
     private var coverageText: String {
+        if listPage { return "" }
         guard packages != line.packages else { return line.coverageText }
         if let size = line.product.packageSize {
             return String(localized: "\(packages) × \(size.text), changed from \(line.packages)")
@@ -846,9 +854,9 @@ private struct ReadyLineRow: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 details
                 Spacer(minLength: 0)
-                if canEdit || remove != nil {
+                if (canEdit && !listPage) || remove != nil {
                     Menu {
-                        if canEdit {
+                        if canEdit, !listPage {
                             if let fix {
                                 Button(fix.title, systemImage: "ruler") { fixPackageSize(fix) }
                             }
@@ -908,7 +916,9 @@ private struct ReadyLineRow: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            if canEdit {
+            if listPage {
+                // Instacart picks the size: nothing to count here.
+            } else if canEdit {
                 Stepper(value: $packages, in: ShoppingLimits.packages) {
                     Text(ShoppingText.packages(packages))
                         .font(.subheadline)
@@ -945,9 +955,11 @@ private struct ReadyLineRow: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(line.name)
                 .font(.headline)
-            Text(productText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            if !productText.isEmpty {
+                Text(productText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
             if let alsoCalled = ShopMealText.alsoCalled(line.alsoCalled) {
                 Text(alsoCalled)
                     .font(.footnote)
@@ -964,7 +976,7 @@ private struct ReadyLineRow: View {
                     .foregroundStyle(.secondary)
             }
             // Sent before at a lower count: only the difference goes to Walmart.
-            if line.sentPackages > 0 {
+            if line.sentPackages > 0, !listPage {
                 Text(ShoppingText.cartStatus(sent: line.sentPackages, wanted: packages))
                     .font(.footnote)
                     .foregroundStyle(.tint)
@@ -1241,6 +1253,7 @@ private struct InWalmartCartSection: View {
             ForEach(proposal.linesInCart) { line in
                 InCartLineRow(
                     line: line, packages: packages(line), canEdit: shopping.canEdit, store: shopping.providerName,
+                    listPage: shopping.opensListPage,
                     sendAgain: { run { try await shopping.sendAgain(line) } },
                     changeProduct: { changeProduct(line) })
             }
@@ -1267,10 +1280,12 @@ private struct InWalmartCartSection: View {
                 }
             }
         } header: {
-            Text("In \(shopping.providerName) Cart")
+            Text(shopping.opensListPage ? "Sent to \(shopping.providerName)" : "In \(shopping.providerName) Cart")
         } footer: {
             Text(
-                "Already in your \(shopping.providerName) cart, so sending again won't add them twice. Once you mark the week ordered, the next list starts fresh."
+                shopping.opensListPage
+                    ? "Already sent to \(shopping.providerName), so sending again only adds what's new. Once you mark the week ordered, the next list starts fresh."
+                    : "Already in your \(shopping.providerName) cart, so sending again won't add them twice. Once you mark the week ordered, the next list starts fresh."
             )
         }
     }
@@ -1294,6 +1309,8 @@ private struct InCartLineRow: View {
     @Binding var packages: Int
     let canEdit: Bool
     let store: String
+    /// Sent to a list page (Instacart): it's on that list, with nothing to count or change.
+    var listPage = false
     let sendAgain: () -> Void
     let changeProduct: () -> Void
 
@@ -1303,12 +1320,14 @@ private struct InCartLineRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(line.name)
                         .font(.headline)
-                    Text(line.product.displayName)
+                    Text(listPage ? line.quantityText : line.product.displayName)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     Label(
-                        ShoppingText.cartStatus(sent: line.sentPackages, wanted: packages, store: store),
-                        systemImage: "cart.fill"
+                        listPage
+                            ? String(localized: "On your \(store) list")
+                            : ShoppingText.cartStatus(sent: line.sentPackages, wanted: packages, store: store),
+                        systemImage: listPage ? "checklist" : "cart.fill"
                     )
                     .font(.footnote)
                     .foregroundStyle(
@@ -1319,7 +1338,10 @@ private struct InCartLineRow: View {
                 if canEdit {
                     Menu {
                         Button("Send Again", systemImage: "arrow.clockwise", action: sendAgain)
-                        Button("Change Product", systemImage: "arrow.triangle.2.circlepath", action: changeProduct)
+                        if !listPage {
+                            Button(
+                                "Change Product", systemImage: "arrow.triangle.2.circlepath", action: changeProduct)
+                        }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                             .imageScale(.large)
@@ -1330,7 +1352,7 @@ private struct InCartLineRow: View {
                         "Removed it from your \(store) cart? Send Again adds it back next time.")
                 }
             }
-            if canEdit {
+            if canEdit, !listPage {
                 Stepper(value: $packages, in: ShoppingLimits.packages) {
                     Text(ShoppingText.packages(packages))
                         .font(.subheadline)
@@ -1626,10 +1648,15 @@ private struct ShopHandoffBar: View {
                 if shopping.isEverythingInCart {
                     everythingInCart
                 } else {
-                    openButton(
-                        title: shopping.writesCart ? "Add New Items to \(store) Cart" : "Add New Items in \(store)"
-                    )
-                    .buttonStyle(.bordered)
+                    if shopping.opensListPage {
+                        instacartButton
+                    } else {
+                        openButton(
+                            title: shopping.writesCart
+                                ? "Add New Items to \(store) Cart" : "Add New Items in \(store)"
+                        )
+                        .buttonStyle(.bordered)
+                    }
                     Text(summary)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -1641,8 +1668,12 @@ private struct ShopHandoffBar: View {
                 // Walmart's link would only add these a second time.
                 everythingInCart
             } else {
-                openButton(title: shopping.writesCart ? "Add to \(store) Cart" : "Open in \(store)")
-                    .buttonStyle(.borderedProminent)
+                if shopping.opensListPage {
+                    instacartButton
+                } else {
+                    openButton(title: shopping.writesCart ? "Add to \(store) Cart" : "Open in \(store)")
+                        .buttonStyle(.borderedProminent)
+                }
                 Text(summary)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -1653,9 +1684,13 @@ private struct ShopHandoffBar: View {
                 }
             }
             if proposal.affiliateTracked {
-                Text("\(configuration.displayName) may earn a commission on Walmart purchases.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(
+                    shopping.opensListPage
+                        ? "\(configuration.displayName) may earn a commission on \(store) orders."
+                        : "\(configuration.displayName) may earn a commission on \(store) purchases."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
         }
         .multilineTextAlignment(.center)
@@ -1670,15 +1705,28 @@ private struct ShopHandoffBar: View {
     }
 
     private var everythingInCart: some View {
-        Label(shopping.linkNotice ?? ShoppingText.everythingInCart(in: store), systemImage: "checkmark.circle")
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity)
+        Label(
+            shopping.linkNotice ?? ShoppingText.everythingInCart(in: store, listPage: shopping.opensListPage),
+            systemImage: "checkmark.circle"
+        )
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity)
     }
 
     /// Counts only what the link adds: lines already in the cart aren't sent again.
     private var summary: String {
         let count = shopping.linesToAdd.count
+        if shopping.opensListPage {
+            if proposal.cart != nil {
+                return count == 1
+                    ? String(localized: "Sends 1 new item to \(store). What you sent before isn't sent again.")
+                    : String(localized: "Sends \(count) new items to \(store). What you sent before isn't sent again.")
+            }
+            return count == 1
+                ? String(localized: "Sends 1 item to \(store). You pick the store and check out there.")
+                : String(localized: "Sends \(count) items to \(store). You pick the store and check out there.")
+        }
         if proposal.cart != nil {
             return count == 1
                 ? String(localized: "Adds 1 new item to your \(store) cart. What's already there isn't added again.")
@@ -1694,6 +1742,12 @@ private struct ShopHandoffBar: View {
         count == 1
             ? String(localized: "Choose what to do with 1 item first.")
             : String(localized: "Choose what to do with \(count) items first.")
+    }
+
+    /// Instacart's own button, in its colors and words.
+    private var instacartButton: some View {
+        InstacartButton(isWorking: shopping.isCreatingHandoff, action: open)
+            .disabled(shopping.isCreatingHandoff)
     }
 
     private func openButton(title: String) -> some View {

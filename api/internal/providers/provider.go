@@ -13,8 +13,8 @@ import (
 // Key identifies a provider in routes, stored documents, and responses.
 type Key string
 
-// Provider keys. Only Walmart is implemented; the others are known so a
-// request for them gets 503 provider_unavailable instead of 404.
+// Provider keys. A known provider that isn't enabled (no API key set) gets
+// 503 provider_unavailable instead of 404.
 const (
 	KeyWalmart   Key = "walmart"
 	KeyInstacart Key = "instacart"
@@ -253,8 +253,11 @@ func CapabilitiesOf(p GroceryProvider) Capabilities {
 	_, cart := p.(CartWriter)
 	_, orders := p.(OrderImporter)
 	_, account := p.(CustomerAccount)
+	// A list page matches products by name and the member picks the store
+	// there: nothing to paste, no store to pick.
+	listPage := p.HandoffKind() == HandoffListPage
 	return Capabilities{
-		Handoff: p.HandoffKind(), PasteProductLink: true, StoreID: true,
+		Handoff: p.HandoffKind(), PasteProductLink: !listPage, StoreID: !listPage,
 		ProductSearch: search, ProductLookup: lookup, StoreFinder: stores, CartWrite: cart, OrderImport: orders,
 		CustomerAccount: account,
 	}
