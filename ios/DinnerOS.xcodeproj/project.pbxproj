@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		D0000000000000000000008A /* DinnerOSLiveActivities.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D00000000000000000000070 /* DinnerOSLiveActivities.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D0000000000000000000009A /* DinnerOSShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D00000000000000000000090 /* DinnerOSShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D000000000000000000000A2 /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = D000000000000000000000A1 /* RevenueCat */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -97,6 +98,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D000000000000000000000A2 /* RevenueCat in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -186,6 +188,7 @@
 			);
 			name = DinnerOS;
 			packageProductDependencies = (
+				D000000000000000000000A1 /* RevenueCat */,
 			);
 			productName = DinnerOS;
 			productReference = D00000000000000000000004 /* DinnerOS.app */;
@@ -294,6 +297,9 @@
 			);
 			mainGroup = D00000000000000000000002;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D000000000000000000000A0 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D00000000000000000000003 /* Products */;
 			projectDirPath = "";
@@ -647,6 +653,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D000000000000000000000A0 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/RevenueCat/purchases-ios-spm.git";
+			requirement = {
+				kind = exactVersion;
+				version = 5.99.2;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D000000000000000000000A1 /* RevenueCat */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D000000000000000000000A0 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
+			productName = RevenueCat;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = D00000000000000000000001 /* Project object */;
 }

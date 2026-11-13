@@ -123,7 +123,8 @@ final class AppDependencies {
         autopilot = AutopilotStore(
             session: session, api: client.map { AutopilotAPI(client: $0) }, prompts: UserDefaultsAutopilotPrompts())
         let plus = PlusStore(
-            session: session, api: client.map { PlusAPI(client: $0) }, purchaser: StoreKitPlusPurchaser())
+            session: session, api: client.map { PlusAPI(client: $0) },
+            purchaser: PlusPurchasers.make(apiKey: configuration.revenueCatAPIKey))
         self.plus = plus
         // Planning a week is part of Plus: a tapped Plan the Week opens the purchase screen.
         autopilot.plusRequired = { [plus] in plus.showsPurchase = true }

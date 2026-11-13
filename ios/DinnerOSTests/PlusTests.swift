@@ -136,6 +136,13 @@ struct PlusStoreTests {
         }
     }
 
+    @Test func theBuildsRevenueCatKeyOpensBuying() {
+        #expect(!PlusPurchasers.make(apiKey: nil).canPurchase)
+        #expect(!PlusPurchasers.make(apiKey: "").canPurchase)
+        let purchaser = PlusPurchasers.make(apiKey: "appl_example")
+        #expect(purchaser is RevenueCatPlusPurchaser && purchaser.canPurchase)
+    }
+
     @Test func aPlusRequiredErrorOpensThePurchaseScreen() async throws {
         let (store, _) = try await makeStore { _ in (200, PlusFixtures.status()) }
         let required = APIError.server(

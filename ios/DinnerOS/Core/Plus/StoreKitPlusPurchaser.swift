@@ -1,9 +1,9 @@
 import Foundation
 import StoreKit
 
-/// Reads Plus prices from the App Store with StoreKit. Buying stays closed until RevenueCat's
-/// SDK and key are added (decision 675): a purchase RevenueCat never hears about would charge
-/// the household without turning Plus on.
+/// Reads Plus prices from the App Store with StoreKit, for a build without RevenueCat's key.
+/// Buying stays closed (decision 675): a purchase RevenueCat never hears about would charge the
+/// household without turning Plus on.
 nonisolated struct StoreKitPlusPurchaser: PlusPurchasing {
     var canPurchase: Bool { false }
 
