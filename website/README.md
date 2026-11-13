@@ -10,7 +10,12 @@ Cloudflare Pages settings:
 - Root directory: repo root
 
 `_headers` sets security headers and caching. `404.html` is served for missing pages.
-Each page repeats the same header and footer, so a nav change touches every page.
+Each page repeats the same header and footer, so a nav change touches every page. On phones the
+nav is a `<details>` Menu, so it works without scripts (the CSP blocks them).
+
+The app pictures on the home page (the week, the list, the store send, timers, reminders) are
+HTML and CSS copies of real app screens, using the app's own wording. No stock photos, so there's
+nothing to credit. Keep them in step with the app when its wording changes.
 
 Preview locally: `python3 -m http.server 8090 --directory website`, then open http://localhost:8090.
 
