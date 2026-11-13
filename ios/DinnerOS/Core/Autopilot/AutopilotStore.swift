@@ -357,8 +357,13 @@ final class AutopilotStore {
 
     // MARK: - Proposals
 
+    /// Called when planning a week needs DinnerOS Plus and someone asked for it.
+    @ObservationIgnored var plusRequired: (() -> Void)?
+
     /// Generates a proposal for `week`, replacing any earlier one, and shows that week.
-    func generate(week target: ISOWeek) async throws {
+    /// `prompted` is false for suggestions the app asks for on its own: those never open the
+    /// Plus purchase screen.
+    func generate(week target: ISOWeek, prompted: Bool = true) async throws {
         if target != week {
             resetWeek(to: target)
         }
@@ -366,8 +371,15 @@ final class AutopilotStore {
         defer { isGenerating = false }
         notice = nil
         let options = AutopilotGenerateRequest(signals: await deviceSignals?(target))
-        let generated = try await mutate { api, householdID, token in
-            try await api.generate(householdID: householdID, week: target, options: options, accessToken: token)
+        let generated: AutopilotProposal
+        do {
+            generated = try await mutate { api, householdID, token in
+                try await api.generate(householdID: householdID, week: target, options: options, accessToken: token)
+            }
+        } catch  where PlusStore.isPlusRequired(error) {
+            // The purchase screen says it; no error message on top of it.
+            if prompted { plusRequired?() }
+            throw CancellationError()
         }
         apply(generated)
         Self.logger.info("Autopilot week generated with \(generated.slots.count, privacy: .public) meals")

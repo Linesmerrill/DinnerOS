@@ -177,6 +177,9 @@ final class ShoppingStore {
     private(set) var weekHandoffs: [ShoppingHandoff] = []
     /// Cleared by a `404`: this API has no cost endpoints yet, so the card hides.
     private(set) var isCostAvailable = true
+    /// The cost and savings are part of DinnerOS Plus and this household doesn't have it
+    /// (decision 675). Adding prices stays open.
+    private(set) var isCostLocked = false
     private(set) var isSavingSpend = false
     private(set) var savingsPhase: Phase = .idle
     private(set) var savings: ShoppingSavings?
@@ -1366,6 +1369,12 @@ final class ShoppingStore {
             guard started == scope, week == self.week else { return }
             weekCost = cost
             isCostAvailable = true
+            isCostLocked = false
+            costPhase = .loaded
+        } catch  where PlusStore.isPlusRequired(error) {
+            guard started == scope, week == self.week else { return }
+            weekCost = nil
+            isCostLocked = true
             costPhase = .loaded
         } catch let error as APIError where error.status == 404 {
             guard started == scope, week == self.week else { return }
@@ -1443,6 +1452,12 @@ final class ShoppingStore {
             }
             guard started == scope else { return }
             savings = loaded
+            isCostLocked = false
+            savingsPhase = .loaded
+        } catch  where PlusStore.isPlusRequired(error) {
+            guard started == scope else { return }
+            savings = nil
+            isCostLocked = true
             savingsPhase = .loaded
         } catch is CancellationError {
             if started == scope, savingsPhase == .loading { savingsPhase = .idle }
@@ -1782,6 +1797,7 @@ final class ShoppingStore {
         isCatalogAvailable = true
         planSignatures = [:]
         clearWeekCost()
+        isCostLocked = false
         isCostAvailable = true
         savingsPhase = .idle
         savings = nil

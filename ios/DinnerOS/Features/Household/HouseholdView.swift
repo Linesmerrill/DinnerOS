@@ -64,6 +64,7 @@ struct HouseholdView: View {
                     switcherSection(detail)
                 }
                 membersSection(detail)
+                PlusHouseholdSection()
                 Section {
                     NavigationLink {
                         AutopilotPreferencesView()
@@ -552,6 +553,7 @@ private struct HouseholdConfirmations: ViewModifier {
     }
     .environment(session)
     .environment(HouseholdPreviewData.store(session: session))
+    .environment(PlusStore(session: session, api: nil, purchaser: StoreKitPlusPurchaser()))
     .environment(RecipePreviewData.library(session: session))
     .environment(AutopilotPreviewData.store(session: session))
 }

@@ -1,5 +1,6 @@
 // Command metrics prints DinnerOS's weekly numbers: active households, carts
-// sent, and the average cart value per store (decision 674). It only reads.
+// sent, the average cart value per store (decision 674), and who has Plus
+// (decision 675). It only reads.
 //
 //	heroku run /metrics -weeks 8 -a dinneros-api
 package main
@@ -60,7 +61,23 @@ func run(ctx context.Context, args []string, getenv func(string) string, out io.
 		return err
 	}
 	Print(out, report)
+	now := time.Now()
+	p, err := metrics.PlusNow(ctx, client.Database(), now, now.AddDate(0, 0, -7*(*weeks)))
+	if err != nil {
+		return err
+	}
+	PrintPlus(out, report, p)
 	return nil
+}
+
+// PrintPlus writes who has Plus now and the codes used each week.
+func PrintPlus(out io.Writer, report []metrics.Week, p metrics.Plus) {
+	fmt.Fprintf(out, "\nPlus now: %d paying, %d in trial, %d on free months\n", p.Paying, p.Trial, p.FreeMonths)
+	var parts []string
+	for _, w := range report {
+		parts = append(parts, fmt.Sprintf("%s %d", w.Week, p.Referrals[w.Week]))
+	}
+	fmt.Fprintf(out, "Referral codes used: %s\n", strings.Join(parts, ", "))
 }
 
 // Print writes the report as a plain table.

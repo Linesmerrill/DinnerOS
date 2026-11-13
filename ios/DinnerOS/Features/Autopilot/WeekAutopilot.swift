@@ -36,11 +36,19 @@ final class WeekAutopilotFlow {
     var isShowingPreferences = false
     /// Set by `WeekAutopilotModifier`; `nil` in previews, which plan without device context.
     @ObservationIgnored var deviceContext: AutopilotDeviceContext?
+    /// Set by `WeekAutopilotModifier`; `nil` in previews, where nothing is behind Plus.
+    @ObservationIgnored var plus: PlusStore?
     /// The week to plan once the member has answered the explainer.
     @ObservationIgnored private var weekAwaitingExplainer: ISOWeek?
 
     /// Plans the shown week, or asks the setup questions first when Autopilot isn't set up.
     func plan(autopilot: AutopilotStore, plans: PlanStore) {
+        // Planning is part of Plus: the purchase screen comes before the setup questions,
+        // so nobody answers them only to be asked to pay.
+        if let plus, !plus.hasPlus {
+            plus.showsPurchase = true
+            return
+        }
         guard autopilot.isConfigured else {
             sheet = .onboarding
             return
@@ -339,6 +347,7 @@ struct WeekAutopilotModifier: ViewModifier {
     @Environment(HouseholdStore.self) private var households
     /// Optional so previews needn't supply them.
     @Environment(AutopilotDeviceContext.self) private var deviceContext: AutopilotDeviceContext?
+    @Environment(PlusStore.self) private var plus: PlusStore?
     @Environment(AppIntentRouter.self) private var router: AppIntentRouter?
 
     private struct WeekKey: Equatable {
@@ -352,7 +361,10 @@ struct WeekAutopilotModifier: ViewModifier {
         @Bindable var flow = flow
         return
             content
-            .onAppear { flow.deviceContext = deviceContext }
+            .onAppear {
+                flow.deviceContext = deviceContext
+                flow.plus = plus
+            }
             // "Plan my dinners" from Siri opens the suggestions it made.
             .onChange(of: router?.autopilotReviewWeek, initial: true) { _, week in
                 guard let week, canEdit else { return }
@@ -372,8 +384,11 @@ struct WeekAutopilotModifier: ViewModifier {
             .task(id: households.current?.household.id) {
                 guard let householdID = households.current?.household.id else { return }
                 await autopilot.activate(householdID: householdID)
-                // First visit for this household: offer setup once, to members who can plan.
-                if canEdit, !holdsOnboarding, autopilot.shouldOfferOnboarding, flow.sheet == nil {
+                // First visit for this household: offer setup once, to members who can plan,
+                // and not to a household whose planning is behind Plus.
+                if canEdit, !holdsOnboarding, autopilot.shouldOfferOnboarding, flow.sheet == nil,
+                    plus?.hasPlus != false
+                {
                     autopilot.markOnboardingOffered()
                     flow.sheet = .onboarding
                 }

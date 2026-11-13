@@ -1935,6 +1935,7 @@ private struct ShopTripStorePicker: View {
         ShopView()
     }
     .environment(HouseholdPreviewData.store(session: session))
+    .environment(PlusStore(session: session, api: nil, purchaser: StoreKitPlusPurchaser()))
     .environment(ShopPreviewData.store(session: session))
 }
 
@@ -1944,6 +1945,7 @@ private struct ShopTripStorePicker: View {
         ShopView()
     }
     .environment(HouseholdPreviewData.store(session: session))
+    .environment(PlusStore(session: session, api: nil, purchaser: StoreKitPlusPurchaser()))
     .environment(ShopPreviewData.store(session: session, configured: false))
 }
 

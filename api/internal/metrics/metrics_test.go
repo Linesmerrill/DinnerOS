@@ -8,6 +8,7 @@ import (
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb/mongotest"
+	"github.com/Linesmerrill/DinnerOS/api/internal/plus"
 )
 
 func TestSummarize(t *testing.T) {
@@ -62,5 +63,48 @@ func TestIntegrationWeeksReadsEvents(t *testing.T) {
 	if len(weeks) != 1 || weeks[0].Week != "2026-W46" || weeks[0].ActiveHouseholds != 1 ||
 		weeks[0].Stores["walmart"].AverageCents() != 5000 {
 		t.Errorf("weeks = %+v", weeks)
+	}
+}
+
+func TestIntegrationPlusNow(t *testing.T) {
+	client := mongotest.Client(t)
+	ctx := t.Context()
+	db := client.Database()
+	now := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	id := func(n byte) bson.ObjectID { var o bson.ObjectID; o[11] = n; return o }
+	later, earlier := now.Add(24*time.Hour), now.Add(-24*time.Hour)
+	for _, d := range []bson.D{
+		{{Key: "householdId", Value: id(1)}, {Key: "trial", Value: false}, {Key: "expiresAt", Value: later}},
+		{{Key: "householdId", Value: id(2)}, {Key: "trial", Value: true}, {Key: "expiresAt", Value: later}},
+		{{Key: "householdId", Value: id(3)}, {Key: "trial", Value: false}, {Key: "expiresAt", Value: earlier}},
+		{{Key: "householdId", Value: id(4)}, {Key: "ended", Value: true}, {Key: "expiresAt", Value: later}},
+	} {
+		if _, err := db.Collection(plus.Collection).InsertOne(ctx, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, d := range []bson.D{
+		{{Key: "householdId", Value: id(1)}, {Key: "until", Value: later}}, // also paying: counted once
+		{{Key: "householdId", Value: id(5)}, {Key: "until", Value: later}},
+		{{Key: "householdId", Value: id(6)}, {Key: "until", Value: earlier}},
+	} {
+		if _, err := db.Collection(plus.FreeTimeCollection).InsertOne(ctx, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, at := range []time.Time{now, now.Add(-time.Hour), now.AddDate(0, 0, -7), now.AddDate(0, 0, -60)} {
+		if _, err := db.Collection(plus.ReferralsCollection).InsertOne(ctx, bson.D{{Key: "at", Value: at}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p, err := PlusNow(ctx, db, now, now.AddDate(0, 0, -14))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Paying != 1 || p.Trial != 1 || p.FreeMonths != 1 {
+		t.Errorf("plus = %+v", p)
+	}
+	if p.Referrals["2026-W47"] != 2 || p.Referrals["2026-W46"] != 1 || len(p.Referrals) != 2 {
+		t.Errorf("referrals = %v", p.Referrals)
 	}
 }

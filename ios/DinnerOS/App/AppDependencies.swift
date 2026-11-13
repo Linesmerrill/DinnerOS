@@ -32,6 +32,8 @@ final class AppDependencies {
     let grocerySkips: GrocerySkipStore
     let sameItems: SameItemStore
     let autopilot: AutopilotStore
+    /// DinnerOS Plus: whether the household has it, the purchase screen, and invite codes.
+    let plus: PlusStore
     let events: EventReporter
     let notifications: NotificationStore
     /// Push permission, this device's token, and tapped pushes.
@@ -120,6 +122,11 @@ final class AppDependencies {
         }
         autopilot = AutopilotStore(
             session: session, api: client.map { AutopilotAPI(client: $0) }, prompts: UserDefaultsAutopilotPrompts())
+        let plus = PlusStore(
+            session: session, api: client.map { PlusAPI(client: $0) }, purchaser: StoreKitPlusPurchaser())
+        self.plus = plus
+        // Planning a week is part of Plus: a tapped Plan the Week opens the purchase screen.
+        autopilot.plusRequired = { [plus] in plus.showsPurchase = true }
         let deviceContext = AutopilotDeviceContext(
             calendar: EventKitCalendarSource(), location: CoreLocationSource(), weather: WeatherKitSource(),
             settings: UserDefaultsDeviceContextSettings())

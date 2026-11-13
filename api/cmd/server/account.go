@@ -52,6 +52,8 @@ func newAccountService(db *mongo.Database, householdService *households.Service,
 			recommendations.NewMongoStore(db),
 			cooking.NewStore(db),
 			plus.NewMongoStore(db),
+			plus.NewMongoFreeTime(db),
+			plus.NewMongoReferrals(db),
 		},
 		UserData: []account.UserPurger{
 			ratingStore,

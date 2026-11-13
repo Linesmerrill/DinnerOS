@@ -103,6 +103,9 @@ extension APIError: LocalizedError {
             case "validation_failed" where !message.isEmpty:
                 // The API documents validation messages as safe to show.
                 message
+            case "plus_required", "code_not_found", "code_not_allowed":
+                // DinnerOS Plus and invite codes: the API writes these for people.
+                message.isEmpty ? String(localized: "Something went wrong. Try again.") : message
             case "fetch_failed":
                 String(
                     localized:

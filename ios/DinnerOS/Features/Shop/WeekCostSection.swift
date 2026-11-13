@@ -32,6 +32,7 @@ struct WeekCostSection: View {
 
     @Environment(ShoppingStore.self) private var shopping
     @Environment(HouseholdStore.self) private var households
+    @Environment(PlusStore.self) private var plus
 
     private var isVisible: Bool {
         WeekCostCard.isVisible(
@@ -42,6 +43,10 @@ struct WeekCostSection: View {
     var body: some View {
         if isVisible {
             Section {
+                if shopping.isCostLocked {
+                    Button("See What This Week Costs", systemImage: "sparkles") { plus.showsPurchase = true }
+                        .accessibilityHint("Part of DinnerOS Plus.")
+                }
                 if let cost = shopping.weekCost {
                     NavigationLink {
                         SavingsView()

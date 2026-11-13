@@ -103,7 +103,7 @@ struct YourMealsSection: View {
             entries.count < (autopilot.profile?.schedule.mealsPerWeek ?? 4)
         else { return }
         suggestedWeeks.insert(week.description)
-        try? await autopilot.generate(week: week)
+        try? await autopilot.generate(week: week, prompted: false)
     }
 
     private var subtitle: String {

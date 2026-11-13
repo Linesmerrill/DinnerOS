@@ -221,8 +221,11 @@ func run() error {
 		Tokens:     tokens,
 		Logger:     logger,
 	})
+	plusService := plus.NewService(plus.NewMongoStore(db.Database()), cfg.Plus.Enabled).
+		WithReferrals(plus.NewMongoFreeTime(db.Database()), plus.NewMongoReferrals(db.Database()))
+	requirePlus := plus.Require(plusService, logger)
 	plusHandler := plus.NewHandler(plus.HandlerOptions{
-		Service:    plus.NewService(plus.NewMongoStore(db.Database()), cfg.Plus.Enabled),
+		Service:    plusService,
 		Authorizer: householdService, Tokens: tokens, WebhookSecret: cfg.Plus.WebhookSecret, Logger: logger,
 	})
 	sameItemsHandler := sameitems.NewHandler(sameitems.HandlerOptions{
@@ -257,10 +260,11 @@ func run() error {
 		Logger:     logger,
 	})
 	autopilotHandler := recommendations.NewHandler(recommendations.HandlerOptions{
-		Service:    autopilotService,
-		Authorizer: householdService,
-		Tokens:     tokens,
-		Logger:     logger,
+		RequirePlus: requirePlus,
+		Service:     autopilotService,
+		Authorizer:  householdService,
+		Tokens:      tokens,
+		Logger:      logger,
 	})
 	// Meal customizations (swap or double a protein) filter choices by the
 	// household's Autopilot restrictions. Grocery lists and cook deductions
@@ -351,6 +355,7 @@ func run() error {
 	// Items a member added by hand join the week's list beside pairings.
 	planService.WithExtras(shoppingService)
 	shoppingHandler := shopping.NewHandler(shopping.HandlerOptions{
+		RequirePlus:  requirePlus,
 		Service:      shoppingService,
 		Pantry:       pantryService,
 		Authorizer:   householdService,
@@ -491,6 +496,7 @@ func indexSets() []mongodb.IndexSet {
 		skips.Indexes(),
 		sameitems.Indexes(),
 		plus.Indexes(),
+		plus.ReferralIndexes(),
 		behaviorIndexes(),
 		recommendations.Indexes(),
 	)

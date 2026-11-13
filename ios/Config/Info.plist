@@ -27,8 +27,10 @@
 	</array>
 	<key>GoogleIOSClientID</key>
 	<string>$(GOOGLE_IOS_CLIENT_ID)</string>
+	<key>RevenueCatAPIKey</key>
+	<string>$(REVENUECAT_API_KEY)</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Autopilot checks how busy your evenings are to suggest quicker dinners on busy nights. Only "free", "some", or "busy" leaves your iPhone — never your events.</string>
+	<string>Autopilot checks how busy your evenings are to suggest quicker dinners on busy nights. Only "free", "some", or "busy" leaves your iPhone, never your events.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Your location helps suggest dinners that suit the weather and fills in your ZIP code when you look for a store. Only the ZIP code leaves your phone.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>

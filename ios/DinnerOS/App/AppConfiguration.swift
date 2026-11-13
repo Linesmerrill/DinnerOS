@@ -19,6 +19,9 @@ struct AppConfiguration: Sendable, Equatable {
     let apiBaseURL: URL?
     /// Google's iOS OAuth client ID (a public identifier). `nil` hides Google sign-in.
     let googleIOSClientID: String?
+    /// RevenueCat's public app key (`appl_…`), which is safe in the bundle. `nil` keeps Plus
+    /// purchases closed: the purchase screen shows prices but can't buy.
+    let revenueCatAPIKey: String?
     /// The custom URL scheme invitation links open (`dinneros://invite?token=...`). It must
     /// match the API's `APP_URL_SCHEME`.
     let urlScheme: String
@@ -38,6 +41,8 @@ struct AppConfiguration: Sendable, Equatable {
         apiBaseURL = Self.parseAPIBaseURL(info["APIBaseURL"] as? String, environment: environment)
         let googleClientID = (info["GoogleIOSClientID"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         googleIOSClientID = googleClientID?.isEmpty == false ? googleClientID : nil
+        let revenueCatKey = (info["RevenueCatAPIKey"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        revenueCatAPIKey = revenueCatKey?.isEmpty == false ? revenueCatKey : nil
         urlScheme = Self.lowercasedValue(info["AppURLScheme"]) ?? InviteLink.defaultScheme
         appLinkDomain = Self.lowercasedValue(info["AppLinkDomain"]) ?? InviteLink.defaultWebHost
         version = info["CFBundleShortVersionString"] as? String ?? "0"

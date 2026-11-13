@@ -71,6 +71,28 @@ struct ShoppingCostStoreTests {
             ])
     }
 
+    /// Without Plus the cost is locked: the card stays for the week's handoffs, with prices
+    /// still open, and shows the way to Plus instead of an error.
+    @Test func costWithoutPlusIsLockedNotAnError() async throws {
+        let (store, _) = try await makeStore { request in
+            guard request.url?.path().hasSuffix("/cost") == true || request.url?.path().hasSuffix("/savings") == true
+            else { return nil }
+            return (402, Data(#"{"error":{"code":"plus_required","message":"This is part of DinnerOS Plus."}}"#.utf8))
+        }
+
+        await store.loadWeekCost()
+        #expect(store.isCostLocked && store.isCostAvailable)
+        #expect(store.weekCost == nil && store.costPhase == .loaded)
+        #expect(!store.priceableLines.isEmpty)
+        #expect(
+            WeekCostCard.isVisible(
+                isCostAvailable: store.isCostAvailable, hasCostContent: false, hasHandoffs: !store.weekHandoffs.isEmpty)
+        )
+
+        await store.loadSavings()
+        #expect(store.savingsPhase == .loaded && store.savings == nil)
+    }
+
     @Test func anAPIWithoutCostHidesTheCard() async throws {
         let (store, _) = try await makeStore(costStatus: 404)
 

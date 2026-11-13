@@ -6,6 +6,7 @@ struct MainTabView: View {
     @Environment(NotificationStore.self) private var notifications
     @Environment(ShoppingStore.self) private var shopping
     @Environment(PantryStore.self) private var pantry
+    @Environment(PlusStore.self) private var plus
     /// Optional so previews needn't supply one.
     @Environment(PushNotificationStore.self) private var push: PushNotificationStore?
     @Environment(AppIntentRouter.self) private var router: AppIntentRouter?
@@ -50,6 +51,10 @@ struct MainTabView: View {
         .task(id: households.current?.household.id) {
             guard let householdID = households.current?.household.id else { return }
             await notifications.activate(householdID: householdID)
+        }
+        .task(id: households.current?.household.id) {
+            guard let householdID = households.current?.household.id else { return }
+            await plus.activate(householdID: householdID)
         }
         // Another household clears the previous one's shopping state. The open handoff is read
         // so "Did you order these?" can be asked when the app returns from Walmart.
@@ -102,6 +107,7 @@ struct MainTabView: View {
         .sheet(isPresented: $tabs.showsNotifications) {
             NotificationsView()
         }
+        .plusPurchaseSheet()
         // Outermost, so the sheets above get it too: an environment value set on the TabView
         // alone doesn't reach a sheet presented from a modifier outside it.
         .environment(tabs)

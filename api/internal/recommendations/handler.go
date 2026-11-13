@@ -25,6 +25,9 @@ type HandlerOptions struct {
 	Authorizer households.Authorizer
 	Tokens     auth.AccessTokenValidator
 	Logger     *slog.Logger
+	// RequirePlus guards the routes behind DinnerOS Plus; nil lets every
+	// request through.
+	RequirePlus func(http.Handler) http.Handler
 }
 
 // Handler serves the Autopilot endpoints.
@@ -35,6 +38,9 @@ type Handler struct {
 
 // NewHandler returns a Handler.
 func NewHandler(opts HandlerOptions) *Handler {
+	if opts.RequirePlus == nil {
+		opts.RequirePlus = func(next http.Handler) http.Handler { return next }
+	}
 	logger := opts.Logger
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
@@ -62,7 +68,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(view).Get(base+"/weeks/{week}/context", h.getContext)
 		r.With(edit).Put(base+"/weeks/{week}/context", h.putContext)
 		r.With(edit).Delete(base+"/weeks/{week}/context", h.deleteContext)
-		r.With(edit).Post(base+"/weeks/{week}/generate", h.generate)
+		r.With(edit, h.opts.RequirePlus).Post(base+"/weeks/{week}/generate", h.generate)
 		r.With(view).Get(base+"/weeks/{week}/proposal", h.getProposal)
 		r.With(edit).Post(base+"/weeks/{week}/proposal/slots/{slotId}/swap", h.swap)
 		r.With(edit).Post(base+"/weeks/{week}/proposal/accept", h.accept)

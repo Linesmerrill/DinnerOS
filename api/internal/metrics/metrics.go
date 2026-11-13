@@ -15,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
+	"github.com/Linesmerrill/DinnerOS/api/internal/plus"
 )
 
 // Row is one event as the report reads it.
@@ -159,4 +160,77 @@ func mondayOf(t time.Time) time.Time {
 	day := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 	offset := (int(day.Weekday()) + 6) % 7
 	return day.AddDate(0, 0, -offset)
+}
+
+// Plus is DinnerOS Plus right now, plus referrals each week.
+type Plus struct {
+	// Paying, Trial and FreeMonths count households with Plus now: paying,
+	// in the App Store trial, or on free months from referrals only.
+	Paying, Trial, FreeMonths int
+	// Referrals counts codes used, per ISO week.
+	Referrals map[string]int
+}
+
+// PlusNow reads Plus subscriptions, free months, and referrals from from on.
+func PlusNow(ctx context.Context, db *mongo.Database, now, from time.Time) (Plus, error) {
+	out := Plus{Referrals: map[string]int{}}
+	subscribed := map[bson.ObjectID]bool{}
+	cur, err := db.Collection(plus.Collection).Find(ctx, bson.D{})
+	if err != nil {
+		return out, fmt.Errorf("read plus: %w", err)
+	}
+	for cur.Next(ctx) {
+		var d struct {
+			HouseholdID bson.ObjectID `bson:"householdId"`
+			Trial       bool          `bson:"trial"`
+			ExpiresAt   *time.Time    `bson:"expiresAt"`
+			Ended       bool          `bson:"ended"`
+		}
+		if err := cur.Decode(&d); err != nil {
+			_ = cur.Close(ctx)
+			return out, fmt.Errorf("decode plus: %w", err)
+		}
+		if d.Ended || (d.ExpiresAt != nil && !now.Before(*d.ExpiresAt)) {
+			continue
+		}
+		subscribed[d.HouseholdID] = true
+		if d.Trial {
+			out.Trial++
+		} else {
+			out.Paying++
+		}
+	}
+	_ = cur.Close(ctx)
+	if err := cur.Err(); err != nil {
+		return out, err
+	}
+
+	cur, err = db.Collection(plus.FreeTimeCollection).Find(ctx, bson.D{{Key: "until", Value: bson.D{{Key: "$gt", Value: now}}}})
+	if err != nil {
+		return out, fmt.Errorf("read free months: %w", err)
+	}
+	for cur.Next(ctx) {
+		var d struct {
+			HouseholdID bson.ObjectID `bson:"householdId"`
+		}
+		if err := cur.Decode(&d); err == nil && !subscribed[d.HouseholdID] {
+			out.FreeMonths++
+		}
+	}
+	_ = cur.Close(ctx)
+
+	cur, err = db.Collection(plus.ReferralsCollection).Find(ctx, bson.D{{Key: "at", Value: bson.D{{Key: "$gte", Value: from}}}})
+	if err != nil {
+		return out, fmt.Errorf("read referrals: %w", err)
+	}
+	defer func() { _ = cur.Close(ctx) }()
+	for cur.Next(ctx) {
+		var d struct {
+			At time.Time `bson:"at"`
+		}
+		if err := cur.Decode(&d); err == nil {
+			out.Referrals[isoWeek(d.At)]++
+		}
+	}
+	return out, cur.Err()
 }

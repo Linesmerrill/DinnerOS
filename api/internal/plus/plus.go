@@ -67,6 +67,9 @@ type Status struct {
 	ExpiresAt    time.Time
 	WillRenew    bool
 	BillingIssue bool
+	// FreeUntil is when free months from referrals end; zero if none. Plus
+	// is active while either a subscription or free time is.
+	FreeUntil time.Time
 }
 
 // Store keeps entitlements, one per household.
@@ -80,10 +83,15 @@ type Store interface {
 
 // Service answers Plus questions and applies RevenueCat events.
 type Service struct {
-	store   Store
-	enabled bool
-	now     func() time.Time
+	store     Store
+	enabled   bool
+	now       func() time.Time
+	free      FreeTimeStore
+	referrals ReferralStore
 }
+
+// Enabled reports whether Plus is switched on (PLUS_ENABLED).
+func (s *Service) Enabled() bool { return s.enabled }
 
 // NewService returns the service. enabled is PLUS_ENABLED.
 func NewService(store Store, enabled bool) *Service {
@@ -93,6 +101,16 @@ func NewService(store Store, enabled bool) *Service {
 // Status returns a household's Plus.
 func (s *Service) Status(ctx context.Context, householdID string) (Status, error) {
 	out := Status{Enabled: s.enabled}
+	now := s.now()
+	if s.free != nil {
+		until, err := s.free.FreeUntil(ctx, householdID)
+		if err != nil {
+			return Status{}, err
+		}
+		if now.Before(until) {
+			out.Active, out.FreeUntil = true, until
+		}
+	}
 	e, err := s.store.Get(ctx, householdID)
 	if errors.Is(err, ErrNotFound) {
 		return out, nil
@@ -100,9 +118,8 @@ func (s *Service) Status(ctx context.Context, householdID string) (Status, error
 	if err != nil {
 		return Status{}, err
 	}
-	now := s.now()
-	out.Active = e.Active(now)
-	if out.Active {
+	if e.Active(now) {
+		out.Active = true
 		out.Trial, out.ExpiresAt, out.WillRenew, out.BillingIssue = e.Trial, e.ExpiresAt, e.WillRenew, e.BillingIssue
 	}
 	return out, nil

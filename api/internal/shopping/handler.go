@@ -52,6 +52,9 @@ type HandlerOptions struct {
 	// households (OPERATOR_USER_IDS).
 	Operators []string
 	Logger    *slog.Logger
+	// RequirePlus guards the routes behind DinnerOS Plus; nil lets every
+	// request through.
+	RequirePlus func(http.Handler) http.Handler
 }
 
 // Handler serves the shopping endpoints.
@@ -62,6 +65,9 @@ type Handler struct {
 
 // NewHandler returns a Handler.
 func NewHandler(opts HandlerOptions) *Handler {
+	if opts.RequirePlus == nil {
+		opts.RequirePlus = func(next http.Handler) http.Handler { return next }
+	}
 	logger := opts.Logger
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
@@ -95,9 +101,9 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(view).Get(base+"/handoffs/{handoffId}/bulk-packs", h.bulkPacks)
 		r.With(pantryEdit).Post(base+"/handoffs/{handoffId}/confirm", h.confirm)
 		r.With(pantryEdit).Post(base+"/handoffs/{handoffId}/prices", h.setPrices)
-		r.With(view).Get(base+"/weeks/{week}/cost", h.getWeekCost)
+		r.With(view, h.opts.RequirePlus).Get(base+"/weeks/{week}/cost", h.getWeekCost)
 		r.With(edit).Put(base+"/weeks/{week}/spend", h.setWeekSpend)
-		r.With(view).Get(base+"/savings", h.getSavings)
+		r.With(view, h.opts.RequirePlus).Get(base+"/savings", h.getSavings)
 		r.With(view).Get(base+"/requests", h.listStoreRequests)
 		r.With(view).Post(base+"/requests", h.requestStore)
 		r.With(view).Delete(base+"/requests/{requestId}", h.deleteStoreRequest)

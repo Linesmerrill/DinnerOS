@@ -3782,6 +3782,8 @@ paths:
     get:
       summary: What the week's groceries cost
       description: |
+        Behind DinnerOS Plus (decision 675): while Plus is on, a household
+        without it gets 402 `plus_required`.
         Spent, used by this week's meals, stocked for later, cost per meal, and
         the comparison with the household's meal kit, from the prices members
         entered (docs/grocery-engine.md#weekly-cost). Requires `household.view`.
@@ -3849,6 +3851,8 @@ paths:
     get:
       summary: Recent weeks' cost and savings
       description: |
+        Behind DinnerOS Plus (decision 675): while Plus is on, a household
+        without it gets 402 `plus_required`.
         Weeks with a confirmed order or an order total, newest first, with the
         total saved against the meal kit. Requires `household.view`.
       operationId: getShoppingSavings
@@ -4829,6 +4833,8 @@ paths:
     post:
       summary: Generate an Autopilot week
       description: |
+        Behind DinnerOS Plus (decision 675): while Plus is on, a household
+        without it gets 402 `plus_required`.
         Requires `plan.edit`. Proposes meals for the week's open days from the
         profile, the week context, ratings, and history, and saves it as the
         week's proposal, replacing any earlier one (a pending one is recorded
@@ -5420,6 +5426,52 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PlusStatus"
+  /api/v1/households/{householdId}/plus/referral:
+    get:
+      tags: [Households]
+      summary: The household's invite code
+      description: |
+        The household's referral code, made the first time it's asked for
+        (decision 675). 404 while Plus is off.
+      parameters:
+        - $ref: "#/components/parameters/HouseholdID"
+      responses:
+        "200":
+          description: The code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlusReferral"
+  /api/v1/households/{householdId}/plus/referral/redeem:
+    post:
+      tags: [Households]
+      summary: Use another household's invite code
+      description: |
+        Gives this household and the code's owner 30 free days of Plus each.
+        Needs plan.edit. The code may be typed in any case, with spaces or
+        dashes, or pasted inside a link. 404 while Plus is off.
+      parameters:
+        - $ref: "#/components/parameters/HouseholdID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: {type: string}
+      responses:
+        "200":
+          description: The household's Plus after the free month
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlusStatus"
+        "404":
+          description: "`code_not_found`: no household has that code"
+        "409":
+          description: "`code_not_allowed`: the household's own code, it already used one, or it has had Plus before"
   /api/v1/webhooks/revenuecat:
     post:
       tags: [Households]
@@ -5602,6 +5654,47 @@ components:
           type: boolean
         billingIssue:
           type: boolean
+        freeUntil:
+          type: string
+          format: date-time
+          description: When free months from referrals end.
+        offer:
+          $ref: "#/components/schemas/PlusOffer"
+    PlusOffer:
+      type: object
+      description: The Plus purchase screen's words (decision 675). Show StoreKit's price when it has one, `priceText` otherwise.
+      required: [title, subtitle, benefits, plans, trialDays, trialText, buyText, terms, restoreText, freeText]
+      properties:
+        title: {type: string}
+        subtitle: {type: string}
+        benefits:
+          type: array
+          items: {type: string}
+        plans:
+          type: array
+          items:
+            type: object
+            required: [productId, name, priceText]
+            properties:
+              productId: {type: string}
+              name: {type: string}
+              priceText: {type: string}
+              note: {type: string}
+        trialDays: {type: integer}
+        trialText: {type: string}
+        buyText: {type: string}
+        terms: {type: string}
+        restoreText: {type: string}
+        freeText: {type: string}
+    PlusReferral:
+      type: object
+      required: [code, shareText, explainer, rewarded, monthsLeft]
+      properties:
+        code: {type: string, description: 8 characters, no 0, O, 1, I or L}
+        shareText: {type: string, description: The share sheet's message}
+        explainer: {type: string}
+        rewarded: {type: integer, description: Households that joined with the code and earned a month}
+        monthsLeft: {type: integer, description: Months the code can still earn (at most 12 in all)}
     RecipeNote:
       type: object
       required: [recipeId, text, updatedAt]

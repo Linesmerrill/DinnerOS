@@ -23,3 +23,13 @@ func TestPrint(t *testing.T) {
 		t.Error("accepted zero weeks")
 	}
 }
+
+func TestPrintPlus(t *testing.T) {
+	var b strings.Builder
+	PrintPlus(&b, []metrics.Week{{Week: "2026-W46"}, {Week: "2026-W47"}},
+		metrics.Plus{Paying: 2, Trial: 1, FreeMonths: 3, Referrals: map[string]int{"2026-W47": 4}})
+	want := "\nPlus now: 2 paying, 1 in trial, 3 on free months\nReferral codes used: 2026-W46 0, 2026-W47 4\n"
+	if b.String() != want {
+		t.Errorf("got %q, want %q", b.String(), want)
+	}
+}
