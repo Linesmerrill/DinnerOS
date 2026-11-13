@@ -17,7 +17,7 @@ nonisolated struct StoreKitPlusPurchaser: PlusPurchasing {
         return out
     }
 
-    func purchase(productID: String, householdID: String) async throws -> PlusPurchaseResult {
+    func purchase(productID: String, householdID: String, userID: String?) async throws -> PlusPurchaseResult {
         throw PlusPurchaseError.notOpen
     }
 

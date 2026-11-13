@@ -197,3 +197,80 @@ nonisolated enum PlusText {
         return String(localized: "\(product.displayPrice) a month")
     }
 }
+
+/// Your Plus (`GET /households/{id}/plus/details`, decision 680). The words come from the API.
+nonisolated struct PlusDetails: Codable, Hashable, Sendable {
+    let status: PlusStatus
+    let plan: Plan?
+    /// trial, active, canceled, expired, free, or none.
+    let state: String
+    let stateText: String
+    /// "Renews on", "Ends on", "Ended on" or "Free until", with `date`.
+    let dateLabel: String?
+    let date: Date?
+    let since: Date?
+    let sinceText: String
+    /// "Founding member".
+    let badge: String?
+    let startedBy: String?
+    /// False for members who see status only.
+    let canManage: Bool
+    let manageNote: String?
+    let history: [HistoryItem]
+    let historyNote: String
+    let stats: [Stat]
+    let statsTitle: String
+    let monthsEarned: Int
+    let monthsCap: Int
+
+    nonisolated struct Plan: Codable, Hashable, Sendable {
+        let productID: String
+        let name: String
+        let priceText: String
+
+        private enum CodingKeys: String, CodingKey {
+            case productID = "productId"
+            case name, priceText
+        }
+    }
+
+    nonisolated struct HistoryItem: Codable, Hashable, Sendable {
+        let at: Date
+        let title: String
+        let amount: Decimal?
+        let currency: String?
+        /// billing or invite.
+        let kind: String
+
+        var isInvite: Bool { kind == "invite" }
+
+        /// "$4.99" in the charge's own currency.
+        var amountText: String? {
+            guard let amount, let currency, !currency.isEmpty else { return nil }
+            return amount.formatted(.currency(code: currency))
+        }
+    }
+
+    nonisolated struct Stat: Codable, Hashable, Sendable {
+        let value: Int?
+        let cents: Int64?
+        let label: String
+        let symbol: String
+
+        /// "12" or "$42".
+        var valueText: String {
+            if let cents {
+                return (Decimal(cents) / 100).formatted(.currency(code: "USD").precision(.fractionLength(0)))
+            }
+            return (value ?? 0).formatted()
+        }
+    }
+}
+
+/// The thank-you screen after buying Plus. Shown once per purchase, never after a restore.
+nonisolated struct PlusCelebration: Identifiable, Hashable, Sendable {
+    let id = UUID()
+    let productID: String
+    /// What Plus unlocks, from the offer.
+    let benefits: [String]
+}

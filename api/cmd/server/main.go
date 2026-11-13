@@ -223,12 +223,20 @@ func run() error {
 	})
 	plusService := plus.NewService(plus.NewMongoStore(db.Database()), cfg.Plus.Enabled).
 		WithReferrals(plus.NewMongoFreeTime(db.Database()), plus.NewMongoReferrals(db.Database())).
-		WithTestHouseholds(cfg.Plus.TestHouseholds)
+		WithTestHouseholds(cfg.Plus.TestHouseholds).
+		WithBilling(plus.NewMongoBilling(db.Database()))
 	requirePlus := plus.Require(plusService, logger)
 	plusHandler := plus.NewHandler(plus.HandlerOptions{
 		Service:    plusService,
 		Authorizer: householdService, Tokens: tokens, WebhookSecret: cfg.Plus.WebhookSecret,
 		Operators: cfg.OperatorUserIDs, Logger: logger,
+		MemberName: func(ctx context.Context, userID string) string {
+			u, err := userService.GetUser(ctx, userID)
+			if err != nil {
+				return ""
+			}
+			return u.DisplayName
+		},
 	})
 	sameItemsHandler := sameitems.NewHandler(sameitems.HandlerOptions{
 		Service:    sameItemsService,
@@ -351,6 +359,8 @@ func run() error {
 		TokenSecret: cfg.AuthTokenSigningKey,
 		Logger:      logger,
 	})
+	plusService.WithStats(newPlusStats(db.Database(), shoppingService))
+
 	// The weekly order reminder is derived when notifications are read, the
 	// way the pantry's low-stock check is: no scheduler and nothing to drift.
 	notificationService.AddRefresher(shoppingService)
@@ -500,6 +510,7 @@ func indexSets() []mongodb.IndexSet {
 		sameitems.Indexes(),
 		plus.Indexes(),
 		plus.ReferralIndexes(),
+		plus.BillingIndexes(),
 		behaviorIndexes(),
 		recommendations.Indexes(),
 	)

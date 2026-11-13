@@ -233,9 +233,13 @@ struct PlusPurchasePresenter: ViewModifier {
 
     func body(content: Content) -> some View {
         @Bindable var plus = plus
-        content.sheet(isPresented: $plus.showsPurchase) {
-            PlusPurchaseView()
-        }
+        content
+            .sheet(isPresented: $plus.showsPurchase, onDismiss: plus.showPendingCelebration) {
+                PlusPurchaseView()
+            }
+            .fullScreenCover(item: $plus.celebration) { celebration in
+                PlusThanksView(celebration: celebration)
+            }
     }
 }
 

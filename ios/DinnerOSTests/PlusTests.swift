@@ -54,6 +54,22 @@ nonisolated enum PlusFixtures {
         {"codesUsed":2,"joinedThisWeek":1,"joinedAllTime":3,"topReferrers":[{"name":"Lines","count":2}]}
         """#.utf8)
 
+    static let details = Data(
+        #"""
+        {"status":{"enabled":true,"active":true,"trial":true,"expiresAt":"2026-11-27T21:02:54Z","willRenew":true,"billingIssue":false},
+         "plan":{"productId":"com.linesmerrill.dinneros.plus.monthly","name":"Monthly","priceText":"$4.99 a month"},
+         "state":"trial","stateText":"Free trial","dateLabel":"Renews on","date":"2026-11-27T21:02:54Z",
+         "since":"2026-11-13T21:02:54Z","sinceText":"Plus since","badge":"Founding member","startedBy":"Merrill",
+         "canManage":true,
+         "history":[{"at":"2026-11-14T12:00:00Z","title":"Renewed","amount":4.99,"currency":"USD","kind":"billing"},
+                    {"at":"2026-11-13T21:02:54Z","title":"Trial started","kind":"billing"},
+                    {"at":"2026-11-10T12:00:00Z","title":"Free month from a household you invited","kind":"invite"}],
+         "historyNote":"Apple emails your receipts.",
+         "stats":[{"value":3,"label":"weeks planned by Autopilot","symbol":"sparkles"},
+                  {"cents":4200,"label":"saved vs meal kits","symbol":"dollarsign.circle"}],
+         "statsTitle":"What Plus did for you","monthsEarned":2,"monthsCap":12}
+        """#.utf8)
+
     static func error(_ status: Int, code: String, message: String) -> (status: Int, body: Data) {
         (status, Data(#"{"error":{"code":"\#(code)","message":"\#(message)"}}"#.utf8))
     }
@@ -76,10 +92,15 @@ nonisolated final class FakePurchaser: PlusPurchasing {
         ids.map { PlusProduct(id: $0, displayPrice: $0.hasSuffix("yearly") ? "$39.99" : "$4.99", trialEligible: false) }
     }
 
-    func purchase(productID: String, householdID: String) async throws -> PlusPurchaseResult {
+    func purchase(productID: String, householdID: String, userID: String?) async throws -> PlusPurchaseResult {
         purchases.withLock { $0.append(productID) }
+        buyers.withLock { $0.append(userID) }
         return result
     }
+
+    private let buyers = Mutex<[String?]>([])
+    /// The member each purchase named as who started Plus.
+    var buyerIDs: [String?] { buyers.withLock { $0 } }
 
     func restore(householdID: String) async throws {}
 }
@@ -157,7 +178,7 @@ struct PlusStoreTests {
         let purchaser = StoreKitPlusPurchaser()
         #expect(!purchaser.canPurchase)
         await #expect(throws: PlusPurchaseError.notOpen) {
-            try await purchaser.purchase(productID: "x", householdID: "h")
+            try await purchaser.purchase(productID: "x", householdID: "h", userID: nil)
         }
     }
 
@@ -282,6 +303,55 @@ struct PlusStoreTests {
             PlusFixtures.error(403, code: "forbidden", message: "Only the people who run DinnerOS can see this.")
         }
         #expect(try await memberStore.referralSummary() == nil)
+    }
+
+    @Test func yourPlusReadsTheServersWords() async throws {
+        let (store, _) = try await makeStore { request in
+            request.url?.path().hasSuffix("/details") == true
+                ? (200, PlusFixtures.details) : (200, PlusFixtures.status())
+        }
+        await store.activate(householdID: "household-1")
+        try await store.loadDetails()
+        let details = try #require(store.details)
+        #expect(details.stateText == "Free trial" && details.plan?.name == "Monthly" && details.canManage)
+        #expect(details.badge == "Founding member" && details.startedBy == "Merrill")
+        #expect(details.history.map(\.isInvite) == [false, false, true])
+        #expect(details.history[0].amountText == "$4.99" && details.history[1].amountText == nil)
+        #expect(details.stats.map(\.valueText) == ["3", "$42"])
+        #expect(store.status?.trial == true)
+    }
+
+    @Test func aStatusOnlyMemberGetsNoHistory() throws {
+        var json = String(decoding: PlusFixtures.details, as: UTF8.self)
+        json = json.replacingOccurrences(
+            of: #""canManage":true"#,
+            with:
+                #""canManage":false,"manageNote":"Only the person who started Plus can change it, in their Apple account.""#
+        )
+        let details = try JSONCoding.makeDecoder().decode(PlusDetails.self, from: Data(json.utf8))
+        #expect(!details.canManage && details.manageNote?.contains("\u{2014}") == false)
+    }
+
+    @Test func buyingShowsThanksOnceButRestoringDoesNot() async throws {
+        let purchaser = FakePurchaser()
+        let (store, _) = try await makeStore(purchaser: purchaser) { _ in (200, PlusFixtures.status(active: true)) }
+        await store.activate(householdID: "household-1")
+        #expect(try await store.restore())
+        store.showPendingCelebration()
+        #expect(store.celebration == nil)
+
+        #expect(try await store.purchase(productID: "com.linesmerrill.dinneros.plus.monthly"))
+        // Waits for the purchase screen to close.
+        #expect(store.celebration == nil && store.pendingCelebration != nil)
+        store.showPendingCelebration()
+        let shown = try #require(store.celebration)
+        #expect(shown.benefits.first == "Autopilot plans the week's dinners for you.")
+        #expect(store.pendingCelebration == nil)
+        store.celebration = nil
+        store.showPendingCelebration()
+        #expect(store.celebration == nil)
+        // The buyer is named so the API can show who started Plus.
+        #expect(purchaser.buyerIDs == [Fixtures.user.id])
     }
 
     @Test func statusLines() throws {

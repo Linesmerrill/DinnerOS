@@ -5,6 +5,9 @@ import StoreKit
 /// Picks how this build buys Plus: through RevenueCat when the build has its key, otherwise
 /// prices only (decision 675).
 nonisolated enum PlusPurchasers {
+    /// The RevenueCat attribute naming the member who bought (the API's `StartedByAttribute`).
+    static let startedByAttribute = "dinneros_user_id"
+
     static func make(apiKey: String?) -> any PlusPurchasing {
         guard let apiKey, !apiKey.isEmpty else { return StoreKitPlusPurchaser() }
         return RevenueCatPlusPurchaser(apiKey: apiKey)
@@ -64,8 +67,12 @@ nonisolated final class RevenueCatPlusPurchaser: PlusPurchasing, @unchecked Send
         return out
     }
 
-    func purchase(productID: String, householdID: String) async throws -> PlusPurchaseResult {
+    func purchase(productID: String, householdID: String, userID: String?) async throws -> PlusPurchaseResult {
         let purchases = try await purchases(for: householdID)
+        // Tells the API, through the webhook, which member started Plus.
+        if let userID {
+            purchases.attribution.setAttributes([PlusPurchasers.startedByAttribute: userID])
+        }
         let result: PurchaseResultData
         do {
             if let package = try? await purchases.offerings().current?.availablePackages.first(where: {

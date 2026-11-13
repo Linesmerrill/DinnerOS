@@ -47,6 +47,11 @@ type Entitlement struct {
 	LastEventID string
 	LastEventAt time.Time
 	UpdatedAt   time.Time
+	// Since is when the household first bought Plus; StartedBy is the
+	// member who did, when the app told RevenueCat (attribute
+	// StartedByAttribute).
+	Since     time.Time
+	StartedBy string
 }
 
 // Active reports whether the household has Plus at now.
@@ -88,6 +93,8 @@ type Service struct {
 	now       func() time.Time
 	free      FreeTimeStore
 	referrals ReferralStore
+	billing   BillingStore
+	stats     StatsSource
 	// testers are households Plus is on for while it's off for everyone
 	// else (PLUS_TEST_HOUSEHOLDS), so a TestFlight purchase can be tried.
 	testers map[string]bool
@@ -167,7 +174,20 @@ type Event struct {
 	ExpirationAtMs    *int64   `json:"expiration_at_ms"`
 	EventTimestampMs  int64    `json:"event_timestamp_ms"`
 	Environment       string   `json:"environment"`
+	// CancelReason is CUSTOMER_SUPPORT when Apple refunded the purchase.
+	CancelReason  string   `json:"cancel_reason"`
+	Price         *float64 `json:"price_in_purchased_currency"`
+	Currency      string   `json:"currency"`
+	PurchasedAtMs *int64   `json:"purchased_at_ms"`
+	// SubscriberAttributes are what the app set on the customer.
+	SubscriberAttributes map[string]struct {
+		Value string `json:"value"`
+	} `json:"subscriber_attributes"`
 }
+
+// StartedByAttribute is the RevenueCat subscriber attribute the app sets to
+// the buying member's user ID before a purchase.
+const StartedByAttribute = "dinneros_user_id"
 
 // Outcome says what an event did, for the log.
 type Outcome string
@@ -223,6 +243,9 @@ func (s *Service) Apply(ctx context.Context, ev Event) (Outcome, error) {
 	}
 	householdID := ids[0]
 	at := time.UnixMilli(ev.EventTimestampMs).UTC()
+	if err := s.recordBilling(ctx, householdID, ev); err != nil {
+		return "", err
+	}
 
 	current, err := s.store.Get(ctx, householdID)
 	if err != nil && !errors.Is(err, ErrNotFound) {
@@ -243,6 +266,14 @@ func (s *Service) Apply(ctx context.Context, ev Event) (Outcome, error) {
 		next.Environment = ev.Environment
 	}
 
+	if ev.Type == "INITIAL_PURCHASE" || ev.Type == "NON_RENEWING_PURCHASE" {
+		if next.Since.IsZero() {
+			next.Since = at
+		}
+		if by := strings.TrimSpace(ev.SubscriberAttributes[StartedByAttribute].Value); by != "" {
+			next.StartedBy = by
+		}
+	}
 	switch ev.Type {
 	case "INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "PRODUCT_CHANGE":
 		next.Ended, next.WillRenew, next.BillingIssue = false, true, false

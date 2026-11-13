@@ -188,7 +188,11 @@ struct PlusHouseholdSection: View {
         if let status = plus.status, status.enabled {
             Section {
                 if status.active {
-                    Label(PlusText.status(status), systemImage: "checkmark.seal.fill")
+                    NavigationLink {
+                        YourPlusView()
+                    } label: {
+                        Label(PlusText.status(status), systemImage: "checkmark.seal.fill")
+                    }
                 } else {
                     Button {
                         plus.showsPurchase = true

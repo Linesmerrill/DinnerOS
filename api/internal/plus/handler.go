@@ -1,6 +1,7 @@
 package plus
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -28,7 +29,9 @@ type HandlerOptions struct {
 	// Operators are the user IDs who may read referral totals across
 	// households (OPERATOR_USER_IDS).
 	Operators []string
-	Logger    *slog.Logger
+	// MemberName returns a member's name for "Started by"; empty if unknown.
+	MemberName func(ctx context.Context, userID string) string
+	Logger     *slog.Logger
 }
 
 // Handler serves the Plus routes.
@@ -55,6 +58,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Use(households.RequirePermission(h.opts.Authorizer, households.PermHouseholdView, h.logger))
 		r.Get("/households/{householdId}/plus", h.status)
 		r.Get("/households/{householdId}/plus/referral", h.referral)
+		r.Get("/households/{householdId}/plus/details", h.details)
 	})
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireAuth(h.opts.Tokens))

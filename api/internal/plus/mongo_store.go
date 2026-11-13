@@ -51,6 +51,8 @@ type entitlementDoc struct {
 	LastEventID  string        `bson:"lastEventId"`
 	LastEventAt  time.Time     `bson:"lastEventAt"`
 	UpdatedAt    time.Time     `bson:"updatedAt"`
+	Since        *time.Time    `bson:"since,omitempty"`
+	StartedBy    string        `bson:"startedBy,omitempty"`
 }
 
 // Get implements Store.
@@ -71,6 +73,10 @@ func (s *MongoStore) Get(ctx context.Context, householdID string) (Entitlement, 
 		HouseholdID: d.HouseholdID.Hex(), ProductID: d.ProductID, Trial: d.Trial, WillRenew: d.WillRenew,
 		BillingIssue: d.BillingIssue, Ended: d.Ended, Environment: d.Environment,
 		LastEventID: d.LastEventID, LastEventAt: d.LastEventAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
+		StartedBy: d.StartedBy,
+	}
+	if d.Since != nil {
+		e.Since = d.Since.UTC()
 	}
 	if d.ExpiresAt != nil {
 		e.ExpiresAt = d.ExpiresAt.UTC()
@@ -89,6 +95,11 @@ func (s *MongoStore) Put(ctx context.Context, e Entitlement) (bool, error) {
 		HouseholdID: oid, ProductID: e.ProductID, Trial: e.Trial, WillRenew: e.WillRenew,
 		BillingIssue: e.BillingIssue, Ended: e.Ended, Environment: e.Environment,
 		LastEventID: e.LastEventID, LastEventAt: e.LastEventAt, UpdatedAt: e.UpdatedAt,
+		StartedBy: e.StartedBy,
+	}
+	if !e.Since.IsZero() {
+		t := e.Since
+		d.Since = &t
 	}
 	if !e.ExpiresAt.IsZero() {
 		t := e.ExpiresAt

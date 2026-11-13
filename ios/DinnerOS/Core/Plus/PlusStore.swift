@@ -9,7 +9,8 @@ protocol PlusPurchasing: Sendable {
     var canPurchase: Bool { get }
     /// The App Store's prices for `ids`; empty when the App Store can't be reached.
     func products(ids: [String]) async -> [PlusProduct]
-    func purchase(productID: String, householdID: String) async throws -> PlusPurchaseResult
+    /// `userID` is the member buying; the API shows them as who started Plus.
+    func purchase(productID: String, householdID: String, userID: String?) async throws -> PlusPurchaseResult
     func restore(householdID: String) async throws
 }
 
@@ -34,6 +35,13 @@ nonisolated enum PlusPurchaseError: Error, Equatable, LocalizedError {
 final class PlusStore {
     private(set) var status: PlusStatus?
     private(set) var referral: PlusReferral?
+    /// Your Plus.
+    private(set) var details: PlusDetails?
+    /// The thank-you screen, showing. Set from `pendingCelebration` once the purchase screen
+    /// closes, so it shows once per purchase and never after a restore.
+    var celebration: PlusCelebration?
+    /// Waiting for the purchase screen to close.
+    var pendingCelebration: PlusCelebration?
     /// App Store prices by product ID.
     private(set) var products: [String: PlusProduct] = [:]
     private(set) var isPurchasing = false
@@ -68,8 +76,16 @@ final class PlusStore {
             self.householdID = householdID
             status = nil
             referral = nil
+            details = nil
         }
         await reload()
+        #if DEBUG
+            // Simulator check of the thank-you screen without an App Store purchase.
+            if ProcessInfo.processInfo.arguments.contains("-PlusThanksCheck"), status?.active == true {
+                celebration = PlusCelebration(
+                    productID: "com.linesmerrill.dinneros.plus.monthly", benefits: status?.offer?.benefits ?? [])
+            }
+        #endif
     }
 
     func reload() async {
@@ -111,12 +127,18 @@ final class PlusStore {
         guard let householdID else { return false }
         isPurchasing = true
         defer { isPurchasing = false }
-        switch try await purchaser.purchase(productID: productID, householdID: householdID) {
+        switch try await purchaser.purchase(
+            productID: productID, householdID: householdID, userID: session.currentUser?.id)
+        {
         case .cancelled, .pending:
             return false
         case .purchased:
             Self.logger.info("Plus purchased")
-            return await waitForPlus()
+            let on = await waitForPlus()
+            if on {
+                pendingCelebration = PlusCelebration(productID: productID, benefits: status?.offer?.benefits ?? [])
+            }
+            return on
         }
     }
 
@@ -141,6 +163,25 @@ final class PlusStore {
     private func loadProducts(_ offer: PlusOffer) async {
         let loaded = await purchaser.products(ids: offer.plans.map(\.productID))
         products = Dictionary(loaded.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    /// Shows the thank-you screen for a purchase that just finished.
+    func showPendingCelebration() {
+        guard let pending = pendingCelebration else { return }
+        pendingCelebration = nil
+        celebration = pending
+    }
+
+    // MARK: Your Plus
+
+    func loadDetails() async throws {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        let loaded = try await session.authorized { token in
+            try await api.details(householdID: householdID, accessToken: token)
+        }
+        guard householdID == self.householdID else { return }
+        details = loaded
+        status = loaded.status
     }
 
     // MARK: Invites

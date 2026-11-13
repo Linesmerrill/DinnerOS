@@ -5442,6 +5442,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PlusReferral"
+  /api/v1/households/{householdId}/plus/details:
+    get:
+      tags: [Households]
+      summary: Your Plus
+      description: |
+        The household's plan, status, history from RevenueCat webhook events and
+        free months from codes, and what Plus did for it (decision 680). Only the
+        member who started Plus (or an admin when that isn't known) gets history;
+        everyone else gets status only. 404 while Plus is off.
+      parameters:
+        - $ref: "#/components/parameters/HouseholdID"
+      responses:
+        "200":
+          description: Your Plus
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlusDetails"
   /api/v1/plus/referrals/summary:
     get:
       tags: [Households]
@@ -5749,6 +5767,53 @@ components:
           properties:
             at: {type: string, format: date-time}
             freeUntil: {type: string, format: date-time}
+    PlusDetails:
+      type: object
+      required: [status, state, stateText, sinceText, canManage, history, historyNote, stats, statsTitle, monthsEarned, monthsCap]
+      properties:
+        status: {$ref: "#/components/schemas/PlusStatus"}
+        plan:
+          type: object
+          required: [productId, name, priceText]
+          properties:
+            productId: {type: string}
+            name: {type: string, description: Monthly or Yearly}
+            priceText: {type: string}
+        state: {type: string, enum: [trial, active, canceled, expired, free, none]}
+        stateText: {type: string}
+        dateLabel: {type: string, description: '"Renews on", "Ends on", "Ended on" or "Free until"'}
+        date: {type: string, format: date-time}
+        since: {type: string, format: date-time}
+        sinceText: {type: string}
+        badge: {type: string, description: '"Founding member" for households that started Plus before July 2027'}
+        startedBy: {type: string, description: The member who started Plus, when known}
+        canManage: {type: boolean}
+        manageNote: {type: string}
+        history:
+          type: array
+          items:
+            type: object
+            required: [at, title, kind]
+            properties:
+              at: {type: string, format: date-time}
+              title: {type: string}
+              amount: {type: number}
+              currency: {type: string}
+              kind: {type: string, enum: [billing, invite]}
+        historyNote: {type: string}
+        stats:
+          type: array
+          items:
+            type: object
+            required: [label, symbol]
+            properties:
+              value: {type: integer}
+              cents: {type: integer}
+              label: {type: string}
+              symbol: {type: string, description: An SF Symbol name}
+        statsTitle: {type: string}
+        monthsEarned: {type: integer}
+        monthsCap: {type: integer}
     PlusReferralSummary:
       type: object
       required: [codesUsed, joinedThisWeek, joinedAllTime, topReferrers]
