@@ -14,7 +14,6 @@ nonisolated enum Welcome {
 
     /// What the member picked on the welcome.
     enum Choice: Equatable, Sendable {
-        case importMealKit
         case browseShared
         case addRecipe
         case startPlanning

@@ -33,8 +33,6 @@
 	<string>Your location helps suggest dinners that suit the weather and fills in your ZIP code when you look for a store. Only the ZIP code leaves your phone.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>Adds your week's grocery list to a Reminders list so you can use it while you shop.</string>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

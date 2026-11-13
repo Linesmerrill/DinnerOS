@@ -415,50 +415,6 @@ the push sweep).
   finds a household's devices with `{userId: {$in: memberIds}}`.
 - Retention: kept indefinitely for now, like events.
 
-### Meal-kit import
-
-Implemented in `internal/mealkit` ([meal-kit-import.md](meal-kit-import.md)).
-Two collections are the only new state: imported recipes land in `recipes`
-through the ordinary import pipeline, never by a second path.
-
-| Collection | Key fields | Indexes |
-| --- | --- | --- |
-| `meal_kit_jobs` | householdId, userId, source, status (`queued`/`running`/`succeeded`/`dead`/`canceled`), attempts, maxAttempts, availableAt, leaseOwner, leaseExpiresAt, checkpoint{phase, orders[], done[], failures[], imported, updated, unchanged, reviewItems}, harvest{earliestWeek, latestWeek, pages, weeks, stopped}, lastError{code, message, at}, createdAt, updatedAt, startedAt, finishedAt | `{householdId, _id: -1}`; `{status, availableAt}` |
-| `meal_kit_cursors` | householdId, source, earliestWeek, latestWeek, complete, blockedAt, updatedAt | `{householdId, source}` unique |
-
-- **Nothing about the meal-kit account is stored.** There is no password, no
-  session token, no cookie, no email address, and no collection to hold one:
-  the member signs in on the meal kit's own site in a web view, their order
-  history is read there, and what is stored is `checkpoint.orders` — recipe
-  ids, public page URLs and delivery weeks. `meal_kit_links` existed for
-  encrypted session tokens in an earlier design and is gone; a deployment that
-  still has it can drop it
-  ([meal-kit-import.md](meal-kit-import.md#when-a-run-goes-wrong)).
-- **The cursor is two ISO weeks and two flags.** `meal_kit_cursors` is how far
-  back a household's own order history has been read (`earliestWeek`), the
-  newest delivered week seen (`latestWeek`), whether the walk ever reached the
-  start of the history (`complete`, sticky), and when the source last refused
-  us (`blockedAt`, a six-hour cooldown). It exists because one sitting cannot
-  read four years: a measured account returned 740 recipes across 160 weeks in
-  40 pages and stopped on the app's page cap. It holds nothing about the
-  meal-kit account, and it goes with the household on deletion
-  ([meal-kit-import.md](meal-kit-import.md#reading-a-long-history-over-several-sittings)).
-- **The queue.** A worker claims with one `findOneAndUpdate` matching either a
-  `queued` job whose `availableAt` has passed or a `running` job whose
-  `leaseExpiresAt` has passed, sorted by `availableAt`, setting the lease and
-  `$inc`-ing `attempts`. One document, one claim: that is what makes
-  overlapping workers safe. Every later write carries
-  `{status: "running", leaseOwner: <this worker>}`, so a canceled job (an
-  unlink) or a taken-over lease stops the worker at its next write.
-- **Resumable.** `checkpoint.orders` is the account's order history, read once;
-  `checkpoint.done` grows only after a batch of recipes has been through the
-  import pipeline. A restart re-fetches at most one batch.
-- **Bounded.** `checkpoint.failures` is capped at 100 entries, so one bad run
-  cannot grow an unbounded document.
-- Retention: jobs are kept as the household's import history; links are deleted
-  on unlink, on the member's account deletion (`{userId}`), and with the
-  household.
-
 ### Grocery lists
 
 | Collection | Key fields | Indexes |

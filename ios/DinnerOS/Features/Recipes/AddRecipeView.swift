@@ -59,7 +59,7 @@ struct AddRecipeView: View {
         case .entry, .parsing:
             entryForm(store)
         case .review, .saving:
-            RecipeDraftReviewForm(draft: $store.draft, warnings: store.draft.warnings)
+            RecipeDraftReviewForm(draft: $store.draft, warnings: store.draft.listedWarnings)
                 .disabled(store.step == .saving)
         }
     }
@@ -93,10 +93,15 @@ struct AddRecipeView: View {
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                    PasteButton(payloadType: String.self) { strings in
+                        if let first = strings.first { link = RecipePageLoader.link(in: first) }
+                    }
                 } header: {
                     Text("Paste a Link")
                 } footer: {
-                    Text("We read the recipe page for you. You'll check what we found before saving.")
+                    Text(
+                        "Any recipe site works. We save the ingredients and a link back to the page, and you check them before saving."
+                    )
                 }
             }
             if let message = store.errorMessage {
@@ -173,6 +178,17 @@ struct RecipeDraftReviewForm: View {
 
     var body: some View {
         Form {
+            if draft.fromURL {
+                Section {
+                    Label(ImportedRecipeText.note, systemImage: "checklist")
+                        .font(.subheadline)
+                    if let link = draft.sourceURL, let url = URL(string: link) {
+                        Link(destination: url) {
+                            Label("View Recipe", systemImage: "safari")
+                        }
+                    }
+                }
+            }
             if !warnings.isEmpty {
                 Section {
                     ForEach(warnings, id: \.self) { warning in
@@ -185,17 +201,28 @@ struct RecipeDraftReviewForm: View {
             }
             Section("Recipe") {
                 TextField("Name", text: $draft.name)
-                TextField("Headline", text: Binding($draft.headline, replacingNilWith: ""))
+                if !draft.fromURL {
+                    TextField("Headline", text: Binding($draft.headline, replacingNilWith: ""))
+                }
                 Stepper(
                     value: $draft.servings, in: 0...12,
                     label: { Text(servingsLabel) })
-                Stepper(
-                    value: Binding($draft.totalMinutes, replacingNilWith: 0), in: 0...480, step: 5,
-                    label: { Text(RecipeFormat.minutes(draft.totalMinutes ?? 0)) })
+                if !draft.fromURL {
+                    Stepper(
+                        value: Binding($draft.totalMinutes, replacingNilWith: 0), in: 0...480, step: 5,
+                        label: { Text(RecipeFormat.minutes(draft.totalMinutes ?? 0)) })
+                }
             }
-            Section("Ingredients") {
-                ForEach($draft.ingredients) { $line in
+            Section {
+                ForEach(Array($draft.ingredients.enumerated()), id: \.element.id) { index, $line in
                     VStack(alignment: .leading, spacing: 4) {
+                        if let group = line.group, !group.isEmpty,
+                            index == 0 || draft.ingredients[index - 1].group != group
+                        {
+                            Text(group)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
                         TextField("Ingredient", text: $line.name)
                         HStack {
                             TextField("Amount", text: Binding($line.quantity, replacingNilWith: ""))
@@ -207,8 +234,13 @@ struct RecipeDraftReviewForm: View {
                             }
                             .labelsHidden()
                         }
+                        if let note = line.note, !note.isEmpty {
+                            Text(note)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                         if let raw = line.rawText, !raw.isEmpty, raw != line.name {
-                            Text(raw)
+                            Text("Original line: \(raw)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -218,15 +250,27 @@ struct RecipeDraftReviewForm: View {
                 Button("Add Ingredient") {
                     draft.ingredients.append(RecipeDraftIngredient())
                 }
+            } header: {
+                Text("Ingredients")
+            } footer: {
+                if draft.fromURL {
+                    Text("Fix any line that looks wrong. Swipe left to remove one.")
+                }
             }
-            Section("Steps") {
-                ForEach(draft.steps.indices, id: \.self) { index in
-                    TextField("Step \(index + 1)", text: $draft.steps[index], axis: .vertical)
-                }
-                .onDelete { draft.steps.remove(atOffsets: $0) }
-                Button("Add Step") {
-                    draft.steps.append("")
-                }
+            if !draft.fromURL {
+                stepsSection
+            }
+        }
+    }
+
+    private var stepsSection: some View {
+        Section("Steps") {
+            ForEach(draft.steps.indices, id: \.self) { index in
+                TextField("Step \(index + 1)", text: $draft.steps[index], axis: .vertical)
+            }
+            .onDelete { draft.steps.remove(atOffsets: $0) }
+            Button("Add Step") {
+                draft.steps.append("")
             }
         }
     }

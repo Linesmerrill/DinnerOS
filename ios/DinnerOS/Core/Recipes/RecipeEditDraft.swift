@@ -44,6 +44,8 @@ nonisolated struct RecipeEditDraft: Equatable, Sendable {
     var steps: [String]
     private let original: [Line]
     private let originalSteps: [String]
+    /// A recipe read from a web page has no steps of its own: the page has them.
+    let requiresSteps: Bool
 
     init(recipe: Recipe, servings preferred: Int? = nil) {
         let sizes = recipe.servings.isEmpty ? [2] : recipe.servings
@@ -62,6 +64,7 @@ nonisolated struct RecipeEditDraft: Equatable, Sendable {
                 quantities: quantities, unit: unit, units: units)
         }
         steps = recipe.steps.sorted { $0.index < $1.index }.map(\.text)
+        requiresSteps = recipe.source != RecipeSourceKey.fromPage
         original = lines
         originalSteps = steps
     }
@@ -76,7 +79,7 @@ nonisolated struct RecipeEditDraft: Equatable, Sendable {
         if lines.contains(where: { $0.name.trimmingCharacters(in: .whitespaces).isEmpty }) {
             return String(localized: "Every ingredient needs a name.")
         }
-        if steps.allSatisfy({ $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
+        if requiresSteps, steps.allSatisfy({ $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
             return String(localized: "Add at least one step.")
         }
         for line in lines {

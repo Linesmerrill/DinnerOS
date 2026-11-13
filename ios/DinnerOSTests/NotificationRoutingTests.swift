@@ -32,7 +32,7 @@ struct NotificationRoutingTests {
         switch kind {
         case AppNotificationSubject.shoppingWeekKind: "2026-W38"
         case AppNotificationSubject.pantryItemKind: "item-butter"
-        default: "job-1"
+        default: "subject-1"
         }
     }
 
@@ -54,7 +54,7 @@ struct NotificationRoutingTests {
 
     @Test func appKnowsExactlyTheServerTypes() throws {
         let known: Set<AppNotificationType> = [
-            .pantryLow, .pantryThaw, .shoppingOrderDue, .recipeImportFinished, .recipeImportAttention,
+            .pantryLow, .pantryThaw, .shoppingOrderDue,
         ]
         let server = Set(try Self.routes().map { AppNotificationType(rawValue: $0.type) })
         #expect(known == server)
@@ -72,10 +72,17 @@ struct NotificationRoutingTests {
             NotificationRouting.destination(
                 type: .shoppingOrderDue, subject: .init(kind: "shopping_week", id: "2026-W38"))
                 == .shopWeek(week))
-        #expect(
-            NotificationRouting.destination(
-                type: .recipeImportAttention, subject: .init(kind: "recipe_import_job", id: "job-1"))
-                == .recipeImport)
+    }
+
+    /// Recipe import notifications from before the import was removed stay on the bell: a
+    /// tap marks them read and opens nothing.
+    @Test func oldImportNotificationsOpenNothing() {
+        for type in ["recipe_import.finished", "recipe_import.attention"] {
+            #expect(
+                NotificationRouting.destination(
+                    type: AppNotificationType(rawValue: type), subject: .init(kind: "recipe_import_job", id: "job-1"))
+                    == .notifications)
+        }
     }
 
     /// A tapped push and its bell row are read by the same function, from the same payload.
@@ -113,18 +120,16 @@ struct NotificationRoutingTests {
     }
 
     @Test func goneSubjectsResolveToTheirTab() async {
-        let gone = NotificationSubjectCheck(pantryItemExists: { _ in false }, canOpenRecipeImport: { false })
+        let gone = NotificationSubjectCheck(pantryItemExists: { _ in false })
         #expect(await NotificationRouting.resolve(.pantryItem(id: "item-gone"), check: gone) == .pantry)
-        #expect(await NotificationRouting.resolve(.recipeImport, check: gone) == .household)
         // Nothing to check: the thaw section and Shop are always there.
         #expect(
             await NotificationRouting.resolve(.pantryThaw(itemID: "item-gone"), check: gone)
                 == .pantryThaw(itemID: "item-gone"))
 
-        let present = NotificationSubjectCheck(pantryItemExists: { _ in true }, canOpenRecipeImport: { true })
+        let present = NotificationSubjectCheck(pantryItemExists: { _ in true })
         #expect(
             await NotificationRouting.resolve(.pantryItem(id: "item-1"), check: present) == .pantryItem(id: "item-1"))
-        #expect(await NotificationRouting.resolve(.recipeImport, check: present) == .recipeImport)
     }
 
     @Test func routerSwitchesTabsAndPushesTheScreen() async throws {
@@ -135,10 +140,6 @@ struct NotificationRoutingTests {
         await tabs.open(.pantryItem(id: "item-butter"))
         #expect(tabs.selection == .pantry)
         #expect(tabs.pantryPath == NavigationPath([PantryItemRoute(itemID: "item-butter")]))
-
-        await tabs.open(.recipeImport)
-        #expect(tabs.selection == .household)
-        #expect(tabs.householdPath == NavigationPath([RecipeImportRoute()]))
 
         let week = try #require(ISOWeek("2026-W38"))
         await tabs.open(.shopWeek(week))
@@ -157,16 +158,11 @@ struct NotificationRoutingTests {
 
     @Test func routerFallsBackWhenTheSubjectIsGone() async {
         let tabs = TabRouter()
-        tabs.check = NotificationSubjectCheck(pantryItemExists: { _ in false }, canOpenRecipeImport: { false })
-        tabs.householdPath = NavigationPath([RecipeImportRoute()])
+        tabs.check = NotificationSubjectCheck(pantryItemExists: { _ in false })
 
         #expect(await tabs.open(.pantryItem(id: "item-gone")) == .pantry)
         #expect(tabs.selection == .pantry)
         #expect(tabs.pantryPath.isEmpty)
-
-        #expect(await tabs.open(.recipeImport) == .household)
-        #expect(tabs.selection == .household)
-        #expect(tabs.householdPath.isEmpty)
     }
 
     @Test func everyRowSaysWhereItGoes() throws {
@@ -178,7 +174,7 @@ struct NotificationRoutingTests {
             #expect(destination.accessibilityHint.hasPrefix("Opens"), "\(route.type): \(destination.accessibilityHint)")
             hints.insert(destination.accessibilityHint)
         }
-        // Four screens, four different hints.
+        // Each screen has its own hint.
         #expect(hints.count == Set(try Self.routes().map(\.destination)).count)
     }
 }

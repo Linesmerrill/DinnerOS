@@ -114,11 +114,6 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/households/{householdId}/recipes/import` import file → `{created, updated, unchanged, ingredientsCreated, reviewItems, errors}` | `recipes.import` | 4 | ✅ |
 | GET | `/api/v1/households/{householdId}/recipes/import-reviews` `?status=open\|resolved\|all&limit` → `{items}`, oldest first | `recipes.import` | 4 | ✅ |
 | POST | `/api/v1/households/{householdId}/recipes/import-reviews/resolve` `{ids, resolution, recipeId?}` → `{resolved}` (`same_recipe`, `different_recipe`, `dismissed`; up to 500 ids) | `recipes.import` | 4 | ✅ |
-| GET | `/api/v1/households/{householdId}/meal-kit/{source}` → `{source, enabled, latestJob}` | `recipes.import` | — | ✅ |
-| POST | `/api/v1/households/{householdId}/meal-kit/{source}/imports` `{recipes:[{sourceRecipeId, name?, url?, weeks?, isAddon?}]}` → `202` job | `recipes.import` | — | ✅ |
-| DELETE | `/api/v1/households/{householdId}/meal-kit/{source}/imports` → `204` (cancels every run in flight) | `recipes.import` | — | ✅ |
-| GET | `/api/v1/households/{householdId}/meal-kit/{source}/imports` → `{items}`, newest first | `recipes.import` | — | ✅ |
-| POST | `/api/v1/households/{householdId}/meal-kit/{source}/sign-in-reports` `{outcome, reason?, stage?, httpStatus?, phase?, elapsedMs, attempt, retried?, pageCrashes?, navigationError?, recipes?, weeks?, pages?, stopped?, appVersion?, osVersion?, device?}` → `204`. How one sign-in attempt on the phone ended, written as one `meal-kit sign-in report` log line; every field is checked against an allow-list and nothing is stored. Works while imports are off | `recipes.import` | — | ✅ |
 | POST | `/api/v1/households/{householdId}/recipes/parse` `{text}` or `{url}` → recipe draft (nothing is stored) | `recipes.edit` | 4a | ✅ |
 | POST | `/api/v1/households/{householdId}/recipes` reviewed draft → `201` recipe (private to the household) | `recipes.edit` | 4a | ✅ |
 | PUT | `/api/v1/households/{householdId}/recipes/{recipeId}/sharing` `{sharedToCatalog}` → `{recipeId, sharedToCatalog, inCatalog}` | `recipes.edit` | 4a | ✅ |
@@ -602,48 +597,6 @@ history (`timesOrdered` 0, no `lastOrderedWeek`), ratings, or plans. A recipe
 the household already has from the same `source` (matched by `sourceRecipeId`
 or an alias, as import matches) is skipped.
 
-### Meal-kit import
-
-Asynchronous import of a household's own meal-kit order history
-([meal-kit-import.md](meal-kit-import.md)). `{source}` is `hellofresh`; any
-other value is 404.
-
-A member signs in on the meal kit's **own website**, in a web view in the app,
-and their order history is read **there, in their own session**. The app posts
-that list — recipe ids, public page URLs, delivery weeks — to
-`POST .../imports`, and the API queues a job for it. **Nothing about the
-meal-kit account is stored**: no password, no session token, no cookie, no
-profile, and no field on this API to put one in. The app can be closed
-immediately: a scheduled worker
-(`cmd/importmealkit`) fetches the recipes that account ordered and puts them
-through the same `recipes.Service.Import` a file import uses, so they arrive
-with the same validation, alias splitting, and review items.
-
-- `enabled: false` means the server has meal-kit import turned off. The app
-  offers adding recipes by hand instead, and `POST .../imports` answers `503
-  import_disabled`.
-- `POST .../imports` returns the run that is already queued or running rather
-  than a second one, so tapping twice never doubles the work. Its body is
-  validated against the source's own allow-list: an id that is not one of the
-  service's is dropped and a URL off the service's recipe pages is rebuilt from
-  the id. A body with nothing usable in it, or with an unknown field in it
-  (such as a token), is a `400`.
-- `status` is `queued`, `running`, `succeeded`, `dead`, or `canceled`.
-  `lastError.message` is written for a person and never contains a URL or
-  fetched page content.
-- `failures[]` lists the recipes of the order history that did not make it,
-  with a reason each. Things the importer could not map confidently are not
-  failures: they are review items, read through
-  [`/recipes/import-reviews`](#recipe-import).
-- `DELETE .../imports` cancels every queued or running run immediately. A
-  worker mid-run stops at its next write; recipes already imported stay.
-- No response carries anything about the meal-kit account, because nothing
-  about it is stored.
-
-The worker is polite by policy, not by accident: one request at a time, at
-least 2.5 s apart with jitter, retries with backoff on 429 and 5xx, a hard stop
-on 403, an honest `User-Agent`, and a real per-run cap
-([meal-kit-import.md](meal-kit-import.md#being-a-good-citizen)).
 ### Add a recipe by hand
 
 Two calls, with a person in between.
@@ -662,14 +615,27 @@ Both require `recipes.edit`.
   the rest as the name, with the original line kept in `rawText`. Anything it
   cannot place becomes a warning rather than an error, because the next step is
   a person fixing it.
-- **A URL is fetched by the server**, never by the client, and only if it is an
+- **A URL is fetched by the server**, and only if it is an
   ordinary public `http(s)` address: no credentials in the URL, no loopback,
   private, link-local, or carrier-grade-NAT address (checked on the resolved IP
   at dial time, so a name that resolves into one is refused too), at most 3
-  redirects, 2 MB, and 8 seconds. The page is scanned for a schema.org `Recipe`
-  in a JSON-LD block; a page without one answers `422 fetch_failed` with "copy
-  the text and paste it instead". Error messages never repeat anything the page
-  said.
+  redirects, 2 MB, and 8 seconds. When a site turns the server away
+  (`422 fetch_failed`), the app loads the page itself and sends it again as
+  `{"url", "html"}`; the server then reads that HTML and fetches nothing.
+- **Reading a page** tries, in order: a schema.org `Recipe` in JSON-LD, the
+  same in microdata, a recipe card plugin's markup (WP Recipe Maker, Tasty
+  Recipes, Mediavine Create), then an "Ingredients" heading followed by lists.
+  Ingredient lines are split into amount, unit, name, and a `note` ("diced",
+  "to taste"), under the `group` heading they came from; ranges take the larger
+  amount, "1 cup plus 2 tablespoons" adds up, and "1 lb / 450 g" keeps the
+  first. A page with no recipe answers `422 fetch_failed`. Error messages never
+  repeat anything the page said.
+- **Only the title, servings, ingredients, and link are kept** from a page
+  (decision 670): the draft carries no steps, photo, description, or times,
+  and saving a `fromUrl` draft drops them whatever the request sent. The
+  recipe shows a View Recipe button for the page and the note "Imported
+  recipes can have mistakes. Please check the ingredients before you shop."
+  It can be edited without steps.
 - **The page is data.** Nothing in it selects a code path, and the recipe lands
   in the household's library, never in the global catalog.
 - The saved recipe's `source` is `manual` (typed) or `user` (from a page).

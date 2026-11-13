@@ -7,8 +7,6 @@ struct MainTabView: View {
     @Environment(ShoppingStore.self) private var shopping
     @Environment(PantryStore.self) private var pantry
     /// Optional so previews needn't supply one.
-    @Environment(MealKitImportStore.self) private var mealKit: MealKitImportStore?
-    /// Optional so previews needn't supply one.
     @Environment(PushNotificationStore.self) private var push: PushNotificationStore?
     @Environment(AppIntentRouter.self) private var router: AppIntentRouter?
     /// The selected tab and the stacks a notification opens. In the environment of every tab
@@ -39,9 +37,6 @@ struct MainTabView: View {
                     case .household:
                         NavigationStack(path: $tabs.householdPath) {
                             HouseholdView()
-                                .navigationDestination(for: RecipeImportRoute.self) { _ in
-                                    MealKitImportStatusView()
-                                }
                         }
                     }
                 } label: {
@@ -117,7 +112,6 @@ struct MainTabView: View {
     private func configureRouter() {
         let households = households
         let pantry = pantry
-        let mealKit = mealKit
         let shopping = shopping
         tabs.check = NotificationSubjectCheck(
             pantryItemExists: { itemID in
@@ -127,15 +121,6 @@ struct MainTabView: View {
                 // A notification can name an item added after the pantry last loaded.
                 if pantry.phase == .loaded { await pantry.refresh() }
                 return pantry.phase != .loaded || pantry.items.contains { $0.id == itemID }
-            },
-            canOpenRecipeImport: {
-                guard let householdID = households.current?.household.id,
-                    households.access?.can(.recipesImport) == true, let mealKit, mealKit.isAvailable
-                else { return false }
-                // Recipe Import loads the household it was activated for; the Household tab
-                // usually does this, but a notification can open the screen first.
-                mealKit.activate(householdID: householdID)
-                return true
             })
         tabs.showWeek = { week in
             if let current = households.current?.household {

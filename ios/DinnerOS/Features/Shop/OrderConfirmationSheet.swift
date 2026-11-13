@@ -38,7 +38,7 @@ struct OrderConfirmationSheet: View {
             List {
                 Section {
                     Text(
-                        "Walmart doesn't tell \(configuration.displayName) what you ordered. Uncheck anything you didn't buy, and the rest goes in your pantry. Prices are optional; add them now or later from Shop."
+                        "\(shopping.providerName) doesn't tell \(configuration.displayName) what you ordered. Uncheck anything you didn't buy, and the rest goes in your pantry. Prices are optional; add them now or later from Shop."
                     )
                     .foregroundStyle(.secondary)
                     if let errorMessage {

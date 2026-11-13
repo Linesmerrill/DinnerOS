@@ -70,6 +70,11 @@ type DraftIngredient struct {
 	Unit         string
 	RawText      string
 	PantryStaple bool
+	// Note is what the line said besides the amount and the name: "diced",
+	// "14.5 oz", "to taste". Shown for review; the saved line keeps RawText.
+	Note string
+	// Group is the heading the line came under ("For the sauce"), or "".
+	Group string
 }
 
 // CreateFromDraft saves a reviewed draft as one of the household's recipes
@@ -88,6 +93,12 @@ func (s *Service) CreateFromDraft(ctx context.Context, householdID string, d Dra
 	source := SourceManual
 	if fromURL {
 		source = SourceUser
+		// A recipe read from a page keeps only its title, servings,
+		// ingredients, and link (decision 670), whatever the request carried.
+		d = Draft{Name: d.Name, Servings: d.Servings, SourceURL: d.SourceURL, Ingredients: d.Ingredients}
+		if strings.TrimSpace(d.SourceURL) == "" {
+			return Recipe{}, fmt.Errorf("%w: a recipe from a page needs the page's link", ErrInvalidDraft)
+		}
 	}
 	in, err := draftImportRecipe(d, source)
 	if err != nil {
@@ -195,7 +206,7 @@ var (
 	// The mixed number ("1 1/2") and the bare fraction ("1/2") come first:
 	// Go's alternation is leftmost-first, so a plain integer listed earlier
 	// would match the "1" of "1/2" and leave "/2" in the name.
-	leadAmountRe = regexp.MustCompile(`^\s*([0-9]+\s+[0-9]+/[0-9]+|[0-9]+/[0-9]+|[0-9]+(?:\.[0-9]+)?)\s*(.*)$`)
+	leadAmountRe = regexp.MustCompile(`^\s*([0-9]+\s+[0-9]+/[0-9]+|[0-9]+/[0-9]+|[0-9]*\.[0-9]+|[0-9]+)\s*(.*)$`)
 	// The rest of a range after its first amount: "-3 cloves", " to 4 cups".
 	rangeRestRe = regexp.MustCompile(`^\s*(?:-|–|to)\s*([0-9]+\s+[0-9]+/[0-9]+|[0-9]+/[0-9]+|[0-9]+(?:\.[0-9]+)?)\s*(.*)$`)
 	// A package size right after the amount: "(14.5 oz) ".
@@ -230,6 +241,8 @@ var manualUnitWords = map[string]string{
 	"slice": "slice", "slices": "slice",
 	"bunch": "bunch", "bunches": "bunch",
 	"pinch": "pinch", "pinches": "pinch",
+	"thumb": "thumb", "thumbs": "thumb",
+	"wedge": "wedge", "wedges": "wedge",
 }
 
 // ParseText reads a pasted recipe into a Draft.
@@ -248,6 +261,7 @@ func ParseText(text string) Draft {
 
 	mode := "head"
 	var intro []string
+	group := ""
 	for _, raw := range lines {
 		line := strings.TrimSpace(whitespaceRe.ReplaceAllString(raw, " "))
 		if line == "" {
@@ -270,10 +284,16 @@ func ParseText(text string) Draft {
 			intro = append(intro, line)
 		case "ingredients":
 			// "For the sauce:" heads the lines under it and isn't one.
-			if len(d.Ingredients) >= maxDraftIngredients || ingredientHeading(bulletRe.ReplaceAllString(line, "")) {
+			if bare := bulletRe.ReplaceAllString(line, ""); ingredientHeading(bare) {
+				group = groupName(bare)
 				continue
 			}
-			d.Ingredients = append(d.Ingredients, parseIngredientLine(line))
+			if len(d.Ingredients) >= maxDraftIngredients {
+				continue
+			}
+			ing := parseIngredientLine(line)
+			ing.Group = group
+			d.Ingredients = append(d.Ingredients, ing)
 		case "steps":
 			if len(d.Steps) >= maxDraftSteps {
 				continue
@@ -295,7 +315,7 @@ func ParseText(text string) Draft {
 
 	switch {
 	case d.Name == "":
-		d.Warnings = append(d.Warnings, "Couldn't find a title — the first line is used as the name.")
+		d.Warnings = append(d.Warnings, "Couldn't find a title, so the first line is the name.")
 	case mode == "head":
 		d.Warnings = append(d.Warnings,
 			"Couldn't find an \"Ingredients\" or \"Steps\" heading, so nothing was split up. Add the headings and paste again, or fill this in by hand.")
@@ -308,58 +328,10 @@ func ParseText(text string) Draft {
 	}
 	for _, line := range d.Ingredients {
 		if line.Quantity == "" && line.Unit == "" {
-			d.Warnings = append(d.Warnings, fmt.Sprintf("No amount for %q — add one so it can be scaled and shopped for.", line.Name))
+			d.Warnings = append(d.Warnings, fmt.Sprintf("%s has no amount. Add one so the list buys enough.", line.Name))
 		}
 	}
 	return d
-}
-
-// parseIngredientLine reads "1 1/2 cups all-purpose flour" into its parts and
-// keeps the original line in RawText, so nothing the parser misreads is lost.
-func parseIngredientLine(line string) DraftIngredient {
-	raw := clip(line, maxDraftLine)
-	rest := bulletRe.ReplaceAllString(raw, "")
-	out := DraftIngredient{RawText: raw}
-
-	rest = expandFractions(rest)
-	if m := leadAmountRe.FindStringSubmatch(rest); m != nil {
-		if _, ok := parseQuantity(m[1]); ok {
-			out.Quantity = strings.TrimSpace(m[1])
-			rest = m[2]
-		}
-		// "2-3 cloves garlic": the larger amount, so there's enough on hand.
-		// RawText keeps the range.
-		if r := rangeRestRe.FindStringSubmatch(rest); r != nil {
-			if _, ok := parseQuantity(r[1]); ok {
-				out.Quantity = strings.TrimSpace(r[1])
-				rest = r[2]
-			}
-		}
-		// "1 (14.5 oz) can diced tomatoes": the size is the can's, and the
-		// line is a can of diced tomatoes.
-		if loc := sizeNoteRe.FindStringIndex(rest); loc != nil {
-			rest = rest[loc[1]:]
-		}
-	}
-	fields := strings.Fields(rest)
-	if len(fields) > 1 {
-		word := strings.ToLower(strings.Trim(fields[0], ".,"))
-		if code, ok := manualUnitWords[word]; ok {
-			out.Unit = code
-			fields = fields[1:]
-		}
-	}
-	// "1 cup flour, sifted" — the preparation after the comma is not part of
-	// the ingredient's name, and keeping it would make a second catalog entry.
-	name := strings.Join(fields, " ")
-	if before, _, ok := strings.Cut(name, ","); ok {
-		name = before
-	}
-	out.Name = clip(strings.TrimSpace(name), maxDraftLine)
-	if out.Name == "" {
-		out.Name = clip(strings.TrimSpace(rest), maxDraftLine)
-	}
-	return out
 }
 
 // --- Helpers ------------------------------------------------------------------

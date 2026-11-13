@@ -13,10 +13,6 @@ nonisolated enum NotificationDestination: Hashable, Sendable {
     case shopWeek(ISOWeek)
     /// Shop tab as it is: an order reminder whose week can't be read.
     case shop
-    /// Household tab, with Recipe Import open.
-    case recipeImport
-    /// The Household tab: where an import notification lands for someone who can't import.
-    case household
     /// A type this build doesn't know: a push opens the bell, a bell row stays put.
     case notifications
 
@@ -29,8 +25,6 @@ nonisolated enum NotificationDestination: Hashable, Sendable {
         case .pantry: "pantry"
         case .shopWeek: "shop_week"
         case .shop: "shop"
-        case .recipeImport: "recipe_import"
-        case .household: "household"
         case .notifications: "notifications"
         }
     }
@@ -43,8 +37,6 @@ nonisolated enum NotificationDestination: Hashable, Sendable {
         case .pantry: String(localized: "Opens Pantry.")
         case .shopWeek: String(localized: "Opens the week in Shop.")
         case .shop: String(localized: "Opens Shop.")
-        case .recipeImport: String(localized: "Opens Recipe Import in Household.")
-        case .household: String(localized: "Opens Household.")
         case .notifications: String(localized: "Marks it read.")
         }
     }
@@ -56,8 +48,6 @@ struct NotificationSubjectCheck {
     /// Whether the pantry item still exists. `true` when that can't be told (the pantry failed
     /// to load): the item screen shows the load error with Try Again.
     var pantryItemExists: (String) async -> Bool
-    /// Whether this member may open Recipe Import (`recipes.import`, and an API with the route).
-    var canOpenRecipeImport: () -> Bool
 }
 
 /// Where each notification opens (`api/internal/notifications/testdata/routes.json`).
@@ -74,8 +64,6 @@ enum NotificationRouting {
             return subject?.pantryItemID.map { .pantryThaw(itemID: $0) } ?? .pantry
         case .shoppingOrderDue:
             return shop(subject)
-        case .recipeImportFinished, .recipeImportAttention:
-            return .recipeImport
         default:
             break
         }
@@ -84,8 +72,6 @@ enum NotificationRouting {
             return subject.map { .pantryItem(id: $0.id) } ?? .pantry
         case AppNotificationSubject.shoppingWeekKind:
             return shop(subject)
-        case AppNotificationSubject.recipeImportKind:
-            return .recipeImport
         default:
             return .notifications
         }
@@ -99,16 +85,14 @@ enum NotificationRouting {
         destination(type: route.type, subject: route.subject)
     }
 
-    /// The nearest screen that exists: an item that's gone opens the Pantry tab, and Recipe
-    /// Import for someone who can't use it opens the Household tab. Never an empty screen.
+    /// The nearest screen that exists: an item that's gone opens the Pantry tab. Never an
+    /// empty screen.
     static func resolve(
         _ destination: NotificationDestination, check: NotificationSubjectCheck
     ) async -> NotificationDestination {
         switch destination {
         case .pantryItem(let id):
             return await check.pantryItemExists(id) ? destination : .pantry
-        case .recipeImport:
-            return check.canOpenRecipeImport() ? destination : .household
         default:
             return destination
         }

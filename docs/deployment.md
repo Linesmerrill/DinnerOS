@@ -167,73 +167,20 @@ so one deployment serves both kinds of build. Local development needs no APNs
 setup: without the variables the sweep is a logged no-op, and the simulator
 can't receive remote pushes anyway.
 
-### Meal-kit recipe import
+### Removed: meal-kit recipe import
 
-New households can import the recipes they actually ordered from their meal-kit
-service instead of starting empty ([meal-kit-import.md](meal-kit-import.md)).
-The member signs in on the meal kit's own site in a web view in the app, where
-their order history is also read; the app hands the API that list, and the API
-process starts fetching the **public** recipe pages it names straight away, in
-batches of 50 with a minute's rest between them. A worker binary in the same
-container image, `/importmealkit`, drains the same queue on **Heroku
-Scheduler** as the backstop.
+The in-app HelloFresh import is gone (decision in
+[architecture.md](architecture.md)). A deployment that ran it has leftovers to
+clean up by hand:
 
-The feature is **off** unless `MEAL_KIT_IMPORT_ENABLED=true`, and that is its
-entire configuration. There is no key, because **nothing about a member's
-meal-kit account is stored**: no password, no session token, no cookie. If this
-deployment still has `RECIPE_IMPORT_ENCRYPTION_KEY` set from the earlier
-design, it is ignored and can be removed whenever convenient
-(`heroku config:unset -a dinneros-api RECIPE_IMPORT_ENCRYPTION_KEY`), along
-with the now-unused `meal_kit_links` collection.
-
-1. Turn it on. There is nothing else to set:
-
-   ```bash
-   heroku config:set -a dinneros-api MEAL_KIT_IMPORT_ENABLED=true
-   ```
-
-2. Add the backstop worker to the scheduler. **Still recommended**, even
-   though the API process does the work:
-
-   ```bash
-   heroku addons:open scheduler -a dinneros-api
-   ```
-
-   **Add Job** → **Every 10 minutes** → command `/importmealkit` → dyno size
-   **Eco**.
-
-   Why it is still needed: the web runner is a goroutine in the one Eco web
-   dyno, and an Eco dyno sleeps after 30 minutes without HTTP traffic. A
-   member who closes the app partway through a long import lets the dyno
-   sleep; the runner hands the job back to the queue, and without this job it
-   waits there until the next request wakes the dyno. With it, the import
-   carries on at 40 recipe pages per household every ten minutes. It is also
-   what finishes a job if the runner ever fails to start. Overlapping with the
-   web runner is safe — a job is claimed with one atomic find-and-modify under
-   a lease, so whichever claims it first has it
-   ([meal-kit-import.md](meal-kit-import.md#who-does-the-work)).
-
-   Without the job an import still starts at once and finishes while the dyno
-   is awake; this was learned the hard way, when a missing job left a member's
-   740 recipes on "queued" with nothing running.
-
-3. Check a run by hand, then its log line:
-
-   ```bash
-   heroku run /importmealkit -a dinneros-api
-   ```
-
-   It ends with `meal-kit import run finished` and counts (`claimed`,
-   `succeeded`, `requeued`, `dead`, `gone`, `recipes`, `recipeFailures`). With
-   the feature off it logs that and exits 0. The web process logs
-   `meal-kit import runner started` at boot and `meal-kit import batch
-   finished` per batch.
-
-Optional: `MEAL_KIT_RECIPES_PER_RUN` lowers the per-run cap (and the web
-batch, when set below 50), and
-`MEAL_KIT_HELLOFRESH_BASE_URL` points the client at a stub for testing.
-[meal-kit-import.md](meal-kit-import.md#when-a-run-goes-wrong) has the runbook
-for a run that goes wrong.
+- Delete the **Heroku Scheduler** job that runs `/importmealkit`. The binary is
+  no longer in the image, so the job fails every run until it is removed.
+- Unset `MEAL_KIT_IMPORT_ENABLED`, `MEAL_KIT_RECIPES_PER_RUN`,
+  `MEAL_KIT_HELLOFRESH_BASE_URL`, and `RECIPE_IMPORT_ENCRYPTION_KEY`. Nothing
+  reads them.
+- The `meal_kit_jobs` and `meal_kit_cursors` collections are no longer read or
+  written and can be dropped. If `meal_kit_links` still exists from the earlier
+  design that kept encrypted session tokens (decision 521), drop it too.
 
 ### Starter recipe library
 
@@ -380,12 +327,9 @@ unaffected: the extension builds for the simulator without signing.
    `com.linesmerrill.dinneros.LiveActivities`, no capabilities → Register.
 3. Re-run Actions → iOS CI on `main`; `beta` now signs both targets.
 
-The extension needs no entitlement: Live Activity pushes use the app's
-`aps-environment`, and the app's Info.plist carries `NSSupportsLiveActivities`.
-The server sends Live Activity pushes with the same APNs key and the topic
-`com.linesmerrill.dinneros.push-type.liveactivity`, from `/importmealkit` and
-(for a stopped import) the web dyno. Both read the existing `APNS_*` config
-vars; there is nothing new to set.
+The extension needs no entitlement. It keeps the Live Activities name and
+bundle ID, but since the meal-kit import was removed it draws only the Dinner
+widget; nothing starts a Live Activity any more.
 - **Rotating the passphrase or the deploy key** means regenerating the secrets
   below and re-running `signing`.
 
@@ -456,9 +400,6 @@ vars or GitHub Secrets.
 | `APP_URL_SCHEME` | Phase 3 | Optional, default `dinneros`. Must match `APP_URL_SCHEME` in `ios/Config/Shared.xcconfig`; the `/invite` page's **Open** button uses it. |
 | `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_AUTH_KEY` | push | ✅ Set. developer.apple.com → Certificates, Identifiers & Profiles → **Keys** → a key with **Apple Push Notifications service (APNs)** enabled (one key serves sandbox and production). `APNS_KEY_ID` is its 10-character key ID, `APNS_TEAM_ID` is `6VTPDG2HNK`, and `APNS_AUTH_KEY` is the **entire** downloaded `AuthKey_XXXX.p8`, BEGIN and END lines included (literal `\n` escapes are accepted too). Apple allows downloading it once; store it only here. Set all three or none: none makes push a logged no-op, a partial or unparseable set stops the API and the sweep at startup. Read only by `/sendreminders`. See [Push notifications](#push-notifications). |
 | `APNS_TOPIC` | push | Optional; defaults to `APPLE_BUNDLE_ID` (`com.linesmerrill.dinneros`). |
-| `MEAL_KIT_IMPORT_ENABLED` | meal-kit import | Your choice, default `false`. `true` turns on asynchronous recipe import of a household's own meal-kit order history. Not a secret, and it needs no companion secret: nothing about the meal-kit account is stored. See [Meal-kit recipe import](#meal-kit-recipe-import). |
-| `MEAL_KIT_RECIPES_PER_RUN` | optional | Recipe pages one worker run fetches per household (default 40). Lower is more polite to the meal-kit service; the rest waits for the next scheduled run. Not a secret. |
-| `MEAL_KIT_HELLOFRESH_BASE_URL` | optional | Overrides the HelloFresh account API origin (https only), for testing against a stub. Empty uses HelloFresh. Not a secret. |
 | `STARTER_RECIPES_HOUSEHOLD_ID` | optional | The 24-character hex ID of the household whose recipes every new household receives as a starter library. Empty (the default) disables it; a malformed value stops the API at startup. Not a secret. See [Starter recipe library](#starter-recipe-library). |
 | `OPENAI_API_KEY` | future | platform.openai.com → API keys (backend only) |
 

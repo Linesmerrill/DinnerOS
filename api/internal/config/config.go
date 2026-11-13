@@ -108,29 +108,7 @@ type Config struct {
 	// APNs signs and addresses Apple push notifications. Unset (the default
 	// in development) makes push a logged no-op.
 	APNs APNs
-
-	// MealKitImport configures asynchronous per-member recipe import from a
-	// meal-kit account (docs/meal-kit-import.md).
-	MealKitImport MealKitImport
 }
-
-// MealKitImport holds the settings for meal-kit recipe import. The feature is
-// off unless MEAL_KIT_IMPORT_ENABLED is true.
-//
-// There is no key here any more, and no secret of any kind: the import stores
-// nothing about a member's meal-kit account, so there is nothing to encrypt.
-type MealKitImport struct {
-	Enabled bool
-	// HelloFreshBaseURL overrides the origin HelloFresh recipe pages are read
-	// from. Empty uses the package default.
-	HelloFreshBaseURL string
-	// RecipesPerRun caps how many recipe pages one worker run fetches. 0
-	// uses the package default.
-	RecipesPerRun int
-}
-
-// Active reports whether meal-kit import is enabled.
-func (m MealKitImport) Active() bool { return m.Enabled }
 
 // APNs holds the token-based APNs credentials (docs/deployment.md#push-notifications).
 // The one key signs for both the sandbox and production gateways.
@@ -277,8 +255,6 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("apnsEnabled", c.APNs.Enabled()),
 		slog.String("apnsKeyId", c.APNs.KeyID),
 		slog.String("apnsTopic", c.APNs.Topic),
-		slog.Bool("mealKitImportEnabled", c.MealKitImport.Active()),
-		slog.Int("mealKitRecipesPerRun", c.MealKitImport.RecipesPerRun),
 	)
 }
 
@@ -361,7 +337,6 @@ func Load(getenv func(string) string) (Config, error) {
 		errs = append(errs, fmt.Errorf("STARTER_RECIPES_HOUSEHOLD_ID must be a 24-character hex household ID, got %q", id))
 	}
 	errs = append(errs, loadAPNs(&cfg, get)...)
-	errs = append(errs, loadMealKitImport(&cfg, get, getenv)...)
 
 	if err := errors.Join(errs...); err != nil {
 		return Config{}, fmt.Errorf("invalid configuration: %w", err)
@@ -393,34 +368,6 @@ func loadAPNs(cfg *Config, get func(key, fallback string) string) []error {
 	}
 	cfg.APNs = APNs{KeyID: keyID, TeamID: teamID, Topic: get("APNS_TOPIC", cfg.AppleBundleID), PrivateKey: key}
 	return nil
-}
-
-// loadMealKitImport reads the meal-kit import settings.
-func loadMealKitImport(cfg *Config, get func(key, fallback string) string, getenv func(string) string) []error {
-	enabled, err := strconv.ParseBool(get("MEAL_KIT_IMPORT_ENABLED", "false"))
-	if err != nil {
-		return []error{errors.New("MEAL_KIT_IMPORT_ENABLED must be true or false")}
-	}
-	cfg.MealKitImport = MealKitImport{
-		Enabled:           enabled,
-		HelloFreshBaseURL: get("MEAL_KIT_HELLOFRESH_BASE_URL", ""),
-	}
-
-	var errs []error
-	if v := strings.TrimSpace(getenv("MEAL_KIT_RECIPES_PER_RUN")); v != "" {
-		n, convErr := strconv.Atoi(v)
-		if convErr != nil || n <= 0 || n > 500 {
-			errs = append(errs, fmt.Errorf("MEAL_KIT_RECIPES_PER_RUN must be an integer between 1 and 500, got %q", v))
-		} else {
-			cfg.MealKitImport.RecipesPerRun = n
-		}
-	}
-	if base := cfg.MealKitImport.HelloFreshBaseURL; base != "" {
-		if u, parseErr := url.Parse(base); parseErr != nil || u.Scheme != "https" || u.Host == "" {
-			errs = append(errs, fmt.Errorf("MEAL_KIT_HELLOFRESH_BASE_URL must be an https origin, got %q", base))
-		}
-	}
-	return errs
 }
 
 // ParseAPNsKey parses the contents of an APNs .p8 file: a PKCS #8 P-256

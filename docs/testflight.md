@@ -12,8 +12,7 @@ list, and keep track of what's already in the pantry.
 ## What to Test
 
 - Sign in, create a household, and look around from the welcome screen.
-- Add a recipe: import from HelloFresh, browse Shared Recipes, or paste a link
-  to any recipe online.
+- Add a recipe: browse Shared Recipes, or paste a link to any recipe online.
 - Plan a few dinners for this week (or let Autopilot suggest a week) and check
   the grocery list makes sense.
 - Cook one with the cooking screen: are the amounts and steps right? Tap a

@@ -103,6 +103,10 @@ extension APIError: LocalizedError {
             case "validation_failed" where !message.isEmpty:
                 // The API documents validation messages as safe to show.
                 message
+            case "fetch_failed":
+                String(
+                    localized:
+                        "Couldn't find a recipe at that link. Check the link, or copy the recipe and paste it as text.")
             case "rate_limited":
                 String(localized: "Too many attempts. Wait a minute and try again.")
             case "provider_unavailable":

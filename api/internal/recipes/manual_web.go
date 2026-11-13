@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -90,9 +91,9 @@ func (f *WebFetcher) Fetch(ctx context.Context, rawURL string) (Draft, error) {
 		return Draft{}, fetchErrf("the page could not be read")
 	}
 
-	d, ok := recipeFromJSONLD(string(body))
+	d, _, ok := ParsePage(string(body))
 	if !ok {
-		return Draft{}, fetchErrf("that page doesn't publish its recipe in a readable format — copy the text and paste it instead")
+		return Draft{}, fetchErrf("couldn't find a recipe on that page. Copy the recipe text and paste it instead")
 	}
 	d.SourceURL = target.String()
 	return d, nil
@@ -276,7 +277,8 @@ func hasType(value any, want string) bool {
 
 func draftFromSchema(obj map[string]any) Draft {
 	d := Draft{
-		Name:        clip(jsonString(obj["name"]), maxDraftName),
+		// Names carry entities too ("Grandma&#8217;s Mac &amp; Cheese").
+		Name:        clip(stripTags(jsonString(obj["name"])), maxDraftName),
 		Description: clip(stripTags(jsonString(obj["description"])), MaxDraftTextBytes),
 		ImageURL:    safeHTTPURL(firstImage(obj["image"])),
 		Cuisines:    labels(jsonStrings(obj["recipeCuisine"])),
@@ -289,15 +291,18 @@ func draftFromSchema(obj map[string]any) Draft {
 		d.TotalMinutes = isoMinutes(jsonString(obj["cookTime"]))
 	}
 
-	for _, raw := range jsonStrings(obj["recipeIngredient"]) {
-		if len(d.Ingredients) >= maxDraftIngredients {
-			break
-		}
+	lines := jsonStrings(obj["recipeIngredient"])
+	if len(lines) == 0 {
+		lines = jsonStrings(obj["ingredients"]) // the older schema name
+	}
+	group := ""
+	for _, raw := range lines {
 		line := stripTags(raw)
-		if strings.TrimSpace(line) == "" || ingredientHeading(line) {
+		if ingredientHeading(line) {
+			group = groupName(line)
 			continue
 		}
-		d.Ingredients = append(d.Ingredients, parseIngredientLine(line))
+		addLine(&d, line, group)
 	}
 	for _, text := range schemaSteps(obj["recipeInstructions"], 0) {
 		if len(d.Steps) >= maxDraftSteps {
@@ -312,7 +317,6 @@ func draftFromSchema(obj map[string]any) Draft {
 	if len(d.Steps) == 0 {
 		d.Warnings = append(d.Warnings, "The page listed no steps.")
 	}
-	d.Warnings = append(d.Warnings, "Read this through before saving — it came from a web page, not from you.")
 	return d
 }
 
@@ -359,7 +363,9 @@ var entities = strings.NewReplacer(
 )
 
 func stripTags(s string) string {
-	return strings.TrimSpace(whitespaceRe.ReplaceAllString(entities.Replace(tagRe.ReplaceAllString(s, " ")), " "))
+	// Twice: JSON-LD strings are sometimes escaped twice ("&amp;frac12;").
+	s = html.UnescapeString(html.UnescapeString(entities.Replace(tagRe.ReplaceAllString(s, " "))))
+	return strings.TrimSpace(whitespaceRe.ReplaceAllString(s, " "))
 }
 
 func jsonString(value any) string {

@@ -31,6 +31,8 @@ final class RecipeDraftStore {
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let api: RecipesAPI?
     @ObservationIgnored private let householdID: String
+    /// Loads a page on this phone; replaced in tests.
+    @ObservationIgnored var pageLoader: @Sendable (String) async throws -> String = RecipePageLoader.load
 
     private static let logger = Logger(subsystem: "DinnerOS", category: "recipes")
 
@@ -57,12 +59,20 @@ final class RecipeDraftStore {
         }
     }
 
-    /// Reads a recipe page. The phone never loads the page itself.
+    /// Reads a recipe page. The server fetches it; when the site turns the server away, this
+    /// phone loads the page like a browser would and sends it to the server to read.
     func parse(url: String) async {
-        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = RecipePageLoader.link(in: url)
         guard !trimmed.isEmpty else { return }
+        let loader = pageLoader
         await parse { api, token in
-            try await api.parseRecipe(householdID: self.householdID, url: trimmed, accessToken: token)
+            do {
+                return try await api.parseRecipe(householdID: self.householdID, url: trimmed, accessToken: token)
+            } catch let error as APIError where error.code == "fetch_failed" {
+                guard let html = try? await loader(trimmed) else { throw error }
+                return try await api.parseRecipe(
+                    householdID: self.householdID, url: trimmed, html: html, accessToken: token)
+            }
         }
     }
 

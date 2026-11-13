@@ -18,7 +18,6 @@ struct MenuView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// Optional so previews needn't supply them.
     @Environment(TabRouter.self) private var tabs: TabRouter?
-    @Environment(MealKitImportStore.self) private var mealKit: MealKitImportStore?
     @Environment(\.appConfiguration) private var configuration
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
@@ -28,11 +27,10 @@ struct MenuView: View {
     @State private var isAddingRecipes = false
     /// The "Add a Recipe" sheet: paste text or a link, review, save.
     @State private var isAddingOwnRecipe = false
-    /// The new-member welcome, what was picked on it (acted on once it closes, so two sheets
-    /// never overlap), and the import it can start.
+    /// The new-member welcome and what was picked on it (acted on once it closes, so two
+    /// sheets never overlap).
     @State private var showsWelcome = false
     @State private var welcomeChoice: Welcome.Choice?
-    @State private var isImportingFromWelcome = false
     private let welcomeStorage: any WelcomeStorage = UserDefaultsWelcomeStorage()
     @State private var actionError: String?
 
@@ -74,7 +72,6 @@ struct MenuView: View {
         let choice = welcomeChoice
         welcomeChoice = nil
         switch choice {
-        case .importMealKit: isImportingFromWelcome = true
         case .browseShared: tabs?.menuPath.append(DiscoverRoute())
         case .addRecipe: isAddingOwnRecipe = true
         case .startPlanning, nil: break
@@ -138,7 +135,8 @@ struct MenuView: View {
                 CatalogRecipeDetailView(route: route)
             }
             .sheet(isPresented: $isAddingOwnRecipe) {
-                AddRecipeView()
+                // The new recipe shows on the menu right away, not at the next refresh.
+                AddRecipeView(onSaved: { _ in Task { await menu.reload() } })
             }
             // Also when the week start day changes: the server moved meals between weeks.
             .task(id: household?.weekScope) {
@@ -208,16 +206,11 @@ struct MenuView: View {
             .sheet(isPresented: $showsWelcome, onDismiss: finishWelcome) {
                 WelcomeView(
                     hasRecipes: !library.items.isEmpty,
-                    canImport: households.access?.can(.recipesImport) == true && mealKit?.isEnabled != false,
-                    canAddRecipe: households.access?.can(.recipesEdit) == true,
-                    serviceName: (mealKit?.service ?? .helloFresh).displayName
+                    canAddRecipe: households.access?.can(.recipesEdit) == true
                 ) { choice in
                     welcomeChoice = choice
                     showsWelcome = false
                 }
-            }
-            .sheet(isPresented: $isImportingFromWelcome) {
-                NavigationStack { MealKitImportFlow() }
             }
     }
 

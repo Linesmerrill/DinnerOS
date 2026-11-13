@@ -14,10 +14,13 @@ import (
 // --- Wire types ---------------------------------------------------------------
 
 // ParseRecipeRequest is the body of POST .../recipes/parse. Exactly one of
-// Text and URL is given.
+// Text and URL is given. With URL, HTML may carry the page as the phone
+// already loaded it (from the share sheet, or after a site turned the server
+// away); the server then reads that instead of fetching.
 type ParseRecipeRequest struct {
 	Text string `json:"text,omitempty"`
 	URL  string `json:"url,omitempty"`
+	HTML string `json:"html,omitempty"`
 }
 
 // DraftResponse is a parsed recipe for review, and the body of
@@ -55,6 +58,10 @@ type DraftIngredientWire struct {
 	Unit         string `json:"unit,omitempty"`
 	RawText      string `json:"rawText,omitempty"`
 	PantryStaple bool   `json:"pantryStaple"`
+	// Note is the rest of the line: "diced", "14.5 oz", "to taste".
+	Note string `json:"note,omitempty"`
+	// Group is the heading the line came under ("Sauce"), or empty.
+	Group string `json:"group,omitempty"`
 }
 
 // SharingRequest is the body of PUT .../recipes/{recipeId}/sharing.
@@ -122,6 +129,22 @@ func (h *Handler) parseRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 	if text != "" {
 		httpx.WriteJSON(w, http.StatusOK, newDraftResponse(ParseText(text), false))
+		return
+	}
+	if req.HTML != "" {
+		target, err := parseLooseURL(link)
+		if err != nil {
+			validationFailed(w, r, "That link doesn't look like a web address.")
+			return
+		}
+		d, _, ok := ParsePage(req.HTML)
+		if !ok {
+			httpx.WriteError(w, r, http.StatusUnprocessableEntity, "fetch_failed",
+				"Couldn't find a recipe on that page. Copy the recipe text and paste it instead.")
+			return
+		}
+		d.SourceURL = target.String()
+		httpx.WriteJSON(w, http.StatusOK, newDraftResponse(d, true))
 		return
 	}
 	d, err := h.fetcher().Fetch(r.Context(), link)

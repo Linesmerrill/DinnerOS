@@ -71,7 +71,9 @@ func (s *Service) Edit(ctx context.Context, householdID, recipeID string, in Edi
 	if err != nil {
 		return Recipe{}, err
 	}
-	steps, err := editedSteps(r.Steps, in.Steps)
+	// A recipe read from a page has no steps of its own (decision 670): the
+	// page has them, so it may stay without.
+	steps, err := editedSteps(r.Steps, in.Steps, r.Source != SourceUser)
 	if err != nil {
 		return Recipe{}, err
 	}
@@ -189,7 +191,7 @@ func editedAmounts(name string, servings []int, in []EditAmount) ([]Amount, erro
 
 // editedSteps numbers the steps from 1 and keeps each one's photo where a
 // step stays in its place.
-func editedSteps(old []Step, in []string) ([]Step, error) {
+func editedSteps(old []Step, in []string, required bool) ([]Step, error) {
 	if len(in) > maxSwapSteps {
 		return nil, invalidEdit("a recipe may have at most 100 steps")
 	}
@@ -208,7 +210,7 @@ func editedSteps(old []Step, in []string) ([]Step, error) {
 		}
 		out = append(out, step)
 	}
-	if len(out) == 0 {
+	if len(out) == 0 && required {
 		return nil, invalidEdit("a recipe needs at least one step")
 	}
 	return out, nil

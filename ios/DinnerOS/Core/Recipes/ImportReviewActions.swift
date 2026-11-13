@@ -2,9 +2,8 @@ import Foundation
 
 /// What a member can do about one row of Import Review, and what the screen says about it.
 ///
-/// Pure so the choices and the wording are tested rather than checked by eye. The copy rules
-/// are the import screens' (`MealKitFormatting`): short sentences, one idea per line, no dash
-/// asides.
+/// Pure so the choices and the wording are tested rather than checked by eye. The copy rules:
+/// short sentences, one idea per line, no dash asides.
 nonisolated enum ImportReviewAction: Hashable, Sendable {
     /// The delivered variant is the stored recipe (`same_recipe`).
     case sameRecipe
@@ -52,8 +51,7 @@ nonisolated enum ImportReviewAction: Hashable, Sendable {
 nonisolated enum ImportReviewCopy {
     /// "HelloFresh" for the one source there is, and a neutral word for anything else.
     static func sourceName(_ source: String) -> String {
-        source == MealKitService.helloFresh.rawValue
-            ? MealKitService.helloFresh.displayName : String(localized: "the meal kit")
+        source == "hellofresh" ? "HelloFresh" : String(localized: "the meal kit")
     }
 
     /// What happened to a recipe whose box looked different, one idea per line.

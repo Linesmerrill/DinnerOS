@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/account"
 	"github.com/Linesmerrill/DinnerOS/api/internal/applinks"
@@ -29,9 +28,6 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/instacart"
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
 	"github.com/Linesmerrill/DinnerOS/api/internal/kroger"
-	"github.com/Linesmerrill/DinnerOS/api/internal/liveactivity"
-	"github.com/Linesmerrill/DinnerOS/api/internal/mealkit"
-	mealkitsources "github.com/Linesmerrill/DinnerOS/api/internal/mealkit/sources"
 	"github.com/Linesmerrill/DinnerOS/api/internal/menu"
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
@@ -392,40 +388,6 @@ func run() error {
 		Tokens:  tokens,
 		Logger:  logger,
 	})
-	// Meal-kit recipe import (docs/meal-kit-import.md). The web dyno queues a
-	// job and its runner starts fetching the first batch at once, then keeps
-	// going batch by batch; cmd/importmealkit on Heroku Scheduler drains the
-	// same queue as the backstop. Off unless MEAL_KIT_IMPORT_ENABLED=true.
-	mealKitService, err := newMealKitService(cfg, db.Database(), notificationService, logger)
-	if err != nil {
-		return err
-	}
-	mealKitRunnerDone := make(chan struct{})
-	if mealKitService.Enabled() {
-		runner := newMealKitRunner(cfg, db.Database(), mealKitService, notificationService, logger)
-		mealKitService.SetKicker(runner)
-		go func() {
-			defer close(mealKitRunnerDone)
-			runner.Run(ctx)
-		}()
-	} else {
-		close(mealKitRunnerDone)
-		logger.Info("meal-kit recipe import is off; set MEAL_KIT_IMPORT_ENABLED=true to enable it")
-	}
-	mealKitHandler := mealkit.NewHandler(mealkit.HandlerOptions{
-		Service:    mealKitService,
-		Authorizer: householdService,
-		Tokens:     tokens,
-		Logger:     logger,
-	})
-	// The app attaches its Live Activity's push token to an import job here
-	// (docs/meal-kit-import.md#live-activity).
-	liveActivityHandler := liveactivity.NewHandler(liveactivity.HandlerOptions{
-		Store:      liveactivity.NewMongoStore(db.Database()),
-		Authorizer: householdService,
-		Tokens:     tokens,
-		Logger:     logger,
-	})
 
 	srv := &http.Server{
 		Addr: cfg.Addr(),
@@ -460,8 +422,6 @@ func run() error {
 				shoppingHandler.Mount(r)
 				notificationHandler.Mount(r)
 				deviceTokenHandler.Mount(r)
-				mealKitHandler.Mount(r)
-				liveActivityHandler.Mount(r)
 				accountHandler.Mount(r)
 				behavior.ratingHandler.Mount(r)
 				cooking.NewHandler(cooking.NewStore(db.Database()), householdService, tokens, logger).Mount(r)
@@ -500,13 +460,6 @@ func run() error {
 	if err := starter.Wait(shutdownCtx); err != nil {
 		logger.Warn("starter recipe copies still running at shutdown", "error", err)
 	}
-	// ctx is already done, so the runner is handing its batch back to the
-	// queue; waiting lets that one write land before the database closes.
-	select {
-	case <-mealKitRunnerDone:
-	case <-shutdownCtx.Done():
-		logger.Warn("meal-kit import runner still stopping at shutdown; its lease will expire instead")
-	}
 	logger.Info("api stopped")
 	return nil
 }
@@ -531,7 +484,6 @@ func indexSets() []mongodb.IndexSet {
 		shopping.Indexes(),
 		skips.Indexes(),
 		sameitems.Indexes(),
-		mealkit.Indexes(),
 		behaviorIndexes(),
 		recommendations.Indexes(),
 	)
@@ -603,64 +555,6 @@ func newHouseholdHandlers(cfg config.Config, db *mongodb.Client, userService *us
 		CreateRateLimit: ratelimit.New(ratelimit.Options{Burst: inviteCreateRateBurst, Every: inviteCreateRateEvery}).Middleware,
 	})
 	return householdService, householdHandler, invitationHandler
-}
-
-// newMealKitService builds the meal-kit import service. MEAL_KIT_IMPORT_ENABLED
-// turns the feature on; without it the service is returned disabled, which is
-// what every route, the runner, and the scheduled worker check.
-func newMealKitService(cfg config.Config, db *mongo.Database, notifier *notifications.Service, logger *slog.Logger) (*mealkit.Service, error) {
-	// Stopping an import ends its Live Activity with a push; nil without
-	// APNs configured.
-	observer, err := liveactivity.NewObserver(cfg.APNs, db, logger)
-	if err != nil {
-		return nil, err
-	}
-	opts := mealkit.ServiceOptions{
-		Store:    mealkit.NewMongoStore(db),
-		Notifier: notifier,
-		Observer: observer,
-		Logger:   logger,
-	}
-	if cfg.MealKitImport.Active() {
-		opts.Enabled = true
-		opts.Sources = mealkitsources.All(mealkitsources.Options{
-			HelloFreshBaseURL: cfg.MealKitImport.HelloFreshBaseURL, Logger: logger,
-		})
-	}
-	return mealkit.NewService(opts), nil
-}
-
-// newMealKitRunner builds the web process's import runner from the same parts
-// cmd/importmealkit wires: the queue, the service's sources, and a plain
-// recipes service as the seam into the library, so a batch run here and one
-// run by the scheduled command import identically.
-//
-// MEAL_KIT_RECIPES_PER_RUN, when an operator has lowered it below the web
-// batch size, lowers the web batch too: it is the documented "be more polite"
-// setting, and it should mean that everywhere.
-func newMealKitRunner(cfg config.Config, db *mongo.Database, service *mealkit.Service, notifier *notifications.Service, logger *slog.Logger) *mealkit.Runner {
-	batch := mealkit.DefaultBatchSize
-	if n := cfg.MealKitImport.RecipesPerRun; n > 0 && n < batch {
-		batch = n
-	}
-	// The runner does most of an import's work, so its progress has to move
-	// the Live Activity too; nil without APNs, like the scheduled worker's.
-	observer, err := liveactivity.NewObserver(cfg.APNs, db, logger)
-	if err != nil {
-		logger.Warn("live activity pushes are off for the web import runner", "error", err)
-		observer = nil
-	}
-	return mealkit.NewRunner(mealkit.RunnerOptions{
-		Worker: mealkit.WorkerOptions{
-			Store:     mealkit.NewMongoStore(db),
-			Service:   service,
-			Publisher: mealkit.ServicePublisher{Service: recipes.NewService(recipes.NewMongoStore(db))},
-			Notifier:  notifier,
-			Observer:  observer,
-			Logger:    logger,
-		},
-		BatchSize: batch,
-	})
 }
 
 // shoppingProviders returns the enabled shopping providers: Walmart always,

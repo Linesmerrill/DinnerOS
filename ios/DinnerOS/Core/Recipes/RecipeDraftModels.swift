@@ -33,6 +33,9 @@ nonisolated struct RecipeDraft: Codable, Equatable, Sendable {
         case fromURL = "fromUrl"
     }
 
+    /// The warnings to list, without the imported-recipe note, which has its own place.
+    var listedWarnings: [String] { warnings.filter { $0 != ImportedRecipeText.note } }
+
     /// Whether the draft has enough to save.
     var isSaveable: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -49,6 +52,10 @@ nonisolated struct RecipeDraftIngredient: Codable, Equatable, Sendable, Identifi
     /// The original line, kept so nothing the parser misread is lost.
     var rawText: String?
     var pantryStaple: Bool = false
+    /// The rest of the line: "diced", "14.5 oz", "to taste".
+    var note: String?
+    /// The heading the line came under on the page ("Sauce").
+    var group: String?
 
     /// Stable within one draft: the list is edited in place, so identity is by
     /// position rather than by a name the member is still typing.
@@ -59,6 +66,21 @@ nonisolated struct RecipeDraftIngredient: Codable, Equatable, Sendable, Identifi
 nonisolated struct ParseRecipeRequest: Encodable, Sendable {
     var text: String?
     var url: String?
+    /// The page as this phone loaded it, for a site that turned the server away.
+    var html: String?
+}
+
+/// Recipe sources the app treats differently (`Recipe.source`).
+nonisolated enum RecipeSourceKey {
+    /// Read from a web page the member linked: only its title, servings, and ingredients
+    /// are kept, with a link back for the rest.
+    static let fromPage = "user"
+}
+
+/// The note shown wherever a recipe read from a web page appears.
+nonisolated enum ImportedRecipeText {
+    static let note = String(
+        localized: "Imported recipes can have mistakes. Please check the ingredients before you shop.")
 }
 
 /// The body of `PUT .../recipes/{recipeId}/sharing`.

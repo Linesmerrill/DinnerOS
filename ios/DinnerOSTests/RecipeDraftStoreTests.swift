@@ -10,11 +10,17 @@ struct RecipeDraftStoreTests {
     }
 
     private func makeHarness(
-        parse: Data = CatalogFixtures.draft, created: Data = RecipeFixtures.detail(), status: Int = 200
+        parse: Data = CatalogFixtures.draft, created: Data = RecipeFixtures.detail(), status: Int = 200,
+        acceptsPhonePage: Bool = false,
+        pageLoader: @escaping @Sendable (String) async throws -> String = { _ in throw URLError(.notConnectedToInternet)
+        }
     ) async throws -> Harness {
         let transport = StubTransport { request in
             guard let path = request.url?.path() else { return (400, Data()) }
             if path.hasSuffix("/recipes/parse") {
+                if acceptsPhonePage, request.jsonBody?["html"] != nil {
+                    return (200, parse)
+                }
                 if status != 200 {
                     return (status, Data(#"{"error":{"code":"fetch_failed","message":"nope"}}"#.utf8))
                 }
@@ -32,6 +38,7 @@ struct RecipeDraftStoreTests {
         await session.restore()
         let store = RecipeDraftStore(
             session: session, api: RecipesAPI(client: client), householdID: "household-1")
+        store.pageLoader = pageLoader
         return Harness(store: store, transport: transport)
     }
 
@@ -60,7 +67,20 @@ struct RecipeDraftStoreTests {
         let harness = try await makeHarness(status: 422)
         await harness.store.parse(url: "https://example.test/not-a-recipe")
         #expect(harness.store.step == .entry)
-        #expect(harness.store.errorMessage != nil)
+        #expect(
+            harness.store.errorMessage
+                == "Couldn't find a recipe at that link. Check the link, or copy the recipe and paste it as text.")
+    }
+
+    @Test func aSiteThatTurnsTheServerAwayIsLoadedOnThePhone() async throws {
+        let harness = try await makeHarness(
+            status: 422, acceptsPhonePage: true, pageLoader: { link in "<html>\(link)</html>" })
+        await harness.store.parse(url: "Try this one: https://example.test/blocked")
+        #expect(harness.store.step == .review)
+        #expect(harness.transport.requests.count == 2)
+        let retry = try #require(harness.transport.requests.last)
+        #expect(retry.jsonBody?["url"] == "https://example.test/blocked")
+        #expect(retry.jsonBody?["html"] == "<html>https://example.test/blocked</html>")
     }
 
     @Test func emptyInputDoesNothing() async throws {

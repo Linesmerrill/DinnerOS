@@ -87,6 +87,23 @@ struct RecipeEditDraftTests {
         #expect(draft.problem == "Add at least one step.")
     }
 
+    @Test func aRecipeFromAPageSavesWithoutSteps() throws {
+        let json = """
+            {"id":"r2","householdId":"h1","source":"user","name":"Chili","isAddon":false,"servings":[4],
+             "cuisines":[],"tags":[],"orderWeeks":[],"timesOrdered":0,
+             "createdAt":"2026-11-01T00:00:00Z","updatedAt":"2026-11-01T00:00:00Z",
+             "householdRating":{"count":0,"average":null},"sourceUrl":"https://example.test/chili",
+             "ingredients":[{"ingredientId":"i-beef","name":"Ground Beef","category":"meat","pantryStaple":false,
+               "amounts":[{"servings":4,"quantity":"1","quantityValue":1,"unit":"lb","sourceUnit":"","rawText":""}]}],
+             "steps":[]}
+            """
+        let recipe = try JSONCoding.makeDecoder().decode(Recipe.self, from: Data(json.utf8))
+        let draft = RecipeEditDraft(recipe: recipe)
+        #expect(!draft.requiresSteps)
+        #expect(draft.problem == nil)
+        #expect(draft.request.steps.isEmpty)
+    }
+
     @Test func numbersReadTheWayPeopleTypeThem() {
         #expect(RecipeEditDraft.number("1 1/2") == 1.5)
         #expect(RecipeEditDraft.number("0.25") == 0.25)

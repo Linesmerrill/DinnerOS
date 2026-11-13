@@ -185,15 +185,13 @@ struct NotificationRow: View {
         case .pantryLow: "cabinet"
         case .pantryThaw: "snowflake"
         case .shoppingOrderDue: "cart"
-        case .recipeImportFinished: "shippingbox"
-        case .recipeImportAttention: "exclamationmark.triangle"
         default: "bell"
         }
     }
 
     private var iconStyle: AnyShapeStyle {
         switch notification.type {
-        case .pantryLow, .recipeImportAttention: AnyShapeStyle(.orange)
+        case .pantryLow: AnyShapeStyle(.orange)
         default: AnyShapeStyle(.tint)
         }
     }

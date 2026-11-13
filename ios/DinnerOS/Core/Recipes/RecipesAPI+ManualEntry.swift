@@ -2,18 +2,22 @@ import Foundation
 
 /// Manual recipe entry: parse, review, save, and the global-catalog opt-in.
 ///
-/// Parsing happens on the server, including fetching a URL, so the phone never
-/// loads a page the member pasted and never has to decide whether an address is
-/// safe to open.
+/// Parsing happens on the server, including fetching a URL. Only when a site turns the
+/// server away does the phone load the page itself (`RecipePageLoader`) and send its HTML
+/// for the server to read.
 nonisolated extension RecipesAPI {
     /// Parses pasted text into a draft. Nothing is stored.
     func parseRecipe(householdID: String, text: String, accessToken: String) async throws -> RecipeDraft {
         try await parse(householdID: householdID, body: ParseRecipeRequest(text: text), accessToken: accessToken)
     }
 
-    /// Reads a recipe page into a draft. Nothing is stored.
-    func parseRecipe(householdID: String, url: String, accessToken: String) async throws -> RecipeDraft {
-        try await parse(householdID: householdID, body: ParseRecipeRequest(url: url), accessToken: accessToken)
+    /// Reads a recipe page into a draft. Nothing is stored. With `html`, the server reads the
+    /// page this phone loaded instead of fetching it.
+    func parseRecipe(
+        householdID: String, url: String, html: String? = nil, accessToken: String
+    ) async throws -> RecipeDraft {
+        try await parse(
+            householdID: householdID, body: ParseRecipeRequest(url: url, html: html), accessToken: accessToken)
     }
 
     /// Saves a reviewed draft as one of the household's own recipes. It stays

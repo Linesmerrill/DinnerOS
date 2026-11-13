@@ -17,7 +17,6 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
-	"github.com/Linesmerrill/DinnerOS/api/internal/mealkit"
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
@@ -96,13 +95,6 @@ var accountDeletionKinds = map[string]collectionKind{
 	recommendations.ProposalsCollection:    householdData,
 	recommendations.OverridesCollection:    householdData,
 	recommendations.WeekPairingsCollection: householdData,
-	// Import runs are household history, and the only thing the meal-kit
-	// import stores: there is no account link and no credential any more.
-	mealkit.JobCollection: householdData,
-	// The harvest cursor is two ISO weeks and a flag — how far back the
-	// household's own order history has been read — and goes with the
-	// household like everything else.
-	mealkit.CursorCollection: householdData,
 }
 
 // seedDoc fills every plain indexed field with a unique value, so documents

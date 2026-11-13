@@ -13,8 +13,6 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/cooking"
 	"github.com/Linesmerrill/DinnerOS/api/internal/customize"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
-	"github.com/Linesmerrill/DinnerOS/api/internal/liveactivity"
-	"github.com/Linesmerrill/DinnerOS/api/internal/mealkit"
 	"github.com/Linesmerrill/DinnerOS/api/internal/menu"
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
@@ -49,8 +47,6 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		auth.NewHandler(auth.HandlerOptions{}).Mount(r)
 		push.NewHandler(push.HandlerOptions{}).Mount(r)
 		account.NewHandler(account.HandlerOptions{}).Mount(r)
-		mealkit.NewHandler(mealkit.HandlerOptions{}).Mount(r)
-		liveactivity.NewHandler(liveactivity.HandlerOptions{}).Mount(r)
 	})
 
 	var routes []string
@@ -92,9 +88,6 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		"GET /api/v1/me",
 		"DELETE /api/v1/me",
 		"PUT /api/v1/me/device-tokens",
-		"DELETE /api/v1/households/{householdId}/meal-kit/{source}/imports",
-		"PUT /api/v1/households/{householdId}/meal-kit/{source}/imports/{jobId}/live-activity",
-		"DELETE /api/v1/households/{householdId}/meal-kit/{source}/imports/{jobId}/live-activity",
 		"DELETE /api/v1/me/device-tokens",
 		"GET /api/v1/households/{householdId}/notifications",
 		"GET /api/v1/households/{householdId}/notifications/unread-count",

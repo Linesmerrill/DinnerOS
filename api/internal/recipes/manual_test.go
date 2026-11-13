@@ -183,16 +183,15 @@ func TestFetchReadsSchemaOrgRecipes(t *testing.T) {
 		t.Errorf("name = %q", d.Name)
 	case d.Servings != 4:
 		t.Errorf("servings = %d; want 4", d.Servings)
-	case d.PrepMinutes != 10 || d.TotalMinutes != 35:
-		t.Errorf("times = %d/%d; want 10/35", d.PrepMinutes, d.TotalMinutes)
 	case len(d.Ingredients) != 3:
 		t.Errorf("ingredients = %+v", d.Ingredients)
-	case len(d.Steps) != 2:
-		t.Errorf("steps = %q", d.Steps)
-	case strings.Contains(d.Description, "<"):
-		t.Errorf("description kept markup: %q", d.Description)
-	case !slices.Contains(d.Cuisines, "Italian"):
-		t.Errorf("cuisines = %q", d.Cuisines)
+	// The publisher's photo, steps, description, and the rest are never
+	// kept (decision 670): the recipe links back to the page for them.
+	case len(d.Steps) != 0 || d.Description != "" || d.ImageURL != "" || d.PrepMinutes != 0 || len(d.Cuisines) != 0:
+		t.Errorf("kept more than the title, servings, and ingredients: %+v", d)
+	}
+	if !slices.Contains(d.Warnings, ImportedRecipeNote) {
+		t.Errorf("warnings = %q", d.Warnings)
 	}
 	if len(d.Warnings) == 0 {
 		t.Error("a fetched draft carries no review warning")

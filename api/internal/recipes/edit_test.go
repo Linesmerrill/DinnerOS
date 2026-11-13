@@ -121,3 +121,65 @@ func TestSwapPreviewRoute(t *testing.T) {
 		t.Errorf("viewer status = %d", rec.Code)
 	}
 }
+
+// A recipe read from a page keeps only its title, servings, ingredients, and
+// link, and can be edited without steps; a typed one still needs one.
+func TestRecipeFromAPageKeepsOnlyItsIngredients(t *testing.T) {
+	srv := newRecipeTestServer(t, nil)
+	draft := DraftResponse{
+		Name: "Weeknight Chili", Servings: 4, SourceURL: "https://recipes.example.com/chili", FromURL: true,
+		ImageURL: "https://recipes.example.com/chili.jpg", Description: "The publisher's words.",
+		Steps:       []string{"The publisher's steps."},
+		Ingredients: []DraftIngredientWire{{Name: "Ground Beef", Quantity: "1", Unit: "lb", RawText: "1 lb ground beef"}},
+	}
+	rec := srv.do(t, http.MethodPost, recipesPath(hhAda), mustJSON(t, draft), userAda)
+	if rec.Code != http.StatusCreated && rec.Code != http.StatusOK {
+		t.Fatalf("create status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	got := decodeBody[RecipeResponse](t, rec)
+	if len(got.Steps) != 0 || got.SourceURL != draft.SourceURL || len(got.Ingredients) != 1 {
+		t.Fatalf("saved = %+v", got)
+	}
+	if got.ImageURL != "" || got.Description != "" {
+		t.Errorf("kept the page's photo or words: %q %q", got.ImageURL, got.Description)
+	}
+	edit := EditRecipeRequest{Ingredients: []EditIngredientRequest{{Name: "Ground Turkey", Amounts: []EditAmountRequest{{Servings: 4, Quantity: "1", Unit: "lb"}}}}}
+	if rec := srv.do(t, http.MethodPut, recipesPath(hhAda)+"/"+got.ID+"/edits", mustJSON(t, edit), userAda); rec.Code != http.StatusOK {
+		t.Errorf("edit without steps = %d, body %s", rec.Code, rec.Body.String())
+	}
+	// Without its link it isn't from a page.
+	draft.SourceURL = ""
+	if rec := srv.do(t, http.MethodPost, recipesPath(hhAda), mustJSON(t, draft), userAda); rec.Code != http.StatusBadRequest {
+		t.Errorf("no link = %d", rec.Code)
+	}
+}
+
+// A page the phone loaded is read the same way, and only http(s) links are
+// taken as its source.
+func TestParseReadsAPageThePhoneSent(t *testing.T) {
+	srv := newRecipeTestServer(t, nil)
+	page := `<html><head><meta property="og:title" content="Lemon Pasta"></head><body>
+<h2>Ingredients</h2><ul><li>8 oz spaghetti</li><li>1 lemon, zested</li></ul><h2>Instructions</h2><ol><li>Boil.</li></ol></body></html>`
+	body := mustJSON(t, ParseRecipeRequest{URL: "https://blog.example.com/lemon-pasta", HTML: page})
+	rec := srv.do(t, http.MethodPost, recipesPath(hhAda)+"/parse", body, userAda)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	got := decodeBody[DraftResponse](t, rec)
+	if got.Name != "Lemon Pasta" || len(got.Ingredients) != 2 || len(got.Steps) != 0 || !got.FromURL ||
+		got.SourceURL != "https://blog.example.com/lemon-pasta" {
+		t.Errorf("draft = %+v", got)
+	}
+	for name, req := range map[string]ParseRecipeRequest{
+		"no recipe":  {URL: "https://blog.example.com/about", HTML: "<html><body><p>Hi.</p></body></html>"},
+		"not a link": {URL: "javascript:alert(1)", HTML: page},
+	} {
+		rec := srv.do(t, http.MethodPost, recipesPath(hhAda)+"/parse", mustJSON(t, req), userAda)
+		if rec.Code != http.StatusUnprocessableEntity && rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d", name, rec.Code)
+		}
+		if strings.Contains(rec.Body.String(), "—") {
+			t.Errorf("%s: message has a dash: %s", name, rec.Body.String())
+		}
+	}
+}

@@ -137,7 +137,7 @@ struct AllMealsSection: View {
             ContentUnavailableView {
                 Label("No Recipes Yet", systemImage: "book.closed")
             } description: {
-                Text("Import the recipes you've ordered, browse our recipes, or type one in yourself.")
+                Text("Browse our recipes, or add one yourself.")
             } actions: {
                 if canEditRecipes {
                     NavigationLink(value: DiscoverRoute()) {
@@ -148,11 +148,6 @@ struct AllMealsSection: View {
                         Button("Add a Recipe", systemImage: "square.and.pencil", action: onAddOwnRecipe)
                     }
                 }
-                // Importing an order history is set up per household, in Household
-                // settings, so this points there rather than pretending to start it.
-                Text("Household → Recipe Import brings in a meal-kit order history.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
         }
     }

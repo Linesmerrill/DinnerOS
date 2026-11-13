@@ -8,6 +8,8 @@ require (
 	golang.org/x/time v0.12.0
 )
 
+require golang.org/x/net v0.55.0
+
 require (
 	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect

@@ -54,16 +54,6 @@ tags:
       member sees the same notifications and reads them separately. Devices
       register push tokens under `/me/device-tokens`, and an hourly sweep
       pushes new notifications to them (docs/pantry-usage.md#push-delivery).
-  - name: meal-kit-import
-    description: |
-      Importing a household's own meal-kit order history (HelloFresh) into
-      their recipe library, asynchronously (docs/meal-kit-import.md). The
-      member signs in on the meal kit's own site in a web view in the app and
-      their order history is read there, in their own session; the app posts
-      that list here and a backend worker fetches the **public** recipe pages
-      it names. **Nothing about the meal-kit account is stored** — no password,
-      no session token, no cookie, no profile — and there is no field on this
-      API to put one in.
   - name: ingredients
     description: The global ingredient catalog.
   - name: ratings
@@ -1356,9 +1346,6 @@ paths:
         and a re-import never reopens a resolved one.
 
         The open list is the household's whole backlog, across every import.
-        A meal-kit job's `reviewItems` counts what that run flagged, which can
-        include items an earlier import already recorded, so a badge counts
-        this list, not the job.
       operationId: listImportReviews
       tags: [recipes]
       security:
@@ -1489,197 +1476,6 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "413":
           $ref: "#/components/responses/PayloadTooLarge"
-  /api/v1/households/{householdId}/meal-kit/{source}:
-    parameters:
-      - $ref: "#/components/parameters/HouseholdID"
-      - $ref: "#/components/parameters/MealKitSource"
-    get:
-      summary: Latest meal-kit import
-      description: |
-        How the household's newest import run is going. Requires
-        `recipes.import`.
-
-        `enabled` is false when the server has `MEAL_KIT_IMPORT_ENABLED` off,
-        so the app offers adding recipes by hand instead of a sign-in it cannot
-        honour. There is no linked account to report: nothing about one is
-        stored.
-      operationId: getMealKitStatus
-      tags: [meal-kit-import]
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: The newest run.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MealKitStatus"
-        "401":
-          $ref: "#/components/responses/Unauthenticated"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-  /api/v1/households/{householdId}/meal-kit/{source}/imports:
-    parameters:
-      - $ref: "#/components/parameters/HouseholdID"
-      - $ref: "#/components/parameters/MealKitSource"
-    post:
-      summary: Start an import run
-      description: |
-        Queues an import of the order history in the body, which the app read
-        in the member's own browser session. The response is immediate; the
-        work happens in a scheduled worker, so the app can be closed. Requires
-        `recipes.import`.
-
-        Every entry is checked against the source's own allow-list: an id that
-        is not one of the service's recipe ids is dropped, and a URL that does
-        not point at the service's own recipe pages is rebuilt from the id
-        rather than followed. A body with nothing usable in it is a `400`.
-
-        A run that is already queued or running is returned as is, so a member
-        tapping twice never doubles the work. Running it again later is safe:
-        recipes already in the library come back as unchanged or updated, never
-        as duplicates.
-      operationId: startMealKitImport
-      tags: [meal-kit-import]
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/MealKitStartImportRequest"
-      responses:
-        "202":
-          description: The queued run.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MealKitImportJob"
-        "401":
-          $ref: "#/components/responses/Unauthenticated"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "503":
-          description: "`import_disabled`: meal-kit import is not enabled on this server."
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-    delete:
-      summary: Stop the imports in flight
-      description: |
-        Cancels every queued or running import for that service. A worker
-        mid-run finds its job canceled at its next write and stops without
-        touching the library again. Recipes already imported stay in the
-        library. Requires `recipes.import`. Stopping when nothing is running is
-        not an error.
-      operationId: stopMealKitImports
-      tags: [meal-kit-import]
-      security:
-        - bearerAuth: []
-      responses:
-        "204":
-          description: Stopped.
-        "401":
-          $ref: "#/components/responses/Unauthenticated"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-    get:
-      summary: List import runs
-      description: |
-        The household's import runs for that service, newest first (at most
-        20). Requires `recipes.import`.
-      operationId: listMealKitImports
-      tags: [meal-kit-import]
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: The runs.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MealKitImportJobList"
-        "401":
-          $ref: "#/components/responses/Unauthenticated"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-  /api/v1/households/{householdId}/meal-kit/{source}/imports/{jobId}/live-activity:
-    parameters:
-      - $ref: "#/components/parameters/HouseholdID"
-      - $ref: "#/components/parameters/MealKitSource"
-      - name: jobId
-        in: path
-        required: true
-        description: The import run the activity follows.
-        schema:
-          type: string
-    put:
-      summary: Attach a Live Activity to an import run
-      description: |
-        Stores the push token of the Live Activity the app started for this
-        run (ActivityKit, `pushType: .token`), so the server can update it
-        while the app is closed and end it — green — when the run finishes
-        (docs/meal-kit-import.md#live-activity). Send it again whenever
-        ActivityKit rotates the token; the new one replaces the old. Requires
-        `recipes.import`.
-
-        The token is stored on the run, never logged or returned, and removed
-        when the run ends. A run that already finished, was stopped, or is not
-        this household's is a `404`; the app then ends its activity from the
-        status it polls.
-
-        The pushes the server sends carry
-        `MealKitLiveActivityContentState` as `content-state`: counts only,
-        nothing about the meal-kit account.
-      operationId: registerMealKitLiveActivity
-      tags: [meal-kit-import]
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/MealKitLiveActivityRegistration"
-      responses:
-        "204":
-          description: Stored.
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthenticated"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
-    delete:
-      summary: Detach the Live Activity
-      description: |
-        Removes the stored token, for a member who dismissed the activity.
-        Idempotent. Requires `recipes.import`.
-      operationId: unregisterMealKitLiveActivity
-      tags: [meal-kit-import]
-      security:
-        - bearerAuth: []
-      responses:
-        "204":
-          description: Removed, or there was nothing to remove.
-        "401":
-          $ref: "#/components/responses/Unauthenticated"
-        "403":
-          $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/menu:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -5625,14 +5421,6 @@ components:
       schema:
         type: string
   parameters:
-    MealKitSource:
-      name: source
-      in: path
-      required: true
-      description: The meal-kit service. Only `hellofresh` exists today.
-      schema:
-        type: string
-        enum: [hellofresh]
     HouseholdID:
       name: householdId
       in: path
@@ -6373,7 +6161,10 @@ components:
           description: False when the household already had it, which is not an error.
     ParseRecipeRequest:
       type: object
-      description: Exactly one of `text` and `url` is given.
+      description: |
+        Exactly one of `text` and `url` is given. With `url`, `html` may carry
+        the page as the phone loaded it (for a site that turns the server
+        away); the server reads it instead of fetching.
       properties:
         text:
           type: string
@@ -6381,6 +6172,9 @@ components:
         url:
           type: string
           format: uri
+        html:
+          type: string
+          description: The page's HTML, at most the request body limit.
     RecipeDraft:
       type: object
       description: |
@@ -6457,6 +6251,12 @@ components:
           description: The original line, kept so nothing the parser misread is lost.
         pantryStaple:
           type: boolean
+        note:
+          type: string
+          description: The rest of the line ("diced", "14.5 oz", "to taste"). Shown for review only.
+        group:
+          type: string
+          description: The heading the line came under on the page ("Sauce"). Shown for review only.
     RecipeSharingRequest:
       type: object
       required: [sharedToCatalog]
@@ -6917,311 +6717,6 @@ components:
           items:
             type: object
             description: ReviewItem (docs/import-format.md).
-    MealKitOrderedRecipe:
-      type: object
-      required: [sourceRecipeId]
-      description: |
-        One recipe of the harvested order history. Every field is untrusted
-        input: it was read from the meal kit's own pages in a web view.
-      properties:
-        sourceRecipeId:
-          type: string
-          description: |
-            The meal kit's id for the recipe. An id that is not one of the
-            service's own is dropped.
-          example: 6512aa11bb22cc33dd44ee55
-        name:
-          type: string
-          description: A label to show before the recipe page itself is read.
-        url:
-          type: string
-          format: uri
-          description: |
-            The public recipe page. Used only when it already points at the
-            service's own recipe pages; otherwise it is rebuilt from the id.
-        weeks:
-          type: array
-          items:
-            type: string
-            pattern: '^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$'
-          description: The ISO weeks it was delivered.
-          example: ["2026-W33", "2026-W38"]
-        isAddon:
-          type: boolean
-          description: A side or extra rather than a main meal.
-      additionalProperties: false
-    MealKitHarvestReport:
-      type: object
-      description: |
-        Where the walk that read the order history stopped. A past-deliveries
-        page covers roughly four to five delivered weeks, and the app walks at
-        most 40 of them in one sitting, so a household with years of history
-        cannot be read in one go. The server remembers this report per
-        household and source, and the next harvest resumes from
-        `earliestWeek` instead of walking back from today again.
-
-        Every field is untrusted input; an unreadable one is a `400`, and an
-        absent report simply teaches the server nothing.
-      properties:
-        earliestWeek:
-          type: string
-          pattern: '^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$'
-          description: The oldest ISO week the walk reached.
-          example: 2023-W30
-        latestWeek:
-          type: string
-          pattern: '^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$'
-          description: |
-            The newest ISO week it saw. Absent when the walk could not reach
-            today's end of the history, so the server must not move its
-            ceiling on this pass.
-          example: 2026-W38
-        pages:
-          type: integer
-          minimum: 0
-          maximum: 500
-          description: How many past-deliveries pages it read.
-        weeks:
-          type: integer
-          minimum: 0
-          maximum: 2080
-          description: How many delivered weeks those pages carried.
-        stopped:
-          type: string
-          enum: [cap, empty, end, caught_up]
-          description: |
-            Why it stopped. `cap` means the walk hit its own page cap and
-            there is more history behind it; `empty` and `end` mean it reached
-            the start of the account's history, which completes the cursor;
-            `caught_up` means it reached weeks already imported, which a
-            catch-up pass for new deliveries does every time and which says
-            nothing about the oldest history.
-      additionalProperties: false
-    MealKitStartImportRequest:
-      type: object
-      required: [recipes]
-      description: |
-        The order history, where reading it stopped, and nothing else. There
-        is deliberately no field for a token, a cookie, or an account: the
-        sign-in stays in the app's web view, and the server has nowhere to put
-        one. A body carrying an unknown field is a `400`.
-
-        A **partial** harvest is posted exactly like a whole one. The recipes
-        it did reach belong in the library now, not after however many more
-        sign-ins the rest of the history takes.
-      properties:
-        recipes:
-          type: array
-          minItems: 1
-          maxItems: 1000
-          items:
-            $ref: "#/components/schemas/MealKitOrderedRecipe"
-        harvest:
-          $ref: "#/components/schemas/MealKitHarvestReport"
-      additionalProperties: false
-    MealKitImportFailure:
-      type: object
-      required: [sourceRecipeId, reason]
-      properties:
-        sourceRecipeId:
-          type: string
-        name:
-          type: string
-        reason:
-          type: string
-          description: |
-            Why this one recipe did not make it, as one of three plain
-            sentences: "This recipe is no longer on HelloFresh.", "We couldn't
-            read this recipe on HelloFresh.", or "This recipe was missing
-            details we need." Never page content, a field name, an index, an
-            id, or a code. A recipe that is the same dish as another on the
-            order history is merged, not listed here.
-    MealKitImportError:
-      type: object
-      required: [code, message, at]
-      properties:
-        code:
-          type: string
-          enum: [parse, blocked, network, import, internal]
-        message:
-          type: string
-          description: |
-            One sentence for a person. It never contains tokens, cookies, URLs,
-            or fetched page content.
-        at:
-          type: string
-          format: date-time
-    MealKitImportJob:
-      type: object
-      required:
-        [id, source, status, phase, recipesFound, recipesDone, imported, updated,
-         unchanged, reviewItems, failures, harvest, attempts, maxAttempts, lastError,
-         nextRunAt, createdAt, updatedAt, finishedAt]
-      properties:
-        id:
-          type: string
-        source:
-          type: string
-          enum: [hellofresh]
-        status:
-          type: string
-          enum: [queued, running, succeeded, dead, canceled]
-          description: |
-            `queued` is waiting for a worker: for a moment after the import
-            is started, then between batches (see `nextRunAt`). `running`
-            means a worker holds it and `recipesDone` climbs every 10
-            recipes. `dead` gave up: either the attempt limit or something
-            retrying cannot fix, such as a source layout change. `canceled`
-            means someone stopped the import.
-        phase:
-          type: string
-          enum: [recipes, import, done]
-          description: The resume point, so a restart re-fetches nothing.
-        recipesFound:
-          type: integer
-          description: How many recipes the submitted order history carried.
-        recipesDone:
-          type: integer
-        imported:
-          type: integer
-          description: New recipes created in the library.
-        updated:
-          type: integer
-        unchanged:
-          type: integer
-        reviewItems:
-          type: integer
-          description: |
-            Things this run flagged, including any an earlier import already
-            recorded. The household's open backlog, which is what a screen
-            should count, is `GET .../recipes/import-reviews`.
-        failures:
-          type: array
-          items:
-            $ref: "#/components/schemas/MealKitImportFailure"
-        harvest:
-          allOf:
-            - $ref: "#/components/schemas/MealKitHarvestSummary"
-          description: |
-            Where the walk that produced this run's order history stopped.
-        attempts:
-          type: integer
-        maxAttempts:
-          type: integer
-        lastError:
-          allOf:
-            - $ref: "#/components/schemas/MealKitImportError"
-          nullable: true
-        nextRunAt:
-          type: string
-          format: date-time
-          nullable: true
-          description: |
-            When a `queued` run can next be picked up: about now for one just
-            started (the API process begins it within seconds), about a
-            minute out for one resting between batches, later for one backing
-            off after an error. Null unless `status` is `queued`.
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-        finishedAt:
-          type: string
-          format: date-time
-          nullable: true
-    MealKitHarvestSummary:
-      type: object
-      required: [earliestWeek, latestWeek, pages, weeks, stopped, moreToFetch]
-      description: Where one walk of the order history stopped, read back.
-      properties:
-        earliestWeek:
-          type: string
-        latestWeek:
-          type: string
-        pages:
-          type: integer
-        weeks:
-          type: integer
-        stopped:
-          type: string
-          description: "`cap`, `empty`, `end`, `caught_up`, or empty when the app did not say."
-        moreToFetch:
-          type: boolean
-          description: |
-            True when the walk stopped on its own page cap, so history is known
-            to be left unread.
-    MealKitImportHistory:
-      type: object
-      required:
-        [earliestWeek, latestWeek, resumeFromWeek, complete, moreToFetch, blockedUntil]
-      description: |
-        How far back this household's order history has been read, and where
-        the next harvest resumes. It is the whole of what the server remembers
-        about a household's meal-kit account: two ISO weeks and a flag.
-
-        A **new delivery** is still picked up on a completed history: the app
-        walks back from today only as far as `latestWeek` and stops there,
-        which costs one page rather than four years of them.
-      properties:
-        earliestWeek:
-          type: string
-          description: The oldest delivered week any harvest has reached.
-        latestWeek:
-          type: string
-          description: |
-            The newest one seen. A catch-up pass walks back only to here.
-        resumeFromWeek:
-          type: string
-          description: |
-            The week the next harvest walks back from — the walk starts the
-            week *before* it — or empty for "start at today".
-        complete:
-          type: boolean
-          description: |
-            True once a harvest reached the start of the account's history. It
-            never goes back to false.
-        moreToFetch:
-          type: boolean
-          description: True when history is known to be left unread.
-        blockedUntil:
-          type: string
-          format: date-time
-          nullable: true
-          description: |
-            Set when the source refused us. A new import is refused with a
-            `400` until then rather than queued: being turned away is the one
-            failure this system does not argue with.
-    MealKitImportJobList:
-      type: object
-      required: [items]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/MealKitImportJob"
-    MealKitStatus:
-      type: object
-      required: [source, enabled, latestJob, history]
-      description: |
-        There is no linked account to report: the server stores nothing about
-        one.
-      properties:
-        source:
-          type: string
-          enum: [hellofresh]
-        enabled:
-          type: boolean
-          description: |
-            False when the server has meal-kit import turned off. The app then
-            offers adding recipes by hand instead.
-        latestJob:
-          allOf:
-            - $ref: "#/components/schemas/MealKitImportJob"
-          nullable: true
-        history:
-          $ref: "#/components/schemas/MealKitImportHistory"
     ImportReviewListResponse:
       type: object
       required: [items]
@@ -9463,42 +8958,6 @@ components:
       description: |
         The APNs gateway the token belongs to: `sandbox` for Xcode debug
         builds, `production` for TestFlight and App Store builds.
-    MealKitLiveActivityRegistration:
-      type: object
-      additionalProperties: false
-      required: [token, environment]
-      properties:
-        token:
-          type: string
-          pattern: "^[0-9a-f]{16,400}$"
-          description: The activity's push token as lowercase hex. Not the device token.
-        environment:
-          $ref: "#/components/schemas/PushEnvironment"
-    MealKitLiveActivityContentState:
-      type: object
-      description: |
-        The `content-state` of the Live Activity pushes the server sends
-        (`apns-push-type: liveactivity`). It is exactly what the app's
-        `MealKitImportActivityAttributes.ContentState` decodes, and nothing
-        else: a phase and three counts.
-      required: [phase, done, total, failed]
-      properties:
-        phase:
-          type: string
-          enum: [importing, waiting, done, failed, canceled]
-          description: |
-            `importing` while a worker fetches; `waiting` while queued (not
-            started, between batches, or waiting out a retry); `done`,
-            `failed`, `canceled` on the final `end` push.
-        done:
-          type: integer
-          description: Recipes handled; on `done`, recipes now in the library from this history.
-        total:
-          type: integer
-          description: Recipes on the submitted order history.
-        failed:
-          type: integer
-          description: Recipes that could not be imported.
     RegisterDeviceTokenRequest:
       type: object
       additionalProperties: false

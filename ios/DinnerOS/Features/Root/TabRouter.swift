@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// Pushes Recipe Import on the Household tab.
-struct RecipeImportRoute: Hashable {}
-
 /// The tab shell's selection and the navigation stacks a notification can open, in the
 /// environment of everything the shell shows, including sheets presented over it (the bell).
 /// `nil` outside the tab shell, where there are no tabs to switch.
@@ -19,8 +16,7 @@ final class TabRouter {
     var showsNotifications = false
 
     /// Set by the tab shell (`MainTabView.configureRouter()`).
-    @ObservationIgnored var check = NotificationSubjectCheck(
-        pantryItemExists: { _ in true }, canOpenRecipeImport: { true })
+    @ObservationIgnored var check = NotificationSubjectCheck(pantryItemExists: { _ in true })
     /// Shows a week on the Shop tab. Set by the tab shell, which owns the shopping store.
     @ObservationIgnored var showWeek: (ISOWeek) -> Void = { _ in }
 
@@ -52,12 +48,6 @@ final class TabRouter {
             openShop(week)
         case .shop:
             selection = .shop
-        case .recipeImport:
-            selection = .household
-            householdPath = NavigationPath([RecipeImportRoute()])
-        case .household:
-            selection = .household
-            householdPath = NavigationPath()
         case .notifications:
             showsNotifications = true
         }

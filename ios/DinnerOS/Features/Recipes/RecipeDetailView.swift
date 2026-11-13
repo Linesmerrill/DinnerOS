@@ -100,6 +100,12 @@ struct RecipeDetailView: View {
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 16)
                     }
+                    if let recipe, let url = recipe.sourceURL,
+                        recipe.source == RecipeSourceKey.fromPage || recipe.steps.isEmpty
+                    {
+                        ImportedRecipeBanner(url: url, showsNote: recipe.source == RecipeSourceKey.fromPage)
+                            .padding(.horizontal, 16)
+                    }
                     if let notes = recipe?.myRating?.notesForNextTime, !notes.isEmpty {
                         RecipeNotesForNextTime(notes: notes)
                             .padding(.horizontal, 16)

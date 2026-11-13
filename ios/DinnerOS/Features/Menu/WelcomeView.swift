@@ -5,9 +5,7 @@ import SwiftUI
 struct WelcomeView: View {
     /// Whether the library already has recipes (a new household gets a starter set).
     let hasRecipes: Bool
-    let canImport: Bool
     let canAddRecipe: Bool
-    let serviceName: String
     let choose: (Welcome.Choice) -> Void
 
     var body: some View {
@@ -35,11 +33,6 @@ struct WelcomeView: View {
                     point("frying.pan", "Cook step by step, with timers.")
                 }
                 VStack(spacing: 10) {
-                    if canImport {
-                        option(
-                            "Import My \(serviceName) Recipes", systemImage: "square.and.arrow.down",
-                            detail: "Bring in meals you've ordered.", choice: .importMealKit)
-                    }
                     option(
                         "Browse Shared Recipes", systemImage: "books.vertical",
                         detail: "Add recipes other households share.", choice: .browseShared)
@@ -110,10 +103,10 @@ struct WelcomeView: View {
 }
 
 #Preview("Welcome") {
-    WelcomeView(hasRecipes: true, canImport: true, canAddRecipe: true, serviceName: "HelloFresh") { _ in }
+    WelcomeView(hasRecipes: true, canAddRecipe: true) { _ in }
 }
 
 #Preview("Welcome, empty, large text") {
-    WelcomeView(hasRecipes: false, canImport: true, canAddRecipe: true, serviceName: "HelloFresh") { _ in }
+    WelcomeView(hasRecipes: false, canAddRecipe: true) { _ in }
         .environment(\.dynamicTypeSize, .accessibility2)
 }
