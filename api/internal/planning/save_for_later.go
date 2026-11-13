@@ -131,9 +131,11 @@ func saveForLaterNote(item grocery.Item, recipeID string, meals mealOrder, also 
 		return recipes.SaveForLater{}, false
 	}
 	keys := []string{item.IngredientKey}
+	var partOf []string
 	for _, sh := range mine {
 		if c := sh.Component; c != nil && c.LineKey != "" && !slices.Contains(keys, c.LineKey) {
 			keys = append(keys, c.LineKey)
+			partOf = append(partOf, c.LineKey)
 		}
 	}
 	for _, a := range also {
@@ -171,7 +173,7 @@ func saveForLaterNote(item grocery.Item, recipeID string, meals mealOrder, also 
 	if len(parts) > 1 {
 		short = "Save some for later meals"
 	}
-	return recipes.SaveForLater{Keys: keys, Name: item.Name, Use: use, Text: text, Short: short}, true
+	return recipes.SaveForLater{Keys: keys, PartOf: partOf, Name: item.Name, Use: use, Text: text, Short: short}, true
 }
 
 // mealOrder is each planned recipe's first day and place in the week.

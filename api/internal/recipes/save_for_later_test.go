@@ -80,3 +80,40 @@ func TestSameKeyFoldsNamesLikeTheGroceryList(t *testing.T) {
 		}
 	}
 }
+
+// A house-made blend's spices each come back as their own note, and all of
+// them land on the blend's line: the cook sees the note once.
+func TestSaveForLaterShowsABlendOnce(t *testing.T) {
+	text := "Use 1 tsp. Save 1 tsp for Pita Pockets on Monday."
+	var notes []SaveForLater
+	for _, spice := range []string{"cumin", "oregano", "garlic-powder"} {
+		notes = append(notes, SaveForLater{Keys: []string{spice, "cuban-spice-blend"}, PartOf: []string{"cuban-spice-blend"},
+			Name: "Cuban Spice Blend", Text: text})
+	}
+	notes = append(notes, SaveForLater{Keys: []string{"onion"}, Name: "Onion", Text: "Use 1 Onion. Save 1 Onion for Flautas."})
+	in := Instructions{Ingredients: []IngredientState{
+		{Index: 0, IngredientKey: "onion", Name: "Onion"},
+		{Index: 3, IngredientKey: "cuban-spice-blend", Name: "Cuban Spice Blend"},
+	}}
+	got := saveForLaterResponses(notes, in)
+	if len(got) != 2 {
+		t.Fatalf("notes = %+v, want the blend once and the onion", got)
+	}
+	if got[0].Name != "Cuban Spice Blend" || got[0].IngredientIndex == nil || *got[0].IngredientIndex != 3 {
+		t.Errorf("blend = %+v", got[0])
+	}
+	if got[1].Name != "Onion" {
+		t.Errorf("onion = %+v", got[1])
+	}
+	// Different words for the same line both stay.
+	notes = append(notes, SaveForLater{Keys: []string{"paprika", "cuban-spice-blend"}, PartOf: []string{"cuban-spice-blend"},
+		Name: "Smoked Paprika", Text: "Use 2 tsp."})
+	got = saveForLaterResponses(notes, in)
+	if len(got) != 3 {
+		t.Fatalf("different notes merged: %+v", got)
+	}
+	// A part of the blend keeps its own name on the blend's line.
+	if p := got[2]; p.Name != "Smoked Paprika" || p.IngredientIndex == nil || *p.IngredientIndex != 3 {
+		t.Errorf("part = %+v", p)
+	}
+}

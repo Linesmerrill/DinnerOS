@@ -19,7 +19,11 @@ type SaveForLater struct {
 	// Keys are the grocery keys the ingredient was bought under: its own and
 	// any other name the household linked to it.
 	Keys []string
-	Name string
+	// PartOf are the keys of recipe lines this ingredient is only one part
+	// of, like the cumin in a house-made spice blend. A note found on such a
+	// line keeps its own name.
+	PartOf []string
+	Name   string
 	// Use is this meal's amount ("4 oz"), empty when the recipe gave none.
 	Use string
 	// Text is the whole note: "Use 4 oz. Save 4 oz for Beef Stir Fry on
@@ -56,13 +60,28 @@ func saveForLaterResponses(notes []SaveForLater, in Instructions) []SaveForLater
 			if slices.ContainsFunc(n.Keys, func(k string) bool { return sameKey(k, st.IngredientKey) }) {
 				index := st.Index
 				r.IngredientIndex, r.IngredientKey = &index, st.IngredientKey
-				r.Name = st.Name
+				// The recipe's own word for it, unless the note reached this
+				// line through one part of it: a blend's cumin stays "Cumin".
+				if n.Name == "" || !slices.ContainsFunc(n.PartOf, func(k string) bool { return sameKey(k, st.IngredientKey) }) {
+					r.Name = st.Name
+				}
 				break
 			}
+		}
+		// A house-made blend's spices each come as their own note and all
+		// read as the blend's line: the cook sees it once.
+		if slices.ContainsFunc(out, func(o SaveForLaterResponse) bool {
+			return o.Name == r.Name && o.Text == r.Text && sameIndex(o.IngredientIndex, r.IngredientIndex)
+		}) {
+			continue
 		}
 		out = append(out, r)
 	}
 	return out
+}
+
+func sameIndex(a, b *int) bool {
+	return (a == nil && b == nil) || (a != nil && b != nil && *a == *b)
 }
 
 // sameKey reports whether two ingredient keys are one ingredient. A line

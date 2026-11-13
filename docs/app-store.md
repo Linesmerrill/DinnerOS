@@ -143,5 +143,24 @@ Contact: Merrill's name, phone and email go in App Review Information (not in th
 
 ## Screenshots
 
-Required: 6.9" iPhone (1320 x 2868) and 13" iPad (2064 x 2752), since the app runs on iPad. Up to
-10 each; App Store Connect scales them for smaller devices. See `docs/app-store/` for the set.
+Taken in the simulator with sample data (status bar 9:41, full battery), at the exact sizes App
+Store Connect asks for. Upload in this order.
+
+6.9" iPhone, 1320 x 2868 (`store-screenshots/iphone/`, not in git: they show starter recipe photos):
+
+1. `01-menu.png` This week's dinners
+2. `02-week.png` The week by day
+3. `03-autopilot.png` Autopilot's picks
+4. `04-shop.png` One list, sent to Walmart
+5. `05-recipe.png` A recipe
+6. `06-cook-steps.png` Cooking with a timer running
+7. `07-timer.png` Setting a timer
+8. `08-your-plus.png` Your Plus
+
+13" iPad, 2752 x 2064 landscape (`store-screenshots/ipad/`):
+
+1. `01-menu.png` This week's dinners
+2. `02-recipe.png` A recipe
+3. `03-cook.png` Ingredients and steps side by side
+
+Plus review screenshots: `plus-review-yearly.png`, `plus-review-monthly.png`.

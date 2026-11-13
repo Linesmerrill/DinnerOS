@@ -75,3 +75,6 @@ ios/fastlane/README.md
 node_modules/
 vendor/bundle/
 .bundle/
+
+# App Store screenshots show imported recipe photos: kept on this Mac, never pushed.
+/store-screenshots/

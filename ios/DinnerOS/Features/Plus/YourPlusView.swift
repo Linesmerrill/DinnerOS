@@ -287,6 +287,8 @@ struct GiftBoxes: View {
                         .foregroundStyle(i < earned ? AnyShapeStyle(.tint) : AnyShapeStyle(.tertiary))
                 }
             }
+            // Twelve boxes read as a set, not a row spread across an iPad.
+            .frame(maxWidth: 340, alignment: .leading)
             Text("\(earned) of \(cap) free months earned")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
