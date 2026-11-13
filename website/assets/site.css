@@ -408,3 +408,12 @@ a:hover { text-decoration-thickness: 2px; }
 .site-footer p { margin: 0; }
 
 @media (prefers-reduced-motion: reduce) { .button, .menu-button svg path { transition: none; } }
+
+/* Small touches for classes the home page uses. */
+.hero-copy { min-width: 0; }
+.days .busy b { color: #2e7d46; }
+.prices .best b { color: #2e7d46; }
+.card.send { border-top: 4px solid var(--tomato); }
+.card.cook { border-top: 4px solid var(--plum); }
+.card.list { border-top: 4px solid var(--saffron); }
+.card.house { border-top: 4px solid var(--leaf); }

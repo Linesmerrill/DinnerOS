@@ -61,6 +61,12 @@ ios-test: ## Run iOS unit tests on the simulator
 	xcodebuild -project $(IOS_DIR)/DinnerOS.xcodeproj -scheme $(IOS_SCHEME) -destination '$(IOS_DESTINATION)' test CODE_SIGNING_ALLOWED=NO
 
 .PHONY: docs-check
+website-assets: ## Fingerprint the website's CSS and JS after editing them
+	python3 scripts/website-assets.py
+
+website-check: ## Fail if a website page links an old CSS or JS file
+	python3 scripts/website-assets.py --check
+
 docs-check: ## Check the decision log for reused row numbers
 	./scripts/check-decision-rows.sh
 

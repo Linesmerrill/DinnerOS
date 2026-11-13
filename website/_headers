@@ -4,15 +4,20 @@
   X-Frame-Options: DENY
   Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
   Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Cache-Control: no-cache
 
-/assets/*.png
-  Cache-Control: public, max-age=86400
-
+# Fingerprinted by scripts/website-assets.py: a new file name on every change.
 /assets/*.css
-  Cache-Control: public, max-age=0, must-revalidate
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
 
 /assets/*.js
-  Cache-Control: public, max-age=0, must-revalidate
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*.png
+  ! Cache-Control
+  Cache-Control: public, max-age=86400
 
 https://:project.pages.dev/*
   X-Robots-Tag: noindex
