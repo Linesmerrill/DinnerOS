@@ -467,3 +467,36 @@ func TestIntegrationReferralMongoStores(t *testing.T) {
 		t.Errorf("purged free = %v", u)
 	}
 }
+
+// With Plus off, a test household still sees Plus and its paywall, and
+// everyone else keeps everything open.
+func TestTestHouseholds(t *testing.T) {
+	s := NewService(newMemoryStore(), false).
+		WithReferrals(&memoryFree{m: map[string]time.Time{}}, &memoryReferrals{codes: map[string]string{}}).
+		WithTestHouseholds([]string{hh})
+	ctx := context.Background()
+	if st, err := s.Status(ctx, hh); err != nil || !st.Enabled || st.Active {
+		t.Errorf("tester status = %+v, %v; want enabled, not active", st, err)
+	}
+	if st, err := s.Status(ctx, hhB); err != nil || st.Enabled {
+		t.Errorf("other status = %+v, %v; want off", st, err)
+	}
+	if _, err := s.Referral(ctx, hh); err != nil {
+		t.Errorf("tester referral: %v", err)
+	}
+	if _, err := s.Referral(ctx, hhB); !errors.Is(err, ErrReferralsOff) {
+		t.Errorf("other referral err = %v, want off", err)
+	}
+
+	r := chi.NewRouter()
+	r.With(Require(s, nil)).Get("/households/{householdId}/x", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	for id, want := range map[string]int{hh: http.StatusPaymentRequired, hhB: http.StatusNoContent} {
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/households/"+id+"/x", nil))
+		if rec.Code != want {
+			t.Errorf("%s: status %d, want %d", id, rec.Code, want)
+		}
+	}
+}

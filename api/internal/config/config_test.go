@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"log/slog"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -124,6 +125,8 @@ func TestLoadEmail(t *testing.T) {
 		{name: "website URL", env: map[string]string{"WEBSITE_URL": "https://dinneros.app/"}, wantProvider: EmailProviderLog},
 		{name: "website URL over http", env: map[string]string{"WEBSITE_URL": "http://dinneros.app"}, wantErr: "WEBSITE_URL"},
 		{name: "website URL with a path", env: map[string]string{"WEBSITE_URL": "https://dinneros.app/home"}, wantErr: "WEBSITE_URL"},
+		{name: "plus test households", env: map[string]string{"PLUS_TEST_HOUSEHOLDS": " 6af70f85f009186daa3236f7, 6AF70F85F009186DAA3236F8 ,"}, wantProvider: EmailProviderLog},
+		{name: "plus test household not an ID", env: map[string]string{"PLUS_TEST_HOUSEHOLDS": "my-house"}, wantErr: "PLUS_TEST_HOUSEHOLDS"},
 		{name: "custom invite URL", env: map[string]string{"APP_INVITE_URL_BASE": "https://example.com/invite?token="}, wantProvider: EmailProviderLog},
 		{name: "relative invite URL", env: map[string]string{"APP_INVITE_URL_BASE": "/invite?token="}, wantErr: "APP_INVITE_URL_BASE"},
 		{name: "script invite URL", env: map[string]string{"APP_INVITE_URL_BASE": "javascript:alert(1)//"}, wantErr: "APP_INVITE_URL_BASE"},
@@ -476,5 +479,16 @@ func TestLoadInstacart(t *testing.T) {
 		if _, err := Load(env(values)); err == nil || !strings.Contains(err.Error(), "INSTACART_") {
 			t.Errorf("%s: Load() error = %v", name, err)
 		}
+	}
+}
+
+func TestPlusTestHouseholds(t *testing.T) {
+	cfg, err := Load(env(map[string]string{"PLUS_TEST_HOUSEHOLDS": " 6af70f85f009186daa3236f7, 6AF70F85F009186DAA3236F8 ,"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"6af70f85f009186daa3236f7", "6af70f85f009186daa3236f8"}
+	if !slices.Equal(cfg.Plus.TestHouseholds, want) || cfg.Plus.Enabled {
+		t.Errorf("plus = %+v, want test households %v with Plus off", cfg.Plus, want)
 	}
 }

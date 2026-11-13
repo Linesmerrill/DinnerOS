@@ -222,7 +222,8 @@ func run() error {
 		Logger:     logger,
 	})
 	plusService := plus.NewService(plus.NewMongoStore(db.Database()), cfg.Plus.Enabled).
-		WithReferrals(plus.NewMongoFreeTime(db.Database()), plus.NewMongoReferrals(db.Database()))
+		WithReferrals(plus.NewMongoFreeTime(db.Database()), plus.NewMongoReferrals(db.Database())).
+		WithTestHouseholds(cfg.Plus.TestHouseholds)
 	requirePlus := plus.Require(plusService, logger)
 	plusHandler := plus.NewHandler(plus.HandlerOptions{
 		Service:    plusService,

@@ -181,11 +181,12 @@ func Require(s *Service, logger *slog.Logger) func(http.Handler) http.Handler {
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if s == nil || !s.Enabled() {
+			householdID := chi.URLParam(r, households.HouseholdIDParam)
+			if s == nil || !s.EnabledFor(householdID) {
 				next.ServeHTTP(w, r)
 				return
 			}
-			ok, err := s.HasPlus(r.Context(), chi.URLParam(r, households.HouseholdIDParam))
+			ok, err := s.HasPlus(r.Context(), householdID)
 			if err != nil {
 				logger.ErrorContext(r.Context(), "plus check failed", "error", err)
 				httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "Something went wrong. Try again.")

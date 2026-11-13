@@ -170,6 +170,9 @@ type Plus struct {
 	// WebhookSecret is the Authorization header value set on the RevenueCat
 	// webhook. A secret: never log it. Empty turns the webhook off.
 	WebhookSecret string
+	// TestHouseholds are household IDs Plus is on for while Enabled is false
+	// (PLUS_TEST_HOUSEHOLDS, comma-separated), for trying purchases.
+	TestHouseholds []string
 }
 
 // Instacart holds the Instacart Developer Platform key. The key is a
@@ -461,6 +464,16 @@ func loadShopping(cfg *Config, get func(key, fallback string) string) []error {
 	if s := cfg.Plus.WebhookSecret; s != "" && len(s) < 24 {
 		cfg.Plus.WebhookSecret = ""
 		errs = append(errs, errors.New("REVENUECAT_WEBHOOK_SECRET must be at least 24 characters (openssl rand -hex 24)"))
+	}
+	for _, id := range strings.Split(get("PLUS_TEST_HOUSEHOLDS", ""), ",") {
+		if id = strings.ToLower(strings.TrimSpace(id)); id == "" {
+			continue
+		}
+		if !objectIDPattern.MatchString(id) {
+			errs = append(errs, fmt.Errorf("PLUS_TEST_HOUSEHOLDS must be household IDs separated by commas, got %q", id))
+			continue
+		}
+		cfg.Plus.TestHouseholds = append(cfg.Plus.TestHouseholds, id)
 	}
 	for _, flag := range []struct {
 		name string

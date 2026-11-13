@@ -88,10 +88,28 @@ type Service struct {
 	now       func() time.Time
 	free      FreeTimeStore
 	referrals ReferralStore
+	// testers are households Plus is on for while it's off for everyone
+	// else (PLUS_TEST_HOUSEHOLDS), so a TestFlight purchase can be tried.
+	testers map[string]bool
 }
 
 // Enabled reports whether Plus is switched on (PLUS_ENABLED).
 func (s *Service) Enabled() bool { return s.enabled }
+
+// EnabledFor reports whether Plus is on for the household: for everyone with
+// PLUS_ENABLED, or for a test household.
+func (s *Service) EnabledFor(householdID string) bool {
+	return s.enabled || s.testers[householdID]
+}
+
+// WithTestHouseholds turns Plus on for these households only. It returns s.
+func (s *Service) WithTestHouseholds(ids []string) *Service {
+	s.testers = make(map[string]bool, len(ids))
+	for _, id := range ids {
+		s.testers[id] = true
+	}
+	return s
+}
 
 // NewService returns the service. enabled is PLUS_ENABLED.
 func NewService(store Store, enabled bool) *Service {
@@ -100,7 +118,7 @@ func NewService(store Store, enabled bool) *Service {
 
 // Status returns a household's Plus.
 func (s *Service) Status(ctx context.Context, householdID string) (Status, error) {
-	out := Status{Enabled: s.enabled}
+	out := Status{Enabled: s.EnabledFor(householdID)}
 	now := s.now()
 	if s.free != nil {
 		until, err := s.free.FreeUntil(ctx, householdID)

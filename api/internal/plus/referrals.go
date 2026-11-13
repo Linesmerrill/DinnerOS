@@ -127,7 +127,7 @@ type ReferralInfo struct {
 
 // Referral returns the household's code and what it has earned.
 func (s *Service) Referral(ctx context.Context, householdID string) (ReferralInfo, error) {
-	if !s.enabled || s.referrals == nil {
+	if !s.EnabledFor(householdID) || s.referrals == nil {
 		return ReferralInfo{}, ErrReferralsOff
 	}
 	code, err := s.referrals.Code(ctx, householdID, NewCode)
@@ -143,7 +143,7 @@ func (s *Service) Referral(ctx context.Context, householdID string) (ReferralInf
 
 // Redeem gives householdID and the code's owner a free month each.
 func (s *Service) Redeem(ctx context.Context, householdID, code string) (Status, error) {
-	if !s.enabled || s.referrals == nil || s.free == nil {
+	if !s.EnabledFor(householdID) || s.referrals == nil || s.free == nil {
 		return Status{}, ErrReferralsOff
 	}
 	code = NormalizeCode(code)
