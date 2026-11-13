@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/providers"
 )
@@ -82,5 +83,45 @@ func TestIntegrationWalmartAffiliateLinks(t *testing.T) {
 				t.Errorf("tracked=%v: link %s", tracked, u)
 			}
 		}
+	}
+}
+
+// A send records what its lines cost at the household's saved prices, for
+// the average cart value per store (decision 674); unpriced lines add nothing.
+func TestIntegrationSendRecordsItsEstimatedValue(t *testing.T) {
+	f := newFixture(t)
+	price := int64(599)
+	if _, _, err := f.svc.PutPreference(f.ctx, f.actor, "walmart", f.keys["Ground Beef"], PreferenceInput{
+		ProductURL: "123456789", DisplayName: "Ground Beef", PackageSize: &PackageSize{Quantity: "16", Unit: "oz"},
+		SetPrice: true, PriceCents: &price,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := f.svc.PutPreference(f.ctx, f.actor, "walmart", f.keys["Kidney Beans"], PreferenceInput{
+		ProductURL: "100000005", DisplayName: "Kidney Beans", PackageSize: &PackageSize{Quantity: "1", Unit: "can"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h, _, err := f.svc.CreateHandoff(f.ctx, f.actor, testWeek, "walmart", MatchInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	beef, ok := h.Line(h.Lines[0].ID)
+	for _, l := range h.Lines {
+		if l.Name == "Ground Beef" {
+			beef, ok = l, true
+		}
+	}
+	if !ok {
+		t.Fatal("no beef line")
+	}
+	var p events.ShoppingHandoffCreated
+	for _, e := range f.events.list {
+		if got, isSend := e.Payload.(events.ShoppingHandoffCreated); isSend {
+			p = got
+		}
+	}
+	if p.PricedLines != 1 || p.EstimatedCents != price*int64(beef.Packages) {
+		t.Errorf("estimate = %d cents over %d lines; want %d over 1", p.EstimatedCents, p.PricedLines, price*int64(beef.Packages))
 	}
 }

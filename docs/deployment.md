@@ -420,3 +420,10 @@ vars or GitHub Secrets.
 | `TESTFLIGHT_ENABLED` | variable | Set to `true` once the setup above is complete |
 | `TESTFLIGHT_EXTERNAL_GROUPS` | variable | Optional. Comma-separated external TestFlight group names (e.g. `Friends & Family`). When set, every main build is also distributed to those groups and submitted for Beta App Review, with the commit subject as "What to Test". The job then waits for build processing, so it takes longer. Empty keeps builds internal-only. |
 | `PRODUCTION_API_BASE_URL` | variable | The production API URL, e.g. `https://<app>.herokuapp.com` |
+
+## Weekly numbers
+
+`heroku run /metrics -weeks 8 -a dinneros-api` prints each week's active
+households, carts sent, and average cart value per store (decision 674). It
+only reads the events collection. Cart value is the household's saved package
+prices for what was sent; stores with no saved prices show "no prices".

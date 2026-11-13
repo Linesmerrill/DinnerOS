@@ -859,6 +859,31 @@ func listAmounts(l HandoffLine) []ingredients.Amount {
 	return needsOf(l.Amounts)
 }
 
+// estimateSend prices a send's lines at the household's saved package prices:
+// the cart value analytics reads (decision 674). Lines without a saved price
+// are left out and counted as unpriced; a failed lookup estimates nothing.
+func (s *Service) estimateSend(ctx context.Context, h Handoff, lines []HandoffLine) (int64, int) {
+	prefs, err := s.store.ListPreferences(ctx, h.HouseholdID, h.Provider)
+	if err != nil {
+		return 0, 0
+	}
+	price := make(map[string]int64, len(prefs))
+	for _, p := range prefs {
+		if p.PriceCents != nil && *p.PriceCents > 0 {
+			price[p.ProductID] = *p.PriceCents
+		}
+	}
+	var total int64
+	priced := 0
+	for _, l := range lines {
+		if cents, ok := price[l.ProductID]; ok && l.ProductID != "" && l.Packages > 0 {
+			total += cents * int64(l.Packages)
+			priced++
+		}
+	}
+	return total, priced
+}
+
 // recordReportedChecks validates the app's checks and records them on the
 // household's saved products.
 func (s *Service) recordReportedChecks(ctx context.Context, householdID, provider string, reports []ProductCheckReport) error {
@@ -883,6 +908,7 @@ func (s *Service) recordSend(ctx context.Context, actor households.Membership, h
 	payload := events.ShoppingHandoffCreated{
 		HandoffID: h.ID, Provider: string(h.Provider), Lines: len(lines), Packages: packages, Excluded: len(h.Excluded), Links: len(h.Links),
 	}
+	payload.EstimatedCents, payload.PricedLines = s.estimateSend(ctx, h, lines)
 	for _, l := range lines {
 		if l.Reason != "" {
 			payload.CheckAmount++

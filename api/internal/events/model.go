@@ -379,6 +379,12 @@ type ShoppingHandoffCreated struct {
 	// Excluded counts grocery lines left out of the links.
 	Excluded int `json:"excluded" bson:"excluded"`
 	Links    int `json:"links" bson:"links"`
+	// EstimatedCents is what the send's priced lines cost at the household's
+	// saved package prices, in US cents; PricedLines counts the lines that
+	// had a price. Both are zero when nothing was priced (an Instacart page
+	// is priced by Instacart). Used for average cart value per store.
+	EstimatedCents int64 `json:"estimatedCents,omitempty" bson:"estimatedCents,omitempty"`
+	PricedLines    int   `json:"pricedLines,omitempty" bson:"pricedLines,omitempty"`
 }
 
 // ShoppingOrderConfirmed is the payload of shopping.order_confirmed: what a
