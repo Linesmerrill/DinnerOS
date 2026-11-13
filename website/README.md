@@ -9,7 +9,7 @@ Cloudflare Pages settings:
 - Build output directory: `website`
 - Root directory: repo root
 
-`_headers` sets security headers and caching. `404.html` is served for missing pages.
+`_headers` sets security headers and caching. CSS and JS are linked with `?v=<timestamp>`: bump it on every page when either file changes, or phones keep the old file. `404.html` is served for missing pages.
 Each page repeats the same header and footer, so a nav change touches every page. On phones the
 nav is a `<details>` Menu, so it works without scripts (the CSP blocks them).
 
