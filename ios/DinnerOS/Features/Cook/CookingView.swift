@@ -11,6 +11,8 @@ struct CookMeal: Identifiable, Hashable {
     let servings: Int?
     /// The meal's protein swaps, so the steps name what's being cooked.
     var swaps: [PlanEntryCustomization] = []
+    /// The week it's planned in, so what's skipped just this once is left out of the steps.
+    var week: ISOWeek? = nil
 }
 
 /// The screen for cooking: the ingredients as a checklist and the steps side by side on an iPad,
@@ -271,7 +273,7 @@ struct CookingView: View {
                 meal?.servings
                 ?? recipe.preferredServings(householdDefault: households.current?.household.defaultServings)
             let instructions = try? await library.instructions(
-                recipeID: id, servings: servings, swaps: meal?.swaps ?? [])
+                recipeID: id, servings: servings, swaps: meal?.swaps ?? [], week: meal?.week)
             dishes[id] = CookDish(recipe: recipe, servings: servings, instructions: instructions)
         } catch is CancellationError {
             return

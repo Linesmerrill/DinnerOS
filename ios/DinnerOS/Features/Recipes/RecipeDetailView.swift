@@ -371,7 +371,8 @@ struct RecipeDetailView: View {
             case .ingredients:
                 RecipeIngredientsSection(
                     recipe: recipe, servings: $servings, instructions: instructions, canEdit: canLeaveOut,
-                    working: leavingOut, leaveOut: leaveOut(_:scope:), putBack: putBack(_:))
+                    canSkipOnce: plannedWeek != nil, working: leavingOut, leaveOut: leaveOut(_:choice:),
+                    putBack: putBack(_:))
             case .nutrition:
                 RecipeNutritionSection(recipe: recipe)
             }
@@ -400,7 +401,12 @@ struct RecipeDetailView: View {
         return CookMeal(
             id: entry?.id ?? summary.id, recipeID: summary.id, name: name,
             imageURL: recipe?.imageURL ?? summary.imageURL, dayText: entry?.day?.name(), servings: servings,
-            swaps: entry?.customizations ?? [])
+            swaps: entry?.customizations ?? [], week: plannedWeek)
+    }
+
+    /// The shown week when this recipe is planned in it: what "just this once" applies to.
+    private var plannedWeek: ISOWeek? {
+        plannedEntries.isEmpty ? nil : plans.week
     }
 
     /// The week's planned dishes, for the cooking screen's switcher, in day order.
@@ -413,7 +419,7 @@ struct RecipeDetailView: View {
             return CookMeal(
                 id: entry.id, recipeID: entry.recipe.id, name: entry.recipe.name, imageURL: entry.recipe.imageURL,
                 dayText: entry.day?.name(), servings: isThis ? servings : entry.servings,
-                swaps: entry.customizations)
+                swaps: entry.customizations, week: plans.week)
         }
     }
 
@@ -449,14 +455,15 @@ struct RecipeDetailView: View {
         guard recipe != nil else { return }
         instructions =
             (try? await library.instructions(
-                recipeID: summary.id, servings: servings, swaps: plannedEntries.last?.customizations ?? []))
+                recipeID: summary.id, servings: servings, swaps: plannedEntries.last?.customizations ?? [],
+                week: plannedWeek))
             ?? instructions
     }
 
-    /// Leaves an ingredient out of this recipe ("just this dish") or out of every recipe, then
-    /// reloads the steps so it's struck through here and in them.
-    private func leaveOut(_ state: RecipeIngredientState, scope: GrocerySkipScope) {
-        guard let request = state.leaveOutRequest(scope: scope, recipeID: summary.id) else { return }
+    /// Leaves an ingredient out of this week's meal, this recipe every time, or every recipe,
+    /// then reloads the steps so it's struck through here and in them.
+    private func leaveOut(_ state: RecipeIngredientState, choice: IngredientLeaveOut) {
+        guard let request = state.leaveOutRequest(choice, recipeID: summary.id, week: plannedWeek) else { return }
         changeLeftOut(state) {
             try await grocerySkips.skip(request, householdID: households.current?.household.id)
         }

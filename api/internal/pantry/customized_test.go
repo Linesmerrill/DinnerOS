@@ -113,7 +113,7 @@ type fakeLeftOut struct {
 	err      error
 }
 
-func (f *fakeLeftOut) RecipeLeftOut(_ context.Context, _, recipeID string) (grocery.LeftOutSet, error) {
+func (f *fakeLeftOut) RecipeLeftOut(_ context.Context, _, recipeID, _ string) (grocery.LeftOutSet, error) {
 	if f.err != nil {
 		return nil, f.err
 	}

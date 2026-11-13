@@ -163,11 +163,41 @@ type fakeLeftOut struct {
 	set      grocery.LeftOutSet
 	failWith error
 	asked    []string
+	weeks    []string
 }
 
-func (f *fakeLeftOut) RecipeLeftOut(_ context.Context, householdID, recipeID string) (grocery.LeftOutSet, error) {
+func (f *fakeLeftOut) RecipeLeftOut(_ context.Context, householdID, recipeID, week string) (grocery.LeftOutSet, error) {
 	f.asked = append(f.asked, householdID+"/"+recipeID)
+	f.weeks = append(f.weeks, week)
 	return f.set, f.failWith
+}
+
+// The meal's week reaches the skips, so a skip for just this week shows; the
+// response says it's for this time only (decision 668).
+func TestInstructionsPassTheMealsWeek(t *testing.T) {
+	leftOut := &fakeLeftOut{set: grocery.LeftOutSet{"name:gochujang": {SkipID: "skip-g", Scope: grocery.SkipRecipe, Once: true}}}
+	srv := newRecipeTestServer(t, func(o *HandlerOptions) { o.LeftOut = leftOut })
+	srv.do(t, http.MethodPost, recipesPath(hhAda)+"/import", mustJSON(t, instructionsFixture()), userAda)
+	id := recipeIDFor(t, srv, "Gochujang Bowl")
+	path := recipesPath(hhAda) + "/" + id + "/instructions"
+	resp := decodeBody[InstructionsResponse](t, srv.do(t, http.MethodGet, path+"?week=2026-W46", "", userAda))
+	srv.do(t, http.MethodGet, path+"?week=soon", "", userAda)
+	srv.do(t, http.MethodGet, path, "", userAda)
+	if len(leftOut.weeks) != 3 || leftOut.weeks[0] != "2026-W46" || leftOut.weeks[1] != "" || leftOut.weeks[2] != "" {
+		t.Errorf("weeks = %q", leftOut.weeks)
+	}
+	found := false
+	for _, ing := range resp.Ingredients {
+		if ing.LeftOut != nil {
+			found = true
+			if !ing.LeftOut.Once {
+				t.Errorf("left out = %+v, want once", ing.LeftOut)
+			}
+		}
+	}
+	if !found {
+		t.Error("no ingredient left out")
+	}
 }
 
 func TestInstructionsMarkWhatTheHouseholdLeavesOut(t *testing.T) {

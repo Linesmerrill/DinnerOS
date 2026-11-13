@@ -44,7 +44,7 @@ final class OfflinePrefetch {
             for entry in plan.entries where seen.insert(entry.recipe.id).inserted {
                 _ = try? await library.recipe(id: entry.recipe.id, reload: true)
                 _ = try? await library.instructions(
-                    recipeID: entry.recipe.id, servings: entry.servings, swaps: entry.customizations)
+                    recipeID: entry.recipe.id, servings: entry.servings, swaps: entry.customizations, week: week)
             }
         }
         await pantry.refresh()

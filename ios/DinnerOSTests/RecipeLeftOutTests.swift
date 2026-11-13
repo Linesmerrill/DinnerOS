@@ -83,11 +83,28 @@ struct RecipeLeftOutTests {
             RecipeIngredientStates.make(lines: [line(0, "Coconut Milk")], instructions: instructions).first)
 
         #expect(
-            coconut.leaveOutRequest(scope: .recipe, recipeID: "r1")
+            coconut.leaveOutRequest(.thisDish, recipeID: "r1")
                 == .leaveOut(ingredientKey: "i-coconut", name: "Coconut Milk", recipeID: "r1"))
         #expect(
-            coconut.leaveOutRequest(scope: .always, recipeID: "r1")
+            coconut.leaveOutRequest(.everyDish, recipeID: "r1")
                 == .always(ingredientKey: "i-coconut", name: "Coconut Milk"))
-        #expect(coconut.leaveOutRequest(scope: .week, recipeID: "r1") == nil)
+        // Just this once needs the week the meal is planned in.
+        #expect(coconut.leaveOutRequest(.thisOnce, recipeID: "r1") == nil)
+        let week = try #require(ISOWeek("2026-W46"))
+        let once = try #require(coconut.leaveOutRequest(.thisOnce, recipeID: "r1", week: week))
+        #expect(once.scope == .recipe && once.recipeID == "r1" && once.week == "2026-W46")
+    }
+
+    @Test func aSkipForThisWeekReadsAsThisTime() throws {
+        let json = Data(#"{"skipId":"s1","scope":"recipe","once":true}"#.utf8)
+        let leftOut = try JSONDecoder().decode(InstructionLeftOut.self, from: json)
+        #expect(leftOut.isOnce)
+        let state = RecipeIngredientState(
+            line: line(0, "Sour Cream"), ingredientKey: "k", leftOut: leftOut, component: nil)
+        #expect(state.leftOutText == "Skipped this time")
+        let lasting = RecipeIngredientState(
+            line: line(0, "Sour Cream"), ingredientKey: "k", leftOut: InstructionLeftOut(skipID: "s1", scope: .recipe),
+            component: nil)
+        #expect(lasting.leftOutText == "Skipped in this dish")
     }
 }

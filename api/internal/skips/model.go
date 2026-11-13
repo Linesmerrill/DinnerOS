@@ -78,7 +78,8 @@ const (
 	// planned, while other recipes still get it. It is per recipe rather than
 	// per planned meal because a household re-plans the dishes it likes: a
 	// preference about the curry that had to be repeated every week would not
-	// be a preference.
+	// be a preference. With a Week it is "just this once": out of that
+	// recipe for that week only (decision 668).
 	ScopeRecipe Scope = "recipe"
 )
 
@@ -118,9 +119,10 @@ type Skip struct {
 	// the recipe is gone.
 	RecipeID   string
 	RecipeName string
-	// Week is the ISO week a ScopeWeek skip applies to ("2026-W38"), and is
-	// empty for ScopeAlways. A week-scoped skip for a past week simply stops
-	// matching; nothing is deleted behind the household's back.
+	// Week is the ISO week a ScopeWeek skip applies to ("2026-W38"), or the
+	// one week a ScopeRecipe skip covers ("just this once"), and is empty for
+	// ScopeAlways and a lasting recipe skip. A skip for a past week simply
+	// stops matching; nothing is deleted behind the household's back.
 	Week      string
 	CreatedBy string
 	CreatedAt time.Time
@@ -147,10 +149,15 @@ func (s Skip) Keys() []string {
 	return keys
 }
 
+// Once reports whether the skip leaves the ingredient out of its recipe for
+// one week only.
+func (s Skip) Once() bool { return s.Scope == ScopeRecipe && s.Week != "" }
+
 // AppliesTo reports whether the skip applies to week's list. An always-skip
-// and a recipe skip apply to every week; a week-skip only to its own.
+// and a lasting recipe skip apply to every week; a week-skip and a recipe skip
+// for one week only to their own.
 func (s Skip) AppliesTo(week string) bool {
-	if s.Scope == ScopeAlways || s.Scope == ScopeRecipe {
+	if s.Scope == ScopeAlways || s.Scope == ScopeRecipe && s.Week == "" {
 		return true
 	}
 	return s.Week != "" && s.Week == week
@@ -162,10 +169,14 @@ func (s Skip) Text() string {
 	case ScopeAlways:
 		return "Never buying this"
 	case ScopeRecipe:
+		text := "Skipped in one recipe"
 		if s.RecipeName != "" {
-			return "Skipped in " + s.RecipeName
+			text = "Skipped in " + s.RecipeName
 		}
-		return "Skipped in one recipe"
+		if s.Once() {
+			text += " this week"
+		}
+		return text
 	}
 	return "Skipped this week"
 }
@@ -179,7 +190,8 @@ type Input struct {
 	// from a key the catalog doesn't resolve, since nothing else can name it.
 	Name  string
 	Scope Scope
-	// Week is required for ScopeWeek and must be empty otherwise.
+	// Week is required for ScopeWeek, optional for ScopeRecipe (just that
+	// week), and must be empty for ScopeAlways.
 	Week string
 	// RecipeID is required for ScopeRecipe and must be empty otherwise. The
 	// recipe must be the household's.
@@ -211,8 +223,8 @@ func (in Input) normalize() (Input, string, error) {
 		return Input{}, "", invalid("name must be at most %d characters", MaxNameLength)
 	case in.Scope == ScopeWeek && in.Week == "":
 		return Input{}, "", invalid("week is required when scope is week")
-	case in.Scope != ScopeWeek && in.Week != "":
-		return Input{}, "", invalid("week must be empty unless scope is week")
+	case in.Scope == ScopeAlways && in.Week != "":
+		return Input{}, "", invalid("week must be empty when scope is always")
 	case in.Scope == ScopeRecipe && in.RecipeID == "":
 		return Input{}, "", invalid("recipeId is required when scope is recipe")
 	case in.Scope != ScopeRecipe && in.RecipeID != "":

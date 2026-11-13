@@ -28,7 +28,7 @@ func (s *Service) SetCookAdjuster(a CookAdjuster) *Service {
 // it (package skips): the ingredients it skipped for that recipe or for every
 // recipe. A week skip is about buying and doesn't count.
 type LeftOutSource interface {
-	RecipeLeftOut(ctx context.Context, householdID, recipeID string) (grocery.LeftOutSet, error)
+	RecipeLeftOut(ctx context.Context, householdID, recipeID, week string) (grocery.LeftOutSet, error)
 }
 
 // SetLeftOut makes cook deductions skip the ingredients the household leaves
@@ -39,13 +39,14 @@ func (s *Service) SetLeftOut(l LeftOutSource) *Service {
 	return s
 }
 
-// withoutLeftOut drops the ingredients the household leaves out of r. A
-// failure fails the deduction, for the same reason adjustCooked does.
-func (s *Service) withoutLeftOut(ctx context.Context, householdID string, r recipes.Recipe) (recipes.Recipe, error) {
+// withoutLeftOut drops the ingredients the household leaves out of r when
+// it's cooked in week, a skip for just that week included. A failure fails
+// the deduction, for the same reason adjustCooked does.
+func (s *Service) withoutLeftOut(ctx context.Context, householdID, week string, r recipes.Recipe) (recipes.Recipe, error) {
 	if s.leftOut == nil {
 		return r, nil
 	}
-	set, err := s.leftOut.RecipeLeftOut(ctx, householdID, r.ID)
+	set, err := s.leftOut.RecipeLeftOut(ctx, householdID, r.ID, week)
 	if err != nil {
 		return recipes.Recipe{}, fmt.Errorf("load left-out ingredients: %w", err)
 	}
@@ -75,4 +76,14 @@ func (s *Service) adjustCooked(ctx context.Context, m CookedMeal, r recipes.Reci
 		return recipes.Recipe{}, fmt.Errorf("apply meal customizations: %w", err)
 	}
 	return adjusted, nil
+}
+
+// cookedWeek is the ISO week a meal was cooked in ("2026-W46"), or "" without a
+// time.
+func cookedWeek(at time.Time) string {
+	if at.IsZero() {
+		return ""
+	}
+	year, week := at.UTC().ISOWeek()
+	return fmt.Sprintf("%04d-W%02d", year, week)
 }

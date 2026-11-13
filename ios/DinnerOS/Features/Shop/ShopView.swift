@@ -1100,8 +1100,10 @@ private struct ShopComponentHeader: View {
                 Menu {
                     Section("Don't Make \(component.name)") {
                         // A taste preference about this dish, so that's the first choice.
-                        Button("Not for This Dish", systemImage: "fork.knife") { leaveOut(.recipe) }
-                        Button("Never Make It", systemImage: "nosign") { leaveOut(.always) }
+                        Button("This Dish, Always", systemImage: "fork.knife") { leaveOut(.recipe) }
+                    }
+                    Section {
+                        Button("Never Make It", systemImage: "nosign", role: .destructive) { leaveOut(.always) }
                     }
                 } label: {
                     Image(systemName: "minus.circle")

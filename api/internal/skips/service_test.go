@@ -114,7 +114,7 @@ func TestSetSkipValidates(t *testing.T) {
 		{"always scope with a week", Input{IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeAlways, Week: "2026-W38"}},
 		{"catalog key without a name", Input{IngredientKey: "66e5a1f2c3b4a5d6e7f82001", Scope: ScopeAlways}},
 		{"recipe scope without a recipe", Input{IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeRecipe}},
-		{"recipe scope with a week", Input{IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeRecipe, RecipeID: testRecipe, Week: "2026-W38"}},
+		{"always scope with a week", Input{IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeAlways, Week: "2026-W38"}},
 		{"always scope with a recipe", Input{IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeAlways, RecipeID: testRecipe}},
 		{"a recipe outside the household", Input{IngredientKey: "name:cilantro", Name: "Cilantro", Scope: ScopeRecipe, RecipeID: otherRecipe}},
 	}
@@ -378,7 +378,7 @@ func TestRecipeLeftOutIsTheRecipesAndAlwaysSkips(t *testing.T) {
 	dill := mustSet(t, svc, Input{IngredientKey: "name:dill", Name: "Dill", Scope: ScopeAlways})
 	mustSet(t, svc, Input{IngredientKey: "name:lime", Name: "Lime", Scope: ScopeWeek, Week: "2026-W38"})
 
-	set, err := svc.RecipeLeftOut(ctx, testHousehold, testRecipe)
+	set, err := svc.RecipeLeftOut(ctx, testHousehold, testRecipe, "2026-W38")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,6 +393,50 @@ func TestRecipeLeftOutIsTheRecipesAndAlwaysSkips(t *testing.T) {
 	}
 	if _, ok := set.Lookup("name:lime"); ok {
 		t.Error("a week skip is about buying, not cooking, and must not be left out of the recipe")
+	}
+}
+
+// "Just this once": a recipe skip with a week leaves the sour cream out of
+// that week's curry only, on the list and in the steps; next week it's back
+// (decision 668).
+func TestARecipeSkipForOneWeek(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newTestService(t, nil)
+	once := mustSet(t, svc, Input{IngredientKey: "name:sour cream", Name: "Sour Cream", Scope: ScopeRecipe, RecipeID: testRecipe, Week: "2026-W46"})
+	if !once.Once() || once.Week != "2026-W46" || once.Text() != "Skipped in "+once.RecipeName+" this week" {
+		t.Errorf("once = %+v, text %q", once, once.Text())
+	}
+	set, err := svc.RecipeLeftOut(ctx, testHousehold, testRecipe, "2026-W46")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lo, ok := set.Lookup("name:sour cream"); !ok || !lo.Once || lo.Scope != grocery.SkipRecipe {
+		t.Errorf("this week = %+v, %v", lo, ok)
+	}
+	for _, week := range []string{"2026-W47", ""} {
+		if set, _ := svc.RecipeLeftOut(ctx, testHousehold, testRecipe, week); len(set) != 0 {
+			t.Errorf("week %q left out %v", week, set)
+		}
+	}
+	rules, _ := svc.GrocerySkips(ctx, testHousehold, "2026-W46")
+	if !rules.Recipes[testRecipe]["name:sour cream"] {
+		t.Errorf("this week's list rules = %+v", rules.Recipes)
+	}
+	if rules, _ := svc.GrocerySkips(ctx, testHousehold, "2026-W47"); len(rules.Recipes[testRecipe]) != 0 {
+		t.Errorf("next week's list rules = %+v", rules.Recipes)
+	}
+
+	// Choosing "every time" for the same dish replaces it with a lasting skip.
+	always, created, err := svc.Set(ctx, editor(testHousehold), Input{IngredientKey: "name:sour cream", Name: "Sour Cream", Scope: ScopeRecipe, RecipeID: testRecipe})
+	if err != nil || created || always.Once() || always.ID != once.ID {
+		t.Fatalf("lasting = %+v, created %v, err %v", always, created, err)
+	}
+	if set, _ := svc.RecipeLeftOut(ctx, testHousehold, testRecipe, "2026-W47"); len(set) == 0 {
+		t.Error("the lasting skip should apply every week")
+	}
+
+	if _, _, err := svc.Set(ctx, editor(testHousehold), Input{IngredientKey: "name:dill", Name: "Dill", Scope: ScopeAlways, Week: "2026-W46"}); err == nil {
+		t.Error("an always skip took a week")
 	}
 }
 

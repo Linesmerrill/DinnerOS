@@ -157,7 +157,7 @@ func (s *Service) GrocerySameItems(ctx context.Context, householdID string) (gro
 // RecipeLeftOuts is what a household leaves out of one recipe.
 // *skips.Service implements it.
 type RecipeLeftOuts interface {
-	RecipeLeftOut(ctx context.Context, householdID, recipeID string) (grocery.LeftOutSet, error)
+	RecipeLeftOut(ctx context.Context, householdID, recipeID, week string) (grocery.LeftOutSet, error)
 }
 
 // LeftOut wraps what a household leaves out of a recipe so a skip under one
@@ -168,8 +168,8 @@ type LeftOut struct {
 }
 
 // RecipeLeftOut implements the cooking views' left-out source.
-func (l LeftOut) RecipeLeftOut(ctx context.Context, householdID, recipeID string) (grocery.LeftOutSet, error) {
-	set, err := l.Skips.RecipeLeftOut(ctx, householdID, recipeID)
+func (l LeftOut) RecipeLeftOut(ctx context.Context, householdID, recipeID, week string) (grocery.LeftOutSet, error) {
+	set, err := l.Skips.RecipeLeftOut(ctx, householdID, recipeID, week)
 	if err != nil || l.Same == nil || len(set) == 0 {
 		return set, err
 	}

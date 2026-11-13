@@ -142,7 +142,7 @@ func (h *Handler) ratingQuestions(w http.ResponseWriter, r *http.Request) {
 		h.internalError(w, r, "load specialty choices failed", err)
 		return
 	}
-	leftOut, leftOutApplied, err := h.recipeLeftOut(r.Context(), actor.HouseholdID, recipe.ID)
+	leftOut, leftOutApplied, err := h.recipeLeftOut(r.Context(), actor.HouseholdID, recipe.ID, "")
 	if err != nil {
 		h.internalError(w, r, "load left-out ingredients failed", err)
 		return

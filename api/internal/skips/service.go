@@ -197,22 +197,27 @@ func (s *Service) GrocerySkips(ctx context.Context, householdID, week string) (g
 }
 
 // RecipeLeftOut returns what the household leaves out of one recipe when it
-// cooks it: its recipe skips for that recipe, and its always-skips. A week
-// skip is about what to buy this week, not how the dish is cooked, so it is
-// not included. Cooking instructions and cook deductions read it.
-func (s *Service) RecipeLeftOut(ctx context.Context, householdID, recipeID string) (grocery.LeftOutSet, error) {
+// cooks it in week: its recipe skips for that recipe (the ones for just one
+// week only in that week), and its always-skips. A week skip is about what to
+// buy this week, not how the dish is cooked, so it is not included. An empty
+// week leaves out only the lasting skips. Cooking instructions and cook
+// deductions read it.
+func (s *Service) RecipeLeftOut(ctx context.Context, householdID, recipeID, week string) (grocery.LeftOutSet, error) {
 	if householdID == "" {
 		return nil, errHouseholdRequired
 	}
 	applies, keysOf, err := s.resolved(ctx, householdID, func(skip Skip) bool {
-		return skip.Scope == ScopeAlways || skip.Scope == ScopeRecipe && skip.RecipeID == recipeID
+		if skip.Scope == ScopeAlways {
+			return true
+		}
+		return skip.Scope == ScopeRecipe && skip.RecipeID == recipeID && (skip.Week == "" || skip.Week == week)
 	})
 	if err != nil {
 		return nil, err
 	}
 	set := grocery.LeftOutSet{}
 	for _, skip := range applies {
-		lo := grocery.LeftOut{SkipID: skip.ID, Scope: skip.Scope.Grocery()}
+		lo := grocery.LeftOut{SkipID: skip.ID, Scope: skip.Scope.Grocery(), Once: skip.Once()}
 		for _, key := range keysOf(skip) {
 			if current, ok := set[key]; !ok || lo.Scope.Outranks(current.Scope) {
 				set[key] = lo

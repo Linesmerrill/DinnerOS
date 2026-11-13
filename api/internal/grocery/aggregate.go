@@ -352,6 +352,8 @@ func (r SkipRules) SkipInRecipe(recipeID, key string) bool { return r.Recipes[re
 type LeftOut struct {
 	SkipID string
 	Scope  SkipScope
+	// Once is true for a recipe skip that covers one week only.
+	Once bool
 }
 
 // LeftOutSet is what a household leaves out of one recipe, registered under

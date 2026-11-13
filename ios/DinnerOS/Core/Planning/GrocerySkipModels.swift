@@ -95,9 +95,13 @@ nonisolated struct GrocerySkipRequest: Encodable, Equatable, Sendable {
         case recipeID = "recipeId"
     }
 
-    /// Leaves an ingredient out of one recipe, every time it's planned ("just this dish").
-    static func leaveOut(ingredientKey: String, name: String, recipeID: String) -> GrocerySkipRequest {
-        GrocerySkipRequest(ingredientKey: ingredientKey, name: name, scope: .recipe, week: nil, recipeID: recipeID)
+    /// Leaves an ingredient out of one recipe, every time it's planned, or only in `week`
+    /// ("just this once").
+    static func leaveOut(ingredientKey: String, name: String, recipeID: String, week: ISOWeek? = nil)
+        -> GrocerySkipRequest
+    {
+        GrocerySkipRequest(
+            ingredientKey: ingredientKey, name: name, scope: .recipe, week: week?.description, recipeID: recipeID)
     }
 
     /// Leaves an ingredient out of every recipe and off every list ("always").

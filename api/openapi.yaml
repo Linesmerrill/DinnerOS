@@ -1292,6 +1292,12 @@ paths:
       security:
         - bearerAuth: []
       parameters:
+        - name: week
+          in: query
+          required: false
+          description: The week the meal is planned in ("2026-W46"), so an ingredient skipped just this once shows as left out.
+          schema:
+            type: string
         - name: servings
           in: query
           description: |
@@ -6635,6 +6641,9 @@ components:
                 scope:
                   type: string
                   enum: [recipe, always]
+                once:
+                  type: boolean
+                  description: True when it's left out of this week's meal only.
             - type: "null"
         component:
           description: Set when the ingredient is a specialty ingredient the household makes from store ingredients.
@@ -8582,7 +8591,7 @@ components:
         scope:
           $ref: "#/components/schemas/GrocerySkipScope"
         week:
-          description: Required when the scope is week, and rejected otherwise.
+          description: Required when the scope is week. With the recipe scope, leaves the ingredient out of that recipe for this week only. Rejected for always.
           oneOf:
             - $ref: "#/components/schemas/IsoWeek"
             - type: "null"

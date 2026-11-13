@@ -19,6 +19,8 @@ nonisolated struct RecipeIngredientState: Equatable, Sendable, Identifiable {
     /// What the row says about a left-out ingredient.
     var leftOutText: String? {
         switch leftOut?.scope {
+        case .recipe? where leftOut?.isOnce == true:
+            isComponent ? String(localized: "Not making this this time") : String(localized: "Skipped this time")
         case .recipe?:
             isComponent
                 ? String(localized: "Not making this for this dish") : String(localized: "Skipped in this dish")
@@ -29,16 +31,31 @@ nonisolated struct RecipeIngredientState: Equatable, Sendable, Identifiable {
         }
     }
 
-    /// The request that leaves it out: of this recipe ("just this dish"), or of every recipe
-    /// ("always"). `nil` when it can't be left out from here.
-    func leaveOutRequest(scope: GrocerySkipScope, recipeID: String) -> GrocerySkipRequest? {
+    /// The request that leaves it out: of this week's meal only, of this recipe every time, or
+    /// of every recipe. `nil` when it can't be left out from here, or just this once without a
+    /// week.
+    func leaveOutRequest(_ choice: IngredientLeaveOut, recipeID: String, week: ISOWeek? = nil)
+        -> GrocerySkipRequest?
+    {
         guard let ingredientKey else { return nil }
-        switch scope {
-        case .recipe: return .leaveOut(ingredientKey: ingredientKey, name: line.name, recipeID: recipeID)
-        case .always: return .always(ingredientKey: ingredientKey, name: line.name)
-        default: return nil
+        switch choice {
+        case .thisOnce:
+            guard let week else { return nil }
+            return .leaveOut(ingredientKey: ingredientKey, name: line.name, recipeID: recipeID, week: week)
+        case .thisDish: return .leaveOut(ingredientKey: ingredientKey, name: line.name, recipeID: recipeID)
+        case .everyDish: return .always(ingredientKey: ingredientKey, name: line.name)
         }
     }
+}
+
+/// How far to leave an ingredient out of a recipe.
+nonisolated enum IngredientLeaveOut: Equatable, Sendable {
+    /// Out of this week's meal only; back next time.
+    case thisOnce
+    /// Out of this dish every time it's planned.
+    case thisDish
+    /// Out of every dish, and off every list.
+    case everyDish
 }
 
 nonisolated enum RecipeIngredientStates {

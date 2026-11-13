@@ -1211,7 +1211,9 @@ two never disagree about what a meal needs.
 - `scope` is `week`, `always`, or `recipe`. `week` requires `week`
   (`"2026-W38"`); `recipe` requires `recipeId`, one of the household's
   recipes, and the skip keeps its name as `recipeName`. Each is rejected for
-  the other scopes.
+  the other scopes, except that `recipe` also takes an optional `week`: the
+  ingredient is left out of that recipe for that week only ("just this
+  once"), and next week it is back.
 - One ingredient has at most one household-wide skip, and one per recipe, so
   posting again for the same `ingredientKey` (and `recipeId`) **replaces** it
   and answers `200` instead of `201`. That is how "skip once" becomes "skip

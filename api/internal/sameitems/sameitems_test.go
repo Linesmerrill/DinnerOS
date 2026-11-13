@@ -368,7 +368,7 @@ func TestIntegrationMongoStore(t *testing.T) {
 
 type fakeLeftOut grocery.LeftOutSet
 
-func (f fakeLeftOut) RecipeLeftOut(context.Context, string, string) (grocery.LeftOutSet, error) {
+func (f fakeLeftOut) RecipeLeftOut(context.Context, string, string, string) (grocery.LeftOutSet, error) {
 	return maps.Clone(grocery.LeftOutSet(f)), nil
 }
 
@@ -379,7 +379,7 @@ func TestLeftOutReadsThroughLinks(t *testing.T) {
 	link(t, svc, "name:chipotle powder", "Chipotle Powder", "ing-ccp", "Chipotle Chili Powder")
 	skip := grocery.LeftOut{SkipID: "s-1", Scope: grocery.SkipRecipe}
 	src := LeftOut{Skips: fakeLeftOut{"ing-ccp": skip}, Same: svc}
-	got, err := src.RecipeLeftOut(context.Background(), editor.HouseholdID, "r-tacos")
+	got, err := src.RecipeLeftOut(context.Background(), editor.HouseholdID, "r-tacos", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -389,7 +389,7 @@ func TestLeftOutReadsThroughLinks(t *testing.T) {
 
 	// Without links, or with no service, it's the skips as they are.
 	bare := LeftOut{Skips: fakeLeftOut{"ing-ccp": skip}}
-	if got, _ := bare.RecipeLeftOut(context.Background(), editor.HouseholdID, "r-tacos"); len(got) != 1 {
+	if got, _ := bare.RecipeLeftOut(context.Background(), editor.HouseholdID, "r-tacos", ""); len(got) != 1 {
 		t.Errorf("no service = %+v", got)
 	}
 }

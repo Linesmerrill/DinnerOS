@@ -218,7 +218,7 @@ func (s *Service) cookNeeds(ctx context.Context, m CookedMeal, recipe recipes.Re
 	if err != nil {
 		return nil, 0, err
 	}
-	if recipe, err = s.withoutLeftOut(ctx, m.HouseholdID, recipe); err != nil {
+	if recipe, err = s.withoutLeftOut(ctx, m.HouseholdID, cookedWeek(m.OccurredAt), recipe); err != nil {
 		return nil, 0, err
 	}
 	needs, scaledFrom := recipeNeeds(recipe, m.Servings)

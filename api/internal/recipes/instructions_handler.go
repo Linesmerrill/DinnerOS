@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -19,7 +20,7 @@ import (
 // it. *skips.Service implements it — the same skips the week's grocery list
 // holds back, so the steps and the list agree about what goes in.
 type LeftOutSource interface {
-	RecipeLeftOut(ctx context.Context, householdID, recipeID string) (grocery.LeftOutSet, error)
+	RecipeLeftOut(ctx context.Context, householdID, recipeID, week string) (grocery.LeftOutSet, error)
 }
 
 // SpecialtySource resolves the specialty ingredients among a set of
@@ -164,6 +165,8 @@ type IngredientStateResponse struct {
 type LeftOutResponse struct {
 	SkipID string            `json:"skipId"`
 	Scope  grocery.SkipScope `json:"scope"`
+	// Once is true when it's left out of this week's meal only.
+	Once bool `json:"once,omitempty"`
 }
 
 // ComponentResponse is a specialty ingredient as the household makes it.
@@ -284,7 +287,7 @@ func newInstructionsResponse(in Instructions) InstructionsResponse {
 			sr.AmountText = st.Amount.Text()
 		}
 		if lo := st.LeftOut; lo != nil {
-			sr.LeftOut = &LeftOutResponse{SkipID: lo.SkipID, Scope: lo.Scope}
+			sr.LeftOut = &LeftOutResponse{SkipID: lo.SkipID, Scope: lo.Scope, Once: lo.Once}
 		}
 		if c := st.Component; c != nil {
 			sr.Component = &ComponentResponse{
@@ -404,7 +407,7 @@ func (h *Handler) instructions(w http.ResponseWriter, r *http.Request) {
 		h.internalError(w, r, "load specialty choices failed", err)
 		return
 	}
-	leftOut, leftOutApplied, err := h.recipeLeftOut(r.Context(), actor.HouseholdID, recipe.ID)
+	leftOut, leftOutApplied, err := h.recipeLeftOut(r.Context(), actor.HouseholdID, recipe.ID, planWeek(r.URL.Query().Get("week")))
 	if err != nil {
 		// Steps that tell a member to add what they asked to leave out are
 		// wrong in the same way, so this fails the request too.
@@ -453,17 +456,29 @@ func (h *Handler) mealSwaps(recipe Recipe, servings int, params []string) Swaps 
 	return out
 }
 
-// recipeLeftOut loads what the household leaves out of the recipe. applied is
-// false when no source is configured.
-func (h *Handler) recipeLeftOut(ctx context.Context, householdID, recipeID string) (grocery.LeftOutSet, bool, error) {
+// recipeLeftOut loads what the household leaves out of the recipe when it's
+// cooked in week ("" for no particular week). applied is false when no source
+// is configured.
+func (h *Handler) recipeLeftOut(ctx context.Context, householdID, recipeID, week string) (grocery.LeftOutSet, bool, error) {
 	if h.opts.LeftOut == nil {
 		return nil, false, nil
 	}
-	set, err := h.opts.LeftOut.RecipeLeftOut(ctx, householdID, recipeID)
+	set, err := h.opts.LeftOut.RecipeLeftOut(ctx, householdID, recipeID, week)
 	if err != nil {
 		return nil, false, err
 	}
 	return set, true, nil
+}
+
+var planWeekPattern = regexp.MustCompile(`^\d{4}-W\d{2}$`)
+
+// planWeek is the week the meal is planned in ("2026-W46"), from the optional
+// week parameter; anything else is no week, so only lasting skips apply.
+func planWeek(param string) string {
+	if planWeekPattern.MatchString(param) {
+		return param
+	}
+	return ""
 }
 
 // instructionServings picks the serving size to render. Amounts are never

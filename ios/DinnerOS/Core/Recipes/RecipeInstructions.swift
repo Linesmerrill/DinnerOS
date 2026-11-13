@@ -105,12 +105,16 @@ nonisolated struct InstructionIngredient: Decodable, Equatable, Sendable, Identi
 /// The skip that leaves an ingredient out of a recipe. Deleting it puts the ingredient back.
 nonisolated struct InstructionLeftOut: Decodable, Equatable, Sendable {
     let skipID: String
-    /// `recipe` (just this dish) or `always` (every dish).
+    /// `recipe` (this dish) or `always` (every dish).
     let scope: GrocerySkipScope
+    /// True when it's left out of this week's meal only; `nil` from an older server.
+    var once: Bool? = nil
+
+    var isOnce: Bool { once == true }
 
     private enum CodingKeys: String, CodingKey {
         case skipID = "skipId"
-        case scope
+        case scope, once
     }
 }
 

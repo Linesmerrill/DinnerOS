@@ -101,9 +101,11 @@ struct RecipeIngredientsSection: View {
     var instructions: RecipeInstructions? = nil
     /// Whether this member may leave ingredients out (`plan.edit`). Others see the state only.
     var canEdit = false
+    /// Whether the recipe is planned this week, so it can be skipped just this once.
+    var canSkipOnce = false
     /// Ingredients with a change in flight, by line ID.
     var working: Set<String> = []
-    var leaveOut: (RecipeIngredientState, GrocerySkipScope) -> Void = { _, _ in }
+    var leaveOut: (RecipeIngredientState, IngredientLeaveOut) -> Void = { _, _ in }
     var putBack: (RecipeIngredientState) -> Void = { _ in }
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -128,7 +130,7 @@ struct RecipeIngredientsSection: View {
                 ForEach(RecipeIngredientStates.make(lines: lines, instructions: instructions)) { state in
                     IngredientRow(
                         line: state.line, state: state, canEdit: canEdit && state.canLeaveOut,
-                        isWorking: working.contains(state.id),
+                        canSkipOnce: canSkipOnce, isWorking: working.contains(state.id),
                         leaveOut: { leaveOut(state, $0) }, putBack: { putBack(state) })
                 }
             }
@@ -167,13 +169,15 @@ struct RecipeIngredientsSection: View {
 
 /// One ingredient: a round photo, the name, the amount, and what it contains. Left out, it's
 /// struck through and greyed with a Put Back button; otherwise a member who may change the plan
-/// can leave it out of this dish or every dish.
+/// can leave it out of this week's meal, this dish every time, or every dish.
 struct IngredientRow: View {
     let line: IngredientLine
     var state: RecipeIngredientState? = nil
     var canEdit = false
+    /// Whether "Just This Once" is offered: the recipe is planned this week.
+    var canSkipOnce = false
     var isWorking = false
-    var leaveOut: (GrocerySkipScope) -> Void = { _ in }
+    var leaveOut: (IngredientLeaveOut) -> Void = { _ in }
     var putBack: () -> Void = {}
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -205,17 +209,19 @@ struct IngredientRow: View {
                 .accessibilityLabel("Put \(line.name) Back")
         } else if canEdit {
             Menu {
-                if state?.isComponent == true {
-                    // A component is a taste preference about this dish, so that comes first.
-                    Section("Don't Make \(line.name)") {
-                        Button("Not for This Dish", systemImage: "fork.knife") { leaveOut(.recipe) }
-                        Button("Never Make It", systemImage: "nosign") { leaveOut(.always) }
+                let isComponent = state?.isComponent == true
+                Section(isComponent ? "Don't Make \(line.name)" : "Skip \(line.name)") {
+                    if canSkipOnce {
+                        Button("Just This Once", systemImage: "calendar") { leaveOut(.thisOnce) }
                     }
-                } else {
-                    Section("Skip \(line.name)") {
-                        Button("Just This Dish", systemImage: "fork.knife") { leaveOut(.recipe) }
-                        Button("Every Dish (Always)", systemImage: "nosign") { leaveOut(.always) }
-                    }
+                    Button("This Dish, Always", systemImage: "fork.knife") { leaveOut(.thisDish) }
+                }
+                // The big one: set apart, in red.
+                Section {
+                    Button(
+                        isComponent ? "Never Make It" : "Every Dish, Forever", systemImage: "nosign",
+                        role: .destructive
+                    ) { leaveOut(.everyDish) }
                 }
             } label: {
                 Image(systemName: "minus.circle")
