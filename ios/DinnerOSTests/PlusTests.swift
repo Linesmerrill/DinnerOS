@@ -37,6 +37,23 @@ nonisolated enum PlusFixtures {
          "explainer":"Invite another household.","rewarded":0,"monthsLeft":12}
         """#.utf8)
 
+    static let referralWithInvites = Data(
+        #"""
+        {"code":"W57ZVGUJ","shareText":"Use my code W57ZVGUJ.","explainer":"Invite another household.",
+         "rewarded":12,"monthsLeft":0,
+         "invites":{"joined":13,"monthsEarned":12,"monthsCap":12,"capText":"12 of 12",
+                    "freeUntil":"2027-11-13T12:00:00Z",
+                    "emptyText":"No one has used your code yet. Share it and you both get a free month of Plus.",
+                    "joins":[{"at":"2026-11-14T12:00:00Z","counted":false,"status":"Limit reached"},
+                             {"at":"2026-11-13T12:00:00Z","counted":true,"status":"Counted"}],
+                    "usedCode":{"at":"2026-11-01T12:00:00Z","freeUntil":"2026-12-01T12:00:00Z"}}}
+        """#.utf8)
+
+    static let referralSummary = Data(
+        #"""
+        {"codesUsed":2,"joinedThisWeek":1,"joinedAllTime":3,"topReferrers":[{"name":"Lines","count":2}]}
+        """#.utf8)
+
     static func error(_ status: Int, code: String, message: String) -> (status: Int, body: Data) {
         (status, Data(#"{"error":{"code":"\#(code)","message":"\#(message)"}}"#.utf8))
     }
@@ -200,6 +217,71 @@ struct PlusStoreTests {
         #expect(store.hasPlus && store.status?.freeUntil != nil)
         let redeem = try #require(transport.requests(to: "/api/v1/households/household-1/plus/referral/redeem").last)
         #expect(String(decoding: redeem.httpBody ?? Data(), as: UTF8.self).contains("wxyz-6789"))
+    }
+
+    @Test func yourInvitesShowWhoUsedTheCode() async throws {
+        let (store, _) = try await makeStore { request in
+            request.url?.path().hasSuffix("/referral") == true
+                ? (200, PlusFixtures.referralWithInvites) : (200, PlusFixtures.status())
+        }
+        await store.activate(householdID: "household-1")
+        try await store.loadReferral()
+        let invites = try #require(store.referral?.invites)
+        #expect(invites.joined == 13 && invites.capText == "12 of 12" && invites.freeUntil != nil)
+        #expect(invites.joins.map(\.status) == ["Limit reached", "Counted"])
+        #expect(invites.joins.map(\.counted) == [false, true])
+        let used = try #require(invites.usedCode)
+        let before = try #require(ISO8601DateFormatter().date(from: "2026-11-13T12:00:00Z"))
+        let after = try #require(ISO8601DateFormatter().date(from: "2027-01-01T12:00:00Z"))
+        #expect(PlusText.usedCode(used, now: before).hasPrefix("You joined with a code. Free month of Plus until"))
+        #expect(PlusText.usedCode(used, now: after).contains("ended"))
+        for line in [PlusText.usedCode(used, now: before), PlusText.usedCode(used, now: after), invites.emptyText] {
+            #expect(!line.contains("\u{2014}"))
+        }
+    }
+
+    @Test func anOlderAPIWithoutInvitesStillShowsTheCode() async throws {
+        let (store, _) = try await makeStore { request in
+            request.url?.path().hasSuffix("/referral") == true
+                ? (200, PlusFixtures.referral) : (200, PlusFixtures.status())
+        }
+        await store.activate(householdID: "household-1")
+        try await store.loadReferral()
+        #expect(store.referral?.code == "ABCD2345" && store.referral?.invites == nil)
+    }
+
+    @Test func usingACodeReloadsYourInvites() async throws {
+        let (store, transport) = try await makeStore { request in
+            switch (request.httpMethod, request.url?.path()) {
+            case ("GET", "/api/v1/households/household-1/plus/referral"):
+                return (200, PlusFixtures.referralWithInvites)
+            case ("POST", _):
+                return (200, PlusFixtures.status(active: true))
+            default:
+                return (200, PlusFixtures.status())
+            }
+        }
+        await store.activate(householdID: "household-1")
+        try await store.redeem(code: "WXYZ6789")
+        #expect(transport.requests(to: "/api/v1/households/household-1/plus/referral").count == 1)
+        #expect(store.referral?.invites?.usedCode != nil)
+    }
+
+    @Test func theCopyButtonDropsTheSpace() {
+        #expect(PlusText.copyableCode("W57Z VGUJ") == "W57ZVGUJ")
+        #expect(PlusText.copyableCode(PlusInviteView.spaced("W57ZVGUJ")) == "W57ZVGUJ")
+    }
+
+    @Test func referralTotalsAreForOperatorsOnly() async throws {
+        let (operatorStore, _) = try await makeStore { _ in (200, PlusFixtures.referralSummary) }
+        let summary = try #require(try await operatorStore.referralSummary())
+        #expect(summary.joinedAllTime == 3 && summary.joinedThisWeek == 1 && summary.codesUsed == 2)
+        #expect(summary.topReferrers.first?.name == "Lines")
+
+        let (memberStore, _) = try await makeStore { _ in
+            PlusFixtures.error(403, code: "forbidden", message: "Only the people who run DinnerOS can see this.")
+        }
+        #expect(try await memberStore.referralSummary() == nil)
     }
 
     @Test func statusLines() throws {

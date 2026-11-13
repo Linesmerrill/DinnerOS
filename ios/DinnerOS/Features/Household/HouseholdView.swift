@@ -16,10 +16,13 @@ struct HouseholdView: View {
     @Environment(PushNotificationStore.self) private var push: PushNotificationStore?
     @Environment(\.openURL) private var openURL
     @Environment(ShoppingStore.self) private var shopping: ShoppingStore?
+    @Environment(PlusStore.self) private var plus: PlusStore?
 
     @State private var me: MeResponse?
     /// Every household's store requests; `nil` for anyone who doesn't run DinnerOS.
     @State private var storeRequests: StoreRequestSummary?
+    /// Every household's referrals; `nil` for anyone who doesn't run DinnerOS.
+    @State private var referrals: PlusReferralSummary?
     @State private var isLoadingAccount = false
     @State private var accountError: String?
 
@@ -88,17 +91,26 @@ struct HouseholdView: View {
                 leaveSection
             }
             accountSection
-            if let storeRequests {
+            if storeRequests != nil || referrals != nil {
                 Section {
-                    NavigationLink {
-                        StoreRequestsReportView(summary: storeRequests)
-                    } label: {
-                        LabeledContent("Store Requests", value: storeRequests.households.formatted())
+                    if let storeRequests {
+                        NavigationLink {
+                            StoreRequestsReportView(summary: storeRequests)
+                        } label: {
+                            LabeledContent("Store Requests", value: storeRequests.households.formatted())
+                        }
+                    }
+                    if let referrals {
+                        NavigationLink {
+                            ReferralsReportView(summary: referrals)
+                        } label: {
+                            LabeledContent("Referrals", value: referrals.joinedAllTime.formatted())
+                        }
                     }
                 } header: {
                     Text("Running DinnerOS")
                 } footer: {
-                    Text("What households asked us to add. Only you can see this.")
+                    Text("What households asked us to add, and who joined with a code. Only you can see this.")
                 }
             }
             Section {
@@ -136,6 +148,7 @@ struct HouseholdView: View {
         }
         .task { await loadAccount() }
         .task { storeRequests = try? await shopping?.storeRequestSummary() ?? nil }
+        .task { referrals = try? await plus?.referralSummary() ?? nil }
         // Only for someone who could act on it: without `recipes.import` the row is hidden and
         // the request would be a guaranteed `403`.
         .task(id: households.current?.household.id) {

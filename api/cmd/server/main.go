@@ -227,7 +227,8 @@ func run() error {
 	requirePlus := plus.Require(plusService, logger)
 	plusHandler := plus.NewHandler(plus.HandlerOptions{
 		Service:    plusService,
-		Authorizer: householdService, Tokens: tokens, WebhookSecret: cfg.Plus.WebhookSecret, Logger: logger,
+		Authorizer: householdService, Tokens: tokens, WebhookSecret: cfg.Plus.WebhookSecret,
+		Operators: cfg.OperatorUserIDs, Logger: logger,
 	})
 	sameItemsHandler := sameitems.NewHandler(sameitems.HandlerOptions{
 		Service:    sameItemsService,

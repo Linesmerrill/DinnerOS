@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -111,6 +112,51 @@ func (s *memoryReferrals) Rewarded(_ context.Context, id string) (int, error) {
 		}
 	}
 	return n, nil
+}
+
+func (s *memoryReferrals) Joins(_ context.Context, id string, limit int) (int, []Referral, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []Referral
+	for _, r := range s.refs {
+		if r.ReferrerID == id {
+			out = append(out, r)
+		}
+	}
+	n := len(out)
+	slices.SortStableFunc(out, func(a, b Referral) int { return b.At.Compare(a.At) })
+	return n, out[:min(limit, n)], nil
+}
+
+func (s *memoryReferrals) UsedBy(_ context.Context, id string) (Referral, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, r := range s.refs {
+		if r.ReferredID == id {
+			return r, true, nil
+		}
+	}
+	return Referral{}, false, nil
+}
+
+func (s *memoryReferrals) Report(_ context.Context, since time.Time, top int) (ReferralReport, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := ReferralReport{Joined: len(s.refs)}
+	counts := map[string]int{}
+	for _, r := range s.refs {
+		counts[r.ReferrerID]++
+		if !r.At.Before(since) {
+			out.JoinedSince++
+		}
+	}
+	out.Codes = len(counts)
+	for id, n := range counts {
+		out.Top = append(out.Top, ReferrerCount{HouseholdID: id, Name: "Household " + id[len(id)-2:], Count: n})
+	}
+	slices.SortFunc(out.Top, func(a, b ReferrerCount) int { return b.Count - a.Count })
+	out.Top = out.Top[:min(top, len(out.Top))]
+	return out, nil
 }
 
 func (s *memoryReferrals) PurgeHousehold(context.Context, string) error { return nil }

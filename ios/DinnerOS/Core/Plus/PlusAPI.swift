@@ -19,6 +19,11 @@ nonisolated struct PlusAPI: Sendable {
         return try await client.send(request.authorized(with: accessToken))
     }
 
+    /// Referrals across every household. 403 for anyone who doesn't run DinnerOS.
+    func referralSummary(accessToken: String) async throws -> PlusReferralSummary {
+        try await client.send(APIRequest.get("/api/v1/plus/referrals/summary").authorized(with: accessToken))
+    }
+
     static func path(_ householdID: String) -> String {
         "/api/v1/households/\(householdID)/plus"
     }

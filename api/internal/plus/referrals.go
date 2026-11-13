@@ -72,8 +72,38 @@ type ReferralStore interface {
 	Used(ctx context.Context, householdID string) (bool, error)
 	// Rewarded counts the referrals that earned referrerID a month.
 	Rewarded(ctx context.Context, referrerID string) (int, error)
+	// Joins counts the households that used referrerID's code and returns
+	// up to limit of them, newest first.
+	Joins(ctx context.Context, referrerID string, limit int) (int, []Referral, error)
+	// UsedBy returns the referral where householdID used a code, if any.
+	UsedBy(ctx context.Context, householdID string) (Referral, bool, error)
+	// Report sums referrals across every household, for the people who run
+	// DinnerOS.
+	Report(ctx context.Context, since time.Time, top int) (ReferralReport, error)
 	PurgeHousehold(ctx context.Context, householdID string) error
 }
+
+// ReferralReport is referrals across every household.
+type ReferralReport struct {
+	// Codes counts households whose code was used at least once.
+	Codes int
+	// Joined counts households that used a code; JoinedSince those that did
+	// from the report's since on.
+	Joined, JoinedSince int
+	// Top is the households whose codes were used most, most first.
+	Top []ReferrerCount
+}
+
+// ReferrerCount is how many households used one household's code.
+type ReferrerCount struct {
+	HouseholdID string
+	// Name is the household's name, for the people who run DinnerOS only.
+	Name  string
+	Count int
+}
+
+// RecentJoins is how many joins the invite screen lists.
+const RecentJoins = 20
 
 // codeAlphabet leaves out 0, O, 1, I and L, which are easy to misread.
 const codeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
@@ -123,9 +153,17 @@ type ReferralInfo struct {
 	// month; MonthsLeft is how many more months the code can still earn.
 	Rewarded   int
 	MonthsLeft int
+	// Joined counts every household that used the code, rewarded or not;
+	// Recent lists up to RecentJoins of them, newest first.
+	Joined int
+	Recent []Referral
+	// FreeUntil is when the household's free months end, if they haven't.
+	FreeUntil time.Time
+	// UsedCode is set when this household joined with another's code.
+	UsedCode *Referral
 }
 
-// Referral returns the household's code and what it has earned.
+// Referral returns the household's code, what it has earned, and who used it.
 func (s *Service) Referral(ctx context.Context, householdID string) (ReferralInfo, error) {
 	if !s.EnabledFor(householdID) || s.referrals == nil {
 		return ReferralInfo{}, ErrReferralsOff
@@ -138,7 +176,34 @@ func (s *Service) Referral(ctx context.Context, householdID string) (ReferralInf
 	if err != nil {
 		return ReferralInfo{}, err
 	}
-	return ReferralInfo{Code: code, Rewarded: n, MonthsLeft: max(0, MaxReferralMonths-n)}, nil
+	info := ReferralInfo{Code: code, Rewarded: n, MonthsLeft: max(0, MaxReferralMonths-n)}
+	if info.Joined, info.Recent, err = s.referrals.Joins(ctx, householdID, RecentJoins); err != nil {
+		return ReferralInfo{}, err
+	}
+	if used, ok, err := s.referrals.UsedBy(ctx, householdID); err != nil {
+		return ReferralInfo{}, err
+	} else if ok {
+		info.UsedCode = &used
+	}
+	if s.free != nil {
+		until, err := s.free.FreeUntil(ctx, householdID)
+		if err != nil {
+			return ReferralInfo{}, err
+		}
+		if until.After(s.now()) {
+			info.FreeUntil = until
+		}
+	}
+	return info, nil
+}
+
+// ReferralReport sums referrals across every household: the last 7 days and
+// all time, and the top 5 sharers.
+func (s *Service) ReferralReport(ctx context.Context) (ReferralReport, error) {
+	if s.referrals == nil {
+		return ReferralReport{}, ErrReferralsOff
+	}
+	return s.referrals.Report(ctx, s.now().Add(-7*24*time.Hour), 5)
 }
 
 // Redeem gives householdID and the code's owner a free month each.

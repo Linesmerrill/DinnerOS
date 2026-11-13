@@ -16,11 +16,14 @@ struct PlusInviteView: View {
                 if let referral = plus.referral {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(referral.explainer)
-                        Text(Self.spaced(referral.code))
-                            .font(.title.monospaced().bold())
-                            .textSelection(.enabled)
-                            .accessibilityLabel("Your code")
-                            .accessibilityValue(referral.code.map(String.init).joined(separator: " "))
+                        HStack(spacing: 12) {
+                            Text(Self.spaced(referral.code))
+                                .font(.title.monospaced().bold())
+                                .textSelection(.enabled)
+                                .accessibilityLabel("Your code")
+                                .accessibilityValue(referral.code.map(String.init).joined(separator: " "))
+                            CopyCodeButton(code: referral.code)
+                        }
                     }
                     .padding(.vertical, 4)
                     ShareLink(item: referral.shareText) {
@@ -35,7 +38,15 @@ struct PlusInviteView: View {
                 Text("Your Code")
             }
 
-            if redeemed {
+            if let invites = plus.referral?.invites {
+                YourInvitesSection(invites: invites)
+            }
+
+            if let used = plus.referral?.invites?.usedCode {
+                Section {
+                    Label(PlusText.usedCode(used), systemImage: "gift.fill")
+                }
+            } else if redeemed {
                 Section {
                     Label("You both have a free month of Plus.", systemImage: "gift.fill")
                 }
@@ -91,6 +102,80 @@ struct PlusInviteView: View {
             } catch {
                 redeemError = HouseholdStore.message(for: error)
             }
+        }
+    }
+}
+
+/// Who used the household's code and what it earned. Other households are never named.
+struct YourInvitesSection: View {
+    let invites: PlusInvites
+
+    var body: some View {
+        Section {
+            LabeledContent("Households joined", value: invites.joined.formatted())
+            LabeledContent("Free months earned", value: invites.capText)
+            if let free = invites.freeUntil {
+                Label("Plus free until \(PlusText.day(free))", systemImage: "gift.fill")
+            }
+            if invites.joins.isEmpty {
+                Text(invites.emptyText)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(invites.joins.enumerated()), id: \.offset) { _, join in
+                    LabeledContent {
+                        Text(join.status)
+                            .foregroundStyle(join.counted ? Color.accentColor : Color.secondary)
+                    } label: {
+                        Text("A household joined, \(PlusText.day(join.at))")
+                    }
+                }
+            }
+        } header: {
+            Text("Your Invites")
+        }
+    }
+}
+
+/// Copies the code without its space. The icon turns into a green check for a moment.
+struct CopyCodeButton: View {
+    let code: String
+    @State private var copied = false
+    @State private var copies = 0
+    @State private var reset: Task<Void, Never>?
+
+    var body: some View {
+        Button(action: copy) {
+            ZStack {
+                if copied {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .transition(.scale(scale: 0.5).combined(with: .opacity))
+                } else {
+                    Image(systemName: "doc.on.doc")
+                        .foregroundStyle(.tint)
+                        .transition(.scale(scale: 0.5).combined(with: .opacity))
+                }
+            }
+            .font(.title2)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Copy code")
+        .sensoryFeedback(.impact(weight: .light), trigger: copies)
+        .onDisappear { reset?.cancel() }
+    }
+
+    private func copy() {
+        UIPasteboard.general.string = PlusText.copyableCode(code)
+        copies += 1
+        withAnimation(.easeOut(duration: 0.25)) { copied = true }
+        AccessibilityNotification.Announcement(String(localized: "Copied")).post()
+        reset?.cancel()
+        reset = Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.25)) { copied = false }
         }
     }
 }

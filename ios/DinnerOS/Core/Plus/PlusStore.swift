@@ -163,6 +163,19 @@ final class PlusStore {
         guard householdID == self.householdID else { return }
         status = updated
         Self.logger.info("Invite code used")
+        // Your Invites now shows the code this household used.
+        try? await loadReferral()
+    }
+
+    /// Referrals across every household, or nil for anyone who doesn't run DinnerOS or an API
+    /// without the route.
+    func referralSummary() async throws -> PlusReferralSummary? {
+        guard let api else { throw AuthSessionError.notConfigured }
+        do {
+            return try await session.authorized { token in try await api.referralSummary(accessToken: token) }
+        } catch let error as APIError where error.status == 403 || error.status == 404 {
+            return nil
+        }
     }
 }
 

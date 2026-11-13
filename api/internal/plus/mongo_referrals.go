@@ -213,6 +213,102 @@ func (s *MongoReferrals) Rewarded(ctx context.Context, referrerID string) (int, 
 	return int(n), nil
 }
 
+func (d referralDoc) referral() Referral {
+	return Referral{ReferrerID: d.ReferrerID.Hex(), ReferredID: d.ReferredID.Hex(), At: d.At.UTC(), ReferrerRewarded: d.ReferrerRewarded}
+}
+
+// Joins implements ReferralStore.
+func (s *MongoReferrals) Joins(ctx context.Context, referrerID string, limit int) (int, []Referral, error) {
+	oid, err := mongodb.ParseID(referrerID)
+	if err != nil {
+		return 0, nil, nil
+	}
+	filter := bson.D{{Key: "referrerId", Value: oid}}
+	n, err := s.referrals.CountDocuments(ctx, filter)
+	if err != nil {
+		return 0, nil, fmt.Errorf("count joins: %w", err)
+	}
+	if n == 0 {
+		return 0, nil, nil
+	}
+	cur, err := s.referrals.Find(ctx, filter,
+		options.Find().SetSort(bson.D{{Key: "at", Value: -1}}).SetLimit(int64(limit)))
+	if err != nil {
+		return 0, nil, fmt.Errorf("list joins: %w", err)
+	}
+	var docs []referralDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return 0, nil, fmt.Errorf("decode joins: %w", err)
+	}
+	out := make([]Referral, 0, len(docs))
+	for _, d := range docs {
+		out = append(out, d.referral())
+	}
+	return int(n), out, nil
+}
+
+// UsedBy implements ReferralStore.
+func (s *MongoReferrals) UsedBy(ctx context.Context, householdID string) (Referral, bool, error) {
+	oid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return Referral{}, false, nil
+	}
+	var d referralDoc
+	err = s.referrals.FindOne(ctx, bson.D{{Key: "householdId", Value: oid}}).Decode(&d)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return Referral{}, false, nil
+	}
+	if err != nil {
+		return Referral{}, false, fmt.Errorf("find used code: %w", err)
+	}
+	return d.referral(), true, nil
+}
+
+// Report implements ReferralStore. Top names come from the households
+// collection; a deleted household's referrals are purged with it.
+func (s *MongoReferrals) Report(ctx context.Context, since time.Time, top int) (ReferralReport, error) {
+	var out ReferralReport
+	all, err := s.referrals.CountDocuments(ctx, bson.D{})
+	if err != nil {
+		return out, fmt.Errorf("count referrals: %w", err)
+	}
+	recent, err := s.referrals.CountDocuments(ctx, bson.D{{Key: "at", Value: bson.D{{Key: "$gte", Value: since.UTC()}}}})
+	if err != nil {
+		return out, fmt.Errorf("count recent referrals: %w", err)
+	}
+	out.Joined, out.JoinedSince = int(all), int(recent)
+	cur, err := s.referrals.Aggregate(ctx, mongo.Pipeline{
+		{{Key: "$group", Value: bson.D{{Key: "_id", Value: "$referrerId"}, {Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}}}}},
+		{{Key: "$sort", Value: bson.D{{Key: "count", Value: -1}, {Key: "_id", Value: 1}}}},
+		{{Key: "$lookup", Value: bson.D{
+			{Key: "from", Value: "households"}, {Key: "localField", Value: "_id"},
+			{Key: "foreignField", Value: "_id"}, {Key: "as", Value: "household"},
+		}}},
+	})
+	if err != nil {
+		return out, fmt.Errorf("group referrals: %w", err)
+	}
+	var rows []struct {
+		ID        bson.ObjectID `bson:"_id"`
+		Count     int           `bson:"count"`
+		Household []struct {
+			Name string `bson:"name"`
+		} `bson:"household"`
+	}
+	if err := cur.All(ctx, &rows); err != nil {
+		return out, fmt.Errorf("decode referral groups: %w", err)
+	}
+	out.Codes = len(rows)
+	for _, r := range rows[:min(top, len(rows))] {
+		c := ReferrerCount{HouseholdID: r.ID.Hex(), Count: r.Count}
+		if len(r.Household) > 0 {
+			c.Name = r.Household[0].Name
+		}
+		out.Top = append(out.Top, c)
+	}
+	return out, nil
+}
+
 // PurgeHousehold implements account.HouseholdPurger: the household's code
 // stops working and its referrals, either way, are forgotten.
 func (s *MongoReferrals) PurgeHousehold(ctx context.Context, householdID string) error {

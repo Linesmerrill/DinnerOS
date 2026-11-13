@@ -5432,7 +5432,7 @@ paths:
       summary: The household's invite code
       description: |
         The household's referral code, made the first time it's asked for
-        (decision 675). 404 while Plus is off.
+        (decision 675), and who used it (decision 679). 404 while Plus is off.
       parameters:
         - $ref: "#/components/parameters/HouseholdID"
       responses:
@@ -5442,6 +5442,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PlusReferral"
+  /api/v1/plus/referrals/summary:
+    get:
+      tags: [Households]
+      summary: Referrals across every household
+      description: |
+        For the people who run DinnerOS (OPERATOR_USER_IDS) only; anyone else
+        gets 403 (decision 679).
+      responses:
+        "200":
+          description: The totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlusReferralSummary"
+        "403":
+          description: Not someone who runs DinnerOS
   /api/v1/households/{householdId}/plus/referral/redeem:
     post:
       tags: [Households]
@@ -5704,6 +5720,51 @@ components:
         explainer: {type: string}
         rewarded: {type: integer, description: Households that joined with the code and earned a month}
         monthsLeft: {type: integer, description: Months the code can still earn (at most 12 in all)}
+        invites: {$ref: "#/components/schemas/PlusInvites"}
+    PlusInvites:
+      type: object
+      description: Who used the code. Other households are never named.
+      required: [joined, monthsEarned, monthsCap, capText, emptyText, joins]
+      properties:
+        joined: {type: integer, description: Households that used the code}
+        monthsEarned: {type: integer}
+        monthsCap: {type: integer}
+        capText: {type: string, description: '"3 of 12"'}
+        freeUntil: {type: string, format: date-time, description: When free months end, while they last}
+        emptyText: {type: string, description: Shown when no one has used the code}
+        joins:
+          type: array
+          description: Up to 20, newest first
+          items:
+            type: object
+            required: [at, counted, status]
+            properties:
+              at: {type: string, format: date-time}
+              counted: {type: boolean, description: False once the code had earned every free month}
+              status: {type: string, description: '"Counted" or "Limit reached"'}
+        usedCode:
+          type: object
+          description: Set when this household joined with another's code
+          required: [at, freeUntil]
+          properties:
+            at: {type: string, format: date-time}
+            freeUntil: {type: string, format: date-time}
+    PlusReferralSummary:
+      type: object
+      required: [codesUsed, joinedThisWeek, joinedAllTime, topReferrers]
+      properties:
+        codesUsed: {type: integer, description: Households whose code was used at least once}
+        joinedThisWeek: {type: integer, description: Codes used in the last 7 days}
+        joinedAllTime: {type: integer}
+        topReferrers:
+          type: array
+          description: The 5 households whose codes were used most
+          items:
+            type: object
+            required: [name, count]
+            properties:
+              name: {type: string}
+              count: {type: integer}
     RecipeNote:
       type: object
       required: [recipeId, text, updatedAt]

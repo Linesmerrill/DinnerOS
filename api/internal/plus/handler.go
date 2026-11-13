@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -24,7 +25,10 @@ type HandlerOptions struct {
 	// WebhookSecret is the Authorization header RevenueCat sends with each
 	// webhook (REVENUECAT_WEBHOOK_SECRET). Empty turns the webhook off.
 	WebhookSecret string
-	Logger        *slog.Logger
+	// Operators are the user IDs who may read referral totals across
+	// households (OPERATOR_USER_IDS).
+	Operators []string
+	Logger    *slog.Logger
 }
 
 // Handler serves the Plus routes.
@@ -45,6 +49,7 @@ func NewHandler(opts HandlerOptions) *Handler {
 // Mount registers the routes on the /api/v1 router.
 func (h *Handler) Mount(r chi.Router) {
 	r.Post("/webhooks/revenuecat", h.webhook)
+	r.With(auth.RequireAuth(h.opts.Tokens)).Get("/plus/referrals/summary", h.referralSummary)
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireAuth(h.opts.Tokens))
 		r.Use(households.RequirePermission(h.opts.Authorizer, households.PermHouseholdView, h.logger))
@@ -109,6 +114,117 @@ type ReferralResponse struct {
 	Explainer  string `json:"explainer"`
 	Rewarded   int    `json:"rewarded"`
 	MonthsLeft int    `json:"monthsLeft"`
+	// Invites is who used the code and what it earned.
+	Invites InvitesResponse `json:"invites"`
+}
+
+// InvitesResponse is the invite screen's Your Invites section. Other
+// households are never named.
+type InvitesResponse struct {
+	// Joined counts households that used the code.
+	Joined int `json:"joined"`
+	// MonthsEarned of MonthsCap; CapText says so, like "3 of 12".
+	MonthsEarned int    `json:"monthsEarned"`
+	MonthsCap    int    `json:"monthsCap"`
+	CapText      string `json:"capText"`
+	// FreeUntil is when free months end, while they last.
+	FreeUntil *time.Time `json:"freeUntil,omitempty"`
+	// EmptyText shows when no one has used the code.
+	EmptyText string `json:"emptyText"`
+	// Joins are the most recent, newest first.
+	Joins []InviteJoin `json:"joins"`
+	// UsedCode is set when this household joined with another's code.
+	UsedCode *UsedCode `json:"usedCode,omitempty"`
+}
+
+// InviteJoin is one household that used the code.
+type InviteJoin struct {
+	At time.Time `json:"at"`
+	// Counted is false when the code had already earned every free month.
+	Counted bool `json:"counted"`
+	// Status is "Counted" or "Limit reached".
+	Status string `json:"status"`
+}
+
+// UsedCode is this household's own use of another's code.
+type UsedCode struct {
+	At time.Time `json:"at"`
+	// FreeUntil is when the free month from it ends.
+	FreeUntil time.Time `json:"freeUntil"`
+}
+
+// InvitesEmptyText shows when no one has used a household's code.
+const InvitesEmptyText = "No one has used your code yet. Share it and you both get a free month of Plus."
+
+func invitesResponse(info ReferralInfo) InvitesResponse {
+	resp := InvitesResponse{
+		Joined: info.Joined, MonthsEarned: info.Rewarded, MonthsCap: MaxReferralMonths,
+		CapText:   fmt.Sprintf("%d of %d", info.Rewarded, MaxReferralMonths),
+		EmptyText: InvitesEmptyText, Joins: make([]InviteJoin, 0, len(info.Recent)),
+	}
+	if !info.FreeUntil.IsZero() {
+		t := info.FreeUntil
+		resp.FreeUntil = &t
+	}
+	for _, r := range info.Recent {
+		status := "Counted"
+		if !r.ReferrerRewarded {
+			status = "Limit reached"
+		}
+		resp.Joins = append(resp.Joins, InviteJoin{At: r.At, Counted: r.ReferrerRewarded, Status: status})
+	}
+	if u := info.UsedCode; u != nil {
+		resp.UsedCode = &UsedCode{At: u.At, FreeUntil: u.At.Add(FreeMonthDays * 24 * time.Hour)}
+	}
+	return resp
+}
+
+// ReferralSummaryResponse is referrals across every household, for the
+// people who run DinnerOS.
+type ReferralSummaryResponse struct {
+	// CodesUsed counts households whose code was used at least once.
+	CodesUsed int `json:"codesUsed"`
+	// JoinedThisWeek counts households that used a code in the last 7 days.
+	JoinedThisWeek int `json:"joinedThisWeek"`
+	JoinedAllTime  int `json:"joinedAllTime"`
+	// TopReferrers are the 5 households whose codes were used most.
+	TopReferrers []TopReferrer `json:"topReferrers"`
+}
+
+// TopReferrer is one household and how many used its code.
+type TopReferrer struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+func (h *Handler) referralSummary(w http.ResponseWriter, r *http.Request) {
+	userID, _ := auth.UserIDFromContext(r.Context())
+	if !slices.Contains(h.opts.Operators, userID) {
+		httpx.WriteError(w, r, http.StatusForbidden, "forbidden", "Only the people who run DinnerOS can see this.")
+		return
+	}
+	rep, err := h.opts.Service.ReferralReport(r.Context())
+	if errors.Is(err, ErrReferralsOff) {
+		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "resource not found")
+		return
+	}
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "plus referral summary failed", "error", err)
+		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "Something went wrong. Try again.")
+		return
+	}
+	resp := ReferralSummaryResponse{
+		CodesUsed: rep.Codes, JoinedThisWeek: rep.JoinedSince, JoinedAllTime: rep.Joined,
+		TopReferrers: make([]TopReferrer, 0, len(rep.Top)),
+	}
+	for _, t := range rep.Top {
+		name := t.Name
+		if name == "" {
+			name = "A deleted household"
+		}
+		resp.TopReferrers = append(resp.TopReferrers, TopReferrer{Name: name, Count: t.Count})
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
 // ReferralText returns the invite screen's words for code.
@@ -141,6 +257,7 @@ func (h *Handler) referral(w http.ResponseWriter, r *http.Request) {
 	share, explainer := ReferralText(info.Code, info.Rewarded, info.MonthsLeft)
 	httpx.WriteJSON(w, http.StatusOK, ReferralResponse{
 		Code: info.Code, ShareText: share, Explainer: explainer, Rewarded: info.Rewarded, MonthsLeft: info.MonthsLeft,
+		Invites: invitesResponse(info),
 	})
 }
 

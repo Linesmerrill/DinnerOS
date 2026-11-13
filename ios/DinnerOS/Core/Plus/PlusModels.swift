@@ -80,6 +80,57 @@ nonisolated struct PlusReferral: Codable, Hashable, Sendable {
     let explainer: String
     let rewarded: Int
     let monthsLeft: Int
+    /// Who used the code. Missing from an older API.
+    var invites: PlusInvites? = nil
+}
+
+/// The invite screen's Your Invites section. Other households are never named.
+nonisolated struct PlusInvites: Codable, Hashable, Sendable {
+    /// Households that used the code.
+    let joined: Int
+    let monthsEarned: Int
+    let monthsCap: Int
+    /// "3 of 12".
+    let capText: String
+    /// When free months end, while they last.
+    let freeUntil: Date?
+    /// Shown when no one has used the code.
+    let emptyText: String
+    /// The most recent, newest first.
+    let joins: [PlusInviteJoin]
+    /// Set when this household joined with another's code.
+    let usedCode: PlusUsedCode?
+}
+
+/// One household that used the code.
+nonisolated struct PlusInviteJoin: Codable, Hashable, Sendable {
+    let at: Date
+    /// False once the code had earned every free month.
+    let counted: Bool
+    /// "Counted" or "Limit reached".
+    let status: String
+}
+
+/// This household's own use of another household's code.
+nonisolated struct PlusUsedCode: Codable, Hashable, Sendable {
+    let at: Date
+    /// When the free month from it ends.
+    let freeUntil: Date
+}
+
+/// Referrals across every household (`GET /plus/referrals/summary`), for the people who run
+/// DinnerOS only.
+nonisolated struct PlusReferralSummary: Codable, Hashable, Sendable {
+    let codesUsed: Int
+    /// Codes used in the last 7 days.
+    let joinedThisWeek: Int
+    let joinedAllTime: Int
+    let topReferrers: [Referrer]
+
+    nonisolated struct Referrer: Codable, Hashable, Sendable {
+        let name: String
+        let count: Int
+    }
 }
 
 /// A plan's price as the App Store gives it.
@@ -118,6 +169,23 @@ nonisolated enum PlusText {
             return String(localized: "Free until \(free.formatted(date: .abbreviated, time: .omitted)).")
         }
         return String(localized: "You have DinnerOS Plus.")
+    }
+
+    /// "Nov 13, 2026".
+    static func day(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    /// The line for a household that joined with another's code.
+    static func usedCode(_ used: PlusUsedCode, now: Date = .now) -> String {
+        used.freeUntil > now
+            ? String(localized: "You joined with a code. Free month of Plus until \(day(used.freeUntil)).")
+            : String(localized: "You joined with a code. Your free month of Plus ended \(day(used.freeUntil)).")
+    }
+
+    /// "W57ZVGUJ" from "W57Z VGUJ": what the copy button puts on the clipboard.
+    static func copyableCode(_ code: String) -> String {
+        code.filter { !$0.isWhitespace }
     }
 
     /// The plan's price line: the App Store's price when known, the API's words otherwise.
