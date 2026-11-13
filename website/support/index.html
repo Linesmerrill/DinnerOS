@@ -10,6 +10,7 @@
   <link rel="icon" href="/assets/favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
   <link rel="stylesheet" href="/assets/site.css">
+  <script src="/assets/menu.js"></script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -22,17 +23,21 @@
         <a href="/faq/">FAQ</a>
         <a href="/support/" aria-current="page">Support</a>
       </nav>
-      <details class="menu">
-        <summary>Menu</summary>
-        <nav aria-label="Main">
-          <a href="/#how">How it works</a>
-          <a href="/#plus">Plus</a>
-          <a href="/faq/">FAQ</a>
-          <a href="/support/" aria-current="page">Support</a>
-        </nav>
-      </details>
+      <button class="menu-button" type="button" aria-expanded="false" aria-controls="mobile-nav">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path class="bar-top" d="M4 7h16"/><path class="bar-mid" d="M4 12h16"/><path class="bar-bot" d="M4 17h16"/></svg>
+        <span class="menu-label">Menu</span>
+      </button>
     </div>
   </header>
+  <nav id="mobile-nav" class="mobile-nav" aria-label="Menu" hidden>
+    <div class="wrap">
+      <a href="/#how">How it works</a>
+      <a href="/#plus">Plus</a>
+      <a href="/faq/">FAQ</a>
+      <a href="/support/" aria-current="page">Support</a>
+      <a class="button solid" href="https://testflight.apple.com/join/cyVY8K6r">Get the free beta</a>
+    </div>
+  </nav>
 
   <main id="main" class="page">
     <div class="wrap">
