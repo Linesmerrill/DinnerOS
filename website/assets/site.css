@@ -417,3 +417,7 @@ a:hover { text-decoration-thickness: 2px; }
 .card.cook { border-top: 4px solid var(--plum); }
 .card.list { border-top: 4px solid var(--saffron); }
 .card.house { border-top: 4px solid var(--leaf); }
+
+/* The App Store badge, swapped in on launch day by scripts/website-launch.py. */
+.store-badge { display: inline-block; line-height: 0; }
+.store-badge img { display: block; height: 52px; width: auto; }

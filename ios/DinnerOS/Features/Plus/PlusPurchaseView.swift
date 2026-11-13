@@ -93,6 +93,10 @@ struct PlusPurchaseView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
                         .disabled(!plus.canPurchase || plus.isPurchasing)
+                        // Apple wants what's charged after the trial right by the button.
+                        Text(chargeLine(offer))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                         if !plus.canPurchase {
                             Text("DinnerOS Plus isn't for sale yet.")
                                 .font(.footnote)
@@ -137,6 +141,15 @@ struct PlusPurchaseView: View {
             .frame(maxWidth: 560)
             .frame(maxWidth: .infinity)
         }
+    }
+
+    /// "Free for 14 days, then $39.99 a year." or "$39.99 a year." for the selected plan.
+    private func chargeLine(_ offer: PlusOffer) -> String {
+        guard let plan = offer.plans.first(where: { $0.productID == selectedID(offer) }) ?? offer.plans.first
+        else { return "" }
+        let product = plus.products[plan.productID]
+        let trial = offer.trialDays > 0 && (product?.trialEligible ?? true)
+        return PlusText.chargeLine(plan, product: product, trialDays: trial ? offer.trialDays : 0)
     }
 
     /// The yearly plan unless another was picked.

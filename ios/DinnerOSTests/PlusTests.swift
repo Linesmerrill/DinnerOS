@@ -354,6 +354,16 @@ struct PlusStoreTests {
         #expect(purchaser.buyerIDs == [Fixtures.user.id])
     }
 
+    @Test func theChargeLineSaysWhatComesAfterTheTrial() throws {
+        let offer = try JSONCoding.makeDecoder().decode(PlusOffer.self, from: Data(PlusFixtures.offer.utf8))
+        let yearly = offer.plans[0]
+        let product = PlusProduct(id: yearly.productID, displayPrice: "$39.99", trialEligible: true)
+        #expect(PlusText.chargeLine(yearly, product: product, trialDays: 14) == "Free for 14 days, then $39.99 a year.")
+        #expect(
+            PlusText.chargeLine(offer.plans[1], product: nil, trialDays: 0) == "$4.99 a month. Renews until you cancel."
+        )
+    }
+
     @Test func statusLines() throws {
         let decoder = JSONCoding.makeDecoder()
         let now = try #require(ISO8601DateFormatter().date(from: "2026-11-13T12:00:00Z"))

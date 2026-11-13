@@ -40,3 +40,17 @@ deployments on `*.pages.dev` send `noindex` so search engines only list the real
 
 Before launch: swap the "Coming soon to the App Store" placeholder for Apple's badge and the
 App Store link.
+
+## Launch day
+
+When the app is live, swap every "Get the free beta" button for the App Store listing:
+
+```bash
+python3 scripts/website-launch.py --app-id <Apple ID from App Store Connect>
+```
+
+Put Apple's official badge at `website/assets/app-store-badge.svg` first to show it on the home
+page (download it from Apple's marketing guidelines page). The script lists pages that still talk
+about the beta, like the FAQ, to edit by hand. Then run `make website-assets` and push.
+
+`/eula` redirects to the Terms of Use, which include Apple's required subscription and EULA terms.
