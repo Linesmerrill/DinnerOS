@@ -329,6 +329,14 @@ func TestOfferCopy(t *testing.T) {
 			t.Errorf("offer contains %q", bad)
 		}
 	}
+	if len(o.Links) != 2 || o.Links[0].URL != PrivacyURL || o.Links[1].URL != TermsURL {
+		t.Errorf("links = %+v, want privacy then terms", o.Links)
+	}
+	for _, l := range o.Links {
+		if !strings.HasPrefix(l.URL, "https://dinneros.app/") || l.Title == "" {
+			t.Errorf("link %+v", l)
+		}
+	}
 	for _, err := range []error{ErrCodeNotFound, ErrOwnCode, ErrAlreadyRedeemed, ErrNotNewToPlus, errors.New("x")} {
 		if m := RedeemMessage(err); m == "" || strings.Contains(m, "—") {
 			t.Errorf("message for %v = %q", err, m)

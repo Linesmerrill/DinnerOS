@@ -123,6 +123,12 @@ struct PlusPurchaseView: View {
                         Button("Have an invite code?") { showsInvite = true }
                     }
                     .font(.footnote)
+                    HStack(spacing: 24) {
+                        ForEach(offer.shownLinks, id: \.self) { link in
+                            Link(link.title, destination: link.url)
+                        }
+                    }
+                    .font(.footnote)
                 }
                 .frame(maxWidth: .infinity)
             }

@@ -80,3 +80,20 @@ func TestHomePageDoesNotShadowRoutes(t *testing.T) {
 		}
 	}
 }
+
+// With the website set, the home and privacy pages send people there; the
+// invite page and apple-app-site-association stay here.
+func TestStaticPagesRedirectToTheWebsite(t *testing.T) {
+	opts := Options{AppName: "DinnerOS", WebsiteURL: "https://dinneros.app/", AppleTeamID: "TEAM", AppleBundleID: "com.example"}
+	for path, want := range map[string]string{HomePath: "https://dinneros.app/", PrivacyPath: "https://dinneros.app/privacy/"} {
+		rec := serve(t, opts, path)
+		if rec.Code != http.StatusFound || rec.Header().Get("Location") != want {
+			t.Errorf("%s: status %d, Location %q, want 302 to %q", path, rec.Code, rec.Header().Get("Location"), want)
+		}
+	}
+	for _, path := range []string{InvitePath, AASAPath} {
+		if rec := serve(t, opts, path); rec.Code != http.StatusOK {
+			t.Errorf("%s: status %d, want 200", path, rec.Code)
+		}
+	}
+}

@@ -5686,6 +5686,15 @@ components:
         terms: {type: string}
         restoreText: {type: string}
         freeText: {type: string}
+        links:
+          type: array
+          description: The privacy policy and terms of use, which Apple requires on the purchase screen.
+          items:
+            type: object
+            required: [title, url]
+            properties:
+              title: {type: string}
+              url: {type: string, format: uri}
     PlusReferral:
       type: object
       required: [code, shareText, explainer, rewarded, monthsLeft]

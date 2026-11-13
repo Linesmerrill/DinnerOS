@@ -13,7 +13,14 @@ nonisolated enum PlusFixtures {
                   {"productId":"com.linesmerrill.dinneros.plus.monthly","name":"Monthly","priceText":"$4.99 a month"}],
          "trialDays":14,"trialText":"Try it free for 14 days","buyText":"Get DinnerOS Plus",
          "terms":"Plus renews automatically until you cancel.","restoreText":"Restore purchases",
-         "freeText":"Sending your list to a store is always free."}
+         "freeText":"Sending your list to a store is always free.",
+         "links":[{"title":"Privacy Policy","url":"https://dinneros.app/privacy/"},
+                  {"title":"Terms of Use","url":"https://dinneros.app/terms/"}]}
+        """#
+
+    static let offerWithoutLinks = #"""
+        {"title":"DinnerOS Plus","subtitle":"s","benefits":[],"plans":[],"trialDays":14,"trialText":"t",
+         "buyText":"b","terms":"r","restoreText":"Restore purchases","freeText":"f"}
         """#
 
     static func status(enabled: Bool = true, active: Bool = false, extra: String = "") -> Data {
@@ -94,6 +101,7 @@ struct PlusStoreTests {
         let yearly = offer.plans[0]
         #expect(PlusText.price(yearly, product: store.products[yearly.productID]) == "$39.99 a year")
         #expect(PlusText.price(offer.plans[1], product: nil) == "$4.99 a month")
+        #expect(offer.shownLinks.map(\.title) == ["Privacy Policy", "Terms of Use"])
     }
 
     @Test func anOlderAPIWithoutPlusLocksNothing() async throws {
@@ -134,6 +142,15 @@ struct PlusStoreTests {
         await #expect(throws: PlusPurchaseError.notOpen) {
             try await purchaser.purchase(productID: "x", householdID: "h")
         }
+    }
+
+    @Test func anOfferWithoutLinksStillShowsPrivacyAndTerms() throws {
+        let offer = try JSONCoding.makeDecoder().decode(PlusOffer.self, from: Data(PlusFixtures.offerWithoutLinks.utf8))
+        #expect(offer.links == nil)
+        #expect(
+            offer.shownLinks.map(\.url.absoluteString) == [
+                "https://dinneros.app/privacy/", "https://dinneros.app/terms/",
+            ])
     }
 
     @Test func theBuildsRevenueCatKeyOpensBuying() {

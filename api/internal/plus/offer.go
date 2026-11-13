@@ -55,7 +55,22 @@ type Offer struct {
 	RestoreText string `json:"restoreText"`
 	// FreeText says that sending lists to stores stays free.
 	FreeText string `json:"freeText"`
+	// Links are the privacy policy and terms of use. Apple requires both on a
+	// subscription's purchase screen.
+	Links []Link `json:"links"`
 }
+
+// Link is a titled web page the purchase screen links to.
+type Link struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
+}
+
+// Website pages the app links to.
+const (
+	PrivacyURL = "https://dinneros.app/privacy/"
+	TermsURL   = "https://dinneros.app/terms/"
+)
 
 // DefaultOffer is the offer shown while Plus is on.
 func DefaultOffer() Offer {
@@ -77,6 +92,10 @@ func DefaultOffer() Offer {
 		Terms:       "Plus renews automatically until you cancel. Cancel anytime in your Apple account settings at least a day before it renews.",
 		RestoreText: "Restore purchases",
 		FreeText:    "Sending your list to a store is always free.",
+		Links: []Link{
+			{Title: "Privacy Policy", URL: PrivacyURL},
+			{Title: "Terms of Use", URL: TermsURL},
+		},
 	}
 }
 

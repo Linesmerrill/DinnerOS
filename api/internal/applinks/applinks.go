@@ -55,6 +55,9 @@ type Options struct {
 	// apple-app-site-association. The file is not served unless both are set.
 	AppleTeamID   string
 	AppleBundleID string
+	// WebsiteURL is the public website's origin. When set, the home and
+	// privacy pages redirect to it instead of being served here.
+	WebsiteURL string
 }
 
 // Handler serves the landing page and apple-app-site-association. Both are
@@ -67,6 +70,8 @@ type Handler struct {
 	// home and privacy are the site's static pages (pages.go).
 	home    staticPage
 	privacy staticPage
+	// website is the public website's origin, or empty.
+	website string
 }
 
 // NewHandler returns a Handler.
@@ -99,6 +104,7 @@ func NewHandler(opts Options) *Handler {
 		csp:     contentSecurityPolicy(),
 		home:    renderStaticPage(homePage, appName),
 		privacy: renderStaticPage(privacyPage, appName),
+		website: strings.TrimSuffix(opts.WebsiteURL, "/"),
 	}
 	if opts.AppleTeamID != "" && opts.AppleBundleID != "" {
 		h.aasa = encodeAppSiteAssociation(opts.AppleTeamID + "." + opts.AppleBundleID)
@@ -109,11 +115,24 @@ func NewHandler(opts Options) *Handler {
 // Mount registers the routes on r, which is expected to be the root router.
 func (h *Handler) Mount(r chi.Router) {
 	// chi matches "/" exactly, so the home page never shadows other routes.
-	r.Get(HomePath, h.home.serve)
-	r.Get(PrivacyPath, h.privacy.serve)
+	if h.website != "" {
+		// Found, not Moved Permanently, so turning WEBSITE_URL off takes effect
+		// right away instead of after browsers forget a cached redirect.
+		r.Get(HomePath, redirect(h.website+"/"))
+		r.Get(PrivacyPath, redirect(h.website+"/privacy/"))
+	} else {
+		r.Get(HomePath, h.home.serve)
+		r.Get(PrivacyPath, h.privacy.serve)
+	}
 	r.Get(InvitePath, h.serveInvitePage)
 	if h.aasa != nil {
 		r.Get(AASAPath, h.serveAASA)
+	}
+}
+
+func redirect(to string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, to, http.StatusFound)
 	}
 }
 

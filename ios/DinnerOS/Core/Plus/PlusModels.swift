@@ -35,6 +35,25 @@ nonisolated struct PlusOffer: Codable, Hashable, Sendable {
     let terms: String
     let restoreText: String
     let freeText: String
+    /// The privacy policy and terms of use. Missing from an older API.
+    var links: [PlusLink]? = nil
+
+    /// The links to show: the API's, or the website's pages when it sent none. Apple requires
+    /// both on the purchase screen.
+    var shownLinks: [PlusLink] {
+        guard let links, !links.isEmpty else { return PlusLink.defaults }
+        return links
+    }
+}
+
+/// A web page the purchase screen links to.
+nonisolated struct PlusLink: Codable, Hashable, Sendable {
+    let title: String
+    let url: URL
+
+    static let defaults: [PlusLink] = [
+        ("Privacy Policy", "https://dinneros.app/privacy/"), ("Terms of Use", "https://dinneros.app/terms/"),
+    ].compactMap { title, address in URL(string: address).map { PlusLink(title: title, url: $0) } }
 }
 
 /// One way to pay for Plus.

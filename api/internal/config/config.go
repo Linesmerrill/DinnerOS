@@ -80,6 +80,9 @@ type Config struct {
 	// token is appended as a "#token=" fragment, or directly when the base ends
 	// in "=" (the legacy "dinneros://invite?token=" form).
 	InviteURLBase string
+	// WebsiteURL is the public website, e.g. "https://dinneros.app". When set,
+	// the API's home and privacy pages redirect there. Empty serves them here.
+	WebsiteURL string
 
 	// AppleTeamID is the Apple Developer Team ID. With AppleBundleID it forms
 	// the app ID in apple-app-site-association. Empty disables that file.
@@ -553,6 +556,13 @@ func loadEmail(cfg *Config, get func(key, fallback string) string) []error {
 	if cfg.EmailFrom != "" {
 		if _, err := mail.ParseAddress(cfg.EmailFrom); err != nil {
 			errs = append(errs, fmt.Errorf("EMAIL_FROM must be an address like %q, got %q", "DinnerOS <invites@example.com>", cfg.EmailFrom))
+		}
+	}
+
+	cfg.WebsiteURL = strings.TrimSuffix(get("WEBSITE_URL", ""), "/")
+	if cfg.WebsiteURL != "" {
+		if u, err := url.Parse(cfg.WebsiteURL); err != nil || u.Scheme != "https" || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+			errs = append(errs, fmt.Errorf("WEBSITE_URL must be an https origin such as %q", "https://dinneros.app"))
 		}
 	}
 

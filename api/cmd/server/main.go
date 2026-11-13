@@ -414,6 +414,7 @@ func run() error {
 				AppURLScheme:  cfg.AppURLScheme,
 				AppleTeamID:   cfg.AppleTeamID,
 				AppleBundleID: cfg.AppleBundleID,
+				WebsiteURL:    cfg.WebsiteURL,
 			}).Mount,
 			APIRoutes: func(r chi.Router) {
 				authHandler.Mount(r)
