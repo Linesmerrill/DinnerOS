@@ -189,7 +189,9 @@ struct ShopStoreFields: View {
             Text("Store")
         } footer: {
             if !choice.isKroger, !choice.isInstacart, shopping.walmart?.affiliateTracked == true {
-                Text("\(configuration.displayName) may earn a commission on Walmart purchases.")
+                Text(
+                    ShoppingText.affiliateDisclosure(
+                        shopping.walmart?.affiliateDisclosure, appName: configuration.displayName))
             }
         }
         if choice.isKroger {
@@ -490,7 +492,9 @@ struct InstacartStoreSection: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Instacart finds a product for each item on your list. You can change any of them there.")
                 if shopping.instacart?.affiliateTracked == true {
-                    Text("\(configuration.displayName) may earn a commission on Instacart orders.")
+                    Text(
+                        ShoppingText.affiliateDisclosure(
+                            shopping.instacart?.affiliateDisclosure, appName: configuration.displayName))
                 }
             }
         }
@@ -771,6 +775,7 @@ struct WalmartStoreNumberSection: View {
     let isEditable: Bool
     let showsCommission: Bool
 
+    @Environment(ShoppingStore.self) private var shopping
     @Environment(HouseholdStore.self) private var households
     @Environment(\.appConfiguration) private var configuration
     @Environment(\.openURL) private var openURL
@@ -796,7 +801,9 @@ struct WalmartStoreNumberSection: View {
                     "Optional. Your cart uses this store for pickup and delivery. Leave it empty to let Walmart choose."
                 )
                 if showsCommission {
-                    Text("\(configuration.displayName) may earn a commission on Walmart purchases.")
+                    Text(
+                        ShoppingText.affiliateDisclosure(
+                            shopping.walmart?.affiliateDisclosure, appName: configuration.displayName))
                 }
             }
         }

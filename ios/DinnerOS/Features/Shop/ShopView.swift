@@ -1685,9 +1685,8 @@ private struct ShopHandoffBar: View {
             }
             if proposal.affiliateTracked {
                 Text(
-                    shopping.opensListPage
-                        ? "\(configuration.displayName) may earn a commission on \(store) orders."
-                        : "\(configuration.displayName) may earn a commission on \(store) purchases."
+                    ShoppingText.affiliateDisclosure(
+                        proposal.affiliateDisclosure, appName: configuration.displayName)
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)

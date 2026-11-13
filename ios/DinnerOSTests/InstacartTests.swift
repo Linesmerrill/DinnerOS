@@ -40,3 +40,24 @@ struct InstacartTests {
         #expect(ShoppingText.everythingInCart(in: "Walmart") == "Everything is already in your Walmart cart")
     }
 }
+
+/// The commission disclosure next to a store's button: the API's words, else the app's own.
+struct AffiliateDisclosureTests {
+    @Test func usesTheAPIsWordsWhenItSendsThem() throws {
+        let json = Data(
+            #"""
+            {"key":"walmart","name":"Walmart","affiliateTracked":true,
+             "affiliateDisclosure":"DinnerOS may earn a commission when you buy through this link. Your price stays the same.",
+             "capabilities":{"handoff":"cart_link","pasteProductLink":true,"storeId":true}}
+            """#.utf8)
+        let walmart = try JSONDecoder().decode(ShoppingProvider.self, from: json)
+        #expect(
+            ShoppingText.affiliateDisclosure(walmart.affiliateDisclosure, appName: "DinnerOS")
+                == "DinnerOS may earn a commission when you buy through this link. Your price stays the same.")
+        // An older API sends none: the app says it in its own words.
+        #expect(
+            ShoppingText.affiliateDisclosure(nil, appName: "DinnerOS")
+                == "DinnerOS may earn a commission when you buy through this link. Your price stays the same.")
+        #expect(ShoppingText.affiliateDisclosure("", appName: "Dinner").hasPrefix("Dinner may earn"))
+    }
+}

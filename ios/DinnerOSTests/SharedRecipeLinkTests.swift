@@ -6,6 +6,20 @@ import Testing
 /// A recipe link shared from Safari: kept for the app, taken once, and dropped when stale.
 @Suite(.serialized)
 struct SharedRecipeLinkTests {
+    /// The test build has no keychain, so the link is kept in memory.
+    init() {
+        let box = MemoryBox()
+        SharedRecipeLink.storage = .init(
+            read: { box.data },
+            write: {
+                box.data = $0; return true
+            }, delete: { box.data = nil })
+    }
+
+    private nonisolated final class MemoryBox: @unchecked Sendable {
+        var data: Data?
+    }
+
     @Test func findsTheLinkInSharedText() {
         #expect(
             SharedRecipeLink.webLink(in: "Look at this one https://cook.example.test/soup?x=1 so good")?.absoluteString

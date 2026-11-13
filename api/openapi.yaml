@@ -11745,6 +11745,9 @@ components:
         affiliateTracked:
           type: boolean
           description: Handoff links carry affiliate tracking; show the commission disclosure next to the handoff button.
+        affiliateDisclosure:
+          type: string
+          description: The sentence to show next to the button when links are tracked ("DinnerOS may earn a commission when you buy through this link. Your price stays the same."). Absent when they aren't.
         capabilities:
           $ref: "#/components/schemas/ShoppingCapabilities"
     ShoppingProviderList:
@@ -12473,6 +12476,9 @@ components:
             $ref: "#/components/schemas/ShoppingCartLink"
         affiliateTracked:
           type: boolean
+        affiliateDisclosure:
+          type: string
+          description: The sentence to show next to the button when links are tracked ("DinnerOS may earn a commission when you buy through this link. Your price stays the same."). Absent when they aren't.
         meals:
           type: array
           description: The week's planned recipes in plan order; every line's `shares` name one. Empty on a stored handoff.

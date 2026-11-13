@@ -45,12 +45,40 @@ nonisolated enum SharedRecipeLink {
         return nil
     }
 
+    /// Where the link is kept: the shared keychain, or memory in unit tests (an unsigned test
+    /// build has no keychain).
+    struct Storage: Sendable {
+        var read: @Sendable () -> Data?
+        var write: @Sendable (Data) -> Bool
+        var delete: @Sendable () -> Void
+    }
+
+    nonisolated(unsafe) static var storage = Storage(read: keychainRead, write: keychainWrite, delete: keychainDelete)
+
     /// Saves a link for the app to open, replacing any earlier one.
     @discardableResult
     static func save(_ url: URL, now: Date = Date()) -> Bool {
         guard url.scheme == "https" || url.scheme == "http",
             let data = try? JSONEncoder().encode(Pending(link: url.absoluteString, savedAt: now))
         else { return false }
+        return storage.write(data)
+    }
+
+    /// Takes the waiting link, if there is a recent one, and forgets it.
+    static func take(now: Date = Date()) -> String? {
+        let found = storage.read().flatMap { try? JSONDecoder().decode(Pending.self, from: $0) }
+        storage.delete()
+        guard let found, now.timeIntervalSince(found.savedAt) < maxAge else { return nil }
+        return found.link
+    }
+
+    static func clear() {
+        storage.delete()
+    }
+
+    // MARK: Keychain
+
+    private static func keychainWrite(_ data: Data) -> Bool {
         for group in [accessGroup, nil] {
             let base = query(group: group)
             var status = SecItemUpdate(base as CFDictionary, [kSecValueData as String: data] as CFDictionary)
@@ -65,27 +93,20 @@ nonisolated enum SharedRecipeLink {
         return false
     }
 
-    /// Takes the waiting link, if there is a recent one, and forgets it.
-    static func take(now: Date = Date()) -> String? {
-        var found: Pending?
+    private static func keychainRead() -> Data? {
         for group in [accessGroup, nil] {
             var query = query(group: group)
             query[kSecReturnData as String] = true
             query[kSecMatchLimit as String] = kSecMatchLimitOne
             var result: AnyObject?
-            if SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let data = result as? Data,
-                let pending = try? JSONDecoder().decode(Pending.self, from: data)
-            {
-                found = pending
-                break
+            if SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let data = result as? Data {
+                return data
             }
         }
-        clear()
-        guard let found, now.timeIntervalSince(found.savedAt) < maxAge else { return nil }
-        return found.link
+        return nil
     }
 
-    static func clear() {
+    private static func keychainDelete() {
         for group in [accessGroup, nil] {
             SecItemDelete(query(group: group) as CFDictionary)
         }

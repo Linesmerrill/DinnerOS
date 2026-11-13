@@ -150,8 +150,11 @@ type ProviderResponse struct {
 	Name string        `json:"name"`
 	// AffiliateTracked is true when handoff links carry affiliate tracking,
 	// which the app must disclose next to the button.
-	AffiliateTracked bool                 `json:"affiliateTracked"`
-	Capabilities     CapabilitiesResponse `json:"capabilities"`
+	AffiliateTracked bool `json:"affiliateTracked"`
+	// AffiliateDisclosure is the sentence the app shows next to the store's
+	// button when its links are tracked, and empty when they aren't.
+	AffiliateDisclosure string               `json:"affiliateDisclosure,omitempty"`
+	Capabilities        CapabilitiesResponse `json:"capabilities"`
 	// Banners name the store brands a provider serves when it serves more
 	// than one ("Fry's", "Ralphs"); Name is then the family's ("Kroger"), and
 	// a household's own brand is its settings' providerName.
@@ -534,6 +537,9 @@ type ProposalResponse struct {
 	Excluded         []ExcludedResponse    `json:"excluded"`
 	CartLinks        []CartLinkResponse    `json:"cartLinks"`
 	AffiliateTracked bool                  `json:"affiliateTracked"`
+	// AffiliateDisclosure is shown next to the button when the links are
+	// tracked; empty when they aren't.
+	AffiliateDisclosure string `json:"affiliateDisclosure,omitempty"`
 	// Cart is set on a match when the week has a current handoff; null
 	// otherwise, and always on a stored handoff.
 	Cart *CartStateResponse `json:"cart"`
@@ -1054,11 +1060,12 @@ func (v *responseView) exclusionText(provider providers.Key, reason ExclusionRea
 func (v *responseView) proposalResponse(p Proposal, stored bool) ProposalResponse {
 	resp := ProposalResponse{
 		Provider: p.Provider, Week: p.Week, StoreID: optionalString(p.StoreID), AffiliateTracked: p.AffiliateTracked,
-		Lines:         make([]HandoffLineResponse, 0, len(p.Lines)),
-		Excluded:      make([]ExcludedResponse, 0, len(p.Excluded)),
-		CartLinks:     make([]CartLinkResponse, 0, len(p.Links)),
-		Meals:         planning.GroceryMeals(p.Meals),
-		NeedsDecision: len(p.NeedsDecision()),
+		AffiliateDisclosure: affiliateDisclosure(p.AffiliateTracked),
+		Lines:               make([]HandoffLineResponse, 0, len(p.Lines)),
+		Excluded:            make([]ExcludedResponse, 0, len(p.Excluded)),
+		CartLinks:           make([]CartLinkResponse, 0, len(p.Links)),
+		Meals:               planning.GroceryMeals(p.Meals),
+		NeedsDecision:       len(p.NeedsDecision()),
 	}
 	for _, l := range p.Lines {
 		resp.Lines = append(resp.Lines, v.lineResponse(p.Provider, l, stored))
@@ -1143,13 +1150,27 @@ func (req MatchRequest) input() MatchInput {
 
 // --- Handlers -----------------------------------------------------------------
 
+// AffiliateDisclosureText tells a member, next to the button, that a store
+// link may earn DinnerOS a commission (the FTC's clear-and-close disclosure,
+// and Walmart's and Instacart's affiliate terms). It lives here so the words
+// can change without an app update.
+const AffiliateDisclosureText = "DinnerOS may earn a commission when you buy through this link. Your price stays the same."
+
+func affiliateDisclosure(tracked bool) string {
+	if !tracked {
+		return ""
+	}
+	return AffiliateDisclosureText
+}
+
 func (h *Handler) listProviders(w http.ResponseWriter, _ *http.Request) {
 	resp := ProviderListResponse{Items: []ProviderResponse{}}
 	for _, p := range h.opts.Service.Providers() {
 		c := providers.CapabilitiesOf(p)
 		item := ProviderResponse{
 			Key: p.Key(), Name: p.Name(), AffiliateTracked: p.AffiliateTracked(),
-			Capabilities: CapabilitiesResponse(c),
+			AffiliateDisclosure: affiliateDisclosure(p.AffiliateTracked()),
+			Capabilities:        CapabilitiesResponse(c),
 		}
 		if b, ok := p.(bannerLister); ok && len(b.Banners()) > 1 {
 			item.Name = "Kroger"

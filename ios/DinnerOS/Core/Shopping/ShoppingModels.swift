@@ -59,6 +59,9 @@ nonisolated struct ShoppingProvider: Decodable, Hashable, Sendable, Identifiable
     /// Handoff links carry affiliate tracking, so the commission disclosure must be shown.
     let affiliateTracked: Bool
     let capabilities: ShoppingCapabilities
+    /// The API's words for the commission, shown next to the store's button; `nil` from an older
+    /// API or when links aren't tracked.
+    var affiliateDisclosure: String? = nil
     /// The store brands the provider serves when it serves several ("Fry's", "Ralphs"); `name`
     /// is then the family's ("Kroger"). `nil` for one brand (decision 652).
     var banners: [String]? = nil
@@ -838,6 +841,8 @@ nonisolated struct ShoppingProposal: Decodable, Hashable, Sendable {
     let excluded: [ShoppingExcludedLine]
     let cartLinks: [ShoppingCartLink]
     let affiliateTracked: Bool
+    /// The API's words for the commission; `nil` from an older API or when links aren't tracked.
+    var affiliateDisclosure: String? = nil
     /// Set on a match once this week's list went to Walmart; `cartLinks` then add only what
     /// isn't in the cart yet.
     var cart: ShoppingCartState? = nil
@@ -888,7 +893,7 @@ nonisolated struct ShoppingProposal: Decodable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case provider, week
         case storeID = "storeId"
-        case lines, excluded, cartLinks, affiliateTracked, cart
+        case lines, excluded, cartLinks, affiliateTracked, affiliateDisclosure, cart
         case mealRefs = "meals"
     }
 }
@@ -1048,6 +1053,13 @@ nonisolated struct ConfirmShoppingOrderResponse: Decodable, Hashable, Sendable {
 // MARK: - Formatting
 
 nonisolated enum ShoppingText {
+    /// The commission disclosure: the API's words when it sent them, else these.
+    static func affiliateDisclosure(_ fromAPI: String?, appName: String) -> String {
+        if let fromAPI, !fromAPI.isEmpty { return fromAPI }
+        return String(
+            localized: "\(appName) may earn a commission when you buy through this link. Your price stays the same.")
+    }
+
     /// "1 package" or "3 packages".
     static func packages(_ count: Int) -> String {
         count == 1 ? String(localized: "1 package") : String(localized: "\(count) packages")
