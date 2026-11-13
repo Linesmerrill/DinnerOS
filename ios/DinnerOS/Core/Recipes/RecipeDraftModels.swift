@@ -75,6 +75,8 @@ nonisolated enum RecipeSourceKey {
     /// Read from a web page the member linked: only its title, servings, and ingredients
     /// are kept, with a link back for the rest.
     static let fromPage = "user"
+    /// From a meal kit's order history: never shared to the catalog.
+    static let mealKit = "hellofresh"
 }
 
 /// The note shown wherever a recipe read from a web page appears.

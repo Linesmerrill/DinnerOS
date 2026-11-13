@@ -61,13 +61,15 @@ func importOne(t *testing.T, s *Service, householdID, source, sourceID, name str
 	return found[0]
 }
 
+// No source reaches the catalog on its own, a meal kit's least of all
+// (decision 672).
 func TestImportPublishesOnlyPublicSources(t *testing.T) {
 	service, _, publisher := newSharingService(t)
 	importOne(t, service, hhAda, SourceHelloFresh, "hf-1", "Harissa Chicken")
 	importOne(t, service, hhAda, SourceManual, "m-1", "Grandma's Chili")
 
-	if got := publisher.names(); !slices.Equal(got, []string{"Harissa Chicken"}) {
-		t.Fatalf("published %v; want only the HelloFresh recipe", got)
+	if got := publisher.names(); len(got) != 0 {
+		t.Fatalf("published %v; want nothing", got)
 	}
 	for _, r := range publisher.published {
 		if r.HouseholdID == "" {
@@ -224,11 +226,12 @@ func TestBackfillKeysAndPublishesExistingRecipes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Keyed != 2 || res.Publishable != 1 || res.Published != 1 {
-		t.Fatalf("apply = %+v; want 2 keyed, 1 publishable, 1 published", res)
+	// A meal kit's recipe is never published (decision 672).
+	if res.Keyed != 2 || res.Publishable != 0 || res.Published != 0 {
+		t.Fatalf("apply = %+v; want 2 keyed, nothing publishable", res)
 	}
-	if got := publisher.names(); !slices.Equal(got, []string{"Harissa Chicken"}) {
-		t.Fatalf("backfill published %v; want only the public-source recipe", got)
+	if got := publisher.names(); len(got) != 0 {
+		t.Fatalf("backfill published %v; want nothing", got)
 	}
 	for _, r := range store.recipes {
 		if r.CatalogKey == "" {
@@ -249,9 +252,10 @@ func TestBackfillKeysAndPublishesExistingRecipes(t *testing.T) {
 func TestPublishFailureFailsTheImport(t *testing.T) {
 	store := newMemoryStore()
 	service := NewService(store).WithCatalog(&fakePublisher{err: errors.New("catalog is down")})
+	service.WithSharing(fakeSharing{hhAda: SharingAll})
 	_, err := service.Import(t.Context(), hhAda, ImportFile{
-		Version: ImportVersion, Source: SourceHelloFresh,
-		Recipes: []ImportRecipe{{Source: SourceHelloFresh, SourceRecipeID: "hf-1", Name: "A", Servings: []int{2}}},
+		Version: ImportVersion, Source: SourceImport,
+		Recipes: []ImportRecipe{{Source: SourceImport, SourceRecipeID: "i-1", Name: "A", Servings: []int{2}}},
 	})
 	if err == nil || !strings.Contains(err.Error(), "publish to catalog") {
 		t.Fatalf("Import error = %v; want a publish failure", err)

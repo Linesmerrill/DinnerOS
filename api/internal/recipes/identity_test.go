@@ -55,7 +55,10 @@ func TestPublicSourceAndPublishable(t *testing.T) {
 		recipe Recipe
 		want   bool
 	}{
-		{"a meal-kit recipe", Recipe{Source: SourceHelloFresh, SourceRecipeID: "1", Name: "A"}, true},
+		// A meal kit's recipes never reach the catalog, shared or not (decision 672).
+		{"a meal-kit recipe", Recipe{Source: SourceHelloFresh, SourceRecipeID: "1", Name: "A"}, false},
+		{"a meal-kit recipe the household shared", Recipe{Source: SourceHelloFresh, SourceRecipeID: "1", Name: "A", SharedToCatalog: true}, false},
+		{"an import the household shared", Recipe{Source: SourceImport, SourceRecipeID: "1", Name: "A", SharedToCatalog: true}, true},
 		{"a typed recipe", Recipe{Source: SourceManual, Name: "A"}, false},
 		{"a pasted page", Recipe{Source: SourceUser, Name: "A"}, false},
 		{"an operator import of unknown provenance", Recipe{Source: SourceImport, SourceRecipeID: "1", Name: "A"}, false},
@@ -67,8 +70,8 @@ func TestPublicSourceAndPublishable(t *testing.T) {
 			}
 		})
 	}
-	if !PublicSource("HELLOFRESH ") {
-		t.Error("PublicSource is case- or space-sensitive")
+	if PublicSource(SourceHelloFresh) || !CatalogWithheld("HELLOFRESH ") {
+		t.Error("a meal kit's recipes would reach the catalog, or the check is case- or space-sensitive")
 	}
 	if PublicSource(SourceManual) || PublicSource(SourceUser) || PublicSource("") {
 		t.Error("a private source is treated as public")

@@ -9,16 +9,27 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 )
 
-// publicSources are the sources whose recipes are published by a meal-kit
-// service or a comparable public catalog, so their content is already public
-// and may enter the global recipe catalog without a household opting in.
+// publicSources are the sources whose recipes may enter the global recipe
+// catalog without a household opting in. There are none (decision 672): a
+// meal kit's recipes are its own writing and photos, and copying them to
+// every household is what invites a takedown.
 //
-// Everything else — a member's typed recipe (SourceManual), a pasted or
-// fetched web page (SourceUser), an operator import of unknown provenance
-// (SourceImport) — is private to the household that owns it until the
-// household sets Recipe.SharedToCatalog. Adding a meal-kit service means
-// adding its source constant to this list and nowhere else.
-var publicSources = []string{SourceHelloFresh}
+// Everything else is private to the household that owns it until the
+// household sets Recipe.SharedToCatalog.
+var publicSources = []string{}
+
+// withheldSources are never shown in, or copied to, the global catalog, even
+// when a household shares one: their recipes are a meal kit's content.
+var withheldSources = []string{SourceHelloFresh}
+
+// WithheldSources returns the withheld sources, for store queries.
+func WithheldSources() []string { return slices.Clone(withheldSources) }
+
+// CatalogWithheld reports whether recipes from this source are kept out of
+// the global catalog entirely.
+func CatalogWithheld(source string) bool {
+	return slices.Contains(withheldSources, strings.ToLower(strings.TrimSpace(source)))
+}
 
 // PublicSource reports whether recipes from this source may be published to
 // the global catalog without the owning household opting in.
@@ -76,5 +87,5 @@ func CatalogKey(r Recipe) string {
 // catalog: it comes from a known public source, or the household explicitly
 // shared it. Add-ons are publishable like any other recipe.
 func Publishable(r Recipe) bool {
-	return CatalogKey(r) != "" && (PublicSource(r.Source) || r.SharedToCatalog)
+	return CatalogKey(r) != "" && !CatalogWithheld(r.Source) && (PublicSource(r.Source) || r.SharedToCatalog)
 }

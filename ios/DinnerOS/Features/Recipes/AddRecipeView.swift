@@ -7,6 +7,8 @@ import SwiftUI
 /// household's recipes — and it stays the household's: a typed or pasted
 /// recipe never enters the global catalog.
 struct AddRecipeView: View {
+    /// A link shared from Safari: the screen opens on it and reads it right away.
+    var initialLink: String? = nil
     /// Called with the saved recipe so the caller can dismiss and show it.
     var onSaved: (Recipe) -> Void = { _ in }
 
@@ -47,7 +49,13 @@ struct AddRecipeView: View {
             .toolbar { toolbar }
             .task {
                 guard store == nil, let householdID = households.current?.household.id else { return }
-                store = library.makeDraftStore(householdID: householdID)
+                let store = library.makeDraftStore(householdID: householdID)
+                self.store = store
+                if let initialLink {
+                    mode = .link
+                    link = initialLink
+                    await store.parse(url: initialLink)
+                }
             }
         }
     }

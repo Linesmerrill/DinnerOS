@@ -26,6 +26,9 @@ DEFAULT_BUNDLE_ID = "com.linesmerrill.dinneros"
 # The widget extension that draws Live Activities. Must match
 # LIVE_ACTIVITIES_BUNDLE_ID in ios/Config/Shared.xcconfig.
 LIVE_ACTIVITIES_SUFFIX = ".LiveActivities"
+# The Safari share sheet extension that saves recipe links. Must match
+# SHARE_BUNDLE_ID in ios/Config/Shared.xcconfig.
+SHARE_SUFFIX = ".ShareExtension"
 TEST_DEVICE = "iPhone 17 Pro"
 
 def app_bundle_id
@@ -36,9 +39,13 @@ def live_activities_bundle_id
   ENV.fetch("LIVE_ACTIVITIES_BUNDLE_ID", "#{app_bundle_id}#{LIVE_ACTIVITIES_SUFFIX}")
 end
 
+def share_bundle_id
+  ENV.fetch("SHARE_BUNDLE_ID", "#{app_bundle_id}#{SHARE_SUFFIX}")
+end
+
 # Every identifier that is signed into the archive, app first.
 def signed_bundle_ids
-  [app_bundle_id, live_activities_bundle_id]
+  [app_bundle_id, live_activities_bundle_id, share_bundle_id]
 end
 
 # The name of the App Store profile match installed for identifier.
@@ -106,6 +113,8 @@ platform :ios do
     match(type: "appstore", app_identifier: signed_bundle_ids, api_key: api_key, readonly: true)
     profile_name = match_profile_name(bundle_id)
     extension_profile_name = match_profile_name(extension_id)
+    share_id = share_bundle_id
+    share_profile_name = match_profile_name(share_id)
 
     build_number = latest_testflight_build_number(
       api_key: api_key,
@@ -124,7 +133,8 @@ platform :ios do
       # PROVISIONING_PROFILE_SPECIFIER here would force the app's profile onto
       # the extension and fail the archive.
       "APP_PROFILE_SPECIFIER=#{profile_name.shellescape}",
-      "LIVE_ACTIVITIES_PROFILE_SPECIFIER=#{extension_profile_name.shellescape}"
+      "LIVE_ACTIVITIES_PROFILE_SPECIFIER=#{extension_profile_name.shellescape}",
+      "SHARE_PROFILE_SPECIFIER=#{share_profile_name.shellescape}"
     ]
     build_settings << "API_BASE_URL=#{ENV['API_BASE_URL'].shellescape}" unless ENV["API_BASE_URL"].to_s.empty?
 
@@ -139,7 +149,9 @@ platform :ios do
       export_options: {
         signingStyle: "manual",
         teamID: ENV["DEVELOPMENT_TEAM"],
-        provisioningProfiles: { bundle_id => profile_name, extension_id => extension_profile_name }
+        provisioningProfiles: {
+          bundle_id => profile_name, extension_id => extension_profile_name, share_id => share_profile_name
+        }
       }
     )
 
@@ -191,6 +203,7 @@ platform :ios do
     # match can only make a profile for an App ID that exists. The app's was
     # registered by hand long ago; the extension's is registered here.
     ensure_bundle_id(live_activities_bundle_id, "DinnerOS Live Activities")
+    ensure_bundle_id(share_bundle_id, "DinnerOS Share")
 
     match(type: "appstore", app_identifier: signed_bundle_ids, api_key: api_key, readonly: false)
     UI.success("Signing assets are stored for #{signed_bundle_ids.join(', ')}; every machine and CI run now shares them.")

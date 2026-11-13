@@ -287,13 +287,16 @@ machine and CI run. They live encrypted in the private repository
 key. Cloud-managed signing used to request a new certificate per run, which hit
 Apple's per-account certificate limit and failed every archive.
 
-- **Two identifiers are signed**: the app, `com.linesmerrill.dinneros`, and its
-  Live Activities widget extension, `com.linesmerrill.dinneros.LiveActivities`
-  (`LIVE_ACTIVITIES_BUNDLE_ID` in `ios/Config/Shared.xcconfig`). Each has its
-  own App Store profile in match; `beta` passes them to their targets as
-  `APP_PROFILE_SPECIFIER` and `LIVE_ACTIVITIES_PROFILE_SPECIFIER`, never as one
-  global `PROVISIONING_PROFILE_SPECIFIER`, which would put the app's profile on
-  the extension.
+- **Three identifiers are signed**: the app, `com.linesmerrill.dinneros`; its
+  widget extension, `com.linesmerrill.dinneros.LiveActivities`
+  (`LIVE_ACTIVITIES_BUNDLE_ID`); and its Safari share sheet extension,
+  `com.linesmerrill.dinneros.ShareExtension` (`SHARE_BUNDLE_ID`, both in
+  `ios/Config/Shared.xcconfig`). Each has its own App Store profile in match;
+  `beta` passes them to their targets as `APP_PROFILE_SPECIFIER`,
+  `LIVE_ACTIVITIES_PROFILE_SPECIFIER`, and `SHARE_PROFILE_SPECIFIER`, never as
+  one global `PROVISIONING_PROFILE_SPECIFIER`, which would put the app's profile
+  on an extension. The `signing` lane registers both extensions' App IDs (no
+  capabilities; they share the app's keychain group) before making profiles.
 - **`ios/fastlane/Matchfile`** points at the storage repository and defaults to
   read-only.
 - **`bundle exec fastlane beta`** never creates or revokes anything.

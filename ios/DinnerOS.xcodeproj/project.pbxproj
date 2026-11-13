@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		D0000000000000000000008A /* DinnerOSLiveActivities.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D00000000000000000000070 /* DinnerOSLiveActivities.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D0000000000000000000009A /* DinnerOSShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = D00000000000000000000090 /* DinnerOSShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -25,6 +26,13 @@
 			remoteGlobalIDString = D00000000000000000000080;
 			remoteInfo = DinnerOSLiveActivities;
 		};
+		D00000000000000000000097 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D00000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D00000000000000000000091;
+			remoteInfo = DinnerOSShare;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -35,6 +43,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				D0000000000000000000008A /* DinnerOSLiveActivities.appex in Embed Foundation Extensions */,
+				D0000000000000000000009A /* DinnerOSShare.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -51,6 +60,8 @@
 		D0000000000000000000000D /* DinnerOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DinnerOS.entitlements; sourceTree = "<group>"; };
 		D00000000000000000000070 /* DinnerOSLiveActivities.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DinnerOSLiveActivities.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		D00000000000000000000073 /* LiveActivities-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "LiveActivities-Info.plist"; sourceTree = "<group>"; };
+		D00000000000000000000090 /* DinnerOSShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DinnerOSShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D00000000000000000000094 /* Share-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Share-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -72,6 +83,11 @@
 		D00000000000000000000072 /* Shared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		D00000000000000000000095 /* DinnerOSShare */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DinnerOSShare;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -98,6 +114,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D00000000000000000000093 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -108,6 +131,7 @@
 				D00000000000000000000006 /* DinnerOS */,
 				D00000000000000000000072 /* Shared */,
 				D00000000000000000000071 /* DinnerOSLiveActivities */,
+				D00000000000000000000095 /* DinnerOSShare */,
 				D00000000000000000000007 /* DinnerOSTests */,
 				D00000000000000000000003 /* Products */,
 			);
@@ -119,6 +143,7 @@
 				D00000000000000000000004 /* DinnerOS.app */,
 				D00000000000000000000005 /* DinnerOSTests.xctest */,
 				D00000000000000000000070 /* DinnerOSLiveActivities.appex */,
+				D00000000000000000000090 /* DinnerOSShare.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -132,6 +157,7 @@
 				D0000000000000000000000C /* Info.plist */,
 				D0000000000000000000000D /* DinnerOS.entitlements */,
 				D00000000000000000000073 /* LiveActivities-Info.plist */,
+				D00000000000000000000094 /* Share-Info.plist */,
 			);
 			path = Config;
 			sourceTree = "<group>";
@@ -152,6 +178,7 @@
 			);
 			dependencies = (
 				D00000000000000000000088 /* PBXTargetDependency */,
+				D00000000000000000000098 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				D00000000000000000000006 /* DinnerOS */,
@@ -210,6 +237,29 @@
 			productReference = D00000000000000000000070 /* DinnerOSLiveActivities.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		D00000000000000000000091 /* DinnerOSShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D0000000000000000000009B /* Build configuration list for PBXNativeTarget "DinnerOSShare" */;
+			buildPhases = (
+				D00000000000000000000092 /* Sources */,
+				D00000000000000000000093 /* Frameworks */,
+				D00000000000000000000096 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D00000000000000000000095 /* DinnerOSShare */,
+				D00000000000000000000072 /* Shared */,
+			);
+			name = DinnerOSShare;
+			packageProductDependencies = (
+			);
+			productName = DinnerOSShare;
+			productReference = D00000000000000000000090 /* DinnerOSShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -228,6 +278,9 @@
 						TestTargetID = D00000000000000000000010;
 					};
 					D00000000000000000000080 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					D00000000000000000000091 = {
 						CreatedOnToolsVersion = 26.0;
 					};
 				};
@@ -249,6 +302,7 @@
 				D00000000000000000000010 /* DinnerOS */,
 				D00000000000000000000020 /* DinnerOSTests */,
 				D00000000000000000000080 /* DinnerOSLiveActivities */,
+				D00000000000000000000091 /* DinnerOSShare */,
 			);
 		};
 /* End PBXProject section */
@@ -269,6 +323,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		D00000000000000000000083 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000096 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -299,6 +360,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D00000000000000000000092 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -311,6 +379,11 @@
 			isa = PBXTargetDependency;
 			target = D00000000000000000000080 /* DinnerOSLiveActivities */;
 			targetProxy = D00000000000000000000087 /* PBXContainerItemProxy */;
+		};
+		D00000000000000000000098 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D00000000000000000000091 /* DinnerOSShare */;
+			targetProxy = D00000000000000000000097 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -475,6 +548,56 @@
 			};
 			name = Release;
 		};
+		D0000000000000000000009C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/Share.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/Share-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SHARE_BUNDLE_ID)";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "$(SHARE_PROFILE_SPECIFIER)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D0000000000000000000009D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/Share.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/Share-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SHARE_BUNDLE_ID)";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "$(SHARE_PROFILE_SPECIFIER)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -510,6 +633,15 @@
 			buildConfigurations = (
 				D00000000000000000000085 /* Debug */,
 				D00000000000000000000086 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D0000000000000000000009B /* Build configuration list for PBXNativeTarget "DinnerOSShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D0000000000000000000009C /* Debug */,
+				D0000000000000000000009D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

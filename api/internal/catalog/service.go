@@ -115,6 +115,7 @@ func (s *Service) Discover(ctx context.Context, householdID string, q Query) (Pa
 	if err != nil {
 		return Page{}, fmt.Errorf("scan catalog: %w", err)
 	}
+	entries = shown(entries)
 	entries, err = s.withoutLibrary(ctx, householdID, entries)
 	if err != nil {
 		return Page{}, err
@@ -138,6 +139,10 @@ func (s *Service) Search(ctx context.Context, householdID string, q Query) (Page
 	if err != nil {
 		return Page{}, fmt.Errorf("search catalog: %w", err)
 	}
+	if kept := shown(entries); len(kept) != len(entries) {
+		total -= len(entries) - len(kept)
+		entries = kept
+	}
 	items := make([]Result, 0, len(entries))
 	for _, e := range entries {
 		items = append(items, Result{Recipe: e})
@@ -158,6 +163,9 @@ func (s *Service) Get(ctx context.Context, householdID, id string) (Result, erro
 	if err != nil {
 		return Result{}, err
 	}
+	if recipes.CatalogWithheld(e.Content.Source) {
+		return Result{}, ErrNotFound
+	}
 	out := []Result{{Recipe: e}}
 	if err := s.mark(ctx, householdID, out); err != nil {
 		return Result{}, err
@@ -172,6 +180,9 @@ func (s *Service) Add(ctx context.Context, householdID, id string) (recipes.Reci
 	if err != nil {
 		return recipes.Recipe{}, false, err
 	}
+	if recipes.CatalogWithheld(e.Content.Source) {
+		return recipes.Recipe{}, false, ErrNotFound
+	}
 	if s.library == nil {
 		return recipes.Recipe{}, false, errors.New("catalog: no library is wired")
 	}
@@ -179,6 +190,18 @@ func (s *Service) Add(ctx context.Context, householdID, id string) (recipes.Reci
 }
 
 // --- helpers ------------------------------------------------------------------
+
+// shown drops entries from withheld sources (a meal kit's recipes, decision
+// 672). Entries published before the rule stay stored but are never served.
+func shown(entries []Recipe) []Recipe {
+	out := entries[:0:0]
+	for _, e := range entries {
+		if !recipes.CatalogWithheld(e.Content.Source) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
 
 func (s *Service) tasteOf(ctx context.Context, householdID string) (recommendations.Profile, autopilot.TimeBands) {
 	// The zero value is the default bands (autopilot.TimeBands.Of).

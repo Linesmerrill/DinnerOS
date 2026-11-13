@@ -197,7 +197,7 @@ func TestIntegrationStoredDocumentHasNoHouseholdFields(t *testing.T) {
 // --- helpers ------------------------------------------------------------------
 
 func mongoContent(name string, ingredientNames ...string) recipes.Recipe {
-	r := recipes.Recipe{Source: recipes.SourceHelloFresh, Name: name, Servings: []int{2}, TotalMinutes: 30}
+	r := recipes.Recipe{Source: recipes.SourceImport, Name: name, Servings: []int{2}, TotalMinutes: 30}
 	for _, n := range ingredientNames {
 		r.Ingredients = append(r.Ingredients, recipes.RecipeIngredient{
 			IngredientID: "66e5a1f2c3b4a5d6e7f8ff01", Name: n,

@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -66,7 +67,8 @@ func libraryRecipe(source, sourceID, name string, ingredientNames ...string) rec
 
 func TestPublishRecipesKeepsHouseholdDataOut(t *testing.T) {
 	h := newHarness(t, nil)
-	in := libraryRecipe(recipes.SourceHelloFresh, "hf-1", "Harissa Chicken", "harissa", "chicken")
+	in := libraryRecipe(recipes.SourceImport, "hf-1", "Harissa Chicken", "harissa", "chicken")
+	in.SharedToCatalog = true
 	in.SharedToCatalog = true
 
 	n, err := h.service.PublishRecipes(t.Context(), []recipes.Recipe{in})
@@ -78,8 +80,8 @@ func TestPublishRecipesKeepsHouseholdDataOut(t *testing.T) {
 		t.Fatalf("Search = %d entries, %v; want 1, nil", len(entries), err)
 	}
 	got := entries[0]
-	if got.CatalogKey != "hellofresh:hf-1" {
-		t.Errorf("catalogKey = %q; want hellofresh:hf-1", got.CatalogKey)
+	if got.CatalogKey != "import:hf-1" {
+		t.Errorf("catalogKey = %q; want import:hf-1", got.CatalogKey)
 	}
 	switch {
 	case got.Content.HouseholdID != "":
@@ -113,9 +115,10 @@ func TestPublishRecipesDropsPrivateSources(t *testing.T) {
 
 func TestPublishRecipesCollapsesTheSameRecipeFromTwoHouseholds(t *testing.T) {
 	h := newHarness(t, nil)
-	ada := libraryRecipe(recipes.SourceHelloFresh, "hf-9", "Pork Tacos", "pork")
-	bob := libraryRecipe(recipes.SourceHelloFresh, "hf-9", "Pork Tacos", "pork")
+	ada := libraryRecipe(recipes.SourceImport, "hf-9", "Pork Tacos", "pork")
+	bob := libraryRecipe(recipes.SourceImport, "hf-9", "Pork Tacos", "pork")
 	bob.HouseholdID, bob.TimesOrdered = hhBob, 2
+	ada.SharedToCatalog, bob.SharedToCatalog = true, true
 
 	if _, err := h.service.PublishRecipes(t.Context(), []recipes.Recipe{ada}); err != nil {
 		t.Fatal(err)
@@ -133,6 +136,41 @@ func TestPublishRecipesCollapsesTheSameRecipeFromTwoHouseholds(t *testing.T) {
 	}
 }
 
+// A meal kit's recipes never reach the catalog, even shared, and ones
+// published before that rule are never served (decision 672).
+func TestMealKitRecipesStayOutOfTheCatalog(t *testing.T) {
+	h := newHarness(t, nil)
+	hf := libraryRecipe(recipes.SourceHelloFresh, "hf-7", "Kit Tacos", "pork")
+	hf.SharedToCatalog = true
+	if n, err := h.service.PublishRecipes(t.Context(), []recipes.Recipe{hf}); err != nil || n != 0 {
+		t.Fatalf("published %d, %v; want 0", n, err)
+	}
+	if err := h.service.PublishOne(t.Context(), hf); err == nil {
+		t.Error("PublishOne accepted a meal kit's recipe")
+	}
+	// One stored before the rule: written straight to the store.
+	old := Recipe{CatalogKey: "hellofresh:hf-8", Content: Content(libraryRecipe(recipes.SourceHelloFresh, "hf-8", "Old Kit Bowl", "rice"))}
+	if _, err := h.store.Upsert(t.Context(), []Recipe{old}, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	stored, _, _ := h.store.Search(t.Context(), Filter{Limit: 10})
+	if len(stored) != 1 {
+		t.Fatalf("store holds %d", len(stored))
+	}
+	if page, err := h.service.Discover(t.Context(), hhAda, Query{}); err != nil || len(page.Items) != 0 {
+		t.Errorf("discover = %+v, %v", page.Items, err)
+	}
+	if page, err := h.service.Search(t.Context(), hhAda, Query{Text: "kit"}); err != nil || len(page.Items) != 0 || page.Total != 0 {
+		t.Errorf("search = %+v, %v", page, err)
+	}
+	if _, err := h.service.Get(t.Context(), hhAda, stored[0].ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("get = %v", err)
+	}
+	if _, _, err := h.service.Add(t.Context(), hhAda, stored[0].ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("add = %v", err)
+	}
+}
+
 func TestPublishOneRejectsAPrivateRecipe(t *testing.T) {
 	h := newHarness(t, nil)
 	err := h.service.PublishOne(t.Context(), libraryRecipe(recipes.SourceManual, "m-3", "Private", "salt"))
@@ -146,7 +184,7 @@ func TestDiscoverExcludesTheHouseholdsOwnRecipes(t *testing.T) {
 	publish(t, h, "hf-1", "Alpha Bowl")
 	publish(t, h, "hf-2", "Beta Bowl")
 	publish(t, h, "hf-3", "Gamma Bowl")
-	h.library.have[hhAda] = map[string]string{"hellofresh:hf-2": "own-2"}
+	h.library.have[hhAda] = map[string]string{"import:hf-2": "own-2"}
 
 	page, err := h.service.Discover(t.Context(), hhAda, Query{})
 	if err != nil {
@@ -256,7 +294,7 @@ func TestSearchMarksTheHouseholdsOwnRecipes(t *testing.T) {
 	h := newHarness(t, nil)
 	publish(t, h, "hf-1", "Tikka Masala")
 	publish(t, h, "hf-2", "Pad Thai")
-	h.library.have[hhAda] = map[string]string{"hellofresh:hf-1": "own-1"}
+	h.library.have[hhAda] = map[string]string{"import:hf-1": "own-1"}
 
 	page, err := h.service.Search(t.Context(), hhAda, Query{Text: "tikka"})
 	if err != nil {
@@ -313,7 +351,10 @@ func publish(t *testing.T, h *harness, sourceID, name string) string {
 
 func publishWith(t *testing.T, h *harness, sourceID, name string, edit func(*recipes.Recipe)) string {
 	t.Helper()
-	r := libraryRecipe(recipes.SourceHelloFresh, sourceID, name, "olive oil")
+	r := libraryRecipe(recipes.SourceImport, sourceID, name, "olive oil")
+	// Shared by its household: no source reaches the catalog on its own
+	// (decision 672).
+	r.SharedToCatalog = true
 	if edit != nil {
 		edit(&r)
 	}

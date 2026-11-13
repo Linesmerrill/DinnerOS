@@ -27,6 +27,9 @@ struct MenuView: View {
     @State private var isAddingRecipes = false
     /// The "Add a Recipe" sheet: paste text or a link, review, save.
     @State private var isAddingOwnRecipe = false
+    /// A recipe link shared from Safari, read as soon as the sheet opens.
+    @State private var sharedRecipeLink: String?
+    @Environment(\.scenePhase) private var appPhase
     /// The new-member welcome and what was picked on it (acted on once it closes, so two
     /// sheets never overlap).
     @State private var showsWelcome = false
@@ -136,7 +139,17 @@ struct MenuView: View {
             }
             .sheet(isPresented: $isAddingOwnRecipe) {
                 // The new recipe shows on the menu right away, not at the next refresh.
-                AddRecipeView(onSaved: { _ in Task { await menu.reload() } })
+                AddRecipeView(initialLink: sharedRecipeLink, onSaved: { _ in Task { await menu.reload() } })
+            }
+            .onChange(of: isAddingOwnRecipe) { _, isOpen in
+                if !isOpen { sharedRecipeLink = nil }
+            }
+            // A recipe shared from Safari waits in the keychain until the app comes forward.
+            .onChange(of: appPhase, initial: true) { _, phase in
+                guard phase == .active, canAddOwnRecipe, !isAddingOwnRecipe, let link = SharedRecipeLink.take()
+                else { return }
+                sharedRecipeLink = link
+                isAddingOwnRecipe = true
             }
             // Also when the week start day changes: the server moved meals between weeks.
             .task(id: household?.weekScope) {

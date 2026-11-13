@@ -350,7 +350,8 @@ func (s *MongoStore) Search(ctx context.Context, f Filter) ([]Recipe, int, error
 // narrowing builds the exact filters shared by search and counting, all of
 // them against folded fields so they need no collation.
 func narrowing(f Filter) bson.D {
-	out := bson.D{}
+	// A meal kit's recipes are never served (decision 672).
+	out := bson.D{{Key: "source", Value: bson.D{{Key: "$nin", Value: recipes.WithheldSources()}}}}
 	if key := fold(f.Cuisine); key != "" {
 		out = append(out, bson.E{Key: "cuisineKeys", Value: key})
 	}

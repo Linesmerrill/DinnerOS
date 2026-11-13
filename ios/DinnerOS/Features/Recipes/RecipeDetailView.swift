@@ -125,8 +125,9 @@ struct RecipeDetailView: View {
                         .padding(.horizontal, 16)
                     }
                     // Picking recipes to share one by one happens here, on the recipe.
+                    // A meal kit's recipes are its own and never go to the catalog.
                     if let recipe, households.current?.household.catalogSharing == .chosen,
-                        households.access?.can(.recipesEdit) == true
+                        households.access?.can(.recipesEdit) == true, recipe.source != RecipeSourceKey.mealKit
                     {
                         RecipeSharingRow(recipe: recipe)
                             .padding(.horizontal, 16)

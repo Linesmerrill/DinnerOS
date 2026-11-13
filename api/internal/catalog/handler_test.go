@@ -111,7 +111,7 @@ func TestDiscoverReturnsUnownedRecipes(t *testing.T) {
 	s := newTestServer(t)
 	publish(t, s.harness, "hf-1", "Alpha Bowl")
 	publish(t, s.harness, "hf-2", "Beta Bowl")
-	s.harness.library.have[hhAda] = map[string]string{"hellofresh:hf-2": "own-2"}
+	s.harness.library.have[hhAda] = map[string]string{"import:hf-2": "own-2"}
 
 	rec := s.do(t, http.MethodGet, "/api/v1/households/"+hhAda+"/discover", userAda)
 	if rec.Code != http.StatusOK {
@@ -129,7 +129,7 @@ func TestDiscoverReturnsUnownedRecipes(t *testing.T) {
 func TestCatalogSearchMarksTheLibrary(t *testing.T) {
 	s := newTestServer(t)
 	publish(t, s.harness, "hf-1", "Tikka Masala")
-	s.harness.library.have[hhAda] = map[string]string{"hellofresh:hf-1": "own-1"}
+	s.harness.library.have[hhAda] = map[string]string{"import:hf-1": "own-1"}
 
 	rec := s.do(t, http.MethodGet, "/api/v1/households/"+hhAda+"/catalog/recipes?q=tikka", userAda)
 	resp := decode[CatalogListResponse](t, rec)
