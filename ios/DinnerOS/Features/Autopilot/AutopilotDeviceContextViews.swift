@@ -27,13 +27,13 @@ struct AutopilotContextExplainerView: View {
                         systemImage: "calendar", title: String(localized: "Your calendar"),
                         detail: String(
                             localized:
-                                "Your iPhone works out how free each evening is between 4 and 8 pm. Only “free”, “some”, or “busy” and the free minutes are sent — never event names, times, or who's invited."
+                                "Your iPhone works out how free each evening is between 4 and 8 pm. We only get “free”, “some”, or “busy” and the free minutes. Never event names, times, or who's invited."
                         ))
                     point(
                         systemImage: "cloud.sun", title: String(localized: "The forecast"),
                         detail: String(
                             localized:
-                                "Your approximate location gets the forecast from Apple Weather on your iPhone. Only “cold”, “mild”, or “hot” and rain or snow are sent — never where you are."
+                                "Your iPhone gets the forecast from Apple Weather using your approximate location. We only get “cold”, “mild”, or “hot” and rain or snow. Never where you are."
                         ))
                     point(
                         systemImage: "switch.2", title: String(localized: "Your choice"),
@@ -109,7 +109,7 @@ struct AutopilotDeviceContextSection: View {
             Text("Calendar & Weather")
         } footer: {
             Text(
-                "Worked out on this iPhone. Autopilot receives only how busy each evening is and cold, mild, or hot with rain or snow — never your events or location."
+                "Worked out on this iPhone. We only get how busy each evening is and whether it's cold, mild, or hot, with rain or snow. Never your events or location."
             )
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
