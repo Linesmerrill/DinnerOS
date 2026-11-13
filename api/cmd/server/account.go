@@ -14,6 +14,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
+	"github.com/Linesmerrill/DinnerOS/api/internal/plus"
 	"github.com/Linesmerrill/DinnerOS/api/internal/push"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ratings"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
@@ -50,6 +51,7 @@ func newAccountService(db *mongo.Database, householdService *households.Service,
 			eventStore,
 			recommendations.NewMongoStore(db),
 			cooking.NewStore(db),
+			plus.NewMongoStore(db),
 		},
 		UserData: []account.UserPurger{
 			ratingStore,

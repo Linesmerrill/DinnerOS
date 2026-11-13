@@ -21,6 +21,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb/mongotest"
+	"github.com/Linesmerrill/DinnerOS/api/internal/plus"
 	"github.com/Linesmerrill/DinnerOS/api/internal/push"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ratings"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
@@ -87,6 +88,7 @@ var accountDeletionKinds = map[string]collectionKind{
 	shopping.UsualsPromptsCollection:       householdData,
 	skips.Collection:                       householdData,
 	sameitems.Collection:                   householdData,
+	plus.Collection:                        householdData,
 	ratings.Collection:                     userRatings,
 	ratings.NotesCollection:                userRatings,
 	events.Collection:                      userHistory,

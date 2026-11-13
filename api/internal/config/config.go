@@ -96,6 +96,10 @@ type Config struct {
 	// default) to fill its cart directly. Off unless the client ID and
 	// secret are set.
 	Kroger Kroger
+	// Plus is DinnerOS Plus: off (PLUS_ENABLED=false, the default) shows no
+	// paywall and opens everything. The RevenueCat webhook needs
+	// REVENUECAT_WEBHOOK_SECRET.
+	Plus Plus
 	// Instacart makes Instacart shopping list pages from a week's list when
 	// INSTACART_ENABLED is true and INSTACART_API_KEY is set.
 	Instacart Instacart
@@ -156,6 +160,14 @@ type Kroger struct {
 
 // Enabled reports whether the Kroger application is configured.
 func (k Kroger) Enabled() bool { return k.ClientID != "" && k.ClientSecret != "" }
+
+// Plus holds DinnerOS Plus settings.
+type Plus struct {
+	Enabled bool
+	// WebhookSecret is the Authorization header value set on the RevenueCat
+	// webhook. A secret: never log it. Empty turns the webhook off.
+	WebhookSecret string
+}
 
 // Instacart holds the Instacart Developer Platform key. The key is a
 // secret: never log it.
@@ -250,6 +262,8 @@ func (c Config) LogValue() slog.Value {
 		slog.String("mongoDatabase", c.MongoDatabase),
 		slog.Bool("walmartAffiliateLinks", c.WalmartImpact.Enabled()),
 		slog.Bool("instacart", c.Instacart.Enabled()),
+		slog.Bool("plus", c.Plus.Enabled),
+		slog.Bool("revenueCatWebhook", c.Plus.WebhookSecret != ""),
 		slog.Bool("instacartAffiliateLinks", c.Instacart.Enabled() && c.Instacart.Affiliate),
 		slog.String("starterRecipesHouseholdId", c.StarterRecipesHouseholdID),
 		slog.Bool("apnsEnabled", c.APNs.Enabled()),
@@ -440,10 +454,15 @@ func loadShopping(cfg *Config, get func(key, fallback string) string) []error {
 		APIKey:  strings.TrimSpace(get("INSTACART_API_KEY", "")),
 		APIBase: strings.TrimRight(strings.TrimSpace(get("INSTACART_API_BASE", DefaultInstacartAPIBase)), "/"),
 	}
+	cfg.Plus.WebhookSecret = strings.TrimSpace(get("REVENUECAT_WEBHOOK_SECRET", ""))
+	if s := cfg.Plus.WebhookSecret; s != "" && len(s) < 24 {
+		cfg.Plus.WebhookSecret = ""
+		errs = append(errs, errors.New("REVENUECAT_WEBHOOK_SECRET must be at least 24 characters (openssl rand -hex 24)"))
+	}
 	for _, flag := range []struct {
 		name string
 		out  *bool
-	}{{"INSTACART_ENABLED", &cfg.Instacart.On}, {"INSTACART_AFFILIATE", &cfg.Instacart.Affiliate}} {
+	}{{"INSTACART_ENABLED", &cfg.Instacart.On}, {"INSTACART_AFFILIATE", &cfg.Instacart.Affiliate}, {"PLUS_ENABLED", &cfg.Plus.Enabled}} {
 		switch strings.ToLower(strings.TrimSpace(get(flag.name, ""))) {
 		case "", "false", "0":
 		case "true", "1":

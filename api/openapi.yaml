@@ -5403,6 +5403,50 @@ paths:
         "409":
           $ref: "#/components/responses/AutopilotConflict"
 
+  /api/v1/households/{householdId}/plus:
+    get:
+      tags: [Households]
+      summary: The household's DinnerOS Plus
+      description: |
+        Whether the household has DinnerOS Plus (decision 673). `enabled` is
+        false while Plus is switched off on the server: show no paywall and
+        open every feature.
+      parameters:
+        - $ref: "#/components/parameters/HouseholdID"
+      responses:
+        "200":
+          description: Plus
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlusStatus"
+  /api/v1/webhooks/revenuecat:
+    post:
+      tags: [Households]
+      summary: RevenueCat subscription events
+      description: |
+        RevenueCat's webhook. The Authorization header must equal
+        `REVENUECAT_WEBHOOK_SECRET` (with or without `Bearer `); without the
+        setting the route answers 404. The event's app user ID is the
+        household ID. Events about other entitlements, test events, and
+        anonymous users are accepted and ignored.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event]
+              properties:
+                event:
+                  type: object
+                  description: A RevenueCat event; only id, type, app_user_id, original_app_user_id, aliases, product_id, period_type, entitlement_ids, expiration_at_ms, event_timestamp_ms, and environment are read.
+      responses:
+        "200":
+          description: Accepted (applied, stale, or ignored)
+        "401":
+          description: Wrong or missing secret
 components:
   securitySchemes:
     bearerAuth:
@@ -5541,6 +5585,23 @@ components:
         type: string
         example: 66e5a1f2c3b4a5d6e7f80d01
   schemas:
+    PlusStatus:
+      type: object
+      required: [enabled, active, trial, willRenew, billingIssue]
+      properties:
+        enabled:
+          type: boolean
+        active:
+          type: boolean
+        trial:
+          type: boolean
+        expiresAt:
+          type: string
+          format: date-time
+        willRenew:
+          type: boolean
+        billingIssue:
+          type: boolean
     RecipeNote:
       type: object
       required: [recipeId, text, updatedAt]

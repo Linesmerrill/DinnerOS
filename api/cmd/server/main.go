@@ -35,6 +35,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/logging"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/ratelimit"
+	"github.com/Linesmerrill/DinnerOS/api/internal/plus"
 	"github.com/Linesmerrill/DinnerOS/api/internal/providers"
 	"github.com/Linesmerrill/DinnerOS/api/internal/push"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
@@ -219,6 +220,10 @@ func run() error {
 		Authorizer: householdService,
 		Tokens:     tokens,
 		Logger:     logger,
+	})
+	plusHandler := plus.NewHandler(plus.HandlerOptions{
+		Service:    plus.NewService(plus.NewMongoStore(db.Database()), cfg.Plus.Enabled),
+		Authorizer: householdService, Tokens: tokens, WebhookSecret: cfg.Plus.WebhookSecret, Logger: logger,
 	})
 	sameItemsHandler := sameitems.NewHandler(sameitems.HandlerOptions{
 		Service:    sameItemsService,
@@ -414,6 +419,7 @@ func run() error {
 				planHandler.Mount(r)
 				skipHandler.Mount(r)
 				sameItemsHandler.Mount(r)
+				plusHandler.Mount(r)
 				customizeHandler.Mount(r)
 				autopilotHandler.Mount(r)
 				menuHandler.Mount(r)
@@ -484,6 +490,7 @@ func indexSets() []mongodb.IndexSet {
 		shopping.Indexes(),
 		skips.Indexes(),
 		sameitems.Indexes(),
+		plus.Indexes(),
 		behaviorIndexes(),
 		recommendations.Indexes(),
 	)
