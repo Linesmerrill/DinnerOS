@@ -27,9 +27,6 @@ struct MenuView: View {
     @State private var isAddingRecipes = false
     /// The "Add a Recipe" sheet: paste text or a link, review, save.
     @State private var isAddingOwnRecipe = false
-    /// A recipe link shared from Safari, read as soon as the sheet opens.
-    @State private var sharedRecipeLink: String?
-    @Environment(\.scenePhase) private var appPhase
     /// The new-member welcome and what was picked on it (acted on once it closes, so two
     /// sheets never overlap).
     @State private var showsWelcome = false
@@ -95,7 +92,7 @@ struct MenuView: View {
     }
 
     var body: some View {
-        content
+        followingTheWeek(content)
             .navigationTitle(mode == .menu ? "Menu" : "By Day")
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .top, spacing: 0) {
@@ -116,41 +113,12 @@ struct MenuView: View {
             .overlay(alignment: .bottom) { toast }
             .toolbar { toolbar }
             .notificationsToolbar()
-            .navigationDestination(for: RecipeSummary.self) { summary in
-                RecipeDetailView(summary: summary)
-            }
-            .navigationDestination(for: HouseholdRatingsRoute.self) { route in
-                HouseholdRatingsView(route: route)
-            }
-            .navigationDestination(for: GroceryListRoute.self) { route in
-                GroceryListView(week: route.week)
-            }
-            .navigationDestination(for: AllMealsRoute.self) { route in
-                AllMealsView(route: route)
-            }
-            .navigationDestination(for: PastWeeksRoute.self) { _ in
-                PastWeeksView()
-            }
-            .navigationDestination(for: DiscoverRoute.self) { _ in
-                DiscoverView()
-            }
-            .navigationDestination(for: CatalogRecipeRoute.self) { route in
-                CatalogRecipeDetailView(route: route)
-            }
-            .sheet(isPresented: $isAddingOwnRecipe) {
-                // The new recipe shows on the menu right away, not at the next refresh.
-                AddRecipeView(initialLink: sharedRecipeLink, onSaved: { _ in Task { await menu.reload() } })
-            }
-            .onChange(of: isAddingOwnRecipe) { _, isOpen in
-                if !isOpen { sharedRecipeLink = nil }
-            }
-            // A recipe shared from Safari waits in the keychain until the app comes forward.
-            .onChange(of: appPhase, initial: true) { _, phase in
-                guard phase == .active, canAddOwnRecipe, !isAddingOwnRecipe, let link = SharedRecipeLink.take()
-                else { return }
-                sharedRecipeLink = link
-                isAddingOwnRecipe = true
-            }
+            .modifier(MenuDestinations())
+            .modifier(
+                AddOwnRecipeSheet(
+                    isPresented: $isAddingOwnRecipe, canAdd: canAddOwnRecipe,
+                    onSaved: { Task { await menu.reload() } })
+            )
             // Also when the week start day changes: the server moved meals between weeks.
             .task(id: household?.weekScope) {
                 guard let household else { return }
@@ -167,26 +135,6 @@ struct MenuView: View {
                     weekStartsOn: household.weekStartsOn)
                 await menuLoad
                 await recipes
-            }
-            // The strip and every other screen change `PlanStore`'s week; the menu follows it.
-            .onChange(of: plans.week) { _, week in
-                Task { await menu.select(week: week) }
-            }
-            // The week's suggestions follow the same week, and reload when its meals change:
-            // a meal added or removed changes what's offered with it.
-            .task(id: PairingsKey(householdID: household?.id, week: plans.week)) {
-                guard let householdID = household?.id else { return }
-                await pairings.showWeek(plans.week, householdID: householdID)
-            }
-            .onChange(of: plans.plan?.entries.map(\.id) ?? []) { _, _ in
-                Task { await pairings.reload() }
-            }
-            .onChange(of: pairings.isForbidden) { _, isForbidden in
-                // The role changed elsewhere; reload it so the rest of the app matches rather
-                // than leaving the suggestions hidden until the next launch.
-                if isForbidden {
-                    Task { await households.load() }
-                }
             }
             .sheet(isPresented: $isAddingRecipes) {
                 AddRecipesSheet(week: plans.week)
@@ -223,6 +171,32 @@ struct MenuView: View {
                 ) { choice in
                     welcomeChoice = choice
                     showsWelcome = false
+                }
+            }
+    }
+
+    /// The menu, its suggestions, and the role follow the week the strip shows. Kept out of
+    /// `body` so the compiler checks it quickly.
+    private func followingTheWeek(_ content: some View) -> some View {
+        content
+            // The strip and every other screen change `PlanStore`'s week; the menu follows it.
+            .onChange(of: plans.week) { _, week in
+                Task { await menu.select(week: week) }
+            }
+            // The week's suggestions follow the same week, and reload when its meals change:
+            // a meal added or removed changes what's offered with it.
+            .task(id: PairingsKey(householdID: household?.id, week: plans.week)) {
+                guard let householdID = household?.id else { return }
+                await pairings.showWeek(plans.week, householdID: householdID)
+            }
+            .onChange(of: plans.plan?.entries.map(\.id) ?? []) { _, _ in
+                Task { await pairings.reload() }
+            }
+            .onChange(of: pairings.isForbidden) { _, isForbidden in
+                // The role changed elsewhere; reload it so the rest of the app matches rather
+                // than leaving the suggestions hidden until the next launch.
+                if isForbidden {
+                    Task { await households.load() }
                 }
             }
     }
@@ -516,5 +490,61 @@ private struct MenuAutoRefresh: ViewModifier {
                 await week
             }
         }
+    }
+}
+
+/// The "Add a Recipe" sheet, and a recipe link shared from Safari: it waits in the keychain
+/// until the app comes forward, then opens the sheet already reading it.
+private struct AddOwnRecipeSheet: ViewModifier {
+    @Binding var isPresented: Bool
+    let canAdd: Bool
+    let onSaved: () -> Void
+
+    @State private var sharedLink: String?
+    @Environment(\.scenePhase) private var phase
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $isPresented) {
+                // The new recipe shows on the menu right away, not at the next refresh.
+                AddRecipeView(initialLink: sharedLink, onSaved: { _ in onSaved() })
+            }
+            .onChange(of: isPresented) { _, isOpen in
+                if !isOpen { sharedLink = nil }
+            }
+            .onChange(of: phase, initial: true) { _, phase in
+                guard phase == .active, canAdd, !isPresented, let link = SharedRecipeLink.take() else { return }
+                sharedLink = link
+                isPresented = true
+            }
+    }
+}
+
+/// Where the menu's links go. Kept apart from the menu's body so the compiler checks it
+/// quickly.
+private struct MenuDestinations: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .navigationDestination(for: RecipeSummary.self) { summary in
+                RecipeDetailView(summary: summary)
+            }
+            .navigationDestination(for: HouseholdRatingsRoute.self) { route in
+                HouseholdRatingsView(route: route)
+            }
+            .navigationDestination(for: GroceryListRoute.self) { route in
+                GroceryListView(week: route.week)
+            }
+            .navigationDestination(for: AllMealsRoute.self) { route in
+                AllMealsView(route: route)
+            }
+            .navigationDestination(for: PastWeeksRoute.self) { _ in
+                PastWeeksView()
+            }
+            .navigationDestination(for: DiscoverRoute.self) { _ in
+                DiscoverView()
+            }
+            .navigationDestination(for: CatalogRecipeRoute.self) { route in
+                CatalogRecipeDetailView(route: route)
+            }
     }
 }
