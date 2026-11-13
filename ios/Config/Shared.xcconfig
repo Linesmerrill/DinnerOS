@@ -32,10 +32,12 @@ APP_LINK_DOMAIN = api.tlps.dev
 // Google Sign-In iOS OAuth client (Google Cloud console → Credentials). A client ID
 // is a public identifier, not a secret. The redirect URI scheme is derived from it.
 // Leave empty to hide Google sign-in.
-// RevenueCat's public iOS app key (appl_...). Empty keeps Plus purchases closed.
-REVENUECAT_API_KEY =
-
 GOOGLE_IOS_CLIENT_ID = 600707694145-ifi6jfhmial52rtjgrrs18eh5muiqsnt.apps.googleusercontent.com
+
+// RevenueCat's public iOS app key (appl_...), safe in the bundle. Project DinnerOS
+// (47807df1), app DinnerOS (iOS). Empty keeps Plus purchases closed. Plus still shows
+// nowhere until the API's PLUS_ENABLED is on.
+REVENUECAT_API_KEY = appl_rCcfVsXFepNLGrVKBfxJdlhrSgy
 
 MARKETING_VERSION = 0.1.0
 // CI overrides this with the TestFlight build number.
