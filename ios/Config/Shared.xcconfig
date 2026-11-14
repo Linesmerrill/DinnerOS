@@ -39,7 +39,7 @@ GOOGLE_IOS_CLIENT_ID = 600707694145-ifi6jfhmial52rtjgrrs18eh5muiqsnt.apps.google
 // nowhere until the API's PLUS_ENABLED is on.
 REVENUECAT_API_KEY = appl_rCcfVsXFepNLGrVKBfxJdlhrSgy
 
-MARKETING_VERSION = 0.1.0
+MARKETING_VERSION = 1.0
 // CI overrides this with the TestFlight build number.
 CURRENT_PROJECT_VERSION = 1
 

@@ -302,7 +302,7 @@ platform :ios do
     deliver(
       api_key: api_key,
       app_identifier: CompactAppID,
-      app_version: "0.1.0",
+      app_version: "1.0",
       build_number: build,
       metadata_path: File.join(__dir__, "metadata"),
       screenshots_path: File.dirname(staged),
@@ -327,7 +327,7 @@ platform :ios do
       next
     end
     deliver(
-      api_key: api_key, app_identifier: CompactAppID, app_version: "0.1.0", build_number: build,
+      api_key: api_key, app_identifier: CompactAppID, app_version: "1.0", build_number: build,
       skip_metadata: true, skip_screenshots: true, skip_binary_upload: true,
       submission_information: { export_compliance_uses_encryption: false, add_id_info_uses_idfa: false },
       automatic_release: false, run_precheck_before_submit: false, submit_for_review: true, force: true
