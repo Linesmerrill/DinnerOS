@@ -67,7 +67,7 @@ struct AddRecipeView: View {
         case .entry, .parsing:
             entryForm(store)
         case .review, .saving:
-            RecipeDraftReviewForm(draft: $store.draft, warnings: store.draft.listedWarnings)
+            RecipeDraftReviewForm(store: store)
                 .disabled(store.step == .saving)
         }
     }
@@ -175,22 +175,40 @@ struct AddRecipeView: View {
 
 /// The review step: every field the parser filled, editable.
 struct RecipeDraftReviewForm: View {
-    @Binding var draft: RecipeDraft
-    let warnings: [String]
+    @Bindable var store: RecipeDraftStore
+
+    @FocusState private var nameFocus: UUID?
+    @State private var amountFocus: UUID?
+
+    private var warnings: [String] { store.draft.listedWarnings }
 
     /// "Serves 4", or a reminder that the source didn't say.
     private var servingsLabel: String {
-        draft.servings == 0
-            ? String(localized: "Servings: not set") : String(localized: "Serves \(draft.servings)")
+        store.draft.servings == 0
+            ? String(localized: "Servings: not set") : String(localized: "Serves \(store.draft.servings)")
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
+            form
+                .onChange(of: nameFocus) { _, id in scroll(proxy, to: id) }
+                .onChange(of: amountFocus) { _, id in scroll(proxy, to: id) }
+        }
+    }
+
+    /// Keeps the ingredient being typed above the keyboard.
+    private func scroll(_ proxy: ScrollViewProxy, to id: UUID?) {
+        guard let id else { return }
+        withAnimation { proxy.scrollTo(id, anchor: .center) }
+    }
+
+    private var form: some View {
         Form {
-            if draft.fromURL {
+            if store.draft.fromURL {
                 Section {
                     Label(ImportedRecipeText.note, systemImage: "checklist")
                         .font(.subheadline)
-                    if let link = draft.sourceURL, let url = URL(string: link) {
+                    if let link = store.draft.sourceURL, let url = URL(string: link) {
                         Link(destination: url) {
                             Label("View Recipe", systemImage: "safari")
                         }
@@ -208,78 +226,105 @@ struct RecipeDraftReviewForm: View {
                 }
             }
             Section("Recipe") {
-                TextField("Name", text: $draft.name)
-                if !draft.fromURL {
-                    TextField("Headline", text: Binding($draft.headline, replacingNilWith: ""))
+                TextField("Name", text: $store.draft.name)
+                if !store.draft.fromURL {
+                    TextField("Headline", text: Binding($store.draft.headline, replacingNilWith: ""))
                 }
                 Stepper(
-                    value: $draft.servings, in: 0...12,
+                    value: $store.draft.servings, in: 0...12,
                     label: { Text(servingsLabel) })
-                if !draft.fromURL {
+                if !store.draft.fromURL {
                     Stepper(
-                        value: Binding($draft.totalMinutes, replacingNilWith: 0), in: 0...480, step: 5,
-                        label: { Text(RecipeFormat.minutes(draft.totalMinutes ?? 0)) })
+                        value: Binding($store.draft.totalMinutes, replacingNilWith: 0), in: 0...480, step: 5,
+                        label: { Text(RecipeFormat.minutes(store.draft.totalMinutes ?? 0)) })
                 }
             }
-            Section {
-                ForEach(Array($draft.ingredients.enumerated()), id: \.element.id) { index, $line in
-                    VStack(alignment: .leading, spacing: 4) {
-                        if let group = line.group, !group.isEmpty,
-                            index == 0 || draft.ingredients[index - 1].group != group
-                        {
-                            Text(group)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        TextField("Ingredient", text: $line.name)
-                        HStack {
-                            TextField("Amount", text: Binding($line.quantity, replacingNilWith: ""))
-                                .frame(maxWidth: 100)
-                            Picker("Unit", selection: Binding($line.unit, replacingNilWith: "count")) {
-                                ForEach(RecipeUnit.codes, id: \.self) { code in
-                                    Text(RecipeUnit.label(code)).tag(code)
-                                }
-                            }
-                            .labelsHidden()
-                        }
-                        if let note = line.note, !note.isEmpty {
-                            Text(note)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        if let raw = line.rawText, !raw.isEmpty, raw != line.name {
-                            Text("Original line: \(raw)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .onDelete { draft.ingredients.remove(atOffsets: $0) }
-                Button("Add Ingredient") {
-                    draft.ingredients.append(RecipeDraftIngredient())
-                }
-            } header: {
-                Text("Ingredients")
-            } footer: {
-                if draft.fromURL {
-                    Text("Fix any line that looks wrong. Swipe left to remove one.")
-                }
+            RecipePhotoSection(imageURL: $store.draft.imageURL) { jpeg in
+                try await store.uploadPhoto(jpeg)
             }
-            if !draft.fromURL {
+            ingredientsSection
+            if !store.draft.fromURL {
                 stepsSection
             }
+        }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var ingredientsSection: some View {
+        Section {
+            ForEach($store.draft.ingredients) { $line in
+                VStack(alignment: .leading, spacing: 4) {
+                    if let group = line.group, !group.isEmpty, startsGroup(line) {
+                        Text(group)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    IngredientEntryRow(
+                        id: line.id,
+                        name: $line.name,
+                        amount: Binding($line.quantity, replacingNilWith: ""),
+                        unit: Binding($line.unit, replacingNilWith: "count"),
+                        units: RecipeUnit.codes.contains(line.unit ?? "count")
+                            ? RecipeUnit.codes : [line.unit ?? "count"] + RecipeUnit.codes,
+                        nameFocus: $nameFocus,
+                        amountFocus: $amountFocus,
+                        next: { next(after: line.id) })
+                    if let note = line.note, !note.isEmpty {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let raw = line.rawText, !raw.isEmpty, raw != line.name {
+                        Text("Original line: \(raw)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .onDelete { store.draft.ingredients.remove(atOffsets: $0) }
+            Button {
+                focus(store.addIngredient())
+            } label: {
+                Label("Add Ingredient", systemImage: "plus")
+                    .frame(minHeight: 44)
+            }
+        } header: {
+            Text("Ingredients")
+        } footer: {
+            Text("Swipe left on an ingredient to remove it.")
         }
     }
 
     private var stepsSection: some View {
         Section("Steps") {
-            ForEach(draft.steps.indices, id: \.self) { index in
-                TextField("Step \(index + 1)", text: $draft.steps[index], axis: .vertical)
+            ForEach(store.draft.steps.indices, id: \.self) { index in
+                TextField("Step \(index + 1)", text: $store.draft.steps[index], axis: .vertical)
             }
-            .onDelete { draft.steps.remove(atOffsets: $0) }
+            .onDelete { store.draft.steps.remove(atOffsets: $0) }
             Button("Add Step") {
-                draft.steps.append("")
+                store.draft.steps.append("")
             }
+        }
+    }
+
+    /// Whether the line is the first under its heading.
+    private func startsGroup(_ line: RecipeDraftIngredient) -> Bool {
+        guard let i = store.draft.ingredients.firstIndex(where: { $0.id == line.id }) else { return false }
+        return i == 0 || store.draft.ingredients[i - 1].group != line.group
+    }
+
+    /// Next on the amount keypad: on to the next ingredient, or a new one after the last.
+    private func next(after id: UUID) -> Bool {
+        guard let following = store.ingredient(after: id) else { return false }
+        focus(following)
+        return true
+    }
+
+    /// Puts the cursor in an ingredient's name once its row is on screen.
+    private func focus(_ id: UUID) {
+        DispatchQueue.main.async {
+            amountFocus = nil
+            nameFocus = id
         }
     }
 }

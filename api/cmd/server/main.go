@@ -141,7 +141,8 @@ func run() error {
 	// into it, and a household copies an entry into its own library.
 	catalogService := catalog.NewService(catalog.ServiceOptions{Store: catalog.NewMongoStore(db.Database())}).
 		WithReports(catalog.NewMongoReports(db.Database()))
-	recipeService := recipes.NewService(recipes.NewMongoStore(db.Database())).WithCatalog(catalogService)
+	recipeService := recipes.NewService(recipes.NewMongoStore(db.Database())).WithCatalog(catalogService).
+		WithPhotos(recipes.NewMongoStore(db.Database()))
 	catalogService.SetLibrary(recipeService)
 	// New households get a copy of STARTER_RECIPES_HOUSEHOLD_ID's recipes in
 	// the background, so friends who sign up don't start with an empty menu.

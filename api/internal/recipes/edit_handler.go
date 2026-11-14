@@ -16,6 +16,9 @@ import (
 type EditRecipeRequest struct {
 	Ingredients []EditIngredientRequest `json:"ingredients"`
 	Steps       []string                `json:"steps"`
+	// ImageURL, when present, changes the recipe's photo: "" removes it,
+	// otherwise the imageUrl from POST .../recipe-photos (decision 687).
+	ImageURL *string `json:"imageUrl,omitempty"`
 }
 
 // EditIngredientRequest is one ingredient line. ingredientId is the line's
@@ -83,7 +86,7 @@ func (h *Handler) editRecipe(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	in := EditInput{Steps: req.Steps}
+	in := EditInput{Steps: req.Steps, ImageURL: req.ImageURL}
 	for _, ing := range req.Ingredients {
 		e := EditIngredient{IngredientID: ing.IngredientID, Name: ing.Name, PantryStaple: ing.PantryStaple}
 		for _, a := range ing.Amounts {

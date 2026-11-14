@@ -37,6 +37,11 @@ func (e editError) Unwrap() error { return ErrInvalidEdit }
 type EditInput struct {
 	Ingredients []EditIngredient
 	Steps       []string
+	// ImageURL, when set, changes the recipe's photo: "" removes it, and
+	// otherwise it must be a photo this API serves (photos.go). Only a
+	// recipe the household added can get one. With no ingredients and no
+	// steps, only the photo changes.
+	ImageURL *string
 }
 
 // EditIngredient is one ingredient line. IngredientID, when it is the
@@ -67,23 +72,44 @@ func (s *Service) Edit(ctx context.Context, householdID, recipeID string, in Edi
 	if err != nil {
 		return Recipe{}, err
 	}
-	lines, err := s.editedIngredients(ctx, r, in.Ingredients)
-	if err != nil {
-		return Recipe{}, err
+	if in.ImageURL != nil {
+		photo, err := editedPhoto(r, *in.ImageURL)
+		if err != nil {
+			return Recipe{}, err
+		}
+		r.ImageURL = photo
 	}
-	// A recipe read from a page has no steps of its own (decision 670): the
-	// page has them, so it may stay without.
-	steps, err := editedSteps(r.Steps, in.Steps, r.Source != SourceUser)
-	if err != nil {
-		return Recipe{}, err
+	if in.ImageURL == nil || in.Ingredients != nil || in.Steps != nil {
+		lines, err := s.editedIngredients(ctx, r, in.Ingredients)
+		if err != nil {
+			return Recipe{}, err
+		}
+		// A recipe read from a page has no steps of its own (decision 670): the
+		// page has them, so it may stay without.
+		steps, err := editedSteps(r.Steps, in.Steps, r.Source != SourceUser)
+		if err != nil {
+			return Recipe{}, err
+		}
+		r.Ingredients, r.Steps = lines, steps
 	}
 	now := s.now().UTC()
-	r.Ingredients, r.Steps = lines, steps
 	r.EditedAt, r.UpdatedAt = now, now
 	if err := s.store.SaveRecipes(ctx, householdID, []Recipe{r}); err != nil {
 		return Recipe{}, fmt.Errorf("save edited recipe: %w", err)
 	}
 	return s.Get(ctx, householdID, recipeID)
+}
+
+// editedPhoto checks a new photo for r (decision 687).
+func editedPhoto(r Recipe, raw string) (string, error) {
+	if r.Source != SourceManual && r.Source != SourceUser {
+		return "", invalidEdit("only recipes you added can get a new photo")
+	}
+	raw = strings.TrimSpace(raw)
+	if raw != "" && !IsOwnPhotoURL(raw) {
+		return "", invalidEdit("that photo can't be used. Add it again from your phone")
+	}
+	return raw, nil
 }
 
 func (s *Service) editedIngredients(ctx context.Context, r Recipe, in []EditIngredient) ([]RecipeIngredient, error) {

@@ -29,6 +29,8 @@
 	<string>$(GOOGLE_IOS_CLIENT_ID)</string>
 	<key>RevenueCatAPIKey</key>
 	<string>$(REVENUECAT_API_KEY)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Take a photo of a dish to add it to one of your recipes.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Autopilot checks how busy your evenings are to suggest quicker dinners on busy nights. Only "free", "some", or "busy" leaves your iPhone, never your events.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>

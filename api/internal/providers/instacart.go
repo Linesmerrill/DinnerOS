@@ -105,7 +105,7 @@ func (*Instacart) BuildCartLinks(items []CartItem, store StoreRef) ([]CartLink, 
 // Instacart's unit names
 // (https://docs.instacart.com/developer_platform_api/api/units_of_measurement).
 var instacartUnits = map[string]string{
-	"count": "each", "can": "can", "package": "package", "bunch": "bunch",
+	"count": "each", "can": "can", "package": "package", "bag": "package", "bunch": "bunch",
 	"tsp": "teaspoon", "tbsp": "tablespoon", "cup": "cup", "ml": "milliliter", "l": "liter",
 	"oz": "ounce", "lb": "pound", "g": "gram", "kg": "kilogram",
 }
@@ -113,7 +113,7 @@ var instacartUnits = map[string]string{
 // InstacartMeasurements turns a line's amounts into Instacart measurements.
 // Units Instacart has no name for are bought whole: fluid ounces become
 // cups, cloves become heads ("each", about 10 cloves to a head), wedges
-// become whole fruit (4 to one), and a slice is a package. A pinch or a thumb
+// become whole fruit (4 to one), a slice is a package, and a bag is a package. A pinch or a thumb
 // is one of the item. Amounts with no usable quantity are dropped, so an
 // unmeasured item ("salt") sends none and Instacart picks a size.
 func InstacartMeasurements(amounts []ingredients.Amount) []ListMeasurement {

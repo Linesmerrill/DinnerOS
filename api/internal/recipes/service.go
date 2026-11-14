@@ -26,6 +26,8 @@ type Service struct {
 	// it, recipes from a public source are shared as before sharing was a
 	// household's choice.
 	sharing SharingSource
+	// photos keeps uploaded recipe photos (photos.go). Nil until WithPhotos.
+	photos PhotoStore
 }
 
 // NewService returns a Service backed by store.

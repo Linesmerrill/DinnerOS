@@ -15,6 +15,7 @@ struct RecipeEditView: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
     @FocusState private var focusedName: RecipeEditDraft.Line.ID?
+    @State private var focusedAmount: RecipeEditDraft.Line.ID?
 
     /// A rename shown in the "Update the steps?" card.
     struct SwapState: Equatable {
@@ -36,32 +37,41 @@ struct RecipeEditView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                if let swap {
-                    swapSection(swap)
-                }
-                if draft.servingSizes.count > 1 {
-                    Section {
-                        Picker("Amounts for", selection: $draft.servings) {
-                            ForEach(draft.servingSizes, id: \.self) { size in
-                                Text("\(size) servings").tag(size)
+            ScrollViewReader { proxy in
+                Form {
+                    if let swap {
+                        swapSection(swap)
+                    }
+                    if draft.servingSizes.count > 1 {
+                        Section {
+                            Picker("Amounts for", selection: $draft.servings) {
+                                ForEach(draft.servingSizes, id: \.self) { size in
+                                    Text("\(size) servings").tag(size)
+                                }
                             }
+                            .pickerStyle(.segmented)
+                        } footer: {
+                            Text("Change an amount here and the other sizes change to match.")
                         }
-                        .pickerStyle(.segmented)
+                    }
+                    if draft.canChangePhoto {
+                        RecipePhotoSection(imageURL: $draft.imageURL) { jpeg in
+                            try await library.uploadPhoto(jpeg)
+                        }
+                    }
+                    ingredientsSection
+                    stepsSection
+                    Section {
                     } footer: {
-                        Text("Change an amount here and the other sizes change to match.")
+                        Text(
+                            "Your changes are just for your household. If the recipe is imported again, your version stays."
+                        )
                     }
                 }
-                ingredientsSection
-                stepsSection
-                Section {
-                } footer: {
-                    Text(
-                        "Your changes are just for your household. If the recipe is imported again, your version stays."
-                    )
-                }
+                .scrollDismissesKeyboard(.interactively)
+                .onChange(of: focusedName) { _, id in scroll(proxy, to: id) }
+                .onChange(of: focusedAmount) { _, id in scroll(proxy, to: id) }
             }
-            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Edit Recipe")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -94,39 +104,50 @@ struct RecipeEditView: View {
     private var ingredientsSection: some View {
         Section {
             ForEach($draft.lines) { $line in
-                VStack(alignment: .leading, spacing: 6) {
-                    TextField("Ingredient", text: $line.name)
-                        .font(.body.weight(.semibold))
-                        .focused($focusedName, equals: line.id)
-                        .submitLabel(.done)
-                        .onSubmit { checkSwap(line.id) }
-                    HStack {
-                        TextField(
-                            "Amount",
-                            text: Binding(
-                                get: { draft.quantity(of: line) },
-                                set: { draft.setQuantity($0, for: line.id) })
-                        )
-                        .keyboardType(.numbersAndPunctuation)
-                        .frame(maxWidth: 110)
-                        .keyboardDoneButton()
-                        Picker("Unit", selection: $line.unit) {
-                            ForEach(units(for: line), id: \.self) { code in
-                                Text(RecipeUnit.label(code)).tag(code)
-                            }
-                        }
-                        .labelsHidden()
-                        Spacer(minLength: 0)
-                    }
-                }
-                .padding(.vertical, 2)
+                IngredientEntryRow(
+                    id: line.id,
+                    name: $line.name,
+                    amount: Binding(
+                        get: { draft.quantity(of: line) },
+                        set: { draft.setQuantity($0, for: line.id) }),
+                    unit: $line.unit,
+                    units: units(for: line),
+                    nameFocus: $focusedName,
+                    amountFocus: $focusedAmount,
+                    next: { next(after: line.id) })
             }
             .onDelete { draft.removeLines(at: $0) }
-            Button("Add Ingredient", systemImage: "plus") { draft.addLine() }
+            Button {
+                focus(draft.addLine())
+            } label: {
+                Label("Add Ingredient", systemImage: "plus")
+                    .frame(minHeight: 44)
+            }
         } header: {
             Text("Ingredients")
         } footer: {
             Text("Rename an ingredient to swap it. We'll offer to change the steps too.")
+        }
+    }
+
+    /// Keeps the ingredient being typed above the keyboard.
+    private func scroll(_ proxy: ScrollViewProxy, to id: RecipeEditDraft.Line.ID?) {
+        guard let id else { return }
+        withAnimation { proxy.scrollTo(id, anchor: .center) }
+    }
+
+    /// Next on the amount keypad: on to the next ingredient, or a new one after the last.
+    private func next(after id: RecipeEditDraft.Line.ID) -> Bool {
+        guard let following = draft.line(after: id) else { return false }
+        focus(following)
+        return true
+    }
+
+    /// Puts the cursor in an ingredient's name once its row is on screen.
+    private func focus(_ id: RecipeEditDraft.Line.ID) {
+        DispatchQueue.main.async {
+            focusedAmount = nil
+            focusedName = id
         }
     }
 

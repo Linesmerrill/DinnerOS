@@ -111,6 +111,13 @@ func Indexes() []mongodb.IndexSet {
 				},
 			},
 		},
+		{
+			// Photos are read by _id; this finds a household's to delete.
+			Collection: PhotosCollection,
+			Indexes: []mongo.IndexModel{
+				{Keys: bson.D{{Key: "householdId", Value: 1}}, Options: options.Index().SetName("householdId")},
+			},
+		},
 	}
 }
 
@@ -120,6 +127,7 @@ type MongoStore struct {
 	ingredients *mongo.Collection
 	reviews     *mongo.Collection
 	findings    *mongo.Collection
+	photos      *mongo.Collection
 }
 
 var _ Store = (*MongoStore)(nil)
@@ -131,6 +139,7 @@ func NewMongoStore(db *mongo.Database) *MongoStore {
 		ingredients: db.Collection(IngredientsCollection),
 		reviews:     db.Collection(ImportReviewsCollection),
 		findings:    db.Collection(FindingsCollection),
+		photos:      db.Collection(PhotosCollection),
 	}
 }
 

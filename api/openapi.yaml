@@ -965,6 +965,127 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/recipes/{recipeId}/edits:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/RecipeID"
+    put:
+      summary: Save the household's version of a recipe
+      description: |
+        The recipe's ingredients and steps as the member left them (decision
+        667), and optionally its photo (decision 687). Requires `recipes.edit`.
+        See docs/api.md#editing-a-recipe. Sent with `imageUrl` and no
+        ingredients or steps, only the photo changes.
+      operationId: editRecipe
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EditRecipeRequest"
+      responses:
+        "200":
+          description: The edited recipe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recipe"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/recipe-photos:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    post:
+      summary: Upload a recipe photo
+      description: |
+        A member's own photo for a recipe the household added (decision 687).
+        Requires `recipes.edit`. The body is the image itself, at most 4 MB;
+        its first bytes must be JPEG, PNG or HEIC. The answer's `imageUrl` goes
+        in a draft's `imageUrl` when saving, or in an edit. Photos are deleted
+        with the household.
+      operationId: uploadRecipePhoto
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+          image/png:
+            schema:
+              type: string
+              format: binary
+          image/heic:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "201":
+          description: The photo's address.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecipePhotoUpload"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+  /api/v1/recipe-photos/{photoId}:
+    parameters:
+      - name: photoId
+        in: path
+        required: true
+        description: 32 lowercase hex characters.
+        schema:
+          type: string
+          pattern: "^[0-9a-f]{32}$"
+    get:
+      summary: Get a recipe photo
+      description: |
+        Needs no sign-in: the ID is 128 random bits, and image views can't send
+        a token. Served with its own image type and cached for a year.
+      operationId: getRecipePhoto
+      tags: [recipes]
+      security: []
+      responses:
+        "200":
+          description: The image.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: public, max-age=31536000, immutable
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/heic:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/discover:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -6439,6 +6560,51 @@ components:
         emptyText:
           type: string
           example: You already have every recipe other households have shared. Check back later.
+    EditRecipeRequest:
+      type: object
+      properties:
+        ingredients:
+          type: array
+          items:
+            type: object
+            required: [name]
+            properties:
+              ingredientId:
+                type: string
+              name:
+                type: string
+              pantryStaple:
+                type: boolean
+              amounts:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    servings:
+                      type: integer
+                    quantity:
+                      type: string
+                      example: 1 1/2
+                    unit:
+                      type: string
+                      description: DinnerOS unit code.
+        steps:
+          type: array
+          items:
+            type: string
+        imageUrl:
+          type: string
+          description: |
+            Changes the photo of a recipe the household added. Absent keeps
+            it, "" removes it, otherwise the `imageUrl` from
+            POST .../recipe-photos.
+    RecipePhotoUpload:
+      type: object
+      required: [imageUrl]
+      properties:
+        imageUrl:
+          type: string
+          example: https://api.example.com/api/v1/recipe-photos/0123456789abcdef0123456789abcdef
     CatalogRecipe:
       allOf:
         - $ref: "#/components/schemas/CatalogSummary"
@@ -6555,7 +6721,7 @@ components:
           type: string
         sourceUrl:
           type: string
-          description: Dropped unless it is an ordinary public web address.
+          description: Dropped unless it is an ordinary public web address or a photo from POST .../recipe-photos. On a recipe from a page, only such a photo is kept.
         imageUrl:
           type: string
           description: Dropped unless it is an ordinary public web address.

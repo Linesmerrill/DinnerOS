@@ -232,11 +232,13 @@ def upload_ipad_13(app_id, dir)
   loc = client.get("v1/appStoreVersions/#{version.id}/appStoreVersionLocalizations").body["data"].find { |l| l.dig("attributes", "locale") == "en-US" }
   sets = client.get("v1/appStoreVersionLocalizations/#{loc['id']}/appScreenshotSets").body["data"]
   target = sets.find { |st| st.dig("attributes", "screenshotDisplayType") == "APP_IPAD_PRO_3GEN_129" }
-  if target && !client.get("v1/appScreenshotSets/#{target['id']}/appScreenshots").body["data"].empty?
-    UI.message("The 13\" iPad screenshots are up.")
-    return
+  # Replace what's there, so retaken screenshots go up too.
+  if target
+    client.get("v1/appScreenshotSets/#{target['id']}/appScreenshots").body["data"].each do |old|
+      client.delete("v1/appScreenshots/#{old['id']}")
+    end
   end
-  target ||= client.post("v1/appScreenshotSets", { data: { type: "appScreenshotSets",
+  target ||=client.post("v1/appScreenshotSets", { data: { type: "appScreenshotSets",
     attributes: { screenshotDisplayType: "APP_IPAD_PRO_3GEN_129" },
     relationships: { appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: loc["id"] } } } } }).body["data"]
   Dir[File.join(dir, "*.png")].sort.each do |f|
@@ -524,6 +526,15 @@ platform :ios do
     set_age_rating(app.id)
     rights = app_content_rights(app.id)
     if options[:dry_run]
+      # A dry run with build: also puts that build on the version. That is not a submission.
+      unless build.empty?
+        version = app.get_edit_app_store_version
+        chosen = Spaceship::ConnectAPI::Build.all(app_id: app.id, version: "1.0", build_number: build).first
+        UI.user_error!("Build 1.0 (#{build}) isn't in App Store Connect yet") unless chosen
+        UI.user_error!("Build #{build} is still #{chosen.processing_state}") unless chosen.processing_state == "VALID"
+        version.select_build(build_id: chosen.id)
+        UI.success("Build #{build} is on version #{version.version_string}.")
+      end
       attach_plus_subscriptions(File.join(root, "docs/app-store"), queue: false)
       UI.important("Dry run: the listing, screenshots and subscriptions are set; nothing was submitted.")
       next

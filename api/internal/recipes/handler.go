@@ -100,6 +100,8 @@ func NewHandler(opts HandlerOptions) *Handler {
 
 // Mount registers the routes on r, which is expected to be the /api/v1 router.
 func (h *Handler) Mount(r chi.Router) {
+	// Recipe photos are public by their unguessable ID (photos.go).
+	r.Get("/recipe-photos/{photoId}", h.servePhoto)
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireAuth(h.opts.Tokens))
 		// The ingredient catalog is global: signed in is enough.
@@ -115,6 +117,7 @@ func (h *Handler) Mount(r chi.Router) {
 		// Editing a recipe (decision 667): the swap preview stores nothing.
 		r.With(edit).Post("/households/{householdId}/recipes/swap-preview", h.swapPreview)
 		r.With(edit).Put("/households/{householdId}/recipes/{recipeId}/edits", h.editRecipe)
+		h.mountPhotos(r, edit)
 		r.With(view).Get("/households/{householdId}/recipes/{recipeId}", h.get)
 		r.With(view).Get("/households/{householdId}/recipes/{recipeId}/instructions", h.instructions)
 		r.With(view).Get("/households/{householdId}/recipes/{recipeId}/rating-questions", h.ratingQuestions)

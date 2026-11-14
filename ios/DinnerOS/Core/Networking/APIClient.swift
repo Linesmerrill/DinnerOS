@@ -21,6 +21,15 @@ nonisolated struct APIRequest: Sendable {
     /// `path` is already percent-encoded (see `encodePathSegment`) and is sent as is. Otherwise
     /// the path is encoded when the URL is built, which would encode a `%` a second time.
     var isPathPercentEncoded = false
+    /// The body's type when it isn't JSON, such as a photo's `image/jpeg`.
+    var contentType: String?
+
+    /// Sends `data` as is, for a body that isn't JSON.
+    static func post(_ path: String, data: Data, contentType: String) -> APIRequest {
+        var request = APIRequest(method: .post, path: path, body: data, bearerToken: nil)
+        request.contentType = contentType
+        return request
+    }
 
     /// A path segment with every character outside RFC 3986's unreserved set and `:`
     /// percent-encoded, so a `/`, `%`, or space inside an ID arrives as one segment.
@@ -129,7 +138,7 @@ nonisolated struct APIClient: Sendable {
         urlRequest.setValue(requestID, forHTTPHeaderField: "X-Request-ID")
         if let body = request.body {
             urlRequest.httpBody = body
-            urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            urlRequest.setValue(request.contentType ?? "application/json", forHTTPHeaderField: "Content-Type")
         }
         if let token = request.bearerToken {
             urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

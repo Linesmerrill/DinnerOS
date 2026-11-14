@@ -26,6 +26,10 @@ struct RecipeDraftStoreTests {
                 }
                 return (200, parse)
             }
+            if path.hasSuffix("/recipe-photos") {
+                guard request.value(forHTTPHeaderField: "Content-Type") == "image/jpeg" else { return (400, Data()) }
+                return (201, Data(#"{"imageUrl":"https://api.test/api/v1/recipe-photos/abc"}"#.utf8))
+            }
             if path.hasSuffix("/recipes") {
                 return (201, created)
             }
@@ -126,5 +130,32 @@ struct RecipeDraftStoreTests {
         harness.store.startOver()
         #expect(harness.store.step == .entry)
         #expect(harness.store.draft.name.isEmpty)
+    }
+
+    @Test func nextMovesThroughIngredientsAndAddsOneAfterTheLast() async throws {
+        let harness = try await makeHarness()
+        harness.store.startBlank()
+        let first = harness.store.draft.ingredients[0].id
+        // A blank last ingredient: Next just closes the keypad.
+        #expect(harness.store.ingredient(after: first) == nil)
+        harness.store.draft.ingredients[0].name = "Garlic"
+        let second = try #require(harness.store.ingredient(after: first))
+        #expect(harness.store.draft.ingredients.map(\.id) == [first, second])
+        harness.store.draft.ingredients[1].name = "Rice"
+        let inserted = harness.store.addIngredient(after: first)
+        #expect(harness.store.draft.ingredients.map(\.id) == [first, inserted, second])
+        #expect(harness.store.ingredient(after: first) == inserted)
+    }
+
+    @Test func aPhotoIsSentAndItsLinkSavedWithTheRecipe() async throws {
+        let harness = try await makeHarness()
+        harness.store.startBlank()
+        harness.store.draft.name = "Grandma's Chili"
+        harness.store.draft.imageURL = try await harness.store.uploadPhoto(Data([0xFF, 0xD8, 0xFF]))
+        #expect(harness.store.draft.imageURL == "https://api.test/api/v1/recipe-photos/abc")
+        await harness.store.save()
+        let sent = try #require(harness.transport.requests.last?.httpBody)
+        let body = try #require(try JSONSerialization.jsonObject(with: sent) as? [String: Any])
+        #expect(body["imageUrl"] as? String == "https://api.test/api/v1/recipe-photos/abc")
     }
 }

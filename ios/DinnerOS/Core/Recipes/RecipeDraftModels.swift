@@ -56,10 +56,28 @@ nonisolated struct RecipeDraftIngredient: Codable, Equatable, Sendable, Identifi
     var note: String?
     /// The heading the line came under on the page ("Sauce").
     var group: String?
+    /// The row's identity on screen. It never changes while the member types, so the
+    /// field keeps its keyboard; it is not sent to the server.
+    var key = UUID()
 
-    /// Stable within one draft: the list is edited in place, so identity is by
-    /// position rather than by a name the member is still typing.
-    var id: String { (rawText ?? "") + "|" + name + "|" + (quantity ?? "") + "|" + (unit ?? "") }
+    var id: UUID { key }
+
+    enum CodingKeys: String, CodingKey {
+        case name, quantity, unit, rawText, pantryStaple, note, group
+    }
+
+    /// Two lines are the same when what's saved is the same, whatever their row identity.
+    static func == (a: Self, b: Self) -> Bool {
+        a.name == b.name && a.quantity == b.quantity && a.unit == b.unit && a.rawText == b.rawText
+            && a.pantryStaple == b.pantryStaple && a.note == b.note && a.group == b.group
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+        hasher.combine(quantity)
+        hasher.combine(unit)
+        hasher.combine(rawText)
+    }
 }
 
 /// The body of `POST .../recipes/parse`. Exactly one field is filled.
@@ -77,12 +95,23 @@ nonisolated enum RecipeSourceKey {
     static let fromPage = "user"
     /// From a meal kit's order history: never shared to the catalog.
     static let mealKit = "hellofresh"
+    /// Typed or pasted by the member.
+    static let typed = "manual"
 }
 
 /// The note shown wherever a recipe read from a web page appears.
 nonisolated enum ImportedRecipeText {
     static let note = String(
         localized: "Imported recipes can have mistakes. Please check the ingredients before you shop.")
+}
+
+/// The answer to `POST .../recipe-photos`: where the photo now lives.
+nonisolated struct RecipePhotoUpload: Decodable, Equatable, Sendable {
+    let imageURL: String
+
+    enum CodingKeys: String, CodingKey {
+        case imageURL = "imageUrl"
+    }
 }
 
 /// The body of `PUT .../recipes/{recipeId}/sharing`.
@@ -108,18 +137,109 @@ nonisolated struct RecipeSharing: Decodable, Equatable, Sendable {
 /// unit codes (`ingredients.UnitCodes`); anything else is refused on save.
 nonisolated enum RecipeUnit {
     static let codes: [String] = [
-        "count", "clove", "can", "package", "slice", "bunch", "pinch", "thumb",
+        "count", "clove", "can", "bag", "package", "slice", "bunch", "pinch", "thumb",
         "tsp", "tbsp", "floz", "cup", "ml", "l",
         "oz", "lb", "g", "kg",
     ]
 
-    /// What to show for a code. `count` means "no unit".
+    /// The units most recipes use, shown as one-tap chips above the amount keypad.
+    static let quick: [String] = ["oz", "g", "lb", "cup", "tbsp", "tsp", "can", "bag", "clove", "count"]
+
+    /// What to show for a code. `count` is a plain number of things: "2 each".
     static func label(_ code: String) -> String {
         switch code {
-        case "count": String(localized: "No unit")
+        case "count": String(localized: "each")
         case "floz": "fl oz"
+        case "tbsp": "Tbsp"
         case "package": String(localized: "package")
         default: code
         }
+    }
+}
+
+/// Typing an amount on the amount keypad: digits, a decimal point, and fraction keys that
+/// make "1 1/2" without hunting for a slash or a space. Pure, so it's tested without the screen.
+nonisolated enum AmountEntry {
+    enum Key: Equatable, Sendable {
+        case digit(Int)
+        case decimal
+        /// A fraction key: ½ is `fraction(1, 2)`.
+        case fraction(Int, Int)
+        case delete
+    }
+
+    /// The fraction keys, in the order they're shown.
+    static let fractions: [(Int, Int)] = [(1, 4), (1, 3), (1, 2), (2, 3), (3, 4)]
+
+    /// What a fraction key shows: "½".
+    static func symbol(_ n: Int, _ d: Int) -> String {
+        switch (n, d) {
+        case (1, 4): "¼"
+        case (1, 3): "⅓"
+        case (1, 2): "½"
+        case (2, 3): "⅔"
+        case (3, 4): "¾"
+        default: "\(n)/\(d)"
+        }
+    }
+
+    /// The text after pressing `key`.
+    static func apply(_ key: Key, to text: String) -> String {
+        switch key {
+        case .digit(let digit):
+            guard (0...9).contains(digit) else { return text }
+            // A digit after a fraction starts nothing sensible: "1/2" then "3" isn't an amount.
+            if lastWord(text).contains("/") { return text }
+            return text + String(digit)
+        case .decimal:
+            let word = lastWord(text)
+            if word.contains(".") || word.contains("/") { return text }
+            return text + (word.isEmpty ? "0." : ".")
+        case .fraction(let n, let d):
+            let fraction = "\(n)/\(d)"
+            let trimmed = text.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { return fraction }
+            let word = lastWord(trimmed)
+            // Pressing another fraction swaps the one that's there.
+            if word.contains("/") { return String(trimmed.dropLast(word.count)) + fraction }
+            // "1." then ½ means "1 1/2".
+            let whole = word.hasSuffix(".") ? String(trimmed.dropLast()) : trimmed
+            if whole.contains(".") { return text }
+            return whole + " " + fraction
+        case .delete:
+            guard !text.isEmpty else { return text }
+            let word = lastWord(text)
+            // A fraction goes in one press, as it came in.
+            if word.contains("/") {
+                return String(text.dropLast(word.count)).trimmingCharacters(in: .whitespaces)
+            }
+            return String(text.dropLast())
+        }
+    }
+
+    /// How the amount reads on screen: "1 1/2" as "1 ½".
+    static func display(_ text: String) -> String {
+        var out = text
+        for (n, d) in fractions {
+            out = out.replacingOccurrences(of: "\(n)/\(d)", with: symbol(n, d))
+        }
+        return out
+    }
+
+    /// The amount as saved, from what the field shows: "1 ½" as "1 1/2".
+    static func raw(_ shown: String) -> String {
+        var out = shown
+        for (n, d) in fractions {
+            let symbol = symbol(n, d)
+            // "1½" typed on a hardware keyboard still means "1 1/2".
+            out = out.replacingOccurrences(
+                of: #"(\d)"# + symbol, with: "$1 \(n)/\(d)", options: .regularExpression)
+            out = out.replacingOccurrences(of: symbol, with: "\(n)/\(d)")
+        }
+        return out
+    }
+
+    private static func lastWord(_ text: String) -> String {
+        String(text.split(separator: " ", omittingEmptySubsequences: false).last ?? "")
     }
 }

@@ -246,6 +246,14 @@ final class RecipeLibrary {
         return saved
     }
 
+    /// Sends a recipe photo and returns its link, for the edit to save.
+    func uploadPhoto(_ jpeg: Data) async throws -> String {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        return try await session.authorized { token in
+            try await api.uploadPhoto(householdID: householdID, jpeg: jpeg, accessToken: token)
+        }
+    }
+
     /// The steps with one ingredient renamed, and how long the new one cooks.
     func swapPreview(_ request: RecipeSwapRequest) async throws -> RecipeSwapPreview {
         guard let api, let householdID else { throw AuthSessionError.notConfigured }

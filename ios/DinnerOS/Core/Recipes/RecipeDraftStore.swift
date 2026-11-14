@@ -83,6 +83,39 @@ final class RecipeDraftStore {
         step = .review
     }
 
+    /// Sends the member's photo and returns its link. The draft takes it when they save.
+    func uploadPhoto(_ jpeg: Data) async throws -> String {
+        guard let api else { throw AuthSessionError.notConfigured }
+        let householdID = householdID
+        return try await session.authorized { token in
+            try await api.uploadPhoto(householdID: householdID, jpeg: jpeg, accessToken: token)
+        }
+    }
+
+    /// Adds an empty ingredient after the one at `index` (or at the end) and returns its
+    /// identity, so the screen can put the cursor in it.
+    @discardableResult
+    func addIngredient(after id: UUID? = nil) -> UUID {
+        let line = RecipeDraftIngredient()
+        if let id, let i = draft.ingredients.firstIndex(where: { $0.id == id }) {
+            draft.ingredients.insert(line, at: i + 1)
+        } else {
+            draft.ingredients.append(line)
+        }
+        return line.id
+    }
+
+    /// Where Next goes from an ingredient's amount: the following ingredient, or a new one
+    /// when this was the last. `nil` when the last one is still blank, so Next just closes.
+    func ingredient(after id: UUID) -> UUID? {
+        guard let i = draft.ingredients.firstIndex(where: { $0.id == id }) else { return nil }
+        if i + 1 < draft.ingredients.count { return draft.ingredients[i + 1].id }
+        guard !draft.ingredients[i].name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return addIngredient()
+    }
+
     /// Goes back to the entry step, dropping the draft.
     func startOver() {
         draft = RecipeDraft()

@@ -42,6 +42,10 @@ nonisolated struct RecipeEditDraft: Equatable, Sendable {
     var servings: Int
     var lines: [Line]
     var steps: [String]
+    /// The recipe's photo. Only a recipe the household added can change it.
+    var imageURL: String?
+    let canChangePhoto: Bool
+    private let originalImageURL: String?
     private let original: [Line]
     private let originalSteps: [String]
     /// A recipe read from a web page has no steps of its own: the page has them.
@@ -65,12 +69,16 @@ nonisolated struct RecipeEditDraft: Equatable, Sendable {
         }
         steps = recipe.steps.sorted { $0.index < $1.index }.map(\.text)
         requiresSteps = recipe.source != RecipeSourceKey.fromPage
+        canChangePhoto = recipe.source == RecipeSourceKey.typed || recipe.source == RecipeSourceKey.fromPage
+        imageURL = recipe.imageURLString
+        originalImageURL = imageURL
         original = lines
         originalSteps = steps
     }
 
     var hasChanges: Bool {
         lines.map(Snapshot.init) != original.map(Snapshot.init) || steps != originalSteps
+            || imageURL != originalImageURL
     }
 
     /// What can't be saved yet, in plain words; `nil` when it can.
@@ -120,8 +128,20 @@ nonisolated struct RecipeEditDraft: Equatable, Sendable {
 
     // MARK: Lines and steps
 
-    mutating func addLine() {
-        lines.append(Line())
+    @discardableResult
+    mutating func addLine() -> Line.ID {
+        let line = Line()
+        lines.append(line)
+        return line.id
+    }
+
+    /// Where Next goes from a line's amount: the following line, or a new one when this was
+    /// the last. `nil` when the last one is still blank, so Next just closes the keypad.
+    mutating func line(after id: Line.ID) -> Line.ID? {
+        guard let i = lines.firstIndex(where: { $0.id == id }) else { return nil }
+        if i + 1 < lines.count { return lines[i + 1].id }
+        guard !lines[i].name.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return addLine()
     }
 
     mutating func removeLines(at offsets: IndexSet) {
@@ -166,7 +186,9 @@ nonisolated struct RecipeEditDraft: Equatable, Sendable {
                             servings: size, quantity: Self.number(quantity) == nil ? "" : quantity, unit: unit)
                     })
             },
-            steps: steps.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
+            steps: steps.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty },
+            // Sent only when it changed; empty removes the photo.
+            imageURL: imageURL == originalImageURL ? nil : (imageURL ?? ""))
     }
 
     // MARK: Numbers
@@ -243,6 +265,13 @@ nonisolated struct RecipeEditRequest: Encodable, Equatable, Sendable {
 
     let ingredients: [Ingredient]
     let steps: [String]
+    /// Left out when the photo didn't change; empty to remove it.
+    var imageURL: String? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case ingredients, steps
+        case imageURL = "imageUrl"
+    }
 }
 
 /// Body of `POST /households/{id}/recipes/swap-preview`.

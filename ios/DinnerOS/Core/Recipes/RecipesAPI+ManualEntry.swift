@@ -27,6 +27,14 @@ nonisolated extension RecipesAPI {
         return try await client.send(request.authorized(with: accessToken))
     }
 
+    /// Sends a recipe photo the member took or picked, and returns its link for the recipe.
+    func uploadPhoto(householdID: String, jpeg: Data, accessToken: String) async throws -> String {
+        let request = APIRequest.post(
+            "/api/v1/households/\(householdID)/recipe-photos", data: jpeg, contentType: "image/jpeg")
+        let uploaded: RecipePhotoUpload = try await client.send(request.authorized(with: accessToken))
+        return uploaded.imageURL
+    }
+
     /// Turns the global-catalog opt-in on or off for one of the household's recipes.
     func setSharing(
         householdID: String, recipeID: String, sharedToCatalog: Bool, accessToken: String

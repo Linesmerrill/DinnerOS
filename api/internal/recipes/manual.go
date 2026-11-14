@@ -95,7 +95,12 @@ func (s *Service) CreateFromDraft(ctx context.Context, householdID string, d Dra
 		source = SourceUser
 		// A recipe read from a page keeps only its title, servings,
 		// ingredients, and link (decision 670), whatever the request carried.
-		d = Draft{Name: d.Name, Servings: d.Servings, SourceURL: d.SourceURL, Ingredients: d.Ingredients}
+		// The member's own photo (decision 687) is theirs, so it stays.
+		own := ""
+		if IsOwnPhotoURL(strings.TrimSpace(d.ImageURL)) {
+			own = strings.TrimSpace(d.ImageURL)
+		}
+		d = Draft{Name: d.Name, Servings: d.Servings, SourceURL: d.SourceURL, ImageURL: own, Ingredients: d.Ingredients}
 		if strings.TrimSpace(d.SourceURL) == "" {
 			return Recipe{}, fmt.Errorf("%w: a recipe from a page needs the page's link", ErrInvalidDraft)
 		}
@@ -118,6 +123,15 @@ func (s *Service) CreateFromDraft(ctx context.Context, householdID string, d Dra
 		return Recipe{}, fmt.Errorf("recipes: saved recipe %q is missing after the write: %w", in.SourceRecipeID, err)
 	}
 	return s.Get(ctx, householdID, stored[0].ID)
+}
+
+// draftPhoto is the photo a draft saves: the member's own upload as it is,
+// so a development API's address works too, or any other public web address.
+func draftPhoto(raw string) string {
+	if raw = strings.TrimSpace(raw); IsOwnPhotoURL(raw) {
+		return raw
+	}
+	return safeHTTPURL(raw)
 }
 
 // draftImportRecipe converts a reviewed draft into the import contract, which
@@ -155,7 +169,7 @@ func draftImportRecipe(d Draft, source string) (ImportRecipe, error) {
 		Name:           name,
 		Headline:       clip(d.Headline, maxDraftLine),
 		Description:    clip(d.Description, MaxDraftTextBytes),
-		ImageURL:       safeHTTPURL(d.ImageURL),
+		ImageURL:       draftPhoto(d.ImageURL),
 		Servings:       []int{servings},
 		PrepMinutes:    d.PrepMinutes,
 		TotalMinutes:   d.TotalMinutes,
@@ -243,6 +257,7 @@ var manualUnitWords = map[string]string{
 	"pinch": "pinch", "pinches": "pinch",
 	"thumb": "thumb", "thumbs": "thumb",
 	"wedge": "wedge", "wedges": "wedge",
+	"bag": "bag", "bags": "bag",
 }
 
 // ParseText reads a pasted recipe into a Draft.

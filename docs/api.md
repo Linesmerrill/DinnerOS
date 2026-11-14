@@ -433,6 +433,22 @@ steps through a later import of the same source recipe, and is never published
 to the global catalog by the edit. Errors are `validation_failed` with a
 sentence to show.
 
+An optional `imageUrl` changes the photo of a recipe the household added
+(decision 687): `""` removes it, otherwise it must be an address from the
+upload below. Sent with no ingredients and no steps, only the photo changes.
+On any other recipe it is `validation_failed`, "Only recipes you added can get
+a new photo."
+
+### Recipe photos
+
+`POST /api/v1/households/{householdId}/recipe-photos` (`recipes.edit`) takes
+the image itself as the body (`Content-Type: image/jpeg`, `image/png` or
+`image/heic`, at most 4 MB; the first bytes are checked too) and answers 201
+`{"imageUrl": "https://<host>/api/v1/recipe-photos/<id>"}`, on the host the
+phone called. Put that in a draft's `imageUrl` on save, or in an edit.
+`GET /api/v1/recipe-photos/{id}` needs no sign-in (the ID is 128 random bits)
+and serves the image, cached for a year. Photos are deleted with the household.
+
 `POST /api/v1/households/{householdId}/recipes/swap-preview` (`recipes.edit`)
 stores nothing: `{oldName, newName, steps, minutes?}` returns the steps with
 the ingredient renamed (each `{text, changed}`), `cookTime` (`{lowMinutes,

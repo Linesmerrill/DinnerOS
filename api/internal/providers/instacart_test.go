@@ -36,6 +36,7 @@ func TestInstacartMeasurements(t *testing.T) {
 		{"1", "l", ListMeasurement{1, "liter"}},
 		{"2", "can", ListMeasurement{2, "can"}},
 		{"1", "package", ListMeasurement{1, "package"}},
+		{"2", "bag", ListMeasurement{2, "package"}},
 		{"1", "bunch", ListMeasurement{1, "bunch"}},
 		{"4", "clove", ListMeasurement{1, "each"}},
 		{"12", "clove", ListMeasurement{2, "each"}},
