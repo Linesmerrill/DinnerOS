@@ -647,8 +647,9 @@ Both require `recipes.edit`.
 `PUT /api/v1/households/{householdId}/recipes/{recipeId}/sharing`
 `{"sharedToCatalog": true|false}` (`recipes.edit`) is the household's opt-in for
 putting one of its *own* recipes in the global catalog. It is off by default.
-A recipe from a meal kit (`hellofresh`) never goes to the catalog, shared or
-not (decision 672); `inCatalog` in the response (and on the recipe) says
+Recipes a household imported, meal-kit imports (`hellofresh`) included, can be
+shared like any other (decision 685); nothing is published without the
+household opting in. `inCatalog` in the response (and on the recipe) says
 whether it is there.
 
 Sharing publishes the recipe's content. It never publishes ratings, notes, or
@@ -663,10 +664,9 @@ household. It holds recipe content and nothing else: no household, no order
 history, no ratings, no notes ([database.md](database.md#global-recipe-catalog),
 [architecture.md](architecture.md#decision-log) #520–#523).
 
-Entries arrive only from recipes a household explicitly shared. A meal kit's
-recipes are its own writing and photos, so they are never published and
-entries published before that rule are never served: discover, search, get,
-and add all skip them (decision 672). Two households' copies of one recipe
+Entries arrive only from recipes a household explicitly shared, its own
+meal-kit imports included (decision 685, replacing decision 672's withhold).
+No source is published without that opt-in. Two households' copies of one recipe
 collapse into one entry, keyed by
 `catalogKey`: `<source>:<sourceRecipeId>`, or a fingerprint of the name and
 ingredient set when the source has no identifier of its own.

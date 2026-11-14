@@ -32,9 +32,11 @@ import (
 // take months of meals out of the pantry at once.
 const ImplicitCookStart = "2026-11-02"
 
-// settleWeeksBack is how many ended weeks are settled: last week, and the one
-// before for a household that didn't open the app all of last week.
-const settleWeeksBack = 2
+// settleWeeksBack is how many ended weeks are settled. Every meal nobody
+// marked "didn't make it" is assumed made, so a household that stays away
+// for weeks still comes back to a pantry and grocery list that count those
+// meals as cooked. ImplicitCookStart still bounds how far back that reaches.
+const settleWeeksBack = 8
 
 // implicitDinnerHour is the time an implicitly cooked meal is recorded at,
 // on its day in the household's time zone.

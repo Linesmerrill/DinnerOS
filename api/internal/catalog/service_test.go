@@ -2,7 +2,6 @@ package catalog
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -136,38 +135,28 @@ func TestPublishRecipesCollapsesTheSameRecipeFromTwoHouseholds(t *testing.T) {
 	}
 }
 
-// A meal kit's recipes never reach the catalog, even shared, and ones
-// published before that rule are never served (decision 672).
-func TestMealKitRecipesStayOutOfTheCatalog(t *testing.T) {
+// A household may share a meal-kit recipe it imported, like any other
+// recipe; one it kept private never reaches the catalog (decision 685).
+func TestSharedMealKitRecipesReachTheCatalog(t *testing.T) {
 	h := newHarness(t, nil)
-	hf := libraryRecipe(recipes.SourceHelloFresh, "hf-7", "Kit Tacos", "pork")
-	hf.SharedToCatalog = true
-	if n, err := h.service.PublishRecipes(t.Context(), []recipes.Recipe{hf}); err != nil || n != 0 {
-		t.Fatalf("published %d, %v; want 0", n, err)
+	private := libraryRecipe(recipes.SourceHelloFresh, "hf-6", "Kit Bowl", "rice")
+	if n, err := h.service.PublishRecipes(t.Context(), []recipes.Recipe{private}); err != nil || n != 0 {
+		t.Fatalf("published a private meal-kit recipe: %d, %v", n, err)
 	}
-	if err := h.service.PublishOne(t.Context(), hf); err == nil {
-		t.Error("PublishOne accepted a meal kit's recipe")
+	shared := libraryRecipe(recipes.SourceHelloFresh, "hf-7", "Kit Tacos", "pork")
+	shared.SharedToCatalog = true
+	if n, err := h.service.PublishRecipes(t.Context(), []recipes.Recipe{shared}); err != nil || n != 1 {
+		t.Fatalf("published %d, %v; want 1", n, err)
 	}
-	// One stored before the rule: written straight to the store.
-	old := Recipe{CatalogKey: "hellofresh:hf-8", Content: Content(libraryRecipe(recipes.SourceHelloFresh, "hf-8", "Old Kit Bowl", "rice"))}
-	if _, err := h.store.Upsert(t.Context(), []Recipe{old}, time.Now().UTC()); err != nil {
-		t.Fatal(err)
+	page, err := h.service.Search(t.Context(), hhAda, Query{Text: "kit"})
+	if err != nil || len(page.Items) != 1 || page.Items[0].Content.Name != "Kit Tacos" {
+		t.Fatalf("search = %+v, %v", page, err)
 	}
-	stored, _, _ := h.store.Search(t.Context(), Filter{Limit: 10})
-	if len(stored) != 1 {
-		t.Fatalf("store holds %d", len(stored))
-	}
-	if page, err := h.service.Discover(t.Context(), hhAda, Query{}); err != nil || len(page.Items) != 0 {
-		t.Errorf("discover = %+v, %v", page.Items, err)
-	}
-	if page, err := h.service.Search(t.Context(), hhAda, Query{Text: "kit"}); err != nil || len(page.Items) != 0 || page.Total != 0 {
-		t.Errorf("search = %+v, %v", page, err)
-	}
-	if _, err := h.service.Get(t.Context(), hhAda, stored[0].ID); !errors.Is(err, ErrNotFound) {
+	if _, err := h.service.Get(t.Context(), hhAda, page.Items[0].ID); err != nil {
 		t.Errorf("get = %v", err)
 	}
-	if _, _, err := h.service.Add(t.Context(), hhAda, stored[0].ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("add = %v", err)
+	if page, err := h.service.Discover(t.Context(), hhAda, Query{}); err != nil || len(page.Items) != 1 {
+		t.Errorf("discover = %+v, %v", page.Items, err)
 	}
 }
 

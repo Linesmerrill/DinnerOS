@@ -19,8 +19,11 @@ import (
 var publicSources = []string{}
 
 // withheldSources are never shown in, or copied to, the global catalog, even
-// when a household shares one: their recipes are a meal kit's content.
-var withheldSources = []string{SourceHelloFresh}
+// when a household shares one. There are none: a household may share recipes
+// it imported itself, meal-kit imports included, exactly as it shares any
+// other recipe (decision 685, replacing decision 672's withhold). Nothing is
+// published without the household opting in; publicSources stays empty.
+var withheldSources = []string{}
 
 // WithheldSources returns the withheld sources, for store queries.
 func WithheldSources() []string { return slices.Clone(withheldSources) }

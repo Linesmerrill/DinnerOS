@@ -81,8 +81,13 @@ struct DiscoverView: View {
                 ContentUnavailableView.search(text: discover.query.normalizedSearch)
             } else {
                 ContentUnavailableView(
-                    "Nothing New Right Now", systemImage: "books.vertical",
-                    description: Text("You already have every shared recipe. Check back later."))
+                    discover.emptyTitle ?? String(localized: "Nothing New Right Now"),
+                    systemImage: SharedRecipes.systemImage,
+                    description: Text(
+                        discover.emptyText
+                            ?? String(
+                                localized:
+                                    "You already have every recipe other households have shared. Check back later.")))
             }
         }
         .listRowSeparator(.hidden)
@@ -124,6 +129,15 @@ struct DiscoverRow: View {
                 .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : min(thumbnailWidth, 140))
                 .clipShape(.rect(cornerRadius: 8))
             VStack(alignment: .leading, spacing: 4) {
+                // A partner's paid placement always says so, in the server's words.
+                if let promotion = summary.promotion {
+                    Text(promotion.label)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color(.tertiarySystemFill), in: .capsule)
+                }
                 Text(summary.name)
                     .font(.headline)
                 if let headline = summary.headline, !headline.isEmpty {

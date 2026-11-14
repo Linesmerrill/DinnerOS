@@ -57,7 +57,8 @@ func TestPublicSourceAndPublishable(t *testing.T) {
 	}{
 		// A meal kit's recipes never reach the catalog, shared or not (decision 672).
 		{"a meal-kit recipe", Recipe{Source: SourceHelloFresh, SourceRecipeID: "1", Name: "A"}, false},
-		{"a meal-kit recipe the household shared", Recipe{Source: SourceHelloFresh, SourceRecipeID: "1", Name: "A", SharedToCatalog: true}, false},
+		{"a meal-kit recipe the household shared", Recipe{Source: SourceHelloFresh, SourceRecipeID: "1", Name: "A", SharedToCatalog: true}, true},
+		{"a meal-kit recipe the household kept private", Recipe{Source: SourceHelloFresh, SourceRecipeID: "1", Name: "A"}, false},
 		{"an import the household shared", Recipe{Source: SourceImport, SourceRecipeID: "1", Name: "A", SharedToCatalog: true}, true},
 		{"a typed recipe", Recipe{Source: SourceManual, Name: "A"}, false},
 		{"a pasted page", Recipe{Source: SourceUser, Name: "A"}, false},
@@ -70,8 +71,14 @@ func TestPublicSourceAndPublishable(t *testing.T) {
 			}
 		})
 	}
-	if PublicSource(SourceHelloFresh) || !CatalogWithheld("HELLOFRESH ") {
-		t.Error("a meal kit's recipes would reach the catalog, or the check is case- or space-sensitive")
+	if PublicSource(SourceHelloFresh) || PublicSource("HELLOFRESH ") {
+		t.Error("a meal kit's recipes would reach the catalog without the household sharing them")
+	}
+	if CatalogWithheld(SourceHelloFresh) || len(WithheldSources()) != 0 {
+		t.Error("a household's shared meal-kit imports are still withheld")
+	}
+	if len(PublicSources()) != 0 {
+		t.Error("some source is published without a household opting in")
 	}
 	if PublicSource(SourceManual) || PublicSource(SourceUser) || PublicSource("") {
 		t.Error("a private source is treated as public")

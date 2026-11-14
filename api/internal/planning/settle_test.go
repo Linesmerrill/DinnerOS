@@ -202,3 +202,28 @@ func TestGroceryListCountsThisWeeksMealsAsMade(t *testing.T) {
 		t.Errorf("after made it = %s, want inPantry", it.Status)
 	}
 }
+
+// A household that stayed away for weeks still has those meals counted as
+// made when it comes back, so its pantry and grocery list don't keep their
+// ingredients on hand.
+func TestSettleEndedWeeksCatchesUpAfterWeeksAway(t *testing.T) {
+	ctx := context.Background()
+	svc, log := settleService(t)
+	_, old := mustAdd(t, svc, hhAda, userAda, "2026-W46", NewEntry{RecipeID: recipeTacos, Day: "tue", Servings: 2})
+	_, skipped := mustAdd(t, svc, hhAda, userAda, "2026-W47", NewEntry{RecipeID: recipeSoup, Day: "wed", Servings: 2})
+	log.answer(skipped.ID, false, time.Date(2026, 11, 18, 20, 0, 0, 0, time.UTC))
+	// Five weeks later (2026-W51).
+	svc.now = func() time.Time { return time.Date(2026, 12, 15, 15, 0, 0, 0, time.UTC) }
+	if err := svc.SettleEndedWeeks(ctx, hhAda); err != nil {
+		t.Fatal(err)
+	}
+	var implicit []string
+	for _, e := range log.cooks() {
+		if p := e.Payload.(events.RecipeCooked); p.Implicit {
+			implicit = append(implicit, p.EntryID)
+		}
+	}
+	if len(implicit) != 1 || implicit[0] != old.ID {
+		t.Errorf("implicit cooks = %v, want only the unanswered meal from five weeks ago", implicit)
+	}
+}

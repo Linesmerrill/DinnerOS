@@ -27,6 +27,9 @@ final class DiscoverStore {
     private(set) var phase: Phase = .idle
     private(set) var items: [CatalogSummary] = []
     private(set) var nextCursor: String?
+    /// The server's words for an empty discovery, kept from the last first page.
+    private(set) var emptyTitle: String?
+    private(set) var emptyText: String?
     private(set) var isLoadingMore = false
     /// Set when the next page failed; loaded items stay on screen.
     private(set) var loadMoreError: String?
@@ -241,6 +244,8 @@ final class DiscoverStore {
             guard started == generation else { return }
             items = page.items
             nextCursor = page.nextCursor
+            emptyTitle = page.emptyTitle
+            emptyText = page.emptyText
             refreshError = nil
             phase = .loaded
         } catch is CancellationError {

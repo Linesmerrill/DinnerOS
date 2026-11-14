@@ -124,6 +124,13 @@ func TestDiscoverReturnsUnownedRecipes(t *testing.T) {
 	if resp.Items[0].InLibrary {
 		t.Error("a discover result is marked as already in the library")
 	}
+	// A household's shared recipe is never marked as a paid placement.
+	if resp.Items[0].Promotion != nil || strings.Contains(rec.Body.String(), `"promotion"`) {
+		t.Errorf("a shared recipe carries a promotion: %s", rec.Body.String())
+	}
+	if resp.EmptyTitle != EmptyTitle || resp.EmptyText != EmptyText || strings.Contains(resp.EmptyText, "we know about") {
+		t.Errorf("empty words = %q / %q", resp.EmptyTitle, resp.EmptyText)
+	}
 }
 
 func TestCatalogSearchMarksTheLibrary(t *testing.T) {

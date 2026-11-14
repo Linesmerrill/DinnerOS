@@ -85,7 +85,24 @@ type CatalogSummaryResponse struct {
 	// Reasons explain the discovery ranking ("You like Thai"). Empty for
 	// search and for a household with no taste profile.
 	Reasons []string `json:"reasons"`
+	// Promotion marks a recipe a partner paid to show here; nil for every
+	// recipe a household shared. The app labels it with Label.
+	Promotion *PromotionResponse `json:"promotion,omitempty"`
 }
+
+// PromotionResponse is a partner's paid placement in Shared Recipes.
+type PromotionResponse struct {
+	// Label is the words the app shows on the recipe, like "Sponsored".
+	Label string `json:"label"`
+	// Partner is who paid for it.
+	Partner string `json:"partner,omitempty"`
+}
+
+// The words Shared Recipes shows when there is nothing new for a household.
+const (
+	EmptyTitle = "Nothing New Right Now"
+	EmptyText  = "You already have every recipe other households have shared. Check back later."
+)
 
 // CatalogListResponse is returned by GET .../discover and .../catalog/recipes.
 type CatalogListResponse struct {
@@ -93,6 +110,10 @@ type CatalogListResponse struct {
 	NextCursor string                   `json:"nextCursor,omitempty"`
 	// Total is how many entries matched, capped at the paging limit.
 	Total int `json:"total"`
+	// EmptyTitle and EmptyText are what the app shows when discovery has
+	// nothing new for the household.
+	EmptyTitle string `json:"emptyTitle"`
+	EmptyText  string `json:"emptyText"`
 }
 
 // CatalogRecipeResponse is returned by GET .../catalog/recipes/{id}.
@@ -230,7 +251,10 @@ func publicMessage(err error) string {
 }
 
 func listResponse(p Page) CatalogListResponse {
-	out := CatalogListResponse{Items: make([]CatalogSummaryResponse, 0, len(p.Items)), NextCursor: p.NextCursor, Total: p.Total}
+	out := CatalogListResponse{
+		Items: make([]CatalogSummaryResponse, 0, len(p.Items)), NextCursor: p.NextCursor, Total: p.Total,
+		EmptyTitle: EmptyTitle, EmptyText: EmptyText,
+	}
 	for _, it := range p.Items {
 		out.Items = append(out.Items, summaryResponse(it))
 	}

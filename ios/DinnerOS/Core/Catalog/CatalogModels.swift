@@ -30,6 +30,8 @@ nonisolated struct CatalogSummary: Decodable, Hashable, Sendable, Identifiable {
     let libraryRecipeID: String?
     /// Why discovery ranked it here ("You like Thai"). Empty for search.
     let reasons: [String]
+    /// A partner's paid placement; `nil` for every recipe a household shared.
+    var promotion: CatalogPromotion? = nil
 
     /// `nil` when missing or not a valid URL; catalog data isn't trusted to be well formed.
     var imageURL: URL? { imageURLString.flatMap { URL(string: $0) } }
@@ -44,7 +46,7 @@ nonisolated struct CatalogSummary: Decodable, Hashable, Sendable, Identifiable {
         case imageURLString = "imageUrl"
         case isAddon, totalMinutes, cookMinutes, timeBand, calories, proteinGrams, cuisines, tags, inLibrary
         case libraryRecipeID = "libraryRecipeId"
-        case reasons
+        case reasons, promotion
     }
 }
 
@@ -69,8 +71,15 @@ nonisolated extension CatalogSummary {
             tags: try container.decodeIfPresent([String].self, forKey: .tags) ?? [],
             inLibrary: try container.decodeIfPresent(Bool.self, forKey: .inLibrary) ?? false,
             libraryRecipeID: try container.decodeIfPresent(String.self, forKey: .libraryRecipeID),
-            reasons: try container.decodeIfPresent([String].self, forKey: .reasons) ?? [])
+            reasons: try container.decodeIfPresent([String].self, forKey: .reasons) ?? [],
+            promotion: container.decodeLenient(CatalogPromotion.self, forKey: .promotion))
     }
+}
+
+/// A partner's paid placement in Shared Recipes. The server writes the label.
+nonisolated struct CatalogPromotion: Decodable, Hashable, Sendable {
+    let label: String
+    let partner: String?
 }
 
 /// One page of catalog results.
@@ -80,9 +89,12 @@ nonisolated struct CatalogListPage: Decodable, Equatable, Sendable {
     let nextCursor: String?
     /// How many entries matched, capped by the server's paging limit.
     var total: Int = 0
+    /// What to show when discovery has nothing new; `nil` from an older server.
+    var emptyTitle: String? = nil
+    var emptyText: String? = nil
 
     fileprivate enum CodingKeys: String, CodingKey {
-        case items, nextCursor, total
+        case items, nextCursor, total, emptyTitle, emptyText
     }
 }
 

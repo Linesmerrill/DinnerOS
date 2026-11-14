@@ -971,7 +971,7 @@ paths:
     get:
       summary: Browse catalog recipes the household doesn't have
       description: |
-        "Try something else": recipes from the global catalog, **excluding**
+        Shared Recipes: recipes from the global catalog, **excluding**
         the household's own library, ordered by how well they suit the
         household. Requires `household.view`.
 
@@ -6354,6 +6354,20 @@ components:
           items:
             type: string
           example: ["You like Thai"]
+        promotion:
+          description: >
+            A partner's paid placement in Shared Recipes. Absent on every
+            recipe a household shared.
+          type: object
+          required: [label]
+          properties:
+            label:
+              type: string
+              description: The words the app shows on the recipe.
+              example: Sponsored
+            partner:
+              type: string
+              description: Who paid for it.
     CatalogListResponse:
       type: object
       required: [items, total]
@@ -6367,6 +6381,13 @@ components:
         total:
           type: integer
           description: How many entries matched, capped at the paging limit.
+        emptyTitle:
+          type: string
+          description: What the app shows when discovery has nothing new.
+          example: Nothing New Right Now
+        emptyText:
+          type: string
+          example: You already have every recipe other households have shared. Check back later.
     CatalogRecipe:
       allOf:
         - $ref: "#/components/schemas/CatalogSummary"
