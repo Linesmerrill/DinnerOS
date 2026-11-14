@@ -20,6 +20,11 @@
   ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
 
+# Recipe photos (decision 684). A changed photo gets a new file name.
+/img/recipes/*
+  ! Cache-Control
+  Cache-Control: public, max-age=2592000
+
 /assets/*.png
   ! Cache-Control
   Cache-Control: public, max-age=86400
