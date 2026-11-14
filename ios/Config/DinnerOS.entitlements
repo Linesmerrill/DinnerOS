@@ -11,6 +11,7 @@
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:$(APP_LINK_DOMAIN)</string>
+		<string>applinks:dinneros.app</string>
 	</array>
 	<key>keychain-access-groups</key>
 	<array>

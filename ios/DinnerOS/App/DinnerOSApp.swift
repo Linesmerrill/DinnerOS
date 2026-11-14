@@ -120,8 +120,9 @@ struct DinnerOSApp: App {
                     }
                 }
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
-                    // Universal links (https://api.tlps.dev/invite#token=...).
-                    if let url = activity.webpageURL {
+                    // Universal links: a shared invite code (https://dinneros.app/invite/CODE) or a
+                    // household invitation (https://api.tlps.dev/invite#token=...).
+                    if let url = activity.webpageURL, !dependencies.plus.handleOpenURL(url) {
                         dependencies.households.handleOpenURL(url)
                     }
                 }

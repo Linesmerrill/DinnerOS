@@ -421,3 +421,16 @@ a:hover { text-decoration-thickness: 2px; }
 /* The App Store badge, swapped in on launch day by scripts/website-launch.py. */
 .store-badge { display: inline-block; line-height: 0; }
 .store-badge img { display: block; height: 52px; width: auto; }
+
+/* The invite page (/invite/<code>). */
+.invite .wrap { max-width: 640px; }
+.invite-icon { border-radius: 20px; margin: 8px 0 16px; }
+.invite .lede { font-size: 1.1rem; color: var(--muted, #555); }
+.invite-code { margin: 28px 0; padding: 24px; border-radius: 20px; background: var(--card, #fff); text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.invite-code[hidden], .invite-missing[hidden] { display: none; }
+.invite-label { margin: 0; font-weight: 600; color: var(--muted, #555); }
+.invite-code .code { margin: 8px 0 16px; font: 700 clamp(2rem, 9vw, 3rem)/1.1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; }
+.invite-code .button { min-height: 44px; min-width: 160px; }
+.invite-steps li { margin: 6px 0; }
+.invite-get { margin-top: 28px; }
+.invite-note { color: var(--muted, #555); font-size: .95rem; }

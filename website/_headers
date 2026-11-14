@@ -6,6 +6,11 @@
   Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   Cache-Control: no-cache
 
+# Universal Links: iOS reads this as JSON.
+/.well-known/apple-app-site-association
+  ! Content-Type
+  Content-Type: application/json
+
 # Fingerprinted by scripts/website-assets.py: a new file name on every change.
 /assets/*.css
   ! Cache-Control

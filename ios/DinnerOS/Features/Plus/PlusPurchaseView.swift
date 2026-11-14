@@ -256,6 +256,16 @@ struct PlusPurchasePresenter: ViewModifier {
             .sheet(item: $plus.compThanks) { comp in
                 PlusCompThanksView(comp: comp)
             }
+            .sheet(item: $plus.linkedCode) { linked in
+                NavigationStack {
+                    PlusInviteView(code: linked.code)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Close") { plus.linkedCode = nil }
+                            }
+                        }
+                }
+            }
     }
 }
 

@@ -1,10 +1,12 @@
 import SwiftUI
 
-/// The Household tab: the selected household's settings, its members and invitations, other
-/// households, and the signed-in account.
+/// The Household tab: a header card, then one row per screen (members, giving a free month,
+/// Plus, planning and settings, other households, the account). Joining this household and
+/// giving another household a free month are separate rows with separate words, so the two
+/// invites can't be mixed up.
 ///
-/// Settings are shown and changed in place and save themselves (`HouseholdSettingsSections`);
-/// there is no Edit mode.
+/// Settings, on the Planning screen, are changed in place and save themselves
+/// (`HouseholdSettingsSections`); there is no Edit mode.
 ///
 /// Actions the user's role doesn't allow are hidden. That's a convenience only: the API
 /// enforces every permission and answers `403`/`409` if a hidden rule applies.
@@ -60,92 +62,102 @@ struct HouseholdView: View {
                         FormErrorLabel(message: refreshError)
                     }
                 }
-                if let settings = households.settings {
-                    HouseholdSettingsSections(settings: settings, role: detail.role)
+                Section {
+                    HouseholdHeaderCard(detail: detail, plusLine: plusLine)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
                 }
-                if households.households.count > 1 {
-                    switcherSection(detail)
-                }
-                membersSection(detail)
-                PlusHouseholdSection()
                 Section {
                     NavigationLink {
-                        AutopilotPreferencesView()
+                        page("Members") {
+                            membersSection(detail)
+                            if detail.access.can(.membersInvite) {
+                                invitationsSection(detail)
+                            }
+                        }
                     } label: {
-                        Label("Autopilot Preferences", systemImage: "sparkles")
+                        Label("Members", systemImage: "person.2")
+                            .badge(detail.members?.count ?? 0)
                     }
-                } header: {
-                    Text("Autopilot")
+                    if let plus, plus.isEnabled {
+                        NavigationLink {
+                            PlusInviteView()
+                        } label: {
+                            Label("Give a Free Month", systemImage: "gift")
+                        }
+                        plusRow(plus)
+                    }
                 } footer: {
-                    Text("What your household likes, your schedule, and weekly habits Autopilot plans around.")
+                    if plus?.isEnabled == true {
+                        Text(
+                            "Members share this household. Give a Free Month is for a different household: you both get a month of Plus."
+                        )
+                    }
                 }
-                // Import bookkeeping, so it follows `recipes.import` rather than `household.view`,
-                // and hides entirely against an API without the route.
-                if detail.access.can(.recipesImport), importReviews.isAvailable {
-                    importReviewSection
-                }
-                if detail.access.can(.membersInvite) {
-                    invitationsSection
-                }
-                moreHouseholdsSection
-                leaveSection
-            }
-            accountSection
-            if storeRequests != nil || referrals != nil {
                 Section {
-                    if let storeRequests {
-                        NavigationLink {
-                            StoreRequestsReportView(summary: storeRequests)
-                        } label: {
-                            LabeledContent("Store Requests", value: storeRequests.households.formatted())
+                    NavigationLink {
+                        page("Planning") {
+                            Section {
+                                NavigationLink {
+                                    AutopilotPreferencesView()
+                                } label: {
+                                    Label("Autopilot Preferences", systemImage: "sparkles")
+                                }
+                                // Import bookkeeping follows `recipes.import`, and hides against an
+                                // API without the route.
+                                if detail.access.can(.recipesImport), importReviews.isAvailable {
+                                    NavigationLink {
+                                        ImportReviewView()
+                                    } label: {
+                                        Label("Import Review", systemImage: "tray.full")
+                                            .badge(importReviews.digest.openCount)
+                                    }
+                                }
+                            } footer: {
+                                Text("What your household likes, your schedule, and recipes we weren't sure about.")
+                            }
+                            if let settings = households.settings {
+                                HouseholdSettingsSections(settings: settings, role: detail.role)
+                            }
                         }
+                        .householdSettingsAutosave(households.settings)
+                    } label: {
+                        Label("Planning", systemImage: "calendar")
+                            .badge(importReviews.digest.openCount)
                     }
-                    if let referrals {
-                        NavigationLink {
-                            ReferralsReportView(summary: referrals)
-                        } label: {
-                            LabeledContent("Referrals", value: referrals.joinedAllTime.formatted())
+                    NavigationLink {
+                        page("Households") {
+                            if households.households.count > 1 {
+                                switcherSection(detail)
+                            }
+                            moreHouseholdsSection
+                            leaveSection
                         }
+                    } label: {
+                        Label("Households", systemImage: "house")
                     }
-                } header: {
-                    Text("Running DinnerOS")
-                } footer: {
-                    Text("What households asked us to add, and who joined with a code. Only you can see this.")
                 }
             }
             Section {
-                Button("Sign Out", role: .destructive) {
-                    isConfirmingSignOut = true
-                }
-                .accessibilityHint("Signs you out of \(configuration.displayName) on this device.")
-                // Attached to the button, not the list: on iOS 26 the dialog is a popover
-                // that points at whatever view it's attached to.
-                .confirmationDialog(
-                    "Sign out of \(configuration.displayName)?",
-                    isPresented: $isConfirmingSignOut,
-                    titleVisibility: .visible
-                ) {
-                    Button("Sign Out", role: .destructive) { Task { await session.signOut() } }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("You'll need to sign in again to see your household.")
+                NavigationLink {
+                    page("Account") {
+                        accountSection
+                        signOutSection
+                        Section {
+                            DeleteAccountButton()
+                        } footer: {
+                            Text("Deletes your account and any household where you're the only member.")
+                        }
+                    }
+                } label: {
+                    Label("Account", systemImage: "person.crop.circle")
                 }
             }
-            Section {
-                DeleteAccountButton()
-            } footer: {
-                Text("Deletes your account and any household where you're the only member.")
+            if storeRequests != nil || referrals != nil {
+                operatorSection
             }
         }
-        .householdSettingsAutosave(households.settings)
-        .navigationTitle(households.current?.household.name ?? String(localized: "Household"))
-        .disabled(isWorking)
-        .overlay {
-            if isWorking {
-                ProgressView()
-                    .controlSize(.large)
-            }
-        }
+        .navigationTitle(String(localized: "Household"))
         .task { await loadAccount() }
         .task { storeRequests = try? await shopping?.storeRequestSummary() ?? nil }
         .task { referrals = try? await plus?.referralSummary() ?? nil }
@@ -162,6 +174,22 @@ struct HouseholdView: View {
             await households.load()
             await loadAccount()
         }
+    }
+
+    /// One of the Household tab's screens, with the sheets and confirmations its rows use.
+    private func page<Content: View>(_ title: LocalizedStringKey, @ViewBuilder content: () -> Content) -> some View {
+        List {
+            content()
+        }
+        .navigationTitle(title)
+        .disabled(isWorking)
+        .overlay {
+            if isWorking {
+                ProgressView()
+                    .controlSize(.large)
+            }
+        }
+        .refreshable { await households.load() }
         .sheet(item: $sheet, content: sheetContent)
         .modifier(confirmations)
         .alert(
@@ -172,6 +200,73 @@ struct HouseholdView: View {
             Button("OK") {}
         } message: { message in
             Text(message)
+        }
+    }
+
+    /// The header card's Plus line, or nil while Plus is off.
+    private var plusLine: String? {
+        guard let plus, plus.isEnabled, let status = plus.status else { return nil }
+        return status.active ? PlusText.status(status) : String(localized: "No Plus yet")
+    }
+
+    @ViewBuilder
+    private func plusRow(_ plus: PlusStore) -> some View {
+        if plus.status?.active == true {
+            NavigationLink {
+                YourPlusView()
+            } label: {
+                Label("DinnerOS Plus", systemImage: "checkmark.seal")
+            }
+        } else {
+            Button {
+                plus.showsPurchase = true
+            } label: {
+                Label("DinnerOS Plus", systemImage: "sparkles")
+            }
+        }
+    }
+
+    private var signOutSection: some View {
+        Section {
+            Button("Sign Out", role: .destructive) {
+                isConfirmingSignOut = true
+            }
+            .accessibilityHint("Signs you out of \(configuration.displayName) on this device.")
+            // Attached to the button, not the list: on iOS 26 the dialog is a popover
+            // that points at whatever view it's attached to.
+            .confirmationDialog(
+                "Sign out of \(configuration.displayName)?",
+                isPresented: $isConfirmingSignOut,
+                titleVisibility: .visible
+            ) {
+                Button("Sign Out", role: .destructive) { Task { await session.signOut() } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("You'll need to sign in again to see your household.")
+            }
+        }
+    }
+
+    private var operatorSection: some View {
+        Section {
+            if let storeRequests {
+                NavigationLink {
+                    StoreRequestsReportView(summary: storeRequests)
+                } label: {
+                    LabeledContent("Store Requests", value: storeRequests.households.formatted())
+                }
+            }
+            if let referrals {
+                NavigationLink {
+                    ReferralsReportView(summary: referrals)
+                } label: {
+                    LabeledContent("Referrals", value: referrals.joinedAllTime.formatted())
+                }
+            }
+        } header: {
+            Text("Running DinnerOS")
+        } footer: {
+            Text("What households asked us to add, and who joined with a code. Only you can see this.")
         }
     }
 
@@ -207,7 +302,7 @@ struct HouseholdView: View {
     }
 
     private func membersSection(_ detail: HouseholdDetail) -> some View {
-        Section("Members") {
+        Section {
             if let members = detail.members {
                 ForEach(members) { member in
                     HouseholdMemberRow(
@@ -225,26 +320,9 @@ struct HouseholdView: View {
         }
     }
 
-    /// The importer's backlog. The badge is `ImportReviewDigest.openCount`: the rows the screen
-    /// lists, so it agrees with the screen.
-    private var importReviewSection: some View {
+    private func invitationsSection(_ detail: HouseholdDetail) -> some View {
         Section {
-            NavigationLink {
-                ImportReviewView()
-            } label: {
-                Label("Import Review", systemImage: "tray.full")
-                    .badge(importReviews.digest.openCount)
-            }
-        } header: {
-            Text("Imports")
-        } footer: {
-            Text("Recipes we weren't sure about. Tap one to decide.")
-        }
-    }
-
-    private var invitationsSection: some View {
-        Section {
-            Button("Invite Someone", systemImage: "person.badge.plus") {
+            Button("Add Someone to \(detail.household.name)", systemImage: "person.badge.plus") {
                 sheet = .invite
             }
             ForEach(households.invitations) { invitation in
@@ -275,16 +353,18 @@ struct HouseholdView: View {
                 }
             }
         } header: {
-            Text("Pending Invitations")
+            Text("Invitations to Join")
         } footer: {
-            if households.invitations.isEmpty {
-                Text("No pending invitations.")
-            }
+            Text(
+                households.invitations.isEmpty
+                    ? "No pending invitations. People you add here join this household and share its plans and lists."
+                    : "People you add here join this household and share its plans and lists."
+            )
         }
     }
 
     private var moreHouseholdsSection: some View {
-        Section("More Households") {
+        Section("Other Households") {
             Button("Create Another Household", systemImage: "house") {
                 sheet = .createHousehold
             }
@@ -338,7 +418,7 @@ struct HouseholdView: View {
     @ViewBuilder
     private var accountSection: some View {
         let user = me?.user ?? session.currentUser
-        Section("Account") {
+        Section {
             if let user {
                 LabeledContent("Name") {
                     Text(user.displayName.isEmpty ? String(localized: "Not provided") : user.displayName)
@@ -372,6 +452,8 @@ struct HouseholdView: View {
                     }
                 }
             }
+        }
+        Section {
             FeedbackLink()
             PrivacyPolicyLink()
         }
@@ -569,4 +651,48 @@ private struct HouseholdConfirmations: ViewModifier {
     .environment(PlusStore(session: session, api: nil, purchaser: StoreKitPlusPurchaser()))
     .environment(RecipePreviewData.library(session: session))
     .environment(AutopilotPreviewData.store(session: session))
+}
+
+/// The top of the Household tab: the household's name, its members' initials, and its Plus.
+private struct HouseholdHeaderCard: View {
+    let detail: HouseholdDetail
+    let plusLine: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(detail.household.name)
+                .font(.title.bold())
+            if let members = detail.members, !members.isEmpty {
+                HStack(spacing: -8) {
+                    ForEach(members.prefix(6)) { member in
+                        Text(Self.initials(member.name))
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                            .background(Color.accentColor, in: .circle)
+                            .overlay(Circle().stroke(Color(.systemGroupedBackground), lineWidth: 2))
+                    }
+                    if members.count > 6 {
+                        Text("+\(members.count - 6)")
+                            .font(.footnote.bold())
+                            .padding(.leading, 14)
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(members.map(\.name).formatted(.list(type: .and)))
+            }
+            if let plusLine {
+                Label(plusLine, systemImage: "sparkles")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 8)
+    }
+
+    static func initials(_ name: String) -> String {
+        let letters = name.split(separator: " ").prefix(2).compactMap(\.first)
+        return letters.isEmpty ? "?" : String(letters).uppercased()
+    }
 }

@@ -417,6 +417,37 @@ struct PlusStoreTests {
         #expect(store.compThanks == nil && store.status?.comp == nil)
     }
 
+    @Test func anInviteLinkOpensTheCodeScreen() async throws {
+        #expect(ReferralLink.code(in: try #require(URL(string: "https://dinneros.app/invite/W57ZVGUJ"))) == "W57ZVGUJ")
+        #expect(
+            ReferralLink.code(in: try #require(URL(string: "https://dinneros.app/invite/w57z-vguj/"))) == "W57ZVGUJ")
+        #expect(
+            ReferralLink.code(in: try #require(URL(string: "https://www.dinneros.app/invite/W57ZVGUJ"))) == "W57ZVGUJ")
+        // Not invite code links: a household invitation, other pages, other hosts.
+        #expect(ReferralLink.code(in: try #require(URL(string: "https://api.tlps.dev/invite#token=abc"))) == nil)
+        #expect(ReferralLink.code(in: try #require(URL(string: "https://dinneros.app/invite/"))) == nil)
+        #expect(ReferralLink.code(in: try #require(URL(string: "https://dinneros.app/faq/"))) == nil)
+        #expect(ReferralLink.code(in: try #require(URL(string: "https://example.com/invite/W57ZVGUJ"))) == nil)
+        #expect(ReferralLink.code(in: try #require(URL(string: "http://dinneros.app/invite/W57ZVGUJ"))) == nil)
+
+        let (store, _) = try await makeStore { _ in (200, PlusFixtures.status()) }
+        #expect(store.handleOpenURL(try #require(URL(string: "https://dinneros.app/invite/W57ZVGUJ"))))
+        #expect(store.linkedCode?.code == "W57ZVGUJ")
+        #expect(!store.handleOpenURL(try #require(URL(string: "https://api.tlps.dev/invite#token=abc"))))
+    }
+
+    @Test func theShareSheetGetsTheLinkSeparately() throws {
+        let json = #"""
+            {"code":"W57ZVGUJ","shareText":"I plan our dinners with DinnerOS. Use my code W57ZVGUJ and we both get a free month of DinnerOS Plus. https://dinneros.app/invite/W57ZVGUJ",
+             "shareMessage":"I plan our dinners with DinnerOS. Use my code W57ZVGUJ and we both get a free month of DinnerOS Plus.",
+             "shareUrl":"https://dinneros.app/invite/W57ZVGUJ","explainer":"x","rewarded":0,"monthsLeft":12}
+            """#
+        let referral = try JSONCoding.makeDecoder().decode(PlusReferral.self, from: Data(json.utf8))
+        #expect(referral.shareURL?.absoluteString == "https://dinneros.app/invite/W57ZVGUJ")
+        #expect(referral.shareMessage?.hasSuffix("DinnerOS Plus.") == true)
+        #expect(referral.shareText.hasSuffix(referral.shareURL?.absoluteString ?? "-"))
+    }
+
     @Test func statusLines() throws {
         let decoder = JSONCoding.makeDecoder()
         let now = try #require(ISO8601DateFormatter().date(from: "2026-11-13T12:00:00Z"))

@@ -42,6 +42,18 @@ final class PlusStore {
     var celebration: PlusCelebration?
     /// Waiting for the purchase screen to close.
     var pendingCelebration: PlusCelebration?
+    /// A code from a shared invite link, opening the invite screen with it filled in.
+    var linkedCode: LinkedCode?
+
+    /// Opens the invite screen for a shared invite link. Returns whether `url` was one.
+    @discardableResult
+    func handleOpenURL(_ url: URL) -> Bool {
+        guard let code = ReferralLink.code(in: url) else { return false }
+        Self.logger.info("Invite code link received")
+        linkedCode = LinkedCode(code: code)
+        return true
+    }
+
     /// The beta thank-you, showing. Set once per household on this device.
     var compThanks: PlusComp?
     @ObservationIgnored let defaults: UserDefaults
@@ -256,3 +268,9 @@ final class PlusStore {
         }
     }
 #endif
+
+/// A code that arrived in a link, shown once.
+nonisolated struct LinkedCode: Identifiable, Hashable, Sendable {
+    let id = UUID()
+    let code: String
+}

@@ -5,7 +5,12 @@ import SwiftUI
 struct PlusInviteView: View {
     @Environment(PlusStore.self) private var plus
     @State private var loadError: String?
-    @State private var code = ""
+    @State private var code: String
+
+    /// `code` fills Got a Code, for a shared invite link.
+    init(code: String = "") {
+        _code = State(initialValue: code)
+    }
     @State private var isRedeeming = false
     @State private var redeemError: String?
     @State private var redeemed = false
@@ -26,8 +31,19 @@ struct PlusInviteView: View {
                         }
                     }
                     .padding(.vertical, 4)
-                    ShareLink(item: referral.shareText) {
-                        Label("Share Your Code", systemImage: "square.and.arrow.up")
+                    if let url = referral.shareURL, let message = referral.shareMessage {
+                        // The link goes as a link, so the share sheet and Messages show its card.
+                        ShareLink(
+                            item: url, message: Text(message),
+                            preview: SharePreview(
+                                Text("Get a free month of DinnerOS Plus"), image: Image("ShareIcon"))
+                        ) {
+                            Label("Share Your Code", systemImage: "square.and.arrow.up")
+                        }
+                    } else {
+                        ShareLink(item: referral.shareText) {
+                            Label("Share Your Code", systemImage: "square.and.arrow.up")
+                        }
                     }
                 } else if let loadError {
                     FormErrorLabel(message: loadError)
@@ -69,7 +85,7 @@ struct PlusInviteView: View {
                 }
             }
         }
-        .navigationTitle("Invite a Household")
+        .navigationTitle("Give a Free Month")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
     }
@@ -176,40 +192,6 @@ struct CopyCodeButton: View {
             try? await Task.sleep(for: .seconds(1.5))
             guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.25)) { copied = false }
-        }
-    }
-}
-
-/// The Household tab's Plus row, shown only while Plus is on.
-struct PlusHouseholdSection: View {
-    @Environment(PlusStore.self) private var plus
-
-    var body: some View {
-        if let status = plus.status, status.enabled {
-            Section {
-                if status.active {
-                    NavigationLink {
-                        YourPlusView()
-                    } label: {
-                        Label(PlusText.status(status), systemImage: "checkmark.seal.fill")
-                    }
-                } else {
-                    Button {
-                        plus.showsPurchase = true
-                    } label: {
-                        Label("Get DinnerOS Plus", systemImage: "sparkles")
-                    }
-                }
-                NavigationLink {
-                    PlusInviteView()
-                } label: {
-                    Label("Invite a Household", systemImage: "gift")
-                }
-            } header: {
-                Text("DinnerOS Plus")
-            } footer: {
-                Text("Invite another household and you both get a free month.")
-            }
         }
     }
 }

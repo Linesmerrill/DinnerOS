@@ -167,6 +167,22 @@ func TestReferralInviteRoutes(t *testing.T) {
 	}
 }
 
+// The share text ends with the invite page's link, so Messages shows its card.
+func TestShareTextEndsWithTheInviteLink(t *testing.T) {
+	share, _ := ReferralText("W57ZVGUJ", 0, MaxReferralMonths)
+	want := "I plan our dinners with DinnerOS. Use my code W57ZVGUJ and we both get a free month of DinnerOS Plus. https://dinneros.app/invite/W57ZVGUJ"
+	if share != want {
+		t.Errorf("share = %q\nwant    %q", share, want)
+	}
+	if ShareMessage("W57ZVGUJ")+" "+InviteURL("W57ZVGUJ") != share {
+		t.Error("message and link don't make the share text")
+	}
+	// The link's code reads back as the same code.
+	if NormalizeCode(InviteURL("W57ZVGUJ")) != "W57ZVGUJ" {
+		t.Error("the link doesn't read back as its code")
+	}
+}
+
 // Invite words are plain: no em dashes.
 func TestInviteCopy(t *testing.T) {
 	for _, s := range []string{InvitesEmptyText, "Counted", "Limit reached"} {

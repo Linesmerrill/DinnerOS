@@ -36,7 +36,7 @@ struct InviteMemberSheet: View {
                     form
                 }
             }
-            .navigationTitle(result == nil ? "Invite Someone" : "Invitation")
+            .navigationTitle(result == nil ? "Add Someone to \(householdName)" : "Join Code")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if result == nil {
@@ -164,10 +164,10 @@ struct InviteCreatedView: View {
                     Label(didCopy ? "Copied" : "Copy Code", systemImage: didCopy ? "checkmark" : "doc.on.doc")
                 }
                 ShareLink(item: shareMessage) {
-                    Label("Share Code", systemImage: "square.and.arrow.up")
+                    Label("Share Join Code", systemImage: "square.and.arrow.up")
                 }
             } header: {
-                Text("Invite Code")
+                Text("Join Code")
             } footer: {
                 Text(
                     "This code is shown only once. One person can use it within 7 days, so share it only with \(result.invitation.email)."
@@ -180,7 +180,7 @@ struct InviteCreatedView: View {
     private var shareMessage: String {
         String(
             localized:
-                "Join “\(householdName)” on \(configuration.displayName): choose Join with a Code and enter \(result.code)"
+                "Join our household “\(householdName)” on \(configuration.displayName) so we share one meal plan and grocery list. In the app, choose Join with a Code and enter \(result.code)."
         )
     }
 

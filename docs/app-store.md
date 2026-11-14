@@ -133,7 +133,7 @@ Paste into App Review Information, Notes:
 > order; DinnerOS never takes payment for groceries. Location, calendar and Reminders access are
 > optional and only asked for when someone turns on the feature that uses them.
 >
-> Account deletion: Household tab > Delete Account.
+> Account deletion: Household tab > Account > Delete Account.
 
 Copyright: © 2026 Merrill Lines. The App Review contact is in `ios/fastlane/metadata/review_information/` on the release Mac only, never in git.
 

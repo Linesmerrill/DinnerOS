@@ -15,7 +15,7 @@ import re
 import sys
 
 SITE = pathlib.Path(__file__).resolve().parent.parent / "website"
-SOURCES = ["assets/site.css", "assets/menu.js"]
+SOURCES = ["assets/site.css", "assets/menu.js", "assets/invite.js"]
 
 
 def fingerprinted(source: str) -> tuple[pathlib.Path, str]:

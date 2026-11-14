@@ -93,8 +93,36 @@ nonisolated struct PlusReferral: Codable, Hashable, Sendable {
     let explainer: String
     let rewarded: Int
     let monthsLeft: Int
+    /// The message without its link, and the invite page, so the share sheet shows the link's
+    /// preview. Missing from an older API, which sends the whole message only.
+    var shareMessage: String? = nil
+    var shareURL: URL? = nil
     /// Who used the code. Missing from an older API.
     var invites: PlusInvites? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case code, shareText, explainer, rewarded, monthsLeft, shareMessage, invites
+        case shareURL = "shareUrl"
+    }
+}
+
+/// A shared invite link, `https://dinneros.app/invite/<code>`: opens the invite screen with
+/// the code filled in.
+nonisolated enum ReferralLink {
+    static let host = "dinneros.app"
+
+    /// The code in `url`, or nil when it isn't an invite page link.
+    static func code(in url: URL) -> String? {
+        guard
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+            components.scheme?.lowercased() == "https",
+            let host = components.host?.lowercased(), host == Self.host || host == "www." + Self.host
+        else { return nil }
+        let parts = components.path.split(separator: "/")
+        guard parts.count == 2, parts[0] == "invite" else { return nil }
+        let code = InviteCode.normalize(String(parts[1]))
+        return code.isEmpty ? nil : code
+    }
 }
 
 /// The invite screen's Your Invites section. Other households are never named.

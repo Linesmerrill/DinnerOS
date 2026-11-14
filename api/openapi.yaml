@@ -5734,7 +5734,9 @@ components:
       required: [code, shareText, explainer, rewarded, monthsLeft]
       properties:
         code: {type: string, description: 8 characters, no 0, O, 1, I or L}
-        shareText: {type: string, description: The share sheet's message}
+        shareText: {type: string, description: The whole invite message with the invite page link last}
+        shareMessage: {type: string, description: The message without the link}
+        shareUrl: {type: string, description: 'The invite page, https://dinneros.app/invite/<code>'}
         explainer: {type: string}
         rewarded: {type: integer, description: Households that joined with the code and earned a month}
         monthsLeft: {type: integer, description: Months the code can still earn (at most 12 in all)}

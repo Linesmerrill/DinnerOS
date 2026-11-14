@@ -132,8 +132,13 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 // ReferralResponse is a household's own invite code.
 type ReferralResponse struct {
 	Code string `json:"code"`
-	// ShareText is the message the app's share sheet starts with.
+	// ShareText is the whole message, the invite link last so Messages shows
+	// its preview card.
 	ShareText string `json:"shareText"`
+	// ShareMessage and ShareURL are the same message split, for a share sheet
+	// that shows the link's preview itself.
+	ShareMessage string `json:"shareMessage"`
+	ShareURL     string `json:"shareUrl"`
 	// Explainer sits above the share button.
 	Explainer  string `json:"explainer"`
 	Rewarded   int    `json:"rewarded"`
@@ -251,9 +256,20 @@ func (h *Handler) referralSummary(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
+// InviteURLBase is the website page a shared invite code links to.
+const InviteURLBase = "https://dinneros.app/invite/"
+
+// InviteURL is the link to code's invite page.
+func InviteURL(code string) string { return InviteURLBase + code }
+
+// ShareMessage is the invite message without its link.
+func ShareMessage(code string) string {
+	return "I plan our dinners with DinnerOS. Use my code " + code + " and we both get a free month of DinnerOS Plus."
+}
+
 // ReferralText returns the invite screen's words for code.
 func ReferralText(code string, rewarded, monthsLeft int) (share, explainer string) {
-	share = "I plan our dinners with DinnerOS. Use my code " + code + " and we both get a free month of DinnerOS Plus."
+	share = ShareMessage(code) + " " + InviteURL(code)
 	switch {
 	case monthsLeft == 0:
 		explainer = "Thanks for sharing DinnerOS. You've earned every free month this code can give."
@@ -280,7 +296,8 @@ func (h *Handler) referral(w http.ResponseWriter, r *http.Request) {
 	}
 	share, explainer := ReferralText(info.Code, info.Rewarded, info.MonthsLeft)
 	httpx.WriteJSON(w, http.StatusOK, ReferralResponse{
-		Code: info.Code, ShareText: share, Explainer: explainer, Rewarded: info.Rewarded, MonthsLeft: info.MonthsLeft,
+		Code: info.Code, ShareText: share, ShareMessage: ShareMessage(info.Code), ShareURL: InviteURL(info.Code),
+		Explainer: explainer, Rewarded: info.Rewarded, MonthsLeft: info.MonthsLeft,
 		Invites: invitesResponse(info),
 	})
 }
