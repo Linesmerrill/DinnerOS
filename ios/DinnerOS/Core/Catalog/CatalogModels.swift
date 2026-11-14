@@ -187,3 +187,26 @@ nonisolated struct CatalogQuery: Equatable, Sendable {
 
     var isSearching: Bool { !normalizedSearch.isEmpty }
 }
+
+/// Why someone reports a shared recipe (decision 686).
+nonisolated enum CatalogReportReason: String, CaseIterable, Identifiable, Sendable {
+    case inappropriate, copyright, spam, wrong, other
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .inappropriate: String(localized: "It's offensive or inappropriate")
+        case .copyright: String(localized: "It's copied from somewhere else")
+        case .spam: String(localized: "It's spam or an ad")
+        case .wrong: String(localized: "It's not a real recipe")
+        case .other: String(localized: "Something else")
+        }
+    }
+}
+
+/// The answer to a report.
+nonisolated struct CatalogReportResult: Decodable, Equatable, Sendable {
+    let hidden: Bool
+    let message: String
+}

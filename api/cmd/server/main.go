@@ -139,7 +139,8 @@ func run() error {
 	// The global recipe catalog is a separate collection with no household in
 	// it. Recipes flow one way: an import publishes public-source recipes
 	// into it, and a household copies an entry into its own library.
-	catalogService := catalog.NewService(catalog.ServiceOptions{Store: catalog.NewMongoStore(db.Database())})
+	catalogService := catalog.NewService(catalog.ServiceOptions{Store: catalog.NewMongoStore(db.Database())}).
+		WithReports(catalog.NewMongoReports(db.Database()))
 	recipeService := recipes.NewService(recipes.NewMongoStore(db.Database())).WithCatalog(catalogService)
 	catalogService.SetLibrary(recipeService)
 	// New households get a copy of STARTER_RECIPES_HOUSEHOLD_ID's recipes in
@@ -501,6 +502,7 @@ func indexSets() []mongodb.IndexSet {
 		invitations.Indexes(),
 		recipes.Indexes(),
 		catalog.Indexes(),
+		catalog.ReportIndexes(),
 		planning.Indexes(),
 		pantry.Indexes(),
 		notifications.Indexes(),

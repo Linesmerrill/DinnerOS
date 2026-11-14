@@ -11,6 +11,8 @@ struct DiscoverView: View {
     @Environment(HouseholdStore.self) private var households
 
     @State private var searchText = ""
+    /// The recipe whose report reasons are showing.
+    @State private var reporting: CatalogSummary?
 
     private var canAdd: Bool {
         households.access?.can(.recipesEdit) == true
@@ -43,6 +45,13 @@ struct DiscoverView: View {
                             Task { await discover.add(item) }
                         }
                     }
+                    .contextMenu {
+                        Button("Report Recipe", systemImage: "flag") { reporting = item }
+                    }
+                    .swipeActions(edge: .trailing) {
+                        Button("Report", systemImage: "flag") { reporting = item }
+                            .tint(.orange)
+                    }
                 }
                 if discover.hasMore {
                     loadMoreRow
@@ -59,6 +68,35 @@ struct DiscoverView: View {
             presenting: discover.addError
         ) { _ in
             Button("OK") { discover.addError = nil }
+        } message: { message in
+            Text(message)
+        }
+        .confirmationDialog(
+            "Why are you reporting this recipe?", isPresented: Binding(presenting: $reporting),
+            titleVisibility: .visible, presenting: reporting
+        ) { item in
+            ForEach(CatalogReportReason.allCases) { reason in
+                Button(reason.title) {
+                    Task { await discover.report(id: item.id, reason: reason) }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("You won't see it again. We'll take a look.")
+        }
+        .alert(
+            "Reported", isPresented: Binding(presenting: Bindable(discover).reportMessage),
+            presenting: discover.reportMessage
+        ) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        .alert(
+            "Couldn't Report That Recipe", isPresented: Binding(presenting: Bindable(discover).reportError),
+            presenting: discover.reportError
+        ) { _ in
+            Button("OK") {}
         } message: { message in
             Text(message)
         }

@@ -44,6 +44,7 @@ type Service struct {
 	store   Store
 	library Library
 	taste   Taste
+	reports ReportStore
 	now     func() time.Time
 }
 
@@ -115,7 +116,7 @@ func (s *Service) Discover(ctx context.Context, householdID string, q Query) (Pa
 	if err != nil {
 		return Page{}, fmt.Errorf("scan catalog: %w", err)
 	}
-	entries = shown(entries)
+	entries = withoutHidden(shown(entries), s.hidden(ctx, householdID))
 	entries, err = s.withoutLibrary(ctx, householdID, entries)
 	if err != nil {
 		return Page{}, err
@@ -139,7 +140,7 @@ func (s *Service) Search(ctx context.Context, householdID string, q Query) (Page
 	if err != nil {
 		return Page{}, fmt.Errorf("search catalog: %w", err)
 	}
-	if kept := shown(entries); len(kept) != len(entries) {
+	if kept := withoutHidden(shown(entries), s.hidden(ctx, householdID)); len(kept) != len(entries) {
 		total -= len(entries) - len(kept)
 		entries = kept
 	}
@@ -163,7 +164,7 @@ func (s *Service) Get(ctx context.Context, householdID, id string) (Result, erro
 	if err != nil {
 		return Result{}, err
 	}
-	if recipes.CatalogWithheld(e.Content.Source) {
+	if recipes.CatalogWithheld(e.Content.Source) || s.hidden(ctx, householdID)[e.ID] {
 		return Result{}, ErrNotFound
 	}
 	out := []Result{{Recipe: e}}
@@ -180,7 +181,7 @@ func (s *Service) Add(ctx context.Context, householdID, id string) (recipes.Reci
 	if err != nil {
 		return recipes.Recipe{}, false, err
 	}
-	if recipes.CatalogWithheld(e.Content.Source) {
+	if recipes.CatalogWithheld(e.Content.Source) || s.hidden(ctx, householdID)[e.ID] {
 		return recipes.Recipe{}, false, ErrNotFound
 	}
 	if s.library == nil {

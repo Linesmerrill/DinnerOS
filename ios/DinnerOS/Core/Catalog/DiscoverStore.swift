@@ -189,6 +189,31 @@ final class DiscoverStore {
         }
     }
 
+    /// The last report's thank-you, for an alert.
+    var reportMessage: String?
+    /// The last report that failed, for an alert.
+    var reportError: String?
+
+    /// Reports a shared recipe and takes it off the list. Returns whether it went through.
+    @discardableResult
+    func report(id: String, reason: CatalogReportReason) async -> Bool {
+        guard let api, let householdID else { return false }
+        do {
+            let result = try await session.authorized { token in
+                try await api.report(householdID: householdID, id: id, reason: reason, accessToken: token)
+            }
+            items.removeAll { $0.id == id }
+            reportMessage = result.message
+            return true
+        } catch is CancellationError {
+            return false
+        } catch {
+            Self.logger.notice("Report failed: \(Self.describe(error), privacy: .public)")
+            reportError = HouseholdStore.message(for: error)
+            return false
+        }
+    }
+
     private func mark(id: String, libraryRecipeID: String) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         if isSearching {
@@ -198,7 +223,7 @@ final class DiscoverStore {
                 headline: item.headline, imageURLString: item.imageURLString, isAddon: item.isAddon,
                 totalMinutes: item.totalMinutes, cookMinutes: item.cookMinutes, timeBand: item.timeBand,
                 calories: item.calories, proteinGrams: item.proteinGrams, cuisines: item.cuisines, tags: item.tags,
-                inLibrary: true, libraryRecipeID: libraryRecipeID, reasons: item.reasons)
+                inLibrary: true, libraryRecipeID: libraryRecipeID, reasons: item.reasons, promotion: item.promotion)
         } else {
             items.remove(at: index)
         }

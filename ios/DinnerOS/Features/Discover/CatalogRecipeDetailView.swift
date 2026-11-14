@@ -15,6 +15,8 @@ struct CatalogRecipeDetailView: View {
     @State private var loadError: String?
     @State private var isAdding = false
     @State private var addedRecipeID: String?
+    @State private var isChoosingReason = false
+    @Environment(\.dismiss) private var dismiss
 
     private var canAdd: Bool {
         households.access?.can(.recipesEdit) == true
@@ -45,6 +47,30 @@ struct CatalogRecipeDetailView: View {
         }
         .navigationTitle(recipe?.name ?? route.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("Report Recipe", systemImage: "flag") { isChoosingReason = true }
+                } label: {
+                    Label("More", systemImage: "ellipsis.circle")
+                }
+            }
+        }
+        .confirmationDialog(
+            "Why are you reporting this recipe?", isPresented: $isChoosingReason, titleVisibility: .visible
+        ) {
+            ForEach(CatalogReportReason.allCases) { reason in
+                Button(reason.title) {
+                    Task {
+                        // The list shows the thank-you; this page goes away.
+                        if await discover.report(id: route.id, reason: reason) { dismiss() }
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You won't see it again. We'll take a look.")
+        }
         .task { await load() }
     }
 

@@ -54,6 +54,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(view).Get(base+"/catalog/recipes", h.search)
 		r.With(view).Get(base+"/catalog/recipes/{catalogRecipeId}", h.get)
 		r.With(edit).Post(base+"/catalog/recipes/{catalogRecipeId}/add", h.add)
+		r.With(view).Post(base+"/catalog/recipes/{catalogRecipeId}/report", h.report)
 	})
 }
 
@@ -198,6 +199,48 @@ func (h *Handler) add(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusCreated
 	}
 	httpx.WriteJSON(w, status, AddToLibraryResponse{RecipeID: stored.ID, Created: created})
+}
+
+// ReportRequest is the body of POST .../catalog/recipes/{id}/report.
+type ReportRequest struct {
+	// Reason is one of ReportReasons.
+	Reason string `json:"reason"`
+	Note   string `json:"note,omitempty"`
+}
+
+// ReportResponse confirms a report.
+type ReportResponse struct {
+	// Hidden is always true: the household won't see the recipe again.
+	Hidden  bool   `json:"hidden"`
+	Message string `json:"message"`
+}
+
+// ReportThanks is what the app shows after a report.
+const ReportThanks = "Thanks for telling us. We'll take a look, and you won't see this recipe again."
+
+func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
+	var req ReportRequest
+	if !httpx.DecodeJSON(w, r, &req) {
+		return
+	}
+	userID, _ := auth.UserIDFromContext(r.Context())
+	id := chi.URLParam(r, "catalogRecipeId")
+	created, err := h.opts.Service.Report(r.Context(), Report{
+		CatalogID: id, HouseholdID: householdID(r), UserID: userID, Reason: req.Reason, Note: req.Note,
+	})
+	if errors.Is(err, ErrInvalidReport) {
+		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", "Pick a reason for the report.")
+		return
+	}
+	if err != nil {
+		h.fail(w, r, "report catalog recipe failed", err)
+		return
+	}
+	if created {
+		// Operators read reports from the logs and the catalog_reports collection.
+		h.logger.WarnContext(r.Context(), "shared recipe reported", "catalogRecipeId", id, "reason", req.Reason)
+	}
+	httpx.WriteJSON(w, http.StatusOK, ReportResponse{Hidden: true, Message: ReportThanks})
 }
 
 // --- Helpers ------------------------------------------------------------------

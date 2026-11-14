@@ -41,3 +41,20 @@ struct SharedRecipesPageTests {
         #expect(page.items.first?.promotion == nil)
     }
 }
+
+/// Report reasons are the API's codes, each with plain words.
+struct CatalogReportReasonTests {
+    @Test func codesMatchTheAPI() {
+        #expect(
+            CatalogReportReason.allCases.map(\.rawValue) == ["inappropriate", "copyright", "spam", "wrong", "other"])
+        for reason in CatalogReportReason.allCases {
+            #expect(!reason.title.isEmpty)
+        }
+    }
+
+    @Test func decodesTheThankYou() throws {
+        let result = try JSONDecoder().decode(
+            CatalogReportResult.self, from: Data(#"{"hidden":true,"message":"Thanks."}"#.utf8))
+        #expect(result == CatalogReportResult(hidden: true, message: "Thanks."))
+    }
+}

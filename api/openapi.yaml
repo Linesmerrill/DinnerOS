@@ -1161,6 +1161,57 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/catalog/recipes/{catalogRecipeId}/report:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/CatalogRecipeID"
+    post:
+      summary: Report a recipe in Shared Recipes
+      description: |
+        Any member can report a shared recipe (decision 686). The household
+        never sees it again in discover, search, get, or add, and once 3
+        households report one it is hidden for everyone until an operator
+        reviews it. Reporting twice keeps the first report.
+      operationId: reportCatalogRecipe
+      tags: [catalog]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  enum: [inappropriate, copyright, spam, wrong, other]
+                note:
+                  type: string
+                  maxLength: 500
+      responses:
+        "200":
+          description: Reported and hidden from the household.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [hidden, message]
+                properties:
+                  hidden:
+                    type: boolean
+                  message:
+                    type: string
+                    example: Thanks for telling us. We'll take a look, and you won't see this recipe again.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/recipes/{recipeId}:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"

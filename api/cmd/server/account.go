@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/Linesmerrill/DinnerOS/api/internal/catalog"
 	"log/slog"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -56,6 +57,7 @@ func newAccountService(db *mongo.Database, householdService *households.Service,
 			plus.NewMongoReferrals(db),
 			plus.NewMongoBilling(db),
 			plus.NewMongoComps(db),
+			catalog.NewMongoReports(db),
 		},
 		UserData: []account.UserPurger{
 			ratingStore,
