@@ -83,25 +83,101 @@ PLUS_GROUP_ID = "22576115"
 # Gives each Plus subscription its review screenshot and adds it to the next
 # App Review submission, through the App Store Connect API. Apple reviews a
 # first subscription only with an app version.
-def attach_plus_subscriptions(screens_dir)
+def attach_plus_subscriptions(screens_dir, queue:)
   client = Spaceship::ConnectAPI.client.tunes_request_client
-  subs = client.get("v1/subscriptionGroups/#{PLUS_GROUP_ID}/subscriptions").body["data"]
-  UI.user_error!("No subscriptions in group #{PLUS_GROUP_ID}") if subs.to_a.empty?
+  list = -> { client.get("v1/subscriptionGroups/#{PLUS_GROUP_ID}/subscriptions").body["data"].to_a }
+  subs = list.call
+  UI.user_error!("No subscriptions in group #{PLUS_GROUP_ID}") if subs.empty?
+  # First give each one what review needs, then queue them once Apple shows
+  # them ready: the state takes a moment to catch up.
   subs.each do |sub|
     product = sub.dig("attributes", "productId")
-    state = sub.dig("attributes", "state")
     shot = File.join(screens_dir, product.end_with?(".yearly") ? "plus-review-yearly.png" : "plus-review-monthly.png")
     upload_review_screenshot(client, sub["id"], shot)
-    if %w[WAITING_FOR_REVIEW IN_REVIEW APPROVED].include?(state)
-      UI.message("#{product} is already #{state}.")
-      next
-    end
-    client.post("v1/subscriptionSubmissions", {
-      data: { type: "subscriptionSubmissions",
-              relationships: { subscription: { data: { type: "subscriptions", id: sub["id"] } } } }
-    })
-    UI.success("#{product} will be reviewed with the app.")
+    make_subscription_available(client, sub["id"], product)
   end
+  return unless queue
+
+  pending = subs.map { |s| s["id"] }
+  10.times do
+    list.call.select { |s| pending.include?(s["id"]) }.each do |sub|
+      product = sub.dig("attributes", "productId")
+      case sub.dig("attributes", "state")
+      when "WAITING_FOR_REVIEW", "IN_REVIEW", "APPROVED"
+        UI.message("#{product} is already #{sub.dig('attributes', 'state')}.")
+        pending.delete(sub["id"])
+      when "READY_TO_SUBMIT"
+        client.post("v1/subscriptionSubmissions", {
+          data: { type: "subscriptionSubmissions",
+                  relationships: { subscription: { data: { type: "subscriptions", id: sub["id"] } } } }
+        })
+        UI.success("#{product} will be reviewed with the app.")
+        pending.delete(sub["id"])
+      end
+    end
+    break if pending.empty?
+    sleep(10)
+  end
+  UI.user_error!("Some Plus subscriptions never became ready: #{pending.join(', ')}") unless pending.empty?
+end
+
+# Sets the app's price to free and makes it available in every country, through
+# the current App Store Connect API (fastlane's price_tier uses a retired one).
+# Both are skipped once set.
+def make_free_everywhere(app_id)
+  client = Spaceship::ConnectAPI.client.tunes_request_client
+  schedule = (client.get("v1/apps/#{app_id}/appPriceSchedule?include=manualPrices").body rescue {})
+  if schedule.dig("data", "id") && !schedule.dig("data", "relationships", "manualPrices", "data").to_a.empty?
+    UI.message("The app already has a price.")
+  else
+    points = client.get("v1/apps/#{app_id}/appPricePoints?filter[territory]=USA&limit=200").body["data"]
+    free = points.find { |pt| pt.dig("attributes", "customerPrice").to_f.zero? }
+    UI.user_error!("No free price point found") unless free
+    client.post("v1/appPriceSchedules", {
+      data: { type: "appPriceSchedules", relationships: {
+        app: { data: { type: "apps", id: app_id } },
+        baseTerritory: { data: { type: "territories", id: "USA" } },
+        manualPrices: { data: [{ type: "appPrices", id: "${price}" }] }
+      } },
+      included: [{ type: "appPrices", id: "${price}", attributes: { startDate: nil },
+                   relationships: { appPricePoint: { data: { type: "appPricePoints", id: free["id"] } } } }]
+    })
+    UI.success("The app is free.")
+  end
+  existing = (client.get("v1/apps/#{app_id}/appAvailabilityV2").body["data"] rescue nil)
+  if existing
+    UI.message("The app already has its countries.")
+    return
+  end
+  territories = client.get("v1/territories?limit=200").body["data"].map { |t| t["id"] }
+  client.post("v2/appAvailabilities", {
+    data: { type: "appAvailabilities", attributes: { availableInNewTerritories: true }, relationships: {
+      app: { data: { type: "apps", id: app_id } },
+      territoryAvailabilities: { data: territories.map { |t| { type: "territoryAvailabilities", id: "${#{t}}" } } }
+    } },
+    included: territories.map do |t|
+      { type: "territoryAvailabilities", id: "${#{t}}", attributes: { available: true },
+        relationships: { territory: { data: { type: "territories", id: t } } } }
+    end
+  })
+  UI.success("The app is available in #{territories.size} countries and regions.")
+end
+
+# A subscription needs its countries before Apple will review it.
+def make_subscription_available(client, subscription_id, product)
+  existing = (client.get("v1/subscriptions/#{subscription_id}/subscriptionAvailability").body["data"] rescue nil)
+  if existing
+    UI.message("#{product} already has its countries.")
+    return
+  end
+  territories = client.get("v1/territories?limit=200").body["data"].map { |t| { type: "territories", id: t["id"] } }
+  client.post("v1/subscriptionAvailabilities", {
+    data: { type: "subscriptionAvailabilities", attributes: { availableInNewTerritories: true }, relationships: {
+      subscription: { data: { type: "subscriptions", id: subscription_id } },
+      availableTerritories: { data: territories }
+    } }
+  })
+  UI.success("#{product} is available in #{territories.size} countries and regions.")
 end
 
 def upload_review_screenshot(client, subscription_id, path)
@@ -273,10 +349,12 @@ platform :ios do
   desc "Upload the listing and screenshots, attach Plus, and submit a build for App Review"
   lane :submit_review do |options|
     build = options[:build].to_s
-    UI.user_error!("Pass build:<number>") if build.empty?
+    UI.user_error!("Pass build:<number>") if build.empty? && !options[:dry_run]
     key_file = File.expand_path(ENV["APP_STORE_CONNECT_KEY_FILE"].to_s)
     UI.user_error!("Set APP_STORE_CONNECT_KEY_FILE to the .p8 file") unless File.file?(key_file)
     issuer = ENV["APP_STORE_CONNECT_ISSUER_ID"].to_s.strip
+    issuer_file = File.expand_path("~/.appstoreconnect/issuer_id")
+    issuer = File.read(issuer_file).strip if issuer.empty? && File.file?(issuer_file)
     UI.user_error!("Set APP_STORE_CONNECT_ISSUER_ID") if issuer.empty?
     key_id = File.basename(key_file)[/AuthKey_([A-Z0-9]+)\.p8/, 1]
     UI.user_error!("The key file must be named AuthKey_<KEYID>.p8") unless key_id
@@ -299,11 +377,11 @@ platform :ios do
     end
     UI.user_error!("No screenshots in #{shots}") if Dir[File.join(staged, "*.png")].empty?
 
+    make_free_everywhere(Spaceship::ConnectAPI::App.find(CompactAppID).id)
     deliver(
       api_key: api_key,
       app_identifier: CompactAppID,
       app_version: "1.0",
-      build_number: build,
       metadata_path: File.join(__dir__, "metadata"),
       screenshots_path: File.dirname(staged),
       overwrite_screenshots: true,
@@ -314,18 +392,27 @@ platform :ios do
       },
       submission_information: { export_compliance_uses_encryption: false, add_id_info_uses_idfa: false },
       automatic_release: false,
-      price_tier: 0,
       precheck_include_in_app_purchases: false,
       run_precheck_before_submit: false,
       skip_binary_upload: true,
       submit_for_review: false,
       force: true
     )
-    attach_plus_subscriptions(File.join(root, "docs/app-store"))
     if options[:dry_run]
-      UI.important("Dry run: everything is uploaded; the build was not submitted.")
+      attach_plus_subscriptions(File.join(root, "docs/app-store"), queue: false)
+      UI.important("Dry run: the listing, screenshots and subscriptions are set; nothing was submitted.")
       next
     end
+    # Apple reviews a first subscription only with a version that has a build,
+    # so the build goes on the version before the subscriptions are queued.
+    app = Spaceship::ConnectAPI::App.find(CompactAppID)
+    version = app.get_edit_app_store_version
+    chosen = Spaceship::ConnectAPI::Build.all(app_id: app.id, version: "1.0", build_number: build).first
+    UI.user_error!("Build 1.0 (#{build}) isn't in App Store Connect yet") unless chosen
+    UI.user_error!("Build #{build} is still #{chosen.processing_state}") unless chosen.processing_state == "VALID"
+    version.select_build(build_id: chosen.id)
+    UI.success("Build #{build} is on version #{version.version_string}.")
+    attach_plus_subscriptions(File.join(root, "docs/app-store"), queue: true)
     deliver(
       api_key: api_key, app_identifier: CompactAppID, app_version: "1.0", build_number: build,
       skip_metadata: true, skip_screenshots: true, skip_binary_upload: true,
