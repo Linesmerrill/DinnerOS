@@ -226,6 +226,8 @@ struct MenuView: View {
                     // library has nothing to plan, so getting recipes in comes first (#530).
                     GetStartedSection()
                     YourMealsSection(flow: autopilotFlow)
+                    // Always shown, so recipes other households shared are never hidden in a menu.
+                    SharedRecipesEntry()
                     PairingSuggestionsSection()
                     sections
                     if menu.selectedTiming != .past {
@@ -383,7 +385,7 @@ struct MenuView: View {
             WeekAutopilotMenuItems(flow: autopilotFlow, canEdit: canEdit)
             Section {
                 NavigationLink(value: DiscoverRoute()) {
-                    Label("Try Something Else", systemImage: "sparkles")
+                    Label(SharedRecipes.title, systemImage: SharedRecipes.systemImage)
                 }
                 if canAddOwnRecipe {
                     Button("Add a Recipe", systemImage: "square.and.pencil") {

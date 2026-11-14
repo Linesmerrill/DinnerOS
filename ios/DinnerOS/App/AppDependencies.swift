@@ -21,7 +21,7 @@ final class AppDependencies {
     let recipes: RecipeLibrary
     /// Import bookkeeping: what the importer couldn't map. Read only by the Household tab.
     let importReviews: ImportReviewStore
-    /// The global recipe catalog: "Try Something Else" and catalog search.
+    /// The global recipe catalog: Shared Recipes and catalog search.
     let discover: DiscoverStore
     let plans: PlanStore
     let widgets: WidgetSync

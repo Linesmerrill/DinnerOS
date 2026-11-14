@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Opens "Try Something Else": the global catalog, minus what the household has.
+/// Opens Shared Recipes: the global catalog, minus what the household has.
 struct DiscoverRoute: Hashable {}
 
 /// Opens one catalog recipe, which the household may not own.

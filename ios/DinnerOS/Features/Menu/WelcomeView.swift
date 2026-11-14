@@ -34,7 +34,7 @@ struct WelcomeView: View {
                 }
                 VStack(spacing: 10) {
                     option(
-                        "Browse Shared Recipes", systemImage: "books.vertical",
+                        LocalizedStringKey(SharedRecipes.title), systemImage: SharedRecipes.systemImage,
                         detail: "Add recipes other households share.", choice: .browseShared)
                     if canAddRecipe {
                         option(

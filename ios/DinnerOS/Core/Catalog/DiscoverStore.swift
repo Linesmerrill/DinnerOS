@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import os
 
-/// The "Try something else" browse surface and catalog search.
+/// The Shared Recipes browse surface and catalog search.
 ///
 /// One store serves both: with no search text it asks for discovery, which
 /// leaves out what the household already has; with search text it asks the

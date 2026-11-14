@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// "Try Something Else": recipes from the global catalog the household doesn't
+/// Shared Recipes: recipes from the global catalog the household doesn't
 /// have yet, and a search across the whole catalog.
 ///
 /// With the search field empty it shows discovery, which leaves out the
@@ -81,8 +81,8 @@ struct DiscoverView: View {
                 ContentUnavailableView.search(text: discover.query.normalizedSearch)
             } else {
                 ContentUnavailableView(
-                    "Nothing New Right Now", systemImage: "sparkles",
-                    description: Text("You already have every recipe we know about. Search to look again."))
+                    "Nothing New Right Now", systemImage: "books.vertical",
+                    description: Text("You already have every shared recipe. Check back later."))
             }
         }
         .listRowSeparator(.hidden)

@@ -88,7 +88,7 @@ struct GetStartedSection: View {
     private var actions: some View {
         VStack(alignment: .leading, spacing: 12) {
             NavigationLink(value: DiscoverRoute()) {
-                Label("Browse Recipes", systemImage: "sparkles")
+                Label(SharedRecipes.title, systemImage: SharedRecipes.systemImage)
             }
             if canAddOwnRecipe {
                 Button {

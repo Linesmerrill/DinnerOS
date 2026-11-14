@@ -6,7 +6,7 @@ import Foundation
 nonisolated struct CatalogAPI: Sendable {
     let client: APIClient
 
-    /// "Try something else": catalog recipes the household does not already have.
+    /// Shared Recipes: catalog recipes the household does not already have.
     func discover(
         householdID: String, query: CatalogQuery, cursor: String?, limit: Int, accessToken: String
     ) async throws -> CatalogListPage {

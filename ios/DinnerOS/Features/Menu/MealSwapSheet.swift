@@ -59,7 +59,7 @@ struct MealSwapSheet: View {
                             swaps.notice
                                 ?? String(
                                     localized:
-                                        "Your library has nothing else for this day. Add a recipe, or browse Try Something Else."
+                                        "Your library has nothing else for this day. Add a recipe, or look in Shared Recipes."
                                 ))
                     )
                     .listRowSeparator(.hidden)

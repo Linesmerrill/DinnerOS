@@ -137,11 +137,11 @@ struct AllMealsSection: View {
             ContentUnavailableView {
                 Label("No Recipes Yet", systemImage: "book.closed")
             } description: {
-                Text("Browse our recipes, or add one yourself.")
+                Text("Add recipes other households shared, or add one yourself.")
             } actions: {
                 if canEditRecipes {
                     NavigationLink(value: DiscoverRoute()) {
-                        Label("Browse Recipes", systemImage: "sparkle.magnifyingglass")
+                        Label(SharedRecipes.title, systemImage: SharedRecipes.systemImage)
                     }
                     .buttonStyle(.borderedProminent)
                     if let onAddOwnRecipe {
