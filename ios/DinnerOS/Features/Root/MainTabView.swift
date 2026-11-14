@@ -7,6 +7,7 @@ struct MainTabView: View {
     @Environment(ShoppingStore.self) private var shopping
     @Environment(PantryStore.self) private var pantry
     @Environment(PlusStore.self) private var plus
+    @Environment(\.scenePhase) private var scenePhase
     /// Optional so previews needn't supply one.
     @Environment(PushNotificationStore.self) private var push: PushNotificationStore?
     @Environment(AppIntentRouter.self) private var router: AppIntentRouter?
@@ -55,6 +56,11 @@ struct MainTabView: View {
         .task(id: households.current?.household.id) {
             guard let householdID = households.current?.household.id else { return }
             await plus.activate(householdID: householdID)
+        }
+        // Coming back to the app checks Plus again, which also brings back a thank-you that
+        // didn't get on screen.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await plus.reload() } }
         }
         // Another household clears the previous one's shopping state. The open handoff is read
         // so "Did you order these?" can be asked when the app returns from Walmart.

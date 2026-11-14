@@ -129,6 +129,13 @@ func DetailsFor(d Details, startedBy string, now time.Time) DetailsResponse {
 	}
 	e := d.Entitlement
 	switch {
+	case d.Status.Comp != nil:
+		// Given by DinnerOS: nothing to renew or pay. A store subscription
+		// on top still shows its plan, so it can be canceled.
+		resp.State, resp.StateText = "comp", CompStateText
+		if e != nil && e.Active(now) {
+			resp.Plan = planLine(e.ProductID)
+		}
 	case e != nil && e.Active(now):
 		resp.Plan = planLine(e.ProductID)
 		switch {

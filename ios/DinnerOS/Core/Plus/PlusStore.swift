@@ -42,6 +42,9 @@ final class PlusStore {
     var celebration: PlusCelebration?
     /// Waiting for the purchase screen to close.
     var pendingCelebration: PlusCelebration?
+    /// The beta thank-you, showing. Set once per household on this device.
+    var compThanks: PlusComp?
+    @ObservationIgnored let defaults: UserDefaults
     /// App Store prices by product ID.
     private(set) var products: [String: PlusProduct] = [:]
     private(set) var isPurchasing = false
@@ -60,13 +63,35 @@ final class PlusStore {
     @ObservationIgnored private var householdID: String?
     /// How long to wait between status checks after a purchase, while RevenueCat tells the API.
     @ObservationIgnored var confirmDelay: Duration = .seconds(2)
+    /// How long the thank-you waits after Plus loads.
+    @ObservationIgnored var compThanksDelay: Duration = .seconds(1)
 
     private static let logger = Logger(subsystem: "DinnerOS", category: "plus")
 
-    init(session: AuthSession, api: PlusAPI?, purchaser: any PlusPurchasing) {
+    init(session: AuthSession, api: PlusAPI?, purchaser: any PlusPurchasing, defaults: UserDefaults = .standard) {
         self.session = session
         self.api = api
         self.purchaser = purchaser
+        self.defaults = defaults
+    }
+
+    static func compThanksKey(_ householdID: String) -> String { "plus.compThanks.\(householdID)" }
+
+    /// Offers the beta thank-you until this device has shown it for the household. It's only
+    /// marked shown once it's on screen (`compThanksShown`), so a sheet SwiftUI drops, say
+    /// behind the welcome sheet after sign-in, comes back on the next check.
+    private func offerCompThanks(_ comp: PlusComp?, householdID: String) async {
+        guard let comp, compThanks == nil, !defaults.bool(forKey: Self.compThanksKey(householdID)) else { return }
+        // Let sign-in's own screens settle first.
+        try? await Task.sleep(for: compThanksDelay)
+        guard householdID == self.householdID, compThanks == nil else { return }
+        compThanks = comp
+    }
+
+    /// The thank-you is on screen: don't show it again on this device.
+    func compThanksShown() {
+        guard let householdID else { return }
+        defaults.set(true, forKey: Self.compThanksKey(householdID))
     }
 
     /// Loads the household's Plus. Offline, the saved answer stands in; with none, Plus is
@@ -96,6 +121,7 @@ final class PlusStore {
             }
             guard householdID == self.householdID else { return }
             status = loaded
+            await offerCompThanks(loaded.comp, householdID: householdID)
             if loaded.enabled, products.isEmpty, let offer = loaded.offer {
                 await loadProducts(offer)
             }

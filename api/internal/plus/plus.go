@@ -75,6 +75,8 @@ type Status struct {
 	// FreeUntil is when free months from referrals end; zero if none. Plus
 	// is active while either a subscription or free time is.
 	FreeUntil time.Time
+	// Comp is set while DinnerOS gives the household Plus (decision 682).
+	Comp *Comp
 }
 
 // Store keeps entitlements, one per household.
@@ -94,6 +96,7 @@ type Service struct {
 	free      FreeTimeStore
 	referrals ReferralStore
 	billing   BillingStore
+	comps     CompStore
 	stats     StatsSource
 	// testers are households Plus is on for while it's off for everyone
 	// else (PLUS_TEST_HOUSEHOLDS), so a TestFlight purchase can be tried.
@@ -134,6 +137,15 @@ func (s *Service) Status(ctx context.Context, householdID string) (Status, error
 		}
 		if now.Before(until) {
 			out.Active, out.FreeUntil = true, until
+		}
+	}
+	if s.comps != nil {
+		c, ok, err := s.comps.Get(ctx, householdID)
+		if err != nil {
+			return Status{}, err
+		}
+		if ok && c.Active(now) {
+			out.Active, out.Comp = true, &c
 		}
 	}
 	e, err := s.store.Get(ctx, householdID)

@@ -93,6 +93,7 @@ var accountDeletionKinds = map[string]collectionKind{
 	plus.ReferralCodesCollection:           householdData,
 	plus.ReferralsCollection:               householdData,
 	plus.BillingCollection:                 householdData,
+	plus.CompsCollection:                   householdData,
 	ratings.Collection:                     userRatings,
 	ratings.NotesCollection:                userRatings,
 	events.Collection:                      userHistory,

@@ -224,7 +224,8 @@ func run() error {
 	plusService := plus.NewService(plus.NewMongoStore(db.Database()), cfg.Plus.Enabled).
 		WithReferrals(plus.NewMongoFreeTime(db.Database()), plus.NewMongoReferrals(db.Database())).
 		WithTestHouseholds(cfg.Plus.TestHouseholds).
-		WithBilling(plus.NewMongoBilling(db.Database()))
+		WithBilling(plus.NewMongoBilling(db.Database())).
+		WithComps(plus.NewMongoComps(db.Database()))
 	requirePlus := plus.Require(plusService, logger)
 	plusHandler := plus.NewHandler(plus.HandlerOptions{
 		Service:    plusService,
@@ -511,6 +512,7 @@ func indexSets() []mongodb.IndexSet {
 		plus.Indexes(),
 		plus.ReferralIndexes(),
 		plus.BillingIndexes(),
+		plus.CompIndexes(),
 		behaviorIndexes(),
 		recommendations.Indexes(),
 	)

@@ -364,6 +364,59 @@ struct PlusStoreTests {
         )
     }
 
+    @Test func betaHouseholdsSeeTheThankYouOnce() async throws {
+        let suite = "plus-comp-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let comp =
+            #","comp":{"reason":"beta","since":"2026-11-13T23:00:00Z","thanksTitle":"Thanks for testing DinnerOS","thanksText":"Plus is on the house.","benefitsTitle":"What you get","benefits":["Autopilot plans the week's dinners for you.","One plan covers everyone in your household."]}"#
+        let transport = StubTransport { _ in (200, PlusFixtures.status(active: true, extra: comp)) }
+        let client = APIClient(baseURL: try #require(URL(string: Fixtures.baseURLString)), transport: transport)
+        let session = AuthSession(
+            api: AuthAPI(client: client),
+            store: InMemoryTokenStore(session: StoredSession(tokens: Fixtures.tokens(), user: Fixtures.user)))
+        await session.restore()
+        let store = PlusStore(
+            session: session, api: PlusAPI(client: client), purchaser: FakePurchaser(), defaults: defaults)
+        store.compThanksDelay = .milliseconds(1)
+        await store.activate(householdID: "household-1")
+        let thanks = try #require(store.compThanks)
+        #expect(thanks.thanksTitle == "Thanks for testing DinnerOS")
+        #expect(thanks.benefits?.count == 2 && thanks.benefitsTitle == "What you get")
+        #expect(store.hasPlus && store.status?.comp?.reason == "beta")
+        // Dropped before it got on screen: it comes back on the next check.
+        store.compThanks = nil
+        await store.reload()
+        #expect(store.compThanks != nil)
+        // On screen once: never again on this device.
+        store.compThanksShown()
+        store.compThanks = nil
+        await store.reload()
+        #expect(store.compThanks == nil)
+        let again = PlusStore(
+            session: session, api: PlusAPI(client: client), purchaser: FakePurchaser(), defaults: defaults)
+        again.compThanksDelay = .milliseconds(1)
+        await again.activate(householdID: "household-1")
+        #expect(again.compThanks == nil)
+    }
+
+    @Test func aHouseholdWithoutACompSeesNoThankYou() async throws {
+        let suite = "plus-comp-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let transport = StubTransport { _ in (200, PlusFixtures.status(active: true)) }
+        let client = APIClient(baseURL: try #require(URL(string: Fixtures.baseURLString)), transport: transport)
+        let session = AuthSession(
+            api: AuthAPI(client: client),
+            store: InMemoryTokenStore(session: StoredSession(tokens: Fixtures.tokens(), user: Fixtures.user)))
+        await session.restore()
+        let store = PlusStore(
+            session: session, api: PlusAPI(client: client), purchaser: FakePurchaser(), defaults: defaults)
+        store.compThanksDelay = .milliseconds(1)
+        await store.activate(householdID: "household-1")
+        #expect(store.compThanks == nil && store.status?.comp == nil)
+    }
+
     @Test func statusLines() throws {
         let decoder = JSONCoding.makeDecoder()
         let now = try #require(ISO8601DateFormatter().date(from: "2026-11-13T12:00:00Z"))

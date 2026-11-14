@@ -253,6 +253,9 @@ struct PlusPurchasePresenter: ViewModifier {
             .fullScreenCover(item: $plus.celebration) { celebration in
                 PlusThanksView(celebration: celebration)
             }
+            .sheet(item: $plus.compThanks) { comp in
+                PlusCompThanksView(comp: comp)
+            }
     }
 }
 

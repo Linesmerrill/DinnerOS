@@ -13,6 +13,8 @@ nonisolated struct PlusStatus: Codable, Hashable, Sendable {
     let freeUntil: Date?
     /// The purchase screen's words, while Plus is on.
     let offer: PlusOffer?
+    /// Set while DinnerOS gives the household Plus. Missing from an older API.
+    var comp: PlusComp? = nil
 
     /// Whether a Plus feature is open: always while Plus is off.
     var hasPlus: Bool { !enabled || active }
@@ -21,6 +23,17 @@ nonisolated struct PlusStatus: Codable, Hashable, Sendable {
     static let off = PlusStatus(
         enabled: false, active: false, trial: false, expiresAt: nil, willRenew: false, billingIssue: false,
         freeUntil: nil, offer: nil)
+}
+
+/// Plus given by DinnerOS (decision 682), and the thank-you shown once for it.
+nonisolated struct PlusComp: Codable, Hashable, Sendable {
+    let reason: String
+    let since: Date
+    let thanksTitle: String
+    let thanksText: String
+    /// What Plus includes, the purchase screen's list. Missing from an older API.
+    var benefitsTitle: String? = nil
+    var benefits: [String]? = nil
 }
 
 /// The purchase screen's words, from the API so they change without an app update.
@@ -154,6 +167,9 @@ nonisolated enum PlusPurchaseResult: Hashable, Sendable {
 nonisolated enum PlusText {
     /// A status line for someone who has Plus.
     static func status(_ status: PlusStatus, now: Date = .now) -> String {
+        if status.comp != nil {
+            return String(localized: "Plus is on the house. Thank you for testing.")
+        }
         if status.billingIssue {
             return String(localized: "Apple couldn't charge your last renewal. Check your payment in Settings.")
         }
@@ -280,4 +296,8 @@ nonisolated struct PlusCelebration: Identifiable, Hashable, Sendable {
     let productID: String
     /// What Plus unlocks, from the offer.
     let benefits: [String]
+}
+
+extension PlusComp: Identifiable {
+    var id: Date { since }
 }

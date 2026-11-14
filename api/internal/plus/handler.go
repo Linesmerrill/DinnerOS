@@ -80,6 +80,20 @@ type StatusResponse struct {
 	FreeUntil *time.Time `json:"freeUntil,omitempty"`
 	// Offer is the purchase screen's words, while Plus is on.
 	Offer *Offer `json:"offer,omitempty"`
+	// Comp is set while DinnerOS gives the household Plus.
+	Comp *CompResponse `json:"comp,omitempty"`
+}
+
+// CompResponse is Plus given by DinnerOS, and the thank-you the app shows
+// once for it.
+type CompResponse struct {
+	Reason      string    `json:"reason"`
+	Since       time.Time `json:"since"`
+	ThanksTitle string    `json:"thanksTitle"`
+	ThanksText  string    `json:"thanksText"`
+	// Benefits are what Plus includes, the purchase screen's list.
+	BenefitsTitle string   `json:"benefitsTitle"`
+	Benefits      []string `json:"benefits"`
 }
 
 func statusResponse(st Status) StatusResponse {
@@ -95,6 +109,12 @@ func statusResponse(st Status) StatusResponse {
 	if st.Enabled {
 		o := DefaultOffer()
 		resp.Offer = &o
+	}
+	if c := st.Comp; c != nil {
+		resp.Comp = &CompResponse{
+			Reason: c.Reason, Since: c.GrantedAt, ThanksTitle: CompThanksTitle, ThanksText: CompThanksText,
+			BenefitsTitle: CompBenefitsTitle, Benefits: DefaultOffer().Benefits,
+		}
 	}
 	return resp
 }

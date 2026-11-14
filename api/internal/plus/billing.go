@@ -176,6 +176,9 @@ func (s *Service) Details(ctx context.Context, householdID string, m households.
 	if d.UsedCode != nil {
 		consider(d.UsedCode.At)
 	}
+	if c := d.Status.Comp; c != nil {
+		consider(c.GrantedAt)
+	}
 	for _, j := range d.InviteJoins {
 		if j.ReferrerRewarded {
 			consider(j.At)

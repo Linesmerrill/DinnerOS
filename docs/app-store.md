@@ -119,14 +119,15 @@ review is rejected for a Plus reason, set it back to off; nothing else changes.
 
 Paste into App Review Information, Notes:
 
-> DinnerOS is a dinner planner for households. Sign in with Apple; a new household starts with a
-> starter library of recipes so there is something to plan with.
+> DinnerOS is a dinner planner for households. Sign in with the demo account, or create a new
+> account with Sign in with Apple. A new household starts with a library of recipes so there is
+> something to plan with.
 >
-> To see the subscription: open the Menu tab and tap "Plan with Autopilot", or open the Household
-> tab and tap "Get DinnerOS Plus". The purchase screen shows both plans, the 14-day free trial,
-> the renewal terms, Restore purchases, and links to the Privacy Policy and Terms of Use. After
-> buying, Household > DinnerOS Plus opens "Your Plus", where Manage Subscription, Restore
-> Purchases and Request a Refund use Apple's own sheets.
+> To see and buy the subscriptions: go to the Household tab and tap DinnerOS Plus. The purchase
+> screen shows both plans (Monthly and Yearly), the 14-day free trial, the renewal terms, Restore
+> purchases, and links to the Privacy Policy and Terms of Use. Plus can also be reached from the
+> Menu tab by tapping Plan with Autopilot. After buying, Household > DinnerOS Plus opens Your Plus,
+> where Manage Subscription, Restore Purchases and Request a Refund use Apple's own sheets.
 >
 > Sending a grocery list to Walmart or Kroger opens the store's own site or app to finish the
 > order; DinnerOS never takes payment for groceries. Location, calendar and Reminders access are
@@ -134,12 +135,13 @@ Paste into App Review Information, Notes:
 >
 > Account deletion: Household tab > Delete Account.
 
-Demo account: not needed. The only sign-in is Sign in with Apple or Google, and every new
-household gets sample recipes. If App Review asks for one anyway, create a household with a few
-planned dinners and send an invite code they can enter under Household > Join with a Code (codes
-expire, so make it the day of submission).
+Copyright: © 2026 Merrill Lines.
 
-Contact: Merrill's name, phone and email go in App Review Information (not in this repo).
+**Demo account and Plus:** beta households got Plus on the house (decision 682) with a one-time
+grant (`cmd/compbeta`). It left out PLUS_TEST_HOUSEHOLDS and anything passed with `-exclude`, and
+it never touches households made later, so a demo account or a new account App Review creates
+always sees the paywall and both subscriptions. If a demo household is made before the grant runs,
+pass its ID with `-exclude`.
 
 ## Screenshots
 
