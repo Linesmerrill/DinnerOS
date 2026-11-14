@@ -163,6 +163,126 @@ def make_free_everywhere(app_id)
   UI.success("The app is available in #{territories.size} countries and regions.")
 end
 
+def asc_text(dir, name)
+  path = File.join(dir, name)
+  File.file?(path) ? File.read(path, encoding: "UTF-8").strip : nil
+end
+
+# The listing, straight through the API: this fastlane's deliver didn't save it.
+def set_listing(app_id, meta, contact)
+  client = Spaceship::ConnectAPI.client.tunes_request_client
+  en = File.join(meta, "en-US")
+  version = Spaceship::ConnectAPI::App.find(CompactAppID).get_edit_app_store_version
+  client.patch("v1/appStoreVersions/#{version.id}", {
+    data: { type: "appStoreVersions", id: version.id,
+            attributes: { copyright: asc_text(meta, "copyright.txt"), releaseType: "MANUAL" } }
+  })
+  loc = client.get("v1/appStoreVersions/#{version.id}/appStoreVersionLocalizations").body["data"].find { |l| l.dig("attributes", "locale") == "en-US" }
+  client.patch("v1/appStoreVersionLocalizations/#{loc['id']}", {
+    data: { type: "appStoreVersionLocalizations", id: loc["id"], attributes: {
+      description: asc_text(en, "description.txt"), keywords: asc_text(en, "keywords.txt"),
+      promotionalText: asc_text(en, "promotional_text.txt"), supportUrl: asc_text(en, "support_url.txt"),
+      marketingUrl: asc_text(en, "marketing_url.txt")
+    } }
+  })
+  info = client.get("v1/apps/#{app_id}/appInfos").body["data"].find { |i| i.dig("attributes", "appStoreState") != "READY_FOR_SALE" }
+  client.patch("v1/appInfos/#{info['id']}", {
+    data: { type: "appInfos", id: info["id"], relationships: {
+      primaryCategory: { data: { type: "appCategories", id: asc_text(meta, "primary_category.txt") } },
+      secondaryCategory: { data: { type: "appCategories", id: asc_text(meta, "secondary_category.txt") } }
+    } }
+  })
+  iloc = client.get("v1/appInfos/#{info['id']}/appInfoLocalizations").body["data"].find { |l| l.dig("attributes", "locale") == "en-US" }
+  client.patch("v1/appInfoLocalizations/#{iloc['id']}", {
+    data: { type: "appInfoLocalizations", id: iloc["id"], attributes: {
+      name: asc_text(en, "name.txt"), subtitle: asc_text(en, "subtitle.txt"), privacyPolicyUrl: asc_text(en, "privacy_url.txt")
+    } }
+  })
+  detail = client.get("v1/appStoreVersions/#{version.id}/appStoreReviewDetail").body["data"] rescue nil
+  attrs = { contactFirstName: contact["first_name"], contactLastName: contact["last_name"],
+            contactEmail: contact["email_address"], contactPhone: contact["phone_number"],
+            notes: asc_text(File.join(meta, "review_information"), "notes.txt"), demoAccountRequired: false }
+  if detail
+    client.patch("v1/appStoreReviewDetails/#{detail['id']}", { data: { type: "appStoreReviewDetails", id: detail["id"], attributes: attrs } })
+  else
+    client.post("v1/appStoreReviewDetails", { data: { type: "appStoreReviewDetails", attributes: attrs,
+      relationships: { appStoreVersion: { data: { type: "appStoreVersions", id: version.id } } } } })
+  end
+  UI.success("The listing, categories and review contact are saved.")
+end
+
+# Uploads one file through an App Store Connect asset reservation.
+def asc_upload(client, kind, rel_name, rel_type, rel_id, path)
+  bytes = File.binread(path)
+  res = client.post("v1/#{kind}", { data: { type: kind,
+    attributes: { fileName: File.basename(path), fileSize: bytes.bytesize },
+    relationships: { rel_name => { data: { type: rel_type, id: rel_id } } } } }).body["data"]
+  res.dig("attributes", "uploadOperations").each do |op|
+    headers = op["requestHeaders"].to_h { |h| [h["name"], h["value"]] }
+    Faraday.new.run_request(op["method"].downcase.to_sym, op["url"], bytes.byteslice(op["offset"], op["length"]), headers)
+  end
+  client.patch("v1/#{kind}/#{res['id']}", { data: { type: kind, id: res["id"],
+    attributes: { uploaded: true, sourceFileChecksum: Digest::MD5.hexdigest(bytes) } } })
+end
+
+# The 13" iPad slot, which this fastlane files under the older 12.9" one.
+def upload_ipad_13(app_id, dir)
+  client = Spaceship::ConnectAPI.client.tunes_request_client
+  version = Spaceship::ConnectAPI::App.find(CompactAppID).get_edit_app_store_version
+  loc = client.get("v1/appStoreVersions/#{version.id}/appStoreVersionLocalizations").body["data"].find { |l| l.dig("attributes", "locale") == "en-US" }
+  sets = client.get("v1/appStoreVersionLocalizations/#{loc['id']}/appScreenshotSets").body["data"]
+  target = sets.find { |st| st.dig("attributes", "screenshotDisplayType") == "APP_IPAD_PRO_3GEN_129" }
+  if target && !client.get("v1/appScreenshotSets/#{target['id']}/appScreenshots").body["data"].empty?
+    UI.message("The 13\" iPad screenshots are up.")
+    return
+  end
+  target ||= client.post("v1/appScreenshotSets", { data: { type: "appScreenshotSets",
+    attributes: { screenshotDisplayType: "APP_IPAD_PRO_3GEN_129" },
+    relationships: { appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: loc["id"] } } } } }).body["data"]
+  Dir[File.join(dir, "*.png")].sort.each do |f|
+    asc_upload(client, "appScreenshots", "appScreenshotSet", "appScreenshotSets", target["id"], f)
+  end
+  sets.select { |st| st.dig("attributes", "screenshotDisplayType") == "APP_IPAD_PRO_129" }.each do |old|
+    client.delete("v1/appScreenshotSets/#{old['id']}")
+  end
+  UI.success("Uploaded the 13\" iPad screenshots.")
+end
+
+# The app's Content Rights answer, or nil before Merrill gives it.
+def app_content_rights(app_id)
+  Spaceship::ConnectAPI.client.tunes_request_client.get("v1/apps/#{app_id}").body.dig("data", "attributes", "contentRightsDeclaration")
+end
+
+# Age rating answers (docs/app-store.md). Every content question is None; the
+# one yes is user-generated content, since households can share recipes with
+# other households. Only blank answers are filled.
+AGE_RATING = {
+  "alcoholTobaccoOrDrugUseOrReferences" => "NONE", "contests" => "NONE", "gamblingSimulated" => "NONE",
+  "gunsOrOtherWeapons" => "NONE", "horrorOrFearThemes" => "NONE", "matureOrSuggestiveThemes" => "NONE",
+  "medicalOrTreatmentInformation" => "NONE", "profanityOrCrudeHumor" => "NONE",
+  "sexualContentGraphicAndNudity" => "NONE", "sexualContentOrNudity" => "NONE",
+  "violenceCartoonOrFantasy" => "NONE", "violenceRealistic" => "NONE",
+  "violenceRealisticProlongedGraphicOrSadistic" => "NONE",
+  "advertising" => false, "gambling" => false, "healthOrWellnessTopics" => false, "lootBox" => false,
+  "messagingAndChat" => false, "parentalControls" => false, "ageAssurance" => false, "socialMedia" => false,
+  "unrestrictedWebAccess" => false, "userGeneratedContent" => true
+}.freeze
+
+def set_age_rating(app_id)
+  client = Spaceship::ConnectAPI.client.tunes_request_client
+  info = client.get("v1/apps/#{app_id}/appInfos").body["data"].find { |i| i.dig("attributes", "appStoreState") != "READY_FOR_SALE" }
+  decl = client.get("v1/appInfos/#{info['id']}/ageRatingDeclaration").body["data"]
+  blank = AGE_RATING.select { |k, _| decl.dig("attributes", k).nil? }
+  if blank.empty?
+    UI.message("The age rating is answered.")
+    return
+  end
+  client.patch("v1/ageRatingDeclarations/#{decl['id']}", {
+    data: { type: "ageRatingDeclarations", id: decl["id"], attributes: blank }
+  })
+  UI.success("Answered #{blank.size} age rating questions.")
+end
+
 # A subscription needs its countries before Apple will review it.
 def make_subscription_available(client, subscription_id, product)
   existing = (client.get("v1/subscriptions/#{subscription_id}/subscriptionAvailability").body["data"] rescue nil)
@@ -398,27 +518,50 @@ platform :ios do
       submit_for_review: false,
       force: true
     )
+    app = Spaceship::ConnectAPI::App.find(CompactAppID)
+    set_listing(app.id, File.join(__dir__, "metadata"), contact)
+    upload_ipad_13(app.id, File.join(shots, "ipad"))
+    set_age_rating(app.id)
+    rights = app_content_rights(app.id)
     if options[:dry_run]
       attach_plus_subscriptions(File.join(root, "docs/app-store"), queue: false)
       UI.important("Dry run: the listing, screenshots and subscriptions are set; nothing was submitted.")
       next
     end
+    # The content rights answer is a legal statement: Merrill gives it in App
+    # Store Connect himself (App Information, Content Rights).
+    UI.user_error!("Answer Content Rights in App Store Connect, App Information, first") if rights.nil?
     # Apple reviews a first subscription only with a version that has a build,
     # so the build goes on the version before the subscriptions are queued.
-    app = Spaceship::ConnectAPI::App.find(CompactAppID)
     version = app.get_edit_app_store_version
     chosen = Spaceship::ConnectAPI::Build.all(app_id: app.id, version: "1.0", build_number: build).first
     UI.user_error!("Build 1.0 (#{build}) isn't in App Store Connect yet") unless chosen
     UI.user_error!("Build #{build} is still #{chosen.processing_state}") unless chosen.processing_state == "VALID"
     version.select_build(build_id: chosen.id)
     UI.success("Build #{build} is on version #{version.version_string}.")
+    # The first subscriptions must go in the same review submission as the
+    # version: open one with the version, queue the subscriptions, then send it.
+    client = Spaceship::ConnectAPI.client.tunes_request_client
+    open_states = %w[READY_FOR_REVIEW]
+    submission = client.get("v1/apps/#{app.id}/reviewSubmissions?filter[platform]=IOS&filter[state]=#{open_states.join(',')}").body["data"].to_a.first
+    submission ||= client.post("v1/reviewSubmissions", {
+      data: { type: "reviewSubmissions", attributes: { platform: "IOS" },
+              relationships: { app: { data: { type: "apps", id: app.id } } } }
+    }).body["data"]
+    items = client.get("v1/reviewSubmissions/#{submission['id']}/items?include=appStoreVersion").body["data"].to_a
+    unless items.any? { |it| it.dig("relationships", "appStoreVersion", "data", "id") == version.id }
+      client.post("v1/reviewSubmissionItems", {
+        data: { type: "reviewSubmissionItems", relationships: {
+          reviewSubmission: { data: { type: "reviewSubmissions", id: submission["id"] } },
+          appStoreVersion: { data: { type: "appStoreVersions", id: version.id } }
+        } }
+      })
+    end
+    UI.success("Version #{version.version_string} is in review submission #{submission['id']}.")
     attach_plus_subscriptions(File.join(root, "docs/app-store"), queue: true)
-    deliver(
-      api_key: api_key, app_identifier: CompactAppID, app_version: "1.0", build_number: build,
-      skip_metadata: true, skip_screenshots: true, skip_binary_upload: true,
-      submission_information: { export_compliance_uses_encryption: false, add_id_info_uses_idfa: false },
-      automatic_release: false, run_precheck_before_submit: false, submit_for_review: true, force: true
-    )
+    client.patch("v1/reviewSubmissions/#{submission['id']}", {
+      data: { type: "reviewSubmissions", id: submission["id"], attributes: { submitted: true } }
+    })
     UI.success("Build #{build} is submitted for App Review.")
   end
 end
