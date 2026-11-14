@@ -75,6 +75,59 @@ def ensure_bundle_id(identifier, name)
   UI.success("Registered App ID #{identifier} (#{name}).")
 end
 
+CompactAppID = "com.linesmerrill.dinneros"
+
+# The Plus subscription group (App Store Connect, "DinnerOS Plus").
+PLUS_GROUP_ID = "22576115"
+
+# Gives each Plus subscription its review screenshot and adds it to the next
+# App Review submission, through the App Store Connect API. Apple reviews a
+# first subscription only with an app version.
+def attach_plus_subscriptions(screens_dir)
+  client = Spaceship::ConnectAPI.client.tunes_request_client
+  subs = client.get("v1/subscriptionGroups/#{PLUS_GROUP_ID}/subscriptions").body["data"]
+  UI.user_error!("No subscriptions in group #{PLUS_GROUP_ID}") if subs.to_a.empty?
+  subs.each do |sub|
+    product = sub.dig("attributes", "productId")
+    state = sub.dig("attributes", "state")
+    shot = File.join(screens_dir, product.end_with?(".yearly") ? "plus-review-yearly.png" : "plus-review-monthly.png")
+    upload_review_screenshot(client, sub["id"], shot)
+    if %w[WAITING_FOR_REVIEW IN_REVIEW APPROVED].include?(state)
+      UI.message("#{product} is already #{state}.")
+      next
+    end
+    client.post("v1/subscriptionSubmissions", {
+      data: { type: "subscriptionSubmissions",
+              relationships: { subscription: { data: { type: "subscriptions", id: sub["id"] } } } }
+    })
+    UI.success("#{product} will be reviewed with the app.")
+  end
+end
+
+def upload_review_screenshot(client, subscription_id, path)
+  existing = client.get("v1/subscriptions/#{subscription_id}/appStoreReviewScreenshot").body["data"] rescue nil
+  if existing
+    UI.message("Review screenshot already set for subscription #{subscription_id}.")
+    return
+  end
+  bytes = File.binread(path)
+  reservation = client.post("v1/subscriptionAppStoreReviewScreenshots", {
+    data: { type: "subscriptionAppStoreReviewScreenshots",
+            attributes: { fileName: File.basename(path), fileSize: bytes.bytesize },
+            relationships: { subscription: { data: { type: "subscriptions", id: subscription_id } } } }
+  }).body["data"]
+  reservation.dig("attributes", "uploadOperations").each do |op|
+    part = bytes.byteslice(op["offset"], op["length"])
+    headers = op["requestHeaders"].to_h { |h| [h["name"], h["value"]] }
+    Faraday.new.run_request(op["method"].downcase.to_sym, op["url"], part, headers)
+  end
+  client.patch("v1/subscriptionAppStoreReviewScreenshots/#{reservation['id']}", {
+    data: { type: "subscriptionAppStoreReviewScreenshots", id: reservation["id"],
+            attributes: { uploaded: true, sourceFileChecksum: Digest::MD5.hexdigest(bytes) } }
+  })
+  UI.success("Uploaded the review screenshot for subscription #{subscription_id}.")
+end
+
 def asc_api_key
   required = %w[APP_STORE_CONNECT_KEY_ID APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_PRIVATE_KEY DEVELOPMENT_TEAM]
   missing = required.select { |name| ENV[name].to_s.strip.empty? }
@@ -207,5 +260,78 @@ platform :ios do
 
     match(type: "appstore", app_identifier: signed_bundle_ids, api_key: api_key, readonly: false)
     UI.success("Signing assets are stored for #{signed_bundle_ids.join(', ')}; every machine and CI run now shares them.")
+  end
+  # Sends a build to App Review, from the release Mac (docs/app-store.md). It
+  # uploads the listing (metadata/), the screenshots (../store-screenshots, kept
+  # out of git), the review contact (metadata/review_information, also out of
+  # git), attaches both Plus subscriptions with their review screenshots, and
+  # submits. Release is manual after approval.
+  #
+  #   APP_STORE_CONNECT_ISSUER_ID=<id> APP_STORE_CONNECT_KEY_FILE=~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8 \
+  #     bundle exec fastlane submit_review build:103
+  #   ...add dry_run:true to upload everything but not submit.
+  desc "Upload the listing and screenshots, attach Plus, and submit a build for App Review"
+  lane :submit_review do |options|
+    build = options[:build].to_s
+    UI.user_error!("Pass build:<number>") if build.empty?
+    key_file = File.expand_path(ENV["APP_STORE_CONNECT_KEY_FILE"].to_s)
+    UI.user_error!("Set APP_STORE_CONNECT_KEY_FILE to the .p8 file") unless File.file?(key_file)
+    issuer = ENV["APP_STORE_CONNECT_ISSUER_ID"].to_s.strip
+    UI.user_error!("Set APP_STORE_CONNECT_ISSUER_ID") if issuer.empty?
+    key_id = File.basename(key_file)[/AuthKey_([A-Z0-9]+)\.p8/, 1]
+    UI.user_error!("The key file must be named AuthKey_<KEYID>.p8") unless key_id
+    api_key = app_store_connect_api_key(key_id: key_id, issuer_id: issuer, key_filepath: key_file)
+
+    root = File.expand_path("../..", __dir__)
+    shots = File.join(root, "store-screenshots")
+    review = File.join(__dir__, "metadata/review_information")
+    contact = %w[first_name last_name email_address phone_number].to_h do |f|
+      path = File.join(review, "#{f}.txt")
+      UI.user_error!("Missing #{path}") unless File.file?(path)
+      [f, File.read(path).strip]
+    end
+    # deliver wants every screenshot in one folder per language.
+    staged = File.join(Dir.tmpdir, "dinneros-shots", "en-US")
+    FileUtils.rm_rf(File.dirname(staged))
+    FileUtils.mkdir_p(staged)
+    Dir[File.join(shots, "{iphone,ipad}", "*.png")].sort.each do |f|
+      FileUtils.cp(f, File.join(staged, "#{File.basename(File.dirname(f))}-#{File.basename(f)}"))
+    end
+    UI.user_error!("No screenshots in #{shots}") if Dir[File.join(staged, "*.png")].empty?
+
+    deliver(
+      api_key: api_key,
+      app_identifier: CompactAppID,
+      app_version: "0.1.0",
+      build_number: build,
+      metadata_path: File.join(__dir__, "metadata"),
+      screenshots_path: File.dirname(staged),
+      overwrite_screenshots: true,
+      app_review_information: {
+        first_name: contact["first_name"], last_name: contact["last_name"],
+        email_address: contact["email_address"], phone_number: contact["phone_number"],
+        notes: File.read(File.join(review, "notes.txt")).strip, demo_required: false
+      },
+      submission_information: { export_compliance_uses_encryption: false, add_id_info_uses_idfa: false },
+      automatic_release: false,
+      price_tier: 0,
+      precheck_include_in_app_purchases: false,
+      run_precheck_before_submit: false,
+      skip_binary_upload: true,
+      submit_for_review: false,
+      force: true
+    )
+    attach_plus_subscriptions(File.join(root, "docs/app-store"))
+    if options[:dry_run]
+      UI.important("Dry run: everything is uploaded; the build was not submitted.")
+      next
+    end
+    deliver(
+      api_key: api_key, app_identifier: CompactAppID, app_version: "0.1.0", build_number: build,
+      skip_metadata: true, skip_screenshots: true, skip_binary_upload: true,
+      submission_information: { export_compliance_uses_encryption: false, add_id_info_uses_idfa: false },
+      automatic_release: false, run_precheck_before_submit: false, submit_for_review: true, force: true
+    )
+    UI.success("Build #{build} is submitted for App Review.")
   end
 end

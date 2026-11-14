@@ -78,3 +78,9 @@ vendor/bundle/
 
 # App Store screenshots show imported recipe photos: kept on this Mac, never pushed.
 /store-screenshots/
+
+# App Review contact: real name, email and phone stay on the release Mac.
+/ios/fastlane/metadata/review_information/first_name.txt
+/ios/fastlane/metadata/review_information/last_name.txt
+/ios/fastlane/metadata/review_information/email_address.txt
+/ios/fastlane/metadata/review_information/phone_number.txt

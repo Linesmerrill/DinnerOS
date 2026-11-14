@@ -1,0 +1,15 @@
+DinnerOS is a dinner planner for households. Sign in with the demo account, or create a new
+account with Sign in with Apple. A new household starts with a library of recipes so there is
+something to plan with.
+
+To see and buy the subscriptions: go to the Household tab and tap DinnerOS Plus. The purchase
+screen shows both plans (Monthly and Yearly), the 14-day free trial, the renewal terms, Restore
+purchases, and links to the Privacy Policy and Terms of Use. Plus can also be reached from the
+Menu tab by tapping Plan with Autopilot. After buying, Household > DinnerOS Plus opens Your Plus,
+where Manage Subscription, Restore Purchases and Request a Refund use Apple's own sheets.
+
+Sending a grocery list to Walmart or Kroger opens the store's own site or app to finish the
+order; DinnerOS never takes payment for groceries. Location, calendar and Reminders access are
+optional and only asked for when someone turns on the feature that uses them.
+
+Account deletion: Household tab > Delete Account.

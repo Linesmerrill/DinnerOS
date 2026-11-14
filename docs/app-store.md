@@ -135,7 +135,9 @@ Paste into App Review Information, Notes:
 >
 > Account deletion: Household tab > Delete Account.
 
-Copyright: © 2026 Merrill Lines.
+Copyright: © 2026 Merrill Lines. The App Review contact is in `ios/fastlane/metadata/review_information/` on the release Mac only, never in git.
+
+To submit: put the issuer ID and key file in the environment, then run `bundle exec fastlane submit_review build:<number>` in `ios/` (add `dry_run:true` to upload without submitting). It uploads `ios/fastlane/metadata`, the screenshots in `store-screenshots/`, the contact, both Plus subscriptions with their review screenshots, and submits with manual release.
 
 **Demo account and Plus:** beta households got Plus on the house (decision 682) with a one-time
 grant (`cmd/compbeta`). It left out PLUS_TEST_HOUSEHOLDS and anything passed with `-exclude`, and
