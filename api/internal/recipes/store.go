@@ -49,6 +49,15 @@ type Store interface {
 	// SetRecipeShared sets a recipe's catalog opt-in and UpdatedAt. It returns
 	// the stored recipe as it now is.
 	SetRecipeShared(ctx context.Context, householdID, id string, shared bool, now time.Time) (Recipe, error)
+	// SetRecipeDeleted marks a recipe deleted at deletedAt, keeping the plan
+	// entries the delete removed, or, with a zero deletedAt, restores it. It
+	// returns the stored recipe as it now is. A deleted recipe is still read
+	// by ID (GetRecipe, GetRecipes, FindRecipesBySourceIDs,
+	// ExistingRecipeIDs) so past weeks and cooked history keep it, and left
+	// out of everything that lists the library: ListRecipes,
+	// ListRecipesAfter, ListCatalog, ListMenuCatalog, LibraryCatalogKeys, and
+	// FindIngredientUse.
+	SetRecipeDeleted(ctx context.Context, householdID, id string, deletedAt time.Time, removed []RemovedPlanEntry, now time.Time) (Recipe, error)
 	// ExistingRecipeIDs returns those of ids that are the household's
 	// recipes, in any order. Malformed IDs are skipped.
 	ExistingRecipeIDs(ctx context.Context, householdID string, ids []string) ([]string, error)

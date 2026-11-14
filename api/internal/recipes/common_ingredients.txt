@@ -1,0 +1,947 @@
+# Common home-cooking ingredients, offered as suggestions while a member
+# types an ingredient (decision 692). One per line, Title Case. Lines that
+# start with # are notes. Keep each ingredient once: plurals and case are
+# the same ingredient.
+
+# Produce: vegetables
+Garlic
+Onion
+Yellow Onion
+Red Onion
+White Onion
+Sweet Onion
+Green Onion
+Shallot
+Leek
+Chive
+Ginger
+Carrot
+Baby Carrot
+Celery
+Potato
+Russet Potato
+Yukon Gold Potato
+Red Potato
+Baby Potato
+Sweet Potato
+Yam
+Tomato
+Cherry Tomato
+Grape Tomato
+Roma Tomato
+Heirloom Tomato
+Sun-Dried Tomato
+Tomatillo
+Green Bell Pepper
+Red Bell Pepper
+Yellow Bell Pepper
+Orange Bell Pepper
+Bell Pepper
+Mini Sweet Pepper
+Jalapeño
+Serrano Pepper
+Poblano Pepper
+Anaheim Pepper
+Habanero
+Thai Chili
+Fresno Chili
+Banana Pepper
+Pepperoncini
+Cucumber
+English Cucumber
+Persian Cucumber
+Zucchini
+Yellow Squash
+Butternut Squash
+Acorn Squash
+Spaghetti Squash
+Delicata Squash
+Pumpkin
+Eggplant
+Broccoli
+Broccolini
+Broccoli Slaw
+Cauliflower
+Brussels Sprout
+Cabbage
+Green Cabbage
+Red Cabbage
+Napa Cabbage
+Coleslaw Mix
+Bok Choy
+Baby Bok Choy
+Kale
+Lacinato Kale
+Spinach
+Baby Spinach
+Arugula
+Swiss Chard
+Collard Greens
+Mustard Greens
+Romaine Lettuce
+Iceberg Lettuce
+Butter Lettuce
+Spring Mix
+Mixed Greens
+Lettuce
+Radicchio
+Endive
+Frisée
+Watercress
+Microgreens
+Asparagus
+Green Bean
+Haricot Vert
+Snap Pea
+Snow Pea
+Pea
+Frozen Pea
+Edamame
+Corn
+Corn on the Cob
+Frozen Corn
+Okra
+Artichoke
+Artichoke Heart
+Fennel
+Radish
+Daikon
+Turnip
+Parsnip
+Rutabaga
+Beet
+Celery Root
+Jicama
+Kohlrabi
+Mushroom
+Cremini Mushroom
+Button Mushroom
+White Mushroom
+Portobello Mushroom
+Shiitake Mushroom
+Oyster Mushroom
+Enoki Mushroom
+Dried Mushroom
+Bean Sprout
+Alfalfa Sprout
+Water Chestnut
+Bamboo Shoot
+Hearts of Palm
+Avocado
+Lemongrass
+Horseradish
+Plantain
+
+# Produce: fruit
+Lemon
+Lime
+Orange
+Blood Orange
+Mandarin Orange
+Clementine
+Grapefruit
+Apple
+Granny Smith Apple
+Honeycrisp Apple
+Gala Apple
+Pear
+Banana
+Strawberry
+Blueberry
+Raspberry
+Blackberry
+Cranberry
+Dried Cranberry
+Cherry
+Grape
+Red Grape
+Green Grape
+Peach
+Nectarine
+Plum
+Apricot
+Dried Apricot
+Mango
+Pineapple
+Papaya
+Kiwi
+Pomegranate
+Pomegranate Seed
+Watermelon
+Cantaloupe
+Honeydew Melon
+Fig
+Dried Fig
+Date
+Medjool Date
+Raisin
+Golden Raisin
+Prune
+Coconut
+Passion Fruit
+Guava
+Persimmon
+Rhubarb
+Lemon Zest
+Lime Zest
+Orange Zest
+Lemon Juice
+Lime Juice
+Orange Juice
+
+# Fresh herbs
+Basil
+Thai Basil
+Cilantro
+Parsley
+Flat-Leaf Parsley
+Curly Parsley
+Mint
+Dill
+Rosemary
+Thyme
+Oregano
+Sage
+Tarragon
+Marjoram
+Bay Leaf
+Lemon Thyme
+Chervil
+Kaffir Lime Leaf
+Curry Leaf
+
+# Meat
+Ground Beef
+Lean Ground Beef
+Ground Turkey
+Ground Chicken
+Ground Pork
+Ground Lamb
+Ground Bison
+Chicken Breast
+Boneless Skinless Chicken Breast
+Chicken Thigh
+Boneless Skinless Chicken Thigh
+Bone-In Chicken Thigh
+Chicken Drumstick
+Chicken Wing
+Chicken Tender
+Whole Chicken
+Rotisserie Chicken
+Cooked Chicken
+Shredded Chicken
+Turkey Breast
+Ground Sausage
+Italian Sausage
+Breakfast Sausage
+Chorizo
+Andouille Sausage
+Kielbasa
+Bratwurst
+Hot Dog
+Smoked Sausage
+Chicken Sausage
+Bacon
+Turkey Bacon
+Pancetta
+Prosciutto
+Ham
+Deli Ham
+Deli Turkey
+Salami
+Pepperoni
+Pork Chop
+Pork Tenderloin
+Pork Loin
+Pork Shoulder
+Pork Belly
+Baby Back Ribs
+Spare Ribs
+Steak
+Ribeye Steak
+Sirloin Steak
+New York Strip Steak
+Flank Steak
+Skirt Steak
+Flat Iron Steak
+Filet Mignon
+Beef Tenderloin
+Chuck Roast
+Beef Stew Meat
+Brisket
+Short Rib
+Tri-Tip
+Roast Beef
+Corned Beef
+Lamb Chop
+Leg of Lamb
+Veal
+Duck Breast
+
+# Seafood
+Salmon
+Salmon Fillet
+Smoked Salmon
+Cod
+Tilapia
+Halibut
+Mahi Mahi
+Tuna Steak
+Canned Tuna
+Trout
+Catfish
+Sea Bass
+Snapper
+Swordfish
+White Fish
+Shrimp
+Large Shrimp
+Cooked Shrimp
+Scallop
+Bay Scallop
+Crab Meat
+Imitation Crab
+Lobster
+Lobster Tail
+Clam
+Mussel
+Oyster
+Squid
+Anchovy
+Sardine
+Fish Sauce
+
+# Plant proteins
+Tofu
+Firm Tofu
+Extra-Firm Tofu
+Silken Tofu
+Tempeh
+Seitan
+Plant-Based Ground
+
+# Eggs and dairy
+Egg
+Egg White
+Egg Yolk
+Large Egg
+Butter
+Unsalted Butter
+Salted Butter
+Ghee
+Milk
+Whole Milk
+2% Milk
+Skim Milk
+Buttermilk
+Heavy Cream
+Half-and-Half
+Light Cream
+Whipped Cream
+Sour Cream
+Greek Yogurt
+Plain Yogurt
+Vanilla Yogurt
+Cream Cheese
+Mascarpone
+Ricotta
+Cottage Cheese
+Crème Fraîche
+Evaporated Milk
+Sweetened Condensed Milk
+Powdered Milk
+Cheddar Cheese
+Sharp Cheddar
+Mild Cheddar
+White Cheddar
+Shredded Cheddar
+Mozzarella
+Fresh Mozzarella
+Shredded Mozzarella
+Burrata
+Parmesan
+Grated Parmesan
+Pecorino Romano
+Asiago
+Monterey Jack
+Pepper Jack
+Colby Jack
+Mexican Blend Cheese
+Italian Blend Cheese
+Swiss Cheese
+Gruyère
+Provolone
+American Cheese
+Havarti
+Gouda
+Smoked Gouda
+Brie
+Camembert
+Goat Cheese
+Feta
+Blue Cheese
+Gorgonzola
+Queso Fresco
+Cotija
+Oaxaca Cheese
+Halloumi
+Paneer
+Fontina
+Manchego
+Muenster
+Velveeta
+
+# Non-dairy
+Almond Milk
+Oat Milk
+Soy Milk
+Coconut Milk
+Light Coconut Milk
+Coconut Cream
+Vegan Butter
+
+# Bread and bakery
+Bread
+White Bread
+Whole Wheat Bread
+Sourdough Bread
+French Bread
+Baguette
+Ciabatta
+Italian Bread
+Rye Bread
+Brioche
+Challah
+Texas Toast
+Garlic Bread
+Hamburger Bun
+Hot Dog Bun
+Brioche Bun
+Slider Bun
+Dinner Roll
+Hoagie Roll
+Kaiser Roll
+English Muffin
+Bagel
+Croissant
+Pita
+Naan
+Flour Tortilla
+Corn Tortilla
+Taco Shell
+Tostada
+Lavash
+Flatbread
+Pizza Dough
+Pie Crust
+Puff Pastry
+Phyllo Dough
+Crescent Roll Dough
+Biscuit Dough
+Breadcrumbs
+Panko
+Italian Breadcrumbs
+Croutons
+Stuffing Mix
+
+# Pasta, rice, grains
+Pasta
+Spaghetti
+Angel Hair
+Linguine
+Fettuccine
+Penne
+Rigatoni
+Ziti
+Rotini
+Fusilli
+Farfalle
+Bow Tie Pasta
+Elbow Macaroni
+Shells
+Orecchiette
+Orzo
+Lasagna Noodle
+Egg Noodle
+Gnocchi
+Tortellini
+Ravioli
+Ramen Noodle
+Udon Noodle
+Soba Noodle
+Rice Noodle
+Rice Vermicelli
+Lo Mein Noodle
+Glass Noodle
+Rice
+White Rice
+Long-Grain White Rice
+Jasmine Rice
+Basmati Rice
+Brown Rice
+Wild Rice
+Arborio Rice
+Sushi Rice
+Instant Rice
+Cauliflower Rice
+Quinoa
+Couscous
+Pearl Couscous
+Bulgur
+Farro
+Barley
+Polenta
+Cornmeal
+Grits
+Rolled Oats
+Quick Oats
+Steel-Cut Oats
+Granola
+Cereal
+
+# Beans and legumes
+Black Beans
+Pinto Beans
+Kidney Beans
+Cannellini Beans
+Great Northern Beans
+Navy Beans
+Chickpeas
+Lentils
+Red Lentils
+Green Lentils
+Split Peas
+Refried Beans
+Baked Beans
+Lima Beans
+Butter Beans
+Black-Eyed Peas
+
+# Canned and jarred
+Diced Tomatoes
+Fire-Roasted Diced Tomatoes
+Crushed Tomatoes
+Whole Peeled Tomatoes
+San Marzano Tomatoes
+Tomato Sauce
+Tomato Paste
+Marinara Sauce
+Pasta Sauce
+Pizza Sauce
+Alfredo Sauce
+Pesto
+Salsa
+Salsa Verde
+Enchilada Sauce
+Green Chiles
+Diced Green Chiles
+Chipotle Peppers in Adobo
+Roasted Red Peppers
+Pickled Jalapeños
+Olives
+Black Olives
+Kalamata Olives
+Green Olives
+Capers
+Pickles
+Dill Pickle
+Relish
+Sauerkraut
+Kimchi
+Canned Corn
+Canned Pumpkin
+Cream of Mushroom Soup
+Cream of Chicken Soup
+Chicken Broth
+Low-Sodium Chicken Broth
+Beef Broth
+Vegetable Broth
+Bone Broth
+Chicken Stock
+Beef Stock
+Vegetable Stock
+Chicken Bouillon
+Beef Bouillon
+Better Than Bouillon
+Coconut Water
+Applesauce
+
+# Oils and vinegars
+Olive Oil
+Extra Virgin Olive Oil
+Vegetable Oil
+Canola Oil
+Avocado Oil
+Coconut Oil
+Sesame Oil
+Toasted Sesame Oil
+Peanut Oil
+Sunflower Oil
+Grapeseed Oil
+Cooking Spray
+Truffle Oil
+Chili Oil
+Balsamic Vinegar
+Red Wine Vinegar
+White Wine Vinegar
+Apple Cider Vinegar
+Rice Vinegar
+Seasoned Rice Vinegar
+White Vinegar
+Sherry Vinegar
+Balsamic Glaze
+
+# Condiments and sauces
+Ketchup
+Mustard
+Yellow Mustard
+Dijon Mustard
+Whole Grain Mustard
+Honey Mustard
+Mayonnaise
+Kewpie Mayo
+Aioli
+Ranch Dressing
+Italian Dressing
+Caesar Dressing
+Blue Cheese Dressing
+Thousand Island Dressing
+Vinaigrette
+Barbecue Sauce
+Hot Sauce
+Sriracha
+Buffalo Sauce
+Tabasco
+Worcestershire Sauce
+Soy Sauce
+Low-Sodium Soy Sauce
+Tamari
+Coconut Aminos
+Teriyaki Sauce
+Hoisin Sauce
+Oyster Sauce
+Sweet Chili Sauce
+Gochujang
+Sambal Oelek
+Chili Garlic Sauce
+Chili Crisp
+Ponzu
+Mirin
+Rice Wine
+Shaoxing Wine
+Miso Paste
+White Miso
+Red Curry Paste
+Green Curry Paste
+Yellow Curry Paste
+Tahini
+Hummus
+Tzatziki
+Guacamole
+Steak Sauce
+Cocktail Sauce
+Tartar Sauce
+Horseradish Sauce
+Harissa
+Chimichurri
+Taco Sauce
+Liquid Smoke
+
+# Spices and dried herbs
+Salt
+Kosher Salt
+Sea Salt
+Flaky Sea Salt
+Black Pepper
+Ground Black Pepper
+Peppercorns
+White Pepper
+Garlic Powder
+Garlic Salt
+Onion Powder
+Dried Minced Onion
+Paprika
+Smoked Paprika
+Sweet Paprika
+Chili Powder
+Ancho Chili Powder
+Chipotle Powder
+Cayenne Pepper
+Red Pepper Flakes
+Crushed Red Pepper
+Ground Cumin
+Cumin Seed
+Ground Coriander
+Coriander Seed
+Turmeric
+Ground Ginger
+Ground Cinnamon
+Cinnamon Stick
+Ground Nutmeg
+Ground Cloves
+Whole Cloves
+Allspice
+Cardamom
+Star Anise
+Fennel Seed
+Mustard Seed
+Celery Seed
+Celery Salt
+Caraway Seed
+Sesame Seeds
+Black Sesame Seeds
+Poppy Seeds
+Dried Oregano
+Dried Basil
+Dried Thyme
+Dried Rosemary
+Dried Parsley
+Dried Dill
+Dried Sage
+Ground Sage
+Dried Tarragon
+Herbes de Provence
+Italian Seasoning
+Poultry Seasoning
+Taco Seasoning
+Fajita Seasoning
+Cajun Seasoning
+Creole Seasoning
+Old Bay Seasoning
+Everything Bagel Seasoning
+Lemon Pepper
+Steak Seasoning
+Seasoned Salt
+Ranch Seasoning
+Curry Powder
+Garam Masala
+Chinese Five Spice
+Za'atar
+Sumac
+Ras el Hanout
+Saffron
+Vanilla Extract
+Pure Vanilla Extract
+Vanilla Bean
+Almond Extract
+Peppermint Extract
+Lemon Extract
+MSG
+
+# Baking
+All-Purpose Flour
+Bread Flour
+Whole Wheat Flour
+Cake Flour
+Self-Rising Flour
+Almond Flour
+Coconut Flour
+Rice Flour
+Cornstarch
+Arrowroot
+Tapioca Starch
+Baking Soda
+Baking Powder
+Active Dry Yeast
+Instant Yeast
+Cream of Tartar
+Gelatin
+Sugar
+Granulated Sugar
+Brown Sugar
+Light Brown Sugar
+Dark Brown Sugar
+Powdered Sugar
+Turbinado Sugar
+Coconut Sugar
+Honey
+Maple Syrup
+Agave Nectar
+Molasses
+Corn Syrup
+Light Corn Syrup
+Simple Syrup
+Stevia
+Cocoa Powder
+Unsweetened Cocoa Powder
+Dutch-Process Cocoa
+Chocolate Chips
+Semisweet Chocolate Chips
+Milk Chocolate Chips
+Dark Chocolate Chips
+White Chocolate Chips
+Mini Chocolate Chips
+Baking Chocolate
+Dark Chocolate
+Milk Chocolate
+White Chocolate
+Butterscotch Chips
+Peanut Butter Chips
+Sprinkles
+Food Coloring
+Marshmallow
+Mini Marshmallow
+Marshmallow Creme
+Graham Cracker
+Graham Cracker Crumbs
+Vanilla Wafer
+Oreo Cookie
+Shredded Coconut
+Sweetened Shredded Coconut
+Unsweetened Coconut Flakes
+Cake Mix
+Brownie Mix
+Pudding Mix
+Instant Vanilla Pudding
+Instant Chocolate Pudding
+Pancake Mix
+Bisquick
+Cornbread Mix
+Pie Filling
+Cool Whip
+Caramel Sauce
+Chocolate Syrup
+Jam
+Strawberry Jam
+Grape Jelly
+Apricot Preserves
+Lemon Curd
+Nutella
+
+# Nuts, seeds, nut butters
+Peanut Butter
+Creamy Peanut Butter
+Crunchy Peanut Butter
+Almond Butter
+Cashew Butter
+Sunflower Seed Butter
+Almonds
+Sliced Almonds
+Slivered Almonds
+Walnuts
+Pecans
+Cashews
+Peanuts
+Pistachios
+Pine Nuts
+Hazelnuts
+Macadamia Nuts
+Brazil Nuts
+Pumpkin Seeds
+Sunflower Seeds
+Chia Seeds
+Flaxseed
+Ground Flaxseed
+Hemp Seeds
+
+# Snacks and crackers
+Tortilla Chips
+Potato Chips
+Crackers
+Saltine Crackers
+Ritz Crackers
+Pretzels
+Popcorn
+French Fried Onions
+Fried Shallots
+Pork Rinds
+
+# Frozen
+Frozen Broccoli
+Frozen Spinach
+Frozen Mixed Vegetables
+Frozen Stir-Fry Vegetables
+Frozen Cauliflower Rice
+Frozen Green Beans
+Frozen Berries
+Frozen Strawberries
+Frozen Blueberries
+Frozen Mango
+Frozen Hash Browns
+Tater Tots
+French Fries
+Frozen Shrimp
+Frozen Meatballs
+Frozen Pie Crust
+Frozen Puff Pastry
+Ice Cream
+Vanilla Ice Cream
+Frozen Waffles
+Pot Stickers
+Dumplings
+
+# Drinks and cooking liquids
+Water
+Ice
+Red Wine
+White Wine
+Dry White Wine
+Marsala Wine
+Sherry
+Beer
+Bourbon
+Rum
+Vodka
+Brandy
+Tequila
+Coffee
+Espresso
+Instant Espresso Powder
+Tea
+Green Tea
+Club Soda
+Ginger Ale
+Cola
+Apple Juice
+Pineapple Juice
+Cranberry Juice
+Tomato Juice
+Clam Juice
+Pickle Juice
+
+# International staples
+Rice Paper
+Wonton Wrapper
+Egg Roll Wrapper
+Dumpling Wrapper
+Nori
+Kombu
+Bonito Flakes
+Dashi
+Furikake
+Pickled Ginger
+Wasabi
+Tamarind Paste
+Palm Sugar
+Galangal
+Shrimp Paste
+Black Bean Sauce
+Doubanjiang
+Gochugaru
+Sichuan Peppercorns
+Chinese Sausage
+Masa Harina
+Achiote Paste
+Adobo Seasoning
+Sazón
+Mole Sauce
+Dried Ancho Chile
+Dried Guajillo Chile
+Dried Chile de Árbol
+Queso Blanco
+Crema
+Chorizo Seasoning
+Coconut Yogurt
+Preserved Lemon
+Pomegranate Molasses
+Dukkah
+Labneh
+Mortadella
+Capicola
+Soppressata
+Guanciale
+Marcona Almonds
+Pimento
+Pimento Cheese
+Sofrito
+Plantain Chips

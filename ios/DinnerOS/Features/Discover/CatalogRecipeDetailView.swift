@@ -76,7 +76,7 @@ struct CatalogRecipeDetailView: View {
 
     @ViewBuilder
     private func header(_ recipe: CatalogRecipe) -> some View {
-        RecipeImage(url: recipe.imageURL)
+        RecipeImage(url: recipe.imageURL, title: recipe.name)
             .clipShape(.rect(cornerRadius: 12))
         if let headline = recipe.headline, !headline.isEmpty {
             Text(headline)

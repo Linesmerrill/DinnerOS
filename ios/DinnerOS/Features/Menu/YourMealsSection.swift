@@ -360,7 +360,7 @@ struct MealCard: View {
     static let photoWidth: CGFloat = 340
 
     private var photo: some View {
-        RecipePhoto(url: summary.imageURL, pointWidth: MealCard.photoWidth)
+        RecipePhoto(url: summary.imageURL, pointWidth: MealCard.photoWidth, title: summary.name)
             .overlay(alignment: .topLeading) {
                 HStack(spacing: 6) {
                     if entry.day == nil && !isAddOn {

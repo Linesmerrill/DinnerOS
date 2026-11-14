@@ -18,7 +18,9 @@ struct MenuRecipeCard: View {
 
     @Environment(MealPlanner.self) private var planner
     @Environment(PlanStore.self) private var plans
+    @Environment(HouseholdStore.self) private var households
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var deleting: RecipeSummary?
 
     private var isBusy: Bool { planner.busyRecipeIDs.contains(card.recipe.id) }
 
@@ -32,12 +34,18 @@ struct MenuRecipeCard: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
+            .contextMenu {
+                if households.access?.can(.recipesEdit) == true {
+                    Button("Delete Recipe", systemImage: "trash", role: .destructive) { deleting = card.recipe }
+                }
+            }
             if size == .fullWidth, canAdd {
                 addButton
                     .padding(.top, 10)
             }
         }
         .frame(width: size == .carousel ? carouselWidth : nil, alignment: .leading)
+        .recipeDeletion($deleting, isPlanned: { _ in card.inPlan })
         .accessibilityElement(children: .contain)
     }
 
@@ -58,7 +66,8 @@ struct MenuRecipeCard: View {
     private var photo: some View {
         RecipePhoto(
             url: card.recipe.imageURL, aspectRatio: size == .carousel ? 4.0 / 3.0 : 16.0 / 10.0,
-            pointWidth: size == .carousel ? carouselWidth : MenuRecipeCard.fullWidthEstimate
+            pointWidth: size == .carousel ? carouselWidth : MenuRecipeCard.fullWidthEstimate,
+            title: card.recipe.name
         )
         .overlay(alignment: .topTrailing) {
             if size == .carousel, canAdd {

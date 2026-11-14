@@ -454,6 +454,15 @@ func TestLoadOperators(t *testing.T) {
 	}
 }
 
+func TestLoadPexelsKey(t *testing.T) {
+	if cfg, err := Load(env(nil)); err != nil || cfg.PexelsAPIKey != "" {
+		t.Fatalf("default PexelsAPIKey = %q, %v; want empty", cfg.PexelsAPIKey, err)
+	}
+	if cfg, _ := Load(env(map[string]string{"PEXELS_API_KEY": "  not-a-real-key \n"})); cfg.PexelsAPIKey != "not-a-real-key" {
+		t.Fatalf("PexelsAPIKey = %q; want it trimmed", cfg.PexelsAPIKey)
+	}
+}
+
 func TestLoadInstacart(t *testing.T) {
 	cfg, err := Load(env(nil))
 	if err != nil || cfg.Instacart.Enabled() || cfg.Instacart.Affiliate || cfg.Instacart.APIBase != DefaultInstacartAPIBase {

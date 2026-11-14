@@ -57,12 +57,14 @@ type ImportNutrient struct {
 
 // ImportIngredient is an ingredient line with amounts for each serving size.
 type ImportIngredient struct {
-	SourceIngredientID string         `json:"sourceIngredientId"`
-	Name               string         `json:"name"`
-	Slug               string         `json:"slug,omitempty"`
-	ImageURL           string         `json:"imageUrl,omitempty"`
-	PantryStaple       bool           `json:"pantryStaple"`
-	Amounts            []ImportAmount `json:"amounts"`
+	SourceIngredientID string `json:"sourceIngredientId"`
+	Name               string `json:"name"`
+	Slug               string `json:"slug,omitempty"`
+	ImageURL           string `json:"imageUrl,omitempty"`
+	PantryStaple       bool   `json:"pantryStaple"`
+	// Note is how the ingredient is prepared: "minced", "softened".
+	Note    string         `json:"note,omitempty"`
+	Amounts []ImportAmount `json:"amounts"`
 }
 
 // ImportAmount is a quantity for one serving size. A nil Quantity means the
@@ -201,6 +203,7 @@ func buildRecipe(r ImportRecipe, ingredientID func(ImportIngredient) string) Rec
 			IngredientID: ingredientID(ing),
 			Name:         strings.TrimSpace(ing.Name),
 			PantryStaple: ing.PantryStaple,
+			Note:         cleanNote(ing.Note),
 		}
 		for _, a := range ing.Amounts {
 			amount := Amount{Servings: a.Servings, Unit: a.Unit, SourceUnit: a.SourceUnit, RawText: a.RawText}
@@ -225,4 +228,9 @@ func orderStats(sortedWeeks []string) (times int, last string) {
 		return 0, ""
 	}
 	return len(sortedWeeks), sortedWeeks[len(sortedWeeks)-1]
+}
+
+// cleanNote is a note with its spaces tidied and its length capped.
+func cleanNote(note string) string {
+	return clip(strings.Join(strings.Fields(note), " "), MaxIngredientNote)
 }

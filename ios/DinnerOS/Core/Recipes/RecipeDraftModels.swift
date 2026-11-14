@@ -24,6 +24,10 @@ nonisolated struct RecipeDraft: Codable, Equatable, Sendable {
     var warnings: [String] = []
     /// True when the draft came from a web page. Sent back unchanged.
     var fromURL: Bool = false
+    /// Per serving, as sent. The form types into `nutrition`; saving copies it here.
+    var nutritionPerServing: [RecipeNutrientEntry]?
+    /// Per serving, as typed. Not sent itself.
+    var nutrition = NutritionValues()
 
     enum CodingKeys: String, CodingKey {
         case name, headline, description
@@ -31,6 +35,7 @@ nonisolated struct RecipeDraft: Codable, Equatable, Sendable {
         case imageURL = "imageUrl"
         case servings, prepMinutes, totalMinutes, cuisines, tags, ingredients, steps, warnings
         case fromURL = "fromUrl"
+        case nutritionPerServing
     }
 
     /// The warnings to list, without the imported-recipe note, which has its own place.
@@ -38,7 +43,7 @@ nonisolated struct RecipeDraft: Codable, Equatable, Sendable {
 
     /// Whether the draft has enough to save.
     var isSaveable: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && nutrition.problem == nil
     }
 }
 
@@ -106,6 +111,81 @@ nonisolated enum ImportedRecipeText {
 }
 
 /// The answer to `POST .../recipe-photos`: where the photo now lives.
+/// What deleting a recipe did: the weeks it came off.
+nonisolated struct RecipeDeletion: Decodable, Equatable, Sendable {
+    var removedFromWeeks: [String] = []
+
+    enum CodingKeys: String, CodingKey { case removedFromWeeks }
+
+    init(removedFromWeeks: [String] = []) { self.removedFromWeeks = removedFromWeeks }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        removedFromWeeks = container.decodeLossyArray(String.self, forKey: .removedFromWeeks)
+    }
+}
+
+/// Ingredient names for suggestions: the household's own, most used first, then common ones.
+nonisolated struct IngredientNameList: Decodable, Equatable, Sendable {
+    struct Used: Decodable, Equatable, Sendable {
+        let name: String
+        var count: Int = 0
+    }
+
+    let household: [Used]
+    let common: [String]
+
+    enum CodingKeys: String, CodingKey { case household, common }
+
+    init(household: [Used], common: [String]) {
+        self.household = household
+        self.common = common
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        household = container.decodeLossyArray(Used.self, forKey: .household)
+        common = container.decodeLossyArray(String.self, forKey: .common)
+    }
+
+    var index: IngredientNameIndex { IngredientNameIndex(household: household.map(\.name), common: common) }
+}
+
+/// One page of photos found on the web.
+nonisolated struct RecipePhotoSearchPage: Decodable, Equatable, Sendable {
+    let photos: [RecipeFoundPhoto]
+    /// The page after this one, or nil at the end.
+    let nextPage: Int?
+
+    enum CodingKeys: String, CodingKey { case photos, nextPage }
+
+    init(photos: [RecipeFoundPhoto], nextPage: Int?) {
+        self.photos = photos
+        self.nextPage = nextPage
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        photos = try container.decodeIfPresent([RecipeFoundPhoto].self, forKey: .photos) ?? []
+        let next = try container.decodeIfPresent(Int.self, forKey: .nextPage) ?? 0
+        nextPage = next > 0 ? next : nil
+    }
+}
+
+/// A photo found on the web: a small image for the grid, and who took it.
+nonisolated struct RecipeFoundPhoto: Decodable, Equatable, Sendable, Identifiable {
+    let id: String
+    let thumbnailURL: String
+    var width: Int? = nil
+    var height: Int? = nil
+    var credit: String? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case id, width, height, credit
+        case thumbnailURL = "thumbnailUrl"
+    }
+}
+
 nonisolated struct RecipePhotoUpload: Decodable, Equatable, Sendable {
     let imageURL: String
 

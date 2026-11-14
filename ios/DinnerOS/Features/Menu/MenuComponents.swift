@@ -17,6 +17,14 @@ struct RecipePhoto: View {
     /// The widest bucket to ask the CDN for. Cards keep the default cap; the hero, the one
     /// photo shown full-screen, passes `nil` for the original.
     var maxBucket: Int? = ImageKey.cardBucketCap
+    /// The recipe's name, for the designed picture shown when there's no photo.
+    var title: String? = nil
+    /// Whether that picture writes the name. The recipe page's header doesn't: the name is
+    /// right under it.
+    var showsTitle = true
+    /// Fades the no-photo picture's icon as it nears the top of the screen, for the recipe
+    /// page's header, so it never shows behind the buttons there.
+    var placeholderFadesNearTop = false
 
     @Environment(\.displayScale) private var displayScale
 
@@ -68,9 +76,7 @@ struct RecipePhoto: View {
     }
 
     private var fallbackGlyph: some View {
-        Image(systemName: "fork.knife")
-            .font(.title2)
-            .foregroundStyle(.tertiary)
+        RecipePlaceholderArt(title: title, showsTitle: showsTitle, fadesNearTop: placeholderFadesNearTop)
     }
 }
 

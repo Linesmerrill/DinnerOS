@@ -108,6 +108,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Get("/ingredients", h.searchIngredients)
 		view := households.RequirePermission(h.opts.Authorizer, households.PermHouseholdView, h.logger)
 		r.With(view).Get("/households/{householdId}/recipes", h.list)
+		h.mountIngredientNames(r, view)
 		// Manual entry: parse (nothing is stored), then create the reviewed
 		// draft. Both are static paths, which win over /{recipeId} in chi.
 		edit := households.RequirePermission(h.opts.Authorizer, households.PermRecipesEdit, h.logger)
@@ -118,6 +119,8 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(edit).Post("/households/{householdId}/recipes/swap-preview", h.swapPreview)
 		r.With(edit).Put("/households/{householdId}/recipes/{recipeId}/edits", h.editRecipe)
 		h.mountPhotos(r, edit)
+		h.mountPhotoSearch(r, edit)
+		h.mountDelete(r, edit)
 		r.With(view).Get("/households/{householdId}/recipes/{recipeId}", h.get)
 		r.With(view).Get("/households/{householdId}/recipes/{recipeId}/instructions", h.instructions)
 		r.With(view).Get("/households/{householdId}/recipes/{recipeId}/rating-questions", h.ratingQuestions)
@@ -234,6 +237,9 @@ type RecipeResponse struct {
 	EditedAt  *time.Time `json:"editedAt"`
 	CreatedAt time.Time  `json:"createdAt"`
 	UpdatedAt time.Time  `json:"updatedAt"`
+	// Deleted is true for a recipe the household deleted, still read by ID
+	// for past weeks and cooked history (decision 694).
+	Deleted bool `json:"deleted,omitempty"`
 	// HouseholdRating aggregates every member's rating; MyRating is the
 	// caller's own, or null.
 	HouseholdRating ratings.HouseholdRatingResponse `json:"householdRating"`
@@ -256,12 +262,14 @@ type StepResponse struct {
 
 // RecipeIngredientResponse is an ingredient line with its catalog category.
 type RecipeIngredientResponse struct {
-	IngredientID string           `json:"ingredientId"`
-	Name         string           `json:"name"`
-	Category     string           `json:"category"`
-	ImageURL     string           `json:"imageUrl,omitempty"`
-	PantryStaple bool             `json:"pantryStaple"`
-	Amounts      []AmountResponse `json:"amounts"`
+	IngredientID string `json:"ingredientId"`
+	Name         string `json:"name"`
+	Category     string `json:"category"`
+	ImageURL     string `json:"imageUrl,omitempty"`
+	PantryStaple bool   `json:"pantryStaple"`
+	// Note is how it's prepared ("minced"), shown after the name.
+	Note    string           `json:"note,omitempty"`
+	Amounts []AmountResponse `json:"amounts"`
 }
 
 // AmountResponse is an ingredient amount for one serving size. Quantity is
@@ -333,6 +341,9 @@ func newRecipeResponse(r Recipe, bands autopilot.TimeBands) RecipeResponse {
 		edited := r.EditedAt.UTC()
 		resp.EditedAt = &edited
 	}
+	if !r.DeletedAt.IsZero() {
+		resp.Deleted, resp.InCatalog = true, false
+	}
 	for _, n := range r.Nutrition {
 		resp.Nutrition = append(resp.Nutrition, NutrientResponse(n))
 	}
@@ -343,7 +354,7 @@ func newRecipeResponse(r Recipe, bands autopilot.TimeBands) RecipeResponse {
 	for _, line := range r.Ingredients {
 		lr := RecipeIngredientResponse{
 			IngredientID: line.IngredientID, Name: line.Name, Category: line.Category, ImageURL: line.ImageURL, PantryStaple: line.PantryStaple,
-			Amounts: make([]AmountResponse, 0, len(line.Amounts)),
+			Note: line.Note, Amounts: make([]AmountResponse, 0, len(line.Amounts)),
 		}
 		for _, a := range line.Amounts {
 			lr.Amounts = append(lr.Amounts, NewAmountResponse(a))

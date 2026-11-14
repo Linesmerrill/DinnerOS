@@ -242,14 +242,22 @@ nonisolated struct RecipeIngredient: Decodable, Equatable, Sendable {
     var imageURLString: String? = nil
     /// Allergens this ingredient contains, such as "Soy"; empty when unknown.
     var allergens: [String] = []
+    /// How it's prepared: "minced", "softened". Shown after the name, never on the list.
+    var note: String? = nil
 
     var imageURL: URL? { imageURLString.flatMap { URL(string: $0) } }
+
+    /// "Garlic, minced", or just the name.
+    var nameWithNote: String {
+        guard let note = note?.trimmingCharacters(in: .whitespaces), !note.isEmpty else { return name }
+        return "\(name), \(note)"
+    }
 
     private enum CodingKeys: String, CodingKey {
         case ingredientID = "ingredientId"
         case name, category, pantryStaple, amounts
         case imageURLString = "imageUrl"
-        case allergens
+        case allergens, note
     }
 }
 
@@ -264,7 +272,8 @@ nonisolated extension RecipeIngredient {
             pantryStaple: try container.decode(Bool.self, forKey: .pantryStaple),
             amounts: try container.decode([RecipeAmount].self, forKey: .amounts),
             imageURLString: container.decodeLenient(String.self, forKey: .imageURLString),
-            allergens: container.decodeLossyArray(String.self, forKey: .allergens))
+            allergens: container.decodeLossyArray(String.self, forKey: .allergens),
+            note: container.decodeLenient(String.self, forKey: .note))
     }
 }
 

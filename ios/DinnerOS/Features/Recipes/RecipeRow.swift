@@ -13,7 +13,7 @@ struct RecipeRow: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
             : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
         layout {
-            RecipeImage(url: summary.imageURL)
+            RecipeImage(url: summary.imageURL, title: summary.name)
                 .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : min(thumbnailWidth, 140))
                 .clipShape(.rect(cornerRadius: 8))
             VStack(alignment: .leading, spacing: 4) {
@@ -66,6 +66,8 @@ struct RecipeImage: View {
     let url: URL?
     /// The width the photo is shown at, in points.
     var pointWidth: CGFloat = 140
+    /// The recipe's name, for the designed picture shown when there's no photo.
+    var title: String? = nil
 
     @Environment(\.displayScale) private var displayScale
 
@@ -75,19 +77,13 @@ struct RecipeImage: View {
             .aspectRatio(4.0 / 3.0, contentMode: .fit)
             .overlay {
                 CachedImage(key: ImageKey(url: url, pointWidth: pointWidth, scale: displayScale)) {
-                    glyph
+                    Color.clear
                 } fallback: {
-                    glyph
+                    RecipePlaceholderArt(title: title, showsTitle: pointWidth >= 200)
                 }
             }
             .clipped()
             .accessibilityHidden(true)
-    }
-
-    private var glyph: some View {
-        Image(systemName: "fork.knife")
-            .font(.title2)
-            .foregroundStyle(.secondary)
     }
 }
 

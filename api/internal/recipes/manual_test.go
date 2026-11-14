@@ -141,13 +141,32 @@ func TestCreateFromDraftRejectsWhatItCannotStore(t *testing.T) {
 		{"an unknown unit", Draft{Name: "A", Ingredients: []DraftIngredient{{Name: "salt", Unit: "handful"}}}},
 		{"a quantity that is not a number", Draft{Name: "A", Ingredients: []DraftIngredient{{Name: "salt", Quantity: "some"}}}},
 		{"an ingredient with no name", Draft{Name: "A", Ingredients: []DraftIngredient{{Name: "   "}}}},
-		{"impossible servings", Draft{Name: "A", Servings: 99}},
+		{"impossible servings", Draft{Name: "A", Servings: 100}},
+		{"negative servings", Draft{Name: "A", Servings: -1}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := service.CreateFromDraft(t.Context(), hhAda, tc.draft, false); err == nil {
 				t.Fatal("the draft was accepted")
 			}
 		})
+	}
+}
+
+// A batch of cookies or a big pot of chili serves far more than a dinner.
+func TestCreateFromDraftTakesBatchSizedServings(t *testing.T) {
+	service := NewService(newMemoryStore())
+	for _, servings := range []int{24, 36, 99} {
+		stored, err := service.CreateFromDraft(t.Context(), hhAda,
+			Draft{Name: "No Bake Cookies", Servings: servings, Ingredients: []DraftIngredient{{Name: "oats", Quantity: "3", Unit: "cup"}}}, false)
+		if err != nil {
+			t.Fatalf("servings %d: %v", servings, err)
+		}
+		if len(stored.Servings) != 1 || stored.Servings[0] != servings {
+			t.Errorf("servings = %v; want [%d]", stored.Servings, servings)
+		}
+	}
+	if got := atoiClamped("48", maxDraftServings); got != 48 {
+		t.Errorf("a page saying it makes 48 read as %d", got)
 	}
 }
 

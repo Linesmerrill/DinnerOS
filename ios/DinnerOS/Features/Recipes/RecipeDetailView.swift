@@ -42,6 +42,9 @@ struct RecipeDetailView: View {
     @State private var leaveOutError: String?
     @State private var showsCooking = false
     @State private var showsEditor = false
+    @State private var deleting: RecipeSummary?
+    @State private var showsNutrition = false
+    @Environment(\.dismiss) private var dismiss
 
     /// Changing a recipe's ingredients and steps needs `recipes.edit`; the API enforces it.
     private var canEditRecipe: Bool {
@@ -106,6 +109,12 @@ struct RecipeDetailView: View {
                         ImportedRecipeBanner(url: url, showsNote: recipe.source == RecipeSourceKey.fromPage)
                             .padding(.horizontal, 16)
                     }
+                    if let recipe, recipe.imageURLString == nil, canEditRecipe,
+                        recipe.source == RecipeSourceKey.typed || recipe.source == RecipeSourceKey.fromPage
+                    {
+                        SuggestedPhotoBanner(recipe: recipe) { saved in show(saved) }
+                            .padding(.horizontal, 16)
+                    }
                     if let notes = recipe?.myRating?.notesForNextTime, !notes.isEmpty {
                         RecipeNotesForNextTime(notes: notes)
                             .padding(.horizontal, 16)
@@ -137,19 +146,27 @@ struct RecipeDetailView: View {
             }
         }
         .ignoresSafeArea(edges: .top)
+        // The page has nothing to type in. Without this, keyboard space left over from the
+        // screen before (a step typed on Add a Recipe) kept the page laying itself out forever.
+        .ignoresSafeArea(.keyboard)
         .background(Color(.systemBackground))
         .scrollIndicators(.hidden)
-        .onScrollGeometryChange(for: Bool.self) { geometry in
-            geometry.contentOffset.y > heroHeight - 110
-        } action: { _, isPastHero in
-            showsNavigationBar = isPastHero
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            geometry.contentOffset.y
+        } action: { _, offset in
+            // A gap between showing and hiding the bar, so a page resting near the line
+            // can't flip it on and off: the bar changes the layout, which moves the line.
+            let shows = RecipeDetailHeader.showsBar(offset: offset, heroHeight: heroHeight, showing: showsNavigationBar)
+            if shows != showsNavigationBar { showsNavigationBar = shows }
         }
         .navigationTitle(showsNavigationBar ? name : "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(showsNavigationBar ? .visible : .hidden, for: .navigationBar)
         .toolbar {
-            if recipe?.steps.isEmpty == false {
-                ToolbarItem(placement: .topBarTrailing) {
+            // One group: two separate items here (Start Cooking beside the ⋯ menu) kept the
+            // bar laying itself out forever on iOS 26.
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if recipe?.steps.isEmpty == false {
                     Button {
                         showsCooking = true
                     } label: {
@@ -164,26 +181,9 @@ struct RecipeDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .accessibilityLabel("Start Cooking")
                 }
-            }
-            if recipe != nil, canEditRecipe {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showsEditor = true
-                    } label: {
-                        Image(systemName: "pencil")
-                            .modifier(HeroToolbarButton(needsBackground: !showsNavigationBar))
-                    }
-                    .accessibilityLabel("Edit Recipe")
+                if hasMoreMenu {
+                    moreMenu
                 }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                ShareLink(item: shareURL ?? URL(string: "https://example.com").unsafelyUnwrapped, subject: Text(name)) {
-                    Image(systemName: "square.and.arrow.up")
-                        .modifier(HeroToolbarButton(needsBackground: !showsNavigationBar))
-                }
-                .accessibilityLabel("Share \(name)")
-                .opacity(shareURL == nil ? 0 : 1)
-                .disabled(shareURL == nil)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -193,6 +193,7 @@ struct RecipeDetailView: View {
                 startCooking: recipe?.steps.isEmpty == false ? { showsCooking = true } : nil)
         }
         .overlay(alignment: .bottom) { toast }
+        .recipeDeletion($deleting, isPlanned: { _ in !plannedEntries.isEmpty }) { dismiss() }
         .fullScreenCover(isPresented: $showsCooking) {
             CookingView(start: cookMeal, meals: weekMeals)
         }
@@ -202,6 +203,11 @@ struct RecipeDetailView: View {
                     show(saved)
                     Task { await loadInstructions() }
                 }
+            }
+        }
+        .sheet(isPresented: $showsNutrition) {
+            if let recipe {
+                NutritionEditorSheet(recipe: recipe) { saved in show(saved) }
             }
         }
         // Attached to the screen's root, never inside a section (decision 510).
@@ -253,14 +259,22 @@ struct RecipeDetailView: View {
     // MARK: Hero
 
     private var hero: some View {
-        GeometryReader { geometry in
+        // Read once per update, not on every layout pass of the header.
+        let badge = heroBadge
+        let url = photoURL
+        let title = name
+        return GeometryReader { geometry in
             let minY = geometry.frame(in: .scrollView).minY
             let stretch = max(minY, 0)
             RecipePhoto(
-                url: photoURL, aspectRatio: nil, pointWidth: geometry.size.width,
+                url: url, aspectRatio: nil, pointWidth: geometry.size.width,
                 cornerRadius: 0,
                 // The hero fills the screen: it's the one photo worth the full-width original.
-                maxBucket: nil
+                maxBucket: nil,
+                title: title, showsTitle: false,
+                // Without a photo, the icon fades as it nears the top, so it never shows
+                // behind the buttons there.
+                placeholderFadesNearTop: true
             )
             .frame(width: geometry.size.width, height: geometry.size.height + stretch)
             .clipped()
@@ -273,7 +287,7 @@ struct RecipeDetailView: View {
                 .allowsHitTesting(false)
             }
             .overlay(alignment: .bottomLeading) {
-                if let badge = heroBadge {
+                if let badge {
                     MenuChip(text: badge.text, systemImage: badge.code.systemImage, isProminent: true)
                         .background(.regularMaterial, in: .capsule)
                         .padding(16)
@@ -298,6 +312,36 @@ struct RecipeDetailView: View {
 
     private var shareURL: URL? {
         recipe?.sourceURL
+    }
+
+    /// Nutrition can be typed in on a recipe the household added.
+    private func canAddNutrition(_ recipe: Recipe) -> Bool {
+        canEditRecipe && (recipe.source == RecipeSourceKey.typed || recipe.source == RecipeSourceKey.fromPage)
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            if let shareURL {
+                ShareLink(item: shareURL, subject: Text(name)) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+            }
+            if recipe != nil, canEditRecipe {
+                Button("Edit Recipe", systemImage: "pencil") { showsEditor = true }
+                Button("Delete Recipe", systemImage: "trash", role: .destructive) {
+                    deleting = summary
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .modifier(HeroToolbarButton(needsBackground: !showsNavigationBar))
+        }
+        .accessibilityLabel("More")
+    }
+
+    /// The ⋯ menu shows only when it has something in it, so there's never an empty button.
+    private var hasMoreMenu: Bool {
+        shareURL != nil || (recipe != nil && canEditRecipe)
     }
 
     // MARK: Title and stats
@@ -381,7 +425,7 @@ struct RecipeDetailView: View {
                     canSkipOnce: plannedWeek != nil, working: leavingOut, leaveOut: leaveOut(_:choice:),
                     putBack: putBack(_:))
             case .nutrition:
-                RecipeNutritionSection(recipe: recipe)
+                RecipeNutritionSection(recipe: recipe, onAdd: canAddNutrition(recipe) ? { showsNutrition = true } : nil)
             }
         } else {
             ProgressView()
@@ -700,4 +744,14 @@ private struct ViewedKey: Equatable {
     }
     .menuPreviewEnvironment()
     .environment(\.dynamicTypeSize, .accessibility2)
+}
+
+/// When the recipe page's navigation bar shows over the header photo.
+enum RecipeDetailHeader {
+    /// Shows once the page is scrolled close to the end of the header, and hides again only
+    /// after scrolling 40 points back, so it can't flicker at the line.
+    static func showsBar(offset: CGFloat, heroHeight: CGFloat, showing: Bool) -> Bool {
+        let line = heroHeight - 110
+        return showing ? offset > line - 40 : offset > line
+    }
 }

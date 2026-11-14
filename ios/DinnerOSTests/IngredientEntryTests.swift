@@ -102,22 +102,25 @@ struct IngredientEntryTests {
         #expect(RecipeUnit.label("bag") == "bag")
     }
 
-    // MARK: Next goes on to the next ingredient
+    // MARK: Servings
 
-    @Test func editNextMovesOnAndMakesANewLineAfterTheLast() throws {
-        var draft = RecipeEditDraft(recipe: try recipe(source: "manual"), servings: 2)
-        let first = draft.lines[0].id
-        let following = draft.line(after: first)
-        #expect(following == draft.lines[1].id)
-        let last = draft.lines[1].id
-        let next = draft.line(after: last)
-        let added = try #require(next)
-        #expect(draft.lines.count == 3)
-        #expect(draft.lines[2].id == added)
-        // A blank last line doesn't make another.
-        let none = draft.line(after: added)
-        #expect(none == nil)
-        #expect(draft.lines.count == 3)
+    @Test func servingsGoHighEnoughForABatchOfCookies() {
+        #expect(RecipeServings.range == 0...99)
+        #expect(RecipeServings.typed("36") == 36)
+        #expect(RecipeServings.typed("99") == 99)
+        // More than allowed stops at the most, and a stray paste keeps only its digits.
+        #expect(RecipeServings.typed("120") == 99)
+        #expect(RecipeServings.typed("2 4") == 24)
+        #expect(RecipeServings.typed("") == 0)
+        #expect(RecipeServings.typed("abc") == 0)
+    }
+
+    @Test func aDraftWithManyServingsSavesThem() throws {
+        var draft = RecipeDraft(name: "No Bake Cookies")
+        draft.servings = RecipeServings.typed("36")
+        let json = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(draft)) as? [String: Any])
+        #expect(json["servings"] as? Int == 36)
     }
 
     // MARK: Photos on a recipe the household added

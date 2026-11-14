@@ -106,6 +106,9 @@ type Config struct {
 	// Instacart makes Instacart shopping list pages from a week's list when
 	// INSTACART_ENABLED is true and INSTACART_API_KEY is set.
 	Instacart Instacart
+	// PexelsAPIKey turns on photo search for recipes (decision 691). Empty
+	// (the default) leaves it off. The key is a secret: never log it.
+	PexelsAPIKey string
 
 	// StarterRecipesHouseholdID is the household whose recipes are copied
 	// into every new household as a starter library. Empty (the default)
@@ -456,6 +459,7 @@ func loadShopping(cfg *Config, get func(key, fallback string) string) []error {
 		errs = append(errs, errors.New("KROGER_API_BASE must be an https origin"))
 	}
 
+	cfg.PexelsAPIKey = strings.TrimSpace(get("PEXELS_API_KEY", ""))
 	cfg.Instacart = Instacart{
 		APIKey:  strings.TrimSpace(get("INSTACART_API_KEY", "")),
 		APIBase: strings.TrimRight(strings.TrimSpace(get("INSTACART_API_BASE", DefaultInstacartAPIBase)), "/"),

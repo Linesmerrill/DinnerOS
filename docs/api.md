@@ -422,8 +422,10 @@ every recipe's instructions with no migration (decision 512).
 
 `PUT /api/v1/households/{householdId}/recipes/{recipeId}/edits` (`recipes.edit`)
 saves the household's version of a recipe's ingredients and steps (decision
-667): `{"ingredients": [{ingredientId?, name, pantryStaple, amounts:
-[{servings, quantity, unit}]}], "steps": ["…"]}`. A line keeps its catalog
+667): `{"ingredients": [{ingredientId?, name, pantryStaple, note?, amounts:
+[{servings, quantity, unit}]}], "steps": ["…"]}`. `note` is how the line is
+prepared ("minced", up to 200 characters); empty or absent clears it, and
+it outlasts a later import like the rest of the edit (decision 692). A line keeps its catalog
 ingredient when it sends its own `ingredientId` with its name unchanged; a new
 or renamed line is matched by name, and a name the catalog doesn't know is
 added. Amounts are only for the recipe's serving sizes; quantities read like
@@ -439,6 +441,78 @@ upload below. Sent with no ingredients and no steps, only the photo changes.
 On any other recipe it is `validation_failed`, "Only recipes you added can get
 a new photo."
 
+An optional `nutritionPerServing` replaces the nutrition of a recipe the
+household added (decision 693): absent keeps it, `[]` clears it. It takes the
+same list as a draft (below) and, like the photo, can be sent alone. On any
+other recipe it is `validation_failed`, "Only recipes you added can get new
+nutrition." The recipe's and the list's `calories` and `proteinGrams` follow
+the new values.
+
+Typed nutrition, on `POST .../recipes` and in edits, is the recipe's own
+`nutritionPerServing` shape, `[{"name": "Calories", "amount": 540, "unit":
+"kcal"}]`, per serving. Names match without case, with common spellings
+("carbs", "fiber", "saturatedFat"), and are stored as Calories (kcal, up to
+5000), Fat, Saturated Fat, Carbohydrate, Sugar, Dietary Fiber, Protein (g, up
+to 1000 each), Cholesterol and Sodium (mg, up to 20000 each), in that order,
+one decimal place. `unit` may be left out; when sent it must be that name's.
+Errors are sentences: "Calories can be up to 5000 kcal.", "Enter sodium in
+mg.", "You listed protein twice.", "Fat can't be less than zero."
+
+### Ingredient notes and suggestions
+
+A recipe's ingredient lines carry an optional `note`, how the ingredient is
+prepared ("minced", "softened", "room temperature"), set from a typed or
+linked draft, an import file's ingredient, or an edit (decision 692). The app
+shows it after the name ("2 Tbsp Garlic, minced"). It never reaches a grocery
+item: the list buys by name alone, so "Garlic" and "Garlic, minced" are one
+item.
+
+`GET /api/v1/households/{householdId}/ingredient-names` (`household.view`)
+gives the names to suggest while a member types an ingredient:
+
+```json
+{"household": [{"name": "Garlic", "count": 41}, {"name": "Ground Beef", "count": 12}],
+ "common": ["Ground Turkey", "Garlic Powder", "Ginger", "Green Bell Pepper"]}
+```
+
+`household` is the household's own ingredient names, one per ingredient
+whatever the case or plural ("tomato" and "Tomatoes" are one), the most used
+spelling, capitalized word by word when it was typed in lowercase, ranked by
+how many recipes use it (at most 2000). `common` is a bundled list of about
+900 common ingredients, without the ones in `household`. The response has
+`Cache-Control: private, max-age=300` and an `ETag`; send `If-None-Match` to
+get `304` when the app's copy is current, and keep the last copy for
+offline use.
+
+### Deleting a recipe
+
+`DELETE /api/v1/households/{householdId}/recipes/{recipeId}` (`recipes.edit`,
+no body) deletes one of the household's recipes, whatever it came from
+(decision 694). It answers `200 {"removedFromWeeks": ["2026-W47"],
+"undoUntil": "2026-12-16T18:00:00Z"}`: the weeks it was taken off (empty when
+it wasn't planned) and when Undo stops working. Another household's recipe is
+`404` "That recipe isn't in your recipes." Deleting it again answers the same.
+
+It is a soft delete. The recipe leaves the recipe list and search, the menu's
+catalog, recommendations and Autopilot, ingredient suggestions, and the
+starter library copied to new households. It isn't shared again; an entry
+already in Shared Recipes stays, as when sharing is turned off, since the
+catalog doesn't record who shared it. It comes off this week from today on and
+every later week, and those weeks' grocery lists follow because they're
+worked out from the plan. Past days, past weeks, and finalized weeks keep it,
+and `GET .../recipes/{recipeId}` still returns it, with `"deleted": true`, so
+history reads it. It can't be planned again. A meal kit re-import keeps it
+deleted, and adding it again from Shared Recipes brings the household's own
+copy back.
+
+`POST .../recipes/{recipeId}/restore` (`recipes.edit`, body `{}`) undoes it
+within 30 days and answers the recipe as `GET` does. The meals the delete took
+off go back on weeks that haven't ended, unless that day has passed or the
+week is now full or finalized. Sharing stays off. After 30 days it answers
+`410 restore_expired` "It's too late to bring that recipe back." and the
+recipe stays deleted; it's never hard deleted, because history reads it, and
+it goes with the household.
+
 ### Recipe photos
 
 `POST /api/v1/households/{householdId}/recipe-photos` (`recipes.edit`) takes
@@ -448,6 +522,20 @@ the image itself as the body (`Content-Type: image/jpeg`, `image/png` or
 phone called. Put that in a draft's `imageUrl` on save, or in an edit.
 `GET /api/v1/recipe-photos/{id}` needs no sign-in (the ID is 128 random bits)
 and serves the image, cached for a year. Photos are deleted with the household.
+
+Photo search (decision 691), both `recipes.edit`:
+`GET /api/v1/households/{householdId}/recipe-photos/search?q=brownies&page=1`
+answers `{"photos": [{"id", "thumbnailUrl", "width", "height", "credit"}],
+"nextPage": 2}` (30 a page; `nextPage` 0 when there are no more, and past page
+50 the list is empty). Thumbnails load straight from the provider. A blank `q`
+is 400 "Type what to search for."; a provider failure is 502
+`photo_search_failed`; with no `PEXELS_API_KEY` both routes answer 503
+`photo_search_off` "Photo search isn't available right now."
+`POST /api/v1/households/{householdId}/recipe-photos/from-search` `{"id":
+"1028714"}` downloads that result, from the address the provider gives for
+it and only from its image host, keeps it like an uploaded photo and answers
+201 `{"imageUrl"}` exactly as the upload does. A result that's gone is 404
+"That photo isn't there anymore. Pick another one."
 
 `POST /api/v1/households/{householdId}/recipes/swap-preview` (`recipes.edit`)
 stores nothing: `{oldName, newName, steps, minutes?}` returns the steps with

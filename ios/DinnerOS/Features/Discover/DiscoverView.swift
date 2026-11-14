@@ -163,7 +163,7 @@ struct DiscoverRow: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
             : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
         layout {
-            RecipeImage(url: summary.imageURL)
+            RecipeImage(url: summary.imageURL, title: summary.name)
                 .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : min(thumbnailWidth, 140))
                 .clipShape(.rect(cornerRadius: 8))
             VStack(alignment: .leading, spacing: 4) {

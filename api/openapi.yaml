@@ -766,6 +766,58 @@ paths:
           $ref: "#/components/responses/InvitationInvalid"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /api/v1/households/{householdId}/ingredient-names:
+    get:
+      summary: Ingredient names to suggest while typing
+      description: |
+        The household's own ingredient names, one per ingredient whatever
+        the case or plural, most used first (at most 2000), then a bundled
+        list of common ingredients without the ones the household has
+        (decision 692). Cached privately for 5 minutes, with an ETag; send
+        If-None-Match to get 304 when the app's copy is current.
+      parameters:
+        - $ref: "#/components/parameters/HouseholdID"
+      responses:
+        "200":
+          description: The names.
+          headers:
+            ETag:
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                example: private, max-age=300
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [household, common]
+                properties:
+                  household:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, count]
+                      properties:
+                        name:
+                          type: string
+                          example: Garlic
+                        count:
+                          type: integer
+                          description: How many of the household's recipes use it.
+                          example: 41
+                  common:
+                    type: array
+                    items:
+                      type: string
+                    example: [Ground Beef, Ground Turkey, Garlic Powder]
+        "304":
+          description: The app's copy is current.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/recipes:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -1046,6 +1098,99 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "413":
           $ref: "#/components/responses/PayloadTooLarge"
+  /api/v1/households/{householdId}/recipe-photos/search:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: Search for recipe photos
+      description: |
+        Photos to pick for a recipe, found by name (decision 691). Requires
+        `recipes.edit`. The search runs on the server, so no key ships in the
+        app; Pexels is the default provider and pages are cached for an hour.
+        Thumbnails load straight from the provider. Off until PEXELS_API_KEY
+        is set.
+      operationId: searchRecipePhotos
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: What to search for, usually the recipe's name. At most 100 characters are used.
+          schema:
+            type: string
+          example: brownies
+        - name: page
+          in: query
+          required: false
+          description: 1 by default. Past page 50 the answer is empty.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: A page of photos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecipePhotoSearch"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "502":
+          $ref: "#/components/responses/PhotoSearchFailed"
+        "503":
+          $ref: "#/components/responses/PhotoSearchOff"
+  /api/v1/households/{householdId}/recipe-photos/from-search:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    post:
+      summary: Keep a photo from a search
+      description: |
+        Downloads a search result and keeps it like an uploaded photo, so it
+        shows offline and outlasts the provider. Requires `recipes.edit`. The
+        phone names the result by its `id`; the server asks the provider where
+        the photo is and downloads only from the provider's image host. The
+        answer's `imageUrl` is used like one from POST .../recipe-photos.
+      operationId: keepSearchedRecipePhoto
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+                  description: A result's `id` from the search.
+                  example: "1028714"
+      responses:
+        "201":
+          description: The kept photo's address.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecipePhotoUpload"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/PhotoSearchFailed"
+        "503":
+          $ref: "#/components/responses/PhotoSearchOff"
   /api/v1/recipe-photos/{photoId}:
     parameters:
       - name: photoId
@@ -1359,6 +1504,85 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete a recipe
+      description: |
+        Deletes one of the household's recipes: typed, linked, imported from
+        a meal kit, copied from Shared Recipes, or from the starter library
+        (decision 694). Requires `recipes.edit`. It is a soft delete: the
+        recipe leaves the list, search, the menu, recommendations, Autopilot,
+        and Shared Recipes (it isn't shared again; an entry already in the
+        catalog stays, as when sharing is turned off), and it comes off this
+        week from today on and every later week, so those weeks' grocery
+        lists lose it. Past days, past weeks, and finalized weeks keep it,
+        and `GET` by ID still returns it with `deleted: true`. A re-import
+        keeps it deleted. Deleting it again answers the same. Undo with
+        `POST .../restore` until `undoUntil`.
+      operationId: deleteRecipe
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [removedFromWeeks, undoUntil]
+                properties:
+                  removedFromWeeks:
+                    type: array
+                    description: ISO weeks ("2026-W47") the recipe was taken off, in order; empty when it wasn't planned.
+                    items:
+                      type: string
+                  undoUntil:
+                    type: string
+                    format: date-time
+                    description: The last moment a restore brings it back (30 days).
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/recipes/{recipeId}/restore:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - $ref: "#/components/parameters/RecipeID"
+    post:
+      summary: Bring back a deleted recipe
+      description: |
+        Undoes a delete within 30 days (decision 694): the recipe is back in
+        the library, and the meals the delete took off are put back on weeks
+        that haven't ended, unless that day has passed or the week is full or
+        finalized. Sharing stays off until the household turns it on again.
+        Requires `recipes.edit`. Send `{}`. Restoring a recipe that isn't
+        deleted changes nothing. Past 30 days it answers 410 `restore_expired`
+        ("It's too late to bring that recipe back.").
+      operationId: restoreRecipe
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The recipe, as `GET` returns it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recipe"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "410":
+          description: Deleted more than 30 days ago.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/households/{householdId}/recipes/{recipeId}/rating-questions:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -6447,6 +6671,12 @@ components:
           description: |
             Whether the recipe is in the global catalog, which is also true for
             a recipe from a public source (HelloFresh and similar).
+        deleted:
+          type: boolean
+          description: |
+            True for a recipe the household deleted (decision 694). It is still
+            read by ID, for past weeks and cooked history, but no list shows it.
+            Absent otherwise.
         createdAt:
           type: string
           format: date-time
@@ -6575,6 +6805,10 @@ components:
                 type: string
               pantryStaple:
                 type: boolean
+              note:
+                type: string
+                maxLength: 200
+                description: How it's prepared ("minced"). Empty or absent for none.
               amounts:
                 type: array
                 items:
@@ -6598,6 +6832,75 @@ components:
             Changes the photo of a recipe the household added. Absent keeps
             it, "" removes it, otherwise the `imageUrl` from
             POST .../recipe-photos.
+        name:
+          type: string
+          maxLength: 200
+          description: Renames a recipe the household added. Absent keeps the name (decision 695).
+        prepMinutes:
+          type: integer
+          minimum: 0
+          maximum: 1440
+          description: Prep time of a recipe the household added. Absent keeps it, 0 clears it (decision 690).
+        totalMinutes:
+          type: integer
+          minimum: 0
+          maximum: 2880
+          description: Prep plus cook time of a recipe the household added. Absent keeps it, 0 clears it.
+        nutritionPerServing:
+          type: array
+          maxItems: 9
+          description: |
+            Replaces the nutrition of a recipe the household added: absent keeps
+            it, [] clears it. Per serving, in the recipe's own shape (decision 693). Names are
+            matched without case, with common spellings ("carbs", "fiber"),
+            and stored as Calories (kcal, at most 5000), Fat, Saturated Fat,
+            Carbohydrate, Sugar, Dietary Fiber, Protein (g, at most 1000 each),
+            Cholesterol, Sodium (mg, at most 20000 each), in that order. A
+            unit, when sent, must be that one. Each name once, none below
+            zero; amounts are kept to one decimal place.
+          items:
+            $ref: "#/components/schemas/TypedNutrient"
+    TypedNutrient:
+      type: object
+      required: [name, amount]
+      properties:
+        name:
+          type: string
+          example: Calories
+        amount:
+          type: number
+          minimum: 0
+          example: 540
+        unit:
+          type: string
+          enum: [kcal, g, mg]
+          description: Optional; the name's own unit is used.
+    RecipePhotoSearch:
+      type: object
+      required: [photos, nextPage]
+      properties:
+        photos:
+          type: array
+          items:
+            type: object
+            required: [id, thumbnailUrl, width, height, credit]
+            properties:
+              id:
+                type: string
+                example: "1028714"
+              thumbnailUrl:
+                type: string
+                example: https://images.pexels.com/photos/1028714/pexels-photo-1028714.jpeg?auto=compress&cs=tinysrgb&h=350
+              width:
+                type: integer
+              height:
+                type: integer
+              credit:
+                type: string
+                description: The photographer's name.
+        nextPage:
+          type: integer
+          description: The page to ask for next, or 0 when there are no more.
     RecipePhotoUpload:
       type: object
       required: [imageUrl]
@@ -6728,12 +7031,25 @@ components:
         servings:
           type: integer
           minimum: 0
-          maximum: 12
+          maximum: 99
           description: What the amounts are for; 0 means the source didn't say.
         prepMinutes:
           type: integer
         totalMinutes:
           type: integer
+        nutritionPerServing:
+          type: array
+          maxItems: 9
+          description: |
+            Per serving, in the recipe's own shape (decision 693). Names are
+            matched without case, with common spellings ("carbs", "fiber"),
+            and stored as Calories (kcal, at most 5000), Fat, Saturated Fat,
+            Carbohydrate, Sugar, Dietary Fiber, Protein (g, at most 1000 each),
+            Cholesterol, Sodium (mg, at most 20000 each), in that order. A
+            unit, when sent, must be that one. Each name once, none below
+            zero; amounts are kept to one decimal place.
+          items:
+            $ref: "#/components/schemas/TypedNutrient"
         cuisines:
           type: array
           items:
@@ -6782,7 +7098,9 @@ components:
           type: boolean
         note:
           type: string
-          description: The rest of the line ("diced", "14.5 oz", "to taste"). Shown for review only.
+          description: |
+            How it's prepared, or the rest of the line ("diced", "14.5 oz").
+            Saved with the line and shown after its name (decision 692).
         group:
           type: string
           description: The heading the line came under on the page ("Sauce"). Shown for review only.
@@ -6828,6 +7146,12 @@ components:
         pantryStaple:
           type: boolean
           description: Source hint that the ingredient is usually at home.
+        note:
+          type: string
+          description: |
+            How it's prepared ("minced", "room temperature"), shown after the
+            name. Absent when there is none. Never part of a grocery item
+            (decision 692).
         amounts:
           type: array
           items:
@@ -13879,6 +14203,18 @@ components:
         `conflict`: the household already asks for the most stores it can
         (25). Withdraw one first. Updating an existing request's note still
         works at the limit.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    PhotoSearchOff:
+      description: "`photo_search_off`: no photo search provider is set up. \"Photo search isn't available right now.\""
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    PhotoSearchFailed:
+      description: "`photo_search_failed`: the provider didn't answer, or the photo can't be used. The message says which."
       content:
         application/json:
           schema:

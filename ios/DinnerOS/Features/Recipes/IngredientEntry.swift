@@ -1,57 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// One ingredient while a member types it: the name on its own line, then the amount and unit
-/// below, each a full-size target. Return in the name moves to the amount; the amount keypad's
-/// Next key moves on to the next ingredient, making one when this is the last.
-struct IngredientEntryRow<ID: Hashable>: View {
-    let id: ID
-    @Binding var name: String
-    @Binding var amount: String
-    @Binding var unit: String
-    let units: [String]
-    var nameFocus: FocusState<ID?>.Binding
-    @Binding var amountFocus: ID?
-    /// Leaving the amount with Next. True when the cursor moved on to another ingredient;
-    /// false closes the keypad.
-    let next: () -> Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            TextField("Ingredient", text: $name)
-                .font(.body.weight(.semibold))
-                .textInputAutocapitalization(.sentences)
-                .submitLabel(.next)
-                .focused(nameFocus, equals: id)
-                .onSubmit { amountFocus = id }
-                .padding(.horizontal, 12)
-                .frame(minHeight: 48)
-                .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: 10))
-            HStack(spacing: 10) {
-                AmountKeypadField(
-                    text: $amount, unit: $unit, units: units,
-                    isFocused: Binding(
-                        get: { amountFocus == id },
-                        set: { focused in
-                            if focused {
-                                amountFocus = id
-                            } else if amountFocus == id {
-                                amountFocus = nil
-                            }
-                        }),
-                    next: next
-                )
-                .padding(.horizontal, 12)
-                .frame(minHeight: 48)
-                .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: 10))
-                .accessibilityLabel("Amount for \(name.isEmpty ? String(localized: "this ingredient") : name)")
-                UnitMenu(unit: $unit, units: units)
-            }
-        }
-        .padding(.vertical, 6)
-    }
-}
-
 /// The unit as a button that opens every unit, for when the keypad isn't up.
 struct UnitMenu: View {
     @Binding var unit: String
@@ -262,7 +211,7 @@ struct AmountKeypad: View {
                         .contentShape(.rect)
                     }
                     .buttonStyle(KeypadButtonStyle())
-                    .accessibilityLabel("Next ingredient")
+                    .accessibilityLabel("Next")
                     .frame(maxHeight: .infinity)
                     .layoutPriority(3)
                 }

@@ -78,7 +78,7 @@ final class RecipeDraftStore {
 
     /// Starts an empty draft, for typing a recipe from scratch.
     func startBlank() {
-        draft = RecipeDraft(ingredients: [RecipeDraftIngredient()], steps: [""])
+        draft = RecipeDraft(steps: [""])
         errorMessage = nil
         step = .review
     }
@@ -92,28 +92,22 @@ final class RecipeDraftStore {
         }
     }
 
-    /// Adds an empty ingredient after the one at `index` (or at the end) and returns its
-    /// identity, so the screen can put the cursor in it.
-    @discardableResult
-    func addIngredient(after id: UUID? = nil) -> UUID {
-        let line = RecipeDraftIngredient()
-        if let id, let i = draft.ingredients.firstIndex(where: { $0.id == id }) {
-            draft.ingredients.insert(line, at: i + 1)
-        } else {
-            draft.ingredients.append(line)
+    /// Photos on the web for a search, a page at a time.
+    func searchPhotos(_ query: String, page: Int) async throws -> RecipePhotoSearchPage {
+        guard let api else { throw AuthSessionError.notConfigured }
+        let householdID = householdID
+        return try await session.authorized { token in
+            try await api.searchPhotos(householdID: householdID, query: query, page: page, accessToken: token)
         }
-        return line.id
     }
 
-    /// Where Next goes from an ingredient's amount: the following ingredient, or a new one
-    /// when this was the last. `nil` when the last one is still blank, so Next just closes.
-    func ingredient(after id: UUID) -> UUID? {
-        guard let i = draft.ingredients.firstIndex(where: { $0.id == id }) else { return nil }
-        if i + 1 < draft.ingredients.count { return draft.ingredients[i + 1].id }
-        guard !draft.ingredients[i].name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
+    /// Keeps a photo found on the web as the household's own and returns its link.
+    func useFoundPhoto(_ photoID: String) async throws -> String {
+        guard let api else { throw AuthSessionError.notConfigured }
+        let householdID = householdID
+        return try await session.authorized { token in
+            try await api.useFoundPhoto(householdID: householdID, photoID: photoID, accessToken: token)
         }
-        return addIngredient()
     }
 
     /// Goes back to the entry step, dropping the draft.
@@ -137,6 +131,8 @@ final class RecipeDraftStore {
         outgoing.steps = draft.steps.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         // Warnings are advice for the person reviewing; the server ignores them.
         outgoing.warnings = []
+        let nutrition = draft.nutrition.entries
+        outgoing.nutritionPerServing = nutrition.isEmpty ? nil : nutrition
         do {
             let recipe = try await session.authorized { token in
                 try await api.createRecipe(householdID: self.householdID, draft: outgoing, accessToken: token)
@@ -165,6 +161,7 @@ final class RecipeDraftStore {
                 try await request(api, token)
             }
             draft = parsed
+            draft.nutrition = NutritionValues(parsed.nutritionPerServing ?? [])
             step = .review
         } catch is CancellationError {
             step = .entry

@@ -19,16 +19,27 @@ type EditRecipeRequest struct {
 	// ImageURL, when present, changes the recipe's photo: "" removes it,
 	// otherwise the imageUrl from POST .../recipe-photos (decision 687).
 	ImageURL *string `json:"imageUrl,omitempty"`
+	// PrepMinutes and TotalMinutes, when present, change the recipe's times;
+	// 0 clears one (decision 690).
+	// Name, when present, renames a recipe the household added.
+	Name         *string `json:"name,omitempty"`
+	PrepMinutes  *int    `json:"prepMinutes,omitempty"`
+	TotalMinutes *int    `json:"totalMinutes,omitempty"`
+	// Nutrition, when present, replaces the per-serving nutrition; []
+	// clears it (decision 693).
+	Nutrition *[]NutrientResponse `json:"nutritionPerServing,omitempty"`
 }
 
 // EditIngredientRequest is one ingredient line. ingredientId is the line's
 // own, from the recipe, for a line the member didn't rename; omit it for a
 // new line.
 type EditIngredientRequest struct {
-	IngredientID string              `json:"ingredientId"`
-	Name         string              `json:"name"`
-	PantryStaple bool                `json:"pantryStaple"`
-	Amounts      []EditAmountRequest `json:"amounts"`
+	IngredientID string `json:"ingredientId"`
+	Name         string `json:"name"`
+	PantryStaple bool   `json:"pantryStaple"`
+	// Note is how it's prepared ("minced"); empty for none.
+	Note    string              `json:"note,omitempty"`
+	Amounts []EditAmountRequest `json:"amounts"`
 }
 
 // EditAmountRequest is the amount for one serving size.
@@ -86,9 +97,13 @@ func (h *Handler) editRecipe(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	in := EditInput{Steps: req.Steps, ImageURL: req.ImageURL}
+	in := EditInput{Steps: req.Steps, ImageURL: req.ImageURL, Name: req.Name, PrepMinutes: req.PrepMinutes, TotalMinutes: req.TotalMinutes}
+	if req.Nutrition != nil {
+		nutrition := nutrientsFromWire(*req.Nutrition)
+		in.Nutrition = &nutrition
+	}
 	for _, ing := range req.Ingredients {
-		e := EditIngredient{IngredientID: ing.IngredientID, Name: ing.Name, PantryStaple: ing.PantryStaple}
+		e := EditIngredient{IngredientID: ing.IngredientID, Name: ing.Name, PantryStaple: ing.PantryStaple, Note: ing.Note}
 		for _, a := range ing.Amounts {
 			e.Amounts = append(e.Amounts, EditAmount(a))
 		}

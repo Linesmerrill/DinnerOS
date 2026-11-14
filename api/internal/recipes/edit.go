@@ -42,6 +42,17 @@ type EditInput struct {
 	// recipe the household added can get one. With no ingredients and no
 	// steps, only the photo changes.
 	ImageURL *string
+	// PrepMinutes and TotalMinutes, when set, change the recipe's times; 0
+	// clears one. Like the photo, only a recipe the household added takes
+	// them, since an import would put the meal kit's own times back.
+	PrepMinutes  *int
+	TotalMinutes *int
+	// Name, when set, renames a recipe the household added (decision 695).
+	Name *string
+	// Nutrition, when set, replaces the per-serving nutrition; an empty list
+	// clears it. Only a recipe the household added takes it, like times
+	// (decision 693).
+	Nutrition *[]Nutrient
 }
 
 // EditIngredient is one ingredient line. IngredientID, when it is the
@@ -51,6 +62,8 @@ type EditIngredient struct {
 	IngredientID string
 	Name         string
 	PantryStaple bool
+	// Note is how it's prepared ("minced"); empty for none.
+	Note string
 	// Amounts has one entry per serving size the recipe offers.
 	Amounts []EditAmount
 }
@@ -79,7 +92,49 @@ func (s *Service) Edit(ctx context.Context, householdID, recipeID string, in Edi
 		}
 		r.ImageURL = photo
 	}
-	if in.ImageURL == nil || in.Ingredients != nil || in.Steps != nil {
+	if in.Name != nil {
+		if r.Source != SourceManual && r.Source != SourceUser {
+			return Recipe{}, invalidEdit("only recipes you added can be renamed")
+		}
+		name := strings.Join(strings.Fields(*in.Name), " ")
+		switch {
+		case name == "":
+			return Recipe{}, invalidEdit("a recipe needs a name")
+		case utf8.RuneCountInString(name) > maxDraftName:
+			return Recipe{}, invalidEdit("a recipe name can be up to 200 characters")
+		}
+		r.Name = name
+	}
+	if in.PrepMinutes != nil || in.TotalMinutes != nil {
+		if r.Source != SourceManual && r.Source != SourceUser {
+			return Recipe{}, invalidEdit("only recipes you added can get new times")
+		}
+		prep, total := r.PrepMinutes, r.TotalMinutes
+		if in.PrepMinutes != nil {
+			prep = *in.PrepMinutes
+		}
+		if in.TotalMinutes != nil {
+			total = *in.TotalMinutes
+		}
+		if problem := timesProblem(prep, total); problem != "" {
+			return Recipe{}, editError(problem)
+		}
+		r.PrepMinutes, r.TotalMinutes = prep, total
+	}
+	if in.Nutrition != nil {
+		if r.Source != SourceManual && r.Source != SourceUser {
+			return Recipe{}, invalidEdit("only recipes you added can get new nutrition")
+		}
+		nutrition, problem := cleanTypedNutrition(*in.Nutrition)
+		if problem != "" {
+			return Recipe{}, editError(problem)
+		}
+		r.Nutrition = nutrition
+	}
+	onlyDetails := in.Ingredients == nil && in.Steps == nil &&
+		(in.ImageURL != nil || in.PrepMinutes != nil || in.TotalMinutes != nil || in.Nutrition != nil ||
+			in.Name != nil)
+	if !onlyDetails {
 		lines, err := s.editedIngredients(ctx, r, in.Ingredients)
 		if err != nil {
 			return Recipe{}, err
@@ -130,7 +185,11 @@ func (s *Service) editedIngredients(ctx context.Context, r Recipe, in []EditIngr
 		if name == "" || utf8.RuneCountInString(name) > maxSwapName {
 			return nil, invalidEdit(fmt.Sprintf("ingredient %d needs a name of at most 200 characters", i+1))
 		}
-		line := RecipeIngredient{Name: name, PantryStaple: e.PantryStaple}
+		note := strings.Join(strings.Fields(e.Note), " ")
+		if utf8.RuneCountInString(note) > MaxIngredientNote {
+			return nil, invalidEdit(fmt.Sprintf("the note on ingredient %d can be up to 200 characters", i+1))
+		}
+		line := RecipeIngredient{Name: name, PantryStaple: e.PantryStaple, Note: note}
 		amounts, err := editedAmounts(name, r.Servings, e.Amounts)
 		if err != nil {
 			return nil, err

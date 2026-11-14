@@ -238,7 +238,7 @@ struct IngredientRow: View {
             IngredientPhoto(url: line.imageURL)
                 .opacity(isLeftOut ? 0.4 : 1)
             VStack(alignment: .leading, spacing: 2) {
-                Text(line.name)
+                Text(line.nameWithNote)
                     .font(.headline)
                     .strikethrough(isLeftOut)
                     .foregroundStyle(isLeftOut ? Color.secondary : Color.primary)
@@ -288,6 +288,8 @@ struct IngredientRow: View {
 /// Per-serving nutrition in label order.
 struct RecipeNutritionSection: View {
     let recipe: Recipe
+    /// Opens the nutrition editor, on a recipe the household added and may change.
+    var onAdd: (() -> Void)? = nil
 
     var body: some View {
         let nutrients = MenuFormat.orderedNutrition(recipe.nutritionValues)
@@ -296,7 +298,15 @@ struct RecipeNutritionSection: View {
                 ContentUnavailableView {
                     Label("No Nutrition Values", systemImage: "chart.pie")
                 } description: {
-                    Text("This recipe didn't come with nutrition information.")
+                    Text(
+                        onAdd == nil
+                            ? "This recipe didn't come with nutrition information."
+                            : "Add calories, protein and more for one serving.")
+                } actions: {
+                    if let onAdd {
+                        Button("Add Nutrition", systemImage: "plus", action: onAdd)
+                            .buttonStyle(.borderedProminent)
+                    }
                 }
             } else {
                 Text("Nutrition Values")
@@ -343,34 +353,52 @@ struct CookingStepsSection: View {
 
     private var count: Int { instructions?.steps.count ?? steps.count }
 
+    // A header button and the steps under it, not a DisclosureGroup: inside the recipe page's
+    // lazy stack, a DisclosureGroup kept the page laying itself out forever on iOS 26 when the
+    // page opened right after a recipe was saved.
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: 20) {
-                if let instructions, !instructions.steps.isEmpty {
-                    ForEach(instructions.steps) { step in
-                        InstructionStepRow(step: step)
-                    }
-                    InstructionSubstitutionsFooter(instructions: instructions, chooseSpecialty: chooseSpecialty)
-                    SafeTemperaturesFooter(instructions: instructions)
-                } else {
-                    ForEach(steps) { step in
-                        RecipeStepRow(step: step)
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.snappy) { isExpanded.toggle() }
+            } label: {
+                HStack {
+                    Text("Cooking Steps")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(Color.primary)
+                    Spacer(minLength: 8)
+                    Text("\(count)")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.tint)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .accessibilityHidden(true)
+                }
+                .frame(minHeight: 44)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityValue(isExpanded ? "Shown" : "Hidden")
+            .accessibilityHint(isExpanded ? "Hides the steps" : "Shows the steps")
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 20) {
+                    if let instructions, !instructions.steps.isEmpty {
+                        ForEach(instructions.steps) { step in
+                            InstructionStepRow(step: step)
+                        }
+                        InstructionSubstitutionsFooter(instructions: instructions, chooseSpecialty: chooseSpecialty)
+                        SafeTemperaturesFooter(instructions: instructions)
+                    } else {
+                        ForEach(steps) { step in
+                            RecipeStepRow(step: step)
+                        }
                     }
                 }
+                .padding(.top, 12)
             }
-            .padding(.top, 12)
-        } label: {
-            HStack {
-                Text("Cooking Steps")
-                    .font(.title3.weight(.semibold))
-                Spacer(minLength: 8)
-                Text("\(count)")
-                    .font(.subheadline)
-                    .foregroundStyle(Color.secondary)
-            }
-            .accessibilityAddTraits(.isHeader)
         }
-        .tint(Color.accentColor)
     }
 }
 

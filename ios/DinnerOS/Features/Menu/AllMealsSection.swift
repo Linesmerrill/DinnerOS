@@ -439,6 +439,7 @@ struct AllMealsView: View {
             }
         }
         .navigationTitle(route.title)
+        .recipeUndoToast()
         .navigationBarTitleDisplayMode(.inline)
         .task {
             if list == nil {

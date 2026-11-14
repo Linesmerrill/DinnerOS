@@ -130,7 +130,8 @@ func cloneForCopy(r Recipe) Recipe {
 	}
 	for _, line := range r.Ingredients {
 		c.Ingredients = append(c.Ingredients, RecipeIngredient{
-			IngredientID: line.IngredientID, Name: line.Name, PantryStaple: line.PantryStaple, Amounts: slices.Clone(line.Amounts),
+			IngredientID: line.IngredientID, Name: line.Name, PantryStaple: line.PantryStaple, Note: line.Note,
+			Amounts: slices.Clone(line.Amounts),
 		})
 	}
 	return c

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // CatalogPublisher publishes recipes into the global recipe catalog.
@@ -93,7 +94,7 @@ func sharedUnder(mode string, r Recipe) bool {
 // InCatalog reports whether other households can find r: its household
 // shares it.
 func (s *Service) InCatalog(ctx context.Context, r Recipe) bool {
-	return sharedUnder(s.sharingMode(ctx, r.HouseholdID), r)
+	return r.DeletedAt.IsZero() && sharedUnder(s.sharingMode(ctx, r.HouseholdID), r)
 }
 
 // PublishHousehold shares every recipe the household's sharing covers, for
@@ -113,6 +114,10 @@ func (s *Service) PublishToCatalog(ctx context.Context, rs []Recipe) (int, error
 	modes := map[string]string{}
 	publishable := make([]Recipe, 0, len(rs))
 	for _, r := range rs {
+		if !r.DeletedAt.IsZero() {
+			// A deleted recipe is never shared again (decision 694).
+			continue
+		}
 		mode, ok := modes[r.HouseholdID]
 		if !ok {
 			mode = s.sharingMode(ctx, r.HouseholdID)
@@ -269,6 +274,11 @@ func (s *Service) AddFromCatalog(ctx context.Context, householdID string, conten
 		if !errors.Is(err, ErrDuplicate) {
 			return Recipe{}, false, fmt.Errorf("save recipes: %w", err)
 		}
+		// The household deleted its copy: adding it again brings that one
+		// back, ratings and history included (decision 694).
+		if back, ok, err := s.undeleteCopy(ctx, householdID, r); err != nil || ok {
+			return back, ok, err
+		}
 	}
 	stored, err := s.existingByCatalogKey(ctx, householdID, key)
 	if err != nil {
@@ -278,6 +288,26 @@ func (s *Service) AddFromCatalog(ctx context.Context, householdID string, conten
 		return Recipe{}, false, fmt.Errorf("recipes: added recipe %q is missing after the write", key)
 	}
 	return stored, true, nil
+}
+
+// undeleteCopy restores the household's deleted recipe with r's source
+// identity, if it has one.
+func (s *Service) undeleteCopy(ctx context.Context, householdID string, r Recipe) (Recipe, bool, error) {
+	found, err := s.store.FindRecipesBySourceIDs(ctx, householdID, r.Source, []string{r.SourceRecipeID})
+	if err != nil {
+		return Recipe{}, false, fmt.Errorf("find deleted copy: %w", err)
+	}
+	for _, old := range found {
+		if old.DeletedAt.IsZero() {
+			continue
+		}
+		if _, err := s.store.SetRecipeDeleted(ctx, householdID, old.ID, time.Time{}, nil, s.now().UTC()); err != nil {
+			return Recipe{}, false, err
+		}
+		back, err := s.Get(ctx, householdID, old.ID)
+		return back, err == nil, err
+	}
+	return Recipe{}, false, nil
 }
 
 func (s *Service) existingByCatalogKey(ctx context.Context, householdID, key string) (Recipe, error) {

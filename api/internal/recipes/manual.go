@@ -24,7 +24,7 @@ const (
 	maxDraftIngredients = 100
 	maxDraftSteps       = 100
 	maxDraftLabels      = 20
-	maxDraftServings    = 12
+	maxDraftServings    = 99
 )
 
 // ErrInvalidDraft means a draft cannot be saved as a recipe. Its message
@@ -49,10 +49,12 @@ type Draft struct {
 	Servings     int
 	PrepMinutes  int
 	TotalMinutes int
-	Cuisines     []string
-	Tags         []string
-	Ingredients  []DraftIngredient
-	Steps        []string
+	// Nutrition is per serving, as the member typed it (decision 693).
+	Nutrition   []Nutrient
+	Cuisines    []string
+	Tags        []string
+	Ingredients []DraftIngredient
+	Steps       []string
 	// Warnings explain what a parser could not read. They are advice for the
 	// person reviewing, never a reason to refuse.
 	Warnings []string
@@ -151,8 +153,12 @@ func draftImportRecipe(d Draft, source string) (ImportRecipe, error) {
 	if servings == 0 {
 		servings = 2
 	}
-	if d.PrepMinutes < 0 || d.TotalMinutes < 0 {
-		return ImportRecipe{}, fmt.Errorf("%w: times must not be negative", ErrInvalidDraft)
+	if problem := timesProblem(d.PrepMinutes, d.TotalMinutes); problem != "" {
+		return ImportRecipe{}, fmt.Errorf("%w: %s", ErrInvalidDraft, problem)
+	}
+	nutrition, problem := cleanTypedNutrition(d.Nutrition)
+	if problem != "" {
+		return ImportRecipe{}, fmt.Errorf("%w: %s", ErrInvalidDraft, problem)
 	}
 	if len(d.Ingredients) > maxDraftIngredients || len(d.Steps) > maxDraftSteps {
 		return ImportRecipe{}, fmt.Errorf("%w: a recipe may have at most %d ingredients and %d steps", ErrInvalidDraft, maxDraftIngredients, maxDraftSteps)
@@ -173,6 +179,7 @@ func draftImportRecipe(d Draft, source string) (ImportRecipe, error) {
 		Servings:       []int{servings},
 		PrepMinutes:    d.PrepMinutes,
 		TotalMinutes:   d.TotalMinutes,
+		Nutrition:      importNutrients(nutrition),
 		Cuisines:       labels(d.Cuisines),
 		Tags:           labels(d.Tags),
 	}
@@ -196,7 +203,7 @@ func draftImportRecipe(d Draft, source string) (ImportRecipe, error) {
 			amount.Quantity = &value
 		}
 		out.Ingredients = append(out.Ingredients, ImportIngredient{
-			Name: lineName, PantryStaple: line.PantryStaple, Amounts: []ImportAmount{amount},
+			Name: lineName, PantryStaple: line.PantryStaple, Note: line.Note, Amounts: []ImportAmount{amount},
 		})
 	}
 	for i, text := range d.Steps {
@@ -435,6 +442,27 @@ func parseQuantity(s string) (float64, bool) {
 		return 0, false
 	}
 	return total, true
+}
+
+// Times a recipe can take: prep up to a day (an overnight rise), and in all
+// up to two days (that rise, then a day of smoking).
+const (
+	maxPrepMinutes  = 24 * 60
+	maxTotalMinutes = 48 * 60
+)
+
+// timesProblem says what's wrong with a recipe's times, as a sentence for
+// the member, or "" when nothing is.
+func timesProblem(prep, total int) string {
+	switch {
+	case prep < 0 || total < 0:
+		return "Times can't be less than zero."
+	case prep > maxPrepMinutes:
+		return "Prep time can be up to 24 hours."
+	case total > maxTotalMinutes:
+		return "Cook time can be up to 24 hours."
+	}
+	return ""
 }
 
 func atoiClamped(s string, maxValue int) int {

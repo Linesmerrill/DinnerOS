@@ -320,8 +320,10 @@ private struct CookHeader: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
-            RecipePhoto(url: dish.recipe.imageURL, aspectRatio: 1, pointWidth: 88, cornerRadius: 14)
-                .frame(width: 88, height: 88)
+            RecipePhoto(
+                url: dish.recipe.imageURL, aspectRatio: 1, pointWidth: 88, cornerRadius: 14, title: dish.recipe.name
+            )
+            .frame(width: 88, height: 88)
             VStack(alignment: .leading, spacing: 4) {
                 if let servings = dish.servings {
                     Text("Serves \(servings)")

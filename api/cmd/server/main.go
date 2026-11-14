@@ -31,6 +31,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/menu"
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
+	"github.com/Linesmerrill/DinnerOS/api/internal/photosearch"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/logging"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb"
@@ -143,6 +144,15 @@ func run() error {
 		WithReports(catalog.NewMongoReports(db.Database()))
 	recipeService := recipes.NewService(recipes.NewMongoStore(db.Database())).WithCatalog(catalogService).
 		WithPhotos(recipes.NewMongoStore(db.Database()))
+	// Photo search for recipes runs here so the Pexels key never ships in the
+	// app; it stays off until PEXELS_API_KEY is set.
+	if cfg.PexelsAPIKey != "" {
+		recipeService.WithPhotoSearch(photosearch.NewPexels(photosearch.PexelsOptions{
+			APIKey: cfg.PexelsAPIKey, MaxBytes: recipes.MaxPhotoBytes,
+		}))
+	} else {
+		logger.Info("PEXELS_API_KEY is not set; recipe photo search is off")
+	}
 	catalogService.SetLibrary(recipeService)
 	// New households get a copy of STARTER_RECIPES_HOUSEHOLD_ID's recipes in
 	// the background, so friends who sign up don't start with an empty menu.
@@ -207,6 +217,9 @@ func run() error {
 		WithEvents(behavior.events, logger).WithWeekStart(householdService).
 		WithFreezer(pantryService, householdService, notificationService).WithOutcomes(behavior.events)
 	householdService.WithWeekStartListener(planService)
+	// Deleting a recipe takes it off this week and later weeks, and Undo puts
+	// those meals back (decision 694).
+	recipeService.WithPlans(planService)
 	// A frozen item needed by one of today's meals is a reminder derived on
 	// read, like the pantry's low-stock check and the weekly order reminder.
 	notificationService.AddRefresher(planService)

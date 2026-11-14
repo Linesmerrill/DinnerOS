@@ -174,8 +174,13 @@ type recipeDoc struct {
 	SharedToCatalog bool                  `bson:"sharedToCatalog,omitempty"`
 	CatalogKey      string                `bson:"catalogKey,omitempty"`
 	EditedAt        *time.Time            `bson:"editedAt,omitempty"`
-	CreatedAt       time.Time             `bson:"createdAt"`
-	UpdatedAt       time.Time             `bson:"updatedAt"`
+	// DeletedAt is set while the household has deleted the recipe (decision
+	// 694); RemovedPlanEntries are the meals the delete took off the plan,
+	// put back by a restore.
+	DeletedAt          *time.Time        `bson:"deletedAt,omitempty"`
+	RemovedPlanEntries []removedEntryDoc `bson:"removedPlanEntries,omitempty"`
+	CreatedAt          time.Time         `bson:"createdAt"`
+	UpdatedAt          time.Time         `bson:"updatedAt"`
 }
 
 type nutrientDoc struct {
@@ -194,6 +199,7 @@ type recipeIngredientDoc struct {
 	IngredientID bson.ObjectID `bson:"ingredientId"`
 	Name         string        `bson:"name"`
 	PantryStaple bool          `bson:"pantryStaple"`
+	Note         string        `bson:"note,omitempty"`
 	Amounts      []amountDoc   `bson:"amounts,omitempty"`
 }
 
@@ -254,6 +260,13 @@ func newRecipeDoc(r Recipe, householdID, id bson.ObjectID) (recipeDoc, error) {
 		edited := r.EditedAt
 		d.EditedAt = &edited
 	}
+	if !r.DeletedAt.IsZero() {
+		deleted := r.DeletedAt
+		d.DeletedAt = &deleted
+	}
+	for _, e := range r.RemovedPlanEntries {
+		d.RemovedPlanEntries = append(d.RemovedPlanEntries, removedEntryDoc(e))
+	}
 	for _, n := range r.Nutrition {
 		d.Nutrition = append(d.Nutrition, nutrientDoc(n))
 	}
@@ -265,7 +278,7 @@ func newRecipeDoc(r Recipe, householdID, id bson.ObjectID) (recipeDoc, error) {
 		if err != nil {
 			return recipeDoc{}, fmt.Errorf("recipes: ingredient id for %q: %w", line.Name, err)
 		}
-		ld := recipeIngredientDoc{IngredientID: ingredientID, Name: line.Name, PantryStaple: line.PantryStaple}
+		ld := recipeIngredientDoc{IngredientID: ingredientID, Name: line.Name, PantryStaple: line.PantryStaple, Note: line.Note}
 		for _, a := range line.Amounts {
 			ad := amountDoc{Servings: a.Servings, Quantity: a.Quantity, Unit: a.Unit, SourceUnit: a.SourceUnit, RawText: a.RawText}
 			if q, ok := a.ExactQuantity(); ok {
@@ -293,6 +306,12 @@ func (d recipeDoc) toRecipe() Recipe {
 	if d.EditedAt != nil {
 		r.EditedAt = d.EditedAt.UTC()
 	}
+	if d.DeletedAt != nil {
+		r.DeletedAt = d.DeletedAt.UTC()
+	}
+	for _, e := range d.RemovedPlanEntries {
+		r.RemovedPlanEntries = append(r.RemovedPlanEntries, RemovedPlanEntry(e))
+	}
 	for _, n := range d.Nutrition {
 		r.Nutrition = append(r.Nutrition, Nutrient(n))
 	}
@@ -300,7 +319,7 @@ func (d recipeDoc) toRecipe() Recipe {
 		r.Steps = append(r.Steps, Step(s))
 	}
 	for _, ld := range d.Ingredients {
-		line := RecipeIngredient{IngredientID: ld.IngredientID.Hex(), Name: ld.Name, PantryStaple: ld.PantryStaple}
+		line := RecipeIngredient{IngredientID: ld.IngredientID.Hex(), Name: ld.Name, PantryStaple: ld.PantryStaple, Note: ld.Note}
 		for _, ad := range ld.Amounts {
 			line.Amounts = append(line.Amounts, Amount{Servings: ad.Servings, Quantity: ad.Quantity, Unit: ad.Unit, SourceUnit: ad.SourceUnit, RawText: ad.RawText})
 		}
@@ -560,7 +579,7 @@ func (s *MongoStore) ListCatalog(ctx context.Context, householdID string, limit 
 		SetProjection(bson.D{
 			{Key: "steps", Value: 0}, {Key: "nutritionPerServing", Value: 0}, {Key: "description", Value: 0},
 		})
-	cur, err := s.recipes.Find(ctx, bson.D{{Key: "householdId", Value: hid}}, opts)
+	cur, err := s.recipes.Find(ctx, bson.D{{Key: "householdId", Value: hid}, notDeleted}, opts)
 	if err != nil {
 		return nil, translate(err)
 	}
@@ -584,7 +603,7 @@ func (s *MongoStore) ListRecipesAfter(ctx context.Context, householdID, afterID 
 	if limit <= 0 {
 		return nil, nil
 	}
-	filter := bson.D{{Key: "householdId", Value: hid}}
+	filter := bson.D{{Key: "householdId", Value: hid}, notDeleted}
 	if afterID != "" {
 		after, err := mongodb.ParseID(afterID)
 		if err != nil {
@@ -658,7 +677,7 @@ func (s *MongoStore) LibraryCatalogKeys(ctx context.Context, householdID string,
 		return nil, nil
 	}
 	cur, err := s.recipes.Find(ctx,
-		bson.D{{Key: "householdId", Value: hid}, {Key: "catalogKey", Value: bson.D{{Key: "$in", Value: wanted}}}},
+		bson.D{{Key: "householdId", Value: hid}, {Key: "catalogKey", Value: bson.D{{Key: "$in", Value: wanted}}}, notDeleted},
 		options.Find().SetProjection(bson.D{{Key: "_id", Value: 1}, {Key: "catalogKey", Value: 1}}))
 	if err != nil {
 		return nil, translate(err)
@@ -679,6 +698,52 @@ func (s *MongoStore) LibraryCatalogKeys(ctx context.Context, householdID string,
 		}
 	}
 	return out, nil
+}
+
+// notDeleted keeps a household's deleted recipes out of lists, search, and
+// the catalogs the menu and recommendations read (decision 694).
+var notDeleted = bson.E{Key: "deletedAt", Value: bson.D{{Key: "$exists", Value: false}}}
+
+type removedEntryDoc struct {
+	Week     string `bson:"week"`
+	Day      string `bson:"day,omitempty"`
+	Servings int    `bson:"servings"`
+	Note     string `bson:"note,omitempty"`
+	Origin   string `bson:"origin,omitempty"`
+}
+
+// SetRecipeDeleted implements Store.
+func (s *MongoStore) SetRecipeDeleted(ctx context.Context, householdID, id string, deletedAt time.Time, removed []RemovedPlanEntry, now time.Time) (Recipe, error) {
+	hid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return Recipe{}, ErrNotFound
+	}
+	oid, err := mongodb.ParseID(id)
+	if err != nil {
+		return Recipe{}, ErrNotFound
+	}
+	update := bson.D{{Key: "$set", Value: bson.D{{Key: "updatedAt", Value: now}}}}
+	if deletedAt.IsZero() {
+		update = append(update, bson.E{Key: "$unset", Value: bson.D{{Key: "deletedAt", Value: ""}, {Key: "removedPlanEntries", Value: ""}}})
+	} else {
+		docs := make([]removedEntryDoc, 0, len(removed))
+		for _, e := range removed {
+			docs = append(docs, removedEntryDoc(e))
+		}
+		update = bson.D{{Key: "$set", Value: bson.D{
+			{Key: "updatedAt", Value: now}, {Key: "deletedAt", Value: deletedAt}, {Key: "removedPlanEntries", Value: docs},
+		}}}
+	}
+	var doc recipeDoc
+	err = s.recipes.FindOneAndUpdate(ctx,
+		bson.D{{Key: "_id", Value: oid}, {Key: "householdId", Value: hid}},
+		update,
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	).Decode(&doc)
+	if err != nil {
+		return Recipe{}, translate(err)
+	}
+	return doc.toRecipe(), nil
 }
 
 // SetRecipeShared implements Store.
@@ -723,6 +788,7 @@ func (s *MongoStore) FindIngredientUse(ctx context.Context, householdID string, 
 		{{Key: "$match", Value: bson.D{
 			{Key: "householdId", Value: hid},
 			{Key: "ingredients.ingredientId", Value: bson.D{{Key: "$in", Value: oids}}},
+			notDeleted,
 		}}},
 		// $setIntersection removes repeats; the IDs are a literal so no value
 		// is read as a field path.
@@ -759,7 +825,7 @@ func (s *MongoStore) ListRecipes(ctx context.Context, householdID string, f List
 	if err != nil {
 		return nil, fmt.Errorf("recipes: household id: %w", err)
 	}
-	filter := bson.D{{Key: "householdId", Value: hid}}
+	filter := bson.D{{Key: "householdId", Value: hid}, notDeleted}
 	if f.SearchPattern != "" {
 		filter = append(filter, bson.E{Key: "name", Value: bson.Regex{Pattern: f.SearchPattern, Options: "i"}})
 	}
@@ -836,7 +902,7 @@ func (s *MongoStore) ListMenuCatalog(ctx context.Context, householdID string, li
 		projection = append(projection, bson.E{Key: f, Value: 1})
 	}
 	opts := options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}).SetLimit(int64(limit)).SetProjection(projection)
-	cur, err := s.recipes.Find(ctx, bson.D{{Key: "householdId", Value: hid}}, opts)
+	cur, err := s.recipes.Find(ctx, bson.D{{Key: "householdId", Value: hid}, notDeleted}, opts)
 	if err != nil {
 		return nil, translate(err)
 	}

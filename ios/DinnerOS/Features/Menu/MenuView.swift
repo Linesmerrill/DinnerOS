@@ -111,13 +111,16 @@ struct MenuView: View {
                 }
             }
             .overlay(alignment: .bottom) { toast }
+            .recipeUndoToast()
             .toolbar { toolbar }
             .notificationsToolbar()
             .modifier(MenuDestinations())
             .modifier(
                 AddOwnRecipeSheet(
                     isPresented: $isAddingOwnRecipe, canAdd: canAddOwnRecipe,
-                    onSaved: { Task { await menu.reload() } })
+                    onSaved: { _ in
+                        Task { await menu.reload() }
+                    })
             )
             // Also when the week start day changes: the server moved meals between weeks.
             .task(id: household?.weekScope) {
@@ -500,16 +503,25 @@ private struct MenuAutoRefresh: ViewModifier {
 private struct AddOwnRecipeSheet: ViewModifier {
     @Binding var isPresented: Bool
     let canAdd: Bool
-    let onSaved: () -> Void
+    let onSaved: (Recipe) -> Void
 
     @State private var sharedLink: String?
+    /// The recipe just saved, opened once the sheet has finished closing. Opening it while the
+    /// sheet was still going away left the recipe page laying itself out forever.
+    @State private var saved: Recipe?
     @Environment(\.scenePhase) private var phase
 
     func body(content: Content) -> some View {
         content
-            .sheet(isPresented: $isPresented) {
-                // The new recipe shows on the menu right away, not at the next refresh.
-                AddRecipeView(initialLink: sharedLink, onSaved: { _ in onSaved() })
+            .sheet(
+                isPresented: $isPresented,
+                onDismiss: {
+                    guard let recipe = saved else { return }
+                    saved = nil
+                    onSaved(recipe)
+                }
+            ) {
+                AddRecipeView(initialLink: sharedLink, onSaved: { saved = $0 })
             }
             .onChange(of: isPresented) { _, isOpen in
                 if !isOpen { sharedLink = nil }

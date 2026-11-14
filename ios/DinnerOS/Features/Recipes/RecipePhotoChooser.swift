@@ -1,0 +1,237 @@
+import PhotosUI
+import SwiftUI
+
+/// Choose Photo: search the web for the dish, already filled in with the recipe's name, or pick
+/// from the phone's library. Web photos come from our server, which keeps the search key.
+struct RecipePhotoChooser: View {
+    let initialQuery: String
+    let search: (String, Int) async throws -> RecipePhotoSearchPage
+    let onPicked: (UIImage) -> Void
+    let onFound: (RecipeFoundPhoto) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var place: Place = .web
+    @State private var libraryItem: PhotosPickerItem?
+    @State private var libraryError: String?
+
+    enum Place: Hashable {
+        case web
+        case library
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                Picker("Where", selection: $place) {
+                    Text("Search the Web").tag(Place.web)
+                    Text("Photo Library").tag(Place.library)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                switch place {
+                case .web:
+                    RecipePhotoSearchView(initialQuery: initialQuery, search: search, onFound: onFound)
+                case .library:
+                    library
+                }
+            }
+            .navigationTitle("Choose a Photo")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var library: some View {
+        VStack(spacing: 0) {
+            if let libraryError {
+                Label(libraryError, systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(8)
+            }
+            PhotosPicker(selection: $libraryItem, matching: .images, photoLibrary: .shared()) {
+                Text("Photo Library")
+            }
+            .photosPickerStyle(.inline)
+            .photosPickerDisabledCapabilities([.selectionActions])
+            .photosPickerAccessoryVisibility(.hidden, edges: .all)
+            .ignoresSafeArea(edges: .bottom)
+        }
+        .onChange(of: libraryItem) { _, item in
+            guard let item else { return }
+            Task {
+                let data = try? await item.loadTransferable(type: Data.self)
+                libraryItem = nil
+                if let data, let image = UIImage(data: data) {
+                    onPicked(image)
+                } else {
+                    libraryError = String(localized: "Couldn't open that photo. Try another one.")
+                }
+            }
+        }
+    }
+}
+
+/// The web search: a search box, then a grid that loads more as it's scrolled.
+struct RecipePhotoSearchView: View {
+    let initialQuery: String
+    let search: (String, Int) async throws -> RecipePhotoSearchPage
+    let onFound: (RecipeFoundPhoto) -> Void
+
+    @State private var query: String
+    @State private var searched = ""
+    @State private var photos: [RecipeFoundPhoto] = []
+    @State private var nextPage: Int?
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @FocusState private var searchFocused: Bool
+
+    init(
+        initialQuery: String, search: @escaping (String, Int) async throws -> RecipePhotoSearchPage,
+        onFound: @escaping (RecipeFoundPhoto) -> Void
+    ) {
+        self.initialQuery = initialQuery
+        self.search = search
+        self.onFound = onFound
+        _query = State(initialValue: initialQuery.trimmingCharacters(in: .whitespaces))
+    }
+
+    private let columns = [GridItem(.adaptive(minimum: 104), spacing: 4)]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                TextField("Search for a photo", text: $query)
+                    .submitLabel(.search)
+                    .focused($searchFocused)
+                    .autocorrectionDisabled()
+                    .onSubmit { Task { await start() } }
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                        searchFocused = true
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear search")
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(minHeight: 44)
+            .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: 10))
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+            ScrollView {
+                if let errorMessage, photos.isEmpty {
+                    message(errorMessage, systemImage: "wifi.exclamationmark", retry: true)
+                } else if photos.isEmpty, !isLoading, !searched.isEmpty {
+                    message(
+                        String(localized: "No photos for \"\(searched)\". Try other words."),
+                        systemImage: "photo.on.rectangle", retry: false)
+                } else if photos.isEmpty, !isLoading {
+                    message(
+                        String(localized: "Type what's in the dish, like brownies or chicken tacos."),
+                        systemImage: "magnifyingglass", retry: false)
+                }
+                LazyVGrid(columns: columns, spacing: 4) {
+                    ForEach(photos) { photo in
+                        Button {
+                            onFound(photo)
+                        } label: {
+                            Color(.secondarySystemFill)
+                                .aspectRatio(1, contentMode: .fit)
+                                .overlay {
+                                    AsyncImage(url: URL(string: photo.thumbnailURL)) { image in
+                                        image.resizable().scaledToFill()
+                                    } placeholder: {
+                                        ProgressView()
+                                    }
+                                }
+                                .clipped()
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(
+                            photo.credit.map { String(localized: "Photo by \($0)") } ?? String(localized: "Photo")
+                        )
+                        .onAppear {
+                            if photo.id == photos.last?.id { Task { await more() } }
+                        }
+                    }
+                }
+                .padding(.horizontal, 4)
+                if isLoading {
+                    ProgressView()
+                        .padding()
+                }
+                if !photos.isEmpty {
+                    Text("Photos from Pexels")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding()
+                }
+            }
+            .scrollDismissesKeyboard(.immediately)
+        }
+        .task {
+            if photos.isEmpty, !query.isEmpty { await start() } else if query.isEmpty { searchFocused = true }
+        }
+    }
+
+    private func message(_ text: String, systemImage: String, retry: Bool) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text(text)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+            if retry {
+                Button("Try Again") { Task { await start() } }
+                    .buttonStyle(.bordered)
+            }
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func start() async {
+        let text = query.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return }
+        searched = text
+        photos = []
+        nextPage = 1
+        errorMessage = nil
+        await more()
+    }
+
+    private func more() async {
+        guard let page = nextPage, !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+        let text = searched
+        do {
+            let result = try await search(text, page)
+            guard text == searched else { return }
+            let known = Set(photos.map(\.id))
+            photos += result.photos.filter { !known.contains($0.id) }
+            nextPage = result.nextPage
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = HouseholdStore.message(for: error)
+            nextPage = page
+        }
+    }
+}

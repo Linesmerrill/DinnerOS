@@ -99,7 +99,9 @@ struct RecipeDraftStoreTests {
         let harness = try await makeHarness()
         harness.store.startBlank()
         #expect(harness.store.step == .review)
-        #expect(harness.store.draft.ingredients.count == 1)
+        // Ingredients are added one at a time in their own sheet, so none start blank.
+        #expect(harness.store.draft.ingredients.isEmpty)
+        #expect(harness.store.draft.steps == [""])
         #expect(!harness.store.canSave, "a nameless draft can't be saved")
 
         harness.store.draft.name = "Grandma's Chili"
@@ -132,19 +134,35 @@ struct RecipeDraftStoreTests {
         #expect(harness.store.draft.name.isEmpty)
     }
 
-    @Test func nextMovesThroughIngredientsAndAddsOneAfterTheLast() async throws {
+    @Test func nutritionAndNotesAreSavedWithTheRecipe() async throws {
         let harness = try await makeHarness()
         harness.store.startBlank()
-        let first = harness.store.draft.ingredients[0].id
-        // A blank last ingredient: Next just closes the keypad.
-        #expect(harness.store.ingredient(after: first) == nil)
-        harness.store.draft.ingredients[0].name = "Garlic"
-        let second = try #require(harness.store.ingredient(after: first))
-        #expect(harness.store.draft.ingredients.map(\.id) == [first, second])
-        harness.store.draft.ingredients[1].name = "Rice"
-        let inserted = harness.store.addIngredient(after: first)
-        #expect(harness.store.draft.ingredients.map(\.id) == [first, inserted, second])
-        #expect(harness.store.ingredient(after: first) == inserted)
+        harness.store.draft.name = "No Bake Cookies"
+        harness.store.draft.ingredients.append(
+            RecipeDraftIngredient(
+                fields: IngredientFields(quantity: "2", unit: "tbsp", name: "Butter", note: "softened")))
+        harness.store.draft.nutrition[.calories] = "180"
+        harness.store.draft.cookTime = 10
+        await harness.store.save()
+        let sent = try #require(harness.transport.requests.last?.httpBody)
+        let body = try #require(try JSONSerialization.jsonObject(with: sent) as? [String: Any])
+        let lines = try #require(body["ingredients"] as? [[String: Any]])
+        #expect(lines.first?["note"] as? String == "softened")
+        let nutrients = try #require(body["nutritionPerServing"] as? [[String: Any]])
+        #expect(nutrients.first?["name"] as? String == "Calories")
+        #expect(nutrients.first?["amount"] as? Double == 180)
+        #expect(body["totalMinutes"] as? Int == 10)
+        #expect(body["nutrition"] == nil, "the typed text isn't sent")
+    }
+
+    @Test func aDraftWithoutNutritionSendsNone() async throws {
+        let harness = try await makeHarness()
+        harness.store.startBlank()
+        harness.store.draft.name = "Toast"
+        await harness.store.save()
+        let sent = try #require(harness.transport.requests.last?.httpBody)
+        let body = try #require(try JSONSerialization.jsonObject(with: sent) as? [String: Any])
+        #expect(body["nutritionPerServing"] == nil)
     }
 
     @Test func aPhotoIsSentAndItsLinkSavedWithTheRecipe() async throws {

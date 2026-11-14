@@ -236,7 +236,7 @@ struct ProposalSlotRow: View {
                 .accessibilityHidden(true)
             }
             if !dynamicTypeSize.isAccessibilitySize {
-                RecipeImage(url: slot.recipe.imageURL)
+                RecipeImage(url: slot.recipe.imageURL, title: slot.recipe.name)
                     .frame(width: min(thumbnailWidth, 96))
                     .clipShape(.rect(cornerRadius: 6))
             }

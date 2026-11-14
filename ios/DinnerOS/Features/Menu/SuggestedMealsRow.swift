@@ -214,13 +214,16 @@ struct SuggestedMealCard: View {
     var body: some View {
         NavigationLink(value: summary) {
             VStack(alignment: .leading, spacing: 8) {
-                RecipePhoto(url: slot.recipe.imageURL, aspectRatio: 4.0 / 3.0, pointWidth: 280, cornerRadius: 14)
-                    .overlay {
-                        if isShuffling {
-                            RoundedRectangle(cornerRadius: 14).fill(.black.opacity(0.35))
-                            ProgressView().tint(.white)
-                        }
+                RecipePhoto(
+                    url: slot.recipe.imageURL, aspectRatio: 4.0 / 3.0, pointWidth: 280, cornerRadius: 14,
+                    title: slot.recipe.name
+                )
+                .overlay {
+                    if isShuffling {
+                        RoundedRectangle(cornerRadius: 14).fill(.black.opacity(0.35))
+                        ProgressView().tint(.white)
                     }
+                }
                 Text(slot.recipe.name)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.primary)
@@ -276,11 +279,14 @@ struct SuggestedMealPreview: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            RecipePhoto(url: slot.recipe.imageURL, aspectRatio: 16.0 / 10.0, pointWidth: 340, cornerRadius: 0)
-                .overlay(alignment: .top) {
-                    SuggestedCardLabels(slot: slot)
-                        .padding(12)
-                }
+            RecipePhoto(
+                url: slot.recipe.imageURL, aspectRatio: 16.0 / 10.0, pointWidth: 340, cornerRadius: 0,
+                title: slot.recipe.name
+            )
+            .overlay(alignment: .top) {
+                SuggestedCardLabels(slot: slot)
+                    .padding(12)
+            }
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(slot.recipe.name)

@@ -174,9 +174,15 @@ nonisolated enum RecipeFormat {
         return known.max()
     }
 
-    /// For example "30 min" or "1 hr, 15 min".
+    /// For example "30 min", "2 hr", or "4 hr 30 min".
     static func minutes(_ minutes: Int) -> String {
-        Duration.seconds(minutes * 60).formatted(.units(allowed: [.hours, .minutes], width: .abbreviated))
+        let hours = minutes / 60
+        let rest = minutes % 60
+        switch (hours, rest) {
+        case (0, _): return String(localized: "\(rest) min")
+        case (_, 0): return String(localized: "\(hours) hr")
+        default: return String(localized: "\(hours) hr \(rest) min")
+        }
     }
 
     static func timesOrdered(_ count: Int) -> String {
@@ -211,6 +217,14 @@ nonisolated struct IngredientLine: Equatable, Sendable, Identifiable {
     var imageURL: URL? = nil
     /// For example `["Soy", "Wheat"]`; empty when unknown.
     var allergens: [String] = []
+    /// How it's prepared: "minced". Shown after the name on the recipe page only.
+    var note: String? = nil
+
+    /// "Garlic, minced", or just the name.
+    var nameWithNote: String {
+        guard let note, !note.isEmpty else { return name }
+        return "\(name), \(note)"
+    }
 }
 
 extension Recipe {
@@ -241,7 +255,8 @@ extension Recipe {
                 isPantryStaple: ingredient.pantryStaple,
                 category: ingredient.category,
                 imageURL: ingredient.imageURL,
-                allergens: ingredient.allergens)
+                allergens: ingredient.allergens,
+                note: ingredient.note?.trimmingCharacters(in: .whitespaces))
         }
     }
 }

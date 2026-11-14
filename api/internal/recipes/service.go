@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
+	"github.com/Linesmerrill/DinnerOS/api/internal/photosearch"
 )
 
 // Service implements recipe import and queries.
@@ -28,6 +29,12 @@ type Service struct {
 	sharing SharingSource
 	// photos keeps uploaded recipe photos (photos.go). Nil until WithPhotos.
 	photos PhotoStore
+	// photoSearch finds photos by a recipe's name (photo_search.go). Nil
+	// until WithPhotoSearch.
+	photoSearch photosearch.Searcher
+	// plans takes a deleted recipe off upcoming weeks and puts it back on a
+	// restore (delete.go). Nil until WithPlans.
+	plans UpcomingPlans
 }
 
 // NewService returns a Service backed by store.
@@ -360,6 +367,9 @@ func mergeStored(r, stored Recipe, released []ImportRecipe) Recipe {
 	// and the key is derived by the store on write. Carrying them over keeps
 	// a re-import of the same file "unchanged" rather than a rewrite.
 	r.SharedToCatalog, r.CatalogKey = stored.SharedToCatalog, stored.CatalogKey
+	// A recipe the household deleted stays deleted when its kit sends it
+	// again; only a restore brings it back (decision 694).
+	r.DeletedAt, r.RemovedPlanEntries = stored.DeletedAt, stored.RemovedPlanEntries
 	// The household's own changes outlast the source's (decision 667).
 	if !stored.EditedAt.IsZero() {
 		r.EditedAt, r.Ingredients, r.Steps = stored.EditedAt, stored.Ingredients, stored.Steps

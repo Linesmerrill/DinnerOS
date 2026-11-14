@@ -35,6 +35,42 @@ nonisolated extension RecipesAPI {
         return uploaded.imageURL
     }
 
+    /// Deletes a recipe from the household's library. It can be put back for a while.
+    func deleteRecipe(householdID: String, recipeID: String, accessToken: String) async throws -> RecipeDeletion {
+        try await client.send(
+            APIRequest.delete("/api/v1/households/\(householdID)/recipes/\(recipeID)").authorized(with: accessToken))
+    }
+
+    /// Puts a deleted recipe back.
+    func restoreRecipe(householdID: String, recipeID: String, accessToken: String) async throws -> Recipe {
+        let request = try APIRequest.post(
+            "/api/v1/households/\(householdID)/recipes/\(recipeID)/restore", body: [String: String]())
+        return try await client.send(request.authorized(with: accessToken))
+    }
+
+    /// The names to offer while an ingredient is typed.
+    func ingredientNames(householdID: String, accessToken: String) async throws -> IngredientNameList {
+        try await client.send(
+            APIRequest.get("/api/v1/households/\(householdID)/ingredient-names").authorized(with: accessToken))
+    }
+
+    /// Photos on the web for a search, a page at a time.
+    func searchPhotos(
+        householdID: String, query: String, page: Int, accessToken: String
+    ) async throws -> RecipePhotoSearchPage {
+        var request = APIRequest.get("/api/v1/households/\(householdID)/recipe-photos/search")
+        request.queryItems = [URLQueryItem(name: "q", value: query), URLQueryItem(name: "page", value: String(page))]
+        return try await client.send(request.authorized(with: accessToken))
+    }
+
+    /// Saves a photo found on the web as the household's own and returns its link.
+    func useFoundPhoto(householdID: String, photoID: String, accessToken: String) async throws -> String {
+        let request = try APIRequest.post(
+            "/api/v1/households/\(householdID)/recipe-photos/from-search", body: ["id": photoID])
+        let uploaded: RecipePhotoUpload = try await client.send(request.authorized(with: accessToken))
+        return uploaded.imageURL
+    }
+
     /// Turns the global-catalog opt-in on or off for one of the household's recipes.
     func setSharing(
         householdID: String, recipeID: String, sharedToCatalog: Bool, accessToken: String

@@ -13,7 +13,7 @@ struct PlanEntryRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             if !dynamicTypeSize.isAccessibilitySize {
-                RecipeImage(url: entry.recipe.imageURL)
+                RecipeImage(url: entry.recipe.imageURL, title: entry.recipe.name)
                     .frame(width: min(thumbnailWidth, 96))
                     .clipShape(.rect(cornerRadius: 6))
             }

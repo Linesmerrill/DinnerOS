@@ -32,13 +32,15 @@ type DraftResponse struct {
 	SourceURL   string `json:"sourceUrl,omitempty"`
 	ImageURL    string `json:"imageUrl,omitempty"`
 	// Servings is what the amounts are for; 0 means the source didn't say.
-	Servings     int                   `json:"servings"`
-	PrepMinutes  int                   `json:"prepMinutes,omitempty"`
-	TotalMinutes int                   `json:"totalMinutes,omitempty"`
-	Cuisines     []string              `json:"cuisines"`
-	Tags         []string              `json:"tags"`
-	Ingredients  []DraftIngredientWire `json:"ingredients"`
-	Steps        []string              `json:"steps"`
+	Servings     int `json:"servings"`
+	PrepMinutes  int `json:"prepMinutes,omitempty"`
+	TotalMinutes int `json:"totalMinutes,omitempty"`
+	// Nutrition is per serving, in the recipe's own shape (decision 693).
+	Nutrition   []NutrientResponse    `json:"nutritionPerServing,omitempty"`
+	Cuisines    []string              `json:"cuisines"`
+	Tags        []string              `json:"tags"`
+	Ingredients []DraftIngredientWire `json:"ingredients"`
+	Steps       []string              `json:"steps"`
 	// Warnings are what the parser could not read. They are advice, not
 	// errors, and are ignored when a draft is saved.
 	Warnings []string `json:"warnings"`
@@ -82,7 +84,8 @@ func newDraftResponse(d Draft, fromURL bool) DraftResponse {
 	out := DraftResponse{
 		Name: d.Name, Headline: d.Headline, Description: d.Description, SourceURL: d.SourceURL, ImageURL: d.ImageURL,
 		Servings: d.Servings, PrepMinutes: d.PrepMinutes, TotalMinutes: d.TotalMinutes,
-		Cuisines: orEmpty(d.Cuisines), Tags: orEmpty(d.Tags),
+		Nutrition: nutrientResponses(d.Nutrition),
+		Cuisines:  orEmpty(d.Cuisines), Tags: orEmpty(d.Tags),
 		Ingredients: make([]DraftIngredientWire, 0, len(d.Ingredients)),
 		Steps:       orEmpty(d.Steps), Warnings: orEmpty(d.Warnings), FromURL: fromURL,
 	}
@@ -96,7 +99,8 @@ func (r DraftResponse) draft() Draft {
 	d := Draft{
 		Name: r.Name, Headline: r.Headline, Description: r.Description, SourceURL: r.SourceURL, ImageURL: r.ImageURL,
 		Servings: r.Servings, PrepMinutes: r.PrepMinutes, TotalMinutes: r.TotalMinutes,
-		Cuisines: r.Cuisines, Tags: r.Tags, Steps: r.Steps,
+		Nutrition: nutrientsFromWire(r.Nutrition),
+		Cuisines:  r.Cuisines, Tags: r.Tags, Steps: r.Steps,
 	}
 	for _, line := range r.Ingredients {
 		d.Ingredients = append(d.Ingredients, DraftIngredient(line))

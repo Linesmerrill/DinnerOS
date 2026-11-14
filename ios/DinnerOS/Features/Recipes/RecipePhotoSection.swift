@@ -1,81 +1,162 @@
-import PhotosUI
 import SwiftUI
 import UIKit
 
-/// A recipe's own photo: take one, pick one from the library, change it, or remove it. The
-/// photo is sent as soon as it's picked, so saving the recipe only has to carry its link.
-struct RecipePhotoSection: View {
-    @Binding var imageURL: String?
+/// Where a recipe's photo can come from: one the member uploads, or one found on the web.
+struct RecipePhotoSource {
     /// Sends a JPEG and returns its link.
     let upload: (Data) async throws -> String
+    /// A page of photos on the web for a search.
+    let search: (String, Int) async throws -> RecipePhotoSearchPage
+    /// Keeps a found photo as the household's own and returns its link.
+    let useFound: (String) async throws -> String
+}
 
-    @State private var pickerItem: PhotosPickerItem?
-    @State private var showsCamera = false
-    @State private var isUploading = false
-    @State private var errorMessage: String?
+/// The photo being added: what's showing, whether it's sending, and what went wrong. The form
+/// owns it and presents the camera and the chooser from the form itself, not from a row in it,
+/// so they open every time.
+@MainActor @Observable
+final class RecipePhotoModel {
+    var showsChooser = false
+    var showsCamera = false
+    private(set) var isUploading = false
+    var errorMessage: String?
     /// The picked photo, shown while it uploads and after, so there's no wait to see it.
-    @State private var preview: UIImage?
+    private(set) var preview: UIImage?
 
-    private var hasPhoto: Bool { imageURL != nil || preview != nil }
+    var cameraAvailable: Bool { UIImagePickerController.isSourceTypeAvailable(.camera) }
 
-    private var cameraAvailable: Bool { UIImagePickerController.isSourceTypeAvailable(.camera) }
+    func hasPhoto(_ imageURL: String?) -> Bool { imageURL != nil || preview != nil }
+
+    func remove(_ imageURL: Binding<String?>) {
+        imageURL.wrappedValue = nil
+        preview = nil
+    }
+
+    /// Sends a photo from the camera or the library.
+    func send(_ image: UIImage, to imageURL: Binding<String?>, source: RecipePhotoSource) async {
+        guard let jpeg = RecipePhotoPrep.jpeg(from: image) else {
+            errorMessage = String(localized: "Couldn't open that photo. Try another one.")
+            return
+        }
+        await replace(imageURL, showing: image) { try await source.upload(jpeg) }
+    }
+
+    /// Keeps a photo found on the web.
+    func use(_ found: RecipeFoundPhoto, to imageURL: Binding<String?>, source: RecipePhotoSource) async {
+        await replace(imageURL, showing: nil) { try await source.useFound(found.id) }
+    }
+
+    private func replace(
+        _ imageURL: Binding<String?>, showing image: UIImage?, link: () async throws -> String
+    ) async {
+        let previous = (imageURL.wrappedValue, preview)
+        preview = image
+        isUploading = true
+        errorMessage = nil
+        defer { isUploading = false }
+        do {
+            imageURL.wrappedValue = try await link()
+        } catch is CancellationError {
+            (imageURL.wrappedValue, preview) = previous
+        } catch {
+            (imageURL.wrappedValue, preview) = previous
+            // A found photo can fail for its own reasons ("isn't there anymore"), which the
+            // server says in plain words.
+            errorMessage =
+                image == nil
+                ? HouseholdStore.message(for: error)
+                : String(localized: "Couldn't add the photo. Check your connection and try again.")
+        }
+    }
+}
+
+extension View {
+    /// The camera and the photo chooser for a recipe form's photo.
+    func recipePhotoPickers(
+        _ model: RecipePhotoModel, imageURL: Binding<String?>, searchText: String, source: RecipePhotoSource
+    ) -> some View {
+        modifier(RecipePhotoPickers(model: model, imageURL: imageURL, searchText: searchText, source: source))
+    }
+}
+
+private struct RecipePhotoPickers: ViewModifier {
+    @Bindable var model: RecipePhotoModel
+    @Binding var imageURL: String?
+    let searchText: String
+    let source: RecipePhotoSource
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $model.showsChooser) {
+                RecipePhotoChooser(
+                    initialQuery: searchText, search: source.search,
+                    onPicked: { image in
+                        model.showsChooser = false
+                        Task { await model.send(image, to: $imageURL, source: source) }
+                    },
+                    onFound: { found in
+                        model.showsChooser = false
+                        Task { await model.use(found, to: $imageURL, source: source) }
+                    })
+            }
+            .fullScreenCover(isPresented: $model.showsCamera) {
+                CameraPicker { image in
+                    model.showsCamera = false
+                    if let image { Task { await model.send(image, to: $imageURL, source: source) } }
+                }
+                .ignoresSafeArea()
+            }
+    }
+}
+
+/// A recipe's own photo: take one, choose one from the web or the library, or remove it. The
+/// photo is sent as soon as it's picked, so saving the recipe only has to carry its link.
+struct RecipePhotoSection: View {
+    let model: RecipePhotoModel
+    @Binding var imageURL: String?
 
     var body: some View {
         Section {
-            if preview != nil || imageURL != nil {
+            if model.hasPhoto(imageURL) {
                 photo
                     .listRowInsets(EdgeInsets())
             }
-            HStack(spacing: 10) {
-                if cameraAvailable {
-                    Button {
-                        showsCamera = true
-                    } label: {
-                        Label("Take Photo", systemImage: "camera")
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    .buttonStyle(.bordered)
+            if model.cameraAvailable {
+                Button {
+                    Keyboard.dismiss()
+                    model.showsCamera = true
+                } label: {
+                    Label("Take Photo", systemImage: "camera")
+                        .frame(minHeight: 44)
                 }
-                let hasPhoto = hasPhoto
-                PhotosPicker(selection: $pickerItem, matching: .images, photoLibrary: .shared()) {
-                    PickPhotoLabel(hasPhoto: hasPhoto)
-                }
-                .buttonStyle(.bordered)
+                .disabled(model.isUploading)
             }
-            .disabled(isUploading)
-            if imageURL != nil || preview != nil {
-                Button("Remove Photo", role: .destructive) {
-                    imageURL = nil
-                    preview = nil
-                }
-                .disabled(isUploading)
+            Button {
+                Keyboard.dismiss()
+                model.showsChooser = true
+            } label: {
+                Label(
+                    model.hasPhoto(imageURL) ? "Change Photo" : "Choose Photo", systemImage: "photo.on.rectangle"
+                )
+                .frame(minHeight: 44)
             }
-            if let errorMessage {
+            .disabled(model.isUploading)
+            if model.hasPhoto(imageURL) {
+                Button(role: .destructive) {
+                    model.remove($imageURL)
+                } label: {
+                    Label("Remove Photo", systemImage: "trash")
+                        .frame(minHeight: 44)
+                }
+                .disabled(model.isUploading)
+            }
+            if let errorMessage = model.errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         } header: {
             Text("Photo")
-        }
-        .onChange(of: pickerItem) { _, item in
-            guard let item else { return }
-            Task {
-                let data = try? await item.loadTransferable(type: Data.self)
-                pickerItem = nil
-                if let data, let image = UIImage(data: data) {
-                    await send(image)
-                } else {
-                    errorMessage = String(localized: "Couldn't open that photo. Try another one.")
-                }
-            }
-        }
-        .fullScreenCover(isPresented: $showsCamera) {
-            CameraPicker { image in
-                showsCamera = false
-                if let image { Task { await send(image) } }
-            }
-            .ignoresSafeArea()
         }
     }
 
@@ -85,7 +166,7 @@ struct RecipePhotoSection: View {
             .aspectRatio(4.0 / 3.0, contentMode: .fit)
             .frame(maxWidth: .infinity)
             .overlay {
-                if let preview {
+                if let preview = model.preview {
                     Image(uiImage: preview)
                         .resizable()
                         .scaledToFill()
@@ -94,7 +175,7 @@ struct RecipePhotoSection: View {
                 }
             }
             .overlay {
-                if isUploading {
+                if model.isUploading {
                     ProgressView()
                         .padding(12)
                         .background(.regularMaterial, in: .circle)
@@ -102,37 +183,7 @@ struct RecipePhotoSection: View {
             }
             .clipped()
             .accessibilityElement()
-            .accessibilityLabel(isUploading ? "Adding the photo" : "Recipe photo")
-    }
-
-    private func send(_ image: UIImage) async {
-        guard let jpeg = RecipePhotoPrep.jpeg(from: image) else {
-            errorMessage = String(localized: "Couldn't open that photo. Try another one.")
-            return
-        }
-        let previous = (imageURL, preview)
-        preview = image
-        isUploading = true
-        errorMessage = nil
-        defer { isUploading = false }
-        do {
-            imageURL = try await upload(jpeg)
-        } catch is CancellationError {
-            (imageURL, preview) = previous
-        } catch {
-            (imageURL, preview) = previous
-            errorMessage = String(localized: "Couldn't add the photo. Check your connection and try again.")
-        }
-    }
-}
-
-/// "Choose Photo", or "Change Photo" once there is one.
-private struct PickPhotoLabel: View {
-    let hasPhoto: Bool
-
-    var body: some View {
-        Label(hasPhoto ? "Change Photo" : "Choose Photo", systemImage: "photo.on.rectangle")
-            .frame(maxWidth: .infinity, minHeight: 44)
+            .accessibilityLabel(model.isUploading ? "Adding the photo" : "Recipe photo")
     }
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
@@ -170,6 +171,31 @@ func TestGroceryLinesWithoutUsableAmounts(t *testing.T) {
 	}
 	if _, err := grocery.Aggregate([]grocery.RecipeSelection{{RecipeID: r.ID, RecipeName: r.Name, RecipeServings: 2, TargetServings: 2, Lines: lines}}, nil); err != nil {
 		t.Errorf("Aggregate() error = %v; unusable amounts must not fail the list", err)
+	}
+}
+
+// A line's note ("minced") is how to prepare it, not what to buy, so the
+// grocery item is the name alone and garlic from two recipes stays one item.
+func TestGroceryLinesLeaveTheNoteOut(t *testing.T) {
+	minced := ingredientLine(ingGarlic, "Garlic", "produce", false, amt(2, "2", "clove"))
+	minced.Note = "minced"
+	r := recipes.Recipe{ID: recipeTacos, Name: "Tacos", Servings: []int{2}, Ingredients: []recipes.RecipeIngredient{minced}}
+	other := recipes.Recipe{ID: recipeSoup, Name: "Soup", Servings: []int{2}, Ingredients: []recipes.RecipeIngredient{
+		ingredientLine(ingGarlic, "Garlic", "produce", false, amt(2, "1", "clove")),
+	}}
+	lines := groceryLines(r, 2)
+	if len(lines) != 1 || lines[0].Name != "Garlic" {
+		t.Fatalf("lines = %+v; want one line named Garlic", lines)
+	}
+	items, err := grocery.Aggregate([]grocery.RecipeSelection{
+		{RecipeID: r.ID, RecipeName: r.Name, RecipeServings: 2, TargetServings: 2, Lines: lines},
+		{RecipeID: other.ID, RecipeName: other.Name, RecipeServings: 2, TargetServings: 2, Lines: groceryLines(other, 2)},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items.Items) != 1 || strings.Contains(items.Items[0].Name, "minced") {
+		t.Errorf("items = %+v; want one Garlic item without the note", items.Items)
 	}
 }
 

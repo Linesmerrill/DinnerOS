@@ -14,8 +14,16 @@ struct RecipeEditView: View {
     @State private var swap: SwapState?
     @State private var isSaving = false
     @State private var errorMessage: String?
-    @FocusState private var focusedName: RecipeEditDraft.Line.ID?
-    @State private var focusedAmount: RecipeEditDraft.Line.ID?
+    @State private var photo = RecipePhotoModel()
+    @State private var ingredientSheet: IngredientSheetTarget<RecipeEditDraft.Line.ID>?
+    @State private var reorder: ReorderTarget?
+    @State private var openTime: TimeField?
+    @FocusState private var focusedStep: Int?
+
+    private enum TimeField {
+        case prep
+        case cook
+    }
 
     /// A rename shown in the "Update the steps?" card.
     struct SwapState: Equatable {
@@ -54,13 +62,30 @@ struct RecipeEditView: View {
                             Text("Change an amount here and the other sizes change to match.")
                         }
                     }
-                    if draft.canChangePhoto {
-                        RecipePhotoSection(imageURL: $draft.imageURL) { jpeg in
-                            try await library.uploadPhoto(jpeg)
+                    if let problem = draft.problem, draft.hasChanges {
+                        Section {
+                            Label(problem, systemImage: "exclamationmark.circle")
+                                .foregroundStyle(.secondary)
+                        } footer: {
+                            Text("Save turns on once that's fixed.")
                         }
+                    }
+                    if draft.canChangePhoto {
+                        Section("Name") {
+                            TextField("Recipe name", text: $draft.name)
+                                .font(.title3.weight(.semibold))
+                                .textInputAutocapitalization(.words)
+                                .submitLabel(.done)
+                                .frame(minHeight: 44)
+                        }
+                        RecipePhotoSection(model: photo, imageURL: $draft.imageURL)
+                        timesSection
                     }
                     ingredientsSection
                     stepsSection
+                    if draft.canChangePhoto {
+                        NutritionSection(values: $draft.nutrition)
+                    }
                     Section {
                     } footer: {
                         Text(
@@ -68,10 +93,21 @@ struct RecipeEditView: View {
                         )
                     }
                 }
-                .scrollDismissesKeyboard(.interactively)
-                .onChange(of: focusedName) { _, id in scroll(proxy, to: id) }
-                .onChange(of: focusedAmount) { _, id in scroll(proxy, to: id) }
+                .onChange(of: focusedStep) { _, index in
+                    if let index { withAnimation { proxy.scrollTo(StepRowID(index: index), anchor: .center) } }
+                }
             }
+            .keyboardDismissal()
+            .recipePhotoPickers(
+                photo, imageURL: $draft.imageURL, searchText: recipe.name,
+                source: RecipePhotoSource(
+                    upload: { try await library.uploadPhoto($0) },
+                    search: { try await library.searchPhotos($0, page: $1) },
+                    useFound: { try await library.useFoundPhoto($0) })
+            )
+            .sheet(item: $ingredientSheet) { target in ingredientEditor(target) }
+            .sheet(item: $reorder) { target in reorderSheet(target) }
+            .task { await library.loadIngredientNames() }
             .navigationTitle("Edit Recipe")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -87,9 +123,6 @@ struct RecipeEditView: View {
                     }
                 }
             }
-            .onChange(of: focusedName) { previous, _ in
-                if let previous { checkSwap(previous) }
-            }
             .alert("Couldn't Save That", isPresented: Binding(presenting: $errorMessage)) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -99,80 +132,143 @@ struct RecipeEditView: View {
         }
     }
 
+    // MARK: Times
+
+    private var timesSection: some View {
+        Section {
+            RecipeTimeField(title: "Prep time", minutes: $draft.prepTime, isOpen: isOpen(.prep))
+            RecipeTimeField(title: "Cook time", minutes: $draft.cookTime, isOpen: isOpen(.cook))
+        } header: {
+            Text("Time")
+        } footer: {
+            if draft.totalTime > 0 {
+                Text("Total: \(RecipeFormat.minutes(draft.totalTime))")
+            }
+        }
+    }
+
+    private func isOpen(_ field: TimeField) -> Binding<Bool> {
+        Binding(
+            get: { openTime == field },
+            set: { open in
+                Keyboard.dismiss()
+                openTime = open ? field : nil
+            })
+    }
+
     // MARK: Ingredients
 
     private var ingredientsSection: some View {
         Section {
-            ForEach($draft.lines) { $line in
-                IngredientEntryRow(
-                    id: line.id,
-                    name: $line.name,
-                    amount: Binding(
-                        get: { draft.quantity(of: line) },
-                        set: { draft.setQuantity($0, for: line.id) }),
-                    unit: $line.unit,
-                    units: units(for: line),
-                    nameFocus: $focusedName,
-                    amountFocus: $focusedAmount,
-                    next: { next(after: line.id) })
+            let lines = draft.lines
+            ForEach(Array(lines.enumerated()), id: \.element.id) { index, line in
+                RecipeListRow(
+                    title: line.name,
+                    detail: IngredientFields.detail(
+                        quantity: draft.quantity(of: line), unit: line.unit, note: line.note),
+                    canMoveUp: index > 0, canMoveDown: index < lines.count - 1,
+                    onEdit: { ingredientSheet = .edit(line.id) },
+                    onMove: { draft.lines.move(at: index, by: $0) },
+                    onDelete: { draft.lines.removeAll { $0.id == line.id } })
             }
-            .onDelete { draft.removeLines(at: $0) }
             Button {
-                focus(draft.addLine())
+                Keyboard.dismiss()
+                ingredientSheet = .new
             } label: {
                 Label("Add Ingredient", systemImage: "plus")
                     .frame(minHeight: 44)
             }
         } header: {
-            Text("Ingredients")
+            SectionHeaderWithMenu(title: "Ingredients") {
+                Button("Reorder & Delete Ingredients", systemImage: "arrow.up.arrow.down") {
+                    reorder = .ingredients
+                }
+                .disabled(draft.lines.isEmpty)
+            }
         } footer: {
             Text("Rename an ingredient to swap it. We'll offer to change the steps too.")
         }
     }
 
-    /// Keeps the ingredient being typed above the keyboard.
-    private func scroll(_ proxy: ScrollViewProxy, to id: RecipeEditDraft.Line.ID?) {
-        guard let id else { return }
-        withAnimation { proxy.scrollTo(id, anchor: .center) }
-    }
-
-    /// Next on the amount keypad: on to the next ingredient, or a new one after the last.
-    private func next(after id: RecipeEditDraft.Line.ID) -> Bool {
-        guard let following = draft.line(after: id) else { return false }
-        focus(following)
-        return true
-    }
-
-    /// Puts the cursor in an ingredient's name once its row is on screen.
-    private func focus(_ id: RecipeEditDraft.Line.ID) {
-        DispatchQueue.main.async {
-            focusedAmount = nil
-            focusedName = id
+    @ViewBuilder
+    private func ingredientEditor(_ target: IngredientSheetTarget<RecipeEditDraft.Line.ID>) -> some View {
+        switch target {
+        case .new:
+            IngredientEditorSheet(mode: .new, units: RecipeUnit.codes, names: library.ingredientNames) { fields in
+                draft.addLine(fields)
+            }
+        case .edit(let id):
+            if let fields = draft.fields(of: id) {
+                IngredientEditorSheet(
+                    mode: .edit, initial: fields, units: units(for: fields.unit), names: library.ingredientNames
+                ) { fields in
+                    draft.apply(fields, to: id)
+                    checkSwap(id)
+                }
+            }
         }
     }
 
     /// The unit codes to offer, with the line's own when it's one the list doesn't have.
-    private func units(for line: RecipeEditDraft.Line) -> [String] {
-        RecipeUnit.codes.contains(line.unit) ? RecipeUnit.codes : [line.unit] + RecipeUnit.codes
+    private func units(for unit: String) -> [String] {
+        RecipeUnit.codes.contains(unit) ? RecipeUnit.codes : [unit] + RecipeUnit.codes
     }
 
     // MARK: Steps
 
     private var stepsSection: some View {
-        Section("Steps") {
+        Section {
             ForEach(draft.steps.indices, id: \.self) { index in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Step \(index + 1)")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    TextField("What to do", text: $draft.steps[index], axis: .vertical)
-                        .lineLimit(2...12)
-                        .keyboardDoneButton()
-                }
-                .padding(.vertical, 2)
+                StepEntryRow(
+                    index: index, text: $draft.steps[index], count: draft.steps.count,
+                    focus: $focusedStep, field: index,
+                    onMove: { draft.steps.move(at: index, by: $0) },
+                    onDelete: { draft.steps.remove(at: index) }
+                )
+                .id(StepRowID(index: index))
             }
-            .onDelete { draft.steps.remove(atOffsets: $0) }
-            Button("Add Step", systemImage: "plus") { draft.steps.append("") }
+            Button {
+                draft.steps.append("")
+                let index = draft.steps.count - 1
+                DispatchQueue.main.async { focusedStep = index }
+            } label: {
+                Label("Add Step", systemImage: "plus")
+                    .frame(minHeight: 44)
+            }
+        } header: {
+            SectionHeaderWithMenu(title: "Steps") {
+                Button("Reorder & Delete Steps", systemImage: "arrow.up.arrow.down") {
+                    reorder = .steps
+                }
+                .disabled(draft.steps.isEmpty)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func reorderSheet(_ target: ReorderTarget) -> some View {
+        switch target {
+        case .ingredients:
+            ReorderDeleteSheet(
+                title: "Reorder & Delete Ingredients",
+                items: draft.lines.enumerated().map { index, line in
+                    ReorderItem(
+                        id: index, title: line.name,
+                        detail: IngredientFields.detail(
+                            quantity: draft.quantity(of: line), unit: line.unit, note: line.note))
+                }
+            ) { places in
+                draft.lines = draft.lines.reordered(by: places)
+            }
+        case .steps:
+            ReorderDeleteSheet(
+                title: "Reorder & Delete Steps",
+                items: draft.steps.enumerated().map { index, step in
+                    ReorderItem(id: index, title: String(localized: "Step \(index + 1)"), detail: step)
+                }
+            ) { places in
+                draft.steps = draft.steps.reordered(by: places)
+            }
         }
     }
 
@@ -288,7 +384,7 @@ struct RecipeEditView: View {
     // MARK: Saving
 
     private func save() {
-        if let id = focusedName { checkSwap(id) }
+        Keyboard.dismiss()
         isSaving = true
         Task {
             defer { isSaving = false }

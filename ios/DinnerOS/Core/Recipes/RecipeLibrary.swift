@@ -33,6 +33,10 @@ final class RecipeLibrary {
     private(set) var refreshError: String?
 
     var hasMore: Bool { nextCursor != nil }
+    /// The recipe just deleted, for the Undo toast. Cleared when it's put back or dismissed.
+    private(set) var recentlyDeleted: DeletedRecipe?
+    /// Names offered while an ingredient is typed. Empty until `loadIngredientNames`.
+    private(set) var ingredientNames = IngredientNameIndex.empty
 
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let api: RecipesAPI?
@@ -243,9 +247,48 @@ final class RecipeLibrary {
         if householdID == self.householdID {
             details[recipeID] = saved
             // A new or removed photo shows in the recipe lists too.
-            if request.imageURL != nil { await loadFirstPage(clearing: false) }
+            if request.imageURL != nil || request.prepMinutes != nil || request.totalMinutes != nil
+                || request.name != nil
+            {
+                await loadFirstPage(clearing: false)
+            }
         }
         return saved
+    }
+
+    /// Deletes a recipe and takes it off the lists right away. `recentlyDeleted` holds it for
+    /// Undo. Returns the weeks it came off, so the caller can reload them.
+    @discardableResult
+    func deleteRecipe(_ summary: RecipeSummary) async throws -> RecipeDeletion {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        let result = try await session.authorized { token in
+            try await api.deleteRecipe(householdID: householdID, recipeID: summary.id, accessToken: token)
+        }
+        if householdID == self.householdID {
+            let index = items.firstIndex { $0.id == summary.id }
+            items.removeAll { $0.id == summary.id }
+            details[summary.id] = nil
+            recentlyDeleted = DeletedRecipe(summary: summary, index: index, removedFromWeeks: result.removedFromWeeks)
+        }
+        return result
+    }
+
+    /// Puts the recipe just deleted back where it was.
+    func undoDelete() async throws {
+        guard let deleted = recentlyDeleted, let api, let householdID else { return }
+        let recipe = try await session.authorized { token in
+            try await api.restoreRecipe(householdID: householdID, recipeID: deleted.summary.id, accessToken: token)
+        }
+        recentlyDeleted = nil
+        guard householdID == self.householdID else { return }
+        details[recipe.id] = recipe
+        if !items.contains(where: { $0.id == deleted.summary.id }) {
+            items.insert(deleted.summary, at: min(deleted.index ?? 0, items.count))
+        }
+    }
+
+    func dismissDeleted() {
+        recentlyDeleted = nil
     }
 
     /// Sends a recipe photo and returns its link, for the edit to save.
@@ -253,6 +296,36 @@ final class RecipeLibrary {
         guard let api, let householdID else { throw AuthSessionError.notConfigured }
         return try await session.authorized { token in
             try await api.uploadPhoto(householdID: householdID, jpeg: jpeg, accessToken: token)
+        }
+    }
+
+    /// Loads the names to suggest for ingredients. Offline it uses the last saved answer, and
+    /// without one there are just no suggestions.
+    func loadIngredientNames() async {
+        guard let api, let householdID else { return }
+        do {
+            let list = try await session.authorized { token in
+                try await api.ingredientNames(householdID: householdID, accessToken: token)
+            }
+            ingredientNames = list.index
+        } catch {
+            // Typing still works without suggestions.
+        }
+    }
+
+    /// Photos on the web for a search, a page at a time.
+    func searchPhotos(_ query: String, page: Int) async throws -> RecipePhotoSearchPage {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        return try await session.authorized { token in
+            try await api.searchPhotos(householdID: householdID, query: query, page: page, accessToken: token)
+        }
+    }
+
+    /// Keeps a photo found on the web as the household's own and returns its link.
+    func useFoundPhoto(_ photoID: String) async throws -> String {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        return try await session.authorized { token in
+            try await api.useFoundPhoto(householdID: householdID, photoID: photoID, accessToken: token)
         }
     }
 
@@ -465,4 +538,14 @@ final class RecipeLibrary {
             String(describing: type(of: error))
         }
     }
+}
+
+/// A recipe just deleted, kept for Undo.
+struct DeletedRecipe: Equatable, Identifiable {
+    let summary: RecipeSummary
+    /// Where it was in the list.
+    let index: Int?
+    let removedFromWeeks: [String]
+
+    var id: String { summary.id }
 }

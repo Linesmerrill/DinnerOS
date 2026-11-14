@@ -191,7 +191,7 @@ func (m *memoryStore) LibraryCatalogKeys(_ context.Context, householdID string, 
 	defer m.mu.Unlock()
 	var out map[string]string
 	for _, r := range m.recipes {
-		if r.HouseholdID != householdID || r.CatalogKey == "" || !slices.Contains(keys, r.CatalogKey) {
+		if r.HouseholdID != householdID || r.CatalogKey == "" || !slices.Contains(keys, r.CatalogKey) || !r.DeletedAt.IsZero() {
 			continue
 		}
 		if out == nil {
@@ -217,12 +217,29 @@ func (m *memoryStore) SetRecipeShared(_ context.Context, householdID, id string,
 	return Recipe{}, ErrNotFound
 }
 
+func (m *memoryStore) SetRecipeDeleted(_ context.Context, householdID, id string, deletedAt time.Time, removed []RemovedPlanEntry, now time.Time) (Recipe, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.recipes {
+		if m.recipes[i].ID == id && m.recipes[i].HouseholdID == householdID {
+			m.recipes[i].DeletedAt = deletedAt
+			m.recipes[i].RemovedPlanEntries = nil
+			if !deletedAt.IsZero() {
+				m.recipes[i].RemovedPlanEntries = slices.Clone(removed)
+			}
+			m.recipes[i].UpdatedAt = now
+			return cloneRecipe(m.recipes[i]), nil
+		}
+	}
+	return Recipe{}, ErrNotFound
+}
+
 func (m *memoryStore) FindIngredientUse(_ context.Context, householdID string, ingredientIDs []string) ([]IngredientUse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []IngredientUse
 	for _, r := range m.recipes {
-		if r.HouseholdID != householdID {
+		if r.HouseholdID != householdID || !r.DeletedAt.IsZero() {
 			continue
 		}
 		use := IngredientUse{RecipeID: r.ID}
@@ -253,7 +270,7 @@ func (m *memoryStore) ListRecipes(_ context.Context, householdID string, f ListF
 	var out []RecipeSummary
 	for _, r := range m.recipes {
 		switch {
-		case r.HouseholdID != householdID,
+		case r.HouseholdID != householdID, !r.DeletedAt.IsZero(),
 			search != nil && !search.MatchString(r.Name),
 			f.Addons != nil && r.IsAddon != *f.Addons,
 			f.Tag != "" && !containsFold(r.Tags, f.Tag),
@@ -282,7 +299,7 @@ func (m *memoryStore) ListCatalog(_ context.Context, householdID string, limit i
 	defer m.mu.Unlock()
 	var out []Recipe
 	for _, r := range m.recipes {
-		if r.HouseholdID == householdID {
+		if r.HouseholdID == householdID && r.DeletedAt.IsZero() {
 			r = cloneRecipe(r)
 			r.Steps, r.Nutrition, r.Description = nil, nil, ""
 			out = append(out, r)
@@ -300,7 +317,7 @@ func (m *memoryStore) ListRecipesAfter(_ context.Context, householdID, afterID s
 	defer m.mu.Unlock()
 	var out []Recipe
 	for _, r := range m.recipes {
-		if r.HouseholdID == householdID && r.ID > afterID {
+		if r.HouseholdID == householdID && r.ID > afterID && r.DeletedAt.IsZero() {
 			out = append(out, cloneRecipe(r))
 		}
 	}
@@ -316,7 +333,7 @@ func (m *memoryStore) ListMenuCatalog(_ context.Context, householdID string, lim
 	defer m.mu.Unlock()
 	var out []Recipe
 	for _, r := range m.recipes {
-		if r.HouseholdID == householdID {
+		if r.HouseholdID == householdID && r.DeletedAt.IsZero() {
 			r = cloneRecipe(r)
 			r.Steps, r.Description, r.Source, r.SourceRecipeID, r.SourceAliases, r.SourceURL = nil, "", "", "", nil, ""
 			for i := range r.Ingredients {
@@ -435,6 +452,7 @@ func cloneRecipe(r Recipe) Recipe {
 	r.Nutrition = nilIfEmpty(slices.Clone(r.Nutrition))
 	r.Steps = nilIfEmpty(slices.Clone(r.Steps))
 	r.OrderWeeks = nilIfEmpty(slices.Clone(r.OrderWeeks))
+	r.RemovedPlanEntries = nilIfEmpty(slices.Clone(r.RemovedPlanEntries))
 	lines := make([]RecipeIngredient, 0, len(r.Ingredients))
 	for _, line := range r.Ingredients {
 		line.Category = "" // not stored

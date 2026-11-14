@@ -330,7 +330,8 @@ func (s *Service) AddEntries(ctx context.Context, householdID, userID, week stri
 			return Plan{}, nil, err
 		}
 		recipe, ok := live[ne.RecipeID]
-		if !ok {
+		if !ok || !recipe.DeletedAt.IsZero() {
+			// A deleted recipe can't be planned (decision 694).
 			return Plan{}, nil, ErrRecipeNotFound
 		}
 		if err := checkServings(recipe, ne.Servings); err != nil {
@@ -587,6 +588,9 @@ func (s *Service) ReplaceEntryRecipe(ctx context.Context, householdID, week, ent
 	recipe, err := s.recipe(ctx, householdID, recipeID)
 	if err != nil {
 		return Plan{}, Entry{}, Entry{}, err
+	}
+	if !recipe.DeletedAt.IsZero() {
+		return Plan{}, Entry{}, Entry{}, ErrRecipeNotFound
 	}
 	servings := nearestServings(recipe, previous.Servings)
 	if err := checkServings(recipe, servings); err != nil {

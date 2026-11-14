@@ -83,9 +83,27 @@ type Recipe struct {
 	// EditedAt is when the household last changed the recipe's ingredients
 	// or steps (Service.Edit); zero for a recipe as it was imported. An
 	// edited recipe keeps its ingredients and steps through a re-import.
-	EditedAt  time.Time
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	EditedAt time.Time
+	// DeletedAt is when the household deleted the recipe; zero while it's in
+	// the library (decision 694). A deleted recipe is still read by ID, so
+	// past weeks and cooked history keep it, but nothing lists it.
+	DeletedAt time.Time
+	// RemovedPlanEntries are the meals the delete took off this week and
+	// later weeks, for a restore to put back.
+	RemovedPlanEntries []RemovedPlanEntry
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+// RemovedPlanEntry is a planned meal a recipe delete took off the plan.
+type RemovedPlanEntry struct {
+	// Week is the ISO week ("2026-W47") and Day the planned day, empty for
+	// "this week, not scheduled".
+	Week     string
+	Day      string
+	Servings int
+	Note     string
+	Origin   string
 }
 
 // CookMinutes is the recipe's effective cook time (see CookMinutes).
@@ -128,9 +146,15 @@ type RecipeIngredient struct {
 	// fills it in and it is not stored on the recipe.
 	ImageURL     string
 	PantryStaple bool
+	// Note is how the ingredient is prepared ("minced", "room temperature"),
+	// shown after the name. It never becomes part of a grocery item.
+	Note string
 	// Amounts has one entry per serving size, ascending.
 	Amounts []Amount
 }
+
+// MaxIngredientNote is the longest note an ingredient line keeps.
+const MaxIngredientNote = 200
 
 // Amount is an ingredient quantity for one serving size.
 type Amount struct {
