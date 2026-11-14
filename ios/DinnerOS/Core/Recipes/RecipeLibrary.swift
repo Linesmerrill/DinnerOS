@@ -242,6 +242,8 @@ final class RecipeLibrary {
         }
         if householdID == self.householdID {
             details[recipeID] = saved
+            // A new or removed photo shows in the recipe lists too.
+            if request.imageURL != nil { await loadFirstPage(clearing: false) }
         }
         return saved
     }

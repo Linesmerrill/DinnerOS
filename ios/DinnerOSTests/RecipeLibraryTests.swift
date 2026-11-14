@@ -224,4 +224,21 @@ struct RecipeLibraryTests {
         #expect(library.items.isEmpty)
         #expect(!library.hasMore)
     }
+
+    @Test func aPhotoChangeReloadsTheListButKeepsTheSavedRecipe() async throws {
+        let harness = try await makeHarness()
+        let library = harness.library
+        await library.activate(householdID: "household-1")
+        let lists = harness.server.listQueries.count
+
+        let plain = RecipeEditRequest(ingredients: [], steps: ["Cook."])
+        _ = try await library.editRecipe(recipeID: "r1", request: plain)
+        #expect(harness.server.listQueries.count == lists, "an edit without a photo leaves the list alone")
+
+        var withPhoto = plain
+        withPhoto.imageURL = ""
+        let saved = try await library.editRecipe(recipeID: "r1", request: withPhoto)
+        #expect(harness.server.listQueries.count == lists + 1, "the list shows the new photo")
+        #expect(library.cachedRecipe(id: "r1") == saved)
+    }
 }

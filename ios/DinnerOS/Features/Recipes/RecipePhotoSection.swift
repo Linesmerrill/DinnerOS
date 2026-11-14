@@ -79,27 +79,30 @@ struct RecipePhotoSection: View {
         }
     }
 
-    @ViewBuilder
+    /// The photo across the row at 4:3, the shape recipe photos are shown in elsewhere.
     private var photo: some View {
-        ZStack {
-            if let preview {
-                Image(uiImage: preview)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                RecipeImage(url: imageURL.flatMap(URL.init(string:)), pointWidth: 600)
+        Color.clear
+            .aspectRatio(4.0 / 3.0, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .overlay {
+                if let preview {
+                    Image(uiImage: preview)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    RecipeImage(url: imageURL.flatMap(URL.init(string:)), pointWidth: 600)
+                }
             }
-            if isUploading {
-                ProgressView()
-                    .padding(12)
-                    .background(.regularMaterial, in: .circle)
+            .overlay {
+                if isUploading {
+                    ProgressView()
+                        .padding(12)
+                        .background(.regularMaterial, in: .circle)
+                }
             }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 220)
-        .clipped()
-        .accessibilityElement()
-        .accessibilityLabel(isUploading ? "Adding the photo" : "Recipe photo")
+            .clipped()
+            .accessibilityElement()
+            .accessibilityLabel(isUploading ? "Adding the photo" : "Recipe photo")
     }
 
     private func send(_ image: UIImage) async {

@@ -165,6 +165,10 @@ nonisolated final class FakeRecipeServer: Sendable {
             guard let entries = state.recipes[route[1]] else {
                 return (404, Fixtures.errorJSON(code: "not_found"))
             }
+            if route.count == 5, route[4] == "edits" {
+                return entries.contains { $0.id == route[3] }
+                    ? (200, RecipeFixtures.detail()) : (404, Fixtures.errorJSON(code: "not_found"))
+            }
             if route.count == 4 {
                 return entries.contains { $0.id == route[3] }
                     ? (200, RecipeFixtures.detail()) : (404, Fixtures.errorJSON(code: "not_found"))

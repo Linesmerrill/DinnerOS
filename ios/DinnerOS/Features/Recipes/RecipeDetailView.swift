@@ -257,7 +257,7 @@ struct RecipeDetailView: View {
             let minY = geometry.frame(in: .scrollView).minY
             let stretch = max(minY, 0)
             RecipePhoto(
-                url: recipe?.imageURL ?? summary.imageURL, aspectRatio: nil, pointWidth: geometry.size.width,
+                url: photoURL, aspectRatio: nil, pointWidth: geometry.size.width,
                 cornerRadius: 0,
                 // The hero fills the screen: it's the one photo worth the full-width original.
                 maxBucket: nil
@@ -402,12 +402,16 @@ struct RecipeDetailView: View {
 
     // MARK: Cooking
 
+    /// The loaded recipe's photo, which may be none after a member removed it; the list's
+    /// until the recipe loads.
+    private var photoURL: URL? { recipe.map(\.imageURL) ?? summary.imageURL }
+
     /// This recipe, as the cooking screen's first dish, at the size on screen.
     private var cookMeal: CookMeal {
         let entry = plannedEntries.last
         return CookMeal(
             id: entry?.id ?? summary.id, recipeID: summary.id, name: name,
-            imageURL: recipe?.imageURL ?? summary.imageURL, dayText: entry?.day?.name(), servings: servings,
+            imageURL: photoURL, dayText: entry?.day?.name(), servings: servings,
             swaps: entry?.customizations ?? [], week: plannedWeek)
     }
 
