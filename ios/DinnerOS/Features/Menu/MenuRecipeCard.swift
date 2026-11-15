@@ -51,13 +51,13 @@ struct MenuRecipeCard: View {
 
     /// Shared with the carousels that warm the next few photos, so a prefetch asks the CDN for
     /// the same size the card will.
-    static func carouselWidth(for dynamicTypeSize: DynamicTypeSize) -> CGFloat {
+    nonisolated static func carouselWidth(for dynamicTypeSize: DynamicTypeSize) -> CGFloat {
         dynamicTypeSize.isAccessibilitySize ? 300 : 220
     }
 
     /// What a full-width card's photo is asked for before the layout measures it; `RecipePhoto`
     /// refines it from the real frame.
-    static let fullWidthEstimate: CGFloat = 400
+    nonisolated static let fullWidthEstimate: CGFloat = 400
 
     private var carouselWidth: CGFloat {
         MenuRecipeCard.carouselWidth(for: dynamicTypeSize)

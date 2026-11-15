@@ -26,6 +26,9 @@ final class NotificationStore {
     private(set) var unreadCount = 0
     /// News to show as a banner the next time the app opens, until it's tapped or closed.
     private(set) var banner: AppNotification?
+    /// Every banner the last load returned. Closing the newest puts the older ones away too,
+    /// so a backlog doesn't show one stale banner per open.
+    private var bannerIDs: [String] = []
     private(set) var isLoadingMore = false
     /// Set when the next page failed; the loaded pages stay on screen.
     private(set) var loadMoreError: String?
@@ -83,7 +86,7 @@ final class NotificationStore {
         await loadBanner()
     }
 
-    /// The oldest unread banner, best effort: a failure shows none and is only logged.
+    /// The newest unread banner, best effort: a failure shows none and is only logged.
     func loadBanner() async {
         guard let api, let householdID else { return }
         do {
@@ -91,18 +94,35 @@ final class NotificationStore {
                 try await api.banners(householdID: householdID, accessToken: token)
             }
             guard householdID == self.householdID else { return }
-            banner = banners.last
+            // The API lists newest first.
+            banner = banners.first
+            bannerIDs = banners.map(\.id)
         } catch is CancellationError {
         } catch {
             Self.logger.notice("Banners failed: \(Self.describe(error), privacy: .public)")
         }
     }
 
-    /// Tapped or closed: it won't show again.
+    /// Tapped or closed: it, and any older ones loaded with it, won't show again.
     func closeBanner() async {
-        guard let shown = banner, let householdID else { return }
+        guard let shown = banner, let api, let householdID else { return }
+        let ids = bannerIDs.isEmpty ? [shown.id] : bannerIDs
         banner = nil
-        await markRead(notificationID: shown.id, householdID: householdID)
+        bannerIDs = []
+        do {
+            let count = try await session.authorized { token in
+                try await api.markRead(householdID: householdID, ids: ids, accessToken: token)
+            }
+            guard householdID == self.householdID else { return }
+            countGeneration += 1
+            unreadCount = count
+            for index in items.indices where ids.contains(items[index].id) {
+                items[index].read = true
+            }
+        } catch is CancellationError {
+        } catch {
+            Self.logger.notice("Closing the banner failed: \(Self.describe(error), privacy: .public)")
+        }
     }
 
     /// Best effort: a failure keeps the last count and is only logged, because the badge
@@ -328,6 +348,7 @@ final class NotificationStore {
         nextCursor = nil
         unreadCount = 0
         banner = nil
+        bannerIDs = []
         isLoadingMore = false
         loadMoreError = nil
         refreshError = nil

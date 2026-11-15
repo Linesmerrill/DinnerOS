@@ -87,14 +87,18 @@ struct AllMealsSection: View {
             if list.items.isEmpty {
                 emptyState
             } else {
+                // Read outside the row builder: SwiftUI can build lazy rows on its render
+                // thread, where reading main-actor state crashes.
+                let urls = photoURLs
+                let canAdd = canAdd
+                let width = MenuRecipeCard.fullWidthEstimate
                 LazyVStack(alignment: .leading, spacing: 24) {
                     if let refreshError = list.refreshError {
                         FormErrorLabel(message: refreshError)
                     }
                     ForEach(Array(list.items.enumerated()), id: \.element.id) { index, card in
                         MenuRecipeCard(card: card, size: .fullWidth, canAdd: canAdd)
-                            .prefetchesPhotos(
-                                after: index, in: photoURLs, pointWidth: MenuRecipeCard.fullWidthEstimate)
+                            .prefetchesPhotos(after: index, in: urls, pointWidth: width)
                     }
                     pageFooter
                 }

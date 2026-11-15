@@ -16,10 +16,27 @@ struct PlusInviteView: View {
     @State private var redeemed = false
 
     var body: some View {
+        ScrollViewReader { proxy in
+            form
+                // The checklist shows at the top, so bring it into view once the code is in.
+                .onChange(of: redeemed) { _, done in
+                    guard done else { return }
+                    withAnimation { proxy.scrollTo(Self.progressID, anchor: .top) }
+                }
+        }
+        .navigationTitle("Give a Free Month")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await load() }
+    }
+
+    private static let progressID = "ReferralProgressTop"
+
+    private var form: some View {
         Form {
             // A household that entered a code sees what's left first.
             if let progress = pendingProgress {
                 ReferralProgressSection(progress: progress)
+                    .id(Self.progressID)
             }
             if let howItWorks = plus.referral?.howItWorks {
                 HowItWorksSection(howItWorks: howItWorks)
@@ -102,9 +119,6 @@ struct PlusInviteView: View {
                 }
             }
         }
-        .navigationTitle("Give a Free Month")
-        .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
     }
 
     /// This household's invite, while it's still waiting on setup.

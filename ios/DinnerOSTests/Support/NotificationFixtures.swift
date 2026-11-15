@@ -98,6 +98,10 @@ nonisolated final class FakeNotificationServer: Sendable {
                 return (200, Data(#"{"items":[\#(items)],"nextCursor":\#(next ?? "null")}"#.utf8))
             case ("GET", ["unread-count"]):
                 return (200, Self.count(entries))
+            case ("GET", ["banners"]):
+                // Every unread entry stands in for a banner, newest first, at most 5.
+                let items = entries.filter { !$0.read }.prefix(5).map { Self.json($0, householdID: householdID) }
+                return (200, Data(#"{"items":[\#(items.joined(separator: ","))]}"#.utf8))
             case ("POST", ["read"]):
                 let body = request.httpBody.flatMap { String(data: $0, encoding: .utf8) } ?? ""
                 state.readBodies.append(body)

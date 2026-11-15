@@ -41,6 +41,24 @@ struct NotificationStoreTests {
             ])
     }
 
+    @Test func theNewestBannerShowsAndClosingPutsAwayTheOlderOnesToo() async throws {
+        let harness = try await makeHarness()
+        let store = harness.store
+        await store.activate(householdID: "household-1")
+        // n-1 is the newest of the three unread.
+        #expect(store.banner?.id == "n-1")
+
+        await store.closeBanner()
+        #expect(store.banner == nil)
+        #expect(store.unreadCount == 0)
+        let entries = harness.server.entries(in: "household-1")
+        #expect(entries.prefix(3).filter { !$0.read }.isEmpty)
+
+        // Nothing is left to show on the next open.
+        await store.loadBanner()
+        #expect(store.banner == nil)
+    }
+
     @Test func pagesThroughEveryNotification() async throws {
         let harness = try await makeHarness()
         let store = harness.store
