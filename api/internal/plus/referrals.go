@@ -31,6 +31,8 @@ func RedeemMessage(err error) string {
 	switch {
 	case errors.Is(err, ErrCodeNotFound):
 		return "We couldn't find that code. Check it and try again."
+	case errors.Is(err, ErrCodeRetired):
+		return codeRetiredText
 	case errors.Is(err, ErrOwnCode):
 		return "That's your own code. Share it with another household."
 	case errors.Is(err, ErrAlreadyRedeemed):
@@ -137,10 +139,21 @@ const (
 
 // ReferralStore keeps codes and who used them.
 type ReferralStore interface {
-	// Code returns the household's code, making one the first time.
+	// Code returns the household's current code, making one the first time.
 	Code(ctx context.Context, householdID string, newCode func() string) (string, error)
-	// Owner returns the household a code belongs to, or ErrCodeNotFound.
+	// Owner returns the household whose current code is code, compared
+	// without case; ErrCodeRetired if it was replaced; else ErrCodeNotFound.
 	Owner(ctx context.Context, code string) (string, error)
+	// Taken reports whether any household has or had code, compared without
+	// case (decision 699).
+	Taken(ctx context.Context, code string) (bool, error)
+	// CodeChanges returns when the household last changed its code, at
+	// least the last CodeChangeLimit times.
+	CodeChanges(ctx context.Context, householdID string) ([]time.Time, error)
+	// Replace makes code the household's code in place of old, if old is
+	// still its code (else ErrCodeChangedNow), and retires old for good.
+	// A code any household has or had is ErrCodeTaken.
+	Replace(ctx context.Context, householdID, old, code string, at time.Time) error
 	// Record stores r as given (pending) and sets its ID, or returns
 	// ErrAlreadyRedeemed if r.ReferredID already used a code.
 	Record(ctx context.Context, r *Referral) error
@@ -224,21 +237,6 @@ func NewCode() string {
 	return b.String()
 }
 
-// NormalizeCode reads a code the way a person might type or paste it:
-// lowercase, with spaces or dashes, or inside an invite link.
-func NormalizeCode(s string) string {
-	if i := strings.LastIndexAny(s, "/="); i >= 0 {
-		s = s[i+1:]
-	}
-	var b strings.Builder
-	for _, r := range strings.ToUpper(s) {
-		if strings.ContainsRune(codeAlphabet, r) {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
-
 // WithReferrals turns on free months and referral codes.
 func (s *Service) WithReferrals(free FreeTimeStore, referrals ReferralStore) *Service {
 	s.free, s.referrals = free, referrals
@@ -262,6 +260,10 @@ type ReferralInfo struct {
 	// Progress says how far its own referral is.
 	UsedCode *Referral
 	Progress *Progress
+	// CodeChanges is how many more times the code can change (decision
+	// 699); Location is the household's time zone for its date.
+	CodeChanges CodeChanges
+	Location    *time.Location
 }
 
 // InviteItem is one household that used the code, as its sharer sees it.
@@ -278,7 +280,7 @@ func (s *Service) Referral(ctx context.Context, householdID string) (ReferralInf
 	if !s.EnabledFor(householdID) || s.referrals == nil {
 		return ReferralInfo{}, ErrReferralsOff
 	}
-	code, err := s.referrals.Code(ctx, householdID, NewCode)
+	code, err := s.referrals.Code(ctx, householdID, newCleanCode)
 	if err != nil {
 		return ReferralInfo{}, err
 	}
@@ -287,6 +289,14 @@ func (s *Service) Referral(ctx context.Context, householdID string) (ReferralInf
 		return ReferralInfo{}, err
 	}
 	info := ReferralInfo{Code: code, Rewarded: n, MonthsLeft: max(0, MaxReferralMonths-n)}
+	changes, err := s.referrals.CodeChanges(ctx, householdID)
+	if err != nil {
+		return ReferralInfo{}, err
+	}
+	info.CodeChanges = codeChanges(changes, s.now())
+	if info.CodeChanges.Left == 0 {
+		info.Location = s.location(ctx, householdID)
+	}
 	counts, recent, err := s.referrals.Joins(ctx, householdID, RecentJoins)
 	if err != nil {
 		return ReferralInfo{}, err
@@ -344,11 +354,7 @@ func (s *Service) Redeem(ctx context.Context, householdID, code string) (Status,
 	if !s.EnabledFor(householdID) || s.referrals == nil || s.free == nil {
 		return Status{}, ErrReferralsOff
 	}
-	code = NormalizeCode(code)
-	if len(code) != CodeLength {
-		return Status{}, ErrCodeNotFound
-	}
-	owner, err := s.referrals.Owner(ctx, code)
+	owner, err := s.owner(ctx, code)
 	if err != nil {
 		return Status{}, err
 	}

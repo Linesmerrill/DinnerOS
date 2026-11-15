@@ -137,3 +137,17 @@ func TestMiddlewareReturns429(t *testing.T) {
 		t.Errorf("other client status = %d, want 204", rec.Code)
 	}
 }
+
+func TestMiddlewareMessage(t *testing.T) {
+	l := New(Options{Burst: 1, Message: "Slow down a moment, then try again."})
+	h := l.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	var rec *httptest.ResponseRecorder
+	for range 2 {
+		rec = httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	}
+	var body httpx.ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil || body.Error.Message != "Slow down a moment, then try again." {
+		t.Errorf("body = %+v, %v", body, err)
+	}
+}

@@ -307,17 +307,7 @@ func TestReferralsOffWhilePlusIsOff(t *testing.T) {
 	}
 }
 
-func TestNormalizeCode(t *testing.T) {
-	for in, want := range map[string]string{
-		"abcd-efgh":                            "ABCDEFGH",
-		" AB CD EF GH ":                        "ABCDEFGH",
-		"https://dinneros.app/invite/ABCD2345": "ABCD2345",
-		"dinneros://plus?code=abcd2345":        "ABCD2345",
-	} {
-		if got := NormalizeCode(in); got != want {
-			t.Errorf("NormalizeCode(%q) = %q, want %q", in, got, want)
-		}
-	}
+func TestNewCode(t *testing.T) {
 	for range 50 {
 		c := NewCode()
 		if len(c) != CodeLength || strings.ContainsAny(c, "01OIL") {

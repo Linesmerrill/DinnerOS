@@ -31,7 +31,16 @@ type HandlerOptions struct {
 	Operators []string
 	// MemberName returns a member's name for "Started by"; empty if unknown.
 	MemberName func(ctx context.Context, userID string) string
-	Logger     *slog.Logger
+	// CodeRateLimit limits the code change and availability routes, keyed
+	// by user (RateLimitKey); nil for none.
+	CodeRateLimit func(http.Handler) http.Handler
+	Logger        *slog.Logger
+}
+
+// RateLimitKey keys a rate limiter by the signed-in user.
+func RateLimitKey(r *http.Request) string {
+	userID, _ := auth.UserIDFromContext(r.Context())
+	return "user:" + userID
 }
 
 // Handler serves the Plus routes.
@@ -64,6 +73,13 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Use(auth.RequireAuth(h.opts.Tokens))
 		r.Use(households.RequirePermission(h.opts.Authorizer, households.PermPlanEdit, h.logger))
 		r.Post("/households/{householdId}/plus/referral/redeem", h.redeem)
+		r.Group(func(r chi.Router) {
+			if h.opts.CodeRateLimit != nil {
+				r.Use(h.opts.CodeRateLimit)
+			}
+			r.Get("/households/{householdId}/plus/referral/code-availability", h.codeAvailability)
+			r.Post("/households/{householdId}/plus/referral/code", h.changeCode)
+		})
 	})
 }
 
@@ -196,6 +212,15 @@ type ReferralResponse struct {
 	HowItWorks HowItWorksResponse `json:"howItWorks"`
 	// Invites is who used the code and what it earned.
 	Invites InvitesResponse `json:"invites"`
+	// CodeChangesLeft is how many more times the code can change in the
+	// next 30 days (decision 699); CodeChangesNext, set at 0, is when it can
+	// change again. CodeChangesText says so; CodeHelp is the rule for a
+	// picked code.
+	CodeChangesLeft  int        `json:"codeChangesLeft"`
+	CodeChangesLimit int        `json:"codeChangesLimit"`
+	CodeChangesNext  *time.Time `json:"codeChangesNext,omitempty"`
+	CodeChangesText  string     `json:"codeChangesText"`
+	CodeHelp         string     `json:"codeHelp"`
 	// ReferralProgress is set when this household entered another's code.
 	ReferralProgress *ProgressResponse `json:"referralProgress,omitempty"`
 }
@@ -383,6 +408,11 @@ func ReferralText(code string, rewarded, monthsLeft int) (share, explainer strin
 
 func (h *Handler) referral(w http.ResponseWriter, r *http.Request) {
 	info, err := h.opts.Service.Referral(r.Context(), chi.URLParam(r, households.HouseholdIDParam))
+	h.writeReferral(w, r, info, err)
+}
+
+// writeReferral writes info as the referral response, or err.
+func (h *Handler) writeReferral(w http.ResponseWriter, r *http.Request, info ReferralInfo, err error) {
 	if errors.Is(err, ErrReferralsOff) {
 		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "resource not found")
 		return
@@ -400,7 +430,63 @@ func (h *Handler) referral(w http.ResponseWriter, r *http.Request) {
 		Explainer: explainer, Rewarded: info.Rewarded, MonthsLeft: info.MonthsLeft,
 		HowItWorks: HowItWorksResponse(how),
 		Invites:    invitesResponse(info, rules), ReferralProgress: progressResponse(info.Progress),
+		CodeChangesLeft: info.CodeChanges.Left, CodeChangesLimit: CodeChangeLimit, CodeChangesNext: timePtr(info.CodeChanges.Next),
+		CodeChangesText: CodeChangesText(info.CodeChanges, info.Location), CodeHelp: CodeHelp,
 	})
+}
+
+// CodeAvailabilityResponse says whether a code can be picked, for a live
+// line under the field while typing.
+type CodeAvailabilityResponse struct {
+	Available bool   `json:"available"`
+	Message   string `json:"message"`
+}
+
+func (h *Handler) codeAvailability(w http.ResponseWriter, r *http.Request) {
+	ok, msg, err := h.opts.Service.CodeAvailability(r.Context(), chi.URLParam(r, households.HouseholdIDParam), r.URL.Query().Get("code"))
+	if errors.Is(err, ErrReferralsOff) {
+		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "resource not found")
+		return
+	}
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "plus code availability failed", "error", err)
+		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", "Something went wrong. Try again.")
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, CodeAvailabilityResponse{Available: ok, Message: msg})
+}
+
+type changeCodeRequest struct {
+	// Custom is the code the household picked; Regenerate asks for a new
+	// random one instead.
+	Custom     string `json:"custom"`
+	Regenerate bool   `json:"regenerate"`
+}
+
+func (h *Handler) changeCode(w http.ResponseWriter, r *http.Request) {
+	var req changeCodeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", CodeMessage(ErrCodeNoChoice))
+		return
+	}
+	info, err := h.opts.Service.ChangeCode(r.Context(), chi.URLParam(r, households.HouseholdIDParam), req.Custom, req.Regenerate)
+	switch {
+	case err == nil, errors.Is(err, ErrReferralsOff):
+		h.writeReferral(w, r, info, err)
+	case errors.Is(err, ErrCodeNoChoice), errors.Is(err, ErrCodeInvalid), errors.Is(err, ErrCodeHyphenEnds):
+		httpx.WriteError(w, r, http.StatusUnprocessableEntity, "code_invalid", CodeMessage(err))
+	case errors.Is(err, ErrCodeNotAllowed):
+		httpx.WriteError(w, r, http.StatusUnprocessableEntity, "code_not_allowed", CodeMessage(err))
+	case errors.Is(err, ErrCodeTaken), errors.Is(err, ErrCodeSame):
+		httpx.WriteError(w, r, http.StatusConflict, "code_taken", CodeMessage(err))
+	case errors.Is(err, ErrCodeChangedNow):
+		httpx.WriteError(w, r, http.StatusConflict, "code_changed", CodeMessage(err))
+	case errors.Is(err, ErrCodeLimit):
+		httpx.WriteError(w, r, http.StatusTooManyRequests, "code_change_limit", CodeMessage(err))
+	default:
+		h.logger.ErrorContext(r.Context(), "plus code change failed", "error", err)
+		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", CodeMessage(err))
+	}
 }
 
 type redeemRequest struct {
@@ -432,6 +518,8 @@ func (h *Handler) redeem(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "resource not found")
 	case errors.Is(err, ErrCodeNotFound):
 		httpx.WriteError(w, r, http.StatusNotFound, "code_not_found", RedeemMessage(err))
+	case errors.Is(err, ErrCodeRetired):
+		httpx.WriteError(w, r, http.StatusNotFound, "code_replaced", RedeemMessage(err))
 	case errors.Is(err, ErrOwnCode), errors.Is(err, ErrAlreadyRedeemed), errors.Is(err, ErrNotNewToPlus):
 		httpx.WriteError(w, r, http.StatusConflict, "code_not_allowed", RedeemMessage(err))
 	default:
