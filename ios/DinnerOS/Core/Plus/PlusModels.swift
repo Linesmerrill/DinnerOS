@@ -128,6 +128,19 @@ nonisolated struct PlusReferral: Codable, Hashable, Sendable {
     var howItWorks: HowItWorks? = nil
     /// This household's own progress, when it entered someone else's code.
     var referralProgress: ReferralProgress? = nil
+    /// Code changes left in the next 30 days, and the limit. Missing from an older API, which
+    /// can't change codes.
+    var codeChangesLeft: Int? = nil
+    var codeChangesLimit: Int? = nil
+    /// When the code can change again, once no changes are left.
+    var codeChangesNext: Date? = nil
+    /// "You can change your code 4 more times in the next 30 days."
+    var codeChangesText: String? = nil
+    /// "Use 3 to 20 letters, numbers or hyphens."
+    var codeHelp: String? = nil
+
+    /// Whether this API lets the household change its code.
+    var canChangeCode: Bool { codeChangesLeft != nil }
 
     nonisolated struct HowItWorks: Codable, Hashable, Sendable {
         let title: String
@@ -136,8 +149,16 @@ nonisolated struct PlusReferral: Codable, Hashable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case code, shareText, explainer, rewarded, monthsLeft, shareMessage, invites, howItWorks, referralProgress
+        case codeChangesLeft, codeChangesLimit, codeChangesNext, codeChangesText, codeHelp
         case shareURL = "shareUrl"
     }
+}
+
+/// Whether a custom code can be used, checked as it's typed.
+nonisolated struct ReferralCodeAvailability: Codable, Hashable, Sendable {
+    let available: Bool
+    /// "That code is taken."
+    let message: String
 }
 
 /// A shared invite link, `https://dinneros.app/invite/<code>`: opens the invite screen with

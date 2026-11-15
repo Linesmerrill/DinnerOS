@@ -14,6 +14,7 @@ struct PlusInviteView: View {
     @State private var isRedeeming = false
     @State private var redeemError: String?
     @State private var redeemed = false
+    @State private var isChangingCode = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -23,6 +24,9 @@ struct PlusInviteView: View {
                     guard done else { return }
                     withAnimation { proxy.scrollTo(Self.progressID, anchor: .top) }
                 }
+        }
+        .sheet(isPresented: $isChangingCode) {
+            NavigationStack { ChangeCodeView() }
         }
         .navigationTitle("Give a Free Month")
         .navigationBarTitleDisplayMode(.inline)
@@ -67,6 +71,13 @@ struct PlusInviteView: View {
                     } else {
                         ShareLink(item: referral.shareText) {
                             Label("Share Your Code", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                    if referral.canChangeCode {
+                        Button {
+                            isChangingCode = true
+                        } label: {
+                            Label("Change Your Code", systemImage: "pencil")
                         }
                     }
                 } else if let loadError {
@@ -127,9 +138,9 @@ struct PlusInviteView: View {
         return progress?.isPending == true ? progress : nil
     }
 
-    /// "ABCD EFGH": easier to read aloud.
+    /// "ABCD EFGH": easier to read aloud. A custom code ("lines-fam") shows as typed.
     static func spaced(_ code: String) -> String {
-        guard code.count == 8 else { return code }
+        guard code.count == 8, code.allSatisfy({ $0.isUppercase || $0.isNumber }) else { return code }
         return code.prefix(4) + " " + code.suffix(4)
     }
 

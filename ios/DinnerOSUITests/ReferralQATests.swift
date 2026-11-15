@@ -14,8 +14,12 @@ final class ReferralQATests: XCTestCase {
 
     @MainActor
     func testAnInviteCountsOnceTheNewHouseholdSetsUp() throws {
-        // 1. The sharer: How it works, then the code.
+        // 1. The sharer: How it works, then the code. An earlier test may have left another
+        // person signed in, so sign in as the sharer explicitly.
         var app = launchSignedIn()
+        signOut(app)
+        signIn(app, subject: "dev-simulator")
+        XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The sharer didn't get to the Menu")
         openGiveAFreeMonth(app)
         XCTAssertTrue(app.staticTexts["How it works"].waitForExistence(timeout: 10), "No How it works")
         XCTAssertTrue(
@@ -88,7 +92,87 @@ final class ReferralQATests: XCTestCase {
         snap(app, "Your Invites, free month earned (\(mode))")
     }
 
+    /// A household picks its own code, sees a blocked and a taken one, then gets a new random
+    /// code (decision 699). A fresh household each run keeps it under 5 changes in 30 days.
+    @MainActor
+    func testANewOrCustomCodeReplacesTheOldOne() throws {
+        var app = launchSignedIn()
+        signOut(app)
+        app = signInAsNewPerson(app, householdName: "QA Code Kitchen \(Int.random(in: 100...999))")
+        openGiveAFreeMonth(app)
+        let oldCode = readCode(app)
+        XCTAssertEqual(oldCode.count, 8, "Couldn't read the code: \(oldCode)")
+
+        // A reserved word isn't allowed.
+        openChangeCode(app)
+        let field = app.textFields["CustomCode"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.tap()
+        field.typeText("admin")
+        XCTAssertTrue(waitForCheck(app, "That code isn't allowed."), "Reserved word wasn't blocked")
+        snap(app, "Change Your Code, not allowed (\(mode))")
+
+        // A free custom code, after the confirmation.
+        let custom = "qa-fam-\(Int.random(in: 10000...99999))"
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 5) + custom)
+        XCTAssertTrue(waitForCheck(app, "You can use that code."), "\(custom) wasn't available")
+        snap(app, "Change Your Code, available (\(mode))")
+        app.buttons["Use This Code"].tap()
+        XCTAssertTrue(app.alerts["Replace your code?"].waitForExistence(timeout: 5), "No confirmation")
+        XCTAssertTrue(app.alerts.staticTexts["Your old code and link will stop working."].exists)
+        snap(app, "Replace your code (\(mode))")
+        app.alerts.buttons["Replace Code"].tap()
+        XCTAssertTrue(waitGone(field, timeout: 10), "The sheet didn't close")
+        XCTAssertEqual(readCode(app), custom, "The custom code isn't showing")
+        snap(app, "Give a Free Month, custom code (\(mode))")
+
+        // A new random code; the custom one is now retired for good.
+        openChangeCode(app)
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.tap()
+        field.typeText(custom)
+        XCTAssertTrue(waitForCheck(app, "That's already your code."), "The current code wasn't recognized")
+        app.buttons["Get a New Random Code"].tap()
+        XCTAssertTrue(app.alerts["Replace your code?"].waitForExistence(timeout: 5), "No confirmation")
+        app.alerts.buttons["Replace Code"].tap()
+        XCTAssertTrue(waitGone(field, timeout: 10), "The sheet didn't close")
+        let random = readCode(app)
+        XCTAssertEqual(random.count, 8, "Not a random code: \(random)")
+        XCTAssertNotEqual(random, oldCode)
+        openChangeCode(app)
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.tap()
+        field.typeText(custom)
+        XCTAssertTrue(waitForCheck(app, "That code is taken."), "A retired code could be claimed again")
+        snap(app, "Change Your Code, retired code taken (\(mode))")
+        app.buttons["Cancel"].firstMatch.tap()
+        // Leave the sharer signed in for the next test.
+        signOut(app)
+        signIn(app, subject: "dev-simulator")
+    }
+
     // MARK: Steps
+
+    @MainActor
+    private func readCode(_ app: XCUIApplication) -> String {
+        let codeText = app.staticTexts["Your code"]
+        XCTAssertTrue(codeText.waitForExistence(timeout: 10))
+        return ((codeText.value as? String) ?? "").replacingOccurrences(of: " ", with: "")
+    }
+
+    @MainActor
+    private func openChangeCode(_ app: XCUIApplication) {
+        let button = app.buttons["Change Your Code"]
+        reveal(button, in: app, maxSwipes: 6)
+        button.tap()
+        XCTAssertTrue(app.navigationBars["Change Your Code"].waitForExistence(timeout: 10), "No Change Your Code")
+    }
+
+    @MainActor
+    private func waitForCheck(_ app: XCUIApplication, _ message: String) -> Bool {
+        app.descendants(matching: .any)["CodeCheck"].firstMatch.waitForExistence(timeout: 10)
+            && app.staticTexts[message].waitForExistence(timeout: 10)
+    }
 
     @MainActor
     private func openGiveAFreeMonth(_ app: XCUIApplication) {

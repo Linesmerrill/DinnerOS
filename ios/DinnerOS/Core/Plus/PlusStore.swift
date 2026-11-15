@@ -233,6 +233,25 @@ final class PlusStore {
         referral = loaded
     }
 
+    /// Whether `code` could be this household's code, for the message under the field.
+    func codeAvailability(_ code: String) async throws -> ReferralCodeAvailability {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        return try await session.authorized { token in
+            try await api.codeAvailability(householdID: householdID, code: code, accessToken: token)
+        }
+    }
+
+    /// A custom code, or a new random one when `custom` is nil. The old code stops working.
+    func changeCode(custom: String?) async throws {
+        guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        let updated = try await session.authorized { token in
+            try await api.changeCode(householdID: householdID, custom: custom, accessToken: token)
+        }
+        guard householdID == self.householdID else { return }
+        referral = updated
+        Self.logger.info("Invite code changed")
+    }
+
     /// Uses another household's code. The referral is pending until this household plans a
     /// dinner and saves recipes; `status.referralProgress` shows what's left.
     func redeem(code: String) async throws {

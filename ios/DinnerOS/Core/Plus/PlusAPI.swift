@@ -24,6 +24,23 @@ nonisolated struct PlusAPI: Sendable {
         return try await client.send(request.authorized(with: accessToken))
     }
 
+    /// Whether `code` could be this household's custom code ("That code is taken.").
+    func codeAvailability(householdID: String, code: String, accessToken: String) async throws
+        -> ReferralCodeAvailability
+    {
+        var request = APIRequest.get(Self.path(householdID) + "/referral/code-availability")
+        request.queryItems = [URLQueryItem(name: "code", value: code)]
+        return try await client.send(request.authorized(with: accessToken))
+    }
+
+    /// Replaces this household's code with `custom`, or a new random one when it's nil. The
+    /// old code and link stop working for good. Needs `plan.edit`.
+    func changeCode(householdID: String, custom: String?, accessToken: String) async throws -> PlusReferral {
+        let body = ChangeCodeRequest(custom: custom, regenerate: custom == nil ? true : nil)
+        let request = try APIRequest.post(Self.path(householdID) + "/referral/code", body: body)
+        return try await client.send(request.authorized(with: accessToken))
+    }
+
     /// Your Plus: plan, status, history and stats.
     func details(householdID: String, accessToken: String) async throws -> PlusDetails {
         try await client.send(APIRequest.get(Self.path(householdID) + "/details").authorized(with: accessToken))
@@ -36,6 +53,11 @@ nonisolated struct PlusAPI: Sendable {
 
     static func path(_ householdID: String) -> String {
         "/api/v1/households/\(householdID)/plus"
+    }
+
+    private struct ChangeCodeRequest: Encodable {
+        let custom: String?
+        let regenerate: Bool?
     }
 
     private struct RedeemRequest: Encodable {
