@@ -25,6 +25,10 @@ final class AppSweepQATests: XCTestCase {
             }
             button.tap()
             sleep(2)
+            guard button.isSelected || app.navigationBars[tab].exists || app.staticTexts[tab].exists else {
+                problems.append("\(tab): tapping the tab didn't open it")
+                continue
+            }
             snap(app, "\(tab) (\(mode))")
             checkScreen(app, "\(tab) (\(mode))")
             visitRows(app, tab: tab, mode: mode)
@@ -45,34 +49,61 @@ final class AppSweepQATests: XCTestCase {
             guard !label.isEmpty, seen.insert(label).inserted else { continue }
             // Rows that act right away (sign out, delete) aren't part of a sweep.
             let lower = label.lowercased()
-            if ["sign out", "delete", "leave", "remove", "reset"].contains(where: lower.contains) { continue }
+            // Nor are ones that hand off to a store or another app.
+            if ["sign out", "delete", "leave", "remove", "reset", "walmart", "instacart", "open in"]
+                .contains(where: lower.contains)
+            { continue }
             let before = app.navigationBars.firstMatch.identifier
             row.tap()
             sleep(1)
             let name = "\(tab) › \(label) (\(mode))"
-            let opened = app.navigationBars.firstMatch.identifier != before || app.sheets.count > 0
+            // A full-screen cover hides the tab bar without a new bar title or sheet.
+            let tabBarCovered = !app.buttons[tab].firstMatch.isHittable
+            let opened = app.navigationBars.firstMatch.identifier != before || app.sheets.count > 0 || tabBarCovered
             if opened {
                 snap(app, name)
                 checkScreen(app, name)
                 goBack(app, name)
+                // Back on the tab, or the rest of this sweep would be checking the wrong screen.
+                if !app.tabBars.firstMatch.waitForExistence(timeout: 3) && !app.buttons[tab].firstMatch.isHittable {
+                    problems.append("\(name): no way back to \(tab)")
+                    app.terminate()
+                    _ = launchSignedIn(dark: mode == "dark")
+                    app.buttons[tab].firstMatch.tap()
+                    return
+                }
             }
         }
     }
 
     @MainActor
     private func checkScreen(_ app: XCUIApplication, _ name: String) {
+        let screen = app.frame
+        // On screen, without asking XCTest whether it can be tapped: that throws for the
+        // off-screen items of a lazy row.
+        func shown(_ element: XCUIElement) -> Bool {
+            let frame = element.frame
+            return !frame.isEmpty && screen.intersects(frame)
+        }
+        func blank(_ element: XCUIElement) -> Bool {
+            element.label.trimmingCharacters(in: .whitespaces).isEmpty
+        }
         for bar in app.navigationBars.allElementsBoundByIndex {
-            for button in bar.buttons.allElementsBoundByIndex where button.isHittable {
-                if button.label.trimmingCharacters(in: .whitespaces).isEmpty {
-                    problems.append("\(name): a toolbar button has no label (blank slot?)")
-                }
+            for button in bar.buttons.allElementsBoundByIndex where blank(button) && shown(button) {
+                problems.append("\(name): a toolbar button has no label (blank slot?)")
             }
         }
+        // A menu's button is an empty wrapper around its label, so its name sits on the text or
+        // icon inside it. VoiceOver reads that one.
+        func namedInside(_ element: XCUIElement) -> Bool {
+            element.descendants(matching: .any).allElementsBoundByIndex.contains { !blank($0) }
+        }
         let unnamed = app.buttons.allElementsBoundByIndex.filter {
-            $0.isHittable && $0.label.trimmingCharacters(in: .whitespaces).isEmpty && $0.identifier.isEmpty
+            blank($0) && $0.identifier.isEmpty && shown($0) && !namedInside($0)
         }
         if !unnamed.isEmpty {
-            problems.append("\(name): \(unnamed.count) button(s) with no name")
+            let places = unnamed.map { "at \(Int($0.frame.midX)),\(Int($0.frame.midY)) size \(Int($0.frame.width))x\(Int($0.frame.height))" }
+            problems.append("\(name): \(unnamed.count) button(s) with no name, \(places.joined(separator: "; "))")
         }
     }
 

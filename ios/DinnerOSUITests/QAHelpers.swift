@@ -5,8 +5,11 @@ import XCTest
 extension XCTestCase {
     @MainActor
     func launchSignedIn(dark: Bool = false) -> XCUIApplication {
+        // Light or dark comes from the simulator: run `xcrun simctl ui <device> appearance dark`
+        // before a dark run. Neither a launch argument nor XCUIDevice.appearance took effect on
+        // iOS 26.2, and the device setting could stick until a reboot.
+        _ = dark
         let app = XCUIApplication()
-        app.launchArguments += ["-AppleInterfaceStyle", dark ? "Dark" : "Light"]
         for (key, value) in ProcessInfo.processInfo.environment where key.hasPrefix("QA_APP_") {
             app.launchEnvironment[String(key.dropFirst("QA_APP_".count))] = value
         }
