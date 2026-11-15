@@ -123,9 +123,21 @@ func runDedupeStoreCases(t *testing.T, newStore func(*testing.T) Store) {
 			dish(recipes.SourceUser, "e", "https://hellofresh.com/recipes/pork-tacos-5f1?mc_cid=1&mc_eid=2", "Pork Tacos", "pork", "salsa"),
 			dish(recipes.SourceUser, "f", "hellofresh.com/recipes/pork-tacos-5f1", "Pork Tacos", "pork", "crema"),
 		}, 1},
-		{"the same importer recipe id", []recipes.Recipe{
+		{"six HelloFresh releases of one recipe: new ids, one link", []recipes.Recipe{
+			dish(recipes.SourceHelloFresh, "6447d2af33e34d0ea5018115", "https://www.hellofresh.com/recipes/garlicky-shrimp-couscous-bowls-6447d2af33e34d0ea5018115?utm_source=email&utm_medium=menu", "Garlicky Shrimp Couscous Bowls", "shrimp", "couscous"),
+			dish(recipes.SourceHelloFresh, "64a0c1e2f3a4b5c6d7e80001", "https://www.hellofresh.com/recipes/garlicky-shrimp-couscous-bowls-6447d2af33e34d0ea5018115", "Garlicky Shrimp Couscous Bowls", "shrimp", "couscous"),
+			dish(recipes.SourceHelloFresh, "64a0c1e2f3a4b5c6d7e80002", "https://www.hellofresh.com/recipes/garlicky-shrimp-couscous-bowls-6447d2af33e34d0ea5018115", "Garlicky Shrimp Couscous Bowls", "shrimp", "couscous"),
+			dish(recipes.SourceHelloFresh, "64a0c1e2f3a4b5c6d7e80003", "https://www.hellofresh.com/recipes/garlicky-shrimp-couscous-bowls-6447d2af33e34d0ea5018115", "Garlicky Shrimp Couscous Bowls", "shrimp", "couscous", "lemon"),
+			dish(recipes.SourceHelloFresh, "64a0c1e2f3a4b5c6d7e80004", "https://www.hellofresh.com/recipes/garlicky-shrimp-couscous-bowls-6447d2af33e34d0ea5018115", "Garlicky Shrimp Couscous Bowls", "shrimp", "couscous"),
+			dish(recipes.SourceHelloFresh, "64a0c1e2f3a4b5c6d7e80005", "https://www.hellofresh.com/recipes/garlicky-shrimp-couscous-bowls-6447d2af33e34d0ea5018115", "Garlicky Shrimp Couscous Bowls", "shrimp", "couscous"),
+		}, 1},
+		{"two HelloFresh recipes: different ids, different links", []recipes.Recipe{
+			dish(recipes.SourceHelloFresh, "6447d2af33e34d0ea5018115", "https://www.hellofresh.com/recipes/garlicky-shrimp-couscous-bowls-6447d2af33e34d0ea5018115", "Garlicky Shrimp Couscous Bowls", "shrimp"),
+			dish(recipes.SourceHelloFresh, "64a0c1e2f3a4b5c6d7e89999", "https://www.hellofresh.com/recipes/pork-tacos-64a0c1e2f3a4b5c6d7e89999", "Pork Tacos", "pork"),
+		}, 2},
+		{"the same importer recipe id and no link", []recipes.Recipe{
 			dish(recipes.SourceHelloFresh, "5f1", "", "Pork Tacos", "pork"),
-			dish("HelloFresh", "5f1", "https://hellofresh.com/recipes/pork-tacos-5f1", "Pork Tacos", "pork", "lime"),
+			dish("HelloFresh", "5f1", "", "Pork Tacos", "pork", "lime"),
 		}, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -442,6 +454,42 @@ func TestIntegrationBackfillFingerprints(t *testing.T) {
 		if !g.Current {
 			t.Errorf("entry %s is not current after the backfill", g.Name)
 		}
+	}
+}
+
+// Version 1 put the importer's ID first, so HelloFresh's weekly re-releases
+// of one recipe stayed apart. The backfill recomputes them under the new rules.
+func TestIntegrationBackfillRecomputesOlderVersions(t *testing.T) {
+	store := newTestMongoStore(t)
+	url := "https://www.hellofresh.com/recipes/garlicky-shrimp-couscous-bowls-6447d2af33e34d0ea5018115"
+	put(t, store,
+		dish(recipes.SourceHelloFresh, "6447d2af33e34d0ea5018115", url, "Garlicky Shrimp Couscous Bowls", "shrimp"),
+		dish(recipes.SourceHelloFresh, "64a0c1e2f3a4b5c6d7e80001", url+"?utm_source=email", "Garlicky Shrimp Couscous Bowls", "shrimp"),
+	)
+	// Make them look like version 1 entries: one src: fingerprint each.
+	cur, err := store.entries.Find(t.Context(), map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var docs []entryDoc
+	if err := cur.All(t.Context(), &docs); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range docs {
+		if _, err := store.entries.UpdateByID(t.Context(), d.ID, map[string]any{"$set": map[string]any{
+			"fingerprint": FingerprintSource + d.SourceID, "fingerprintVersion": 1,
+		}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, total := searchAll(t, store, Filter{}); total != 2 {
+		t.Fatalf("version 1 fingerprints show %d; want the two copies apart", total)
+	}
+	if n, err := store.BackfillFingerprints(t.Context()); err != nil || n != 2 {
+		t.Fatalf("BackfillFingerprints = %d, %v; want both recomputed", n, err)
+	}
+	if _, total := searchAll(t, store, Filter{}); total != 1 {
+		t.Errorf("after the backfill search counts %d; want 1", total)
 	}
 }
 

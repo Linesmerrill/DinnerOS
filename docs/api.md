@@ -688,9 +688,10 @@ collapse into one entry, keyed by
 ingredient set when the source has no identifier of its own.
 
 Discovery and search show each recipe **once** (decision 689). Entries that are
-the same recipe under different keys (the same importer recipe ID, the same
-link once `www.`, the scheme, a trailing slash and tracking parameters are
-ignored, or for a typed recipe the same title, ingredient lines and steps) are
+the same recipe under different keys (the same link once `www.`, the scheme, a
+trailing slash and tracking parameters are ignored; with no link, the same
+importer recipe ID; or for a typed recipe the same title, ingredient lines and
+steps) are
 one result: the most complete copy (photo, then steps, then nutrition, then the
 first published). `total` and the cursor count recipes, not copies, and a result
 is `inLibrary` when the household has any copy. Reporting any copy hides every

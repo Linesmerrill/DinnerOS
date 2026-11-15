@@ -186,8 +186,10 @@ Implemented in Phase 4a (`internal/catalog`; see
   matches. The unique index is what collapses two households' copies of one
   HelloFresh meal into one entry.
 - **`fingerprint` groups the copies `catalogKey` keeps apart** (decision 689):
-  the same page pasted by six households, or a link with and without
-  tracking parameters, is several entries but one recipe. Discover and search
+  HelloFresh's weekly re-releases of one recipe (new IDs, one link), the same
+  page pasted by six households, or a link with and without tracking
+  parameters, are several entries but one recipe. The link wins over the
+  importer's ID. Discover and search
   group by it in the aggregation and show the most complete copy
   (`completeness`), so counts and paging are per recipe. The server
   fingerprints entries stored under an older `fingerprintVersion` at startup.

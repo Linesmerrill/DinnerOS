@@ -22,7 +22,8 @@ import (
 
 // FingerprintVersion is the version of the fingerprint rules. Entries stored
 // under an older version (or none) are refreshed by BackfillFingerprints.
-const FingerprintVersion = 1
+// Version 2 puts the link before the importer's ID.
+const FingerprintVersion = 2
 
 // Fingerprint kinds, the prefix of every fingerprint.
 const (
@@ -36,10 +37,13 @@ const (
 //
 // In order of preference:
 //
+//   - url: the source link, normalized (NormalizeSourceURL). It comes first
+//     because HelloFresh re-releases one recipe under a new ID each menu
+//     week, keeping its link.
 //   - src: the importer's own recipe ID (HelloFresh's ID, say), for a source
-//     that has one. Typed and pasted recipes are given random IDs, so theirs
-//     never count (the same rule as recipes.CatalogKey).
-//   - url: the source link, normalized (NormalizeSourceURL).
+//     that has one and a recipe with no link. Typed and pasted recipes are
+//     given random IDs, so theirs never count (the same rule as
+//     recipes.CatalogKey).
 //   - typed: the title, the ingredient lines (name, amount, and unit, in any
 //     order), and the steps (in order), each case-folded with whitespace
 //     collapsed. Two recipes called "Brownies" with different ingredients or
@@ -56,13 +60,13 @@ func Fingerprint(c recipes.Recipe) string {
 }
 
 func fingerprintKey(c recipes.Recipe) (kind, key string) {
+	if u := NormalizeSourceURL(c.SourceURL); u != "" {
+		return FingerprintURL, u
+	}
 	source := strings.ToLower(strings.TrimSpace(c.Source))
 	id := strings.TrimSpace(c.SourceRecipeID)
 	if source != "" && id != "" && source != recipes.SourceManual && source != recipes.SourceUser {
 		return FingerprintSource, source + "\n" + id
-	}
-	if u := NormalizeSourceURL(c.SourceURL); u != "" {
-		return FingerprintURL, u
 	}
 	title := normalizeText(c.Name)
 	if title == "" {

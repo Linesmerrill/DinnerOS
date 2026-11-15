@@ -41,7 +41,8 @@ func TestFingerprintKinds(t *testing.T) {
 		in   recipes.Recipe
 		want string
 	}{
-		{"importer id", dish(recipes.SourceHelloFresh, "hf-1", "https://hellofresh.com/r/1", "Tacos"), FingerprintSource},
+		{"importer id and no link", dish(recipes.SourceHelloFresh, "hf-1", "", "Tacos"), FingerprintSource},
+		{"importer id and a link", dish(recipes.SourceHelloFresh, "hf-1", "https://hellofresh.com/r/1", "Tacos"), FingerprintURL},
 		{"a link", dish(recipes.SourceUser, "random", "https://example.com/tacos", "Tacos"), FingerprintURL},
 		{"typed", dish(recipes.SourceManual, "random", "", "Tacos", "beef"), FingerprintTyped},
 		{"an import with no id", dish(recipes.SourceImport, "", "", "Tacos"), FingerprintTyped},
