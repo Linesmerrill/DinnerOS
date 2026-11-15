@@ -125,7 +125,9 @@ final class ScreensQATests: XCTestCase {
             if done.waitForExistence(timeout: 2) { done.tap() }
             snap(app, "Menu › search after Done, \(kind) (\(mode))")
             // The week strip keeps the week you're on (it once ran back to weeks from 2025).
-            let thisWeek = app.buttons.matching(NSPredicate(format: "label CONTAINS 'This Week'")).firstMatch
+            // Expanded, this week's pill; collapsed, the one-line "This Week · Nov 15–21".
+            let thisWeek = app.descendants(matching: .any)
+                .matching(NSPredicate(format: "label BEGINSWITH 'This Week'")).firstMatch
             if !(thisWeek.exists && app.frame.intersects(thisWeek.frame) && !thisWeek.frame.isEmpty) {
                 problems.append("Menu › search: the week strip lost this week")
             }

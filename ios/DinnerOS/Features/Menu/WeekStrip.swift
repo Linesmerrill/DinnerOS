@@ -120,6 +120,10 @@ struct WeekStrip: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var scrolledWeek: String?
+    /// Off until a new strip has scrolled to the selected week. A strip starts at its first
+    /// pill, beside "loading earlier weeks"; loading then put a page of older weeks in front of
+    /// the selected one and the strip opened weeks early.
+    @State private var canLoadEarlier = false
     /// Whether this week's pill is on screen, for the way back to it.
     @State private var isCurrentWeekVisible = true
     @State private var stripWidth: CGFloat = 402
@@ -207,53 +211,63 @@ struct WeekStrip: View {
     /// this week's pill has scrolled out of sight, and floats over the edge rather than taking a
     /// column.
     private var pills: some View {
-        ScrollView(.horizontal) {
-            LazyHStack(spacing: 8) {
-                pastButton
-                if menu.canLoadEarlierWeeks {
-                    ProgressView()
-                        .frame(width: 44)
-                        .task(id: menu.oldestWeek) {
-                            await menu.loadEarlierWeeks()
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 8) {
+                    pastButton
+                    if menu.canLoadEarlierWeeks {
+                        ProgressView()
+                            .frame(width: 44)
+                            .task(id: "\(menu.oldestWeek)-\(canLoadEarlier)") {
+                                guard canLoadEarlier else { return }
+                                await menu.loadEarlierWeeks()
+                            }
+                            .accessibilityLabel("Loading earlier weeks")
+                    }
+                    ForEach(menu.stripItems) { item in
+                        Button {
+                            select(item.week)
+                        } label: {
+                            WeekPill(
+                                item: item, isSelected: item.week == plans.week,
+                                currentWeek: menu.currentWeek, weekStartsOn: menu.weekStartsOn, isWide: isWide)
                         }
-                        .accessibilityLabel("Loading earlier weeks")
+                        .buttonStyle(WeekPillButtonStyle())
+                        // An explicit width, not `containerRelativeFrame`: the lazy row estimates
+                        // the pills it hasn't laid out from the ones it has, and a relative frame
+                        // threw that off enough to scroll the selected week to the edge.
+                        .frame(width: pillWidth)
+                        .id(item.id)
+                        .onScrollVisibilityChange(threshold: 0.6) { visible in
+                            if item.week == menu.currentWeek { isCurrentWeekVisible = visible }
+                        }
+                    }
                 }
-                ForEach(menu.stripItems) { item in
-                    Button {
-                        select(item.week)
-                    } label: {
-                        WeekPill(
-                            item: item, isSelected: item.week == plans.week,
-                            currentWeek: menu.currentWeek, weekStartsOn: menu.weekStartsOn, isWide: isWide)
-                    }
-                    .buttonStyle(WeekPillButtonStyle())
-                    // An explicit width, not `containerRelativeFrame`: the lazy row estimates
-                    // the pills it hasn't laid out from the ones it has, and a relative frame
-                    // threw that off enough to scroll the selected week to the edge.
-                    .frame(width: pillWidth)
-                    .id(item.id)
-                    .onScrollVisibilityChange(threshold: 0.6) { visible in
-                        if item.week == menu.currentWeek { isCurrentWeekVisible = visible }
-                    }
+                .scrollTargetLayout()
+            }
+            .contentMargins(.horizontal, 16, for: .scrollContent)
+            .onGeometryChange(for: CGFloat.self) {
+                $0.size.width
+            } action: {
+                stripWidth = $0
+            }
+            .scrollIndicators(.hidden)
+            .scrollPosition(id: $scrolledWeek, anchor: .center)
+            // A strip made again (after collapsing, or when the menu jumps back to All Meals) could
+            // start at its first pill, with "loading earlier weeks" on screen; that loaded page
+            // after page until the strip showed weeks from a year and a half ago. Ask for the
+            // selected week every time the strip appears.
+            .onAppear {
+                // The position binding alone missed on a lazy row whose selected pill wasn't laid
+                // out yet (it opened weeks early); the reader's scroll finds it either way.
+                canLoadEarlier = false
+                scrolledWeek = plans.week.description
+                Task { @MainActor in
+                    proxy.scrollTo(plans.week.description, anchor: .center)
+                    try? await Task.sleep(for: .milliseconds(600))
+                    canLoadEarlier = true
                 }
             }
-            .scrollTargetLayout()
-        }
-        .contentMargins(.horizontal, 16, for: .scrollContent)
-        .onGeometryChange(for: CGFloat.self) {
-            $0.size.width
-        } action: {
-            stripWidth = $0
-        }
-        .scrollIndicators(.hidden)
-        .scrollPosition(id: $scrolledWeek, anchor: .center)
-        // A strip made again (after collapsing, or when the menu jumps back to All Meals) could
-        // start at its first pill, with "loading earlier weeks" on screen; that loaded page
-        // after page until the strip showed weeks from a year and a half ago. Ask for the
-        // selected week every time the strip appears.
-        .onAppear {
-            scrolledWeek = nil
-            Task { @MainActor in scrolledWeek = plans.week.description }
         }
         // A horizontal ScrollView takes all the height it is offered, and as a top
         // safe-area inset that is the whole screen, so pin it to the pills' height.
