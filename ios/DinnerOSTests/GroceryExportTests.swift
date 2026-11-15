@@ -425,6 +425,21 @@ struct GroceryExportTests {
                 """)
     }
 
+    @Test func anEmptyListHasNothingToCopyOrShare() throws {
+        let session = AuthSession(
+            api: AuthAPI(client: APIClient(baseURL: try #require(URL(string: Fixtures.baseURLString)))),
+            store: InMemoryTokenStore(session: StoredSession(tokens: Fixtures.tokens(), user: Fixtures.user)))
+        let json = #"""
+            {"week": "2026-W47", "status": "draft", "pantryApplied": true, "categories": [],
+             "skipped": [], "skippedItems": []}
+            """#
+        let empty = try JSONCoding.makeDecoder().decode(GroceryList.self, from: Data(json.utf8))
+        let model = GroceryListModel.preview(session: session, list: empty, checked: [])
+
+        // Copy would otherwise say "Copied" over nothing.
+        #expect(model.plainText(locale: locale) == nil)
+    }
+
     @Test func theModelsPlainTextMatchesTheFormatterForTheSameChecks() throws {
         let session = AuthSession(
             api: AuthAPI(client: APIClient(baseURL: try #require(URL(string: Fixtures.baseURLString)))),

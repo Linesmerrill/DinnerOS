@@ -97,13 +97,26 @@ final class AnyListGuideQATests: XCTestCase {
         XCTAssertTrue(next.waitForExistence(timeout: 10), "No Next Week on the Menu")
         next.tap()
         let list = app.buttons["Grocery List"].firstMatch
-        if !list.waitForExistence(timeout: 4) {
-            app.buttons["Add Recipes"].tap()
-            let add = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Add '")).element(boundBy: 0)
-            XCTAssertTrue(add.waitForExistence(timeout: 10), "Nothing to add to next week")
+        // A meal-kit recipe with ingredients, so next week's list has things to buy.
+        let recipe = "Street Cart-Style Chicken Bowls"
+        app.buttons["Add Recipes"].tap()
+        let search = app.searchFields["Search recipes"].firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
+        search.tap()
+        search.typeText(recipe)
+        let add = app.buttons["Add \(recipe)"].firstMatch
+        if add.waitForExistence(timeout: 8) {
             add.tap()
             sleep(2)
+        }
+        // Searching hides Done behind the search's Cancel.
+        if !app.buttons["Done"].firstMatch.exists, app.buttons["Cancel"].firstMatch.exists {
+            app.buttons["Cancel"].firstMatch.tap()
+        }
+        if app.buttons["Done"].firstMatch.waitForExistence(timeout: 3) {
             app.buttons["Done"].firstMatch.tap()
+        } else {
+            app.swipeDown(velocity: .fast)
         }
         XCTAssertTrue(list.waitForExistence(timeout: 10), "No Grocery List button on the Menu")
         list.tap()

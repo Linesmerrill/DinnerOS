@@ -597,8 +597,12 @@ final class GroceryListModel {
     }
 
     /// The list as plain text for sharing, or `nil` before it loads.
+    ///
+    /// `nil` when there's nothing on the list, so Copy and Share aren't offered for an empty
+    /// list, and Copy never says "Copied" over nothing.
     func plainText(locale: Locale = .autoupdatingCurrent) -> String? {
-        list.map { GroceryListText.make($0, week: week, weekStartsOn: weekStartsOn, checked: checked, locale: locale) }
+        guard let list, list.categories.contains(where: { !$0.items.isEmpty }) else { return nil }
+        return GroceryListText.make(list, week: week, weekStartsOn: weekStartsOn, checked: checked, locale: locale)
     }
 }
 
