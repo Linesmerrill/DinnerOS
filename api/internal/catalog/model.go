@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -26,8 +27,17 @@ var (
 // Recipe is one entry in the global catalog.
 type Recipe struct {
 	ID string
-	// CatalogKey is the entry's identity (recipes.CatalogKey). It is unique.
+	// CatalogKey is the recipe's identity (recipes.CatalogKey), which a
+	// household's library is marked against. Since decision 697 it is not
+	// unique: two households sharing the same typed recipe are two entries
+	// with one key.
 	CatalogKey string
+	// Origin is recipes.CatalogOrigin of the household recipe a typed or
+	// pasted entry was shared from: an opaque hash, never the household. An
+	// entry with an origin is that household recipe's own, and re-sharing it
+	// updates the entry even when its CatalogKey changed. Importer recipes
+	// have none: one entry per importer recipe ID, shared by every household.
+	Origin string
 	// Content is the recipe itself. Its HouseholdID, OrderWeeks,
 	// TimesOrdered, LastOrderedWeek, SharedToCatalog, and CatalogKey are
 	// always zero: the catalog holds content, never a household's history.
@@ -46,12 +56,29 @@ type Recipe struct {
 	GroupKeys []string
 }
 
-// keys returns the catalog keys a household's library is checked against.
-func (r Recipe) keys() []string {
-	if len(r.GroupKeys) > 0 {
-		return r.GroupKeys
+// entryKey is what makes an entry unique: its origin when it has one, else
+// its CatalogKey.
+func (r Recipe) entryKey() string { return entryKeyOf(r.Origin, r.CatalogKey) }
+
+func entryKeyOf(origin, catalogKey string) string {
+	if origin != "" {
+		return "origin:" + origin
 	}
-	return []string{r.CatalogKey}
+	return catalogKey
+}
+
+// keys returns the catalog keys a household's library is checked against:
+// the group's, then the recipe's key from before decision 697, which a
+// household recipe not rewritten since still stores.
+func (r Recipe) keys() []string {
+	out := slices.Clone(r.GroupKeys)
+	if len(out) == 0 {
+		out = []string{r.CatalogKey}
+	}
+	if legacy := recipes.LegacyCatalogKey(r.Content); legacy != "" && !slices.Contains(out, legacy) {
+		out = append(out, legacy)
+	}
+	return out
 }
 
 // Content returns a household-free copy of a library recipe, ready to store

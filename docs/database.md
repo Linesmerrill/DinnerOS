@@ -170,7 +170,7 @@ Implemented in Phase 4a (`internal/catalog`; see
 
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `recipe_catalog` | catalogKey, contentHash, source, sourceRecipeId, sourceUrl, name, nameKey, headline, description, imageUrl, isAddon, servings[], prepMinutes, totalMinutes, difficulty, cuisines[], tags[], utensils[], allergens[], nutritionPerServing[], ingredients[] (ingredientId, name, pantryStaple, amounts[]), steps[], ingredientNames[], ingredientKeys[], cuisineKeys[], tagKeys[], fingerprint, fingerprintVersion, completeness, firstPublishedAt, updatedAt | **unique** `{catalogKey}`; **text** `{name, headline, ingredientNames, cuisines, tags}` (weights 10/4/3/2/2, name `catalog_text`); `{nameKey, _id}`; `{cuisineKeys}`; `{tagKeys}`; `{ingredientKeys}`; `{fingerprint, completeness: -1, firstPublishedAt, _id}`; `{fingerprintVersion}` |
+| `recipe_catalog` | catalogKey, entryKey, origin, contentHash, source, sourceRecipeId, sourceUrl, name, nameKey, headline, description, imageUrl, isAddon, servings[], prepMinutes, totalMinutes, difficulty, cuisines[], tags[], utensils[], allergens[], nutritionPerServing[], ingredients[] (ingredientId, name, pantryStaple, amounts[]), steps[], ingredientNames[], ingredientKeys[], cuisineKeys[], tagKeys[], fingerprint, fingerprintVersion, completeness, firstPublishedAt, updatedAt | **unique** `{entryKey}` (partial: where it is a string); `{catalogKey}`; **text** `{name, headline, ingredientNames, cuisines, tags}` (weights 10/4/3/2/2, name `catalog_text`); `{nameKey, _id}`; `{cuisineKeys}`; `{tagKeys}`; `{ingredientKeys}`; `{fingerprint, completeness: -1, firstPublishedAt, _id}`; `{fingerprintVersion}` |
 
 - **There is no `householdId` here, and no `orderWeeks`, `timesOrdered`,
   `lastOrderedWeek`, `sharedToCatalog`, rating, or note.** The document type
@@ -178,22 +178,35 @@ Implemented in Phase 4a (`internal/catalog`; see
   `internal/recipes`, so a later change to a household recipe cannot carry
   household data into a collection every household reads. An integration test
   asserts a stored document has none of those fields.
-- **`catalogKey` is the identity of "the same recipe"**:
-  `<source>:<sourceRecipeId>` when the source has its own identifier, and
-  otherwise `fp:<sha256 prefix>` of the normalized name plus the sorted,
-  de-duplicated normalized ingredient names. Amounts, servings, and steps are
-  left out of the fingerprint, so a household that halved the quantities still
-  matches. The unique index is what collapses two households' copies of one
-  HelloFresh meal into one entry.
+- **`catalogKey` is the identity of "the same recipe"**, which a household's
+  library is marked against: `<source>:<sourceRecipeId>` when the source has
+  its own identifier, and otherwise `fp2:<sha256 prefix>` of the normalized
+  name, the ingredient lines (name, servings, amount, unit; any order), and the
+  steps (in order) (decision 697). Before 697 it was `fp:` over the name and
+  ingredient names only; a household recipe not rewritten since still stores
+  that, so library lookups also try `recipes.LegacyCatalogKey` until it is.
+- **`entryKey` is what is unique** (decision 697). An importer's recipe is one
+  entry for every household that has it: `entryKey` is its `catalogKey`. A
+  typed or pasted recipe is its household's own entry: `entryKey` is
+  `origin:<origin>`, where `origin` is an opaque SHA-256 of the household and
+  the recipe's own source ID (`recipes.CatalogOrigin`), never a household ID.
+  So two households sharing brownies with the same name and ingredient names
+  are two entries (and, if the recipes are identical, one result after
+  dedupe), and a household re-sharing its edited recipe updates its own entry
+  under the new `catalogKey`. An entry published before 697 has no origin; the
+  first household to re-share a recipe with that legacy key takes it over.
+  `catalogKey_unique` is dropped at startup and the backfill gives older
+  entries their `entryKey`.
 - **`fingerprint` groups the copies `catalogKey` keeps apart** (decision 689):
   HelloFresh's weekly re-releases of one recipe (new IDs, one link), the same
   page pasted by six households, or a link with and without tracking
-  parameters, are several entries but one recipe. The link wins over the
-  importer's ID. Discover and search
+  parameters, are several entries but one recipe. A specific link together
+  with the title wins over the importer's ID; a generic link (a home page,
+  only section words like `/recipes`, a search) never groups (decision 697). Discover and search
   group by it in the aggregation and show the most complete copy
   (`completeness`), so counts and paging are per recipe. The server
   fingerprints entries stored under an older `fingerprintVersion` at startup.
-- **Publishing is an upsert on `catalogKey`** whose update is an aggregation
+- **Publishing is an upsert on `entryKey`** whose update is an aggregation
   pipeline, so `firstPublishedAt` survives and `updatedAt` only moves when
   `contentHash` changed. Re-publishing unchanged content writes nothing, which
   makes an import's publish step free on a re-run.

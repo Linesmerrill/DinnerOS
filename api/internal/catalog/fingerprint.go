@@ -22,8 +22,9 @@ import (
 
 // FingerprintVersion is the version of the fingerprint rules. Entries stored
 // under an older version (or none) are refreshed by BackfillFingerprints.
-// Version 2 puts the link before the importer's ID.
-const FingerprintVersion = 2
+// Version 2 put the link before the importer's ID; version 3 (decision 697)
+// groups by a link only when it is specific, and only with the same title.
+const FingerprintVersion = 3
 
 // Fingerprint kinds, the prefix of every fingerprint.
 const (
@@ -37,11 +38,14 @@ const (
 //
 // In order of preference:
 //
-//   - url: the source link, normalized (NormalizeSourceURL). It comes first
+//   - url: the source link, normalized (NormalizeSourceURL), together with
+//     the title, when the link is specific (isGenericLink). It comes first
 //     because HelloFresh re-releases one recipe under a new ID each menu
-//     week, keeping its link.
+//     week, keeping its link and title. The title keeps apart two recipes
+//     from one blog post, and a generic link (a site's home page, its
+//     recipe index, a search) never groups anything.
 //   - src: the importer's own recipe ID (HelloFresh's ID, say), for a source
-//     that has one and a recipe with no link. Typed and pasted recipes are
+//     that has one and a recipe with no specific link. Typed and pasted recipes are
 //     given random IDs, so theirs never count (the same rule as
 //     recipes.CatalogKey).
 //   - typed: the title, the ingredient lines (name, amount, and unit, in any
@@ -60,15 +64,15 @@ func Fingerprint(c recipes.Recipe) string {
 }
 
 func fingerprintKey(c recipes.Recipe) (kind, key string) {
-	if u := NormalizeSourceURL(c.SourceURL); u != "" {
-		return FingerprintURL, u
+	title := normalizeText(c.Name)
+	if u := NormalizeSourceURL(c.SourceURL); u != "" && title != "" && !isGenericLink(c.SourceURL) {
+		return FingerprintURL, u + "\x00" + title
 	}
 	source := strings.ToLower(strings.TrimSpace(c.Source))
 	id := strings.TrimSpace(c.SourceRecipeID)
 	if source != "" && id != "" && source != recipes.SourceManual && source != recipes.SourceUser {
 		return FingerprintSource, source + "\n" + id
 	}
-	title := normalizeText(c.Name)
 	if title == "" {
 		return "", ""
 	}
@@ -162,6 +166,61 @@ func NormalizeSourceURL(raw string) string {
 		out += "?" + q
 	}
 	return out
+}
+
+// genericSegments are path words that name a section of a site, not a recipe.
+var genericSegments = []string{
+	"recipes", "recipe", "blog", "menu", "menus", "index", "index.html", "home", "search",
+	"collections", "category", "categories", "tag", "tags", "all", "food", "dinner", "dinners",
+}
+
+// searchParams are query parameters that make a page a search.
+var searchParams = []string{"q", "query", "s"}
+
+// isGenericLink reports whether a link can't tell one recipe from another:
+// it is not a web address, it is a site's home page, its path is only
+// section words ("/recipes", "/blog/dinner"), or it is a search or listing
+// page ("/search", "?q=chicken"). A query parameter that isn't tracking or
+// a search names the recipe ("/recipe?id=12", "/?p=123"), so it makes the
+// link specific. Only a specific link groups recipes.
+func isGenericLink(raw string) bool {
+	if NormalizeSourceURL(raw) == "" {
+		return true
+	}
+	raw = strings.TrimSpace(raw)
+	if !strings.Contains(raw, "://") {
+		raw = "https://" + strings.TrimPrefix(raw, "//")
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return true
+	}
+	var segments []string
+	for _, s := range strings.Split(u.Path, "/") {
+		if s = strings.ToLower(strings.TrimSpace(s)); s != "" {
+			segments = append(segments, s)
+		}
+	}
+	if len(segments) > 0 && segments[len(segments)-1] == "search" {
+		return true
+	}
+	named := false
+	for k := range u.Query() {
+		if slices.Contains(searchParams, strings.ToLower(k)) {
+			return true
+		}
+		// A kept parameter can name the recipe: "/recipe?id=12", "/?p=123".
+		named = named || !isTrackingParam(k)
+	}
+	if named {
+		return false
+	}
+	for _, s := range segments {
+		if !slices.Contains(genericSegments, s) {
+			return false
+		}
+	}
+	return true
 }
 
 // Completeness scores how much of a recipe a copy carries: a photo counts

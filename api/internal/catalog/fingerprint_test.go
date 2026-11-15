@@ -102,6 +102,76 @@ func TestNormalizeSourceURL(t *testing.T) {
 	}
 }
 
+func TestIsGenericLink(t *testing.T) {
+	for _, tc := range []struct {
+		raw     string
+		generic bool
+	}{
+		// Not a link at all.
+		{"", true},
+		{"not a url at all", true},
+		// A site's home page.
+		{"https://example.com", true},
+		{"https://www.example.com/", true},
+		{"example.com", true},
+		{"https://example.com/?utm_source=pin", true},
+		// Only section words.
+		{"https://example.com/recipes", true},
+		{"https://example.com/recipes/", true},
+		{"https://example.com/Recipes/Dinner", true},
+		{"https://example.com/blog/category/dinners", true},
+		{"https://example.com/index.html", true},
+		{"https://example.com/collections/all", true},
+		{"https://example.com/tags/food", true},
+		{"https://example.com/menus", true},
+		{"https://example.com/home", true},
+		// Search and listing pages.
+		{"https://example.com/search", true},
+		{"https://example.com/recipes/chicken/search", true},
+		{"https://example.com/recipes/chicken?q=thighs", true},
+		{"https://example.com/find?query=soup", true},
+		{"https://example.com/?s=chili", true},
+		{"https://example.com/browse?Q=chili", true},
+		// Specific links.
+		{"https://example.com/chili", false},
+		{"https://www.hellofresh.com/recipes/garlicky-shrimp-couscous-bowls-6447d2af33e34d0ea5018115", false},
+		{"https://example.com/recipes/chili", false},
+		{"https://example.com/2026/10/fall-dinners", false},
+		{"https://example.com/recipe?id=12", false},
+		{"https://example.com/?p=123", false},
+		{"https://example.com/search?p=2", true},
+		{"https://example.com/blog/my-searching-for-soup", false},
+		{"https://example.com/recipes/chili?utm_source=pin&fbclid=1", false},
+		{"https://example.com/tag/chili", false},
+	} {
+		if got := isGenericLink(tc.raw); got != tc.generic {
+			t.Errorf("isGenericLink(%q) = %v; want %v", tc.raw, got, tc.generic)
+		}
+	}
+}
+
+func TestFingerprintLinkRules(t *testing.T) {
+	url := "https://www.hellofresh.com/recipes/garlicky-shrimp-couscous-bowls-6447d2af33e34d0ea5018115"
+	a := dish(recipes.SourceHelloFresh, "6447d2af33e34d0ea5018115", url, "Garlicky Shrimp Couscous Bowls", "shrimp")
+	b := dish(recipes.SourceHelloFresh, "64a0c1e2f3a4b5c6d7e80001", url+"?utm_source=email", "garlicky  shrimp couscous bowls", "shrimp", "lemon")
+	if Fingerprint(a) != Fingerprint(b) || !strings.HasPrefix(Fingerprint(a), FingerprintURL) {
+		t.Errorf("a re-release with a new id is a different recipe: %s, %s", Fingerprint(a), Fingerprint(b))
+	}
+	other := a
+	other.Name = "Shrimp Couscous Salad"
+	if Fingerprint(other) == Fingerprint(a) {
+		t.Error("two titles on one link are one recipe")
+	}
+	generic := dish(recipes.SourceHelloFresh, "5f1", "https://www.hellofresh.com/recipes", "Pork Tacos", "pork")
+	if got := Fingerprint(generic); !strings.HasPrefix(got, FingerprintSource) {
+		t.Errorf("a generic link with an importer id = %q; want the importer id", got)
+	}
+	typedGeneric := dish(recipes.SourceUser, "random", "https://example.com/", "Pork Tacos", "pork")
+	if got := Fingerprint(typedGeneric); !strings.HasPrefix(got, FingerprintTyped) {
+		t.Errorf("a pasted recipe with a generic link = %q; want the typed rule", got)
+	}
+}
+
 func TestFingerprintTypedRules(t *testing.T) {
 	base := typed("Fudgy Brownies", []string{"Melt the butter.", "Fold in the cocoa."}, "butter=1/2 cup", "cocoa powder=0.5 cup", "sugar")
 	for _, tc := range []struct {

@@ -810,11 +810,20 @@ func (s *Service) SameRecipeIn(ctx context.Context, fromHouseholdID, recipeID, h
 	if key == "" {
 		return "", nil
 	}
-	ids, err := s.store.LibraryCatalogKeys(ctx, householdID, []string{key})
+	// The other household's copy may still store its key from before
+	// decision 697.
+	keys := []string{key}
+	if legacy := LegacyCatalogKey(r); legacy != "" {
+		keys = append(keys, legacy)
+	}
+	ids, err := s.store.LibraryCatalogKeys(ctx, householdID, keys)
 	if err != nil {
 		return "", err
 	}
-	return ids[key], nil
+	if id := ids[key]; id != "" {
+		return id, nil
+	}
+	return ids[LegacyCatalogKey(r)], nil
 }
 
 // --- small helpers ------------------------------------------------------------

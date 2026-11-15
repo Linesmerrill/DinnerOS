@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -255,7 +256,9 @@ func (s *Service) AddFromCatalog(ctx context.Context, householdID string, conten
 	if key == "" {
 		return Recipe{}, false, fmt.Errorf("%w: recipe has no catalog identity", ErrInvalidImport)
 	}
-	if existing, err := s.existingByCatalogKey(ctx, householdID, key); err != nil {
+	// A recipe the household has not changed since decision 697 still
+	// stores its old key, so that one counts as already having it too.
+	if existing, err := s.existingByCatalogKey(ctx, householdID, key, LegacyCatalogKey(content)); err != nil {
 		return Recipe{}, false, err
 	} else if existing.ID != "" {
 		return existing, false, nil
@@ -310,20 +313,23 @@ func (s *Service) undeleteCopy(ctx context.Context, householdID string, r Recipe
 	return Recipe{}, false, nil
 }
 
-func (s *Service) existingByCatalogKey(ctx context.Context, householdID, key string) (Recipe, error) {
-	found, err := s.store.LibraryCatalogKeys(ctx, householdID, []string{key})
+// existingByCatalogKey returns the household's recipe under the first of
+// keys it has, or the zero Recipe. Empty keys are skipped.
+func (s *Service) existingByCatalogKey(ctx context.Context, householdID string, keys ...string) (Recipe, error) {
+	keys = slices.DeleteFunc(slices.Clone(keys), func(k string) bool { return k == "" })
+	if len(keys) == 0 {
+		return Recipe{}, nil
+	}
+	found, err := s.store.LibraryCatalogKeys(ctx, householdID, keys)
 	if err != nil {
 		return Recipe{}, fmt.Errorf("library catalog keys: %w", err)
 	}
-	id, ok := found[key]
-	if !ok {
-		return Recipe{}, nil
+	for _, key := range keys {
+		if id, ok := found[key]; ok {
+			return s.Get(ctx, householdID, id)
+		}
 	}
-	r, err := s.Get(ctx, householdID, id)
-	if err != nil {
-		return Recipe{}, err
-	}
-	return r, nil
+	return Recipe{}, nil
 }
 
 // InLibrary maps each of keys the household already has a recipe for to that
