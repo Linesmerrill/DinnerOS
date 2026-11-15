@@ -39,6 +39,9 @@ struct MainTabView: View {
                     case .household:
                         NavigationStack(path: $tabs.householdPath) {
                             HouseholdView()
+                                .navigationDestination(for: PlusInvitesRoute.self) { _ in
+                                    PlusInviteView()
+                                }
                         }
                     }
                 } label: {
@@ -60,8 +63,28 @@ struct MainTabView: View {
         // Coming back to the app checks Plus again, which also brings back a thank-you that
         // didn't get on screen.
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await plus.reload() } }
+            if phase == .active {
+                Task { await plus.reload() }
+                Task { await notifications.loadBanner() }
+            }
         }
+        // News whose push may not have been seen, like an invite that counted.
+        .overlay(alignment: .top) {
+            if let banner = notifications.banner {
+                NewsBanner(notification: banner) {
+                    Task {
+                        await tabs.open(NotificationRouting.destination(for: banner))
+                        await notifications.closeBanner()
+                    }
+                } close: {
+                    Task { await notifications.closeBanner() }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy, value: notifications.banner?.id)
         // Another household clears the previous one's shopping state. The open handoff is read
         // so "Did you order these?" can be asked when the app returns from Walmart.
         .task(id: households.current?.household.weekScope) {

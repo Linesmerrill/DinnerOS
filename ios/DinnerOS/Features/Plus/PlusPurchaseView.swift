@@ -35,6 +35,12 @@ struct PlusPurchaseView: View {
     private func content(_ offer: PlusOffer) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                // A household that entered an invite code sees what's left before its free month.
+                if let progress = plus.status?.referralProgress, progress.isPending {
+                    ReferralProgressContent(progress: progress)
+                        .padding(14)
+                        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 14))
+                }
                 VStack(alignment: .leading, spacing: 8) {
                     Image(systemName: "sparkles")
                         .font(.largeTitle)

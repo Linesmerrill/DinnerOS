@@ -14,12 +14,15 @@ nonisolated struct AppNotificationType: RawRepresentable, Codable, Hashable, Sen
     static let pantryThaw = AppNotificationType(rawValue: "pantry.thaw")
     /// The household's order day has arrived and the week isn't marked ordered.
     static let shoppingOrderDue = AppNotificationType(rawValue: "shopping.order_due")
+    /// An invite counted: both households got a free month (decision 698).
+    static let plusReferral = AppNotificationType(rawValue: "plus.referral")
 }
 
 /// What a notification is about, and so what tapping it opens.
 nonisolated struct AppNotificationSubject: Codable, Hashable, Sendable {
     static let pantryItemKind = "pantry_item"
     static let shoppingWeekKind = "shopping_week"
+    static let plusKind = "plus"
 
     let kind: String
     let id: String

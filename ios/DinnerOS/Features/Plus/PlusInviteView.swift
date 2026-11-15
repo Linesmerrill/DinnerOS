@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Invite another household, or use another household's code. Both get a free month of
-/// Plus (decision 675).
+/// Plus once the new household plans a dinner and saves recipes (decisions 675 and 698).
 struct PlusInviteView: View {
     @Environment(PlusStore.self) private var plus
     @State private var loadError: String?
@@ -17,6 +17,9 @@ struct PlusInviteView: View {
 
     var body: some View {
         Form {
+            if let howItWorks = plus.referral?.howItWorks {
+                HowItWorksSection(howItWorks: howItWorks)
+            }
             Section {
                 if let referral = plus.referral {
                     VStack(alignment: .leading, spacing: 12) {
@@ -55,16 +58,22 @@ struct PlusInviteView: View {
             }
 
             if let invites = plus.referral?.invites {
-                YourInvitesSection(invites: invites)
+                YourInvitesList(invites: invites)
             }
 
-            if let used = plus.referral?.invites?.usedCode {
+            if let progress = plus.referral?.referralProgress ?? plus.status?.referralProgress,
+                progress.state != "qualified" || plus.referral?.invites?.usedCode == nil
+            {
+                ReferralProgressSection(progress: progress)
+            } else if let used = plus.referral?.invites?.usedCode {
                 Section {
                     Label(PlusText.usedCode(used), systemImage: "gift.fill")
                 }
             } else if redeemed {
                 Section {
-                    Label("You both have a free month of Plus.", systemImage: "gift.fill")
+                    Label(
+                        "Code saved. Plan a dinner and save a few recipes to unlock your free month.",
+                        systemImage: "gift")
                 }
             } else {
                 Section {
@@ -81,7 +90,9 @@ struct PlusInviteView: View {
                 } header: {
                     Text("Got a Code?")
                 } footer: {
-                    Text("Enter another household's code to get a free month of Plus for both of you.")
+                    Text(
+                        "Enter another household's code. Once you plan a dinner and save a few recipes, you both get a free month of Plus."
+                    )
                 }
             }
         }
@@ -118,36 +129,6 @@ struct PlusInviteView: View {
             } catch {
                 redeemError = HouseholdStore.message(for: error)
             }
-        }
-    }
-}
-
-/// Who used the household's code and what it earned. Other households are never named.
-struct YourInvitesSection: View {
-    let invites: PlusInvites
-
-    var body: some View {
-        Section {
-            LabeledContent("Households joined", value: invites.joined.formatted())
-            LabeledContent("Free months earned", value: invites.capText)
-            if let free = invites.freeUntil {
-                Label("Plus free until \(PlusText.day(free))", systemImage: "gift.fill")
-            }
-            if invites.joins.isEmpty {
-                Text(invites.emptyText)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(Array(invites.joins.enumerated()), id: \.offset) { _, join in
-                    LabeledContent {
-                        Text(join.status)
-                            .foregroundStyle(join.counted ? Color.accentColor : Color.secondary)
-                    } label: {
-                        Text("A household joined, \(PlusText.day(join.at))")
-                    }
-                }
-            }
-        } header: {
-            Text("Your Invites")
         }
     }
 }

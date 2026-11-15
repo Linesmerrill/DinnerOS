@@ -13,9 +13,14 @@ nonisolated struct PlusAPI: Sendable {
         try await client.send(APIRequest.get(Self.path(householdID) + "/referral").authorized(with: accessToken))
     }
 
-    /// Uses another household's code; both get a free month. Needs `plan.edit`.
-    func redeem(householdID: String, code: String, accessToken: String) async throws -> PlusStatus {
-        let request = try APIRequest.post(Self.path(householdID) + "/referral/redeem", body: RedeemRequest(code: code))
+    /// Uses another household's code. Needs `plan.edit`.
+    /// The referral is pending until the new household sets up (decision 698); `deviceCheck`
+    /// lets the API check this device isn't already another household's.
+    func redeem(
+        householdID: String, code: String, deviceCheck: DeviceCheckToken? = nil, accessToken: String
+    ) async throws -> PlusStatus {
+        let request = try APIRequest.post(
+            Self.path(householdID) + "/referral/redeem", body: RedeemRequest(code: code, deviceCheck: deviceCheck))
         return try await client.send(request.authorized(with: accessToken))
     }
 
@@ -35,5 +40,6 @@ nonisolated struct PlusAPI: Sendable {
 
     private struct RedeemRequest: Encodable {
         let code: String
+        let deviceCheck: DeviceCheckToken?
     }
 }

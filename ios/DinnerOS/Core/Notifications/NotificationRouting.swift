@@ -13,6 +13,8 @@ nonisolated enum NotificationDestination: Hashable, Sendable {
     case shopWeek(ISOWeek)
     /// Shop tab as it is: an order reminder whose week can't be read.
     case shop
+    /// Household tab, Give a Free Month: an invite counted (decision 698).
+    case plusInvites
     /// A type this build doesn't know: a push opens the bell, a bell row stays put.
     case notifications
 
@@ -25,6 +27,7 @@ nonisolated enum NotificationDestination: Hashable, Sendable {
         case .pantry: "pantry"
         case .shopWeek: "shop_week"
         case .shop: "shop"
+        case .plusInvites: "plus_invites"
         case .notifications: "notifications"
         }
     }
@@ -37,6 +40,7 @@ nonisolated enum NotificationDestination: Hashable, Sendable {
         case .pantry: String(localized: "Opens Pantry.")
         case .shopWeek: String(localized: "Opens the week in Shop.")
         case .shop: String(localized: "Opens Shop.")
+        case .plusInvites: String(localized: "Opens Give a Free Month.")
         case .notifications: String(localized: "Marks it read.")
         }
     }
@@ -64,6 +68,8 @@ enum NotificationRouting {
             return subject?.pantryItemID.map { .pantryThaw(itemID: $0) } ?? .pantry
         case .shoppingOrderDue:
             return shop(subject)
+        case .plusReferral:
+            return .plusInvites
         default:
             break
         }
@@ -72,6 +78,8 @@ enum NotificationRouting {
             return subject.map { .pantryItem(id: $0.id) } ?? .pantry
         case AppNotificationSubject.shoppingWeekKind:
             return shop(subject)
+        case AppNotificationSubject.plusKind:
+            return .plusInvites
         default:
             return .notifications
         }

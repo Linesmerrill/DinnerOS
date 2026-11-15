@@ -48,8 +48,14 @@ final class TabRouter {
             openShop(week)
         case .shop:
             selection = .shop
+        case .plusInvites:
+            selection = .household
+            householdPath = NavigationPath([PlusInvitesRoute()])
         case .notifications:
             showsNotifications = true
         }
     }
 }
+
+/// Give a Free Month, opened from a notification that an invite counted.
+struct PlusInvitesRoute: Hashable {}

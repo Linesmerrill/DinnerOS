@@ -199,8 +199,10 @@ final class HouseholdStore {
     /// Creates a household with the caller as admin and selects it.
     func createHousehold(name: String, timeZone: String) async throws {
         let api = try requireAPI()
+        let deviceCheck = await DeviceCheckToken.current()
         let response = try await session.authorized { token in
-            try await api.createHousehold(name: name, timeZone: timeZone, defaultServings: nil, accessToken: token)
+            try await api.createHousehold(
+                name: name, timeZone: timeZone, defaultServings: nil, deviceCheck: deviceCheck, accessToken: token)
         }
         Self.logger.info("Household created")
         select(response.household.id)
@@ -227,8 +229,9 @@ final class HouseholdStore {
 
     private func accept(_ secret: InvitationSecret) async throws -> Household {
         let api = try requireAPI()
+        let deviceCheck = await DeviceCheckToken.current()
         let response = try await session.authorized { token in
-            try await api.acceptInvitation(secret, accessToken: token)
+            try await api.acceptInvitation(secret, deviceCheck: deviceCheck, accessToken: token)
         }
         Self.logger.info("Invitation accepted")
         select(response.household.id)

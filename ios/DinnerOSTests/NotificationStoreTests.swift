@@ -24,7 +24,7 @@ struct NotificationStoreTests {
             store: NotificationStore(session: session, api: NotificationsAPI(client: client)), server: server)
     }
 
-    @Test func activatingLoadsOnlyTheUnreadCount() async throws {
+    @Test func activatingLoadsTheUnreadCountAndBannersButNotTheList() async throws {
         let harness = try await makeHarness()
         let store = harness.store
 
@@ -33,7 +33,12 @@ struct NotificationStoreTests {
         #expect(store.unreadCount == 3)
         #expect(store.phase == .idle)
         #expect(store.items.isEmpty)
-        #expect(harness.server.log == ["GET /households/household-1/notifications/unread-count"])
+        // The list waits for the bell; banners show news whose push may have gone unseen.
+        #expect(
+            harness.server.log == [
+                "GET /households/household-1/notifications/unread-count",
+                "GET /households/household-1/notifications/banners",
+            ])
     }
 
     @Test func pagesThroughEveryNotification() async throws {

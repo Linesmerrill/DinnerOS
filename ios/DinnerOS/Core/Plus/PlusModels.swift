@@ -15,6 +15,9 @@ nonisolated struct PlusStatus: Codable, Hashable, Sendable {
     let offer: PlusOffer?
     /// Set while DinnerOS gives the household Plus. Missing from an older API.
     var comp: PlusComp? = nil
+    /// This household's progress toward the free month from an invite code it entered
+    /// (decision 698). Missing from an older API, and when no code was entered.
+    var referralProgress: ReferralProgress? = nil
 
     /// Whether a Plus feature is open: always while Plus is off.
     var hasPlus: Bool { !enabled || active }
@@ -23,6 +26,28 @@ nonisolated struct PlusStatus: Codable, Hashable, Sendable {
     static let off = PlusStatus(
         enabled: false, active: false, trial: false, expiresAt: nil, willRenew: false, billingIssue: false,
         freeUntil: nil, offer: nil)
+}
+
+/// A household that entered an invite code, on its way to the free month: what's left to do.
+/// The words come from the API, from the same settings that decide when the invite counts.
+nonisolated struct ReferralProgress: Codable, Hashable, Sendable {
+    /// "pending", "qualified" or "expired".
+    let state: String
+    /// "Plan a dinner and save 3 recipes to unlock your free month".
+    let message: String
+    let steps: [Step]
+    /// When a pending invite stops counting. Gone once setup is done.
+    var expiresAt: Date? = nil
+
+    var isPending: Bool { state == "pending" }
+
+    nonisolated struct Step: Codable, Hashable, Sendable, Identifiable {
+        let id: String
+        let title: String
+        let done: Bool
+        var count: Int? = nil
+        var target: Int? = nil
+    }
 }
 
 /// Plus given by DinnerOS (decision 682), and the thank-you shown once for it.
@@ -99,9 +124,18 @@ nonisolated struct PlusReferral: Codable, Hashable, Sendable {
     var shareURL: URL? = nil
     /// Who used the code. Missing from an older API.
     var invites: PlusInvites? = nil
+    /// "How it works", above the code. Missing from an older API.
+    var howItWorks: HowItWorks? = nil
+    /// This household's own progress, when it entered someone else's code.
+    var referralProgress: ReferralProgress? = nil
+
+    nonisolated struct HowItWorks: Codable, Hashable, Sendable {
+        let title: String
+        let steps: [String]
+    }
 
     private enum CodingKeys: String, CodingKey {
-        case code, shareText, explainer, rewarded, monthsLeft, shareMessage, invites
+        case code, shareText, explainer, rewarded, monthsLeft, shareMessage, invites, howItWorks, referralProgress
         case shareURL = "shareUrl"
     }
 }
@@ -141,6 +175,40 @@ nonisolated struct PlusInvites: Codable, Hashable, Sendable {
     let joins: [PlusInviteJoin]
     /// Set when this household joined with another's code.
     let usedCode: PlusUsedCode?
+    /// Invites by state (decision 698). Missing from an older API.
+    var pending: Int? = nil
+    var qualified: Int? = nil
+    var expired: Int? = nil
+    /// Each household that used the code, newest first, with where it stands.
+    var items: [PlusInviteItem]? = nil
+}
+
+/// One household that used this household's code: "Pending, needs 2 more recipes",
+/// "Free month earned", or "Expired".
+nonisolated struct PlusInviteItem: Codable, Hashable, Sendable, Identifiable {
+    let id: String
+    let householdName: String
+    /// "pending", "qualified" or "expired".
+    let state: String
+    /// What's left, or the result, in the API's words. Empty for a plain "Pending".
+    let detail: String
+    let at: Date
+
+    /// The state as a person says it.
+    var stateTitle: String {
+        switch state {
+        case "qualified": String(localized: "Free month earned")
+        case "expired": String(localized: "Expired")
+        default: String(localized: "Pending")
+        }
+    }
+
+    /// The line under the name: the detail, unless it only repeats the state.
+    var detailLine: String? {
+        let trimmed = detail.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, trimmed != stateTitle else { return nil }
+        return trimmed
+    }
 }
 
 /// One household that used the code.
@@ -167,6 +235,12 @@ nonisolated struct PlusReferralSummary: Codable, Hashable, Sendable {
     let joinedThisWeek: Int
     let joinedAllTime: Int
     let topReferrers: [Referrer]
+    /// Codes used by state, and the footer that explains them (decision 698). Missing from an
+    /// older API.
+    var pending: Int? = nil
+    var qualified: Int? = nil
+    var expired: Int? = nil
+    var footerText: String? = nil
 
     nonisolated struct Referrer: Codable, Hashable, Sendable {
         let name: String

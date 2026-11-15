@@ -6,10 +6,14 @@ import Foundation
 nonisolated struct HouseholdsAPI: Sendable {
     let client: APIClient
 
-    func createHousehold(name: String, timeZone: String, defaultServings: Int?, accessToken: String)
-        async throws -> CreateHouseholdResponse
-    {
-        let body = CreateHouseholdBody(name: name, timeZone: timeZone, defaultServings: defaultServings)
+    /// `deviceCheck` lets the API tell Apple this device now has a household, so a throwaway
+    /// household on the same phone can't earn invite rewards.
+    func createHousehold(
+        name: String, timeZone: String, defaultServings: Int?, deviceCheck: DeviceCheckToken? = nil,
+        accessToken: String
+    ) async throws -> CreateHouseholdResponse {
+        let body = CreateHouseholdBody(
+            name: name, timeZone: timeZone, defaultServings: defaultServings, deviceCheck: deviceCheck)
         return try await client.send(
             try APIRequest.post("/api/v1/households", body: body).authorized(with: accessToken))
     }
@@ -74,10 +78,14 @@ nonisolated struct HouseholdsAPI: Sendable {
     }
 
     /// The token or code travels in the JSON body, never in the URL.
-    func acceptInvitation(_ secret: InvitationSecret, accessToken: String) async throws -> AcceptInvitationResponse {
+    func acceptInvitation(
+        _ secret: InvitationSecret, deviceCheck: DeviceCheckToken? = nil, accessToken: String
+    ) async throws -> AcceptInvitationResponse {
         try await client.send(
-            try APIRequest.post("/api/v1/invitations/accept", body: InvitationSecretBody(secret))
-                .authorized(with: accessToken))
+            try APIRequest.post(
+                "/api/v1/invitations/accept", body: InvitationSecretBody(secret, deviceCheck: deviceCheck)
+            )
+            .authorized(with: accessToken))
     }
 
     /// Describes an invitation without accepting it. It needs no access token, so it works
@@ -93,6 +101,7 @@ private nonisolated struct CreateHouseholdBody: Encodable {
     let name: String
     let timeZone: String
     let defaultServings: Int?
+    let deviceCheck: DeviceCheckToken?
 }
 
 private nonisolated struct ChangeRoleBody: Encodable {
@@ -108,8 +117,10 @@ private nonisolated struct CreateInvitationBody: Encodable {
 private nonisolated struct InvitationSecretBody: Encodable {
     let token: String?
     let code: String?
+    var deviceCheck: DeviceCheckToken? = nil
 
-    init(_ secret: InvitationSecret) {
+    init(_ secret: InvitationSecret, deviceCheck: DeviceCheckToken? = nil) {
+        self.deviceCheck = deviceCheck
         switch secret {
         case .token(let value):
             token = value

@@ -10,8 +10,13 @@ struct ReferralsReportView: View {
                 LabeledContent("Codes used", value: summary.codesUsed.formatted())
                 LabeledContent("Joined in the last 7 days", value: summary.joinedThisWeek.formatted())
                 LabeledContent("Joined in all", value: summary.joinedAllTime.formatted())
+                if let pending = summary.pending, let qualified = summary.qualified, let expired = summary.expired {
+                    LabeledContent("Pending", value: pending.formatted())
+                    LabeledContent("Qualified", value: qualified.formatted())
+                    LabeledContent("Expired", value: expired.formatted())
+                }
             } footer: {
-                Text("Codes used counts households whose code someone used.")
+                Text(summary.footerText ?? "Codes used counts households whose code someone used.")
             }
             Section {
                 if summary.topReferrers.isEmpty {

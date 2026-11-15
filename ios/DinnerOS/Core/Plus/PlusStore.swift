@@ -233,11 +233,13 @@ final class PlusStore {
         referral = loaded
     }
 
-    /// Uses another household's code. Both households get a free month.
+    /// Uses another household's code. The referral is pending until this household plans a
+    /// dinner and saves recipes; `status.referralProgress` shows what's left.
     func redeem(code: String) async throws {
         guard let api, let householdID else { throw AuthSessionError.notConfigured }
+        let deviceCheck = await DeviceCheckToken.current()
         let updated = try await session.authorized { token in
-            try await api.redeem(householdID: householdID, code: code, accessToken: token)
+            try await api.redeem(householdID: householdID, code: code, deviceCheck: deviceCheck, accessToken: token)
         }
         guard householdID == self.householdID else { return }
         status = updated

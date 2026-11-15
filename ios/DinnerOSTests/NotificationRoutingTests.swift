@@ -54,7 +54,7 @@ struct NotificationRoutingTests {
 
     @Test func appKnowsExactlyTheServerTypes() throws {
         let known: Set<AppNotificationType> = [
-            .pantryLow, .pantryThaw, .shoppingOrderDue,
+            .pantryLow, .pantryThaw, .shoppingOrderDue, .plusReferral,
         ]
         let server = Set(try Self.routes().map { AppNotificationType(rawValue: $0.type) })
         #expect(known == server)

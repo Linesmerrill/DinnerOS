@@ -24,6 +24,8 @@ final class NotificationStore {
     /// Newest first.
     private(set) var items: [AppNotification] = []
     private(set) var unreadCount = 0
+    /// News to show as a banner the next time the app opens, until it's tapped or closed.
+    private(set) var banner: AppNotification?
     private(set) var isLoadingMore = false
     /// Set when the next page failed; the loaded pages stay on screen.
     private(set) var loadMoreError: String?
@@ -78,6 +80,29 @@ final class NotificationStore {
             userID = currentUserID
         }
         await refreshUnreadCount()
+        await loadBanner()
+    }
+
+    /// The oldest unread banner, best effort: a failure shows none and is only logged.
+    func loadBanner() async {
+        guard let api, let householdID else { return }
+        do {
+            let banners = try await session.authorized { token in
+                try await api.banners(householdID: householdID, accessToken: token)
+            }
+            guard householdID == self.householdID else { return }
+            banner = banners.last
+        } catch is CancellationError {
+        } catch {
+            Self.logger.notice("Banners failed: \(Self.describe(error), privacy: .public)")
+        }
+    }
+
+    /// Tapped or closed: it won't show again.
+    func closeBanner() async {
+        guard let shown = banner, let householdID else { return }
+        banner = nil
+        await markRead(notificationID: shown.id, householdID: householdID)
     }
 
     /// Best effort: a failure keeps the last count and is only logged, because the badge
@@ -302,6 +327,7 @@ final class NotificationStore {
         items = []
         nextCursor = nil
         unreadCount = 0
+        banner = nil
         isLoadingMore = false
         loadMoreError = nil
         refreshError = nil

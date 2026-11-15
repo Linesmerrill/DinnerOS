@@ -19,6 +19,18 @@ nonisolated struct NotificationsAPI: Sendable {
         return try await client.send(request.authorized(with: accessToken))
     }
 
+    /// Unread notifications this member should see as a banner when the app opens, for news
+    /// whose push may not have been seen (an invite counted, decision 698).
+    func banners(householdID: String, accessToken: String) async throws -> [AppNotification] {
+        let response: BannerListResponse = try await client.send(
+            APIRequest.get(Self.path(householdID) + "/banners").authorized(with: accessToken))
+        return response.items
+    }
+
+    private struct BannerListResponse: Decodable {
+        let items: [AppNotification]
+    }
+
     func unreadCount(householdID: String, accessToken: String) async throws -> Int {
         let response: NotificationUnreadCount = try await client.send(
             APIRequest.get(Self.path(householdID) + "/unread-count").authorized(with: accessToken))
