@@ -90,7 +90,7 @@ struct HouseholdView: View {
                 } footer: {
                     if plus?.isEnabled == true {
                         Text(
-                            "Members share this household. Give a Free Month is for a different household: you both get a month of Plus."
+                            "Members share this household. Give a Free Month is for a different household: once they set up, you both get a month of Plus."
                         )
                     }
                 }

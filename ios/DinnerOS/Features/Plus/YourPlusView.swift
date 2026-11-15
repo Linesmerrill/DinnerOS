@@ -40,7 +40,7 @@ struct YourPlusView: View {
                 } header: {
                     Text("Free Months From Invites")
                 } footer: {
-                    Text("Invite another household and you both get a free month.")
+                    Text("Invite another household. Once they set up, you both get a free month.")
                 }
                 if details.canManage {
                     manageSection(details)

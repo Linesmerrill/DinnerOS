@@ -261,7 +261,7 @@ type UsedCode struct {
 }
 
 // InvitesEmptyText shows when no one has used a household's code.
-const InvitesEmptyText = "No one has used your code yet. Share it and you both get a free month of Plus."
+const InvitesEmptyText = "No one has used your code yet. Share it, and once they set up DinnerOS you both get a free month of Plus."
 
 func invitesResponse(info ReferralInfo, rules ReferralRules) InvitesResponse {
 	resp := InvitesResponse{
@@ -372,9 +372,9 @@ func ReferralText(code string, rewarded, monthsLeft int) (share, explainer strin
 	case monthsLeft == 0:
 		explainer = "Thanks for sharing DinnerOS. You've earned every free month this code can give."
 	case rewarded == 1:
-		explainer = "Invite another household. You both get a free month of Plus. You've earned 1 month so far."
+		explainer = "Invite another household. When they set up DinnerOS with your code, you both get a free month of Plus. You've earned 1 month so far."
 	case rewarded > 1:
-		explainer = fmt.Sprintf("Invite another household. You both get a free month of Plus. You've earned %d months so far.", rewarded)
+		explainer = fmt.Sprintf("Invite another household. When they set up DinnerOS with your code, you both get a free month of Plus. You've earned %d months so far.", rewarded)
 	default:
 		explainer = "Invite another household. When they set up DinnerOS with your code, you both get a free month of Plus."
 	}

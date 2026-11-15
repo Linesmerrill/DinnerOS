@@ -17,6 +17,10 @@ struct PlusInviteView: View {
 
     var body: some View {
         Form {
+            // A household that entered a code sees what's left first.
+            if let progress = pendingProgress {
+                ReferralProgressSection(progress: progress)
+            }
             if let howItWorks = plus.referral?.howItWorks {
                 HowItWorksSection(howItWorks: howItWorks)
             }
@@ -61,8 +65,10 @@ struct PlusInviteView: View {
                 YourInvitesList(invites: invites)
             }
 
-            if let progress = plus.referral?.referralProgress ?? plus.status?.referralProgress,
-                progress.state != "qualified" || plus.referral?.invites?.usedCode == nil
+            if pendingProgress != nil {
+                // Shown at the top.
+            } else if let progress = plus.referral?.referralProgress ?? plus.status?.referralProgress,
+                progress.state == "expired"
             {
                 ReferralProgressSection(progress: progress)
             } else if let used = plus.referral?.invites?.usedCode {
@@ -99,6 +105,12 @@ struct PlusInviteView: View {
         .navigationTitle("Give a Free Month")
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
+    }
+
+    /// This household's invite, while it's still waiting on setup.
+    private var pendingProgress: ReferralProgress? {
+        let progress = plus.referral?.referralProgress ?? plus.status?.referralProgress
+        return progress?.isPending == true ? progress : nil
     }
 
     /// "ABCD EFGH": easier to read aloud.
