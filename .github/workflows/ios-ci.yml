@@ -16,6 +16,10 @@ on:
         description: "Create or renew the shared signing certificate (fastlane match)"
         type: boolean
         default: false
+      internal_only:
+        description: "Upload to TestFlight for internal testers only: no external groups, no Beta App Review"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -117,7 +121,8 @@ jobs:
           APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
           API_BASE_URL: ${{ vars.PRODUCTION_API_BASE_URL }}
-          TESTFLIGHT_EXTERNAL_GROUPS: ${{ vars.TESTFLIGHT_EXTERNAL_GROUPS }}
+          # Empty for an internal-only run, so the lane skips external groups and review.
+          TESTFLIGHT_EXTERNAL_GROUPS: ${{ inputs.internal_only != true && vars.TESTFLIGHT_EXTERNAL_GROUPS || '' }}
           TESTFLIGHT_CHANGELOG: ${{ github.event.head_commit.message }}
         run: bundle exec fastlane beta
 

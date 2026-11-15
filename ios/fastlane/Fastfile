@@ -413,11 +413,12 @@ platform :ios do
     # the processed build, so that path waits for processing instead of skipping it.
     external_groups = ENV.fetch("TESTFLIGHT_EXTERNAL_GROUPS", "").split(",").map(&:strip).reject(&:empty?)
     if external_groups.empty?
+      # Waits for processing, so the log says when internal testers can install the build.
       upload_to_testflight(
         api_key: api_key,
         app_identifier: bundle_id,
-        skip_waiting_for_build_processing: true,
-        distribute_external: false
+        distribute_external: false,
+        wait_processing_timeout_duration: 2400
       )
     else
       # The commit subject; the body and trailers are for developers, not testers.
