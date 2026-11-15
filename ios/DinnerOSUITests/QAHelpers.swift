@@ -61,11 +61,12 @@ extension XCTestCase {
     func reveal(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 8) {
         var swipes = 0
         // Hittable isn't enough: a pinned bottom bar (Open in Walmart, Add to Week) can sit over
-        // an element XCTest still calls hittable. Keep it out of the bottom fifth of the screen.
+        // an element XCTest still calls hittable. On an SE, Open in Walmart, its note and the tab
+        // bar cover the bottom third, so keep it above that.
         func clear() -> Bool {
             guard element.exists, element.isHittable else { return false }
             let screen = app.frame
-            return element.frame.maxY < screen.minY + screen.height * 0.8
+            return element.frame.maxY < screen.minY + screen.height * 0.62
         }
         while !clear(), swipes < maxSwipes {
             app.swipeUp(velocity: .slow)

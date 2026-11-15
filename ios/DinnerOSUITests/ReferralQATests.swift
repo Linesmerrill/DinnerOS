@@ -35,7 +35,8 @@ final class ReferralQATests: XCTestCase {
         signOut(app)
 
         // 2. A brand-new person starts a household and enters the code.
-        let newName = "QA Invite Kitchen \(Int.random(in: 100...999))"
+        // Unique per run: earlier runs left dozens of QA Invite Kitchens in Your Invites.
+        let newName = "QA Invite Kitchen \(Int(Date().timeIntervalSince1970) % 1_000_000)"
         app = signInAsNewPerson(app, householdName: newName)
         openGiveAFreeMonth(app)
         let field = app.textFields["Code"]
@@ -86,7 +87,9 @@ final class ReferralQATests: XCTestCase {
         sharerBanner.buttons.matching(NSPredicate(format: "label != 'Close'")).firstMatch.tap()
         // Tapping it opens Give a Free Month.
         XCTAssertTrue(app.navigationBars["Give a Free Month"].waitForExistence(timeout: 10))
-        let row = app.staticTexts[newName]
+        // Each invite row reads as one element: "name, how it's going, status".
+        let row = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", newName)).firstMatch
         reveal(row, in: app, maxSwipes: 8)
         XCTAssertTrue(row.exists, "The invite isn't in Your Invites")
         snap(app, "Your Invites, free month earned (\(mode))")

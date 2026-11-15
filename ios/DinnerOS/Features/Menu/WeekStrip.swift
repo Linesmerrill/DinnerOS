@@ -124,8 +124,15 @@ struct WeekStrip: View {
     /// pill, beside "loading earlier weeks"; loading then put a page of older weeks in front of
     /// the selected one and the strip opened weeks early.
     @State private var canLoadEarlier = false
+    /// Set once the person drags the strip. Only then do earlier weeks load: a strip made again
+    /// (the keyboard closing after a search) could land on its first pill by itself and load a
+    /// page of older weeks, and it opened on October.
+    @State private var hasDragged = false
     /// Whether this week's pill is on screen, for the way back to it.
     @State private var isCurrentWeekVisible = true
+    /// Whether the selected week's pill is on screen. The position binding can name a week the
+    /// lazy row never reached, so this is what says a scroll landed.
+    @State private var isSelectedVisible = false
     @State private var stripWidth: CGFloat = 402
 
     /// What the pills need at this text size, capped so the strip can't take the screen.
@@ -218,8 +225,8 @@ struct WeekStrip: View {
                     if menu.canLoadEarlierWeeks {
                         ProgressView()
                             .frame(width: 44)
-                            .task(id: "\(menu.oldestWeek)-\(canLoadEarlier)") {
-                                guard canLoadEarlier else { return }
+                            .task(id: "\(menu.oldestWeek)-\(canLoadEarlier)-\(hasDragged)") {
+                                guard canLoadEarlier, hasDragged else { return }
                                 await menu.loadEarlierWeeks()
                             }
                             .accessibilityLabel("Loading earlier weeks")
@@ -240,6 +247,7 @@ struct WeekStrip: View {
                         .id(item.id)
                         .onScrollVisibilityChange(threshold: 0.6) { visible in
                             if item.week == menu.currentWeek { isCurrentWeekVisible = visible }
+                            if item.week == plans.week { isSelectedVisible = visible }
                         }
                     }
                 }
@@ -253,6 +261,9 @@ struct WeekStrip: View {
             }
             .scrollIndicators(.hidden)
             .scrollPosition(id: $scrolledWeek, anchor: .center)
+            .onScrollPhaseChange { _, phase in
+                if phase == .interacting { hasDragged = true }
+            }
             // A strip made again (after collapsing, or when the menu jumps back to All Meals) could
             // start at its first pill, with "loading earlier weeks" on screen; that loaded page
             // after page until the strip showed weeks from a year and a half ago. Ask for the
@@ -261,10 +272,20 @@ struct WeekStrip: View {
                 // The position binding alone missed on a lazy row whose selected pill wasn't laid
                 // out yet (it opened weeks early); the reader's scroll finds it either way.
                 canLoadEarlier = false
+                hasDragged = false
+                // Pills that went away with the old strip never said they left the screen.
+                isSelectedVisible = false
                 scrolledWeek = plans.week.description
                 Task { @MainActor in
                     proxy.scrollTo(plans.week.description, anchor: .center)
-                    try? await Task.sleep(for: .milliseconds(600))
+                    // A lazy row guesses where pills it hasn't laid out are, so a long jump can
+                    // land weeks off (it opened on October after a search). Each try lays out
+                    // more of the row, so try again until the selected pill is on screen.
+                    for _ in 0..<4 {
+                        try? await Task.sleep(for: .milliseconds(250))
+                        if hasDragged || isSelectedVisible { break }
+                        proxy.scrollTo(plans.week.description, anchor: .center)
+                    }
                     canLoadEarlier = true
                 }
             }

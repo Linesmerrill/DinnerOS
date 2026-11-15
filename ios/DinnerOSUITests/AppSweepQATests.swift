@@ -48,10 +48,16 @@ final class AppSweepQATests: XCTestCase {
         let rows = app.collectionViews.firstMatch.exists ? app.collectionViews.firstMatch.cells : app.cells
         let count = min(rows.count, 25)
         var seen = Set<String>()
+        let screen = app.frame
         for index in 0..<count {
-            let row = rows.element(boundBy: index)
-            guard row.exists, row.isHittable else { continue }
-            let label = row.label.isEmpty ? row.staticTexts.firstMatch.label : row.label
+            // A snapshot rather than the live row: the list can change while the sweep walks it
+            // (a row loads in, or coming back re-renders it), and asking a vanished row for its
+            // label fails the test. A snapshot just throws, and the row is skipped.
+            guard let row = try? rows.element(boundBy: index).snapshot() else { continue }
+            let center = CGPoint(x: row.frame.midX, y: row.frame.midY)
+            guard !row.frame.isEmpty, screen.insetBy(dx: 0, dy: screen.height * 0.1).contains(center) else { continue }
+            let firstText = row.children.first { $0.elementType == .staticText }?.label ?? ""
+            let label = row.label.isEmpty ? firstText : row.label
             guard !label.isEmpty, seen.insert(label).inserted else { continue }
             // Rows that act right away (sign out, delete) aren't part of a sweep.
             let lower = label.lowercased()
@@ -62,7 +68,7 @@ final class AppSweepQATests: XCTestCase {
                 continue
             }
             let before = app.navigationBars.firstMatch.identifier
-            row.tap()
+            app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: center.x, dy: center.y)).tap()
             sleep(1)
             let name = "\(tab) › \(label) (\(mode))"
             // A full-screen cover hides the tab bar without a new bar title or sheet.
