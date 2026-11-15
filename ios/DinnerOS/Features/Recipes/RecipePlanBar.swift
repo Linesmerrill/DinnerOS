@@ -14,6 +14,9 @@ struct RecipePlanBar: View {
     let selections: [PlanCustomizationRequest.Selection]
     /// Opens the cooking screen.
     var startCooking: (() -> Void)?
+    /// Shows Start Cooking in this bar even while planning. On iPad the top bar shares its
+    /// space with the tab bar, and iOS folded Start Cooking into an overflow menu there.
+    var showsStartCooking = false
 
     @Environment(PlanStore.self) private var plans
     @Environment(MenuStore.self) private var menu
@@ -55,16 +58,21 @@ struct RecipePlanBar: View {
             .background(.bar)
             .overlay(alignment: .top) { Divider() }
         } else if canEdit {
-            VStack(alignment: .leading, spacing: 8) {
-                if let entry {
-                    plannedBar(entry)
-                } else {
-                    addBar
+            HStack(alignment: .center, spacing: 12) {
+                if showsStartCooking, let startCooking {
+                    cookButton(startCooking)
                 }
-                if !plans.isDraft, !isPastWeek {
-                    Text("This week is finalized. Reopen it to change the meals.")
-                        .font(.caption)
-                        .foregroundStyle(Color.secondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    if let entry {
+                        plannedBar(entry)
+                    } else {
+                        addBar
+                    }
+                    if !plans.isDraft, !isPastWeek {
+                        Text("This week is finalized. Reopen it to change the meals.")
+                            .font(.caption)
+                            .foregroundStyle(Color.secondary)
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -75,7 +83,24 @@ struct RecipePlanBar: View {
             .sheet(isPresented: $isChoosingWeek) {
                 AddEntrySheet(recipeID: summary.id, recipeName: summary.name, fixedWeek: nil)
             }
+        } else if showsStartCooking, let startCooking {
+            cookButton(startCooking)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.bar)
+                .overlay(alignment: .top) { Divider() }
         }
+    }
+
+    /// Start Cooking beside the planning controls, for iPad.
+    private func cookButton(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label("Start Cooking", systemImage: "frying.pan")
+                .fontWeight(.semibold)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
     }
 
     // MARK: Not planned

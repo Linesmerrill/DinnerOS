@@ -247,6 +247,14 @@ struct WeekStrip: View {
         }
         .scrollIndicators(.hidden)
         .scrollPosition(id: $scrolledWeek, anchor: .center)
+        // A strip made again (after collapsing, or when the menu jumps back to All Meals) could
+        // start at its first pill, with "loading earlier weeks" on screen; that loaded page
+        // after page until the strip showed weeks from a year and a half ago. Ask for the
+        // selected week every time the strip appears.
+        .onAppear {
+            scrolledWeek = nil
+            Task { @MainActor in scrolledWeek = plans.week.description }
+        }
         // A horizontal ScrollView takes all the height it is offered, and as a top
         // safe-area inset that is the whole screen, so pin it to the pills' height.
         .frame(height: pillHeight)

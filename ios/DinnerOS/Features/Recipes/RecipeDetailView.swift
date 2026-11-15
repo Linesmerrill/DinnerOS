@@ -37,6 +37,7 @@ struct RecipeDetailView: View {
     @State private var showsSpecialtySetup = false
     @State private var heroHeight: CGFloat = 320
     @State private var showsNavigationBar = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// Where the tab picker stops as the page scrolls: just under the bar.
     @State private var pinTop: CGFloat = 0
     /// Ingredients being left out or put back, by line ID.
@@ -170,7 +171,9 @@ struct RecipeDetailView: View {
         .toolbar {
             // One group, so Start Cooking and the ⋯ menu share a pill.
             ToolbarItemGroup(placement: .topBarTrailing) {
-                if recipe?.steps.isEmpty == false {
+                // On iPad, Start Cooking sits in the bottom bar instead: the tab bar shares the
+                // top bar there, and iOS folded these buttons into an overflow menu.
+                if recipe?.steps.isEmpty == false, horizontalSizeClass != .regular {
                     Button {
                         showsCooking = true
                     } label: {
@@ -194,7 +197,8 @@ struct RecipeDetailView: View {
             RecipePlanBar(
                 summary: summary, recipe: recipe, entries: plannedEntries, servings: $servings,
                 selections: customizationSelections,
-                startCooking: recipe?.steps.isEmpty == false ? { showsCooking = true } : nil)
+                startCooking: recipe?.steps.isEmpty == false ? { showsCooking = true } : nil,
+                showsStartCooking: horizontalSizeClass == .regular)
         }
         .overlay(alignment: .bottom) { toast }
         .recipeDeletion($deleting, isPlanned: { _ in !plannedEntries.isEmpty }) { dismiss() }

@@ -282,19 +282,6 @@ struct MenuView: View {
                 scrollOffset = offset
                 changeStrip { collapse.update(offset: offset) }
             }
-            // Closing the keyboard during a search left the menu scrolled back near the top on
-            // iPad, away from the results. Bring All Meals back once the keyboard is gone.
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
-                guard menu.allMeals.query.isNarrowed else { return }
-                changeStrip { collapse.hold() }
-                withAnimation(MenuScroll.animation(reduceMotion: reduceMotion)) {
-                    proxy.scrollTo(Self.allMealsAnchor, anchor: .top)
-                }
-                Task {
-                    try? await Task.sleep(for: MenuScroll.jumpSettle)
-                    collapse.release(offset: scrollOffset)
-                }
-            }
             // Changing a filter reloads All Meals from its first page. Without this the
             // screen stays scrolled past that page and looks empty until you scroll back.
             .onChange(of: menu.allMeals.query) { _, _ in

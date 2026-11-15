@@ -124,6 +124,11 @@ final class ScreensQATests: XCTestCase {
             let done = app.toolbars.buttons["Done"].firstMatch
             if done.waitForExistence(timeout: 2) { done.tap() }
             snap(app, "Menu › search after Done, \(kind) (\(mode))")
+            // The week strip keeps the week you're on (it once ran back to weeks from 2025).
+            let thisWeek = app.buttons.matching(NSPredicate(format: "label CONTAINS 'This Week'")).firstMatch
+            if !(thisWeek.exists && app.frame.intersects(thisWeek.frame) && !thisWeek.frame.isEmpty) {
+                problems.append("Menu › search: the week strip lost this week")
+            }
             let cards = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", recipe))
             var card: XCUIElement?
             for _ in 0..<10 where card == nil {
