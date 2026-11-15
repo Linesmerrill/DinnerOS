@@ -364,6 +364,12 @@ final class WebViewWalmartRenderer: NSObject, WalmartPageRendering, WKNavigation
     ) {
         complete(false)
     }
+
+    /// The page's own script can crash the web content process (Walmart's did, in the iOS 26.2
+    /// simulator). That's a page that didn't load, now rather than at the timeout.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        complete(false)
+    }
 }
 
 // MARK: - Cache

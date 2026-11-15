@@ -248,6 +248,16 @@ struct MenuView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 24)
             }
+            // A drag on the list puts the meal search's keyboard away, and Done above it does
+            // when the results are too short to drag. The keyboard covers the tab bar.
+            .scrollDismissesKeyboard(.immediately)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { Keyboard.dismiss() }
+                        .fontWeight(.semibold)
+                }
+            }
             // How far the menu is scrolled decides the week strip's form, and nothing else
             // reads it; `MenuChromeCollapse` holds the rule.
             .onScrollGeometryChange(for: CGFloat.self) { geometry in

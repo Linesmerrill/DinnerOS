@@ -18,6 +18,8 @@ extension XCTestCase {
         if devSignIn.waitForExistence(timeout: 8) {
             devSignIn.tap()
         }
+        // Shown once after a fresh install to a household with Plus on the house.
+        if app.buttons["Thanks"].waitForExistence(timeout: 4) { app.buttons["Thanks"].tap() }
         XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The Menu tab didn't open after sign-in")
         return app
     }

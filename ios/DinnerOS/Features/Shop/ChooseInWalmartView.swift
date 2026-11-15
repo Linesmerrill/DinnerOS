@@ -34,6 +34,7 @@ struct ChooseInWalmartView: View {
                 Divider()
                 WalmartBrowser(page: page)
                     .ignoresSafeArea(edges: .bottom)
+                    .overlay { pageState }
             } else {
                 finished
             }
@@ -52,6 +53,32 @@ struct ChooseInWalmartView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
+        }
+    }
+
+    /// A blank page is never left on its own: it says it's loading, or that it didn't load and
+    /// offers to try again.
+    @ViewBuilder
+    private var pageState: some View {
+        switch page.state {
+        case .loading:
+            ProgressView("Opening Walmart…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(.systemBackground))
+        case .failed:
+            ContentUnavailableView {
+                Label("Walmart Didn't Load", systemImage: "wifi.exclamationmark")
+            } description: {
+                Text("Try again in a moment.")
+            } actions: {
+                Button("Try Again") {
+                    if let url = chooser.searchURL { page.load(url) }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .background(Color(.systemBackground))
+        case .shown:
+            EmptyView()
         }
     }
 
@@ -168,6 +195,10 @@ struct ChooseInWalmartView: View {
 /// The browser's state the bar reads: the address, and on a product page, its name and price.
 @MainActor @Observable
 final class WalmartBrowserPage {
+    enum State: Equatable { case loading, shown, failed }
+
+    /// Loading until the first page paints, then shown; failed if it never could.
+    private(set) var state: State = .loading
     private(set) var url: URL?
     private(set) var productName: String?
     private(set) var priceText: String?
@@ -175,6 +206,7 @@ final class WalmartBrowserPage {
     @ObservationIgnored private var pending: URL?
 
     func load(_ url: URL) {
+        state = .loading
         productName = nil
         priceText = nil
         if let webView {
@@ -190,6 +222,22 @@ final class WalmartBrowserPage {
             webView.load(URLRequest(url: pending))
             self.pending = nil
         }
+    }
+
+    func committed() {
+        state = .shown
+    }
+
+    /// Walmart's own script crashed the page (it did in the iOS 26.2 simulator), leaving it blank
+    /// even after it had shown. Say so and offer to try again.
+    func crashed() {
+        state = .failed
+    }
+
+    func failed(_ error: Error) {
+        // A newer load replacing this one isn't a failure.
+        if (error as NSError).code == NSURLErrorCancelled { return }
+        if state != .shown { state = .failed }
     }
 
     /// Walmart is a single-page app: the address changes without a page load, so it's watched.
@@ -296,6 +344,24 @@ private struct WalmartBrowser: UIViewRepresentable {
 
         init(page: WalmartBrowserPage) {
             self.page = page
+        }
+
+        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+            Task { @MainActor in page.committed() }
+        }
+
+        func webView(
+            _ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error
+        ) {
+            Task { @MainActor in page.failed(error) }
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            Task { @MainActor in page.failed(error) }
+        }
+
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            Task { @MainActor in page.crashed() }
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

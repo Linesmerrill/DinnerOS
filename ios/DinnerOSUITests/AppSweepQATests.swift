@@ -52,7 +52,9 @@ final class AppSweepQATests: XCTestCase {
             // Nor are ones that hand off to a store or another app.
             if ["sign out", "delete", "leave", "remove", "reset", "walmart", "instacart", "open in"]
                 .contains(where: lower.contains)
-            { continue }
+            {
+                continue
+            }
             let before = app.navigationBars.firstMatch.identifier
             row.tap()
             sleep(1)
@@ -102,7 +104,9 @@ final class AppSweepQATests: XCTestCase {
             blank($0) && $0.identifier.isEmpty && shown($0) && !namedInside($0)
         }
         if !unnamed.isEmpty {
-            let places = unnamed.map { "at \(Int($0.frame.midX)),\(Int($0.frame.midY)) size \(Int($0.frame.width))x\(Int($0.frame.height))" }
+            let places = unnamed.map {
+                "at \(Int($0.frame.midX)),\(Int($0.frame.midY)) size \(Int($0.frame.width))x\(Int($0.frame.height))"
+            }
             problems.append("\(name): \(unnamed.count) button(s) with no name, \(places.joined(separator: "; "))")
         }
     }

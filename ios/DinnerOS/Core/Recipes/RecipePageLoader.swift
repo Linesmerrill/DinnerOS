@@ -124,6 +124,11 @@ private final class WebPageReader: NSObject, WKNavigationDelegate {
         Task { @MainActor in finish(.failure(error)) }
     }
 
+    /// The page's own script crashed the web content process: the page didn't load.
+    nonisolated func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        Task { @MainActor in finish(.failure(URLError(.cannotLoadFromNetwork))) }
+    }
+
     private func finish(_ result: Result<String, any Error>) {
         guard let continuation else { return }
         self.continuation = nil
