@@ -222,6 +222,13 @@ struct AddRecipeFormTests {
         #expect(!RecipeDetailHeader.showsBar(offset: 249, heroHeight: 400, showing: true))
     }
 
+    @Test func theTabPickerStopsUnderTheBar() {
+        // Bar 116 tall: the picker rides along until it reaches it, then stays there.
+        #expect(RecipeDetailHeader.stickyOffset(minY: 500, top: 116) == 0)
+        #expect(RecipeDetailHeader.stickyOffset(minY: 116, top: 116) == 0)
+        #expect(RecipeDetailHeader.stickyOffset(minY: -200, top: 116) == 316)
+    }
+
     // MARK: Deleting
 
     @Test func aDeletionSaysWhichWeeksItLeft() throws {

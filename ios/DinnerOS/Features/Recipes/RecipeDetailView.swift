@@ -37,6 +37,8 @@ struct RecipeDetailView: View {
     @State private var showsSpecialtySetup = false
     @State private var heroHeight: CGFloat = 320
     @State private var showsNavigationBar = false
+    /// Where the tab picker stops as the page scrolls: just under the bar.
+    @State private var pinTop: CGFloat = 0
     /// Ingredients being left out or put back, by line ID.
     @State private var leavingOut: Set<String> = []
     @State private var leaveOutError: String?
@@ -93,7 +95,10 @@ struct RecipeDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 hero
-                LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
+                // A plain stack, not a lazy one: the page has a handful of sections, and on iOS 26
+                // a LazyVStack here kept re-placing its items and never settled when a recipe
+                // with steps was opened right after it was saved (100% CPU, no state changing).
+                VStack(alignment: .leading, spacing: 20) {
                     titleBlock
                         .padding(.horizontal, 16)
                         .padding(.top, 16)
@@ -119,13 +124,12 @@ struct RecipeDetailView: View {
                         RecipeNotesForNextTime(notes: notes)
                             .padding(.horizontal, 16)
                     }
-                    Section {
-                        sectionContent
-                            .padding(.horizontal, 16)
-                            .padding(.top, 4)
-                    } header: {
-                        RecipeDetailTabPicker(tabs: availableTabs, selection: tabSelection)
-                    }
+                    RecipeDetailTabPicker(tabs: availableTabs, selection: tabSelection)
+                        .stickyBelowTop(pinTop)
+                        .zIndex(1)
+                    sectionContent
+                        .padding(.horizontal, 16)
+                        .padding(.top, -16)
                     if let recipe, !recipe.steps.isEmpty {
                         CookingStepsSection(
                             steps: recipe.steps, instructions: instructions,
@@ -146,14 +150,15 @@ struct RecipeDetailView: View {
             }
         }
         .ignoresSafeArea(edges: .top)
-        // The page has nothing to type in. Without this, keyboard space left over from the
-        // screen before (a step typed on Add a Recipe) kept the page laying itself out forever.
+        // The page has nothing to type in.
         .ignoresSafeArea(.keyboard)
         .background(Color(.systemBackground))
         .scrollIndicators(.hidden)
-        .onScrollGeometryChange(for: CGFloat.self) { geometry in
-            geometry.contentOffset.y
-        } action: { _, offset in
+        .onScrollGeometryChange(for: RecipeDetailHeader.Scroll.self) { geometry in
+            RecipeDetailHeader.Scroll(offset: geometry.contentOffset.y, top: geometry.contentInsets.top)
+        } action: { _, scroll in
+            let offset = scroll.offset
+            if pinTop != scroll.top { pinTop = scroll.top }
             // A gap between showing and hiding the bar, so a page resting near the line
             // can't flip it on and off: the bar changes the layout, which moves the line.
             let shows = RecipeDetailHeader.showsBar(offset: offset, heroHeight: heroHeight, showing: showsNavigationBar)
@@ -163,8 +168,7 @@ struct RecipeDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(showsNavigationBar ? .visible : .hidden, for: .navigationBar)
         .toolbar {
-            // One group: two separate items here (Start Cooking beside the ⋯ menu) kept the
-            // bar laying itself out forever on iOS 26.
+            // One group, so Start Cooking and the ⋯ menu share a pill.
             ToolbarItemGroup(placement: .topBarTrailing) {
                 if recipe?.steps.isEmpty == false {
                     Button {
@@ -748,10 +752,35 @@ private struct ViewedKey: Equatable {
 
 /// When the recipe page's navigation bar shows over the header photo.
 enum RecipeDetailHeader {
+    /// What the page reads from its scroll view: how far it's scrolled, and how far down the bar
+    /// reaches. Read together because the action only runs when the value changes, and the inset
+    /// alone never does after the first frame.
+    struct Scroll: Equatable {
+        var offset: CGFloat
+        var top: CGFloat
+    }
+
+    /// How far to push a pinned row down so it stays `top` points below the scroll view's top:
+    /// nothing while it's still below that line.
+    nonisolated static func stickyOffset(minY: CGFloat, top: CGFloat) -> CGFloat {
+        max(0, top - minY)
+    }
+
     /// Shows once the page is scrolled close to the end of the header, and hides again only
     /// after scrolling 40 points back, so it can't flicker at the line.
     static func showsBar(offset: CGFloat, heroHeight: CGFloat, showing: Bool) -> Bool {
         let line = heroHeight - 110
         return showing ? offset > line - 40 : offset > line
+    }
+}
+
+extension View {
+    /// Keeps the view at `top` points from the scroll view's top once it scrolls up to there,
+    /// like a pinned section header. It only moves the drawing, so it never changes the layout.
+    func stickyBelowTop(_ top: CGFloat) -> some View {
+        visualEffect { content, proxy in
+            let minY = proxy.frame(in: .scrollView).minY
+            return content.offset(y: RecipeDetailHeader.stickyOffset(minY: minY, top: top))
+        }
     }
 }

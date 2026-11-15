@@ -118,7 +118,12 @@ struct MenuView: View {
             .modifier(
                 AddOwnRecipeSheet(
                     isPresented: $isAddingOwnRecipe, canAdd: canAddOwnRecipe,
-                    onSaved: { _ in
+                    onSaved: { recipe in
+                        // The new recipe opens, and the menu picks it up behind it.
+                        tabs?.menuPath = NavigationPath([
+                            RecipeSummary.placeholder(
+                                id: recipe.id, name: recipe.name, imageURLString: recipe.imageURLString)
+                        ])
                         Task { await menu.reload() }
                     })
             )
@@ -506,8 +511,7 @@ private struct AddOwnRecipeSheet: ViewModifier {
     let onSaved: (Recipe) -> Void
 
     @State private var sharedLink: String?
-    /// The recipe just saved, opened once the sheet has finished closing. Opening it while the
-    /// sheet was still going away left the recipe page laying itself out forever.
+    /// The recipe just saved, opened once the sheet has finished closing.
     @State private var saved: Recipe?
     @Environment(\.scenePhase) private var phase
 

@@ -353,9 +353,7 @@ struct CookingStepsSection: View {
 
     private var count: Int { instructions?.steps.count ?? steps.count }
 
-    // A header button and the steps under it, not a DisclosureGroup: inside the recipe page's
-    // lazy stack, a DisclosureGroup kept the page laying itself out forever on iOS 26 when the
-    // page opened right after a recipe was saved.
+    // A header button and the steps under it, so the whole header row is one tap target.
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
