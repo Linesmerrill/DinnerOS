@@ -109,7 +109,8 @@ const (
 type CatalogListResponse struct {
 	Items      []CatalogSummaryResponse `json:"items"`
 	NextCursor string                   `json:"nextCursor,omitempty"`
-	// Total is how many entries matched, capped at the paging limit.
+	// Total is how many recipes matched, capped at the paging limit; copies
+	// of one recipe count once (decision 689).
 	Total int `json:"total"`
 	// EmptyTitle and EmptyText are what the app shows when discovery has
 	// nothing new for the household.

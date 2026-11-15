@@ -6552,7 +6552,10 @@ components:
           type: string
         total:
           type: integer
-          description: How many entries matched, capped at the paging limit.
+          description: >-
+            How many recipes matched, capped at the paging limit. Copies of one
+            recipe shared by several households count once and appear once, as
+            the most complete copy (decision 689).
         emptyTitle:
           type: string
           description: What the app shows when discovery has nothing new.

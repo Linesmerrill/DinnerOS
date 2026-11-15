@@ -170,7 +170,7 @@ Implemented in Phase 4a (`internal/catalog`; see
 
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `recipe_catalog` | catalogKey, contentHash, source, sourceRecipeId, sourceUrl, name, nameKey, headline, description, imageUrl, isAddon, servings[], prepMinutes, totalMinutes, difficulty, cuisines[], tags[], utensils[], allergens[], nutritionPerServing[], ingredients[] (ingredientId, name, pantryStaple, amounts[]), steps[], ingredientNames[], ingredientKeys[], cuisineKeys[], tagKeys[], firstPublishedAt, updatedAt | **unique** `{catalogKey}`; **text** `{name, headline, ingredientNames, cuisines, tags}` (weights 10/4/3/2/2, name `catalog_text`); `{nameKey, _id}`; `{cuisineKeys}`; `{tagKeys}`; `{ingredientKeys}` |
+| `recipe_catalog` | catalogKey, contentHash, source, sourceRecipeId, sourceUrl, name, nameKey, headline, description, imageUrl, isAddon, servings[], prepMinutes, totalMinutes, difficulty, cuisines[], tags[], utensils[], allergens[], nutritionPerServing[], ingredients[] (ingredientId, name, pantryStaple, amounts[]), steps[], ingredientNames[], ingredientKeys[], cuisineKeys[], tagKeys[], fingerprint, fingerprintVersion, completeness, firstPublishedAt, updatedAt | **unique** `{catalogKey}`; **text** `{name, headline, ingredientNames, cuisines, tags}` (weights 10/4/3/2/2, name `catalog_text`); `{nameKey, _id}`; `{cuisineKeys}`; `{tagKeys}`; `{ingredientKeys}`; `{fingerprint, completeness: -1, firstPublishedAt, _id}`; `{fingerprintVersion}` |
 
 - **There is no `householdId` here, and no `orderWeeks`, `timesOrdered`,
   `lastOrderedWeek`, `sharedToCatalog`, rating, or note.** The document type
@@ -185,6 +185,12 @@ Implemented in Phase 4a (`internal/catalog`; see
   left out of the fingerprint, so a household that halved the quantities still
   matches. The unique index is what collapses two households' copies of one
   HelloFresh meal into one entry.
+- **`fingerprint` groups the copies `catalogKey` keeps apart** (decision 689):
+  the same page pasted by six households, or a link with and without
+  tracking parameters, is several entries but one recipe. Discover and search
+  group by it in the aggregation and show the most complete copy
+  (`completeness`), so counts and paging are per recipe. The server
+  fingerprints entries stored under an older `fingerprintVersion` at startup.
 - **Publishing is an upsert on `catalogKey`** whose update is an aggregation
   pipeline, so `firstPublishedAt` survives and `updatedAt` only moves when
   `contentHash` changed. Re-publishing unchanged content writes nothing, which

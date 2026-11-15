@@ -37,6 +37,21 @@ type Recipe struct {
 	// UpdatedAt is the last time any household's copy refreshed it.
 	FirstPublishedAt time.Time
 	UpdatedAt        time.Time
+	// Fingerprint groups entries that are the same recipe (fingerprint.go).
+	// It is derived from Content on every write, never taken from a caller.
+	Fingerprint string
+	// GroupKeys are the CatalogKeys of every entry in this entry's group,
+	// its own first. The store fills it on reads; a household that has any
+	// of them already has this recipe.
+	GroupKeys []string
+}
+
+// keys returns the catalog keys a household's library is checked against.
+func (r Recipe) keys() []string {
+	if len(r.GroupKeys) > 0 {
+		return r.GroupKeys
+	}
+	return []string{r.CatalogKey}
 }
 
 // Content returns a household-free copy of a library recipe, ready to store
@@ -77,8 +92,8 @@ type Page struct {
 	Items []Result
 	// NextCursor is empty on the last page.
 	NextCursor string
-	// Total is the number of catalog entries the query matched before
-	// paging, -1 when it was not counted.
+	// Total is the number of recipes (groups of entries, decision 689) the
+	// query matched before paging, -1 when it was not counted.
 	Total int
 }
 
@@ -126,6 +141,10 @@ type Filter struct {
 	Ingredient string
 	Offset     int
 	Limit      int
+	// HiddenGroups are groups (groupKey) the household must not see: ones it
+	// reported and ones enough households reported. The store drops them
+	// before paging and counting.
+	HiddenGroups []string
 }
 
 // validate checks q and resolves its cursor to an offset.

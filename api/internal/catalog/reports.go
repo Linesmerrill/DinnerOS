@@ -18,7 +18,8 @@ import (
 // Reports (decision 686): anyone in a household can report a recipe in
 // Shared Recipes. The household never sees it again, and once PullAfter
 // different households report one it is hidden for everyone until an
-// operator looks at it. Apple asks this of apps where people share content.
+// operator looks at it. A report counts against every copy of the recipe
+// (decision 689). Apple asks this of apps where people share content.
 
 // ReportReasons are the reasons a member can pick.
 var ReportReasons = []string{"inappropriate", "copyright", "spam", "wrong", "other"}
@@ -48,10 +49,9 @@ type ReportStore interface {
 	// Add stores r; a household reporting the same recipe twice keeps its
 	// first report and created is false.
 	Add(ctx context.Context, r Report) (created bool, err error)
-	// HiddenFor returns the catalog IDs the household reported.
-	HiddenFor(ctx context.Context, householdID string) (map[string]bool, error)
-	// Pulled returns the catalog IDs at least n households reported.
-	Pulled(ctx context.Context, n int) (map[string]bool, error)
+	// Reporters maps each reported catalog ID to the households that
+	// reported it.
+	Reporters(ctx context.Context) (map[string][]string, error)
 }
 
 // WithReports turns on reporting and returns s.
@@ -80,25 +80,57 @@ func (s *Service) Report(ctx context.Context, r Report) (bool, error) {
 	return s.reports.Add(ctx, r)
 }
 
-// hidden is the set of catalog IDs not shown to the household: the ones it
-// reported, and the ones enough households reported. A failed read hides
+// hidden is the set of groups (groupKey) not shown to the household. A report
+// is kept against the entry the member saw, but it counts against the whole
+// group that entry belongs to (decision 689): the household's own report
+// hides every copy of the recipe from it, and PullAfter different households
+// reporting any copies hides the recipe for everyone. A failed read hides
 // nothing extra rather than failing the page.
+//
+// Each reported entry's own ID group is hidden alongside its fingerprint
+// group, so an entry is still hidden if its group cannot be read.
 func (s *Service) hidden(ctx context.Context, householdID string) map[string]bool {
 	out := map[string]bool{}
 	if s.reports == nil {
 		return out
 	}
-	if mine, err := s.reports.HiddenFor(ctx, householdID); err == nil {
-		for id := range mine {
-			out[id] = true
+	reporters, err := s.reports.Reporters(ctx)
+	if err != nil || len(reporters) == 0 {
+		return out
+	}
+	ids := make([]string, 0, len(reporters))
+	for id := range reporters {
+		ids = append(ids, id)
+	}
+	groups, err := s.store.Groups(ctx, ids)
+	if err != nil {
+		groups = map[string]string{}
+	}
+	byGroup := map[string]map[string]bool{}
+	for id, households := range reporters {
+		for _, g := range []string{idGroup(id), groups[id]} {
+			if g == "" {
+				continue
+			}
+			if byGroup[g] == nil {
+				byGroup[g] = map[string]bool{}
+			}
+			for _, hh := range households {
+				byGroup[g][hh] = true
+			}
 		}
 	}
-	if pulled, err := s.reports.Pulled(ctx, PullAfter); err == nil {
-		for id := range pulled {
-			out[id] = true
+	for g, households := range byGroup {
+		if households[householdID] || len(households) >= PullAfter {
+			out[g] = true
 		}
 	}
 	return out
+}
+
+// isHidden reports whether e's group, or e itself, is hidden.
+func isHidden(e Recipe, hidden map[string]bool) bool {
+	return hidden[groupKey(e)] || hidden[idGroup(e.ID)]
 }
 
 func withoutHidden(entries []Recipe, hidden map[string]bool) []Recipe {
@@ -107,10 +139,19 @@ func withoutHidden(entries []Recipe, hidden map[string]bool) []Recipe {
 	}
 	out := entries[:0:0]
 	for _, e := range entries {
-		if !hidden[e.ID] {
+		if !isHidden(e, hidden) {
 			out = append(out, e)
 		}
 	}
+	return out
+}
+
+func hiddenList(hidden map[string]bool) []string {
+	out := make([]string, 0, len(hidden))
+	for g := range hidden {
+		out = append(out, g)
+	}
+	slices.Sort(out)
 	return out
 }
 
@@ -167,45 +208,32 @@ func (s *MongoReports) Add(ctx context.Context, r Report) (bool, error) {
 	return true, nil
 }
 
-// HiddenFor implements ReportStore.
-func (s *MongoReports) HiddenFor(ctx context.Context, householdID string) (map[string]bool, error) {
-	hid, err := mongodb.ParseID(householdID)
-	if err != nil {
-		return map[string]bool{}, nil
-	}
-	cur, err := s.coll.Find(ctx, bson.D{{Key: "householdId", Value: hid}}, options.Find().SetProjection(bson.D{{Key: "catalogId", Value: 1}}))
+// Reporters implements ReportStore.
+func (s *MongoReports) Reporters(ctx context.Context) (map[string][]string, error) {
+	cur, err := s.coll.Aggregate(ctx, mongo.Pipeline{
+		{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: "$catalogId"},
+			{Key: "households", Value: bson.D{{Key: "$addToSet", Value: "$householdId"}}},
+		}}},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list catalog reports: %w", err)
 	}
-	var docs []reportDoc
-	if err := cur.All(ctx, &docs); err != nil {
-		return nil, fmt.Errorf("decode catalog reports: %w", err)
-	}
-	out := make(map[string]bool, len(docs))
-	for _, d := range docs {
-		out[d.CatalogID.Hex()] = true
-	}
-	return out, nil
-}
-
-// Pulled implements ReportStore.
-func (s *MongoReports) Pulled(ctx context.Context, n int) (map[string]bool, error) {
-	cur, err := s.coll.Aggregate(ctx, mongo.Pipeline{
-		{{Key: "$group", Value: bson.D{{Key: "_id", Value: "$catalogId"}, {Key: "n", Value: bson.D{{Key: "$sum", Value: 1}}}}}},
-		{{Key: "$match", Value: bson.D{{Key: "n", Value: bson.D{{Key: "$gte", Value: n}}}}}},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("count catalog reports: %w", err)
-	}
 	var rows []struct {
-		ID bson.ObjectID `bson:"_id"`
+		ID         bson.ObjectID   `bson:"_id"`
+		Households []bson.ObjectID `bson:"households"`
 	}
 	if err := cur.All(ctx, &rows); err != nil {
-		return nil, fmt.Errorf("decode catalog report counts: %w", err)
+		return nil, fmt.Errorf("decode catalog reports: %w", err)
 	}
-	out := make(map[string]bool, len(rows))
+	out := make(map[string][]string, len(rows))
 	for _, r := range rows {
-		out[r.ID.Hex()] = true
+		households := make([]string, 0, len(r.Households))
+		for _, hh := range r.Households {
+			households = append(households, hh.Hex())
+		}
+		slices.Sort(households)
+		out[r.ID.Hex()] = households
 	}
 	return out, nil
 }

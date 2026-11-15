@@ -123,6 +123,15 @@ func run() error {
 	if err := substitutes.EnsureSeed(startupCtx, substitutesStore, logger); err != nil {
 		return err
 	}
+	// Shared Recipes groups copies of one recipe by fingerprint (decision
+	// 689). Entries stored before it, or under older rules, get theirs here;
+	// once all are current this reads one index and writes nothing. A failure
+	// is not fatal: an entry without a fingerprint is shown on its own.
+	if n, err := catalog.NewMongoStore(db.Database()).BackfillFingerprints(startupCtx); err != nil {
+		logger.Warn("shared recipe fingerprint backfill failed", "error", err, "updated", n)
+	} else if n > 0 {
+		logger.Info("shared recipe fingerprints backfilled", "updated", n)
+	}
 	cancelStartup()
 	logger.Info("mongodb connected", "database", cfg.MongoDatabase)
 
