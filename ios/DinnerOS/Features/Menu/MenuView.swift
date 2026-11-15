@@ -37,7 +37,7 @@ struct MenuView: View {
     /// Whether the week strip is showing its pills, and where the menu is scrolled to.
     @State private var collapse = MenuChromeCollapse()
     @State private var scrollOffset: CGFloat = 0
-    /// The menu's visible height, so a narrowed All Meals can fill it (see below).
+    /// The menu's tallest visible height, so a narrowed All Meals can fill it (see below).
     @State private var viewportHeight: CGFloat = 0
 
     /// VoiceOver always gets the pills. Collapsing would take away an element a reader may be
@@ -278,9 +278,22 @@ struct MenuView: View {
                     height: geometry.containerSize.height)
             } action: { _, reading in
                 let offset = reading.offset
-                if viewportHeight != reading.height { viewportHeight = reading.height }
+                // The tallest the menu has been, not its height right now: with the keyboard up
+                // the menu is short, and a minimum taken then let the page shrink back out from
+                // under the results when the keyboard closed (iPad, landscape).
+                if reading.height > viewportHeight { viewportHeight = reading.height }
                 scrollOffset = offset
                 changeStrip { collapse.update(offset: offset) }
+            }
+            // Closing the keyboard during a search could leave the menu scrolled back to the
+            // top on iPad in landscape, away from the results. Bring All Meals back once the
+            // keyboard is gone. The strip's collapse is left alone: holding it here made the
+            // strip open and lose its week.
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
+                guard menu.allMeals.query.isNarrowed else { return }
+                withAnimation(MenuScroll.animation(reduceMotion: reduceMotion)) {
+                    proxy.scrollTo(Self.allMealsAnchor, anchor: .top)
+                }
             }
             // Changing a filter reloads All Meals from its first page. Without this the
             // screen stays scrolled past that page and looks empty until you scroll back.
