@@ -41,7 +41,12 @@ func (m *memoryStore) Upsert(_ context.Context, entries []Recipe, now time.Time)
 		}
 		e.Content = Content(e.Content)
 		e.Fingerprint, e.GroupKeys = Fingerprint(e.Content), nil
-		i := slices.IndexFunc(m.entries, func(o Recipe) bool { return o.CatalogKey == e.CatalogKey })
+		// By entry key, as MongoStore does; an entry with an origin and no
+		// entry yet adopts an origin-less one under its legacy key.
+		i := slices.IndexFunc(m.entries, func(o Recipe) bool { return o.entryKey() == e.entryKey() })
+		if legacy := recipes.LegacyCatalogKey(e.Content); i < 0 && e.Origin != "" && legacy != "" {
+			i = slices.IndexFunc(m.entries, func(o Recipe) bool { return o.Origin == "" && o.CatalogKey == legacy })
+		}
 		if i < 0 {
 			e.ID = m.id()
 			e.Content.ID = e.ID
@@ -53,7 +58,7 @@ func (m *memoryStore) Upsert(_ context.Context, entries []Recipe, now time.Time)
 		prev := m.entries[i]
 		// Content clears the entry's own ID, as newEntryDoc does before it
 		// hashes, so an unchanged re-publish hashes the same.
-		if contentHash(Content(prev.Content)) == contentHash(e.Content) {
+		if contentHash(Content(prev.Content)) == contentHash(e.Content) && prev.entryKey() == e.entryKey() && prev.CatalogKey == e.CatalogKey {
 			continue
 		}
 		e.ID, e.Content.ID, e.FirstPublishedAt, e.UpdatedAt = prev.ID, prev.ID, prev.FirstPublishedAt, now

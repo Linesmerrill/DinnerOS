@@ -79,7 +79,8 @@ func (s *Service) PublishRecipes(ctx context.Context, rs []recipes.Recipe) (int,
 		if !recipes.Publishable(r) {
 			continue
 		}
-		entries = append(entries, Recipe{CatalogKey: recipes.CatalogKey(r), Content: Content(r)})
+		// The origin is taken before Content strips the household.
+		entries = append(entries, Recipe{CatalogKey: recipes.CatalogKey(r), Origin: recipes.CatalogOrigin(r), Content: Content(r)})
 	}
 	if len(entries) == 0 {
 		return 0, nil

@@ -770,16 +770,18 @@ history, no ratings, no notes ([database.md](database.md#global-recipe-catalog),
 
 Entries arrive only from recipes a household explicitly shared, its own
 meal-kit imports included (decision 685, replacing decision 672's withhold).
-No source is published without that opt-in. Two households' copies of one recipe
-collapse into one entry, keyed by
-`catalogKey`: `<source>:<sourceRecipeId>`, or a fingerprint of the name and
-ingredient set when the source has no identifier of its own.
+No source is published without that opt-in. Two households' copies of one
+importer recipe collapse into one entry, keyed by `catalogKey`
+(`<source>:<sourceRecipeId>`). A typed or pasted recipe is its household's own
+entry, and its `catalogKey` is a fingerprint of its name, ingredient lines and
+steps, so a recipe with the same name and ingredients but different steps is a
+different recipe, and re-sharing an edited one updates its entry (decision 697).
 
 Discovery and search show each recipe **once** (decision 689). Entries that are
-the same recipe under different keys (the same link once `www.`, the scheme, a
-trailing slash and tracking parameters are ignored; with no link, the same
-importer recipe ID; or for a typed recipe the same title, ingredient lines and
-steps) are
+the same recipe (the same specific link and title, once `www.`, the scheme, a
+trailing slash and tracking parameters are ignored; with no specific link, the
+same importer recipe ID; or for a typed recipe the same title, ingredient lines
+and steps) are
 one result: the most complete copy (photo, then steps, then nutrition, then the
 first published). `total` and the cursor count recipes, not copies, and a result
 is `inLibrary` when the household has any copy. Reporting any copy hides every

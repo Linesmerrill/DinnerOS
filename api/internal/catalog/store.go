@@ -11,7 +11,10 @@ import (
 // household, and no method takes a household ID. Implementations return
 // ErrNotFound for a missing entry, and nil rather than empty slices.
 type Store interface {
-	// Upsert writes each entry by its CatalogKey: inserting it with
+	// Upsert writes each entry by its entry key (its Origin when it has one,
+	// else its CatalogKey; decision 697). An entry with an origin and no
+	// entry yet adopts the one published under its LegacyCatalogKey before
+	// decision 697, if no other origin has. It writes by inserting it with
 	// FirstPublishedAt and UpdatedAt set to now, or refreshing the content
 	// and UpdatedAt of an entry that exists. It returns how many documents it
 	// wrote (inserted plus modified). It is idempotent: re-publishing

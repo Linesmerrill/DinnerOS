@@ -94,14 +94,38 @@ func runDedupeStoreCases(t *testing.T, newStore func(*testing.T) Store) {
 			typed("Brownies", []string{"Bake"}, "butter", "cocoa", "sugar"),
 			typed("Brownies", []string{"Bake"}, "coconut oil", "cocoa", "maple syrup"),
 		}, 2},
-		{"two imports of the same link", []recipes.Recipe{
+		{"two imports of the same link and title", []recipes.Recipe{
 			dish(recipes.SourceUser, "r1", "https://example.com/chili", "Chili", "beans", "beef"),
-			dish(recipes.SourceUser, "r2", "https://example.com/chili", "Best Chili", "kidney beans", "ground beef"),
+			dish(recipes.SourceUser, "r2", "https://example.com/chili", "  chili ", "kidney beans", "ground beef"),
 		}, 1},
+		{"one blog post with two recipes: same link, different titles", []recipes.Recipe{
+			dish(recipes.SourceUser, "r1", "https://example.com/2026/10/fall-dinners", "Chili", "beans"),
+			dish(recipes.SourceUser, "r2", "https://www.example.com/2026/10/fall-dinners/", "Cornbread", "cornmeal"),
+		}, 2},
+		{"a site's home page shared by two recipes", []recipes.Recipe{
+			dish(recipes.SourceUser, "r1", "https://example.com/", "Chili", "beans"),
+			dish(recipes.SourceUser, "r2", "https://www.example.com", "Chili", "black beans"),
+		}, 2},
+		{"a recipe index shared by two recipes", []recipes.Recipe{
+			dish(recipes.SourceUser, "r1", "https://example.com/recipes", "Chili", "beans"),
+			dish(recipes.SourceUser, "r2", "https://example.com/recipes/dinner/", "Chili", "black beans"),
+		}, 2},
+		{"a search page shared by two recipes", []recipes.Recipe{
+			dish(recipes.SourceUser, "r1", "https://example.com/search?q=chili", "Chili", "beans"),
+			dish(recipes.SourceUser, "r2", "https://example.com/search?q=chili", "Chili", "black beans"),
+		}, 2},
+		{"a generic link and the same importer id", []recipes.Recipe{
+			dish(recipes.SourceHelloFresh, "5f1", "https://www.hellofresh.com/recipes", "Pork Tacos", "pork"),
+			dish(recipes.SourceHelloFresh, "5f1", "https://www.hellofresh.com/", "Pork Tacos", "pork", "lime"),
+		}, 1},
+		{"a generic link and different importer ids", []recipes.Recipe{
+			dish(recipes.SourceHelloFresh, "5f1", "https://www.hellofresh.com/recipes", "Pork Tacos", "pork"),
+			dish(recipes.SourceHelloFresh, "5f2", "https://www.hellofresh.com/recipes", "Beef Tacos", "beef"),
+		}, 2},
 		{"the same link with tracking and www", []recipes.Recipe{
 			dish(recipes.SourceUser, "r1", "https://example.com/chili", "Chili", "beans"),
 			dish(recipes.SourceUser, "r2", "http://www.Example.com/chili/?utm_source=pin&fbclid=x#top", "Chili", "black beans"),
-			dish(recipes.SourceUser, "r3", "https://example.com/chili?gclid=9&utm_campaign=fall", "Chili!", "pinto beans"),
+			dish(recipes.SourceUser, "r3", "https://example.com/chili?gclid=9&utm_campaign=fall", "CHILI", "pinto beans"),
 		}, 1},
 		{"the same link with a different recipe parameter", []recipes.Recipe{
 			dish(recipes.SourceUser, "r1", "https://example.com/r?id=1", "Chili", "beans"),
@@ -152,7 +176,7 @@ func runDedupeStoreCases(t *testing.T, newStore func(*testing.T) Store) {
 	t.Run("the most complete copy represents the group", func(t *testing.T) {
 		store := newStore(t)
 		url := "https://example.com/pie"
-		bare := dish(recipes.SourceUser, "a", url, "Pie", "apples")
+		bare := dish(recipes.SourceUser, "a", url, "Apple Pie", "apples")
 		withPhoto := dish(recipes.SourceUser, "b", url, "Apple Pie", "apples", "flour")
 		withPhoto.ImageURL = "https://example.com/pie.jpg"
 		full := dish(recipes.SourceUser, "c", url, "Apple Pie", "apples", "butter")

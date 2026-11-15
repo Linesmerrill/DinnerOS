@@ -6705,9 +6705,9 @@ components:
           type: string
           description: |
             The catalog's identity for this recipe: `<source>:<sourceRecipeId>`,
-            or `fp:<hash>` of the name and ingredient set when the source gave
-            no identifier. Two households' copies of one meal-kit recipe share
-            it.
+            or `fp2:<hash>` of the name, ingredient lines and steps when the
+            source gave no identifier (decision 697; `fp:` before it). Two
+            households' copies of one meal-kit recipe share it.
           example: hellofresh:6543
         source:
           type: string

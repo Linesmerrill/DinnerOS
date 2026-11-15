@@ -41,8 +41,17 @@ func Indexes() []mongodb.IndexSet {
 		Collection: RecipesCollection,
 		Indexes: []mongo.IndexModel{
 			{
+				// An entry's identity (decision 697): its origin for a typed
+				// or pasted recipe, its catalogKey for an importer's. Entries
+				// stored earlier get theirs from BackfillFingerprints.
+				Keys: bson.D{{Key: "entryKey", Value: 1}},
+				Options: options.Index().SetUnique(true).SetName("entryKey_unique").
+					SetPartialFilterExpression(bson.D{{Key: "entryKey", Value: bson.D{{Key: "$type", Value: "string"}}}}),
+			},
+			{
+				// Library marking and legacy adoption look entries up by key.
 				Keys:    bson.D{{Key: "catalogKey", Value: 1}},
-				Options: options.Index().SetUnique(true).SetName("catalogKey_unique"),
+				Options: options.Index().SetName("catalogKey"),
 			},
 			{
 				Keys: bson.D{
@@ -94,6 +103,8 @@ func Indexes() []mongodb.IndexSet {
 				Options: options.Index().SetName("fingerprintVersion"),
 			},
 		},
+		// catalogKey was unique until decision 697.
+		Obsolete: []string{"catalogKey_unique"},
 	}}
 }
 
@@ -116,8 +127,14 @@ func NewMongoStore(db *mongo.Database) *MongoStore {
 // lastOrderedWeek, or sharedToCatalog field here, so no future change to a
 // household recipe can carry household data into the catalog by accident.
 type entryDoc struct {
-	ID          bson.ObjectID   `bson:"_id"`
-	CatalogKey  string          `bson:"catalogKey"`
+	ID         bson.ObjectID `bson:"_id"`
+	CatalogKey string        `bson:"catalogKey"`
+	// EntryKey is unique: "origin:<Origin>" for a typed or pasted recipe,
+	// the catalogKey for an importer's. Origin is an opaque hash of the
+	// household recipe it was shared from (recipes.CatalogOrigin), never a
+	// household ID.
+	EntryKey    string          `bson:"entryKey,omitempty"`
+	Origin      string          `bson:"origin,omitempty"`
 	ContentHash string          `bson:"contentHash"`
 	Source      string          `bson:"source"`
 	SourceID    string          `bson:"sourceRecipeId,omitempty"`
@@ -186,7 +203,7 @@ type amountDoc struct {
 func newEntryDoc(e Recipe) (entryDoc, error) {
 	c := Content(e.Content)
 	d := entryDoc{
-		CatalogKey: e.CatalogKey, ContentHash: contentHash(c),
+		CatalogKey: e.CatalogKey, EntryKey: e.entryKey(), Origin: e.Origin, ContentHash: contentHash(c),
 		Source: c.Source, SourceID: c.SourceRecipeID, SourceURL: c.SourceURL,
 		Name: c.Name, NameKey: fold(c.Name), Headline: c.Headline, Description: c.Description, ImageURL: c.ImageURL,
 		IsAddon: c.IsAddon, Servings: c.Servings, PrepMinutes: c.PrepMinutes, TotalMin: c.TotalMinutes,
@@ -245,7 +262,7 @@ func (d entryDoc) toRecipe() Recipe {
 		c.Ingredients = append(c.Ingredients, line)
 	}
 	return Recipe{
-		ID: d.ID.Hex(), CatalogKey: d.CatalogKey, Content: c, Fingerprint: d.Fingerprint,
+		ID: d.ID.Hex(), CatalogKey: d.CatalogKey, Origin: d.Origin, Content: c, Fingerprint: d.Fingerprint,
 		FirstPublishedAt: d.FirstPublishedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
 	}
 }
@@ -304,13 +321,25 @@ func (s *MongoStore) Upsert(ctx context.Context, entries []Recipe, now time.Time
 				bson.D{{Key: "$eq", Value: bson.A{"$contentHash", d.ContentHash}}}, "$updatedAt", now,
 			}}}},
 		)
+		// An importer's entry stored before decision 697 has no entryKey
+		// until the startup backfill gives it one; it is still that entry.
+		filter := bson.D{{Key: "$or", Value: bson.A{
+			bson.D{{Key: "entryKey", Value: d.EntryKey}},
+			bson.D{{Key: "entryKey", Value: bson.D{{Key: "$exists", Value: false}}}, {Key: "catalogKey", Value: e.CatalogKey}},
+		}}}
+		if e.Origin != "" {
+			filter = bson.D{{Key: "entryKey", Value: d.EntryKey}}
+		}
 		models = append(models, mongo.NewUpdateOneModel().
-			SetFilter(bson.D{{Key: "catalogKey", Value: e.CatalogKey}}).
+			SetFilter(filter).
 			SetUpdate(mongo.Pipeline{bson.D{{Key: "$set", Value: stage}}}).
 			SetUpsert(true))
 	}
 	if len(models) == 0 {
 		return 0, nil
+	}
+	if err := s.adoptLegacy(ctx, entries); err != nil {
+		return 0, err
 	}
 	res, err := s.entries.BulkWrite(ctx, models, options.BulkWrite().SetOrdered(false))
 	if err != nil {
@@ -321,6 +350,67 @@ func (s *MongoStore) Upsert(ctx context.Context, entries []Recipe, now time.Time
 		}
 	}
 	return int(res.UpsertedCount + res.ModifiedCount), nil
+}
+
+// adoptLegacy hands each typed or pasted entry with no entry of its own the
+// one published under its key from before decision 697, which has no origin
+// yet. The household re-sharing it then updates that entry instead of adding
+// a second one beside it. The first household to re-share a recipe several
+// households published under one legacy key takes the entry; the others get
+// their own.
+func (s *MongoStore) adoptLegacy(ctx context.Context, entries []Recipe) error {
+	type candidate struct{ entryKey, origin, legacy string }
+	var candidates []candidate
+	var keys bson.A
+	for _, e := range entries {
+		if e.Origin == "" || e.CatalogKey == "" {
+			continue
+		}
+		legacy := recipes.LegacyCatalogKey(e.Content)
+		if legacy == "" || legacy == e.CatalogKey {
+			continue
+		}
+		candidates = append(candidates, candidate{e.entryKey(), e.Origin, legacy})
+		keys = append(keys, e.entryKey())
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	cur, err := s.entries.Find(ctx, bson.D{{Key: "entryKey", Value: bson.D{{Key: "$in", Value: keys}}}},
+		options.Find().SetProjection(bson.D{{Key: "entryKey", Value: 1}}))
+	if err != nil {
+		return translate(err)
+	}
+	var docs []struct {
+		EntryKey string `bson:"entryKey"`
+	}
+	if err := cur.All(ctx, &docs); err != nil {
+		return translate(err)
+	}
+	have := map[string]bool{}
+	for _, d := range docs {
+		have[d.EntryKey] = true
+	}
+	for _, c := range candidates {
+		if have[c.entryKey] {
+			continue
+		}
+		_, err := s.entries.UpdateOne(ctx,
+			bson.D{
+				{Key: "origin", Value: bson.D{{Key: "$exists", Value: false}}},
+				{Key: "catalogKey", Value: c.legacy},
+				{Key: "$or", Value: bson.A{
+					bson.D{{Key: "entryKey", Value: bson.D{{Key: "$exists", Value: false}}}},
+					bson.D{{Key: "entryKey", Value: c.legacy}},
+				}},
+			},
+			bson.D{{Key: "$set", Value: bson.D{{Key: "entryKey", Value: c.entryKey}, {Key: "origin", Value: c.origin}}}})
+		// A concurrent share of the same recipe got there first.
+		if err != nil && !errors.Is(mongodb.TranslateError(err), mongodb.ErrDuplicate) {
+			return fmt.Errorf("catalog: adopt entry: %w", err)
+		}
+	}
+	return nil
 }
 
 // --- Reads --------------------------------------------------------------------
@@ -606,8 +696,8 @@ func (s *MongoStore) Scan(ctx context.Context, limit int) ([]Recipe, error) {
 const fingerprintBatch = 500
 
 // BackfillFingerprints gives every entry stored before decision 689, or under
-// older fingerprint rules, its fingerprint and completeness, and returns how
-// many it changed. The server runs it at startup: once every entry is current
+// older fingerprint rules, its fingerprint and completeness (and, for one
+// stored before decision 697, its entryKey), and returns how many it changed. The server runs it at startup: once every entry is current
 // it reads one index and writes nothing, and re-running it is safe.
 func (s *MongoStore) BackfillFingerprints(ctx context.Context) (int, error) {
 	cur, err := s.entries.Find(ctx, bson.D{{Key: "fingerprintVersion", Value: bson.D{{Key: "$ne", Value: FingerprintVersion}}}})
@@ -638,6 +728,10 @@ func (s *MongoStore) BackfillFingerprints(ctx context.Context) (int, error) {
 		set := bson.D{
 			{Key: "fingerprintVersion", Value: FingerprintVersion},
 			{Key: "completeness", Value: Completeness(c)},
+		}
+		if d.EntryKey == "" {
+			// Stored before decision 697, when catalogKey was unique.
+			set = append(set, bson.E{Key: "entryKey", Value: entryKeyOf(d.Origin, d.CatalogKey)})
 		}
 		update := bson.D{}
 		if fp := Fingerprint(c); fp != "" {
