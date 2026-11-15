@@ -282,7 +282,7 @@ struct GroceryExportTests {
     /// the header branch is covered without inventing a second real vendor.
     private let aisleKeepingApp = GroceryListApp(
         id: "test-aisles", name: "Test List", systemImage: "list.bullet",
-        sortsIntoItsOwnAisles: false, pasteSteps: "Paste it.")
+        sortsIntoItsOwnAisles: false, guide: [], launchURL: nil, appStoreURL: nil)
 
     @Test func anyListGetsOneItemPerLineWithAmountsAndNoAisleHeaders() throws {
         let drafts = GroceryReminderPlan.drafts(for: try list(), checked: [])
@@ -343,74 +343,60 @@ struct GroceryExportTests {
 
         controller.send(list: try list(), checked: ["i-onion", "i-salt", "i-pepper"], to: .anyList)
 
-        #expect(controller.listAppExplainer == nil)
+        // The guide still opens, so the tap visibly does something; it has nothing to copy.
+        let handoff = try #require(controller.listAppGuide)
+        #expect(handoff.drafts.isEmpty)
+        #expect(handoff.text.isEmpty)
         #expect(controller.message == nil)
-        #expect(controller.errorMessage != nil)
     }
 
-    @Test func theListAppExplainerShowsBeforeTheFirstCopyOnly() throws {
+    @Test func sendingShowsTheGuideEveryTimeAndCopiesOnlyFromIt() throws {
         let controller = GroceryExportController(
             remindersStore: FakeRemindersStore(), defaultsSuite: freshDefaults())
 
         controller.send(list: try list(), checked: [], to: .anyList)
 
-        // Nothing is copied and nothing is reported until the member agrees.
-        let handoff = try #require(controller.listAppExplainer)
+        // Nothing is copied or reported until the member taps the guide's button.
+        let handoff = try #require(controller.listAppGuide)
         #expect(handoff.app == .anyList)
-        #expect(handoff.preview == ["1 ½ + 8 oz Yellow Onion", "Salt"])
-        #expect(handoff.moreCount == 0)
         #expect(handoff.text == "1 ½ + 8 oz Yellow Onion\nSalt")
         #expect(controller.message == nil)
-        #expect(!controller.hasExplained(.anyList))
 
-        controller.confirmListAppExplainer(handoff)
+        controller.copyForListApp(handoff)
+        #expect(controller.message == "List copied")
 
-        #expect(controller.listAppExplainer == nil)
-        #expect(controller.hasExplained(.anyList))
-        #expect(controller.message == "Copied 2 items for AnyList")
-
-        // Later taps copy straight away.
+        // The guide shows again on the next tap: there's no "don't show again".
+        controller.listAppGuide = nil
         controller.send(list: try list(), checked: ["i-salt"], to: .anyList)
-        #expect(controller.listAppExplainer == nil)
-        #expect(controller.message == "Copied 1 item for AnyList")
+        #expect(try #require(controller.listAppGuide).text == "1 ½ + 8 oz Yellow Onion")
     }
 
-    @Test func cancellingTheListAppExplainerDoesntCountAsSeen() throws {
+    @Test func anyListsGuideHasFiveStepsWithPicturesAndALaunchPath() {
+        let app = GroceryListApp.anyList
+        #expect(app.guide.map(\.imageName) == (1...5).map { "AnyListGuideStep\($0)" })
+        #expect(String(localized: app.guide[0].text) == "Open your list in AnyList and tap Add Item.")
+        #expect(
+            String(localized: app.guide[1].text) == "Tap the paste list icon at the top right, next to the book.")
+        #expect(String(localized: app.guide[2].text) == "Tap the empty area, then tap Paste.")
+        #expect(String(localized: app.guide[3].text) == "Each line becomes its own item. Tap the check mark.")
+        #expect(String(localized: app.guide[4].text) == "Your items are added and sorted into aisles.")
+        for step in app.guide {
+            #expect(!String(localized: step.imageDescription).isEmpty)
+            #expect(!String(localized: step.text).contains("—"))
+        }
+        #expect(app.launchURL?.scheme == "anylist")
+        #expect(app.appStoreURL?.absoluteString == "https://apps.apple.com/app/id522167641")
+    }
+
+    @Test func copyingForAListAppDoesntCountAsRemindersExplained() throws {
         let controller = GroceryExportController(
             remindersStore: FakeRemindersStore(), defaultsSuite: freshDefaults())
 
         controller.send(list: try list(), checked: [], to: .anyList)
-        controller.listAppExplainer = nil
-        controller.send(list: try list(), checked: [], to: .anyList)
-
-        #expect(controller.listAppExplainer != nil)
-        #expect(!controller.hasExplained(.anyList))
-        #expect(controller.message == nil)
-    }
-
-    @Test func eachListAppIsExplainedOnItsOwn() throws {
-        let controller = GroceryExportController(
-            remindersStore: FakeRemindersStore(), defaultsSuite: freshDefaults())
-
-        controller.send(list: try list(), checked: [], to: .anyList)
-        controller.confirmListAppExplainer(try #require(controller.listAppExplainer))
-
-        // A second app doesn't inherit the first one's "already explained": its paste steps
-        // are different, so the member hasn't been told them yet.
-        #expect(controller.hasExplained(.anyList))
-        #expect(!controller.hasExplained(aisleKeepingApp))
-        #expect(GroceryExportController.explainedKey(for: .anyList) == "groceryExport.listAppExplained.anylist")
-    }
-
-    @Test func remindersAndListAppExplainersAreSeparate() throws {
-        let controller = GroceryExportController(
-            remindersStore: FakeRemindersStore(), defaultsSuite: freshDefaults())
-
-        controller.send(list: try list(), checked: [], to: .anyList)
-        controller.confirmListAppExplainer(try #require(controller.listAppExplainer))
+        controller.copyForListApp(try #require(controller.listAppGuide))
 
         // Reminders asks for a system permission and writes to the member's database; copying
-        // does neither, so agreeing to one says nothing about the other.
+        // does neither, so one says nothing about the other.
         #expect(!controller.hasExplained)
     }
 

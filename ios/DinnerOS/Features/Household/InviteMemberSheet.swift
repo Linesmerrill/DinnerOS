@@ -174,7 +174,6 @@ struct InviteCreatedView: View {
                 )
             }
         }
-        .sensoryFeedback(.success, trigger: didCopy) { _, copied in copied }
     }
 
     private var shareMessage: String {
@@ -186,9 +185,7 @@ struct InviteCreatedView: View {
 
     private func copyCode() {
         // The code expires from the clipboard so it doesn't linger there.
-        UIPasteboard.general.setItems(
-            [[UTType.plainText.identifier: result.code]],
-            options: [.expirationDate: Date.now.addingTimeInterval(10 * 60)])
+        Clipboard.copy(result.code, expiresAfter: 10 * 60)
         didCopy = true
     }
 }

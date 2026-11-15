@@ -84,6 +84,8 @@ final class AppSweepQATests: XCTestCase {
         // On screen, without asking XCTest whether it can be tapped: that throws for the
         // off-screen items of a lazy row.
         func shown(_ element: XCUIElement) -> Bool {
+            // Gone since the list was taken (a toast going away): nothing to check.
+            guard element.exists else { return false }
             let frame = element.frame
             return !frame.isEmpty && screen.intersects(frame)
         }
@@ -91,7 +93,7 @@ final class AppSweepQATests: XCTestCase {
             element.label.trimmingCharacters(in: .whitespaces).isEmpty
         }
         for bar in app.navigationBars.allElementsBoundByIndex {
-            for button in bar.buttons.allElementsBoundByIndex where blank(button) && shown(button) {
+            for button in bar.buttons.allElementsBoundByIndex where shown(button) && blank(button) {
                 problems.append("\(name): a toolbar button has no label (blank slot?)")
             }
         }
@@ -101,7 +103,7 @@ final class AppSweepQATests: XCTestCase {
             element.descendants(matching: .any).allElementsBoundByIndex.contains { !blank($0) }
         }
         let unnamed = app.buttons.allElementsBoundByIndex.filter {
-            blank($0) && $0.identifier.isEmpty && shown($0) && !namedInside($0)
+            shown($0) && blank($0) && $0.identifier.isEmpty && !namedInside($0)
         }
         if !unnamed.isEmpty {
             let places = unnamed.map {

@@ -38,8 +38,8 @@ final class GroceryExportController {
         static let previewCount = 4
     }
 
-    /// What "Send to <app>" is about to put on the clipboard, shown once per device per app
-    /// before anything is copied.
+    /// What "Send to <app>" puts on the clipboard, and the guide to pasting it, shown every
+    /// time before anything is copied.
     struct ListAppHandoff: Identifiable, Equatable {
         let app: GroceryListApp
         /// The lines still to buy, the same drafts the Reminders export would write.
@@ -60,12 +60,6 @@ final class GroceryExportController {
     /// The `UserDefaults` key set once Reminders export has worked on this device.
     static let explainedKey = "groceryExport.remindersExplained"
 
-    /// The `UserDefaults` key set once `app`'s export has worked on this device. Per app, so
-    /// adding a second list app explains itself the first time rather than riding on AnyList's.
-    static func explainedKey(for app: GroceryListApp) -> String {
-        "groceryExport.listAppExplained.\(app.id)"
-    }
-
     /// For example "Added 14 items to Reminders".
     private(set) var message: String?
     private(set) var errorMessage: String?
@@ -75,8 +69,8 @@ final class GroceryExportController {
     var existingList: ExistingList?
     /// The first-time explainer, while it's showing.
     var explainer: Explainer?
-    /// The first-time explainer for a list app, while it's showing.
-    var listAppExplainer: ListAppHandoff?
+    /// The guide to pasting into a list app, while it's showing.
+    var listAppGuide: ListAppHandoff?
 
     @ObservationIgnored private let export: GroceryRemindersExport
     /// The `UserDefaults` suite, `nil` for standard. A name rather than the object, which isn't
@@ -96,11 +90,6 @@ final class GroceryExportController {
     /// Whether Reminders export has already worked on this device, so the explainer is skipped.
     var hasExplained: Bool {
         defaults.bool(forKey: Self.explainedKey)
-    }
-
-    /// Whether `app`'s export has already worked on this device.
-    func hasExplained(_ app: GroceryListApp) -> Bool {
-        defaults.bool(forKey: Self.explainedKey(for: app))
     }
 
     /// Sends the unchecked lines to a Reminders list named for the week. The first time on a
@@ -169,46 +158,25 @@ final class GroceryExportController {
         report(message: String(localized: "Grocery list copied"))
     }
 
-    /// Copies the week's unchecked lines in the shape `app` imports them. The first time on a
-    /// device it explains what will happen and where to paste, before the clipboard is touched.
+    /// Shows the guide to pasting the week's unchecked lines into `app`, every time: testers
+    /// tapped Send, saw nothing happen, and pasted the list into one item. Nothing is copied
+    /// until the member taps the guide's button.
     ///
-    /// No app is launched: none of them documents a URL scheme that takes items, and opening
-    /// one on a guess would leave the member somewhere they didn't ask to be with no way to
-    /// tell whether the copy worked.
+    /// With nothing left to buy the guide still opens and says so: an error line alone didn't
+    /// show on the Grocery List screen, so the tap looked like it did nothing.
     func send(list: GroceryList, checked: Set<String>, to app: GroceryListApp) {
-        let drafts = GroceryReminderPlan.drafts(for: list, checked: checked)
-        guard !drafts.isEmpty else {
-            report(error: String(localized: "Nothing to send: every item is checked off."))
-            return
-        }
-        let handoff = ListAppHandoff(app: app, drafts: drafts)
-        guard hasExplained(app) else {
-            listAppExplainer = handoff
-            return
-        }
-        finish(handoff)
+        listAppGuide = ListAppHandoff(app: app, drafts: GroceryReminderPlan.drafts(for: list, checked: checked))
     }
 
-    /// The member tapped Copy Items in the list app's explainer.
-    func confirmListAppExplainer(_ pending: ListAppHandoff) {
-        listAppExplainer = nil
-        finish(pending)
-    }
-
-    private func finish(_ handoff: ListAppHandoff) {
+    /// The guide's Copy button: the lines go on the clipboard, one item per line. The guide
+    /// opens the app itself once the member has seen "List copied".
+    func copyForListApp(_ handoff: ListAppHandoff) {
         write(handoff.text)
-        defaults.set(true, forKey: Self.explainedKey(for: handoff.app))
-        let count = handoff.drafts.count
-        report(
-            message: count == 1
-                ? String(localized: "Copied 1 item for \(handoff.app.name)")
-                : String(localized: "Copied \(count) items for \(handoff.app.name)"))
+        report(message: String(localized: "List copied"))
     }
 
     private func write(_ text: String) {
-        #if canImport(UIKit)
-            UIPasteboard.general.string = text
-        #endif
+        Clipboard.copy(text)
     }
 
     func dismissMessage() {
@@ -353,11 +321,11 @@ struct GroceryExportPrompts: ViewModifier {
             }
             .sheet(
                 item: Binding(
-                    get: { controller.listAppExplainer },
-                    set: { controller.listAppExplainer = $0 })
+                    get: { controller.listAppGuide },
+                    set: { controller.listAppGuide = $0 })
             ) { pending in
-                ListAppExplainerSheet(handoff: pending) {
-                    controller.confirmListAppExplainer(pending)
+                ListAppGuideSheet(handoff: pending) {
+                    controller.copyForListApp(pending)
                 }
             }
             .alert(
@@ -472,64 +440,122 @@ private struct RemindersExplainerSheet: View {
     }
 }
 
-/// Shown the first time "Send to <app>" is tapped on a device: what lands on the clipboard,
-/// where to paste it, and the first few lines as they'll arrive.
-///
-/// It runs before the copy, not after, so the member's clipboard isn't taken over by something
-/// they hadn't agreed to yet.
-private struct ListAppExplainerSheet: View {
+/// Shown every time "Send to <app>" is tapped: how to paste the list there, step by step with
+/// a picture of each screen, then one button that copies the list and opens the app.
+struct ListAppGuideSheet: View {
     let handoff: GroceryExportController.ListAppHandoff
-    let confirm: () -> Void
+    let copy: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @State private var copied = false
 
-    private var count: Int { handoff.drafts.count }
+    private var app: GroceryListApp { handoff.app }
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    Text(
-                        "Copies the \(count) items you still need, with amounts. Then open \(handoff.app.name) and paste."
-                    )
-                    .padding(.vertical, 2)
-                    Text(handoff.app.pasteSteps)
-                        .padding(.vertical, 2)
-                }
-                Section {
-                    ForEach(Array(handoff.preview.enumerated()), id: \.offset) { _, line in
-                        Text(line)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    Text("Your list is pasted in all at once, so every item lands on its own line.")
+                        .foregroundStyle(.secondary)
+                    if app == .anyList {
+                        Label(
+                            "Don't use AnyList Recipe Import from the share sheet. It reads your list as a recipe.",
+                            systemImage: "exclamationmark.triangle"
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                     }
-                    if handoff.moreCount > 0 {
-                        Text("and \(handoff.moreCount) more")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                    ForEach(Array(app.guide.enumerated()), id: \.offset) { index, step in
+                        ListAppGuideStepView(number: index + 1, step: step)
                     }
-                } header: {
-                    Text("Preview")
                 }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
+                .frame(maxWidth: 560)
+                .frame(maxWidth: .infinity)
             }
-            .navigationTitle("Send to \(handoff.app.name)")
+            .navigationTitle("Add your list to \(app.name)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Done") { dismiss() }
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                Button {
-                    dismiss()
-                    confirm()
-                } label: {
-                    Text("Copy Items")
-                        .frame(maxWidth: .infinity)
+                VStack(spacing: 8) {
+                    if handoff.drafts.isEmpty {
+                        Text("Nothing to copy yet. Add recipes to this week, or uncheck items you still need.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    Button {
+                        copyAndOpen()
+                    } label: {
+                        Text("Copy List and Open \(app.name)")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(copied || handoff.drafts.isEmpty)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
                 .padding()
+                .background(.bar)
             }
         }
-        .presentationDetents([.medium, .large])
+    }
+
+    private func copyAndOpen() {
+        copy()
+        copied = true
+        Task {
+            // Long enough to see the Copied HUD before the other app takes over.
+            try? await Task.sleep(for: CopiedHUD.duration)
+            open()
+            copied = false
+        }
+    }
+
+    private func open() {
+        #if canImport(UIKit)
+            if let launch = app.launchURL, UIApplication.shared.canOpenURL(launch) {
+                openURL(launch)
+                return
+            }
+        #endif
+        if let store = app.appStoreURL { openURL(store) }
+    }
+}
+
+/// One numbered step: the number, what to do, and the picture of that screen.
+private struct ListAppGuideStepView: View {
+    let number: Int
+    let step: GroceryListAppGuideStep
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text("\(number)")
+                    .font(.headline)
+                    .foregroundStyle(Color("OnAccent"))
+                    .frame(minWidth: 28, minHeight: 28)
+                    .background(Circle().fill(.tint))
+                    .accessibilityHidden(true)
+                Text(step.text)
+                    .font(.body.weight(.medium))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(Text("Step \(number). ") + Text(step.text))
+            Image(step.imageName)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity)
+                .clipShape(.rect(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(.separator)))
+                .accessibilityLabel(Text(step.imageDescription))
+        }
     }
 }
 

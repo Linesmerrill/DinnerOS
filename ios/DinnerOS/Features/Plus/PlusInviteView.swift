@@ -156,7 +156,6 @@ struct YourInvitesSection: View {
 struct CopyCodeButton: View {
     let code: String
     @State private var copied = false
-    @State private var copies = 0
     @State private var reset: Task<Void, Never>?
 
     var body: some View {
@@ -178,15 +177,12 @@ struct CopyCodeButton: View {
         }
         .buttonStyle(.borderless)
         .accessibilityLabel("Copy code")
-        .sensoryFeedback(.impact(weight: .light), trigger: copies)
         .onDisappear { reset?.cancel() }
     }
 
     private func copy() {
-        UIPasteboard.general.string = PlusText.copyableCode(code)
-        copies += 1
+        Clipboard.copy(PlusText.copyableCode(code))
         withAnimation(.easeOut(duration: 0.25)) { copied = true }
-        AccessibilityNotification.Announcement(String(localized: "Copied")).post()
         reset?.cancel()
         reset = Task {
             try? await Task.sleep(for: .seconds(1.5))

@@ -2,13 +2,13 @@ import Foundation
 
 /// A grocery app outside DinnerOS that a week's list can be handed to in one action.
 ///
-/// AnyList is the first. None of these apps publishes an API, a URL scheme, or a share
-/// extension that takes items, so the handoff every one of them does document is the same:
-/// the whole list as plain text, one item per line, pasted in one go. See
-/// `docs/shopping-providers.md` for what each vendor actually documents.
+/// AnyList is the first. None of these apps publishes an API or a share extension that takes
+/// items, so the handoff every one of them does document is the same: the whole list as plain
+/// text, one item per line, pasted in one go. See `docs/shopping-providers.md` for what each
+/// vendor actually documents.
 ///
-/// A second app needs one value here and nothing else — the lines, the button, the explainer,
-/// and the confirmation all read from it.
+/// A second app needs one value here and nothing else: the lines, the button, the guide, and
+/// the confirmation all read from it.
 nonisolated struct GroceryListApp: Identifiable, Equatable, Sendable {
     /// Stable: it's part of the `UserDefaults` key that remembers the explainer, so renaming
     /// the app later doesn't show the explainer a second time.
@@ -22,9 +22,13 @@ nonisolated struct GroceryListApp: Identifiable, Equatable, Sendable {
     /// so a header would arrive as something to buy. The aisle *order* still survives, because
     /// the lines keep the order the Reminders export uses.
     let sortsIntoItsOwnAisles: Bool
-    /// What to do with the copied text once it's on the clipboard, in the app's own words.
-    /// Shown in the explainer before anything is copied, and nowhere else.
-    let pasteSteps: LocalizedStringResource
+    /// How to paste the list in the app, step by step, each with a picture of that screen.
+    /// Shown every time the list is sent: the paste button is easy to miss.
+    let guide: [GroceryListAppGuideStep]
+    /// Opens the app. A bare launch: none of these apps takes items through a link.
+    let launchURL: URL?
+    /// The app's App Store page, for when it isn't installed.
+    let appStoreURL: URL?
 
     /// AnyList's documented bulk import: one item per line, pasted into the Add Item field,
     /// categorized by AnyList on arrival.
@@ -34,14 +38,39 @@ nonisolated struct GroceryListApp: Identifiable, Equatable, Sendable {
         name: "AnyList",
         systemImage: "checklist",
         sortsIntoItsOwnAisles: true,
-        pasteSteps: """
-            In AnyList, open the list you shop from, tap the Add Item field, tap the paste \
-            button, then tap Done. Every line arrives as its own item, and AnyList files each \
-            one under its own category.
-            """)
+        guide: [
+            GroceryListAppGuideStep(
+                imageName: "AnyListGuideStep1", text: "Open your list in AnyList and tap Add Item.",
+                imageDescription: "AnyList's list screen with Add Item highlighted."),
+            GroceryListAppGuideStep(
+                imageName: "AnyListGuideStep2", text: "Tap the paste list icon at the top right, next to the book.",
+                imageDescription: "AnyList's Add Item bar with the paste list icon highlighted, next to the book."),
+            GroceryListAppGuideStep(
+                imageName: "AnyListGuideStep3", text: "Tap the empty area, then tap Paste.",
+                imageDescription: "AnyList's Paste Items screen with the empty text area highlighted."),
+            GroceryListAppGuideStep(
+                imageName: "AnyListGuideStep4", text: "Each line becomes its own item. Tap the check mark.",
+                imageDescription: "The pasted list, one item per line, with the check mark highlighted."),
+            GroceryListAppGuideStep(
+                imageName: "AnyListGuideStep5", text: "Your items are added and sorted into aisles.",
+                imageDescription: "AnyList's list with the items sorted under Bakery and Produce."),
+        ],
+        // Not documented by AnyList, but it opens the app. If it ever stops, the App Store page
+        // still shows Open for someone who has AnyList.
+        launchURL: URL(string: "anylist://"),
+        appStoreURL: URL(string: "https://apps.apple.com/app/id522167641"))
 
     /// Every list app offered, in the order the export menu shows them.
     static let all: [GroceryListApp] = [.anyList]
+}
+
+/// One numbered step of a list app's paste guide.
+nonisolated struct GroceryListAppGuideStep: Equatable, Sendable {
+    /// The picture in the asset catalog.
+    let imageName: String
+    let text: LocalizedStringResource
+    /// What the picture shows, for VoiceOver.
+    let imageDescription: LocalizedStringResource
 }
 
 /// Builds the text a list app is pasted.

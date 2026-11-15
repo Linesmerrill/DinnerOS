@@ -162,13 +162,23 @@ struct GroceryListContent: View {
             .toolbar {
                 if let text = model.plainText() {
                     ToolbarItem(placement: .topBarTrailing) {
-                        ShareLink(
-                            item: text,
-                            subject: Text("Grocery List"),
-                            preview: SharePreview(
-                                Text("Grocery List: \(model.week.rangeLabel(weekStartsOn: model.weekStartsOn))"))
-                        ) {
-                            Label("Share", systemImage: "square.and.arrow.up")
+                        // A menu, with Send to AnyList first: the system share sheet offers
+                        // AnyList's Recipe Import, which reads a grocery list as a recipe.
+                        Menu("Share", systemImage: "square.and.arrow.up") {
+                            ForEach(GroceryListApp.all) { app in
+                                Button("Send to \(app.name)", systemImage: app.systemImage) {
+                                    guard let list = model.list else { return }
+                                    exportController.send(list: list, checked: model.checked, to: app)
+                                }
+                            }
+                            ShareLink(
+                                item: text,
+                                subject: Text("Grocery List"),
+                                preview: SharePreview(
+                                    Text("Grocery List: \(model.week.rangeLabel(weekStartsOn: model.weekStartsOn))"))
+                            ) {
+                                Label("Share List…", systemImage: "square.and.arrow.up")
+                            }
                         }
                     }
                 }

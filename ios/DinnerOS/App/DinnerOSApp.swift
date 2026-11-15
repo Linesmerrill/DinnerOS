@@ -12,6 +12,8 @@ struct DinnerOSApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                // Every copy in the app shows the same Copied HUD, above sheets too.
+                .copiedHUD()
                 .environment(\.appConfiguration, dependencies.configuration)
                 .environment(\.googleSignIn, dependencies.googleSignIn)
                 .environment(dependencies.session)
