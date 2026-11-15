@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -17,7 +18,10 @@ import (
 const (
 	FreeTimeCollection      = "plus_free_time"
 	ReferralCodesCollection = "plus_referral_codes"
-	ReferralsCollection     = "plus_referrals"
+	// ReferralCodeKeysCollection keeps every code any household has had,
+	// active or retired, unique by lowercase key (decision 699).
+	ReferralCodeKeysCollection = "plus_referral_code_keys"
+	ReferralsCollection        = "plus_referrals"
 )
 
 // ReferralIndexes returns the indexes the referral stores rely on.
@@ -33,6 +37,12 @@ func ReferralIndexes() []mongodb.IndexSet {
 		{Collection: FreeTimeCollection, Indexes: []mongo.IndexModel{unique("householdId_unique", "householdId")}},
 		{Collection: ReferralCodesCollection, Indexes: []mongo.IndexModel{
 			unique("householdId_unique", "householdId"), unique("code_unique", "code"),
+			{Keys: bson.D{{Key: "codeKey", Value: 1}}, Options: options.Index().SetUnique(true).SetName("codeKey_unique").
+				SetPartialFilterExpression(bson.D{{Key: "codeKey", Value: bson.D{{Key: "$exists", Value: true}}}})},
+		}},
+		{Collection: ReferralCodeKeysCollection, Indexes: []mongo.IndexModel{
+			unique("key_unique", "key"),
+			{Keys: bson.D{{Key: "householdId", Value: 1}}, Options: options.Index().SetName("householdId")},
 		}},
 		{Collection: ReferralsCollection, Indexes: []mongo.IndexModel{
 			unique("householdId_unique", "householdId"),
@@ -106,26 +116,82 @@ func (s *MongoFreeTime) PurgeHousehold(ctx context.Context, householdID string) 
 	return err
 }
 
-// MongoReferrals is the MongoDB ReferralStore.
+// MongoReferrals is the MongoDB ReferralStore. A household's current code
+// is its one plus_referral_codes document; plus_referral_code_keys holds
+// every code ever used, so a code can't be claimed twice, even after it is
+// replaced.
 type MongoReferrals struct {
-	codes, referrals *mongo.Collection
+	codes, keys, referrals *mongo.Collection
 }
 
 var _ ReferralStore = (*MongoReferrals)(nil)
 
 // NewMongoReferrals returns a store using db.
 func NewMongoReferrals(db *mongo.Database) *MongoReferrals {
-	return &MongoReferrals{codes: db.Collection(ReferralCodesCollection), referrals: db.Collection(ReferralsCollection)}
+	return &MongoReferrals{
+		codes: db.Collection(ReferralCodesCollection), keys: db.Collection(ReferralCodeKeysCollection),
+		referrals: db.Collection(ReferralsCollection),
+	}
 }
 
 type codeDoc struct {
 	HouseholdID bson.ObjectID `bson:"householdId"`
-	Code        string        `bson:"code"`
-	CreatedAt   time.Time     `bson:"createdAt"`
+	// Code is shown as stored: a generated code in capitals, a picked one
+	// lowercase. CodeKey is it lowercase; absent before decision 699 until
+	// MigrateCodes sets it.
+	Code      string    `bson:"code"`
+	CodeKey   string    `bson:"codeKey,omitempty"`
+	CreatedAt time.Time `bson:"createdAt"`
+	// Changes are when the code was changed, the last few.
+	Changes []time.Time `bson:"changes,omitempty"`
 }
 
-// Code implements ReferralStore. A new code that collides with another
-// household's is drawn again.
+// Code key states.
+const (
+	codeActive  = "active"
+	codeRetired = "retired"
+)
+
+type codeKeyDoc struct {
+	Key string `bson:"key"`
+	// HouseholdID is unset once the household is deleted; the key stays.
+	HouseholdID *bson.ObjectID `bson:"householdId,omitempty"`
+	Status      string         `bson:"status"`
+	CreatedAt   time.Time      `bson:"createdAt"`
+	RetiredAt   *time.Time     `bson:"retiredAt,omitempty"`
+}
+
+// claimKey stores key as active for oid, or returns ErrCodeTaken.
+func (s *MongoReferrals) claimKey(ctx context.Context, key string, oid bson.ObjectID, at time.Time) error {
+	_, err := s.keys.InsertOne(ctx, codeKeyDoc{Key: key, HouseholdID: &oid, Status: codeActive, CreatedAt: at.UTC()})
+	if mongo.IsDuplicateKeyError(err) {
+		return ErrCodeTaken
+	}
+	if err != nil {
+		return fmt.Errorf("claim referral code: %w", err)
+	}
+	return nil
+}
+
+// unclaimKey removes a key claimed by a write that then lost a race. It was
+// never anyone's code, so it is free again.
+func (s *MongoReferrals) unclaimKey(ctx context.Context, key string, oid bson.ObjectID) {
+	_, _ = s.keys.DeleteOne(ctx, bson.D{{Key: "key", Value: key}, {Key: "householdId", Value: oid}, {Key: "status", Value: codeActive}})
+}
+
+// keepKey records key as oid's active code if it isn't recorded yet.
+func (s *MongoReferrals) keepKey(ctx context.Context, key string, oid bson.ObjectID, at time.Time) error {
+	_, err := s.keys.UpdateOne(ctx, bson.D{{Key: "key", Value: key}}, bson.D{{Key: "$setOnInsert", Value: bson.D{
+		{Key: "householdId", Value: oid}, {Key: "status", Value: codeActive}, {Key: "createdAt", Value: at.UTC()},
+	}}}, options.UpdateOne().SetUpsert(true))
+	if err != nil && !mongo.IsDuplicateKeyError(err) {
+		return fmt.Errorf("keep referral code: %w", err)
+	}
+	return nil
+}
+
+// Code implements ReferralStore. A new code that collides with any code
+// ever used is drawn again.
 func (s *MongoReferrals) Code(ctx context.Context, householdID string, newCode func() string) (string, error) {
 	oid, err := mongodb.ParseID(householdID)
 	if err != nil {
@@ -141,10 +207,20 @@ func (s *MongoReferrals) Code(ctx context.Context, householdID string, newCode f
 		if !errors.Is(err, mongo.ErrNoDocuments) {
 			return "", fmt.Errorf("get referral code: %w", err)
 		}
-		_, err = s.codes.InsertOne(ctx, codeDoc{HouseholdID: oid, Code: newCode(), CreatedAt: time.Now().UTC()})
-		if err == nil || mongo.IsDuplicateKeyError(err) {
-			// Stored, or another request stored one first, or the code was
-			// taken: read again.
+		code, now := newCode(), time.Now().UTC()
+		key := CodeKey(code)
+		if err := s.claimKey(ctx, key, oid, now); errors.Is(err, ErrCodeTaken) {
+			continue
+		} else if err != nil {
+			return "", err
+		}
+		_, err = s.codes.InsertOne(ctx, codeDoc{HouseholdID: oid, Code: code, CodeKey: key, CreatedAt: now})
+		if err == nil {
+			return code, nil
+		}
+		s.unclaimKey(ctx, key, oid)
+		if mongo.IsDuplicateKeyError(err) {
+			// Another request stored one first: read again.
 			continue
 		}
 		return "", fmt.Errorf("make referral code: %w", err)
@@ -152,17 +228,142 @@ func (s *MongoReferrals) Code(ctx context.Context, householdID string, newCode f
 	return "", errors.New("plus: could not make a referral code")
 }
 
-// Owner implements ReferralStore.
+// Owner implements ReferralStore. A code from before decision 699 that
+// MigrateCodes hasn't reached yet is found by its capitals. A deleted
+// household's code is not found, not replaced.
 func (s *MongoReferrals) Owner(ctx context.Context, code string) (string, error) {
+	key := CodeKey(code)
 	var d codeDoc
-	err := s.codes.FindOne(ctx, bson.D{{Key: "code", Value: code}}).Decode(&d)
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		return "", ErrCodeNotFound
+	err := s.codes.FindOne(ctx, bson.D{{Key: "$or", Value: bson.A{
+		bson.D{{Key: "codeKey", Value: key}},
+		bson.D{{Key: "code", Value: strings.ToUpper(key)}, {Key: "codeKey", Value: bson.D{{Key: "$exists", Value: false}}}},
+	}}}).Decode(&d)
+	if err == nil {
+		return d.HouseholdID.Hex(), nil
 	}
-	if err != nil {
+	if !errors.Is(err, mongo.ErrNoDocuments) {
 		return "", fmt.Errorf("find referral code: %w", err)
 	}
-	return d.HouseholdID.Hex(), nil
+	// A deleted household's codes are retired with no household: those are
+	// just not found.
+	n, err := s.keys.CountDocuments(ctx, bson.D{
+		{Key: "key", Value: key}, {Key: "status", Value: codeRetired}, {Key: "householdId", Value: bson.D{{Key: "$exists", Value: true}}},
+	}, options.Count().SetLimit(1))
+	if err != nil {
+		return "", fmt.Errorf("find retired referral code: %w", err)
+	}
+	if n > 0 {
+		return "", ErrCodeRetired
+	}
+	return "", ErrCodeNotFound
+}
+
+// Taken implements ReferralStore.
+func (s *MongoReferrals) Taken(ctx context.Context, code string) (bool, error) {
+	key := CodeKey(code)
+	n, err := s.keys.CountDocuments(ctx, bson.D{{Key: "key", Value: key}}, options.Count().SetLimit(1))
+	if err != nil {
+		return false, fmt.Errorf("check referral code: %w", err)
+	}
+	if n > 0 {
+		return true, nil
+	}
+	n, err = s.codes.CountDocuments(ctx, bson.D{{Key: "code", Value: strings.ToUpper(key)}}, options.Count().SetLimit(1))
+	if err != nil {
+		return false, fmt.Errorf("check referral code: %w", err)
+	}
+	return n > 0, nil
+}
+
+// CodeChanges implements ReferralStore.
+func (s *MongoReferrals) CodeChanges(ctx context.Context, householdID string) ([]time.Time, error) {
+	oid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return nil, nil
+	}
+	var d codeDoc
+	err = s.codes.FindOne(ctx, bson.D{{Key: "householdId", Value: oid}}).Decode(&d)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get referral code changes: %w", err)
+	}
+	return d.Changes, nil
+}
+
+// keptChanges is how many change times a code document keeps.
+const keptChanges = 2 * CodeChangeLimit
+
+// Replace implements ReferralStore. The new key is claimed first, so two
+// households can't both get it; the swap is conditional on old, so two
+// changes at once can't both pass one limit check.
+func (s *MongoReferrals) Replace(ctx context.Context, householdID, old, code string, at time.Time) error {
+	oid, err := mongodb.ParseID(householdID)
+	if err != nil {
+		return fmt.Errorf("plus: bad household id")
+	}
+	key := CodeKey(code)
+	if err := s.claimKey(ctx, key, oid, at); err != nil {
+		return err
+	}
+	res, err := s.codes.UpdateOne(ctx, bson.D{{Key: "householdId", Value: oid}, {Key: "code", Value: old}}, bson.D{
+		{Key: "$set", Value: bson.D{{Key: "code", Value: code}, {Key: "codeKey", Value: key}}},
+		{Key: "$push", Value: bson.D{{Key: "changes", Value: bson.D{
+			{Key: "$each", Value: bson.A{at.UTC()}}, {Key: "$slice", Value: -keptChanges},
+		}}}},
+	})
+	if err != nil {
+		s.unclaimKey(ctx, key, oid)
+		return fmt.Errorf("replace referral code: %w", err)
+	}
+	if res.MatchedCount == 0 {
+		s.unclaimKey(ctx, key, oid)
+		return ErrCodeChangedNow
+	}
+	retired := at.UTC()
+	_, err = s.keys.UpdateOne(ctx, bson.D{{Key: "key", Value: CodeKey(old)}}, bson.D{
+		{Key: "$set", Value: bson.D{{Key: "status", Value: codeRetired}, {Key: "retiredAt", Value: retired}}},
+		{Key: "$setOnInsert", Value: bson.D{{Key: "householdId", Value: oid}, {Key: "createdAt", Value: retired}}},
+	}, options.UpdateOne().SetUpsert(true))
+	if err != nil {
+		// The old code already stopped working; only its record is behind.
+		return fmt.Errorf("retire referral code: %w", err)
+	}
+	return nil
+}
+
+// MigrateCodes records every code from before decision 699 as an active
+// key and sets its codeKey. It is idempotent and returns how many it moved.
+func (s *MongoReferrals) MigrateCodes(ctx context.Context) (int, error) {
+	cur, err := s.codes.Find(ctx, bson.D{{Key: "codeKey", Value: bson.D{{Key: "$exists", Value: false}}}})
+	if err != nil {
+		return 0, fmt.Errorf("list referral codes: %w", err)
+	}
+	defer func() { _ = cur.Close(ctx) }()
+	n := 0
+	for cur.Next(ctx) {
+		var d codeDoc
+		if err := cur.Decode(&d); err != nil {
+			return n, fmt.Errorf("decode referral code: %w", err)
+		}
+		key := CodeKey(d.Code)
+		created := d.CreatedAt
+		if created.IsZero() {
+			created = time.Now()
+		}
+		if err := s.keepKey(ctx, key, d.HouseholdID, created); err != nil {
+			return n, err
+		}
+		res, err := s.codes.UpdateOne(ctx,
+			bson.D{{Key: "householdId", Value: d.HouseholdID}, {Key: "codeKey", Value: bson.D{{Key: "$exists", Value: false}}}},
+			bson.D{{Key: "$set", Value: bson.D{{Key: "codeKey", Value: key}}}})
+		if err != nil {
+			return n, fmt.Errorf("migrate referral code: %w", err)
+		}
+		n += int(res.ModifiedCount)
+	}
+	return n, cur.Err()
 }
 
 type referralDoc struct {
@@ -509,13 +710,20 @@ func (s *MongoReferrals) Report(ctx context.Context, since time.Time, top int) (
 }
 
 // PurgeHousehold implements account.HouseholdPurger: the household's code
-// stops working and its referrals, either way, are forgotten.
+// stops working for good and its referrals, either way, are forgotten.
 func (s *MongoReferrals) PurgeHousehold(ctx context.Context, householdID string) error {
 	oid, err := mongodb.ParseID(householdID)
 	if err != nil {
 		return nil
 	}
 	if _, err := s.codes.DeleteMany(ctx, bson.D{{Key: "householdId", Value: oid}}); err != nil {
+		return err
+	}
+	// Its codes stay retired, with no household, so no one can claim them.
+	if _, err := s.keys.UpdateMany(ctx, bson.D{{Key: "householdId", Value: oid}}, bson.D{
+		{Key: "$set", Value: bson.D{{Key: "status", Value: codeRetired}, {Key: "retiredAt", Value: time.Now().UTC()}}},
+		{Key: "$unset", Value: bson.D{{Key: "householdId", Value: ""}}},
+	}); err != nil {
 		return err
 	}
 	_, err = s.referrals.DeleteMany(ctx, bson.D{{Key: "$or", Value: bson.A{

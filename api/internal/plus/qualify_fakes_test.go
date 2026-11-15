@@ -19,9 +19,13 @@ import (
 type memoryReferrals struct {
 	mu    sync.Mutex
 	codes map[string]string // household -> code
-	refs  []Referral
-	flags map[string]map[string]bool // referred -> flag -> set
-	next  int
+	// retired are the keys of replaced codes; changes are each household's
+	// code change times.
+	retired map[string]bool
+	changes map[string][]time.Time
+	refs    []Referral
+	flags   map[string]map[string]bool // referred -> flag -> set
+	next    int
 }
 
 func (s *memoryReferrals) Code(_ context.Context, id string, newCode func() string) (string, error) {
@@ -30,19 +34,70 @@ func (s *memoryReferrals) Code(_ context.Context, id string, newCode func() stri
 	if c, ok := s.codes[id]; ok {
 		return c, nil
 	}
-	s.codes[id] = newCode()
-	return s.codes[id], nil
+	for range 5 {
+		if c := newCode(); !s.takenLocked(CodeKey(c)) {
+			s.codes[id] = c
+			return c, nil
+		}
+	}
+	return "", fmt.Errorf("no code")
 }
 
 func (s *memoryReferrals) Owner(_ context.Context, code string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	key := CodeKey(code)
 	for id, c := range s.codes {
-		if c == code {
+		if CodeKey(c) == key {
 			return id, nil
 		}
 	}
+	if s.retired[key] {
+		return "", ErrCodeRetired
+	}
 	return "", ErrCodeNotFound
+}
+
+func (s *memoryReferrals) takenLocked(key string) bool {
+	if s.retired[key] {
+		return true
+	}
+	for _, c := range s.codes {
+		if CodeKey(c) == key {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *memoryReferrals) Taken(_ context.Context, code string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.takenLocked(CodeKey(code)), nil
+}
+
+func (s *memoryReferrals) CodeChanges(_ context.Context, id string) ([]time.Time, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.changes[id]), nil
+}
+
+func (s *memoryReferrals) Replace(_ context.Context, id, old, code string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.takenLocked(CodeKey(code)) {
+		return ErrCodeTaken
+	}
+	if s.codes[id] != old {
+		return ErrCodeChangedNow
+	}
+	if s.retired == nil {
+		s.retired, s.changes = map[string]bool{}, map[string][]time.Time{}
+	}
+	s.retired[CodeKey(old)] = true
+	s.codes[id] = code
+	s.changes[id] = append(s.changes[id], at)
+	return nil
 }
 
 func norm(r Referral) Referral {

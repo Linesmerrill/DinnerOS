@@ -168,6 +168,8 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/plus` → Plus status, with `referralProgress` ([Plus referrals](#plus-referrals)) | `household.view` | Plus | ✅ |
 | GET | `/api/v1/households/{householdId}/plus/referral` → code, `howItWorks`, `invites`, `referralProgress` | `household.view` | Plus | ✅ |
 | POST | `/api/v1/households/{householdId}/plus/referral/redeem` `{code, deviceCheck?}` → Plus status (a pending referral) | `plan.edit` | Plus | ✅ |
+| GET | `/api/v1/households/{householdId}/plus/referral/code-availability?code=` → `{available, message}` | `plan.edit` | Plus | ✅ |
+| POST | `/api/v1/households/{householdId}/plus/referral/code` `{custom}` or `{regenerate: true}` → the referral response | `plan.edit` | Plus | ✅ |
 | GET | `/api/v1/plus/referrals/summary` → totals by state and `footerText` | operators | Plus | ✅ |
 | PUT | `/api/v1/households/{householdId}/recipes/{recipeId}/rating` `{score, comment?, tags?}` → rating | `household.view` | 9 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/recipes/{recipeId}/rating` → `204` | `household.view` | 9 | ✅ |
@@ -2948,6 +2950,59 @@ code) and, in `invites`:
 
 `GET /plus/referrals/summary` adds `pending`, `qualified`, `expired`, and
 `footerText`, the plain words for under the totals.
+
+### Changing the code
+
+Decision 699. A household can swap its code for a new random one or one it
+picks, like `lines-fam`. Both routes need `plan.edit`, like redeem, and share
+a per-user rate limit (a burst of 30, one more each second; over it is 429
+`rate_limited`, "Slow down a moment, then try again.").
+
+A picked code is 3 to 20 characters: letters, numbers and hyphens, not
+starting or ending with a hyphen. It is stored and shown lowercase. Codes are
+compared by **key**: lowercase letters and numbers only, so `Lines-Fam`,
+`LINESFAM` and `lines fam` are the same code, and builds that strip hyphens
+still redeem a picked code. Reserved words (`admin`, `dinneros`, `support`,
+`help`, `invite`, `plus`) can't be a whole code, and a short built-in list of
+rude words can't appear anywhere in one. Generated codes stay 8 capitals.
+
+`GET .../plus/referral/code-availability?code=lines-fam` checks a code while
+it is typed:
+
+```json
+{"available": true, "message": "You can use that code."}
+```
+
+`available` is false with "That code is taken." (any household has or had it,
+in any case), "Use 3 to 20 letters, numbers or hyphens.", "Start and end with
+a letter or number.", "That code isn't allowed.", or "That's already your
+code."
+
+`POST .../plus/referral/code` with `{"custom": "lines-fam"}` or
+`{"regenerate": true}` changes the code and returns the whole
+`GET .../plus/referral` response. The new code, share text and link work at
+once; the old code stops for good, and redeeming it is 404 `code_replaced`
+("That code was replaced. Ask for the new one."). No household, the same one
+included, can ever take a replaced code again. Invites already made with the
+old code still count.
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `validation_failed` | The body isn't JSON |
+| 422 | `code_invalid` | No code and no `regenerate`, or the wrong length, characters or hyphens |
+| 422 | `code_not_allowed` | A reserved or rude code |
+| 409 | `code_taken` | Another household has or had it, or it is already this household's |
+| 409 | `code_changed` | The code changed during the request ("Your code just changed. Check it and try again.") |
+| 429 | `code_change_limit` | A sixth change in 30 days ("You can change your code again on December 13.", in the household's time zone) |
+
+`GET .../plus/referral` adds:
+
+- `codeChangesLeft`: changes left in the next 30 days, of `codeChangesLimit`
+  (5).
+- `codeChangesNext`: when the code can change again, set only at 0 left.
+- `codeChangesText`: "You can change your code 4 more times in the next 30
+  days.", or the date at 0.
+- `codeHelp`: "Use 3 to 20 letters, numbers or hyphens."
 
 ### Banners
 

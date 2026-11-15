@@ -29,14 +29,21 @@ func newDeviceChecker(cfg config.Config, logger *slog.Logger) plus.DeviceChecker
 }
 
 // migrateReferrals marks referrals from before decision 698 qualified (they
-// were paid when the code was entered), and in the background copies every
-// current membership into the identity history, once. Both are idempotent;
+// were paid when the code was entered), records every code from before
+// decision 699 as an active code key, and in the background copies every
+// current membership into the identity history, once. All are idempotent;
 // a failure is logged and tried again at the next start.
 func migrateReferrals(ctx context.Context, db *mongodb.Client, s *plus.Service, logger *slog.Logger) {
-	if n, err := plus.NewMongoReferrals(db.Database()).MigrateReferrals(ctx); err != nil {
+	refs := plus.NewMongoReferrals(db.Database())
+	if n, err := refs.MigrateReferrals(ctx); err != nil {
 		logger.Error("referral migration failed", "error", err)
 	} else if n > 0 {
 		logger.Info("referrals marked qualified", "count", n)
+	}
+	if n, err := refs.MigrateCodes(ctx); err != nil {
+		logger.Error("referral code migration failed", "error", err)
+	} else if n > 0 {
+		logger.Info("referral codes recorded", "count", n)
 	}
 	migrations := plus.NewMigrations(db.Database())
 	if done, err := migrations.Done(ctx, historyBackfill); err != nil || done {

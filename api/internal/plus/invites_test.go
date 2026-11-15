@@ -186,7 +186,7 @@ func TestShareTextEndsWithTheInviteLink(t *testing.T) {
 		t.Error("message and link don't make the share text")
 	}
 	// The link's code reads back as the same code.
-	if NormalizeCode(InviteURL("W57ZVGUJ")) != "W57ZVGUJ" {
+	if redeemKey(InviteURL("W57ZVGUJ")) != CodeKey("W57ZVGUJ") || redeemKey(InviteURL("lines-fam")) != CodeKey("lines-fam") {
 		t.Error("the link doesn't read back as its code")
 	}
 }

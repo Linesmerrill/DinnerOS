@@ -594,11 +594,12 @@ Implemented in Phase 10 (`internal/recommendations`; see [autopilot.md](autopilo
 
 ### Plus referrals
 
-Implemented in `internal/plus` (decisions 675 and 698).
+Implemented in `internal/plus` (decisions 675, 698 and 699).
 
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `plus_referral_codes` | householdId, code, createdAt | **unique** `{householdId}`; **unique** `{code}` |
+| `plus_referral_codes` | householdId, code (as shown), codeKey, createdAt, changes (the last 10 change times) | **unique** `{householdId}`; **unique** `{code}`; **unique** `{codeKey}` where it exists |
+| `plus_referral_code_keys` | key (lowercase letters and numbers), householdId (unset once the household is deleted), status (`active`/`retired`), createdAt, retiredAt | **unique** `{key}`; `{householdId}` |
 | `plus_referrals` | householdId (the household that entered the code), referrerId, at, state (`pending`/`ready`/`qualified`/`expired`), expiresAt, setupMetAt, qualifiedAt, referrerRewarded, checks (`passed`/`blocked`, absent when unknown), referredGranted, referrerGranted, settled | **unique** `{householdId}`; `{referrerId}`; `{state, _id}` |
 | `plus_free_time` | householdId, until, updatedAt | **unique** `{householdId}` |
 | `plus_household_setup` | householdId, dinners, recipes, updatedAt | **unique** `{householdId}` |
@@ -630,6 +631,19 @@ Implemented in `internal/plus` (decisions 675 and 698).
   698, paid when the code was entered) become `qualified` with
   `qualifiedAt: at` and every flag set. Reads treat a missing `state` the same
   way.
+- **Codes are never reused.** `plus_referral_codes` holds each household's
+  current code; `plus_referral_code_keys` holds every code ever used, active
+  or retired, so its unique `{key}` index stops two households, or a later
+  change, claiming one. A change inserts the new key first (a duplicate is
+  "taken"), then swaps the code with an update guarded by the old code (a
+  lost race removes the key it just inserted), then marks the old key
+  `retired`. The 5-in-30-days limit is read from `changes` before the swap;
+  the guarded swap means two changes at once can't both pass it. Deleting a
+  household deletes its `plus_referral_codes` document and keeps its keys,
+  `retired` with no householdId.
+- **Code migration.** At startup, every `plus_referral_codes` document with
+  no `codeKey` gets one and an `active` key (an upsert), so it is idempotent.
+  Until then, lookups also match a code by its capitals.
 
 ## Multi-tenancy
 

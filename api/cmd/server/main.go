@@ -65,6 +65,11 @@ const (
 	// Creating invitations sends email; limit bursts from one client.
 	inviteCreateRateBurst = 20
 	inviteCreateRateEvery = 30 * time.Second
+	// Checking a referral code as it is typed, and changing it, allow a
+	// burst of 30 per user, refilling one a second. Changes are also capped
+	// at plus.CodeChangeLimit a month.
+	referralCodeRateBurst = 30
+	referralCodeRateEvery = time.Second
 	// A recipe import uploads a household's whole order history (10–15 MB), so
 	// that one route extends the server's ReadTimeout and WriteTimeout.
 	recipeImportTimeout = 5 * time.Minute
@@ -276,6 +281,9 @@ func run() error {
 		Service:    plusService,
 		Authorizer: householdService, Tokens: tokens, WebhookSecret: cfg.Plus.WebhookSecret,
 		Operators: cfg.OperatorUserIDs, Logger: logger,
+		CodeRateLimit: ratelimit.New(ratelimit.Options{
+			Burst: referralCodeRateBurst, Every: referralCodeRateEvery, Message: "Slow down a moment, then try again.",
+		}).MiddlewareBy(plus.RateLimitKey),
 		MemberName: func(ctx context.Context, userID string) string {
 			u, err := userService.GetUser(ctx, userID)
 			if err != nil {

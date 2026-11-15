@@ -27,6 +27,9 @@ type Options struct {
 	IdleTTL time.Duration
 	// Now is the clock. Default time.Now.
 	Now func() time.Time
+	// Message is the 429's message. Default "too many requests; try again
+	// shortly".
+	Message string
 }
 
 // Limiter rate-limits requests per client IP.
@@ -35,6 +38,7 @@ type Limiter struct {
 	burst   int
 	idleTTL time.Duration
 	now     func() time.Time
+	message string
 
 	mu        sync.Mutex
 	clients   map[string]*client
@@ -60,11 +64,15 @@ func New(opts Options) *Limiter {
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
+	if opts.Message == "" {
+		opts.Message = "too many requests; try again shortly"
+	}
 	return &Limiter{
 		limit:   rate.Every(opts.Every),
 		burst:   opts.Burst,
 		idleTTL: opts.IdleTTL,
 		now:     opts.Now,
+		message: opts.Message,
 		clients: map[string]*client{},
 	}
 }
@@ -120,7 +128,7 @@ func (l *Limiter) MiddlewareBy(key func(*http.Request) string) func(http.Handler
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !l.Allow(key(r)) {
 				w.Header().Set("Retry-After", "6")
-				httpx.WriteError(w, r, http.StatusTooManyRequests, "rate_limited", "too many requests; try again shortly")
+				httpx.WriteError(w, r, http.StatusTooManyRequests, "rate_limited", l.message)
 				return
 			}
 			next.ServeHTTP(w, r)

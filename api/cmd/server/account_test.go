@@ -93,11 +93,14 @@ var accountDeletionKinds = map[string]collectionKind{
 	plus.Collection:                  householdData,
 	plus.FreeTimeCollection:          householdData,
 	plus.ReferralCodesCollection:     householdData,
-	plus.ReferralsCollection:         householdData,
-	plus.BillingCollection:           householdData,
-	plus.CompsCollection:             householdData,
-	plus.SetupCollection:             householdData,
-	plus.DevicesCollection:           householdData,
+	// Each code stays, retired with no household, so it can never be
+	// claimed again (decision 699).
+	plus.ReferralCodeKeysCollection: householdData,
+	plus.ReferralsCollection:        householdData,
+	plus.BillingCollection:          householdData,
+	plus.CompsCollection:            householdData,
+	plus.SetupCollection:            householdData,
+	plus.DevicesCollection:          householdData,
 	// Hashed sign-in identities and IDs, kept so a deleted account can't
 	// farm referrals again (decision 698).
 	plus.HistoryCollection:                 global,
