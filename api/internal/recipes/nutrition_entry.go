@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Nutrition a member types for a recipe the household added (decision 693):
+// Nutrition a member types for a recipe the household added (decision 694):
 // per serving, in the same {name, amount, unit} list imports carry, so the
 // recipe page, the cards' calories and protein, and the app's label order all
 // read it the same way.

@@ -35,7 +35,7 @@ type DraftResponse struct {
 	Servings     int `json:"servings"`
 	PrepMinutes  int `json:"prepMinutes,omitempty"`
 	TotalMinutes int `json:"totalMinutes,omitempty"`
-	// Nutrition is per serving, in the recipe's own shape (decision 693).
+	// Nutrition is per serving, in the recipe's own shape (decision 694).
 	Nutrition   []NutrientResponse    `json:"nutritionPerServing,omitempty"`
 	Cuisines    []string              `json:"cuisines"`
 	Tags        []string              `json:"tags"`

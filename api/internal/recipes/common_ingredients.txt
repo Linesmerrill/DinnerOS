@@ -1,5 +1,5 @@
 # Common home-cooking ingredients, offered as suggestions while a member
-# types an ingredient (decision 692). One per line, Title Case. Lines that
+# types an ingredient (decision 693). One per line, Title Case. Lines that
 # start with # are notes. Keep each ingredient once: plurals and case are
 # the same ingredient.
 

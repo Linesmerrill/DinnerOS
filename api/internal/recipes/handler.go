@@ -238,7 +238,7 @@ type RecipeResponse struct {
 	CreatedAt time.Time  `json:"createdAt"`
 	UpdatedAt time.Time  `json:"updatedAt"`
 	// Deleted is true for a recipe the household deleted, still read by ID
-	// for past weeks and cooked history (decision 694).
+	// for past weeks and cooked history (decision 695).
 	Deleted bool `json:"deleted,omitempty"`
 	// HouseholdRating aggregates every member's rating; MyRating is the
 	// caller's own, or null.

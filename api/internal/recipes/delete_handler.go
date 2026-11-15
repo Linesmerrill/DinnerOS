@@ -12,7 +12,7 @@ import (
 )
 
 // DeleteRecipeResponse is the body of a 200 from DELETE
-// /households/{householdId}/recipes/{recipeId} (decision 694).
+// /households/{householdId}/recipes/{recipeId} (decision 695).
 type DeleteRecipeResponse struct {
 	// RemovedFromWeeks are the ISO weeks ("2026-W47") the recipe was taken
 	// off, in order; empty when it wasn't planned.

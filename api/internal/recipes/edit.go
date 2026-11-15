@@ -47,11 +47,11 @@ type EditInput struct {
 	// them, since an import would put the meal kit's own times back.
 	PrepMinutes  *int
 	TotalMinutes *int
-	// Name, when set, renames a recipe the household added (decision 695).
+	// Name, when set, renames a recipe the household added (decision 696).
 	Name *string
 	// Nutrition, when set, replaces the per-serving nutrition; an empty list
 	// clears it. Only a recipe the household added takes it, like times
-	// (decision 693).
+	// (decision 694).
 	Nutrition *[]Nutrient
 }
 

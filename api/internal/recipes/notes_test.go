@@ -7,7 +7,7 @@ import (
 )
 
 // An ingredient's note ("minced") is how it's prepared: kept per line, shown
-// after the name, and never part of the name (decision 692).
+// after the name, and never part of the name (decision 693).
 
 func TestTypedRecipeKeepsIngredientNotes(t *testing.T) {
 	srv := newRecipeTestServer(t, nil)

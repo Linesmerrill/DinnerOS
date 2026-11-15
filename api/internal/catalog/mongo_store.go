@@ -80,6 +80,19 @@ func Indexes() []mongodb.IndexSet {
 				Keys:    bson.D{{Key: "ingredientKeys", Value: 1}},
 				Options: options.Index().SetName("ingredientKeys"),
 			},
+			{
+				// Groups the copies of one recipe (decision 689), most
+				// complete first, then the first published.
+				Keys: bson.D{
+					{Key: "fingerprint", Value: 1}, {Key: "completeness", Value: -1},
+					{Key: "firstPublishedAt", Value: 1}, {Key: "_id", Value: 1},
+				},
+				Options: options.Index().SetName("fingerprint_representative"),
+			},
+			{
+				Keys:    bson.D{{Key: "fingerprintVersion", Value: 1}},
+				Options: options.Index().SetName("fingerprintVersion"),
+			},
 		},
 	}}
 }
@@ -128,12 +141,19 @@ type entryDoc struct {
 	Steps       []stepDoc       `bson:"steps,omitempty"`
 	// IngredientNames feeds the text index. The *Keys fields are the folded
 	// forms the exact filters and the listing order compare against.
-	IngredientNames  []string  `bson:"ingredientNames,omitempty"`
-	IngredientKeys   []string  `bson:"ingredientKeys,omitempty"`
-	CuisineKeys      []string  `bson:"cuisineKeys,omitempty"`
-	TagKeys          []string  `bson:"tagKeys,omitempty"`
-	FirstPublishedAt time.Time `bson:"firstPublishedAt"`
-	UpdatedAt        time.Time `bson:"updatedAt"`
+	IngredientNames []string `bson:"ingredientNames,omitempty"`
+	IngredientKeys  []string `bson:"ingredientKeys,omitempty"`
+	CuisineKeys     []string `bson:"cuisineKeys,omitempty"`
+	TagKeys         []string `bson:"tagKeys,omitempty"`
+	// Fingerprint groups the copies of one recipe, Completeness picks the
+	// copy shown, and FingerprintVersion says which rules made them
+	// (fingerprint.go). All three are derived from the content on every
+	// write.
+	Fingerprint        string    `bson:"fingerprint,omitempty"`
+	FingerprintVersion int       `bson:"fingerprintVersion"`
+	Completeness       int       `bson:"completeness"`
+	FirstPublishedAt   time.Time `bson:"firstPublishedAt"`
+	UpdatedAt          time.Time `bson:"updatedAt"`
 }
 
 type nutrientDoc struct {
@@ -172,6 +192,7 @@ func newEntryDoc(e Recipe) (entryDoc, error) {
 		IsAddon: c.IsAddon, Servings: c.Servings, PrepMinutes: c.PrepMinutes, TotalMin: c.TotalMinutes,
 		Difficulty: c.Difficulty, Cuisines: c.Cuisines, Tags: c.Tags, Utensils: c.Utensils, Allergens: c.Allergens,
 		CuisineKeys: foldAll(c.Cuisines), TagKeys: foldAll(c.Tags),
+		Fingerprint: Fingerprint(c), FingerprintVersion: FingerprintVersion, Completeness: Completeness(c),
 	}
 	for _, n := range c.Nutrition {
 		d.Nutrition = append(d.Nutrition, nutrientDoc(n))
@@ -224,7 +245,7 @@ func (d entryDoc) toRecipe() Recipe {
 		c.Ingredients = append(c.Ingredients, line)
 	}
 	return Recipe{
-		ID: d.ID.Hex(), CatalogKey: d.CatalogKey, Content: c,
+		ID: d.ID.Hex(), CatalogKey: d.CatalogKey, Content: c, Fingerprint: d.Fingerprint,
 		FirstPublishedAt: d.FirstPublishedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
 	}
 }
@@ -314,37 +335,193 @@ func (s *MongoStore) Get(ctx context.Context, id string) (Recipe, error) {
 	if err := s.entries.FindOne(ctx, bson.D{{Key: "_id", Value: oid}}).Decode(&d); err != nil {
 		return Recipe{}, translate(err)
 	}
-	return d.toRecipe(), nil
+	out := d.toRecipe()
+	out.GroupKeys = []string{out.CatalogKey}
+	if d.Fingerprint == "" {
+		return out, nil
+	}
+	cur, err := s.entries.Find(ctx,
+		bson.D{{Key: "fingerprint", Value: d.Fingerprint}, {Key: "_id", Value: bson.D{{Key: "$ne", Value: oid}}}},
+		options.Find().SetSort(representativeOrder()).SetProjection(bson.D{{Key: "catalogKey", Value: 1}}))
+	if err != nil {
+		return Recipe{}, translate(err)
+	}
+	var others []struct {
+		CatalogKey string `bson:"catalogKey"`
+	}
+	if err := cur.All(ctx, &others); err != nil {
+		return Recipe{}, translate(err)
+	}
+	for _, o := range others {
+		if !slices.Contains(out.GroupKeys, o.CatalogKey) {
+			out.GroupKeys = append(out.GroupKeys, o.CatalogKey)
+		}
+	}
+	return out, nil
 }
 
-// Search implements Store. With text it uses the catalog_text index and sorts
-// by relevance; without it, the name index and alphabetical order.
-func (s *MongoStore) Search(ctx context.Context, f Filter) ([]Recipe, int, error) {
-	filter := narrowing(f)
-	opts := options.Find().SetSkip(int64(f.Offset)).SetLimit(int64(f.Limit))
-	if f.Text != "" {
-		filter = append(filter, bson.E{Key: "$text", Value: bson.D{{Key: "$search", Value: f.Text}}})
-		opts.SetSort(bson.D{{Key: "score", Value: bson.D{{Key: "$meta", Value: "textScore"}}}, {Key: "_id", Value: 1}})
-	} else {
-		opts.SetSort(bson.D{{Key: "nameKey", Value: 1}, {Key: "_id", Value: 1}})
+// groupExpr is an entry's group in an aggregation: its fingerprint, or its
+// own ID before the backfill reaches it (groupKey).
+func groupExpr() bson.D {
+	return bson.D{{Key: "$ifNull", Value: bson.A{
+		"$fingerprint", bson.D{{Key: "$concat", Value: bson.A{"id:", bson.D{{Key: "$toString", Value: "$_id"}}}}},
+	}}}
+}
+
+// representativeOrder sorts a group's copies best first (representsBetter).
+func representativeOrder() bson.D {
+	return bson.D{{Key: "completeness", Value: -1}, {Key: "firstPublishedAt", Value: 1}, {Key: "_id", Value: 1}}
+}
+
+// notHidden excludes the hidden groups: fingerprint groups by fingerprint,
+// and entries standing alone by ID.
+func notHidden(groups []string) bson.D {
+	var fps, ids bson.A
+	for _, g := range groups {
+		if id, ok := strings.CutPrefix(g, "id:"); ok {
+			if oid, err := mongodb.ParseID(id); err == nil {
+				ids = append(ids, oid)
+			}
+			continue
+		}
+		fps = append(fps, g)
 	}
-	total, err := s.entries.CountDocuments(ctx, filter, options.Count().SetLimit(int64(MaxOffset+MaxLimit)))
+	var out bson.D
+	if len(fps) > 0 {
+		out = append(out, bson.E{Key: "fingerprint", Value: bson.D{{Key: "$nin", Value: fps}}})
+	}
+	if len(ids) > 0 {
+		out = append(out, bson.E{Key: "_id", Value: bson.D{{Key: "$nin", Value: ids}}})
+	}
+	return out
+}
+
+// Groups implements Store.
+func (s *MongoStore) Groups(ctx context.Context, ids []string) (map[string]string, error) {
+	out := make(map[string]string, len(ids))
+	oids := make(bson.A, 0, len(ids))
+	for _, id := range ids {
+		out[id] = idGroup(id)
+		if oid, err := mongodb.ParseID(id); err == nil {
+			oids = append(oids, oid)
+		}
+	}
+	if len(oids) == 0 {
+		return out, nil
+	}
+	cur, err := s.entries.Find(ctx, bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: oids}}}},
+		options.Find().SetProjection(bson.D{{Key: "fingerprint", Value: 1}}))
 	if err != nil {
-		return nil, 0, translate(err)
+		return nil, translate(err)
 	}
-	cur, err := s.entries.Find(ctx, filter, opts)
-	if err != nil {
-		return nil, 0, translate(err)
+	var docs []struct {
+		ID          bson.ObjectID `bson:"_id"`
+		Fingerprint string        `bson:"fingerprint"`
 	}
-	var docs []entryDoc
 	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	for _, d := range docs {
+		if d.Fingerprint != "" {
+			out[d.ID.Hex()] = d.Fingerprint
+		}
+	}
+	return out, nil
+}
+
+// Search implements Store with one aggregation. Matching entries are grouped
+// by fingerprint; the groups are counted, sorted, and paged; and each group on
+// the page is shown as its most complete copy, chosen from the whole group.
+// With text it uses the catalog_text index and sorts groups by their best
+// relevance; without it, by name.
+func (s *MongoStore) Search(ctx context.Context, f Filter) ([]Recipe, int, error) {
+	match := narrowing(f)
+	match = append(match, notHidden(f.HiddenGroups)...)
+	group := bson.D{
+		{Key: "_id", Value: groupExpr()},
+		{Key: "nameKey", Value: bson.D{{Key: "$min", Value: "$nameKey"}}},
+		{Key: "firstId", Value: bson.D{{Key: "$min", Value: "$_id"}}},
+	}
+	sort := bson.D{{Key: "nameKey", Value: 1}, {Key: "_id", Value: 1}}
+	var pipeline mongo.Pipeline
+	if f.Text != "" {
+		match = append(match, bson.E{Key: "$text", Value: bson.D{{Key: "$search", Value: f.Text}}})
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: match}},
+			bson.D{{Key: "$addFields", Value: bson.D{{Key: "textScore", Value: bson.D{{Key: "$meta", Value: "textScore"}}}}}})
+		group = append(group, bson.E{Key: "score", Value: bson.D{{Key: "$max", Value: "$textScore"}}})
+		sort = bson.D{{Key: "score", Value: -1}, {Key: "_id", Value: 1}}
+	} else {
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: match}})
+	}
+	pipeline = append(pipeline,
+		bson.D{{Key: "$group", Value: group}},
+		bson.D{{Key: "$facet", Value: bson.D{
+			{Key: "total", Value: bson.A{bson.D{{Key: "$count", Value: "n"}}}},
+			{Key: "page", Value: bson.A{
+				bson.D{{Key: "$sort", Value: sort}},
+				bson.D{{Key: "$skip", Value: int64(f.Offset)}},
+				bson.D{{Key: "$limit", Value: int64(f.Limit)}},
+				bson.D{{Key: "$lookup", Value: bson.D{
+					{Key: "from", Value: RecipesCollection},
+					{Key: "localField", Value: "_id"},
+					{Key: "foreignField", Value: "fingerprint"},
+					{Key: "pipeline", Value: bson.A{
+						bson.D{{Key: "$match", Value: bson.D{{Key: "source", Value: bson.D{{Key: "$nin", Value: recipes.WithheldSources()}}}}}},
+						bson.D{{Key: "$sort", Value: representativeOrder()}},
+					}},
+					{Key: "as", Value: "members"},
+				}}},
+			}},
+		}}},
+	)
+	cur, err := s.entries.Aggregate(ctx, pipeline, options.Aggregate().SetAllowDiskUse(true))
+	if err != nil {
 		return nil, 0, translate(err)
 	}
-	out := make([]Recipe, 0, len(docs))
-	for _, d := range docs {
-		out = append(out, d.toRecipe())
+	var rows []struct {
+		Total []struct {
+			N int `bson:"n"`
+		} `bson:"total"`
+		Page []struct {
+			FirstID bson.ObjectID `bson:"firstId"`
+			Members []entryDoc    `bson:"members"`
+		} `bson:"page"`
 	}
-	return out, int(total), nil
+	if err := cur.All(ctx, &rows); err != nil {
+		return nil, 0, translate(err)
+	}
+	if len(rows) == 0 {
+		return nil, 0, nil
+	}
+	total := 0
+	if len(rows[0].Total) > 0 {
+		total = min(rows[0].Total[0].N, MaxOffset+MaxLimit)
+	}
+	out := make([]Recipe, 0, len(rows[0].Page))
+	for _, g := range rows[0].Page {
+		if len(g.Members) == 0 {
+			// An entry the backfill has not reached stands alone.
+			var d entryDoc
+			if err := s.entries.FindOne(ctx, bson.D{{Key: "_id", Value: g.FirstID}}).Decode(&d); err != nil {
+				return nil, 0, translate(err)
+			}
+			g.Members = []entryDoc{d}
+		}
+		out = append(out, representative(g.Members))
+	}
+	return out, total, nil
+}
+
+// representative is a group's first copy (members are sorted best first),
+// with the keys of the whole group.
+func representative(members []entryDoc) Recipe {
+	out := members[0].toRecipe()
+	for _, m := range members {
+		if !slices.Contains(out.GroupKeys, m.CatalogKey) {
+			out.GroupKeys = append(out.GroupKeys, m.CatalogKey)
+		}
+	}
+	return out
 }
 
 // narrowing builds the exact filters shared by search and counting, all of
@@ -380,27 +557,145 @@ func foldAll(values []string) []string {
 	return out
 }
 
-// Scan implements Store with a projection that drops steps and descriptions,
-// which discovery never shows.
+// Scan implements Store with an aggregation that keeps each group's most
+// complete copy and drops steps and descriptions, which discovery never
+// shows. The limit counts groups.
 func (s *MongoStore) Scan(ctx context.Context, limit int) ([]Recipe, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
-	cur, err := s.entries.Find(ctx, bson.D{},
-		options.Find().
-			SetSort(bson.D{{Key: "_id", Value: 1}}).
-			SetLimit(int64(limit)).
-			SetProjection(bson.D{{Key: "steps", Value: 0}, {Key: "description", Value: 0}}))
+	cur, err := s.entries.Aggregate(ctx, mongo.Pipeline{
+		{{Key: "$match", Value: bson.D{{Key: "source", Value: bson.D{{Key: "$nin", Value: recipes.WithheldSources()}}}}}},
+		{{Key: "$project", Value: bson.D{{Key: "steps", Value: 0}, {Key: "description", Value: 0}}}},
+		{{Key: "$sort", Value: append(bson.D{{Key: "fingerprint", Value: 1}}, representativeOrder()...)}},
+		{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: groupExpr()},
+			{Key: "doc", Value: bson.D{{Key: "$first", Value: "$$ROOT"}}},
+			{Key: "keys", Value: bson.D{{Key: "$push", Value: "$catalogKey"}}},
+		}}},
+		{{Key: "$sort", Value: bson.D{{Key: "doc._id", Value: 1}}}},
+		{{Key: "$limit", Value: int64(limit)}},
+	}, options.Aggregate().SetAllowDiskUse(true))
 	if err != nil {
 		return nil, translate(err)
 	}
-	var docs []entryDoc
-	if err := cur.All(ctx, &docs); err != nil {
+	var rows []struct {
+		Doc  entryDoc `bson:"doc"`
+		Keys []string `bson:"keys"`
+	}
+	if err := cur.All(ctx, &rows); err != nil {
 		return nil, translate(err)
 	}
-	out := make([]Recipe, 0, len(docs))
-	for _, d := range docs {
-		out = append(out, d.toRecipe())
+	out := make([]Recipe, 0, len(rows))
+	for _, row := range rows {
+		e := row.Doc.toRecipe()
+		e.GroupKeys = []string{e.CatalogKey}
+		for _, k := range row.Keys {
+			if !slices.Contains(e.GroupKeys, k) {
+				e.GroupKeys = append(e.GroupKeys, k)
+			}
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
+// --- Fingerprints -------------------------------------------------------------
+
+// fingerprintBatch is how many entries BackfillFingerprints writes at once.
+const fingerprintBatch = 500
+
+// BackfillFingerprints gives every entry stored before decision 689, or under
+// older fingerprint rules, its fingerprint and completeness, and returns how
+// many it changed. The server runs it at startup: once every entry is current
+// it reads one index and writes nothing, and re-running it is safe.
+func (s *MongoStore) BackfillFingerprints(ctx context.Context) (int, error) {
+	cur, err := s.entries.Find(ctx, bson.D{{Key: "fingerprintVersion", Value: bson.D{{Key: "$ne", Value: FingerprintVersion}}}})
+	if err != nil {
+		return 0, translate(err)
+	}
+	defer func() { _ = cur.Close(context.WithoutCancel(ctx)) }()
+	changed := 0
+	var models []mongo.WriteModel
+	flush := func() error {
+		if len(models) == 0 {
+			return nil
+		}
+		res, err := s.entries.BulkWrite(ctx, models, options.BulkWrite().SetOrdered(false))
+		if err != nil {
+			return fmt.Errorf("catalog: backfill fingerprints: %w", err)
+		}
+		changed += int(res.ModifiedCount)
+		models = models[:0]
+		return nil
+	}
+	for cur.Next(ctx) {
+		var d entryDoc
+		if err := cur.Decode(&d); err != nil {
+			return changed, translate(err)
+		}
+		c := d.toRecipe().Content
+		set := bson.D{
+			{Key: "fingerprintVersion", Value: FingerprintVersion},
+			{Key: "completeness", Value: Completeness(c)},
+		}
+		update := bson.D{}
+		if fp := Fingerprint(c); fp != "" {
+			update = append(update, bson.E{Key: "$set", Value: append(set, bson.E{Key: "fingerprint", Value: fp})})
+		} else {
+			update = append(update, bson.E{Key: "$set", Value: set}, bson.E{Key: "$unset", Value: bson.D{{Key: "fingerprint", Value: ""}}})
+		}
+		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.D{{Key: "_id", Value: d.ID}}).SetUpdate(update))
+		if len(models) >= fingerprintBatch {
+			if err := flush(); err != nil {
+				return changed, err
+			}
+		}
+	}
+	if err := cur.Err(); err != nil {
+		return changed, translate(err)
+	}
+	return changed, flush()
+}
+
+// GroupEntry is one stored entry and the group the current rules put it in.
+type GroupEntry struct {
+	ID   string
+	Name string
+	// Group is computed now from the content, whatever is stored: the
+	// fingerprint, or the entry's own ID group when it has none.
+	Group string
+	// Current is true when the stored fingerprint and version are up to date.
+	Current bool
+}
+
+// ListGroups reads every entry the lists can show (none from a withheld
+// source) and computes its group. It writes nothing: cmd/sharedcount uses it
+// to count Shared Recipes before and after decision 689 on any database,
+// backfilled or not.
+func (s *MongoStore) ListGroups(ctx context.Context) ([]GroupEntry, error) {
+	cur, err := s.entries.Find(ctx,
+		bson.D{{Key: "source", Value: bson.D{{Key: "$nin", Value: recipes.WithheldSources()}}}},
+		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}).SetProjection(bson.D{{Key: "description", Value: 0}}))
+	if err != nil {
+		return nil, translate(err)
+	}
+	defer func() { _ = cur.Close(context.WithoutCancel(ctx)) }()
+	var out []GroupEntry
+	for cur.Next(ctx) {
+		var d entryDoc
+		if err := cur.Decode(&d); err != nil {
+			return nil, translate(err)
+		}
+		e := d.toRecipe()
+		e.Fingerprint = Fingerprint(e.Content)
+		out = append(out, GroupEntry{
+			ID: e.ID, Name: e.Content.Name, Group: groupKey(e),
+			Current: d.FingerprintVersion == FingerprintVersion && d.Fingerprint == e.Fingerprint,
+		})
+	}
+	if err := cur.Err(); err != nil {
+		return nil, translate(err)
 	}
 	return out, nil
 }

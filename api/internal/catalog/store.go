@@ -17,14 +17,20 @@ type Store interface {
 	// wrote (inserted plus modified). It is idempotent: re-publishing
 	// unchanged content writes nothing.
 	Upsert(ctx context.Context, entries []Recipe, now time.Time) (int, error)
-	// Get returns one entry by ID.
+	// Get returns one entry by ID, with GroupKeys.
 	Get(ctx context.Context, id string) (Recipe, error)
-	// Search returns entries matching f, ordered by relevance when f.Text is
-	// set and by name otherwise, and the total number of matches. Results
-	// carry full content.
+	// Search returns one representative per group of entries (decision 689)
+	// for the groups with an entry matching f and none in f.HiddenGroups,
+	// ordered by relevance when f.Text is set and by name otherwise, and the
+	// total number of such groups. Paging counts groups, not entries.
+	// Results carry full content and GroupKeys.
 	Search(ctx context.Context, f Filter) (entries []Recipe, total int, err error)
-	// Scan returns up to limit entries for ranking, ordered by ID. Entries
-	// carry no steps and no description: discovery ranks and lists, it does
-	// not render a recipe.
+	// Scan returns up to limit group representatives for ranking, ordered by
+	// ID, with GroupKeys. Entries carry no steps and no description:
+	// discovery ranks and lists, it does not render a recipe.
 	Scan(ctx context.Context, limit int) ([]Recipe, error)
+	// Groups maps each of ids to its entry's group (groupKey); an unknown ID
+	// maps to its own group. Reports are kept per entry and apply to the
+	// whole group.
+	Groups(ctx context.Context, ids []string) (map[string]string, error)
 }

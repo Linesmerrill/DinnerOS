@@ -124,6 +124,15 @@ func run() error {
 	if err := substitutes.EnsureSeed(startupCtx, substitutesStore, logger); err != nil {
 		return err
 	}
+	// Shared Recipes groups copies of one recipe by fingerprint (decision
+	// 689). Entries stored before it, or under older rules, get theirs here;
+	// once all are current this reads one index and writes nothing. A failure
+	// is not fatal: an entry without a fingerprint is shown on its own.
+	if n, err := catalog.NewMongoStore(db.Database()).BackfillFingerprints(startupCtx); err != nil {
+		logger.Warn("shared recipe fingerprint backfill failed", "error", err, "updated", n)
+	} else if n > 0 {
+		logger.Info("shared recipe fingerprints backfilled", "updated", n)
+	}
 	cancelStartup()
 	logger.Info("mongodb connected", "database", cfg.MongoDatabase)
 
@@ -218,7 +227,7 @@ func run() error {
 		WithFreezer(pantryService, householdService, notificationService).WithOutcomes(behavior.events)
 	householdService.WithWeekStartListener(planService)
 	// Deleting a recipe takes it off this week and later weeks, and Undo puts
-	// those meals back (decision 694).
+	// those meals back (decision 695).
 	recipeService.WithPlans(planService)
 	// A frozen item needed by one of today's meals is a reminder derived on
 	// read, like the pantry's low-stock check and the weekly order reminder.

@@ -49,7 +49,7 @@ type Draft struct {
 	Servings     int
 	PrepMinutes  int
 	TotalMinutes int
-	// Nutrition is per serving, as the member typed it (decision 693).
+	// Nutrition is per serving, as the member typed it (decision 694).
 	Nutrition   []Nutrient
 	Cuisines    []string
 	Tags        []string

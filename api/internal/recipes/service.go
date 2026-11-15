@@ -368,7 +368,7 @@ func mergeStored(r, stored Recipe, released []ImportRecipe) Recipe {
 	// a re-import of the same file "unchanged" rather than a rewrite.
 	r.SharedToCatalog, r.CatalogKey = stored.SharedToCatalog, stored.CatalogKey
 	// A recipe the household deleted stays deleted when its kit sends it
-	// again; only a restore brings it back (decision 694).
+	// again; only a restore brings it back (decision 695).
 	r.DeletedAt, r.RemovedPlanEntries = stored.DeletedAt, stored.RemovedPlanEntries
 	// The household's own changes outlast the source's (decision 667).
 	if !stored.EditedAt.IsZero() {

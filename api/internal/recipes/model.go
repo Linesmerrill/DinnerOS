@@ -85,7 +85,7 @@ type Recipe struct {
 	// edited recipe keeps its ingredients and steps through a re-import.
 	EditedAt time.Time
 	// DeletedAt is when the household deleted the recipe; zero while it's in
-	// the library (decision 694). A deleted recipe is still read by ID, so
+	// the library (decision 695). A deleted recipe is still read by ID, so
 	// past weeks and cooked history keep it, but nothing lists it.
 	DeletedAt time.Time
 	// RemovedPlanEntries are the meals the delete took off this week and

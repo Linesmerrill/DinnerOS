@@ -106,7 +106,7 @@ type Config struct {
 	// Instacart makes Instacart shopping list pages from a week's list when
 	// INSTACART_ENABLED is true and INSTACART_API_KEY is set.
 	Instacart Instacart
-	// PexelsAPIKey turns on photo search for recipes (decision 691). Empty
+	// PexelsAPIKey turns on photo search for recipes (decision 692). Empty
 	// (the default) leaves it off. The key is a secret: never log it.
 	PexelsAPIKey string
 

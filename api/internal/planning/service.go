@@ -331,7 +331,7 @@ func (s *Service) AddEntries(ctx context.Context, householdID, userID, week stri
 		}
 		recipe, ok := live[ne.RecipeID]
 		if !ok || !recipe.DeletedAt.IsZero() {
-			// A deleted recipe can't be planned (decision 694).
+			// A deleted recipe can't be planned (decision 695).
 			return Plan{}, nil, ErrRecipeNotFound
 		}
 		if err := checkServings(recipe, ne.Servings); err != nil {

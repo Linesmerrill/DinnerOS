@@ -773,7 +773,7 @@ paths:
         The household's own ingredient names, one per ingredient whatever
         the case or plural, most used first (at most 2000), then a bundled
         list of common ingredients without the ones the household has
-        (decision 692). Cached privately for 5 minutes, with an ETag; send
+        (decision 693). Cached privately for 5 minutes, with an ETag; send
         If-None-Match to get 304 when the app's copy is current.
       parameters:
         - $ref: "#/components/parameters/HouseholdID"
@@ -1104,7 +1104,7 @@ paths:
     get:
       summary: Search for recipe photos
       description: |
-        Photos to pick for a recipe, found by name (decision 691). Requires
+        Photos to pick for a recipe, found by name (decision 692). Requires
         `recipes.edit`. The search runs on the server, so no key ships in the
         app; Pexels is the default provider and pages are cached for an hour.
         Thumbnails load straight from the provider. Off until PEXELS_API_KEY
@@ -1509,7 +1509,7 @@ paths:
       description: |
         Deletes one of the household's recipes: typed, linked, imported from
         a meal kit, copied from Shared Recipes, or from the starter library
-        (decision 694). Requires `recipes.edit`. It is a soft delete: the
+        (decision 695). Requires `recipes.edit`. It is a soft delete: the
         recipe leaves the list, search, the menu, recommendations, Autopilot,
         and Shared Recipes (it isn't shared again; an entry already in the
         catalog stays, as when sharing is turned off), and it comes off this
@@ -1553,7 +1553,7 @@ paths:
     post:
       summary: Bring back a deleted recipe
       description: |
-        Undoes a delete within 30 days (decision 694): the recipe is back in
+        Undoes a delete within 30 days (decision 695): the recipe is back in
         the library, and the meals the delete took off are put back on weeks
         that haven't ended, unless that day has passed or the week is full or
         finalized. Sharing stays off until the household turns it on again.
@@ -6674,7 +6674,7 @@ components:
         deleted:
           type: boolean
           description: |
-            True for a recipe the household deleted (decision 694). It is still
+            True for a recipe the household deleted (decision 695). It is still
             read by ID, for past weeks and cooked history, but no list shows it.
             Absent otherwise.
         createdAt:
@@ -6782,7 +6782,10 @@ components:
           type: string
         total:
           type: integer
-          description: How many entries matched, capped at the paging limit.
+          description: >-
+            How many recipes matched, capped at the paging limit. Copies of one
+            recipe shared by several households count once and appear once, as
+            the most complete copy (decision 689).
         emptyTitle:
           type: string
           description: What the app shows when discovery has nothing new.
@@ -6835,12 +6838,12 @@ components:
         name:
           type: string
           maxLength: 200
-          description: Renames a recipe the household added. Absent keeps the name (decision 695).
+          description: Renames a recipe the household added. Absent keeps the name (decision 696).
         prepMinutes:
           type: integer
           minimum: 0
           maximum: 1440
-          description: Prep time of a recipe the household added. Absent keeps it, 0 clears it (decision 690).
+          description: Prep time of a recipe the household added. Absent keeps it, 0 clears it (decision 691).
         totalMinutes:
           type: integer
           minimum: 0
@@ -6851,7 +6854,7 @@ components:
           maxItems: 9
           description: |
             Replaces the nutrition of a recipe the household added: absent keeps
-            it, [] clears it. Per serving, in the recipe's own shape (decision 693). Names are
+            it, [] clears it. Per serving, in the recipe's own shape (decision 694). Names are
             matched without case, with common spellings ("carbs", "fiber"),
             and stored as Calories (kcal, at most 5000), Fat, Saturated Fat,
             Carbohydrate, Sugar, Dietary Fiber, Protein (g, at most 1000 each),
@@ -7041,7 +7044,7 @@ components:
           type: array
           maxItems: 9
           description: |
-            Per serving, in the recipe's own shape (decision 693). Names are
+            Per serving, in the recipe's own shape (decision 694). Names are
             matched without case, with common spellings ("carbs", "fiber"),
             and stored as Calories (kcal, at most 5000), Fat, Saturated Fat,
             Carbohydrate, Sugar, Dietary Fiber, Protein (g, at most 1000 each),
@@ -7100,7 +7103,7 @@ components:
           type: string
           description: |
             How it's prepared, or the rest of the line ("diced", "14.5 oz").
-            Saved with the line and shown after its name (decision 692).
+            Saved with the line and shown after its name (decision 693).
         group:
           type: string
           description: The heading the line came under on the page ("Sauce"). Shown for review only.
@@ -7151,7 +7154,7 @@ components:
           description: |
             How it's prepared ("minced", "room temperature"), shown after the
             name. Absent when there is none. Never part of a grocery item
-            (decision 692).
+            (decision 693).
         amounts:
           type: array
           items:

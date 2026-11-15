@@ -46,7 +46,7 @@ Imported files contain personal order history. They live under
 | `sourceIngredientId` | string | Source ingredient ID, used to map to canonical DinnerOS ingredients |
 | `name`, `slug`, `imageUrl` | string | |
 | `pantryStaple` | bool | Source hint that the ingredient isn't shipped (salt, pepper, oil) and is expected at home. The household pantry decides the final grocery list. |
-| `note` | string, optional | How the ingredient is prepared ("minced", "softened"). Shown after the name, never part of the grocery item. Spaces are tidied and it is cut at 200 characters (decision 692). |
+| `note` | string, optional | How the ingredient is prepared ("minced", "softened"). Shown after the name, never part of the grocery item. Spaces are tidied and it is cut at 200 characters (decision 693). |
 | `amounts` | ImportAmount[] | One entry per serving size, ascending |
 
 ## ImportAmount

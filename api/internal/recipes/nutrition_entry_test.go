@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// Typed nutrition on a recipe the household added (decision 693).
+// Typed nutrition on a recipe the household added (decision 694).
 
 func TestCleanTypedNutritionUsesTheImportNamesAndUnits(t *testing.T) {
 	got, problem := cleanTypedNutrition([]Nutrient{

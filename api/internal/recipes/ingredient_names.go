@@ -19,7 +19,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
 )
 
-// Ingredient name suggestions (decision 692): while a member types an
+// Ingredient name suggestions (decision 693): while a member types an
 // ingredient, the app suggests names. The household's own come first, most
 // used first, then a bundled list of common ingredients. The app keeps the
 // response, so suggestions work offline.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -32,29 +33,13 @@ func (m *memoryReports) Add(_ context.Context, r Report) (bool, error) {
 	return true, nil
 }
 
-func (m *memoryReports) HiddenFor(_ context.Context, householdID string) (map[string]bool, error) {
+func (m *memoryReports) Reporters(context.Context) (map[string][]string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := map[string]bool{}
+	out := map[string][]string{}
 	for _, r := range m.list {
-		if r.HouseholdID == householdID {
-			out[r.CatalogID] = true
-		}
-	}
-	return out, nil
-}
-
-func (m *memoryReports) Pulled(_ context.Context, n int) (map[string]bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	counts := map[string]int{}
-	for _, r := range m.list {
-		counts[r.CatalogID]++
-	}
-	out := map[string]bool{}
-	for id, c := range counts {
-		if c >= n {
-			out[id] = true
+		if !slices.Contains(out[r.CatalogID], r.HouseholdID) {
+			out[r.CatalogID] = append(out[r.CatalogID], r.HouseholdID)
 		}
 	}
 	return out, nil
@@ -172,19 +157,19 @@ func TestIntegrationMongoReports(t *testing.T) {
 	if _, err := store.Add(t.Context(), Report{CatalogID: other, HouseholdID: hhAda, Reason: "spam"}); err != nil {
 		t.Fatal(err)
 	}
-	if mine, err := store.HiddenFor(t.Context(), hhAda); err != nil || len(mine) != 2 {
-		t.Errorf("hidden for ada = %v, %v", mine, err)
+	reporters, err := store.Reporters(t.Context())
+	if err != nil {
+		t.Fatal(err)
 	}
-	if pulled, err := store.Pulled(t.Context(), PullAfter); err != nil || len(pulled) != 1 || !pulled[recipe] {
-		t.Errorf("pulled = %v, %v", pulled, err)
+	want := slices.Sorted(slices.Values(households))
+	if !slices.Equal(reporters[recipe], want) || !slices.Equal(reporters[other], []string{hhAda}) || len(reporters) != 2 {
+		t.Errorf("reporters = %v", reporters)
 	}
 	if err := store.PurgeHousehold(t.Context(), hhAda); err != nil {
 		t.Fatal(err)
 	}
-	if mine, _ := store.HiddenFor(t.Context(), hhAda); len(mine) != 0 {
-		t.Errorf("after purge ada still hides %v", mine)
-	}
-	if pulled, _ := store.Pulled(t.Context(), PullAfter); len(pulled) != 0 {
-		t.Errorf("after purge still pulled: %v", pulled)
+	reporters, _ = store.Reporters(t.Context())
+	if len(reporters[recipe]) != 2 || len(reporters[other]) != 0 {
+		t.Errorf("after purge reporters = %v", reporters)
 	}
 }

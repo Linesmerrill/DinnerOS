@@ -9,7 +9,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 )
 
-// A recipe delete (decision 694) takes the recipe off this week from today
+// A recipe delete (decision 695) takes the recipe off this week from today
 // on and every later week; past days, past weeks, and finalized weeks keep
 // it. Undo puts the meals back.
 func TestRemoveRecipeFromUpcomingAndRestore(t *testing.T) {

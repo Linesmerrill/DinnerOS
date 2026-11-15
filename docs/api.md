@@ -425,7 +425,7 @@ saves the household's version of a recipe's ingredients and steps (decision
 667): `{"ingredients": [{ingredientId?, name, pantryStaple, note?, amounts:
 [{servings, quantity, unit}]}], "steps": ["…"]}`. `note` is how the line is
 prepared ("minced", up to 200 characters); empty or absent clears it, and
-it outlasts a later import like the rest of the edit (decision 692). A line keeps its catalog
+it outlasts a later import like the rest of the edit (decision 693). A line keeps its catalog
 ingredient when it sends its own `ingredientId` with its name unchanged; a new
 or renamed line is matched by name, and a name the catalog doesn't know is
 added. Amounts are only for the recipe's serving sizes; quantities read like
@@ -442,7 +442,7 @@ On any other recipe it is `validation_failed`, "Only recipes you added can get
 a new photo."
 
 An optional `nutritionPerServing` replaces the nutrition of a recipe the
-household added (decision 693): absent keeps it, `[]` clears it. It takes the
+household added (decision 694): absent keeps it, `[]` clears it. It takes the
 same list as a draft (below) and, like the photo, can be sent alone. On any
 other recipe it is `validation_failed`, "Only recipes you added can get new
 nutrition." The recipe's and the list's `calories` and `proteinGrams` follow
@@ -462,7 +462,7 @@ mg.", "You listed protein twice.", "Fat can't be less than zero."
 
 A recipe's ingredient lines carry an optional `note`, how the ingredient is
 prepared ("minced", "softened", "room temperature"), set from a typed or
-linked draft, an import file's ingredient, or an edit (decision 692). The app
+linked draft, an import file's ingredient, or an edit (decision 693). The app
 shows it after the name ("2 Tbsp Garlic, minced"). It never reaches a grocery
 item: the list buys by name alone, so "Garlic" and "Garlic, minced" are one
 item.
@@ -488,7 +488,7 @@ offline use.
 
 `DELETE /api/v1/households/{householdId}/recipes/{recipeId}` (`recipes.edit`,
 no body) deletes one of the household's recipes, whatever it came from
-(decision 694). It answers `200 {"removedFromWeeks": ["2026-W47"],
+(decision 695). It answers `200 {"removedFromWeeks": ["2026-W47"],
 "undoUntil": "2026-12-16T18:00:00Z"}`: the weeks it was taken off (empty when
 it wasn't planned) and when Undo stops working. Another household's recipe is
 `404` "That recipe isn't in your recipes." Deleting it again answers the same.
@@ -523,7 +523,7 @@ phone called. Put that in a draft's `imageUrl` on save, or in an edit.
 `GET /api/v1/recipe-photos/{id}` needs no sign-in (the ID is 128 random bits)
 and serves the image, cached for a year. Photos are deleted with the household.
 
-Photo search (decision 691), both `recipes.edit`:
+Photo search (decision 692), both `recipes.edit`:
 `GET /api/v1/households/{householdId}/recipe-photos/search?q=brownies&page=1`
 answers `{"photos": [{"id", "thumbnailUrl", "width", "height", "credit"}],
 "nextPage": 2}` (30 a page; `nextPage` 0 when there are no more, and past page
@@ -774,6 +774,17 @@ No source is published without that opt-in. Two households' copies of one recipe
 collapse into one entry, keyed by
 `catalogKey`: `<source>:<sourceRecipeId>`, or a fingerprint of the name and
 ingredient set when the source has no identifier of its own.
+
+Discovery and search show each recipe **once** (decision 689). Entries that are
+the same recipe under different keys (the same link once `www.`, the scheme, a
+trailing slash and tracking parameters are ignored; with no link, the same
+importer recipe ID; or for a typed recipe the same title, ingredient lines and
+steps) are
+one result: the most complete copy (photo, then steps, then nutrition, then the
+first published). `total` and the cursor count recipes, not copies, and a result
+is `inLibrary` when the household has any copy. Reporting any copy hides every
+copy from that household, and 3 households reporting copies of one recipe hide
+it for everyone.
 
 The routes are household-scoped even though the data is global, because the
 only useful way to read a catalog is marked against a library.

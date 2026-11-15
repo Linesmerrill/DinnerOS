@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// Prep and cook times on a recipe the household typed (decision 690): the
+// Prep and cook times on a recipe the household typed (decision 691): the
 // app sends prep and total, and an edit can change or clear them.
 
 func TestDraftTimesUpToADay(t *testing.T) {

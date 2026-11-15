@@ -20,13 +20,13 @@ type EditRecipeRequest struct {
 	// otherwise the imageUrl from POST .../recipe-photos (decision 687).
 	ImageURL *string `json:"imageUrl,omitempty"`
 	// PrepMinutes and TotalMinutes, when present, change the recipe's times;
-	// 0 clears one (decision 690).
+	// 0 clears one (decision 691).
 	// Name, when present, renames a recipe the household added.
 	Name         *string `json:"name,omitempty"`
 	PrepMinutes  *int    `json:"prepMinutes,omitempty"`
 	TotalMinutes *int    `json:"totalMinutes,omitempty"`
 	// Nutrition, when present, replaces the per-serving nutrition; []
-	// clears it (decision 693).
+	// clears it (decision 694).
 	Nutrition *[]NutrientResponse `json:"nutritionPerServing,omitempty"`
 }
 

@@ -136,13 +136,12 @@ func (s *Service) Search(ctx context.Context, householdID string, q Query) (Page
 	if err != nil {
 		return Page{}, err
 	}
+	// The store drops hidden groups before paging, so the count and the
+	// cursor are right.
+	f.HiddenGroups = hiddenList(s.hidden(ctx, householdID))
 	entries, total, err := s.store.Search(ctx, f)
 	if err != nil {
 		return Page{}, fmt.Errorf("search catalog: %w", err)
-	}
-	if kept := withoutHidden(shown(entries), s.hidden(ctx, householdID)); len(kept) != len(entries) {
-		total -= len(entries) - len(kept)
-		entries = kept
 	}
 	items := make([]Result, 0, len(entries))
 	for _, e := range entries {
@@ -164,7 +163,7 @@ func (s *Service) Get(ctx context.Context, householdID, id string) (Result, erro
 	if err != nil {
 		return Result{}, err
 	}
-	if recipes.CatalogWithheld(e.Content.Source) || s.hidden(ctx, householdID)[e.ID] {
+	if recipes.CatalogWithheld(e.Content.Source) || isHidden(e, s.hidden(ctx, householdID)) {
 		return Result{}, ErrNotFound
 	}
 	out := []Result{{Recipe: e}}
@@ -181,7 +180,7 @@ func (s *Service) Add(ctx context.Context, householdID, id string) (recipes.Reci
 	if err != nil {
 		return recipes.Recipe{}, false, err
 	}
-	if recipes.CatalogWithheld(e.Content.Source) || s.hidden(ctx, householdID)[e.ID] {
+	if recipes.CatalogWithheld(e.Content.Source) || isHidden(e, s.hidden(ctx, householdID)) {
 		return recipes.Recipe{}, false, ErrNotFound
 	}
 	if s.library == nil {
@@ -223,14 +222,15 @@ func (s *Service) tasteOf(ctx context.Context, householdID string) (recommendati
 	return profile, bands
 }
 
-// withoutLibrary drops the entries the household already has.
+// withoutLibrary drops the entries the household already has, under any of
+// their group's keys: a household with one copy of a recipe has the recipe.
 func (s *Service) withoutLibrary(ctx context.Context, householdID string, entries []Recipe) ([]Recipe, error) {
 	if s.library == nil || len(entries) == 0 {
 		return entries, nil
 	}
-	keys := make([]string, 0, len(entries))
+	var keys []string
 	for _, e := range entries {
-		keys = append(keys, e.CatalogKey)
+		keys = append(keys, e.keys()...)
 	}
 	have, err := s.library.InLibrary(ctx, householdID, keys)
 	if err != nil {
@@ -238,7 +238,7 @@ func (s *Service) withoutLibrary(ctx context.Context, householdID string, entrie
 	}
 	out := make([]Recipe, 0, len(entries))
 	for _, e := range entries {
-		if _, ok := have[e.CatalogKey]; !ok {
+		if libraryID(e, have) == "" {
 			out = append(out, e)
 		}
 	}
@@ -250,18 +250,28 @@ func (s *Service) mark(ctx context.Context, householdID string, items []Result) 
 	if s.library == nil || len(items) == 0 {
 		return nil
 	}
-	keys := make([]string, 0, len(items))
+	var keys []string
 	for _, it := range items {
-		keys = append(keys, it.CatalogKey)
+		keys = append(keys, it.keys()...)
 	}
 	have, err := s.library.InLibrary(ctx, householdID, keys)
 	if err != nil {
 		return fmt.Errorf("mark library: %w", err)
 	}
 	for i := range items {
-		items[i].LibraryRecipeID = have[items[i].CatalogKey]
+		items[i].LibraryRecipeID = libraryID(items[i].Recipe, have)
 	}
 	return nil
+}
+
+// libraryID is the household's recipe for e's group, preferring e's own key.
+func libraryID(e Recipe, have map[string]string) string {
+	for _, k := range e.keys() {
+		if id := have[k]; id != "" {
+			return id
+		}
+	}
+	return ""
 }
 
 // narrow applies the exact filters in memory, for the scanned discovery set.

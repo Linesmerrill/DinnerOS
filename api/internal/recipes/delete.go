@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Deleting a recipe (decision 694) is a soft delete: the recipe leaves the
+// Deleting a recipe (decision 695) is a soft delete: the recipe leaves the
 // library, search, the menu's catalog, recommendations, Autopilot, Shared
 // Recipes, and this week and later weeks, but stays readable by ID, so past
 // weeks and cooked history still show what was made. A restore within

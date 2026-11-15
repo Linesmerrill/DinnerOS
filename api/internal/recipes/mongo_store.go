@@ -701,7 +701,7 @@ func (s *MongoStore) LibraryCatalogKeys(ctx context.Context, householdID string,
 }
 
 // notDeleted keeps a household's deleted recipes out of lists, search, and
-// the catalogs the menu and recommendations read (decision 694).
+// the catalogs the menu and recommendations read (decision 695).
 var notDeleted = bson.E{Key: "deletedAt", Value: bson.D{{Key: "$exists", Value: false}}}
 
 type removedEntryDoc struct {

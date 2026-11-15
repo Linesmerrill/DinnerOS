@@ -13,7 +13,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
 )
 
-// Photo search (decision 691): instead of taking a photo, a member searches
+// Photo search (decision 692): instead of taking a photo, a member searches
 // for one by the recipe's name and picks it. The search runs here so no key
 // ships in the app. A picked photo is downloaded and kept like an uploaded
 // one, so it still shows offline and if the provider removes it.

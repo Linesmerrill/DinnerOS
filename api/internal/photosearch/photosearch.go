@@ -1,5 +1,5 @@
 // Package photosearch finds photos for a recipe by its name, so a member can
-// pick one instead of taking their own (decision 691). The search runs on the
+// pick one instead of taking their own (decision 692). The search runs on the
 // server so no provider key ships in the app, and the phone never hands the
 // server an address to download: it names a result by its ID, and the
 // provider's own API says where that photo is.

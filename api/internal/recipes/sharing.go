@@ -115,7 +115,7 @@ func (s *Service) PublishToCatalog(ctx context.Context, rs []Recipe) (int, error
 	publishable := make([]Recipe, 0, len(rs))
 	for _, r := range rs {
 		if !r.DeletedAt.IsZero() {
-			// A deleted recipe is never shared again (decision 694).
+			// A deleted recipe is never shared again (decision 695).
 			continue
 		}
 		mode, ok := modes[r.HouseholdID]
@@ -275,7 +275,7 @@ func (s *Service) AddFromCatalog(ctx context.Context, householdID string, conten
 			return Recipe{}, false, fmt.Errorf("save recipes: %w", err)
 		}
 		// The household deleted its copy: adding it again brings that one
-		// back, ratings and history included (decision 694).
+		// back, ratings and history included (decision 695).
 		if back, ok, err := s.undeleteCopy(ctx, householdID, r); err != nil || ok {
 			return back, ok, err
 		}

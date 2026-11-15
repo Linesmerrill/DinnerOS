@@ -40,6 +40,7 @@ func (m *memoryStore) Upsert(_ context.Context, entries []Recipe, now time.Time)
 			continue
 		}
 		e.Content = Content(e.Content)
+		e.Fingerprint, e.GroupKeys = Fingerprint(e.Content), nil
 		i := slices.IndexFunc(m.entries, func(o Recipe) bool { return o.CatalogKey == e.CatalogKey })
 		if i < 0 {
 			e.ID = m.id()
@@ -66,27 +67,51 @@ func (m *memoryStore) Get(_ context.Context, id string) (Recipe, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, e := range m.entries {
-		if e.ID == id {
-			return e, nil
+		if e.ID != id {
+			continue
 		}
+		e.GroupKeys = []string{e.CatalogKey}
+		for _, o := range m.entries {
+			if o.ID != e.ID && e.Fingerprint != "" && o.Fingerprint == e.Fingerprint {
+				e.GroupKeys = append(e.GroupKeys, o.CatalogKey)
+			}
+		}
+		return e, nil
 	}
 	return Recipe{}, ErrNotFound
 }
 
+// Search mirrors MongoStore.Search: groups with a matching, unhidden entry,
+// ordered by their lowest folded matching name, then group, each shown as its
+// best copy from the whole group.
 func (m *memoryStore) Search(_ context.Context, f Filter) ([]Recipe, int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var hits []Recipe
+	hidden := map[string]bool{}
+	for _, g := range f.HiddenGroups {
+		hidden[g] = true
+	}
+	nameKey := map[string]string{}
 	for _, e := range m.entries {
-		if matches(e, f) {
-			hits = append(hits, e)
+		if !matches(e, f) || isHidden(e, hidden) {
+			continue
+		}
+		g := groupKey(e)
+		if k, ok := nameKey[g]; !ok || fold(e.Content.Name) < k {
+			nameKey[g] = fold(e.Content.Name)
+		}
+	}
+	var hits []Recipe
+	for _, rep := range Dedupe(m.entries) {
+		if _, ok := nameKey[groupKey(rep)]; ok {
+			hits = append(hits, rep)
 		}
 	}
 	slices.SortStableFunc(hits, func(a, b Recipe) int {
-		if c := cmp.Compare(fold(a.Content.Name), fold(b.Content.Name)); c != 0 {
+		if c := cmp.Compare(nameKey[groupKey(a)], nameKey[groupKey(b)]); c != 0 {
 			return c
 		}
-		return cmp.Compare(a.ID, b.ID)
+		return cmp.Compare(groupKey(a), groupKey(b))
 	})
 	total := len(hits)
 	if f.Offset >= total {
@@ -99,10 +124,25 @@ func (m *memoryStore) Scan(_ context.Context, limit int) ([]Recipe, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.scanLimit = limit
-	out := slices.Clone(m.entries)
+	out := Dedupe(m.entries)
 	slices.SortFunc(out, func(a, b Recipe) int { return cmp.Compare(a.ID, b.ID) })
 	if len(out) > limit {
 		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (m *memoryStore) Groups(_ context.Context, ids []string) (map[string]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := map[string]string{}
+	for _, id := range ids {
+		out[id] = idGroup(id)
+		for _, e := range m.entries {
+			if e.ID == id {
+				out[id] = groupKey(e)
+			}
+		}
 	}
 	return out, nil
 }

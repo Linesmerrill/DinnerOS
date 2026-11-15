@@ -13,7 +13,7 @@ import (
 const upcomingWeeks = 104
 
 // RemoveRecipeFromUpcoming takes a deleted recipe off the household's plan
-// (decision 694): this week from today on, and every later week. Meals on
+// (decision 695): this week from today on, and every later week. Meals on
 // days already past stay, because that's what the household made, and so
 // do meals in a finalized week, whose list has gone to the store. The
 // week's grocery list follows, since it is worked out from the plan. It
