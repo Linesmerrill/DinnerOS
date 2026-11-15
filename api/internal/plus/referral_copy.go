@@ -67,6 +67,11 @@ type Progress struct {
 	Steps   []ProgressStep
 	// ExpiresAt is set while it's pending and setup isn't done.
 	ExpiresAt time.Time
+	// Summary is the Menu card's line: "Free month: 1 of 3 done".
+	Summary string
+	// TimeLeft is "14 days left" while ExpiresAt is set; set by the service,
+	// which knows the time.
+	TimeLeft string
 }
 
 // ProgressStep is one thing the household does for its free month.
@@ -82,7 +87,25 @@ const (
 	ProgressWaiting   = "Thanks for setting up. We'll let you know when your free month is on"
 	ProgressQualified = "Your free month of Plus is on"
 	ProgressExpired   = "This invite has expired"
+	// StepHousehold is the first step, done by the time a code is in.
+	StepHousehold = "Create your household"
 )
+
+// TimeLeftText is "14 days left", "1 day left", or "Last day".
+func TimeLeftText(expires, now time.Time) string {
+	if expires.IsZero() {
+		return ""
+	}
+	left := expires.Sub(now)
+	if left < 24*time.Hour {
+		return "Last day"
+	}
+	days := int((left + 24*time.Hour - 1) / (24 * time.Hour))
+	if days == 1 {
+		return "1 day left"
+	}
+	return fmt.Sprintf("%d days left", days)
+}
 
 func publicState(s ReferralState) string {
 	if s.Open() {
@@ -95,18 +118,28 @@ func publicState(s ReferralState) string {
 // anti-farming check a referral is waiting on.
 func (r ReferralRules) ProgressFor(ref Referral, setup Setup) Progress {
 	met := !ref.SetupMetAt.IsZero()
+	// In the order a new household does them. A code needs a household, so
+	// that step is always done.
 	steps := []ProgressStep{
-		{ID: "dinner", Title: capitalize(r.dinnerPhrase()), Done: met || setup.Dinners >= r.MinDinners,
-			Count: min(setup.Dinners, r.MinDinners), Target: r.MinDinners},
+		{ID: "household", Title: StepHousehold, Done: true, Count: 1, Target: 1},
 		{ID: "recipes", Title: capitalize(r.recipePhrase()), Done: met || setup.Recipes >= r.MinRecipes,
 			Count: min(setup.Recipes, r.MinRecipes), Target: r.MinRecipes},
+		{ID: "dinner", Title: capitalize(r.dinnerPhrase()), Done: met || setup.Dinners >= r.MinDinners,
+			Count: min(setup.Dinners, r.MinDinners), Target: r.MinDinners},
 	}
 	if met || ref.State == StateQualified {
 		for i := range steps {
 			steps[i].Done, steps[i].Count = true, steps[i].Target
 		}
 	}
-	p := Progress{State: publicState(ref.State), Steps: steps}
+	done := 0
+	for _, st := range steps {
+		if st.Done {
+			done++
+		}
+	}
+	p := Progress{State: publicState(ref.State), Steps: steps,
+		Summary: fmt.Sprintf("Free month: %d of %d done", done, len(steps))}
 	switch ref.State {
 	case StateQualified:
 		p.Message = ProgressQualified
@@ -137,7 +170,9 @@ func (s *Service) progress(ctx context.Context, ref Referral) (Progress, error) 
 			return Progress{}, err
 		}
 	}
-	return s.rules.ProgressFor(ref, setup), nil
+	p := s.rules.ProgressFor(ref, setup)
+	p.TimeLeft = TimeLeftText(p.ExpiresAt, s.now())
+	return p, nil
 }
 
 // ReferralProgress is the progress of the referral householdID made by

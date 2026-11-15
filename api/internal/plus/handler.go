@@ -34,7 +34,10 @@ type HandlerOptions struct {
 	// CodeRateLimit limits the code change and availability routes, keyed
 	// by user (RateLimitKey); nil for none.
 	CodeRateLimit func(http.Handler) http.Handler
-	Logger        *slog.Logger
+	// InviteRateLimit limits the public invite preview, keyed by address;
+	// nil for none.
+	InviteRateLimit func(http.Handler) http.Handler
+	Logger          *slog.Logger
 }
 
 // RateLimitKey keys a rate limiter by the signed-in user.
@@ -62,6 +65,13 @@ func NewHandler(opts HandlerOptions) *Handler {
 func (h *Handler) Mount(r chi.Router) {
 	r.Post("/webhooks/revenuecat", h.webhook)
 	r.With(auth.RequireAuth(h.opts.Tokens)).Get("/plus/referrals/summary", h.referralSummary)
+	// Public: an invite link opens the app before anyone signs in.
+	r.Group(func(r chi.Router) {
+		if h.opts.InviteRateLimit != nil {
+			r.Use(h.opts.InviteRateLimit)
+		}
+		r.Get("/referral-codes/{code}", h.invitePreview)
+	})
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireAuth(h.opts.Tokens))
 		r.Use(households.RequirePermission(h.opts.Authorizer, households.PermHouseholdView, h.logger))
@@ -111,9 +121,13 @@ type ProgressResponse struct {
 	Steps   []ProgressStepResponse `json:"steps"`
 	// ExpiresAt is when an unfinished setup stops counting.
 	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	// Summary is "Free month: 1 of 3 done", for the Menu card.
+	Summary string `json:"summary,omitempty"`
+	// TimeLeft is "14 days left" while ExpiresAt is set.
+	TimeLeft string `json:"timeLeft,omitempty"`
 }
 
-// ProgressStepResponse is one step: dinner or recipes.
+// ProgressStepResponse is one step: household, recipes, or dinner.
 type ProgressStepResponse struct {
 	ID     string `json:"id"`
 	Title  string `json:"title"`
@@ -126,7 +140,8 @@ func progressResponse(p *Progress) *ProgressResponse {
 	if p == nil {
 		return nil
 	}
-	out := &ProgressResponse{State: p.State, Message: p.Message, Steps: make([]ProgressStepResponse, 0, len(p.Steps)), ExpiresAt: timePtr(p.ExpiresAt)}
+	out := &ProgressResponse{State: p.State, Message: p.Message, Steps: make([]ProgressStepResponse, 0, len(p.Steps)), ExpiresAt: timePtr(p.ExpiresAt),
+		Summary: p.Summary, TimeLeft: p.TimeLeft}
 	for _, st := range p.Steps {
 		out.Steps = append(out.Steps, ProgressStepResponse(st))
 	}
@@ -524,6 +539,46 @@ func (h *Handler) redeem(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, http.StatusConflict, "code_not_allowed", RedeemMessage(err))
 	default:
 		h.logger.ErrorContext(r.Context(), "plus redeem failed", "error", err)
+		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", RedeemMessage(err))
+	}
+}
+
+// InvitePreviewResponse is the invite screen for a code.
+type InvitePreviewResponse struct {
+	Code          string               `json:"code"`
+	HouseholdName string               `json:"householdName,omitempty"`
+	Title         string               `json:"title"`
+	Message       string               `json:"message"`
+	Steps         []string             `json:"steps"`
+	ForExisting   InviteNoticeResponse `json:"forExisting"`
+	ForOwn        InviteNoticeResponse `json:"forOwn"`
+}
+
+// InviteNoticeResponse is a title and a line under it.
+type InviteNoticeResponse struct {
+	Title   string `json:"title"`
+	Message string `json:"message"`
+}
+
+// InvitesOffText is shown for an invite link while invites are off.
+const InvitesOffText = "Invites aren't available right now."
+
+func (h *Handler) invitePreview(w http.ResponseWriter, r *http.Request) {
+	p, err := h.opts.Service.PreviewInvite(r.Context(), chi.URLParam(r, "code"))
+	switch {
+	case err == nil:
+		httpx.WriteJSON(w, http.StatusOK, InvitePreviewResponse{
+			Code: p.Code, HouseholdName: p.HouseholdName, Title: p.Title, Message: p.Message, Steps: p.Steps,
+			ForExisting: InviteNoticeResponse(p.ForExisting), ForOwn: InviteNoticeResponse(p.ForOwn),
+		})
+	case errors.Is(err, ErrReferralsOff):
+		httpx.WriteError(w, r, http.StatusNotFound, "invites_off", InvitesOffText)
+	case errors.Is(err, ErrCodeNotFound):
+		httpx.WriteError(w, r, http.StatusNotFound, "code_not_found", RedeemMessage(err))
+	case errors.Is(err, ErrCodeRetired):
+		httpx.WriteError(w, r, http.StatusNotFound, "code_replaced", RedeemMessage(err))
+	default:
+		h.logger.ErrorContext(r.Context(), "invite preview failed", "error", err)
 		httpx.WriteError(w, r, http.StatusInternalServerError, "internal", RedeemMessage(err))
 	}
 }

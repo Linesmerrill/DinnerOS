@@ -41,6 +41,13 @@ nonisolated struct PlusAPI: Sendable {
         return try await client.send(request.authorized(with: accessToken))
     }
 
+    /// Who an invite code is from. No sign-in: a link opens the app before anyone has an
+    /// account. Unknown and replaced codes are 404s with the words to show.
+    func invitePreview(code: String) async throws -> InvitePreview {
+        let escaped = code.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(["/"])) ?? code
+        return try await client.send(APIRequest.get("/api/v1/referral-codes/" + escaped))
+    }
+
     /// Your Plus: plan, status, history and stats.
     func details(householdID: String, accessToken: String) async throws -> PlusDetails {
         try await client.send(APIRequest.get(Self.path(householdID) + "/details").authorized(with: accessToken))

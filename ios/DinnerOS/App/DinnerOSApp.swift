@@ -110,8 +110,11 @@ struct DinnerOSApp: App {
                         dependencies.intentRouter.widgetLink = link
                         return
                     }
-                    // Custom-scheme links (dinneros://invite?token=...).
-                    dependencies.households.handleOpenURL(url)
+                    // Custom-scheme links: an invite code (dinneros://referral/CODE) or a
+                    // household invitation (dinneros://invite?token=...).
+                    if !dependencies.plus.handleOpenURL(url) {
+                        dependencies.households.handleOpenURL(url)
+                    }
                 }
                 // Signed out: the widgets stop showing this household's dinners.
                 .onChange(of: dependencies.session.state) { _, state in

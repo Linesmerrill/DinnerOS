@@ -59,6 +59,10 @@ struct MainTabView: View {
         .task(id: households.current?.household.id) {
             guard let householdID = households.current?.household.id else { return }
             await plus.activate(householdID: householdID)
+            // A code accepted before this household was made is used for it now.
+            if let created = households.current?.household.createdAt {
+                await plus.useSavedInvite(householdCreatedAt: created)
+            }
         }
         // Coming back to the app checks Plus again, which also brings back a thank-you that
         // didn't get on screen.

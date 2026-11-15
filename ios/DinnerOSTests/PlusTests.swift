@@ -432,7 +432,7 @@ struct PlusStoreTests {
 
         let (store, _) = try await makeStore { _ in (200, PlusFixtures.status()) }
         #expect(store.handleOpenURL(try #require(URL(string: "https://dinneros.app/invite/W57ZVGUJ"))))
-        #expect(store.linkedCode?.code == "W57ZVGUJ")
+        #expect(store.incomingInvite?.code == "W57ZVGUJ")
         #expect(!store.handleOpenURL(try #require(URL(string: "https://api.tlps.dev/invite#token=abc"))))
     }
 

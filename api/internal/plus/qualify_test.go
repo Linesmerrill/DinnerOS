@@ -221,7 +221,8 @@ func TestReferralWithoutADinnerExpires(t *testing.T) {
 	}
 	p, _ := h.s.ReferralProgress(t.Context(), hhNew)
 	if p == nil || p.State != "pending" || p.Message != "Plan a dinner to unlock your free month" ||
-		p.Steps[0].Done || !p.Steps[1].Done || !p.ExpiresAt.Equal(qualifyNow.Add(14*24*time.Hour)) {
+		!p.Steps[0].Done || !p.Steps[1].Done || p.Steps[2].Done || !p.ExpiresAt.Equal(qualifyNow.Add(14*24*time.Hour)) ||
+		p.Summary != "Free month: 2 of 3 done" || p.TimeLeft != "1 day left" {
 		t.Errorf("progress = %+v", p)
 	}
 	h.at(qualifyNow.Add(14*24*time.Hour + time.Minute))
@@ -455,11 +456,12 @@ func TestReferralHowItWorksFollowsTheRules(t *testing.T) {
 		t.Errorf("footer = %q", got)
 	}
 	p := r.ProgressFor(Referral{State: StatePending}, Setup{})
-	if p.Message != "Plan 2 dinners and save a recipe to unlock your free month" || p.Steps[0].Title != "Plan 2 dinners" ||
-		p.Steps[1].Title != "Save a recipe" || p.Steps[0].Target != 2 {
+	if p.Message != "Save a recipe and plan 2 dinners to unlock your free month" || p.Steps[0].Title != "Create your household" ||
+		!p.Steps[0].Done || p.Steps[1].Title != "Save a recipe" || p.Steps[2].Title != "Plan 2 dinners" || p.Steps[2].Target != 2 ||
+		p.Summary != "Free month: 1 of 3 done" {
 		t.Errorf("progress = %+v", p)
 	}
-	if p := DefaultReferralRules().ProgressFor(Referral{State: StatePending}, Setup{Recipes: 2}); p.Message != "Plan a dinner and save 3 recipes to unlock your free month" ||
+	if p := DefaultReferralRules().ProgressFor(Referral{State: StatePending}, Setup{Recipes: 2}); p.Message != "Save 3 recipes and plan a dinner to unlock your free month" ||
 		p.Steps[1].Count != 2 || p.Steps[1].Target != 3 || p.Steps[1].Done {
 		t.Errorf("default progress = %+v", p)
 	}

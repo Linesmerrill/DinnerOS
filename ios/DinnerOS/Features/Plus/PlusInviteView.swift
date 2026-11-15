@@ -39,7 +39,7 @@ struct PlusInviteView: View {
         Form {
             // A household that entered a code sees what's left first.
             if let progress = pendingProgress {
-                ReferralProgressSection(progress: progress)
+                ReferralChecklistSection(progress: progress)
                     .id(Self.progressID)
             }
             if let howItWorks = plus.referral?.howItWorks {
@@ -89,6 +89,11 @@ struct PlusInviteView: View {
                 Text("Your Code")
             }
 
+            // Above Your Invites, which can run long, and gone once a code is in.
+            if showsGotACode {
+                gotACode
+            }
+
             if let invites = plus.referral?.invites {
                 YourInvitesList(invites: invites)
             }
@@ -109,26 +114,35 @@ struct PlusInviteView: View {
                         "Code saved. Plan a dinner and save a few recipes to unlock your free month.",
                         systemImage: "gift")
                 }
-            } else {
-                Section {
-                    TextField("Code", text: $code)
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                        .submitLabel(.done)
-                        .onSubmit(redeem)
-                    Button("Use Code", action: redeem)
-                        .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty || isRedeeming)
-                    if let redeemError {
-                        FormErrorLabel(message: redeemError)
-                    }
-                } header: {
-                    Text("Got a Code?")
-                } footer: {
-                    Text(
-                        "Enter another household's code. Once you plan a dinner and save a few recipes, you both get a free month of Plus."
-                    )
-                }
             }
+        }
+    }
+
+    /// Whether "Got a Code?" shows: not once this household has used one.
+    private var showsGotACode: Bool {
+        guard pendingProgress == nil, !redeemed, plus.referral?.invites?.usedCode == nil else { return false }
+        let progress = plus.referral?.referralProgress ?? plus.status?.referralProgress
+        return progress == nil
+    }
+
+    private var gotACode: some View {
+        Section {
+            TextField("Code", text: $code)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .submitLabel(.done)
+                .onSubmit(redeem)
+            Button("Use Code", action: redeem)
+                .disabled(code.trimmingCharacters(in: .whitespaces).isEmpty || isRedeeming)
+            if let redeemError {
+                FormErrorLabel(message: redeemError)
+            }
+        } header: {
+            Text("Got a Code?")
+        } footer: {
+            Text(
+                "Enter another household's code. Once you plan a dinner and save a few recipes, you both get a free month of Plus."
+            )
         }
     }
 

@@ -42,15 +42,35 @@ final class PlusStore {
     var celebration: PlusCelebration?
     /// Waiting for the purchase screen to close.
     var pendingCelebration: PlusCelebration?
-    /// A code from a shared invite link, opening the invite screen with it filled in.
-    var linkedCode: LinkedCode?
+    /// An invite link that just opened: the invite screen shows over everything.
+    var incomingInvite: IncomingInvite?
+    /// An invite code kept until a new household uses it. Saved on this device, so it lasts
+    /// through signing in and setting up.
+    /// Set through `saveInvite`, which keeps it on the device.
+    var savedInvite: SavedInvite?
+    /// The free month checklist, showing.
+    var showsChecklist = false
+    /// A new household's code just went in: the Menu shows the checklist once its own welcome
+    /// is out of the way, since two sheets can't show at once.
+    var checklistWaiting = false
+    /// "Your free month of Plus is on", shown once when the checklist is done.
+    var freeMonthOn: ReferralProgress?
+    /// Why a saved code couldn't be used, in the server's words.
+    var inviteError: String?
+    /// The Menu card's Hide, per household. Bumped so views reading it update.
+    private(set) var hiddenCardsVersion = 0
+    func bumpHiddenCards() { hiddenCardsVersion += 1 }
 
     /// Opens the invite screen for a shared invite link. Returns whether `url` was one.
     @discardableResult
     func handleOpenURL(_ url: URL) -> Bool {
         guard let code = ReferralLink.code(in: url) else { return false }
         Self.logger.info("Invite code link received")
-        linkedCode = LinkedCode(code: code)
+        // Kept, so setup can fill it in even if the screen is closed with Not Now.
+        if savedInvite?.code != code {
+            saveInvite(SavedInvite(code: code, accepted: false))
+        }
+        incomingInvite = IncomingInvite(code: code)
         return true
     }
 
@@ -71,6 +91,10 @@ final class PlusStore {
 
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let api: PlusAPI?
+    /// For the invite preview, which needs no household.
+    var inviteAPI: PlusAPI? { api }
+    var currentHouseholdID: String? { householdID }
+    static let inviteLogger = Logger(subsystem: "DinnerOS", category: "invites")
     @ObservationIgnored private let purchaser: any PlusPurchasing
     @ObservationIgnored private var householdID: String?
     /// How long to wait between status checks after a purchase, while RevenueCat tells the API.
@@ -85,6 +109,7 @@ final class PlusStore {
         self.api = api
         self.purchaser = purchaser
         self.defaults = defaults
+        savedInvite = Self.loadSavedInvite(defaults)
     }
 
     static func compThanksKey(_ householdID: String) -> String { "plus.compThanks.\(householdID)" }
@@ -133,6 +158,7 @@ final class PlusStore {
             }
             guard householdID == self.householdID else { return }
             status = loaded
+            noteReferralProgress(loaded.referralProgress, householdID: householdID)
             await offerCompThanks(loaded.comp, householdID: householdID)
             if loaded.enabled, products.isEmpty, let offer = loaded.offer {
                 await loadProducts(offer)
@@ -262,6 +288,7 @@ final class PlusStore {
         }
         guard householdID == self.householdID else { return }
         status = updated
+        noteReferralProgress(updated.referralProgress, householdID: householdID)
         Self.logger.info("Invite code used")
         // Your Invites now shows the code this household used.
         try? await loadReferral()
@@ -291,7 +318,3 @@ final class PlusStore {
 #endif
 
 /// A code that arrived in a link, shown once.
-nonisolated struct LinkedCode: Identifiable, Hashable, Sendable {
-    let id = UUID()
-    let code: String
-}

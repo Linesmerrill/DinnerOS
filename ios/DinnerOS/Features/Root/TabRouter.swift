@@ -14,6 +14,8 @@ final class TabRouter {
     var householdPath = NavigationPath()
     /// A tapped push of a type this build doesn't know opens the bell.
     var showsNotifications = false
+    /// The free month checklist's Plan a Dinner: the Menu opens Add Recipes.
+    var addMealsRequested = false
 
     /// Set by the tab shell (`MainTabView.configureRouter()`).
     @ObservationIgnored var check = NotificationSubjectCheck(pantryItemExists: { _ in true })

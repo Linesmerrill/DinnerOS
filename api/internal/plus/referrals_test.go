@@ -348,7 +348,8 @@ func TestReferralRoutes(t *testing.T) {
 	var st StatusResponse
 	_ = json.Unmarshal(rec.Body.Bytes(), &st)
 	if rec.Code != http.StatusOK || st.Active || st.FreeUntil != nil || st.ReferralProgress == nil ||
-		st.ReferralProgress.State != "pending" || len(st.ReferralProgress.Steps) != 2 {
+		st.ReferralProgress.State != "pending" || len(st.ReferralProgress.Steps) != 3 ||
+		st.ReferralProgress.Summary != "Free month: 1 of 3 done" || st.ReferralProgress.TimeLeft != "14 days left" {
 		t.Errorf("redeem = %d %s", rec.Code, rec.Body.String())
 	}
 	setUpHousehold(s, hhB)

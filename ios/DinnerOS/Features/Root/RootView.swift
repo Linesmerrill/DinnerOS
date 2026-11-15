@@ -71,6 +71,8 @@ struct RootView: View {
                 }
             }
             .inviteLinkPrompt()
+            // An invite code link: who invited you, with Accept, before or after signing in.
+            .inviteCodeScreen()
     }
 
     /// Events are recorded for the signed-in user in the selected household.

@@ -14,6 +14,8 @@ struct HouseholdOnboardingView: View {
                     header
                         .listRowBackground(Color.clear)
                 }
+                // Before making a household, so the free month comes with it.
+                InviteCodeSetupSection()
                 Section {
                     NavigationLink {
                         CreateHouseholdForm()

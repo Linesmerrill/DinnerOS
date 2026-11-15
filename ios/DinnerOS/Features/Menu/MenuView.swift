@@ -15,6 +15,8 @@ struct MenuView: View {
     @Environment(PairingsStore.self) private var pairings
     @Environment(MealSwapStore.self) private var swaps
     @Environment(AuthSession.self) private var session
+    /// Optional so previews needn't supply one.
+    @Environment(PlusStore.self) private var plus: PlusStore?
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// Optional so previews needn't supply them.
     @Environment(TabRouter.self) private var tabs: TabRouter?
@@ -73,10 +75,22 @@ struct MenuView: View {
         }
         let choice = welcomeChoice
         welcomeChoice = nil
+        showWaitingChecklist()
         switch choice {
         case .browseShared: tabs?.menuPath.append(DiscoverRoute())
         case .addRecipe: isAddingOwnRecipe = true
         case .startPlanning, nil: break
+        }
+    }
+
+    /// Shows a waiting checklist unless the welcome is up or about to be.
+    private func showWaitingChecklist() {
+        guard let plus, plus.checklistWaiting, !showsWelcome, !welcomeDue else { return }
+        plus.checklistWaiting = false
+        Task {
+            // Let a closing sheet finish first.
+            try? await Task.sleep(for: .milliseconds(600))
+            plus.showsChecklist = true
         }
     }
 
@@ -149,6 +163,12 @@ struct MenuView: View {
             .sheet(isPresented: $isAddingRecipes) {
                 AddRecipesSheet(week: plans.week)
             }
+            // The free month checklist's Plan a Dinner.
+            .onChange(of: tabs?.addMealsRequested ?? false, initial: true) { _, requested in
+                guard requested else { return }
+                tabs?.addMealsRequested = false
+                if canAddMeals { isAddingRecipes = true }
+            }
             .alert("Couldn't Change the Week", isPresented: Binding(presenting: $actionError)) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -172,6 +192,10 @@ struct MenuView: View {
             .modifier(WeekAutopilotModifier(flow: autopilotFlow, canEdit: canEdit, holdsOnboarding: welcomeDue))
             .task(id: household?.id) {
                 if welcomeDue { showsWelcome = true }
+            }
+            // A new household's free month checklist, after the welcome.
+            .onChange(of: plus?.checklistWaiting ?? false, initial: true) { _, _ in
+                showWaitingChecklist()
             }
             .modifier(MenuAutoRefresh())
             .sheet(isPresented: $showsWelcome, onDismiss: finishWelcome) {
@@ -234,6 +258,8 @@ struct MenuView: View {
                     }
                     // Above the week, not under All Meals: a household with nothing in its
                     // library has nothing to plan, so getting recipes in comes first (#530).
+                    // A new household's free month checklist, until it's done or hidden.
+                    ReferralMenuCard()
                     GetStartedSection()
                     YourMealsSection(flow: autopilotFlow)
                     // Always shown, so recipes other households shared are never hidden in a menu.

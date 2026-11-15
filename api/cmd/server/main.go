@@ -70,6 +70,10 @@ const (
 	// at plus.CodeChangeLimit a month.
 	referralCodeRateBurst = 30
 	referralCodeRateEvery = time.Second
+	// The public invite preview, per address: enough to open a few links,
+	// too few to walk the code space.
+	invitePreviewRateBurst = 20
+	invitePreviewRateEvery = 3 * time.Second
 	// A recipe import uploads a household's whole order history (10–15 MB), so
 	// that one route extends the server's ReadTimeout and WriteTimeout.
 	recipeImportTimeout = 5 * time.Minute
@@ -284,6 +288,9 @@ func run() error {
 		CodeRateLimit: ratelimit.New(ratelimit.Options{
 			Burst: referralCodeRateBurst, Every: referralCodeRateEvery, Message: "Slow down a moment, then try again.",
 		}).MiddlewareBy(plus.RateLimitKey),
+		InviteRateLimit: ratelimit.New(ratelimit.Options{
+			Burst: invitePreviewRateBurst, Every: invitePreviewRateEvery, Message: "Slow down a moment, then try again.",
+		}).Middleware,
 		MemberName: func(ctx context.Context, userID string) string {
 			u, err := userService.GetUser(ctx, userID)
 			if err != nil {

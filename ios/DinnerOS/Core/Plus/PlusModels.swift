@@ -38,8 +38,17 @@ nonisolated struct ReferralProgress: Codable, Hashable, Sendable {
     let steps: [Step]
     /// When a pending invite stops counting. Gone once setup is done.
     var expiresAt: Date? = nil
+    /// "Free month: 1 of 3 done", for the Menu card. Missing from an older API.
+    var summary: String? = nil
+    /// "14 days left", while `expiresAt` is set.
+    var timeLeft: String? = nil
 
     var isPending: Bool { state == "pending" }
+
+    /// The Menu card's line, worked out here for an API that doesn't send one.
+    var summaryText: String {
+        summary ?? "Free month: \(steps.filter(\.done).count) of \(steps.count) done"
+    }
 
     nonisolated struct Step: Codable, Hashable, Sendable, Identifiable {
         let id: String
@@ -165,11 +174,20 @@ nonisolated struct ReferralCodeAvailability: Codable, Hashable, Sendable {
 /// the code filled in.
 nonisolated enum ReferralLink {
     static let host = "dinneros.app"
+    /// `dinneros://referral/CODE`: the same as the web link, for UI tests and links
+    /// opened from inside the app.
+    static let schemeHost = "referral"
 
     /// The code in `url`, or nil when it isn't an invite page link.
     static func code(in url: URL) -> String? {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        if components.scheme?.lowercased() == InviteLink.defaultScheme, components.host?.lowercased() == schemeHost {
+            let parts = components.path.split(separator: "/")
+            guard parts.count == 1 else { return nil }
+            let code = InviteCode.normalize(String(parts[0]))
+            return code.isEmpty ? nil : code
+        }
         guard
-            let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
             components.scheme?.lowercased() == "https",
             let host = components.host?.lowercased(), host == Self.host || host == "www." + Self.host
         else { return nil }
@@ -423,4 +441,43 @@ nonisolated struct PlusCelebration: Identifiable, Hashable, Sendable {
 
 extension PlusComp: Identifiable {
     var id: Date { since }
+}
+
+/// Who sent an invite link, shown before signing in (`GET /api/v1/referral-codes/{code}`).
+nonisolated struct InvitePreview: Codable, Hashable, Sendable {
+    let code: String
+    var householdName: String? = nil
+    /// "Lines invited you to DinnerOS".
+    let title: String
+    /// "You both get a free month of Plus once you're set up."
+    let message: String
+    /// The setup steps, in order.
+    let steps: [String]
+    /// Shown instead to a household that's already set up.
+    let forExisting: Notice
+    /// Shown instead to the household the code belongs to.
+    let forOwn: Notice
+
+    nonisolated struct Notice: Codable, Hashable, Sendable {
+        let title: String
+        let message: String
+    }
+}
+
+/// An invite link that just opened, for the invite screen.
+nonisolated struct IncomingInvite: Identifiable, Hashable, Sendable {
+    let id = UUID()
+    let code: String
+}
+
+/// An invite code kept on this device until a new household uses it: from a link, or typed
+/// during setup. `accepted` is set once the person says yes to it.
+nonisolated struct SavedInvite: Codable, Hashable, Sendable {
+    let code: String
+    var accepted: Bool
+    /// When it was accepted. Only a household made after this uses it, so an existing
+    /// household that signs in never picks it up by accident.
+    var acceptedAt: Date?
+    /// "Lines invited you to DinnerOS", for setup.
+    var title: String?
 }

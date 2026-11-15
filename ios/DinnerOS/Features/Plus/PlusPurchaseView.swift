@@ -262,15 +262,20 @@ struct PlusPurchasePresenter: ViewModifier {
             .sheet(item: $plus.compThanks) { comp in
                 PlusCompThanksView(comp: comp)
             }
-            .sheet(item: $plus.linkedCode) { linked in
-                NavigationStack {
-                    PlusInviteView(code: linked.code)
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Close") { plus.linkedCode = nil }
-                            }
-                        }
-                }
+            // A new household's code is in: what's left for the free month.
+            .sheet(isPresented: $plus.showsChecklist) {
+                ReferralChecklistSheet()
+            }
+            .sheet(item: $plus.freeMonthOn, onDismiss: plus.freeMonthShown) { progress in
+                FreeMonthOnView(progress: progress)
+            }
+            .alert(
+                "Couldn't Use Your Invite Code",
+                isPresented: Binding(get: { plus.inviteError != nil }, set: { if !$0 { plus.inviteError = nil } })
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(plus.inviteError ?? "")
             }
     }
 }

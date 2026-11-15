@@ -2,11 +2,14 @@
 (function () {
   function ready() {
     var match = location.pathname.match(/^\/invite\/([A-Za-z0-9-]{4,20})\/?$/);
-    var code = match ? match[1].replace(/-/g, "").toUpperCase() : "";
+    var raw = match ? match[1] : "";
+    // A picked code (lines-fam) shows as it was picked; a made-up one in capitals.
+    var picked = /[a-z]/.test(raw) || raw.indexOf("-") > 0;
+    var code = picked ? raw.toLowerCase() : raw.toUpperCase();
     var box = document.querySelector(".invite-code");
     var missing = document.querySelector(".invite-missing");
     if (!code || !box) return;
-    document.getElementById("invite-code").textContent = code.length === 8 ? code.slice(0, 4) + " " + code.slice(4) : code;
+    document.getElementById("invite-code").textContent = !picked && code.length === 8 ? code.slice(0, 4) + " " + code.slice(4) : code;
     box.hidden = false;
     if (missing) missing.hidden = true;
     var button = document.getElementById("copy-code");

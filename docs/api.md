@@ -170,6 +170,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/households/{householdId}/plus/referral/redeem` `{code, deviceCheck?}` → Plus status (a pending referral) | `plan.edit` | Plus | ✅ |
 | GET | `/api/v1/households/{householdId}/plus/referral/code-availability?code=` → `{available, message}` | `plan.edit` | Plus | ✅ |
 | POST | `/api/v1/households/{householdId}/plus/referral/code` `{custom}` or `{regenerate: true}` → the referral response | `plan.edit` | Plus | ✅ |
+| GET | `/api/v1/referral-codes/{code}` → who invited you, for an invite link ([Invite links](#invite-links)) | none | Plus | ✅ |
 | GET | `/api/v1/plus/referrals/summary` → totals by state and `footerText` | operators | Plus | ✅ |
 | PUT | `/api/v1/households/{householdId}/recipes/{recipeId}/rating` `{score, comment?, tags?}` → rating | `household.view` | 9 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/recipes/{recipeId}/rating` → `204` | `household.view` | 9 | ✅ |
@@ -2919,19 +2920,51 @@ carry `referralProgress` for a household that entered a code:
 ```json
 {
   "state": "pending",
-  "message": "Plan a dinner and save 3 recipes to unlock your free month",
+  "message": "Save 3 recipes and plan a dinner to unlock your free month",
   "steps": [
-    {"id": "dinner", "title": "Plan a dinner", "done": false, "count": 0, "target": 1},
-    {"id": "recipes", "title": "Save 3 recipes", "done": false, "count": 1, "target": 3}
+    {"id": "household", "title": "Create your household", "done": true, "count": 1, "target": 1},
+    {"id": "recipes", "title": "Save 3 recipes", "done": false, "count": 1, "target": 3},
+    {"id": "dinner", "title": "Plan a dinner", "done": false, "count": 0, "target": 1}
   ],
-  "expiresAt": "2026-11-27T12:00:00Z"
+  "expiresAt": "2026-11-27T12:00:00Z",
+  "summary": "Free month: 1 of 3 done",
+  "timeLeft": "14 days left"
 }
 ```
 
-`state` is `pending`, `qualified`, or `expired`. Once setup is done the message
-is "Thanks for setting up. We'll let you know when your free month is on" and
-`expiresAt` goes away. The words come from the API and follow the `REFERRAL_*`
-settings.
+`state` is `pending`, `qualified`, or `expired`. Steps come in the order a new
+household does them; `household` is always done, since a code needs a
+household. `summary` is the app's Menu card line. `timeLeft` ("14 days left",
+"1 day left", "Last day") is there while `expiresAt` is. Once setup is done the
+message is "Thanks for setting up. We'll let you know when your free month is
+on" and `expiresAt` and `timeLeft` go away. The words come from the API and
+follow the `REFERRAL_*` settings.
+
+### Invite links
+
+`GET /api/v1/referral-codes/{code}` needs no sign-in: an invite link
+(`https://dinneros.app/invite/{code}`) opens the app before the person has an
+account. It is rate limited by address.
+
+```json
+{
+  "code": "lines-fam",
+  "householdName": "Lines",
+  "title": "Lines invited you to DinnerOS",
+  "message": "You both get a free month of Plus once you're set up.",
+  "steps": ["Create your household", "Save 3 recipes", "Plan a dinner"],
+  "forExisting": {"title": "This code is for new households", "message": "..."},
+  "forOwn": {"title": "That's your own code", "message": "..."}
+}
+```
+
+The app shows `title`, `message` and `steps` with Accept and Not Now. Someone
+whose household is already set up sees `forExisting` instead, and the code's
+own household `forOwn`, each with a way to see their own code. An accepted
+code is kept on the device through sign-in and used once the person makes a
+new household. 404 `code_not_found` ("We couldn't find that code. Check it
+and try again."), 404 `code_replaced` ("That code was replaced. Ask for the
+new one."), or 404 `invites_off` ("Invites aren't available right now.").
 
 ### The sharer's invites
 
