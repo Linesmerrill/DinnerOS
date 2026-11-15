@@ -37,6 +37,8 @@ struct MenuView: View {
     /// Whether the week strip is showing its pills, and where the menu is scrolled to.
     @State private var collapse = MenuChromeCollapse()
     @State private var scrollOffset: CGFloat = 0
+    /// The menu's visible height, so a narrowed All Meals can fill it (see below).
+    @State private var viewportHeight: CGFloat = 0
 
     /// VoiceOver always gets the pills. Collapsing would take away an element a reader may be
     /// focused on, or be sitting next to, and the screen space it buys is not what someone
@@ -242,6 +244,14 @@ struct MenuView: View {
                         AllMealsSection(list: menu.allMeals, canAdd: canAddMeals) {
                             isAddingOwnRecipe = true
                         }
+                        // A search or filter can leave All Meals one card long at the bottom of
+                        // the menu. Closing the keyboard then left too little page to stay
+                        // scrolled there, and the results slid away (seen on iPad). Filling a
+                        // screen keeps them in place.
+                        .frame(
+                            minHeight: menu.allMeals.query.isNarrowed ? viewportHeight : nil,
+                            alignment: .top
+                        )
                         .id(Self.allMealsAnchor)
                     }
                 }
@@ -260,11 +270,30 @@ struct MenuView: View {
             }
             // How far the menu is scrolled decides the week strip's form, and nothing else
             // reads it; `MenuChromeCollapse` holds the rule.
-            .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                geometry.contentOffset.y + geometry.contentInsets.top
-            } action: { _, offset in
+            .onScrollGeometryChange(for: MenuScrollReading.self) { geometry in
+                // Read together: the action only runs on a change, and the height alone rarely
+                // changes after the first frame.
+                MenuScrollReading(
+                    offset: geometry.contentOffset.y + geometry.contentInsets.top,
+                    height: geometry.containerSize.height)
+            } action: { _, reading in
+                let offset = reading.offset
+                if viewportHeight != reading.height { viewportHeight = reading.height }
                 scrollOffset = offset
                 changeStrip { collapse.update(offset: offset) }
+            }
+            // Closing the keyboard during a search left the menu scrolled back near the top on
+            // iPad, away from the results. Bring All Meals back once the keyboard is gone.
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
+                guard menu.allMeals.query.isNarrowed else { return }
+                changeStrip { collapse.hold() }
+                withAnimation(MenuScroll.animation(reduceMotion: reduceMotion)) {
+                    proxy.scrollTo(Self.allMealsAnchor, anchor: .top)
+                }
+                Task {
+                    try? await Task.sleep(for: MenuScroll.jumpSettle)
+                    collapse.release(offset: scrollOffset)
+                }
             }
             // Changing a filter reloads All Meals from its first page. Without this the
             // screen stays scrolled past that page and looks empty until you scroll back.
@@ -575,4 +604,10 @@ private struct MenuDestinations: ViewModifier {
                 CatalogRecipeDetailView(route: route)
             }
     }
+}
+
+/// What the menu reads from its scroll view: how far it's scrolled and how tall it is.
+struct MenuScrollReading: Equatable {
+    var offset: CGFloat
+    var height: CGFloat
 }

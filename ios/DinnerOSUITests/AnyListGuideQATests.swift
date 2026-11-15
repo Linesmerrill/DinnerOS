@@ -48,8 +48,10 @@ final class AnyListGuideQATests: XCTestCase {
 
         // 3. The Shop tab's Export the List section.
         app.buttons["Shop"].firstMatch.tap()
+        snap(app, "Shop tab before Send (\(mode))")
         let shopSend = app.buttons["Send to AnyList"].firstMatch
         reveal(shopSend, in: app, maxSwipes: 15)
+        snap(app, "Shop › Export the List (\(mode))")
         shopSend.tap()
         checkGuide(app, from: "Shop › Export the List")
 

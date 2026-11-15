@@ -18,6 +18,7 @@ final class ScreensQATests: XCTestCase {
 
     @MainActor
     func testNewPersonFirstRun() throws {
+        applyOrientation()
         let app = XCUIApplication()
         app.launch()
         let subject = app.textFields["Subject"]
@@ -117,10 +118,12 @@ final class ScreensQATests: XCTestCase {
                 field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: typed.count))
             }
             field.typeText(recipe)
+            snap(app, "Menu › search typed, \(kind) (\(mode))")
             // Put the keyboard away with Done, then tap the result card that's on screen: the same
             // name can also sit in a carousel further up.
             let done = app.toolbars.buttons["Done"].firstMatch
             if done.waitForExistence(timeout: 2) { done.tap() }
+            snap(app, "Menu › search after Done, \(kind) (\(mode))")
             let cards = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", recipe))
             var card: XCUIElement?
             for _ in 0..<10 where card == nil {
@@ -128,6 +131,7 @@ final class ScreensQATests: XCTestCase {
                 if card == nil { sleep(1) }
             }
             guard let card else {
+                snap(app, "Recipe page › \(kind): search result missing (\(mode))")
                 problems.append("Recipe page › \(kind): \(recipe) isn't in All Meals")
                 continue
             }
@@ -250,7 +254,7 @@ final class ScreensQATests: XCTestCase {
     /// Cancel, Done or Close if the screen has one, else the back button, else swipe the sheet away.
     @MainActor
     private func back(_ app: XCUIApplication) {
-        for title in ["Set Up Later", "Cancel", "Close", "Done", "Not Now"] where app.buttons[title].firstMatch.exists {
+        for title in ["Set Up Later", "Cancel", "Done", "Close", "Not Now"] where app.buttons[title].firstMatch.exists {
             let button = app.buttons[title].firstMatch
             if button.isHittable {
                 button.tap()

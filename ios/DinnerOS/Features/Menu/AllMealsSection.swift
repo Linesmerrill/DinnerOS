@@ -207,7 +207,6 @@ struct MenuChipBar: View {
                 .padding(.vertical, 8)
                 .background(Color(.secondarySystemBackground), in: .capsule)
                 .padding(.horizontal, 16)
-                .onAppear { isSearchFocused = true }
             }
         }
         .sheet(isPresented: $isShowingFilters) {
@@ -220,7 +219,11 @@ struct MenuChipBar: View {
     private var searchChip: some View {
         Button {
             isSearching.toggle()
-            if !isSearching {
+            if isSearching {
+                // Focus once, when search opens. Focusing on appear brought the keyboard back
+                // whenever the menu scrolled the field off screen and back (it's a lazy stack).
+                Task { @MainActor in isSearchFocused = true }
+            } else {
                 searchText = ""
             }
         } label: {

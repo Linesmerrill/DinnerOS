@@ -10,6 +10,7 @@ extension XCTestCase {
         // iOS 26.2, and the device setting could stick until a reboot.
         _ = dark
         let app = XCUIApplication()
+        applyOrientation()
         for (key, value) in ProcessInfo.processInfo.environment where key.hasPrefix("QA_APP_") {
             app.launchEnvironment[String(key.dropFirst("QA_APP_".count))] = value
         }
@@ -22,6 +23,14 @@ extension XCTestCase {
         if app.buttons["Thanks"].waitForExistence(timeout: 4) { app.buttons["Thanks"].tap() }
         XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The Menu tab didn't open after sign-in")
         return app
+    }
+
+    /// Portrait unless the run sets QA_ORIENTATION=landscape (the kitchen iPad lives on a
+    /// stand in landscape).
+    @MainActor
+    func applyOrientation() {
+        let landscape = ProcessInfo.processInfo.environment["QA_ORIENTATION"] == "landscape"
+        XCUIDevice.shared.orientation = landscape ? .landscapeLeft : .portrait
     }
 
     /// Keeps a screenshot in the test results, named for the checklist.
@@ -51,7 +60,14 @@ extension XCTestCase {
     @MainActor
     func reveal(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 8) {
         var swipes = 0
-        while !(element.exists && element.isHittable), swipes < maxSwipes {
+        // Hittable isn't enough: a pinned bottom bar (Open in Walmart, Add to Week) can sit over
+        // an element XCTest still calls hittable. Keep it out of the bottom fifth of the screen.
+        func clear() -> Bool {
+            guard element.exists, element.isHittable else { return false }
+            let screen = app.frame
+            return element.frame.maxY < screen.minY + screen.height * 0.8
+        }
+        while !clear(), swipes < maxSwipes {
             app.swipeUp(velocity: .slow)
             swipes += 1
         }

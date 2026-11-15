@@ -25,7 +25,12 @@ final class AppSweepQATests: XCTestCase {
             }
             button.tap()
             sleep(2)
-            guard button.isSelected || app.navigationBars[tab].exists || app.staticTexts[tab].exists else {
+            var opened = false
+            for _ in 0..<5 where !opened {
+                opened = button.isSelected || app.navigationBars[tab].exists || app.staticTexts[tab].exists
+                if !opened { sleep(1) }
+            }
+            guard opened else {
                 problems.append("\(tab): tapping the tab didn't open it")
                 continue
             }
