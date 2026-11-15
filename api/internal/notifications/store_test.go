@@ -72,6 +72,7 @@ func (m *memoryStore) List(_ context.Context, householdID string, f ListFilter) 
 		case n.HouseholdID != householdID,
 			f.UnreadBy != "" && n.ReadByUser(f.UnreadBy),
 			f.Viewer != "" && slices.Contains(n.DismissedBy, f.Viewer),
+			f.BannerOnly && !n.Banner,
 			f.Before != "" && n.ID >= f.Before:
 			continue
 		}

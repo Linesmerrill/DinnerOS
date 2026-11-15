@@ -22,10 +22,10 @@ func TestReferralInvites(t *testing.T) {
 	s, _, _, _ := referralService(t, now)
 
 	info, err := s.Referral(ctx, hh)
-	if err != nil || info.Joined != 0 || len(info.Recent) != 0 || info.UsedCode != nil || !info.FreeUntil.IsZero() {
+	if err != nil || info.Counts.Total() != 0 || len(info.Recent) != 0 || info.UsedCode != nil || !info.FreeUntil.IsZero() {
 		t.Fatalf("empty = %+v, %v", info, err)
 	}
-	if resp := invitesResponse(info); resp.EmptyText != InvitesEmptyText || len(resp.Joins) != 0 || resp.Joins == nil ||
+	if resp := invitesResponse(info, s.rules); resp.EmptyText != InvitesEmptyText || len(resp.Joins) != 0 || resp.Joins == nil ||
 		resp.CapText != "0 of 12" || resp.FreeUntil != nil {
 		t.Errorf("empty response = %+v", resp)
 	}
@@ -33,13 +33,15 @@ func TestReferralInvites(t *testing.T) {
 	if _, err := s.Redeem(ctx, hhB, info.Code); err != nil {
 		t.Fatal(err)
 	}
+	setUpHousehold(s, hhB)
 	s.now = func() time.Time { return now.Add(24 * time.Hour) }
 	if _, err := s.Redeem(ctx, hhC, info.Code); err != nil {
 		t.Fatal(err)
 	}
+	setUpHousehold(s, hhC)
 
 	info, err = s.Referral(ctx, hh)
-	if err != nil || info.Joined != 2 || len(info.Recent) != 2 || info.Rewarded != 2 {
+	if err != nil || info.Counts.Total() != 2 || info.Counts.Qualified != 2 || len(info.Recent) != 2 || info.Rewarded != 2 {
 		t.Fatalf("after two = %+v, %v", info, err)
 	}
 	if !info.Recent[0].At.Equal(now.Add(24*time.Hour)) || info.Recent[0].ReferredID != hhC {
@@ -48,7 +50,7 @@ func TestReferralInvites(t *testing.T) {
 	if want := now.Add(2 * month); !info.FreeUntil.Equal(want) {
 		t.Errorf("free until %v, want %v", info.FreeUntil, want)
 	}
-	resp := invitesResponse(info)
+	resp := invitesResponse(info, s.rules)
 	if resp.Joined != 2 || resp.MonthsEarned != 2 || resp.MonthsCap != MaxReferralMonths || resp.CapText != "2 of 12" ||
 		resp.FreeUntil == nil || resp.UsedCode != nil {
 		t.Errorf("response = %+v", resp)
@@ -58,12 +60,16 @@ func TestReferralInvites(t *testing.T) {
 			t.Errorf("join = %+v", j)
 		}
 	}
-	// Other households are never named or identified.
+	// Other households are shown by the names they chose, never by ID.
 	raw, _ := json.Marshal(resp)
 	for _, id := range []string{hhB, hhC} {
 		if strings.Contains(string(raw), id) {
-			t.Errorf("response names %s: %s", id, raw)
+			t.Errorf("response has the ID of %s: %s", id, raw)
 		}
+	}
+	if len(resp.Items) != 2 || resp.Items[0].HouseholdName != "Okafors" || resp.Items[0].State != "qualified" ||
+		resp.Items[0].Detail != InviteEarned || resp.Qualified != 2 || resp.Pending != 0 {
+		t.Errorf("items = %+v", resp.Items)
 	}
 
 	// The household that joined sees its own use, and when its month ends.
@@ -71,7 +77,7 @@ func TestReferralInvites(t *testing.T) {
 	if err != nil || joined.UsedCode == nil || joined.UsedCode.ReferrerID != hh {
 		t.Fatalf("joiner = %+v, %v", joined, err)
 	}
-	if u := invitesResponse(joined).UsedCode; u == nil || !u.At.Equal(now) || !u.FreeUntil.Equal(now.Add(month)) {
+	if u := invitesResponse(joined, s.rules).UsedCode; u == nil || !u.At.Equal(now) || !u.FreeUntil.Equal(now.Add(month)) {
 		t.Errorf("used code = %+v", u)
 	}
 
@@ -95,7 +101,7 @@ func TestReferralInvitesPastTheCap(t *testing.T) {
 		})
 	}
 	info, _ := s.Referral(ctx, hh)
-	resp := invitesResponse(info)
+	resp := invitesResponse(info, s.rules)
 	if resp.Joined != MaxReferralMonths+1 || resp.CapText != "12 of 12" {
 		t.Errorf("response = %+v", resp)
 	}
@@ -133,6 +139,7 @@ func TestReferralInviteRoutes(t *testing.T) {
 	if rec := do(http.MethodPost, "/households/"+hhB+"/plus/referral/redeem", "u2", `{"code":"`+ref.Code+`"}`); rec.Code != http.StatusOK {
 		t.Fatalf("redeem = %d %s", rec.Code, rec.Body.String())
 	}
+	setUpHousehold(s, hhB)
 	rec = do(http.MethodGet, "/households/"+hh+"/plus/referral", "u1", "")
 	ref = ReferralResponse{}
 	_ = json.Unmarshal(rec.Body.Bytes(), &ref)
@@ -156,6 +163,7 @@ func TestReferralInviteRoutes(t *testing.T) {
 		t.Fatalf("summary = %d %s", rec.Code, rec.Body.String())
 	}
 	if sum.CodesUsed != 1 || sum.JoinedAllTime != 1 || sum.JoinedThisWeek != 1 || len(sum.TopReferrers) != 1 ||
+		sum.Qualified != 1 || sum.Pending != 0 || sum.FooterText == "" ||
 		sum.TopReferrers[0].Count != 1 || sum.TopReferrers[0].Name == "" {
 		t.Errorf("summary = %+v", sum)
 	}
@@ -206,23 +214,23 @@ func TestIntegrationReferralJoinsAndReport(t *testing.T) {
 	}
 
 	at := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
-	if n, list, err := refs.Joins(ctx, hh, 20); err != nil || n != 0 || len(list) != 0 {
+	if n, list, err := refs.Joins(ctx, hh, 20); err != nil || n.Total() != 0 || len(list) != 0 {
 		t.Errorf("no joins = %d %v %v", n, list, err)
 	}
 	if _, ok, err := refs.UsedBy(ctx, hhB); err != nil || ok {
 		t.Errorf("unused = %v %v", ok, err)
 	}
 	for _, r := range []Referral{
-		{ReferrerID: hh, ReferredID: hhB, At: at, ReferrerRewarded: true},
+		{ReferrerID: hh, ReferredID: hhB, At: at, ReferrerRewarded: true, State: StateQualified},
 		{ReferrerID: hh, ReferredID: hhC, At: at.Add(48 * time.Hour), ReferrerRewarded: false},
-		{ReferrerID: hhB, ReferredID: "66e5a1f2c3b4a5d6e7f80a04", At: at.Add(-30 * 24 * time.Hour), ReferrerRewarded: true},
+		{ReferrerID: hhB, ReferredID: "66e5a1f2c3b4a5d6e7f80a04", At: at.Add(-30 * 24 * time.Hour), ReferrerRewarded: true, State: StateExpired},
 	} {
-		if err := refs.Record(ctx, r); err != nil {
+		if err := refs.Record(ctx, &r); err != nil {
 			t.Fatal(err)
 		}
 	}
 	n, list, err := refs.Joins(ctx, hh, 1)
-	if err != nil || n != 2 || len(list) != 1 || list[0].ReferredID != hhC || list[0].ReferrerRewarded {
+	if err != nil || n.Total() != 2 || n.Pending != 1 || len(list) != 1 || list[0].ReferredID != hhC || list[0].ReferrerRewarded {
 		t.Errorf("joins = %d %+v %v", n, list, err)
 	}
 	if r, ok, err := refs.UsedBy(ctx, hhB); err != nil || !ok || r.ReferrerID != hh || !r.At.Equal(at) {

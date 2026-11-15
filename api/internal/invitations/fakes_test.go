@@ -152,6 +152,8 @@ type fakeHouseholds struct {
 	households  map[string]households.Household
 	memberships map[string]households.Membership // key householdID/userID
 	failAdd     error
+	// proofs are the DeviceCheck tokens AddMember saw in its context.
+	proofs []households.DeviceProof
 }
 
 var (
@@ -226,7 +228,12 @@ func (f *fakeHouseholds) GetMembership(_ context.Context, householdID, userID st
 	return m, nil
 }
 
-func (f *fakeHouseholds) AddMember(_ context.Context, householdID, userID string, role households.Role) (households.Membership, bool, error) {
+func (f *fakeHouseholds) AddMember(ctx context.Context, householdID, userID string, role households.Role) (households.Membership, bool, error) {
+	if p, ok := households.DeviceProofFromContext(ctx); ok {
+		f.mu.Lock()
+		f.proofs = append(f.proofs, p)
+		f.mu.Unlock()
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.failAdd != nil {

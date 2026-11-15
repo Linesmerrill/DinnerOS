@@ -202,6 +202,8 @@ type createHouseholdRequest struct {
 	DefaultServings *int   `json:"defaultServings"`
 	// WeekStartsOn is optional; new households start weeks on Sunday.
 	WeekStartsOn *string `json:"weekStartsOn"`
+	// DeviceCheck is the app's DeviceCheck token, for referrals (decision 698).
+	DeviceCheck *DeviceCheckRequest `json:"deviceCheck"`
 }
 
 type updateHouseholdRequest struct {
@@ -239,7 +241,13 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	hh, m, err := h.svc.Create(r.Context(), userID, CreateInput(req))
+	ctx := r.Context()
+	if p, ok := req.DeviceCheck.Proof(); ok {
+		ctx = WithDeviceProof(ctx, p)
+	}
+	hh, m, err := h.svc.Create(ctx, userID, CreateInput{
+		Name: req.Name, TimeZone: req.TimeZone, DefaultServings: req.DefaultServings, WeekStartsOn: req.WeekStartsOn,
+	})
 	if err != nil {
 		h.writeError(w, r, "create household failed", err)
 		return

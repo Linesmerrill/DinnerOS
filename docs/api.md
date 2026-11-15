@@ -95,7 +95,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | DELETE | `/api/v1/me` → `204` ([delete account](#delete-account)) | bearer | 7 | ✅ |
 | PUT | `/api/v1/me/device-tokens` `{token, environment, platform?}` → device token | bearer | 7 | ✅ |
 | DELETE | `/api/v1/me/device-tokens` `{token}` → `204` | bearer | 7 | ✅ |
-| POST | `/api/v1/households` `{name, timeZone, defaultServings?}` → `201 {household, membership}`. When `STARTER_RECIPES_HOUSEHOLD_ID` is set, the new household's recipes are copied from that household; the response waits up to 3 s for the copy (typically under a second), and a slower copy finishes in the background | bearer | 3 | ✅ |
+| POST | `/api/v1/households` `{name, timeZone, defaultServings?, deviceCheck?}` → `201 {household, membership}`. When `STARTER_RECIPES_HOUSEHOLD_ID` is set, the new household's recipes are copied from that household; the response waits up to 3 s for the copy (typically under a second), and a slower copy finishes in the background | bearer | 3 | ✅ |
 | GET | `/api/v1/households` → `{items: [{household, role, permissions}]}` | bearer | 3 | ✅ |
 | GET | `/api/v1/households/{householdId}` → `{household, members, role, permissions}` | `household.view` | 3 | ✅ |
 | PATCH | `/api/v1/households/{householdId}` `{name?, timeZone?, defaultServings?, orderDay?, weekStartsOn?, mealKit?}` → household | `household.update` | 3 | ✅ |
@@ -105,7 +105,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/households/{householdId}/invitations` `{email, role}` → `201 {invitation, code, emailDelivered}` | `members.invite`, rate limited | 3 | ✅ |
 | GET | `/api/v1/households/{householdId}/invitations` → `{items}` (pending only) | `members.invite` | 3 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/invitations/{invitationId}` → `204` | `members.invite` | 3 | ✅ |
-| POST | `/api/v1/invitations/accept` `{token}` or `{code}` → `{household, role, permissions}` | bearer, rate limited | 3 | ✅ |
+| POST | `/api/v1/invitations/accept` `{token}` or `{code}`, `deviceCheck?` → `{household, role, permissions}` | bearer, rate limited | 3 | ✅ |
 | POST | `/api/v1/invitations/preview` `{token}` or `{code}` → `{householdName, inviterName, role, expiresAt}` | none, rate limited (shares accept's bucket) | 3 | ✅ |
 | GET | `/invite` → HTML landing page for invitation links (token in the `#token=` fragment) | — | 3 | ✅ |
 | GET | `/.well-known/apple-app-site-association` → universal-link association JSON (404 until `APPLE_TEAM_ID` is set) | — | 3 | ✅ |
@@ -164,6 +164,11 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/notifications` `?unread&limit&before` → `{items, nextCursor}` | `household.view` | 7 | ✅ |
 | GET | `/api/v1/households/{householdId}/notifications/unread-count` → `{unreadCount}` | `household.view` | 7 | ✅ |
 | POST | `/api/v1/households/{householdId}/notifications/read` `{ids}` or `{all: true}` → `{unreadCount}` | `household.view` | 7 | ✅ |
+| GET | `/api/v1/households/{householdId}/notifications/banners` → `{items}` ([banners](#banners)) | `household.view` | Plus | ✅ |
+| GET | `/api/v1/households/{householdId}/plus` → Plus status, with `referralProgress` ([Plus referrals](#plus-referrals)) | `household.view` | Plus | ✅ |
+| GET | `/api/v1/households/{householdId}/plus/referral` → code, `howItWorks`, `invites`, `referralProgress` | `household.view` | Plus | ✅ |
+| POST | `/api/v1/households/{householdId}/plus/referral/redeem` `{code, deviceCheck?}` → Plus status (a pending referral) | `plan.edit` | Plus | ✅ |
+| GET | `/api/v1/plus/referrals/summary` → totals by state and `footerText` | operators | Plus | ✅ |
 | PUT | `/api/v1/households/{householdId}/recipes/{recipeId}/rating` `{score, comment?, tags?}` → rating | `household.view` | 9 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/recipes/{recipeId}/rating` → `204` | `household.view` | 9 | ✅ |
 | GET | `/api/v1/households/{householdId}/recipes/{recipeId}/ratings` → `{householdRating, items}` | `household.view` | 9 | ✅ |
@@ -2778,8 +2783,10 @@ marking notifications never depends on push.
 - `unread=true` keeps notifications the caller hasn't read.
 - `read` is for the caller. `subject` says what to open: `pantry_item` is a
   pantry item ID.
-- `type` is stable. `pantry.low` and `shopping.order_due` exist today; show
-  unknown types with their title and body. A `shopping.order_due` subject is
+- `type` is stable. `pantry.low`, `pantry.thaw`, `shopping.order_due`, and
+  `plus.referral` exist today; show unknown types with their title and body.
+- `banner` is true for a notification shown at the top of the app until the
+  caller reads it ([banners](#banners)). A `shopping.order_due` subject is
   `{kind: "shopping_week", id: "2026-W38"}`: the week to open in Shop.
 
 `GET .../notifications/unread-count` returns `{"unreadCount": 3}`.
@@ -2865,6 +2872,90 @@ Apple: the API never exchanges an authorization code, so it holds none.
 | --- | --- | --- |
 | 401 | `unauthenticated` | Missing or invalid access token |
 | 500 | `internal` | A store failed part-way; retrying is safe |
+
+## Plus referrals
+
+Decision 698. Entering another household's code makes a **pending**
+referral. Nothing is free yet. It **qualifies**, and both households get 30
+free days of Plus within 24 hours (the sharer up to 12 months in all; a
+paying household's month starts when its paid time ends), only when:
+
+- the new household's creator had never been in another household, by Apple
+  or Google sign-in identity, whatever accounts were deleted since;
+- the device that made the household, or entered the code, wasn't tied to
+  another household first (Apple DeviceCheck);
+- the two households never shared a member, now or before;
+- within `REFERRAL_QUALIFY_DAYS` (14) of the code, it planned
+  `REFERRAL_MIN_DINNERS` (1) dinners and saved `REFERRAL_MIN_RECIPES` (3)
+  recipes it imported or typed (not the starter library or Shared Recipes);
+- the sharer had fewer than `REFERRAL_MAX_PER_30_DAYS` (3) referrals qualify
+  in the last 30 days. One over waits, shown as pending, past its 14 days,
+  until a slot frees.
+
+A referral that isn't set up in time **expires**. Nothing a person sees says
+which of the first three checks a referral waits on.
+
+### DeviceCheck token
+
+`POST /households`, `POST /invitations/accept`, and
+`POST .../plus/referral/redeem` take an optional
+
+```json
+"deviceCheck": {"token": "<DCDevice.generateToken, base64>", "development": true}
+```
+
+`development` is true for a token from a development build. Without a token,
+or with no key on the server, the device can't be checked: in production the
+referral stays pending (and expires); in development (`APP_ENV=development`,
+simulators) a missing token counts as a new device.
+
+### The new household's progress
+
+`GET .../plus` and the redeem response (`PlusStatus`), and `GET .../plus/referral`,
+carry `referralProgress` for a household that entered a code:
+
+```json
+{
+  "state": "pending",
+  "message": "Plan a dinner and save 3 recipes to unlock your free month",
+  "steps": [
+    {"id": "dinner", "title": "Plan a dinner", "done": false, "count": 0, "target": 1},
+    {"id": "recipes", "title": "Save 3 recipes", "done": false, "count": 1, "target": 3}
+  ],
+  "expiresAt": "2026-11-27T12:00:00Z"
+}
+```
+
+`state` is `pending`, `qualified`, or `expired`. Once setup is done the message
+is "Thanks for setting up. We'll let you know when your free month is on" and
+`expiresAt` goes away. The words come from the API and follow the `REFERRAL_*`
+settings.
+
+### The sharer's invites
+
+`GET .../plus/referral` adds `howItWorks` (`{title, steps}`, shown above the
+code) and, in `invites`:
+
+- `pending`, `qualified`, `expired`: counts. `joined` stays the total.
+- `items`: up to 20, newest first, `{id, householdName, state, detail, at}`.
+  `detail` is what's left ("Needs 2 more recipes", "Needs a dinner planned and
+  3 more recipes"), "Counts within 24 hours" once it's set up, "Free month
+  earned" or "Joined. You already have the most free months." when qualified,
+  "Expired", or empty for a plain "Pending".
+- `joins` keeps its shape for older builds; `status` can now also be
+  "Pending" or "Expired", and `counted` is true only once it earned a month.
+- `usedCode` is set only once this household's own code use paid its month.
+
+`GET /plus/referrals/summary` adds `pending`, `qualified`, `expired`, and
+`footerText`, the plain words for under the totals.
+
+### Banners
+
+When a referral qualifies, each household gets one `plus.referral`
+notification (subject `{kind: "plus", id: ""}`), pushed by the push sweep and
+marked `banner: true`. `GET .../notifications/banners` returns `{items}`, the
+banners the caller hasn't read. Show one at the top when the app opens, then
+`POST .../notifications/read` with its ID; opening its push should do the same.
 
 ## Ingredient catalog
 

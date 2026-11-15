@@ -115,6 +115,13 @@ type Config struct {
 	// disables it.
 	StarterRecipesHouseholdID string
 
+	// Referrals are the referral thresholds (REFERRAL_*, decision 698).
+	Referrals Referrals
+	// DeviceCheck signs Apple DeviceCheck requests (DEVICECHECK_*, by
+	// default the APNs key). Unset leaves devices unchecked, so in
+	// production no referral can qualify.
+	DeviceCheck DeviceCheck
+
 	// APNs signs and addresses Apple push notifications. Unset (the default
 	// in development) makes push a logged no-op.
 	APNs APNs
@@ -278,6 +285,9 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("apnsEnabled", c.APNs.Enabled()),
 		slog.String("apnsKeyId", c.APNs.KeyID),
 		slog.String("apnsTopic", c.APNs.Topic),
+		slog.Bool("deviceCheckEnabled", c.DeviceCheck.Enabled()),
+		slog.String("deviceCheckKeyId", c.DeviceCheck.KeyID),
+		slog.Any("referrals", c.Referrals),
 	)
 }
 
@@ -360,6 +370,7 @@ func Load(getenv func(string) string) (Config, error) {
 		errs = append(errs, fmt.Errorf("STARTER_RECIPES_HOUSEHOLD_ID must be a 24-character hex household ID, got %q", id))
 	}
 	errs = append(errs, loadAPNs(&cfg, get)...)
+	errs = append(errs, loadReferrals(&cfg, get)...)
 
 	if err := errors.Join(errs...); err != nil {
 		return Config{}, fmt.Errorf("invalid configuration: %w", err)

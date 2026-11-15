@@ -250,6 +250,27 @@ func run() error {
 		WithTestHouseholds(cfg.Plus.TestHouseholds).
 		WithBilling(plus.NewMongoBilling(db.Database())).
 		WithComps(plus.NewMongoComps(db.Database()))
+	// A referral pays only once the new household is real and set up
+	// (decision 698): memberships feed the identity history and DeviceCheck,
+	// planned dinners and saved recipes feed the setup, and every one of
+	// them can qualify it.
+	plusService.WithQualify(plus.QualifyOptions{
+		Rules: plus.ReferralRules{
+			QualifyDays: cfg.Referrals.QualifyDays, MinDinners: cfg.Referrals.MinDinners,
+			MinRecipes: cfg.Referrals.MinRecipes, MaxPer30Days: cfg.Referrals.MaxPer30Days,
+		},
+		Setup: plus.NewMongoSetup(db.Database()), History: plus.NewMongoHistory(db.Database()),
+		Devices: plus.NewMongoDevices(db.Database()), Locks: plus.NewMongoLocks(db.Database()),
+		Households: householdService, Identities: userService, Notifier: notificationService,
+		DeviceCheck: newDeviceChecker(cfg, logger),
+		// Simulators can't make DeviceCheck tokens.
+		AllowWithoutToken: cfg.Env == config.Development,
+		Logger:            logger,
+	})
+	householdService.SetMemberListener(plusService)
+	planService.WithDinnerListener(plusService)
+	recipeService.WithSaveListener(plusService)
+	migrateReferrals(ctx, db, plusService, logger)
 	requirePlus := plus.Require(plusService, logger)
 	plusHandler := plus.NewHandler(plus.HandlerOptions{
 		Service:    plusService,
@@ -490,6 +511,11 @@ func run() error {
 		logger.Info("http server listening", "addr", srv.Addr)
 		serveErr <- srv.ListenAndServe()
 	}()
+	// Referrals that expire, wait for a sharer's 30-day slot, or met setup
+	// with no event are handled here: at start and every hour, well inside
+	// the 24 hours the copy promises. Every step is claimed, so two dynos
+	// sweeping at once pay nothing twice.
+	go plusService.RunSweeps(ctx, plus.SweepEvery)
 
 	select {
 	case err := <-serveErr:
@@ -538,6 +564,7 @@ func indexSets() []mongodb.IndexSet {
 		plus.ReferralIndexes(),
 		plus.BillingIndexes(),
 		plus.CompIndexes(),
+		plus.QualifyIndexes(),
 		behaviorIndexes(),
 		recommendations.Indexes(),
 	)

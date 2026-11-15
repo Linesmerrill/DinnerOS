@@ -1,8 +1,9 @@
 {
-  "about": "Where tapping each notification opens in the app. Read by api/internal/notifications/routes_test.go, which fails when the server can create a type or subject kind missing here, and by ios/DinnerOSTests/NotificationRoutingTests.swift, which fails when the app has no route for a row. Destinations: pantry_item (Pantry tab, the item), pantry_thaw (Pantry tab, Take Out to Thaw), and shop_week (Shop tab, that week).",
+  "about": "Where tapping each notification opens in the app. Read by api/internal/notifications/routes_test.go, which fails when the server can create a type or subject kind missing here, and by ios/DinnerOSTests/NotificationRoutingTests.swift, which fails when the app has no route for a row. Destinations: pantry_item (Pantry tab, the item), pantry_thaw (Pantry tab, Take Out to Thaw), shop_week (Shop tab, that week), and plus_invites (the Give a Free Month screen).",
   "routes": [
     { "type": "pantry.low", "subjectKind": "pantry_item", "destination": "pantry_item" },
     { "type": "pantry.thaw", "subjectKind": "pantry_item", "destination": "pantry_thaw" },
-    { "type": "shopping.order_due", "subjectKind": "shopping_week", "destination": "shop_week" }
+    { "type": "shopping.order_due", "subjectKind": "shopping_week", "destination": "shop_week" },
+    { "type": "plus.referral", "subjectKind": "plus", "destination": "plus_invites" }
   ]
 }

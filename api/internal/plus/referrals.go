@@ -9,11 +9,13 @@ import (
 	"time"
 )
 
-// Referrals (decision 675): every household has a code to share. A household
-// new to Plus that enters another household's code gets a free month, and so
-// does the household that shared it, up to MaxReferralMonths. Free months are
-// kept here, not at Apple: Apple keeps billing a paying household, so a free
-// month for one is added after the time it has paid for.
+// Referrals (decisions 675 and 698): every household has a code to share. A
+// household new to Plus that enters another household's code starts a
+// pending referral. It qualifies once the new household is really set up
+// (qualify.go), and then both households get a free month, the sharer up to
+// MaxReferralMonths. Free months are kept here, not at Apple: Apple keeps
+// billing a paying household, so a free month for one is added after the
+// time it has paid for.
 
 // Referral errors. Each has a message a person can read in the app.
 var (
@@ -49,15 +51,89 @@ type FreeTimeStore interface {
 	PurgeHousehold(ctx context.Context, householdID string) error
 }
 
-// Referral is one household joining Plus with another's code.
+// ReferralState is where a referral is.
+type ReferralState string
+
+// Referral states. Ready is shown as pending: every condition is met and it
+// waits for the sharer's 30-day limit or the next run.
+const (
+	StatePending   ReferralState = "pending"
+	StateReady     ReferralState = "ready"
+	StateQualified ReferralState = "qualified"
+	StateExpired   ReferralState = "expired"
+)
+
+// Open reports whether the referral can still qualify.
+func (s ReferralState) Open() bool { return s == StatePending || s == StateReady }
+
+// Checks is what the anti-farming checks last found, never shown to anyone.
+type Checks string
+
+// Check results. Unknown means a check couldn't be made yet (no DeviceCheck
+// token, or no key): the referral can't qualify until it can.
+const (
+	ChecksUnknown Checks = ""
+	ChecksPassed  Checks = "passed"
+	ChecksBlocked Checks = "blocked"
+)
+
+// Referral is one household entering another's code.
 type Referral struct {
+	ID         string
 	ReferrerID string
 	ReferredID string
-	At         time.Time
+	// At is when the code was entered.
+	At    time.Time
+	State ReferralState
+	// ExpiresAt ends the setup window, At plus REFERRAL_QUALIFY_DAYS.
+	ExpiresAt time.Time
+	// SetupMetAt is when the new household first had the setup the referral
+	// needs, within the window.
+	SetupMetAt  time.Time
+	QualifiedAt time.Time
 	// ReferrerRewarded is false once the referrer has earned
 	// MaxReferralMonths.
 	ReferrerRewarded bool
+	Checks           Checks
+	// Settled is set once both free months and both notifications are done.
+	Settled bool
 }
+
+// EarnedAt is when the referral paid its months: QualifiedAt, or At for one
+// from before qualifying existed.
+func (r Referral) EarnedAt() time.Time {
+	if !r.QualifiedAt.IsZero() {
+		return r.QualifiedAt
+	}
+	return r.At
+}
+
+// ReferralCounts counts one sharer's referrals by state; Pending includes
+// ready.
+type ReferralCounts struct {
+	Pending, Qualified, Expired int
+}
+
+func (c *ReferralCounts) add(state ReferralState, n int) {
+	switch state {
+	case StateQualified:
+		c.Qualified += n
+	case StateExpired:
+		c.Expired += n
+	default:
+		c.Pending += n
+	}
+}
+
+// Total is every household that used the code.
+func (c ReferralCounts) Total() int { return c.Pending + c.Qualified + c.Expired }
+
+// Grant flags, each set once by ReferralStore.Claim.
+const (
+	FlagReferredGranted = "referredGranted"
+	FlagReferrerGranted = "referrerGranted"
+	FlagSettled         = "settled"
+)
 
 // ReferralStore keeps codes and who used them.
 type ReferralStore interface {
@@ -65,18 +141,39 @@ type ReferralStore interface {
 	Code(ctx context.Context, householdID string, newCode func() string) (string, error)
 	// Owner returns the household a code belongs to, or ErrCodeNotFound.
 	Owner(ctx context.Context, code string) (string, error)
-	// Record stores r, or returns ErrAlreadyRedeemed if r.ReferredID already
-	// used a code.
-	Record(ctx context.Context, r Referral) error
+	// Record stores r as given (pending) and sets its ID, or returns
+	// ErrAlreadyRedeemed if r.ReferredID already used a code.
+	Record(ctx context.Context, r *Referral) error
 	// Used reports whether householdID already used a code.
 	Used(ctx context.Context, householdID string) (bool, error)
-	// Rewarded counts the referrals that earned referrerID a month.
+	// Rewarded counts the qualified referrals that earned referrerID a month.
 	Rewarded(ctx context.Context, referrerID string) (int, error)
-	// Joins counts the households that used referrerID's code and returns
-	// up to limit of them, newest first.
-	Joins(ctx context.Context, referrerID string, limit int) (int, []Referral, error)
+	// QualifiedSince counts referrerID's referrals that qualified at or
+	// after since.
+	QualifiedSince(ctx context.Context, referrerID string, since time.Time) (int, error)
+	// Joins counts the households that used referrerID's code by state and
+	// returns up to limit of them, newest first.
+	Joins(ctx context.Context, referrerID string, limit int) (ReferralCounts, []Referral, error)
 	// UsedBy returns the referral where householdID used a code, if any.
 	UsedBy(ctx context.Context, householdID string) (Referral, bool, error)
+	// Open returns up to limit referrals still to work on, in ID order
+	// after the ID after (from the first when empty): pending or ready, or
+	// qualified and not settled.
+	Open(ctx context.Context, after string, limit int) ([]Referral, error)
+	// SetSetupMet records when the referred household met setup, once.
+	SetSetupMet(ctx context.Context, referredID string, at time.Time) error
+	// SetChecks records what the anti-farming checks found.
+	SetChecks(ctx context.Context, referredID string, c Checks) error
+	// Move changes an open referral's state from one of from to to, and
+	// reports whether it did. It is one conditional update, so two callers
+	// can't both move it.
+	Move(ctx context.Context, referredID string, from []ReferralState, to ReferralState) (bool, error)
+	// Qualify moves an open referral to qualified at at, with rewarded,
+	// and reports whether this call did. Only one caller ever wins.
+	Qualify(ctx context.Context, referredID string, at time.Time, rewarded bool) (bool, error)
+	// Claim sets one of the Flag* flags and reports whether this call set
+	// it: the guard that grants each month and finishes each referral once.
+	Claim(ctx context.Context, referredID, flag string) (bool, error)
 	// Report sums referrals across every household, for the people who run
 	// DinnerOS.
 	Report(ctx context.Context, since time.Time, top int) (ReferralReport, error)
@@ -90,6 +187,8 @@ type ReferralReport struct {
 	// Joined counts households that used a code; JoinedSince those that did
 	// from the report's since on.
 	Joined, JoinedSince int
+	// Counts splits Joined by state.
+	Counts ReferralCounts
 	// Top is the households whose codes were used most, most first.
 	Top []ReferrerCount
 }
@@ -153,14 +252,25 @@ type ReferralInfo struct {
 	// month; MonthsLeft is how many more months the code can still earn.
 	Rewarded   int
 	MonthsLeft int
-	// Joined counts every household that used the code, rewarded or not;
-	// Recent lists up to RecentJoins of them, newest first.
-	Joined int
-	Recent []Referral
+	// Counts splits the households that used the code by state; Recent
+	// lists up to RecentJoins of them, newest first.
+	Counts ReferralCounts
+	Recent []InviteItem
 	// FreeUntil is when the household's free months end, if they haven't.
 	FreeUntil time.Time
-	// UsedCode is set when this household joined with another's code.
+	// UsedCode is set when this household entered another's code;
+	// Progress says how far its own referral is.
 	UsedCode *Referral
+	Progress *Progress
+}
+
+// InviteItem is one household that used the code, as its sharer sees it.
+type InviteItem struct {
+	Referral
+	// HouseholdName is the household's own chosen name.
+	HouseholdName string
+	// Setup is how far the household is, for what's left to do.
+	Setup Setup
 }
 
 // Referral returns the household's code, what it has earned, and who used it.
@@ -177,13 +287,34 @@ func (s *Service) Referral(ctx context.Context, householdID string) (ReferralInf
 		return ReferralInfo{}, err
 	}
 	info := ReferralInfo{Code: code, Rewarded: n, MonthsLeft: max(0, MaxReferralMonths-n)}
-	if info.Joined, info.Recent, err = s.referrals.Joins(ctx, householdID, RecentJoins); err != nil {
+	counts, recent, err := s.referrals.Joins(ctx, householdID, RecentJoins)
+	if err != nil {
 		return ReferralInfo{}, err
+	}
+	info.Counts = counts
+	for _, r := range recent {
+		item := InviteItem{Referral: r}
+		if s.households != nil {
+			if h, err := s.households.GetHousehold(ctx, r.ReferredID); err == nil {
+				item.HouseholdName = h.Name
+			}
+		}
+		if s.setup != nil && r.State.Open() {
+			if item.Setup, err = s.setup.Get(ctx, r.ReferredID); err != nil {
+				return ReferralInfo{}, err
+			}
+		}
+		info.Recent = append(info.Recent, item)
 	}
 	if used, ok, err := s.referrals.UsedBy(ctx, householdID); err != nil {
 		return ReferralInfo{}, err
 	} else if ok {
 		info.UsedCode = &used
+		p, err := s.progress(ctx, used)
+		if err != nil {
+			return ReferralInfo{}, err
+		}
+		info.Progress = &p
 	}
 	if s.free != nil {
 		until, err := s.free.FreeUntil(ctx, householdID)
@@ -206,7 +337,9 @@ func (s *Service) ReferralReport(ctx context.Context) (ReferralReport, error) {
 	return s.referrals.Report(ctx, s.now().Add(-7*24*time.Hour), 5)
 }
 
-// Redeem gives householdID and the code's owner a free month each.
+// Redeem records householdID entering code: a pending referral that pays a
+// free month to each household once it qualifies (qualify.go). The request's
+// DeviceCheck token, if any, is in ctx.
 func (s *Service) Redeem(ctx context.Context, householdID, code string) (Status, error) {
 	if !s.EnabledFor(householdID) || s.referrals == nil || s.free == nil {
 		return Status{}, ErrReferralsOff
@@ -239,24 +372,19 @@ func (s *Service) Redeem(ctx context.Context, householdID, code string) (Status,
 	} else if !until.IsZero() {
 		return Status{}, ErrNotNewToPlus
 	}
-	rewarded, err := s.referrals.Rewarded(ctx, owner)
-	if err != nil {
-		return Status{}, err
-	}
 	now := s.now().UTC()
-	ref := Referral{ReferrerID: owner, ReferredID: householdID, At: now, ReferrerRewarded: rewarded < MaxReferralMonths}
+	ref := Referral{
+		ReferrerID: owner, ReferredID: householdID, At: now, State: StatePending,
+		ExpiresAt: now.Add(s.rules.window()),
+	}
 	// Recording first means two codes entered at once can't both count.
-	if err := s.referrals.Record(ctx, ref); err != nil {
+	if err := s.referrals.Record(ctx, &ref); err != nil {
 		return Status{}, err
 	}
-	month := FreeMonthDays * 24 * time.Hour
-	if _, err := s.free.Extend(ctx, householdID, now, month); err != nil {
-		return Status{}, err
-	}
-	if ref.ReferrerRewarded {
-		if _, err := s.free.Extend(ctx, owner, s.paidUntil(ctx, owner, now), month); err != nil {
-			return Status{}, err
-		}
+	s.checkDevice(ctx, householdID, deviceAtCodeEntry)
+	// A household already set up can qualify now.
+	if err := s.Evaluate(ctx, householdID); err != nil {
+		s.logger.ErrorContext(ctx, "evaluate referral after code entry", "householdId", householdID, "error", err)
 	}
 	return s.Status(ctx, householdID)
 }

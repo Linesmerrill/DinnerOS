@@ -109,9 +109,14 @@ func TestInvitationLifecycleHandlers(t *testing.T) {
 		}
 	}
 
-	rec = srv.do(t, http.MethodPost, "/api/v1/invitations/accept", `{"code":"`+strings.ToLower(created.Code)+`"}`, userCat)
+	rec = srv.do(t, http.MethodPost, "/api/v1/invitations/accept",
+		`{"code":"`+strings.ToLower(created.Code)+`","deviceCheck":{"token":"abc","development":true}}`, userCat)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("accept status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	// The DeviceCheck token reaches the join (decision 698).
+	if p := srv.households.proofs; len(p) != 1 || p[0].Token != "abc" || !p[0].Development {
+		t.Errorf("join proofs = %+v", p)
 	}
 	accepted := decodeBody[AcceptInvitationResponse](t, rec)
 	if accepted.Household.ID != householdID || accepted.Household.Name != "The Lines" || accepted.Role != households.RoleMember ||

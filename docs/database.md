@@ -410,7 +410,7 @@ the push sweep).
 
 | Collection | Key fields | Indexes |
 | --- | --- | --- |
-| `notifications` | householdId, type (`pantry.low`, `shopping.order_due`), title, body, subject{kind, id}, dedupeKey, readBy[] (user IDs), push{status (`pending`/`sending`/`sent`/`failed`/`skipped`), attempts, lastAttemptAt, sentAt}, createdAt | **unique** `{householdId, dedupeKey}`; `{householdId, _id: -1}`; **partial** `{push.status, createdAt}` where `push.status` is `pending` |
+| `notifications` | householdId, type (`pantry.low`, `pantry.thaw`, `shopping.order_due`, `plus.referral`), title, body, subject{kind, id}, dedupeKey, readBy[] (user IDs), banner (shown at the top until read), push{status (`pending`/`sending`/`sent`/`failed`/`skipped`), attempts, lastAttemptAt, sentAt}, createdAt | **unique** `{householdId, dedupeKey}`; `{householdId, _id: -1}`; **partial** `{push.status, createdAt}` where `push.status` is `pending` |
 | `device_tokens` | token (APNs device token, lowercase hex), userId, environment (`sandbox`/`production`), platform (`ios`), createdAt, updatedAt | **unique** `{token}`; `{userId}` |
 
 - **Household-wide, read per member.** Marking read is one `updateMany` with
@@ -591,6 +591,45 @@ Implemented in Phase 10 (`internal/recommendations`; see [autopilot.md](autopilo
 - A paired grocery item names the plan entry it is for. It leaves the grocery
   list when that entry is unplanned, without being deleted, so replanning the
   meal brings it back.
+
+### Plus referrals
+
+Implemented in `internal/plus` (decisions 675 and 698).
+
+| Collection | Key fields | Indexes |
+| --- | --- | --- |
+| `plus_referral_codes` | householdId, code, createdAt | **unique** `{householdId}`; **unique** `{code}` |
+| `plus_referrals` | householdId (the household that entered the code), referrerId, at, state (`pending`/`ready`/`qualified`/`expired`), expiresAt, setupMetAt, qualifiedAt, referrerRewarded, checks (`passed`/`blocked`, absent when unknown), referredGranted, referrerGranted, settled | **unique** `{householdId}`; `{referrerId}`; `{state, _id}` |
+| `plus_free_time` | householdId, until, updatedAt | **unique** `{householdId}` |
+| `plus_household_setup` | householdId, dinners, recipes, updatedAt | **unique** `{householdId}` |
+| `plus_identity_households` | identity (SHA-256 of provider and subject), householdId, userId, at | **unique** `{identity, householdId}`; `{householdId}` |
+| `plus_device_ties` | householdId, owns, elsewhere, updatedAt | **unique** `{householdId}` |
+| `plus_referral_locks` | _id (`referrer:<householdId>`), until | `_id` |
+| `plus_migrations` | _id (name), at | `_id` |
+
+- **One state change wins.** Moving a referral (`pending` to `ready` or
+  `expired`, `ready` to `qualified`) is one `updateOne` guarded by the current
+  state. Each free month is claimed with `{flag: {$ne: true}}` before
+  `plus_free_time` is extended, so a retry never pays twice; `settled` is set
+  after both months and both notifications (deduplicated by
+  `plus.referral:<householdId>:referred|referrer`), and the sweep finishes any
+  qualified referral that isn't settled.
+- **The 30-day cap** is counted from `qualifiedAt` while holding the sharer's
+  lease in `plus_referral_locks` (an upsert that only matches an expired
+  `until`), so two referrals can't both take the last slot.
+- **Setup** counts only go up: `$inc` when a household plans dinners (not
+  add-ons) or imports or types recipes.
+- **Identity history** is written on every household creation and join, and
+  backfilled once from current memberships (`plus_migrations`
+  `referral-identity-history-v1`). It keeps the earliest `at` per identity and
+  household and is **not** purged with an account or household: it holds only
+  hashes and IDs, and remembering them is what stops a deleted account farming
+  again. `plus_device_ties` and `plus_household_setup` are purged with the
+  household; the DeviceCheck bit stays at Apple.
+- **Migration.** At startup, referrals with no `state` (from before decision
+  698, paid when the code was entered) become `qualified` with
+  `qualifiedAt: at` and every flag set. Reads treat a missing `state` the same
+  way.
 
 ## Multi-tenancy
 

@@ -13,6 +13,8 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/seedstarter ./cmd/
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/weekstart ./cmd/weekstart
 # The weekly numbers, run by hand as `heroku run /metrics -weeks 8`.
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/metrics ./cmd/metrics
+# The DeviceCheck key check, run by hand as `heroku run /devicecheckprobe`.
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/devicecheckprobe ./cmd/devicecheckprobe
 
 # Heroku starts containers with `/bin/sh -c <CMD>`, so the runtime image needs a
 # shell (distroless has none). Keep it minimal and non-root.
@@ -23,6 +25,7 @@ COPY --from=build /out/sendreminders /sendreminders
 COPY --from=build /out/seedstarter /seedstarter
 COPY --from=build /out/weekstart /weekstart
 COPY --from=build /out/metrics /metrics
+COPY --from=build /out/devicecheckprobe /devicecheckprobe
 EXPOSE 8080
 USER app
 # Heroku injects PORT; the server reads it from the environment.

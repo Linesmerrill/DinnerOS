@@ -48,6 +48,9 @@ const (
 	// meals and should move to the fridge
 	// (docs/pantry-usage.md#thaw-reminders).
 	TypePantryThaw Type = "pantry.thaw"
+	// TypePlusReferral: an invite counted and a free month of Plus is on
+	// (decision 698). It shows as a banner until each member has seen it.
+	TypePlusReferral Type = "plus.referral"
 )
 
 // SubjectKind is the kind of record a notification points at.
@@ -58,6 +61,8 @@ const (
 	SubjectPantryItem SubjectKind = "pantry_item"
 	// SubjectShoppingWeek is an ISO week ("2026-W38"): the week to open.
 	SubjectShoppingWeek SubjectKind = "shopping_week"
+	// SubjectPlus is the household's Plus screen; ID is empty.
+	SubjectPlus SubjectKind = "plus"
 )
 
 // Subject is the record a notification is about, so an app can open it.
@@ -110,8 +115,12 @@ type Notification struct {
 	// DismissedBy lists the members who swiped it away. It's gone for them
 	// and stays for the rest of the household.
 	DismissedBy []string
-	Push        Push
-	CreatedAt   time.Time
+	// Banner shows the notification at the top of the app, the next time a
+	// member opens it, until that member has read it (seen the push or the
+	// banner).
+	Banner    bool
+	Push      Push
+	CreatedAt time.Time
 }
 
 // ReadByUser reports whether userID has read n.
@@ -132,6 +141,8 @@ type New struct {
 	Body        string
 	Subject     Subject
 	DedupeKey   string
+	// Banner: see Notification.Banner.
+	Banner bool
 }
 
 // Limits.
@@ -139,9 +150,11 @@ const (
 	DefaultListLimit = 50
 	MaxListLimit     = 100
 	MaxMarkRead      = 100
-	maxTitleLength   = 200
-	maxBodyLength    = 1000
-	maxDedupeKey     = 200
+	// MaxBanners is how many banners a read returns.
+	MaxBanners     = 5
+	maxTitleLength = 200
+	maxBodyLength  = 1000
+	maxDedupeKey   = 200
 )
 
 // ListFilter selects a household's notifications, newest first.
@@ -153,5 +166,7 @@ type ListFilter struct {
 	// Before, when set, keeps notifications older than the one with this ID
 	// (the previous page's last ID).
 	Before string
-	Limit  int
+	// BannerOnly keeps notifications shown as banners.
+	BannerOnly bool
+	Limit      int
 }

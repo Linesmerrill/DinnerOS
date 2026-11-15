@@ -12,6 +12,7 @@ package plus
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -98,6 +99,18 @@ type Service struct {
 	billing   BillingStore
 	comps     CompStore
 	stats     StatsSource
+	// Qualifying referrals (qualify.go, decision 698); set by WithQualify.
+	rules             ReferralRules
+	setup             SetupStore
+	history           HistoryStore
+	devices           DeviceTieStore
+	locks             LockStore
+	households        HouseholdReader
+	identities        IdentityLister
+	notifier          Notifier
+	deviceCheck       DeviceChecker
+	allowWithoutToken bool
+	logger            *slog.Logger
 	// testers are households Plus is on for while it's off for everyone
 	// else (PLUS_TEST_HOUSEHOLDS), so a TestFlight purchase can be tried.
 	testers map[string]bool
@@ -123,7 +136,7 @@ func (s *Service) WithTestHouseholds(ids []string) *Service {
 
 // NewService returns the service. enabled is PLUS_ENABLED.
 func NewService(store Store, enabled bool) *Service {
-	return &Service{store: store, enabled: enabled, now: time.Now}
+	return &Service{store: store, enabled: enabled, now: time.Now, rules: DefaultReferralRules(), logger: slog.New(slog.DiscardHandler)}
 }
 
 // Status returns a household's Plus.

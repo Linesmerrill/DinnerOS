@@ -45,6 +45,7 @@ func (h *Handler) Mount(r chi.Router) {
 		const base = "/households/{householdId}/notifications"
 		r.Get(base, h.list)
 		r.Get(base+"/unread-count", h.unreadCount)
+		r.Get(base+"/banners", h.banners)
 		r.Post(base+"/read", h.markRead)
 		r.Post(base+"/dismiss", h.dismiss)
 	})
@@ -59,7 +60,10 @@ type NotificationResponse struct {
 	Body        string          `json:"body"`
 	Subject     SubjectResponse `json:"subject"`
 	// Read is whether the caller has read it.
-	Read      bool      `json:"read"`
+	Read bool `json:"read"`
+	// Banner is true for a notification the app shows at the top until the
+	// member reads it.
+	Banner    bool      `json:"banner"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
@@ -92,7 +96,7 @@ func newResponse(n Notification, userID string) NotificationResponse {
 	return NotificationResponse{
 		ID: n.ID, HouseholdID: n.HouseholdID, Type: n.Type, Title: n.Title, Body: n.Body,
 		Subject: SubjectResponse{Kind: n.Subject.Kind, ID: n.Subject.ID},
-		Read:    n.ReadByUser(userID), CreatedAt: n.CreatedAt.UTC(),
+		Read:    n.ReadByUser(userID), Banner: n.Banner, CreatedAt: n.CreatedAt.UTC(),
 	}
 }
 
@@ -131,6 +135,27 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	if page.NextCursor != "" {
 		cursor := page.NextCursor
 		resp.NextCursor = &cursor
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+// BannersResponse is returned by GET .../notifications/banners.
+type BannersResponse struct {
+	Items []NotificationResponse `json:"items"`
+}
+
+// banners lists the banners the caller hasn't seen. The app marks one seen
+// with POST .../notifications/read.
+func (h *Handler) banners(w http.ResponseWriter, r *http.Request) {
+	actor, _ := households.MembershipFromContext(r.Context())
+	items, err := h.opts.Service.Banners(r.Context(), actor)
+	if err != nil {
+		h.writeError(w, r, "list banners failed", err)
+		return
+	}
+	resp := BannersResponse{Items: make([]NotificationResponse, 0, len(items))}
+	for _, n := range items {
+		resp.Items = append(resp.Items, newResponse(n, actor.UserID))
 	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }

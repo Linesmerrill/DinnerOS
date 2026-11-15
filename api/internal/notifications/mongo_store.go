@@ -76,6 +76,7 @@ type notificationDoc struct {
 	DedupeKey   string          `bson:"dedupeKey"`
 	ReadBy      []bson.ObjectID `bson:"readBy"`
 	DismissedBy []bson.ObjectID `bson:"dismissedBy,omitempty"`
+	Banner      bool            `bson:"banner,omitempty"`
 	Push        pushDoc         `bson:"push"`
 	CreatedAt   time.Time       `bson:"createdAt"`
 }
@@ -91,7 +92,7 @@ func (d notificationDoc) toNotification() Notification {
 	n := Notification{
 		ID: d.ID.Hex(), HouseholdID: d.HouseholdID.Hex(), Type: Type(d.Type), Title: d.Title, Body: d.Body,
 		Subject:   Subject{Kind: SubjectKind(d.Subject.Kind), ID: d.Subject.ID},
-		DedupeKey: d.DedupeKey,
+		DedupeKey: d.DedupeKey, Banner: d.Banner,
 		Push:      Push{Status: PushStatus(d.Push.Status), Attempts: d.Push.Attempts},
 		CreatedAt: d.CreatedAt.UTC(),
 	}
@@ -127,7 +128,7 @@ func (s *MongoStore) Insert(ctx context.Context, n Notification) (Notification, 
 	d := notificationDoc{
 		ID: bson.NewObjectID(), HouseholdID: hid, Type: string(n.Type), Title: n.Title, Body: n.Body,
 		Subject:   subjectDoc{Kind: string(n.Subject.Kind), ID: n.Subject.ID},
-		DedupeKey: n.DedupeKey, ReadBy: []bson.ObjectID{},
+		DedupeKey: n.DedupeKey, ReadBy: []bson.ObjectID{}, Banner: n.Banner,
 		Push: pushDoc{
 			Status: string(n.Push.Status), Attempts: n.Push.Attempts,
 			LastAttemptAt: optionalTime(n.Push.LastAttemptAt), SentAt: optionalTime(n.Push.SentAt),
@@ -180,6 +181,9 @@ func (s *MongoStore) List(ctx context.Context, householdID string, f ListFilter)
 			return nil, fmt.Errorf("notifications: user id: %w", err)
 		}
 		filter = append(filter, bson.E{Key: "dismissedBy", Value: bson.D{{Key: "$ne", Value: uid}}})
+	}
+	if f.BannerOnly {
+		filter = append(filter, bson.E{Key: "banner", Value: true})
 	}
 	if f.Before != "" {
 		before, err := mongodb.ParseID(f.Before)

@@ -171,12 +171,12 @@ func DetailsFor(d Details, startedBy string, now time.Time) DetailsResponse {
 		}
 	}
 	if u := d.UsedCode; u != nil {
-		resp.History = append(resp.History, HistoryItem{At: u.At, Title: "Free month from a code you used", Kind: "invite"})
+		resp.History = append(resp.History, HistoryItem{At: u.EarnedAt(), Title: "Free month from a code you used", Kind: "invite"})
 	}
 	for _, j := range d.InviteJoins {
 		if j.ReferrerRewarded {
 			resp.MonthsEarned++
-			resp.History = append(resp.History, HistoryItem{At: j.At, Title: "Free month from a household you invited", Kind: "invite"})
+			resp.History = append(resp.History, HistoryItem{At: j.EarnedAt(), Title: "Free month from a household you invited", Kind: "invite"})
 		}
 	}
 	sortHistory(resp.History)

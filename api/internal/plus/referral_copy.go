@@ -1,0 +1,206 @@
+package plus
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+)
+
+// The words around referrals (decision 698). They come from the same rules
+// the qualify check uses, so changing a threshold changes the copy.
+
+// dinnerPhrase is "plan a dinner" or "plan 2 dinners".
+func (r ReferralRules) dinnerPhrase() string {
+	if r.MinDinners == 1 {
+		return "plan a dinner"
+	}
+	return fmt.Sprintf("plan %d dinners", r.MinDinners)
+}
+
+// recipePhrase is "save a recipe" or "save 3 recipes".
+func (r ReferralRules) recipePhrase() string {
+	if r.MinRecipes == 1 {
+		return "save a recipe"
+	}
+	return fmt.Sprintf("save %d recipes", r.MinRecipes)
+}
+
+func capitalize(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// HowItWorks is the invite screen's explanation, above the code.
+type HowItWorks struct {
+	Title string
+	Steps []string
+}
+
+// HowItWorks explains referrals with these rules.
+func (r ReferralRules) HowItWorks() HowItWorks {
+	return HowItWorks{
+		Title: "How it works",
+		Steps: []string{
+			"Share your code with friends, family, even that one aunt.",
+			"They download DinnerOS, start a new household, and enter your code.",
+			fmt.Sprintf("Once they %s and %s, the invite counts.", r.dinnerPhrase(), r.recipePhrase()),
+			fmt.Sprintf("Within %d hours you both get a free month of Plus. We'll send you a notification when it's on.", int(RewardWithin.Hours())),
+		},
+	}
+}
+
+// SummaryFooter explains qualified and pending on the referral totals.
+func (r ReferralRules) SummaryFooter() string {
+	return fmt.Sprintf("An invite counts once the new household goes on to %s and %s. Until then it's pending, and it expires after %d days.",
+		r.dinnerPhrase(), r.recipePhrase(), r.QualifyDays)
+}
+
+// Progress is how far the household's own referral is, for the household
+// that entered a code.
+type Progress struct {
+	// State is pending, qualified, or expired (ready shows as pending).
+	State   string
+	Message string
+	Steps   []ProgressStep
+	// ExpiresAt is set while it's pending and setup isn't done.
+	ExpiresAt time.Time
+}
+
+// ProgressStep is one thing the household does for its free month.
+type ProgressStep struct {
+	ID            string
+	Title         string
+	Done          bool
+	Count, Target int
+}
+
+// Progress messages.
+const (
+	ProgressWaiting   = "Thanks for setting up. We'll let you know when your free month is on"
+	ProgressQualified = "Your free month of Plus is on"
+	ProgressExpired   = "This invite has expired"
+)
+
+func publicState(s ReferralState) string {
+	if s.Open() {
+		return string(StatePending)
+	}
+	return string(s)
+}
+
+// ProgressFor is ref's progress with setup. Nothing in it says which
+// anti-farming check a referral is waiting on.
+func (r ReferralRules) ProgressFor(ref Referral, setup Setup) Progress {
+	met := !ref.SetupMetAt.IsZero()
+	steps := []ProgressStep{
+		{ID: "dinner", Title: capitalize(r.dinnerPhrase()), Done: met || setup.Dinners >= r.MinDinners,
+			Count: min(setup.Dinners, r.MinDinners), Target: r.MinDinners},
+		{ID: "recipes", Title: capitalize(r.recipePhrase()), Done: met || setup.Recipes >= r.MinRecipes,
+			Count: min(setup.Recipes, r.MinRecipes), Target: r.MinRecipes},
+	}
+	if met || ref.State == StateQualified {
+		for i := range steps {
+			steps[i].Done, steps[i].Count = true, steps[i].Target
+		}
+	}
+	p := Progress{State: publicState(ref.State), Steps: steps}
+	switch ref.State {
+	case StateQualified:
+		p.Message = ProgressQualified
+	case StateExpired:
+		p.Message = ProgressExpired
+	default:
+		var left []string
+		for _, st := range steps {
+			if !st.Done {
+				left = append(left, strings.ToLower(st.Title[:1])+st.Title[1:])
+			}
+		}
+		if len(left) == 0 {
+			p.Message = ProgressWaiting
+		} else {
+			p.Message = capitalize(strings.Join(left, " and ")) + " to unlock your free month"
+			p.ExpiresAt = ref.ExpiresAt
+		}
+	}
+	return p
+}
+
+func (s *Service) progress(ctx context.Context, ref Referral) (Progress, error) {
+	var setup Setup
+	if s.setup != nil && ref.State.Open() {
+		var err error
+		if setup, err = s.setup.Get(ctx, ref.ReferredID); err != nil {
+			return Progress{}, err
+		}
+	}
+	return s.rules.ProgressFor(ref, setup), nil
+}
+
+// ReferralProgress is the progress of the referral householdID made by
+// entering a code; nil without one.
+func (s *Service) ReferralProgress(ctx context.Context, householdID string) (*Progress, error) {
+	if s.referrals == nil || !s.EnabledFor(householdID) {
+		return nil, nil
+	}
+	ref, ok, err := s.referrals.UsedBy(ctx, householdID)
+	if err != nil || !ok {
+		return nil, err
+	}
+	p, err := s.progress(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// Invite details, as the sharer sees them.
+const (
+	InviteCountsSoon    = "Counts within 24 hours"
+	InviteEarned        = "Free month earned"
+	InviteEarnedAtCap   = "Joined. You already have the most free months."
+	InviteExpired       = "Expired"
+	InviteStatusPending = "Pending"
+)
+
+// InviteDetail is the sharer's state and line for one invite. An invite
+// waiting on an anti-farming check is plain "pending" with no detail.
+func (r ReferralRules) InviteDetail(item InviteItem) (state, detail string) {
+	switch item.State {
+	case StateQualified:
+		if item.ReferrerRewarded {
+			return string(StateQualified), InviteEarned
+		}
+		return string(StateQualified), InviteEarnedAtCap
+	case StateExpired:
+		return string(StateExpired), InviteExpired
+	}
+	if item.Checks != ChecksPassed {
+		return string(StatePending), ""
+	}
+	if !item.SetupMetAt.IsZero() {
+		return string(StatePending), InviteCountsSoon
+	}
+	var needs []string
+	switch d := r.MinDinners - item.Setup.Dinners; {
+	case d == 1:
+		needs = append(needs, "a dinner planned")
+	case d > 1 && item.Setup.Dinners == 0:
+		needs = append(needs, fmt.Sprintf("%d dinners planned", d))
+	case d > 1:
+		needs = append(needs, fmt.Sprintf("%d more dinners planned", d))
+	}
+	switch n := r.MinRecipes - item.Setup.Recipes; {
+	case n == 1:
+		needs = append(needs, "1 more recipe")
+	case n > 1:
+		needs = append(needs, fmt.Sprintf("%d more recipes", n))
+	}
+	if len(needs) == 0 {
+		return string(StatePending), InviteCountsSoon
+	}
+	return string(StatePending), "Needs " + strings.Join(needs, " and ")
+}

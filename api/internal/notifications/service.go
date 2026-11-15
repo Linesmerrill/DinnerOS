@@ -88,7 +88,7 @@ func (s *Service) Create(ctx context.Context, in New) (n Notification, created b
 	}
 	saved, err := s.store.Insert(ctx, Notification{
 		HouseholdID: in.HouseholdID, Type: in.Type, Title: in.Title, Body: in.Body, Subject: in.Subject,
-		DedupeKey: in.DedupeKey, Push: Push{Status: PushPending},
+		DedupeKey: in.DedupeKey, Banner: in.Banner, Push: Push{Status: PushPending},
 		CreatedAt: s.now().UTC().Truncate(time.Millisecond),
 	})
 	if errors.Is(err, ErrDuplicate) {
@@ -165,6 +165,22 @@ func (s *Service) List(ctx context.Context, actor households.Membership, q ListQ
 		page.NextCursor = items[limit-1].ID
 	}
 	return page, nil
+}
+
+// Banners returns the banners the actor hasn't seen, newest first: the
+// notifications shown at the top of the app until the member reads them
+// (POST .../notifications/read with their IDs).
+func (s *Service) Banners(ctx context.Context, actor households.Membership) ([]Notification, error) {
+	if err := authorizeView(actor); err != nil {
+		return nil, err
+	}
+	items, err := s.store.List(ctx, actor.HouseholdID, ListFilter{
+		UnreadBy: actor.UserID, Viewer: actor.UserID, BannerOnly: true, Limit: MaxBanners,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list banners: %w", err)
+	}
+	return items, nil
 }
 
 // UnreadCount counts the notifications the actor hasn't read.

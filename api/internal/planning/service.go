@@ -98,6 +98,8 @@ type Service struct {
 	outcomes EventLister
 	// settled is the last ended week settled per household (settle.go).
 	settled settled
+	// dinners hears how many meals a household planned (WithDinnerListener).
+	dinners DinnerListener
 	logger  *slog.Logger
 	now     func() time.Time
 }
@@ -105,6 +107,19 @@ type Service struct {
 // NewService returns a Service.
 func NewService(store Store, recipeReader RecipeReader) *Service {
 	return &Service{store: store, recipes: recipeReader, now: time.Now}
+}
+
+// DinnerListener hears that a household planned dinners: meals, not
+// add-ons. *plus.Service implements it, for the setup a referral needs
+// (decision 698). It must return quickly and cannot fail the change.
+type DinnerListener interface {
+	DinnersPlanned(ctx context.Context, householdID string, n int)
+}
+
+// WithDinnerListener sets what hears about planned dinners, and returns s.
+func (s *Service) WithDinnerListener(l DinnerListener) *Service {
+	s.dinners = l
+	return s
 }
 
 // WithPantry makes GroceryList apply the household pantry from source, and
@@ -355,12 +370,21 @@ func (s *Service) AddEntries(ctx context.Context, householdID, userID, week stri
 		return Plan{}, nil, err
 	}
 	added := make([]Entry, 0, len(ids))
+	dinners := 0
+	defer func() {
+		if s.dinners != nil && dinners > 0 {
+			s.dinners.DinnersPlanned(ctx, householdID, dinners)
+		}
+	}()
 	for _, id := range ids {
 		e, ok := p.entry(id)
 		if !ok {
 			return Plan{}, nil, fmt.Errorf("planning: added entry %s missing from plan", id)
 		}
 		added = append(added, e)
+		if !e.RecipeIsAddon {
+			dinners++
+		}
 		events.RecordOrLog(ctx, s.events, s.logger, events.Event{
 			HouseholdID: householdID, UserID: userID, Type: events.TypeRecipePlanned, RecipeID: e.RecipeID,
 			Week: w.String(), OccurredAt: now,

@@ -130,6 +130,9 @@ type InvitationPreviewResponse struct {
 type invitationSecretRequest struct {
 	Token string `json:"token"`
 	Code  string `json:"code"`
+	// DeviceCheck is the app's DeviceCheck token on accept, for referrals
+	// (decision 698). Preview ignores it.
+	DeviceCheck *households.DeviceCheckRequest `json:"deviceCheck"`
 }
 
 // decodeSecret decodes and length-checks an accept or preview body.
@@ -198,7 +201,11 @@ func (h *Handler) accept(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	res, err := h.opts.Service.Accept(r.Context(), userID, req.Token, req.Code)
+	ctx := r.Context()
+	if p, ok := req.DeviceCheck.Proof(); ok {
+		ctx = households.WithDeviceProof(ctx, p)
+	}
+	res, err := h.opts.Service.Accept(ctx, userID, req.Token, req.Code)
 	if err != nil {
 		h.writeError(w, r, "accept invitation failed", err)
 		return

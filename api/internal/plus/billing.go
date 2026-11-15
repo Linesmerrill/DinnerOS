@@ -151,13 +151,20 @@ func (s *Service) Details(ctx context.Context, householdID string, m households.
 		}
 	}
 	if s.referrals != nil {
+		// Only referrals that qualified paid a month (decision 698).
 		if used, ok, err := s.referrals.UsedBy(ctx, householdID); err != nil {
 			return Details{}, err
-		} else if ok {
+		} else if ok && used.State == StateQualified {
 			d.UsedCode = &used
 		}
-		if _, d.InviteJoins, err = s.referrals.Joins(ctx, householdID, RecentJoins); err != nil {
+		_, joins, err := s.referrals.Joins(ctx, householdID, RecentJoins)
+		if err != nil {
 			return Details{}, err
+		}
+		for _, j := range joins {
+			if j.State == StateQualified {
+				d.InviteJoins = append(d.InviteJoins, j)
+			}
 		}
 	}
 	// Plus started at the first of: the subscription, the oldest billing
@@ -174,14 +181,14 @@ func (s *Service) Details(ctx context.Context, householdID string, m households.
 		consider(b.At)
 	}
 	if d.UsedCode != nil {
-		consider(d.UsedCode.At)
+		consider(d.UsedCode.EarnedAt())
 	}
 	if c := d.Status.Comp; c != nil {
 		consider(c.GrantedAt)
 	}
 	for _, j := range d.InviteJoins {
 		if j.ReferrerRewarded {
-			consider(j.At)
+			consider(j.EarnedAt())
 		}
 	}
 	if !d.CanManage {

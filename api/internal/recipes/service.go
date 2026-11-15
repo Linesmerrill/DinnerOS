@@ -35,6 +35,22 @@ type Service struct {
 	// plans takes a deleted recipe off upcoming weeks and puts it back on a
 	// restore (delete.go). Nil until WithPlans.
 	plans UpcomingPlans
+	// saved hears how many recipes a household added (WithSaveListener).
+	saved SaveListener
+}
+
+// SaveListener hears that a household added recipes to its library by
+// importing or typing them, not from the starter library or Shared Recipes.
+// *plus.Service implements it, for the setup a referral needs (decision
+// 698). It must return quickly and cannot fail the save.
+type SaveListener interface {
+	RecipesSaved(ctx context.Context, householdID string, n int)
+}
+
+// WithSaveListener sets what hears about added recipes, and returns s.
+func (s *Service) WithSaveListener(l SaveListener) *Service {
+	s.saved = l
+	return s
 }
 
 // NewService returns a Service backed by store.
@@ -294,6 +310,9 @@ func (s *Service) Import(ctx context.Context, householdID string, file ImportFil
 	res.ReviewItems = len(items)
 
 	slices.SortFunc(res.Errors, func(a, b RecipeError) int { return cmp.Compare(a.Index, b.Index) })
+	if s.saved != nil && res.Created > 0 {
+		s.saved.RecipesSaved(ctx, householdID, res.Created)
+	}
 	return res, nil
 }
 

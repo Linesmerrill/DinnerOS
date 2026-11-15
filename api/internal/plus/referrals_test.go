@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -52,128 +51,122 @@ func (s *memoryFree) PurgeHousehold(_ context.Context, id string) error {
 	return nil
 }
 
-type memoryReferrals struct {
-	mu    sync.Mutex
-	codes map[string]string // household -> code
-	refs  []Referral
+// harness is a Service with every qualify store in memory, and DeviceCheck
+// faked so one token is one device.
+type harness struct {
+	t       *testing.T
+	s       *Service
+	subs    *memoryStore
+	free    *memoryFree
+	refs    *memoryReferrals
+	setup   *memorySetup
+	history *memoryHistory
+	devices *memoryDevices
+	dc      *MemoryDeviceCheck
+	homes   *fakeHouseholds
+	ids     *fakeIdentities
+	notes   *memoryNotifier
 }
 
-func (s *memoryReferrals) Code(_ context.Context, id string, newCode func() string) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if c, ok := s.codes[id]; ok {
-		return c, nil
+var harnesses sync.Map // *Service -> *harness
+
+func newHarness(t *testing.T, now time.Time) *harness {
+	t.Helper()
+	h := &harness{
+		t: t, subs: newMemoryStore(), free: &memoryFree{m: map[string]time.Time{}},
+		refs: &memoryReferrals{codes: map[string]string{}}, setup: &memorySetup{m: map[string]Setup{}},
+		history: &memoryHistory{}, devices: &memoryDevices{m: map[string]DeviceTie{}}, dc: NewMemoryDeviceCheck(),
+		homes: &fakeHouseholds{m: map[string]households.Household{}}, ids: &fakeIdentities{subjects: map[string]string{}},
+		notes: &memoryNotifier{},
 	}
-	s.codes[id] = newCode()
-	return s.codes[id], nil
+	h.s = NewService(h.subs, true).WithReferrals(h.free, h.refs).WithQualify(QualifyOptions{
+		Setup: h.setup, History: h.history, Devices: h.devices, Locks: &memoryLocks{m: map[string]time.Time{}},
+		Households: h.homes, Identities: h.ids, Notifier: h.notes, DeviceCheck: h.dc,
+	})
+	h.s.now = func() time.Time { return now }
+	harnesses.Store(h.s, h)
+	t.Cleanup(func() { harnesses.Delete(h.s) })
+	return h
 }
 
-func (s *memoryReferrals) Owner(_ context.Context, code string) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for id, c := range s.codes {
-		if c == code {
-			return id, nil
-		}
-	}
-	return "", ErrCodeNotFound
+func harnessOf(s *Service) *harness {
+	h, _ := harnesses.Load(s)
+	return h.(*harness)
 }
 
-func (s *memoryReferrals) Record(_ context.Context, r Referral) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, old := range s.refs {
-		if old.ReferredID == r.ReferredID {
-			return ErrAlreadyRedeemed
-		}
+func (h *harness) at(t time.Time) { h.s.now = func() time.Time { return t } }
+
+func deviceCtx(ctx context.Context, device string) context.Context {
+	if device == "" {
+		return ctx
 	}
-	s.refs = append(s.refs, r)
-	return nil
+	return households.WithDeviceProof(ctx, households.DeviceProof{Token: device})
 }
 
-func (s *memoryReferrals) Used(_ context.Context, id string) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, r := range s.refs {
-		if r.ReferredID == id {
-			return true, nil
-		}
-	}
-	return false, nil
+// create makes household id, named name, by user on device ("" for no
+// DeviceCheck token).
+func (h *harness) create(id, name, user, device string) {
+	h.t.Helper()
+	now := h.s.now().UTC()
+	h.homes.mu.Lock()
+	h.homes.m[id] = households.Household{ID: id, Name: name, CreatedBy: user, CreatedAt: now}
+	h.homes.mu.Unlock()
+	h.s.MemberAdded(deviceCtx(h.t.Context(), device), households.MemberAdded{HouseholdID: id, UserID: user, Created: true, At: now})
 }
 
-func (s *memoryReferrals) Rewarded(_ context.Context, id string) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	n := 0
-	for _, r := range s.refs {
-		if r.ReferrerID == id && r.ReferrerRewarded {
-			n++
-		}
-	}
-	return n, nil
+// join adds user to household id from device.
+func (h *harness) join(id, user, device string) {
+	h.t.Helper()
+	h.s.MemberAdded(deviceCtx(h.t.Context(), device), households.MemberAdded{HouseholdID: id, UserID: user, At: h.s.now().UTC()})
 }
 
-func (s *memoryReferrals) Joins(_ context.Context, id string, limit int) (int, []Referral, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var out []Referral
-	for _, r := range s.refs {
-		if r.ReferrerID == id {
-			out = append(out, r)
-		}
-	}
-	n := len(out)
-	slices.SortStableFunc(out, func(a, b Referral) int { return b.At.Compare(a.At) })
-	return n, out[:min(limit, n)], nil
+func (h *harness) redeem(id, code, device string) (Status, error) {
+	return h.s.Redeem(deviceCtx(h.t.Context(), device), id, code)
 }
 
-func (s *memoryReferrals) UsedBy(_ context.Context, id string) (Referral, bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, r := range s.refs {
-		if r.ReferredID == id {
-			return r, true, nil
-		}
-	}
-	return Referral{}, false, nil
+// setUp plans the dinners and saves the recipes the rules ask for.
+func (h *harness) setUp(id string) {
+	h.s.DinnersPlanned(h.t.Context(), id, h.s.rules.MinDinners)
+	h.s.RecipesSaved(h.t.Context(), id, h.s.rules.MinRecipes)
 }
 
-func (s *memoryReferrals) Report(_ context.Context, since time.Time, top int) (ReferralReport, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := ReferralReport{Joined: len(s.refs)}
-	counts := map[string]int{}
-	for _, r := range s.refs {
-		counts[r.ReferrerID]++
-		if !r.At.Before(since) {
-			out.JoinedSince++
-		}
+func (h *harness) state(id string) ReferralState {
+	r, ok, _ := h.refs.UsedBy(h.t.Context(), id)
+	if !ok {
+		return ""
 	}
-	out.Codes = len(counts)
-	for id, n := range counts {
-		out.Top = append(out.Top, ReferrerCount{HouseholdID: id, Name: "Household " + id[len(id)-2:], Count: n})
-	}
-	slices.SortFunc(out.Top, func(a, b ReferrerCount) int { return b.Count - a.Count })
-	out.Top = out.Top[:min(top, len(out.Top))]
-	return out, nil
+	return r.State
 }
 
-func (s *memoryReferrals) PurgeHousehold(context.Context, string) error { return nil }
+func (h *harness) code(id string) string {
+	info, err := h.s.Referral(h.t.Context(), id)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return info.Code
+}
 
+// referralService is a harness with hh, hhB, and hhC created by different
+// people on different devices.
 func referralService(t *testing.T, now time.Time) (*Service, *memoryStore, *memoryFree, *memoryReferrals) {
 	t.Helper()
-	subs, free := newMemoryStore(), &memoryFree{m: map[string]time.Time{}}
-	refs := &memoryReferrals{codes: map[string]string{}}
-	s := NewService(subs, true).WithReferrals(free, refs)
-	s.now = func() time.Time { return now }
-	return s, subs, free, refs
+	h := newHarness(t, now)
+	h.at(now.Add(-time.Hour))
+	h.create(hh, "Lines", "66e5a1f2c3b4a5d6e7f80b01", "device-hh")
+	h.create(hhB, "Parkers", "66e5a1f2c3b4a5d6e7f80b02", "device-hhB")
+	h.create(hhC, "Okafors", "66e5a1f2c3b4a5d6e7f80b03", "device-hhC")
+	h.at(now)
+	return h.s, h.subs, h.free, h.refs
 }
+
+// setUpHousehold gives a household created by referralService the setup
+// a referral needs, so its referral qualifies.
+func setUpHousehold(s *Service, id string) { harnessOf(s).setUp(id) }
 
 const month = FreeMonthDays * 24 * time.Hour
 
-// A new household that enters another's code gets a free month, and so does
-// the household that shared it.
+// A new household that enters another's code gets a free month once it is
+// set up, and so does the household that shared it.
 func TestReferralGivesBothHouseholdsAFreeMonth(t *testing.T) {
 	ctx := t.Context()
 	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
@@ -190,9 +183,10 @@ func TestReferralGivesBothHouseholdsAFreeMonth(t *testing.T) {
 	// Typed the way a person might: lowercase, with a dash and a space.
 	typed := strings.ToLower(info.Code[:4]) + "- " + info.Code[4:]
 	st, err := s.Redeem(ctx, hhB, typed)
-	if err != nil || !st.Active || !st.FreeUntil.Equal(now.Add(month)) {
-		t.Fatalf("redeem = %+v, %v", st, err)
+	if err != nil || st.Active || !st.FreeUntil.IsZero() {
+		t.Fatalf("redeem = %+v, %v; want pending, no free time yet", st, err)
 	}
+	setUpHousehold(s, hhB)
 	if ok, _ := s.HasPlus(ctx, hhB); !ok {
 		t.Error("new household has no Plus")
 	}
@@ -233,6 +227,7 @@ func TestReferralRules(t *testing.T) {
 	if _, err := s.Redeem(ctx, hhB, code.Code); err != nil {
 		t.Fatal(err)
 	}
+	setUpHousehold(s, hhB)
 	// Once per household, whichever code.
 	other, _ := s.Referral(ctx, hhC)
 	if _, err := s.Redeem(ctx, hhB, other.Code); !errors.Is(err, ErrAlreadyRedeemed) {
@@ -256,12 +251,18 @@ func TestReferralMonthsAreCapped(t *testing.T) {
 	ctx := t.Context()
 	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
 	s, _, free, _ := referralService(t, now)
+	h := harnessOf(s)
+	s.rules.MaxPer30Days = 100
 	code, _ := s.Referral(ctx, hh)
 	for i := range MaxReferralMonths + 2 {
 		id := "66e5a1f2c3b4a5d6e7f8" + string(rune('a'+i/16)) + string("0123456789abcdef"[i%16]) + "ff"
+		h.at(now.Add(-time.Minute))
+		h.create(id, "Household", "66e5a1f2c3b4a5d6e7f9"+id[20:], "device-"+id)
+		h.at(now)
 		if _, err := s.Redeem(ctx, id, code.Code); err != nil {
 			t.Fatalf("redeem %d (%s): %v", i, id, err)
 		}
+		h.setUp(id)
 		if !free.m[id].Equal(now.Add(month)) {
 			t.Errorf("household %d got %v", i, free.m[id])
 		}
@@ -290,6 +291,7 @@ func TestReferralMonthWaitsForPaidTime(t *testing.T) {
 	if _, err := s.Redeem(ctx, hhB, code.Code); err != nil {
 		t.Fatal(err)
 	}
+	setUpHousehold(s, hhB)
 	if !free.m[hh].Equal(paidTo.Add(month)) {
 		t.Errorf("sharer free until %v, want %v", free.m[hh], paidTo.Add(month))
 	}
@@ -351,11 +353,20 @@ func TestReferralRoutes(t *testing.T) {
 	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "couldn't find that code") {
 		t.Errorf("unknown = %d %s", rec.Code, rec.Body.String())
 	}
-	rec = do(http.MethodPost, "/households/"+hhB+"/plus/referral/redeem", "u2", `{"code":"`+ref.Code+`"}`)
+	rec = do(http.MethodPost, "/households/"+hhB+"/plus/referral/redeem", "u2",
+		`{"code":"`+ref.Code+`","deviceCheck":{"token":"device-hhB","development":true}}`)
 	var st StatusResponse
 	_ = json.Unmarshal(rec.Body.Bytes(), &st)
-	if rec.Code != http.StatusOK || !st.Active || st.FreeUntil == nil {
+	if rec.Code != http.StatusOK || st.Active || st.FreeUntil != nil || st.ReferralProgress == nil ||
+		st.ReferralProgress.State != "pending" || len(st.ReferralProgress.Steps) != 2 {
 		t.Errorf("redeem = %d %s", rec.Code, rec.Body.String())
+	}
+	setUpHousehold(s, hhB)
+	rec = do(http.MethodGet, "/households/"+hhB+"/plus", "u2", "")
+	st = StatusResponse{}
+	_ = json.Unmarshal(rec.Body.Bytes(), &st)
+	if !st.Active || st.FreeUntil == nil || st.ReferralProgress == nil || st.ReferralProgress.State != "qualified" {
+		t.Errorf("after setup = %s", rec.Body.String())
 	}
 
 	// The status carries the offer while Plus is on.
@@ -478,13 +489,13 @@ func TestIntegrationReferralMongoStores(t *testing.T) {
 		t.Errorf("unknown owner = %v", err)
 	}
 
-	if err := refs.Record(ctx, Referral{ReferrerID: hh, ReferredID: hhB, At: at, ReferrerRewarded: true}); err != nil {
+	if err := refs.Record(ctx, &Referral{State: StateQualified, ReferrerID: hh, ReferredID: hhB, At: at, ReferrerRewarded: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := refs.Record(ctx, Referral{ReferrerID: hhC, ReferredID: hhB, At: at}); !errors.Is(err, ErrAlreadyRedeemed) {
+	if err := refs.Record(ctx, &Referral{State: StateQualified, ReferrerID: hhC, ReferredID: hhB, At: at}); !errors.Is(err, ErrAlreadyRedeemed) {
 		t.Errorf("second record = %v", err)
 	}
-	if err := refs.Record(ctx, Referral{ReferrerID: hh, ReferredID: hhC, At: at}); err != nil {
+	if err := refs.Record(ctx, &Referral{State: StateQualified, ReferrerID: hh, ReferredID: hhC, At: at}); err != nil {
 		t.Fatal(err)
 	}
 	if used, _ := refs.Used(ctx, hhB); !used {

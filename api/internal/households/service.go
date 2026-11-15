@@ -46,6 +46,7 @@ type Service struct {
 	onCreated CreatedListener
 	weekStart WeekStartListener
 	sharing   SharingListener
+	onMember  MemberListener
 	now       func() time.Time
 	logger    *slog.Logger
 }
@@ -63,13 +64,15 @@ type ServiceOptions struct {
 	// OnSharing, when set, publishes the household's recipes when it turns
 	// catalog sharing on. Without it only recipes saved later are shared.
 	OnSharing SharingListener
+	// OnMember, when set, hears about every new membership.
+	OnMember MemberListener
 	// Now is the clock. Default time.Now.
 	Now func() time.Time
 }
 
 // NewService returns a Service.
 func NewService(opts ServiceOptions) *Service {
-	s := &Service{store: opts.Store, users: opts.Users, onCreated: opts.OnCreated, weekStart: opts.OnWeekStart, sharing: opts.OnSharing, now: opts.Now, logger: opts.Logger}
+	s := &Service{store: opts.Store, users: opts.Users, onCreated: opts.OnCreated, weekStart: opts.OnWeekStart, sharing: opts.OnSharing, onMember: opts.OnMember, now: opts.Now, logger: opts.Logger}
 	if s.now == nil {
 		s.now = time.Now
 	}
@@ -128,6 +131,7 @@ func (s *Service) Create(ctx context.Context, userID string, in CreateInput) (Ho
 		return Household{}, Membership{}, fmt.Errorf("create admin membership: %w", err)
 	}
 	s.logger.InfoContext(ctx, "household created", "householdId", h.ID, "userId", userID)
+	s.memberAdded(ctx, m, true)
 	if s.onCreated != nil {
 		s.onCreated.HouseholdCreated(ctx, h.ID)
 	}
@@ -523,6 +527,7 @@ func (s *Service) AddMember(ctx context.Context, householdID, userID string, rol
 		}
 	}
 	s.logger.InfoContext(ctx, "member added", "householdId", householdID, "userId", userID, "role", string(role))
+	s.memberAdded(ctx, m, false)
 	return m, true, nil
 }
 

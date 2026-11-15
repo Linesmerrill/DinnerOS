@@ -4820,6 +4820,39 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/notifications/banners:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: Banners the caller hasn't seen
+      description: |
+        Notifications shown at the top of the app until the member reads them
+        (decision 698), newest first, at most 5. Today only `plus.referral`
+        (a free month of Plus is on) is a banner. Show each, then mark it
+        seen with POST .../notifications/read and its ID; opening its push
+        does the same. Each member sees a banner until they have. Requires
+        `household.view`.
+      operationId: listNotificationBanners
+      tags: [notifications]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The unseen banners.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Notification"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/notifications/read:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -5877,9 +5910,15 @@ paths:
       tags: [Households]
       summary: Use another household's invite code
       description: |
-        Gives this household and the code's owner 30 free days of Plus each.
-        Needs plan.edit. The code may be typed in any case, with spaces or
-        dashes, or pasted inside a link. 404 while Plus is off.
+        Records a pending referral (decision 698). Nothing is free yet: once
+        this household plans REFERRAL_MIN_DINNERS dinners and saves
+        REFERRAL_MIN_RECIPES recipes within REFERRAL_QUALIFY_DAYS, and the
+        anti-farming checks pass, both households get 30 free days of Plus
+        (within 24 hours) and a `plus.referral` notification. The response's
+        `referralProgress` says what's left. Send `deviceCheck` from the
+        device entering the code. Needs plan.edit. The code may be typed in
+        any case, with spaces or dashes, or pasted inside a link. 404 while
+        Plus is off.
       parameters:
         - $ref: "#/components/parameters/HouseholdID"
       requestBody:
@@ -5891,9 +5930,10 @@ paths:
               required: [code]
               properties:
                 code: {type: string}
+                deviceCheck: {$ref: "#/components/schemas/DeviceCheckToken"}
       responses:
         "200":
-          description: The household's Plus after the free month
+          description: The household's Plus, with `referralProgress`
           content:
             application/json:
               schema:
@@ -6090,6 +6130,41 @@ components:
           description: When free months from referrals end.
         offer:
           $ref: "#/components/schemas/PlusOffer"
+        referralProgress:
+          $ref: "#/components/schemas/PlusReferralProgress"
+    PlusReferralProgress:
+      type: object
+      description: |
+        Set for a household that entered another's code: how far it is to its
+        free month (decision 698). It never says which anti-farming check a
+        referral waits on.
+      required: [state, message, steps]
+      properties:
+        state: {type: string, enum: [pending, qualified, expired]}
+        message: {type: string, example: Plan a dinner and save 3 recipes to unlock your free month}
+        steps:
+          type: array
+          items:
+            type: object
+            required: [id, title, done, count, target]
+            properties:
+              id: {type: string, enum: [dinner, recipes]}
+              title: {type: string, example: Save 3 recipes}
+              done: {type: boolean}
+              count: {type: integer, description: Done so far, at most target}
+              target: {type: integer}
+        expiresAt: {type: string, format: date-time, description: While pending with setup unfinished}
+    DeviceCheckToken:
+      type: object
+      description: |
+        Apple DeviceCheck (decision 698): `token` is DCDevice.generateToken,
+        base64. Send it when creating a household, accepting an invitation,
+        and entering a referral code. Optional; without it (or in production
+        without a key on the server) a referral stays pending.
+      required: [token]
+      properties:
+        token: {type: string, maxLength: 8192}
+        development: {type: boolean, description: True when a development build made the token}
     PlusOffer:
       type: object
       description: The Plus purchase screen's words (decision 675). Show StoreKit's price when it has one, `priceText` otherwise.
@@ -6136,18 +6211,45 @@ components:
         explainer: {type: string}
         rewarded: {type: integer, description: Households that joined with the code and earned a month}
         monthsLeft: {type: integer, description: Months the code can still earn (at most 12 in all)}
+        howItWorks:
+          type: object
+          description: Shown above the code, in the words of the rules in force (REFERRAL_*).
+          required: [title, steps]
+          properties:
+            title: {type: string, example: How it works}
+            steps:
+              type: array
+              items: {type: string}
         invites: {$ref: "#/components/schemas/PlusInvites"}
+        referralProgress: {$ref: "#/components/schemas/PlusReferralProgress"}
     PlusInvites:
       type: object
-      description: Who used the code. Other households are never named.
-      required: [joined, monthsEarned, monthsCap, capText, emptyText, joins]
+      description: Who used the code. `items` names households by the names they chose; `joins` is the same list unnamed, for older app builds.
+      required: [joined, pending, qualified, expired, monthsEarned, monthsCap, capText, emptyText, items, joins]
       properties:
-        joined: {type: integer, description: Households that used the code}
+        joined: {type: integer, description: Households that used the code, in any state}
+        pending: {type: integer}
+        qualified: {type: integer}
+        expired: {type: integer}
         monthsEarned: {type: integer}
         monthsCap: {type: integer}
         capText: {type: string, description: '"3 of 12"'}
         freeUntil: {type: string, format: date-time, description: When free months end, while they last}
         emptyText: {type: string, description: Shown when no one has used the code}
+        items:
+          type: array
+          description: Up to 20, newest first
+          items:
+            type: object
+            required: [id, householdName, state, detail, at]
+            properties:
+              id: {type: string}
+              householdName: {type: string}
+              state: {type: string, enum: [pending, qualified, expired]}
+              detail:
+                type: string
+                description: '"Needs 2 more recipes", "Counts within 24 hours", "Free month earned", "Expired", or empty for a plain "Pending"'
+              at: {type: string, format: date-time, description: When the code was entered}
         joins:
           type: array
           description: Up to 20, newest first
@@ -6156,11 +6258,11 @@ components:
             required: [at, counted, status]
             properties:
               at: {type: string, format: date-time}
-              counted: {type: boolean, description: False once the code had earned every free month}
-              status: {type: string, description: '"Counted" or "Limit reached"'}
+              counted: {type: boolean, description: True once it earned a month}
+              status: {type: string, description: '"Counted", "Limit reached", "Pending", or "Expired"'}
         usedCode:
           type: object
-          description: Set when this household joined with another's code
+          description: Set once this household's own use of a code paid its month
           required: [at, freeUntil]
           properties:
             at: {type: string, format: date-time}
@@ -6214,11 +6316,15 @@ components:
         monthsCap: {type: integer}
     PlusReferralSummary:
       type: object
-      required: [codesUsed, joinedThisWeek, joinedAllTime, topReferrers]
+      required: [codesUsed, joinedThisWeek, joinedAllTime, pending, qualified, expired, footerText, topReferrers]
       properties:
         codesUsed: {type: integer, description: Households whose code was used at least once}
         joinedThisWeek: {type: integer, description: Codes used in the last 7 days}
         joinedAllTime: {type: integer}
+        pending: {type: integer}
+        qualified: {type: integer}
+        expired: {type: integer}
+        footerText: {type: string, description: Explains qualified and pending, under the totals}
         topReferrers:
           type: array
           description: The 5 households whose codes were used most
@@ -8060,6 +8166,8 @@ components:
           default: 2
         weekStartsOn:
           $ref: "#/components/schemas/WeekStartDay"
+        deviceCheck:
+          $ref: "#/components/schemas/DeviceCheckToken"
     UpdateHouseholdRequest:
       type: object
       additionalProperties: false
@@ -8277,6 +8385,8 @@ components:
           maxLength: 64
           description: The invite code. Case-insensitive; spaces and dashes are ignored.
           example: 7k3qm x9d2p
+        deviceCheck:
+          $ref: "#/components/schemas/DeviceCheckToken"
       oneOf:
         - required: [token]
         - required: [code]
@@ -9759,7 +9869,7 @@ components:
           maximum: 100
     Notification:
       type: object
-      required: [id, householdId, type, title, body, subject, read, createdAt]
+      required: [id, householdId, type, title, body, subject, read, banner, createdAt]
       properties:
         id:
           type: string
@@ -9767,7 +9877,7 @@ components:
           type: string
         type:
           type: string
-          description: Stable type. `pantry.low` and `shopping.order_due` exist today; show unknown types by title and body.
+          description: Stable type. `pantry.low`, `pantry.thaw`, `shopping.order_due`, and `plus.referral` (a free month of Plus from an invite, decision 698) exist today; show unknown types by title and body.
           example: pantry.low
         title:
           type: string
@@ -9778,7 +9888,7 @@ components:
         subject:
           type: object
           required: [kind, id]
-          description: What to open. `pantry_item` is a pantry item ID; `shopping_week` is an ISO week to open in Shop.
+          description: What to open. `pantry_item` is a pantry item ID; `shopping_week` is an ISO week to open in Shop; `plus` (empty ID) is the Give a Free Month screen.
           properties:
             kind:
               type: string
@@ -9788,6 +9898,9 @@ components:
         read:
           type: boolean
           description: Whether the caller has read it.
+        banner:
+          type: boolean
+          description: Shown at the top of the app until the caller reads it (GET .../notifications/banners).
         createdAt:
           type: string
           format: date-time
