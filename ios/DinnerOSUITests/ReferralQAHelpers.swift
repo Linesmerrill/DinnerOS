@@ -46,10 +46,14 @@ extension XCTestCase {
     func signIn(_ app: XCUIApplication, subject name: String) {
         let subject = app.textFields["Subject"]
         XCTAssertTrue(subject.waitForExistence(timeout: 15))
-        subject.tap()
-        subject.press(forDuration: 1.0)
-        if app.menuItems["Select All"].waitForExistence(timeout: 2) { app.menuItems["Select All"].tap() }
+        // Clear what's there by deleting from the end. Select All doesn't always show, and then
+        // the name was added to the old one and signed in a brand-new person.
+        subject.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        if let old = subject.value as? String, !old.isEmpty, old != subject.placeholderValue {
+            subject.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count + 2))
+        }
         subject.typeText(name)
+        XCTAssertEqual(subject.value as? String, name, "The sign-in field didn't take the name")
         // The button names the account once the field has taken the text.
         let button = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Developer sign-in'")).firstMatch
         let words = name.split(separator: "-").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")

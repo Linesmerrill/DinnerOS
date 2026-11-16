@@ -35,17 +35,20 @@ final class UnsplashPhotoQATests: XCTestCase {
         XCTAssertTrue(app.buttons["Search the Web"].exists, "No Search the Web with photo search on")
         let result = app.buttons[credit].firstMatch
         XCTAssertTrue(result.waitForExistence(timeout: 15), "No results credited to their photographer")
+        // The footer link exists below the results without scrolling to it. No scrolling back
+        // either: on an iPad a downward drag can close the chooser.
         let source = app.descendants(matching: .any)["PhotoSource"].firstMatch
-        reveal(source, in: app, maxSwipes: 3)
-        XCTAssertTrue(source.exists, "No Photos from Unsplash link")
+        XCTAssertTrue(source.waitForExistence(timeout: 5), "No Photos from Unsplash link")
         XCTAssertEqual(source.label, "Photos from Unsplash")
         snap(app, "Unsplash 01 Search results")
 
         // Pick one: the form shows it with its credit.
-        scrollBack(app)
-        app.buttons[credit].firstMatch.tap()
+        result.tap()
+        // On an iPad the form is a short sheet, and the credit under a tall photo can start below
+        // its fold, where the form hasn't made it yet.
         let formCredit = app.descendants(matching: .any)["PhotoCredit"].firstMatch
-        XCTAssertTrue(formCredit.waitForExistence(timeout: 15), "No credit under the picked photo")
+        if !formCredit.waitForExistence(timeout: 8) { reveal(formCredit, in: app, maxSwipes: 4) }
+        XCTAssertTrue(formCredit.waitForExistence(timeout: 8), "No credit under the picked photo")
         XCTAssertTrue(formCredit.label.contains(credit), "The credit says \(formCredit.label)")
         snap(app, "Unsplash 02 Picked, with credit")
 
@@ -58,10 +61,17 @@ final class UnsplashPhotoQATests: XCTestCase {
         app.buttons["cup"].firstMatch.tap()
         app.buttons["Next"].firstMatch.tap()
         app.typeText("Lettuce")
-        app.buttons["Done"].firstMatch.tap()
+        // The sheet's own Done: on an iPad the form behind it has one too.
+        let sheetDone = app.navigationBars["New Ingredient"].buttons["Done"]
+        (sheetDone.exists ? sheetDone : app.buttons["Done"].firstMatch).tap()
+        // With the keyboard up, the first Done can only put it away; a second closes the sheet.
+        if !waitGone(app.navigationBars["New Ingredient"], timeout: 3), sheetDone.exists { sheetDone.tap() }
+        XCTAssertTrue(waitGone(app.navigationBars["New Ingredient"], timeout: 5), "New Ingredient didn't close")
         let step = app.textViews["Step 1"].exists ? app.textViews["Step 1"] : app.textFields["Step 1"]
         reveal(step, in: app)
-        step.tap()
+        // On an iPad in landscape the field can report itself not hittable under the form's
+        // bottom bar; tapping its middle reaches it either way.
+        step.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         step.typeText("Toss everything together.")
         app.buttons["Done"].firstMatch.tap()
         app.buttons["Save"].tap()

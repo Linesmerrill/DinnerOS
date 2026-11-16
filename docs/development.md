@@ -234,3 +234,47 @@ project edits.
 - Make one coherent commit per logical change.
 - Update the relevant `docs/` page when behavior or architecture changes.
 - Never commit secrets, `.env`, or imported personal data (see README).
+
+## UI QA matrix (under 30 minutes)
+
+Every build's UI QA runs the 8 configs (iPhone 17 Pro Max, iPhone SE, iPad landscape, iPad
+portrait; each in light and dark) with `scripts/qa-matrix.sh`. The whole matrix must finish in
+under 30 minutes. The standard:
+
+1. **Parallel.** One simulator per config ("QA matrix <config>"), all 8 at once. The app is built
+   once per API port (`build-for-testing`), then every config runs `test-without-building`.
+2. **Timeouts.** Each test has a 10-minute limit. A run with no output for 10 minutes is killed,
+   its simulator restarted, and only that test retried once.
+3. **Targeted reruns.** After a fix, rerun only what failed, never the whole matrix:
+   `CONFIGS="ipadL-light" TESTS="UnsplashPhotoQATests" scripts/qa-matrix.sh`.
+4. **Local APIs** on local Mongo: 8082 with no photo search key, 8083 with the fake Unsplash
+   (below), both with `REFERRAL_MAX_PER_30_DAYS=1000`.
+5. **Report.** `summary.txt` lists each config and test as ok or FAILED with the first error, and
+   the time. If a run goes past 30 minutes, say why from the logs before rerunning anything.
+
+## Photo search QA (Unsplash)
+
+Two cases go on the QA checklist every build (decision 705):
+
+1. **Key missing: search hidden.** A local API without `UNSPLASH_ACCESS_KEY`: Add a Recipe >
+   Choose Photo shows only the photo library, with no Search the Web (`AddRecipeQATests`).
+2. **Key present: search, pick, credit.** Start the stand-in Unsplash and a second API that
+   uses it, then run `UnsplashPhotoQATests` with `TEST_RUNNER_QA_PHOTO_SEARCH=on` against it:
+
+   ```bash
+   go run ./api/cmd/fakeunsplash
+   PORT=8083 UNSPLASH_ACCESS_KEY=qa-not-a-real-key UNSPLASH_API_BASE=http://localhost:8099 go run ./api/cmd/server
+   ```
+
+   Search the Web opens on the recipe's name, each result names its photographer, the chooser
+   links "Photos from Unsplash", a pick calls `download_location` (`GET localhost:8099/qa/downloads`
+   counts them), and "Photo by <name> on Unsplash" shows under the photo in the form, on the
+   recipe page and in Edit Recipe. `UNSPLASH_API_BASE` is ignored in production.
+
+## Referral QA on a local API
+
+`ReferralQATests` invites a new household from the `dev-simulator` sharer every run, and a sharer
+qualifies at most `REFERRAL_MAX_PER_30_DAYS` (3) referrals in any 30 days (decision 698). After
+three runs the next invite stays pending and the test reports "No free month confirmation". For
+local QA, start the API with `REFERRAL_MAX_PER_30_DAYS=1000`, or move the local database's
+qualified referrals back past the 30 days before the run. Never on a shared or production database.

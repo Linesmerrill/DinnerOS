@@ -1,0 +1,152 @@
+#!/bin/bash
+# The 8-config UI QA matrix, in parallel: one simulator per config (iPhone 17 Pro Max, iPhone SE,
+# iPad landscape, iPad portrait; each light and dark). Target: under 30 minutes.
+#
+#   scripts/qa-matrix.sh                      # every config, every test
+#   CONFIGS="ipadL-light" TESTS="UnsplashPhotoQATests" scripts/qa-matrix.sh   # a targeted rerun
+#
+# Needs two local APIs on local Mongo (docs/development.md): 8082 with no photo search key, and
+# 8083 with UNSPLASH_ACCESS_KEY=qa-not-a-real-key pointed at cmd/fakeunsplash. Start both with
+# REFERRAL_MAX_PER_30_DAYS=1000 so parallel referral runs don't use up the sharer's slots.
+#
+# The app is built once per API port (build-for-testing), then every config runs
+# test-without-building at the same time. Each test has a 10-minute limit, and a run with no
+# output for 10 minutes is killed, its simulator restarted, and that test retried once.
+# Results: $OUT/summary.txt, one line per config and test; $OUT/<config>-<test>.xcresult.
+set -u
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+OUT=${OUT:-${TMPDIR:-/tmp}/dinneros-qa}
+ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-light ipadP-dark"
+CONFIGS=${CONFIGS:-$ALL}
+TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeQATests SaveThenOpenQATests"}
+STALL=${STALL:-600}
+RUNTIME_PHONE=${RUNTIME_PHONE:-com.apple.CoreSimulator.SimRuntime.iOS-26-2}
+RUNTIME_IPAD=${RUNTIME_IPAD:-com.apple.CoreSimulator.SimRuntime.iOS-26-4}
+mkdir -p "$OUT"
+: >"$OUT/summary.txt"
+
+device_type() {
+    case $1 in
+    large-*) echo com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max ;;
+    small-*) echo com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation ;;
+    ipad*) echo com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M5-12GB ;;
+    esac
+}
+
+# One simulator per config, named "QA matrix <config>", made once and reused.
+simulator() {
+    local name="QA matrix $1" id
+    id=$(xcrun simctl list devices -j | python3 -c "
+import json,sys
+for devs in json.load(sys.stdin)['devices'].values():
+    for d in devs:
+        if d['name']=='$name' and d['isAvailable']: print(d['udid']); raise SystemExit")
+    if [ -z "$id" ]; then
+        local rt=$RUNTIME_PHONE
+        case $1 in ipad*) rt=$RUNTIME_IPAD ;; esac
+        id=$(xcrun simctl create "$name" "$(device_type "$1")" "$rt")
+    fi
+    echo "$id"
+}
+
+build() {
+    local port=$1
+    xcodebuild build-for-testing -project "$ROOT/ios/DinnerOS.xcodeproj" -scheme "DinnerOS QA" \
+        -destination "generic/platform=iOS Simulator" -derivedDataPath "$OUT/dd-$port" \
+        "API_BASE_URL=http:/\$()/localhost:$port" ARCHS=arm64 CODE_SIGNING_ALLOWED=NO >"$OUT/build-$port.log" 2>&1 ||
+        { echo "build for $port failed: $OUT/build-$port.log"; exit 1; }
+}
+
+# Runs one test on one simulator, killing it after $STALL seconds without output.
+run_test() {
+    local config=$1 id=$2 test=$3 attempt=$4
+    local mode=${config#*-} orientation=portrait port=8082 search=off
+    case $config in ipadL-*) orientation=landscape ;; esac
+    test=${test/SWEEP/$([ "$mode" = dark ] && echo testSweepDark || echo testSweepLight)}
+    [ "$test" = UnsplashPhotoQATests ] && { port=8083; search=on; }
+    local name="$config-$(echo "$test" | tr '/' '-')"
+    local xctestrun
+    xctestrun=$(ls "$OUT/dd-$port"/Build/Products/*.xctestrun | head -1)
+    xcrun simctl uninstall "$id" com.linesmerrill.dinneros 2>/dev/null
+    rm -rf "$OUT/$name.xcresult"
+    TEST_RUNNER_QA_PHOTO_SEARCH=$search TEST_RUNNER_QA_MODE=$mode TEST_RUNNER_QA_ORIENTATION=$orientation \
+        TEST_RUNNER_QA_APP_QA_HUD_SECONDS=3 TEST_RUNNER_QA_MANUAL_NAME="Sip Fudge" \
+        TEST_RUNNER_QA_IMPORTED_NAME="Street Cart-Style Chicken Bowls" \
+        xcodebuild test-without-building -xctestrun "$xctestrun" -destination "id=$id" \
+        -test-timeouts-enabled YES -maximum-test-execution-time-allowance 600 \
+        -resultBundlePath "$OUT/$name.xcresult" -only-testing:"DinnerOSUITests/$test" \
+        >"$OUT/$name.log" 2>&1 &
+    local pid=$!
+    while kill -0 $pid 2>/dev/null; do
+        sleep 15
+        local idle=$(($(date +%s) - $(stat -f %m "$OUT/$name.log")))
+        if [ $idle -gt "$STALL" ]; then
+            kill $pid 2>/dev/null
+            pkill -f "id=$id" 2>/dev/null
+            xcrun simctl shutdown "$id" 2>/dev/null
+            xcrun simctl boot "$id" 2>/dev/null
+            xcrun simctl bootstatus "$id" -b >/dev/null 2>&1
+            xcrun simctl ui "$id" appearance "$mode"
+            if [ "$attempt" = 1 ]; then
+                echo "$config $test: stalled ${STALL}s, restarted" >>"$OUT/summary.txt"
+                run_test "$config" "$id" "$3" 2
+            else
+                echo "$config $test: FAILED (stalled twice)" >>"$OUT/summary.txt"
+            fi
+            return
+        fi
+    done
+    # A fresh simulator can refuse the first install ("Internal error"): retry that once.
+    if [ "$attempt" = 1 ] && grep -q "failed to install the application\|Unable to Install" "$OUT/$name.log"; then
+        echo "$config $test: install failed, retried" >>"$OUT/summary.txt"
+        sleep 10
+        run_test "$config" "$id" "$3" 2
+        return
+    fi
+    local passed failed
+    passed=$(grep -cE "Test Case.*passed" "$OUT/$name.log")
+    failed=$(grep -cE "Test Case.*failed" "$OUT/$name.log")
+    local verdict=ok
+    [ "$failed" -gt 0 ] || [ "$passed" -eq 0 ] && verdict=FAILED
+    echo "$config $test: $verdict ($passed passed, $failed failed)" >>"$OUT/summary.txt"
+    grep -E " error:" "$OUT/$name.log" | sed "s|$ROOT/||" | cut -c1-300 | head -3 >>"$OUT/summary.txt"
+}
+
+run_config() {
+    local config=$1 id
+    id=$(simulator "$config")
+    xcrun simctl boot "$id" 2>/dev/null
+    xcrun simctl bootstatus "$id" -b >/dev/null 2>&1
+    xcrun simctl ui "$id" appearance "${config#*-}"
+    for test in $TESTS; do
+        # The end-to-end add tests run once, on the large iPhone in light.
+        case $test in AddRecipeQATests | SaveThenOpenQATests) [ "$config" = large-light ] || continue ;; esac
+        run_test "$config" "$id" "$test" 1
+    done
+    xcrun simctl shutdown "$id"
+}
+
+start=$(date +%s)
+# Simulators, installs and result bundles need room; a full disk shows up as failed installs and
+# a crashed local Mongo, not as a clear error.
+free_gb=$(df -g "$OUT" | awk 'NR==2 {print $4}')
+if [ "$free_gb" -lt 10 ]; then
+    echo "Only ${free_gb} GB free; the matrix needs 10. Clear old result bundles first."
+    exit 1
+fi
+need8083=no
+for t in $TESTS; do [ "$t" = UnsplashPhotoQATests ] && need8083=yes; done
+build 8082 &
+[ $need8083 = yes ] && build 8083 &
+wait
+echo "built in $(($(date +%s) - start))s" >>"$OUT/summary.txt"
+# Staggered a little, so 8 simulators don't boot and install at the same instant.
+for config in $CONFIGS; do
+    run_config "$config" &
+    sleep 15
+done
+wait
+echo "done in $(($(date +%s) - start))s" >>"$OUT/summary.txt"
+cat "$OUT/summary.txt"
+grep -q "FAILED" "$OUT/summary.txt" && exit 1
+exit 0

@@ -111,9 +111,16 @@ final class AnyListGuideQATests: XCTestCase {
             add.tap()
             sleep(2)
         }
-        // Searching hides Done behind the search's Cancel.
-        if !app.buttons["Done"].firstMatch.exists, app.buttons["Cancel"].firstMatch.exists {
-            app.buttons["Cancel"].firstMatch.tap()
+        // Searching hides Done behind the search's own button: Cancel, or Close on iOS 26.
+        let sheet = app.navigationBars["Add Recipes"]
+        if !app.buttons["Done"].firstMatch.exists {
+            for name in ["Cancel", "Close"] where sheet.buttons[name].exists {
+                sheet.buttons[name].tap()
+                break
+            }
+            if !app.buttons["Done"].firstMatch.exists, app.buttons["Cancel"].firstMatch.exists {
+                app.buttons["Cancel"].firstMatch.tap()
+            }
         }
         if app.buttons["Done"].firstMatch.waitForExistence(timeout: 3) {
             app.buttons["Done"].firstMatch.tap()
