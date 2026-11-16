@@ -266,9 +266,18 @@ struct PlusPurchasePresenter: ViewModifier {
             .sheet(isPresented: $plus.showsChecklist) {
                 ReferralChecklistSheet()
             }
-            .sheet(item: $plus.freeMonthOn, onDismiss: plus.freeMonthShown) { progress in
-                FreeMonthOnView(progress: progress)
+            // A card over the app, not a sheet: it waits under any sheet that's open (Add
+            // Recipes, say) and shows when that closes, instead of being dropped.
+            .overlay {
+                if let progress = plus.freeMonthOn {
+                    FreeMonthOnView(progress: progress) {
+                        plus.freeMonthOn = nil
+                        plus.freeMonthShown()
+                    }
+                    .transition(.opacity)
+                }
             }
+            .animation(.easeOut(duration: 0.2), value: plus.freeMonthOn?.id)
             .alert(
                 "Couldn't Use Your Invite Code",
                 isPresented: Binding(get: { plus.inviteError != nil }, set: { if !$0 { plus.inviteError = nil } })

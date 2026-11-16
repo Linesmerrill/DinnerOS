@@ -48,8 +48,11 @@ final class AddRecipeQATests: XCTestCase {
         XCTAssertTrue(total.waitForExistence(timeout: 3), "Total didn't add up")
 
         // Choose Photo opens the chooser with both places.
+        // It's near the top of the form, and checking the total scrolled to the bottom.
         let choose = app.buttons["Choose Photo"]
-        reveal(choose, in: app)
+        for _ in 0..<6 where !(choose.exists && choose.isHittable && choose.frame.minY > app.frame.height * 0.15) {
+            scrollBack(app)
+        }
         choose.tap()
         XCTAssertTrue(app.navigationBars["Choose a Photo"].waitForExistence(timeout: 5), "Choose Photo opened nothing")
         snap(app, "04 Choose a Photo, web")

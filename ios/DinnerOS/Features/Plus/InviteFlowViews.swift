@@ -476,6 +476,7 @@ struct ReferralChecklistSection: View {
 struct ReferralMenuCard: View {
     @Environment(PlusStore.self) private var plus
     @Environment(RecipeLibrary.self) private var library
+    @Environment(PlanStore.self) private var plans
 
     var body: some View {
         Group {
@@ -484,11 +485,19 @@ struct ReferralMenuCard: View {
                     .padding(.horizontal, 16)
             }
         }
-        // Saving recipes and planning change the count; check again when they might have.
-        .task(id: library.items.count) {
+        // Saving recipes and planning a dinner change the count; check again when they might
+        // have. The server counts a new dinner just after it's saved, so wait a moment.
+        .task(id: SetupCounts(recipes: library.items.count, meals: plans.plan?.entries.count ?? 0)) {
             guard plus.pendingReferral != nil else { return }
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
             await plus.reload()
         }
+    }
+
+    private struct SetupCounts: Equatable {
+        let recipes: Int
+        let meals: Int
     }
 
     private func card(_ progress: ReferralProgress) -> some View {
@@ -537,41 +546,48 @@ struct ReferralMenuCard: View {
 /// Shown once, when the checklist is done and the free month starts.
 struct FreeMonthOnView: View {
     let progress: ReferralProgress
+    let done: () -> Void
 
     @Environment(PlusStore.self) private var plus
-    @Environment(\.dismiss) private var dismiss
-    @ScaledMetric(relativeTo: .largeTitle) private var markSize: CGFloat = 64
+    @ScaledMetric(relativeTo: .largeTitle) private var markSize: CGFloat = 56
 
     var body: some View {
-        VStack(spacing: 20) {
-            Spacer(minLength: 0)
-            Image(systemName: "gift.fill")
-                .font(.system(size: markSize))
-                .foregroundStyle(.tint)
+        ZStack {
+            Color.black.opacity(0.35)
+                .ignoresSafeArea()
                 .accessibilityHidden(true)
-            Text(progress.message)
-                .font(.title.bold())
-                .multilineTextAlignment(.center)
-                .accessibilityAddTraits(.isHeader)
-            if let until = plus.status?.freeUntil {
-                Text("Plus is free until \(PlusText.day(until)).")
-                    .foregroundStyle(.secondary)
+            VStack(spacing: 16) {
+                Image(systemName: "gift.fill")
+                    .font(.system(size: markSize))
+                    .foregroundStyle(.tint)
+                    .accessibilityHidden(true)
+                Text(progress.message)
+                    .font(.title2.bold())
                     .multilineTextAlignment(.center)
+                    .accessibilityAddTraits(.isHeader)
+                if let until = plus.status?.freeUntil {
+                    Text("Plus is free until \(PlusText.day(until)).")
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                Button(action: done) {
+                    Text("Done")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 32)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding(.top, 4)
             }
-            Spacer(minLength: 0)
-            Button {
-                dismiss()
-            } label: {
-                Text("Done")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: 32)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .padding(24)
+            .frame(maxWidth: 420)
+            // White in light; a raised gray in dark, so it stands off the dimmed app.
+            .background(Color(.tertiarySystemBackground), in: .rect(cornerRadius: 24))
+            .shadow(color: .black.opacity(0.2), radius: 20, y: 8)
+            .padding(24)
+            .accessibilityElement(children: .contain)
+            .accessibilityAddTraits(.isModal)
+            .accessibilityIdentifier("FreeMonthOn")
         }
-        .padding(24)
-        .frame(maxWidth: 560)
-        .presentationDetents([.medium, .large])
-        .accessibilityIdentifier("FreeMonthOn")
     }
 }

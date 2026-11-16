@@ -130,7 +130,7 @@ final class InviteLinkQATests: XCTestCase {
         XCTAssertTrue(app.staticTexts["That's your own code"].waitForExistence(timeout: 10), "Own code not spotted")
         XCTAssertFalse(app.buttons["Accept"].exists, "A set-up household was offered Accept")
         snap(app, "Invite link, your own code (\(mode))")
-        app.buttons["Close"].tap()
+        screen.buttons["Close"].tap()
         XCTAssertTrue(waitGone(screen, timeout: 5))
         signOut(app)
 
@@ -149,7 +149,7 @@ final class InviteLinkQATests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Your code"].waitForExistence(timeout: 10))
         snap(app, "Invite link, See Your Code (\(mode))")
         app.navigationBars.buttons.firstMatch.tap()
-        app.buttons["Close"].tap()
+        screen.buttons["Close"].tap()
         XCTAssertTrue(waitGone(screen, timeout: 5))
 
         // A code that doesn't exist, opened from a cold start: the server's words.
@@ -161,7 +161,7 @@ final class InviteLinkQATests: XCTestCase {
             app.staticTexts["We couldn't find that code. Check it and try again."].waitForExistence(timeout: 15),
             "A bad code didn't show the server's message")
         snap(app, "Invite link, code not found (\(mode))")
-        app.buttons["Close"].tap()
+        screen.buttons["Close"].tap()
         XCTAssertTrue(waitGone(screen, timeout: 5))
     }
 }

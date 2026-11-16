@@ -37,7 +37,8 @@ final class ReferralQATests: XCTestCase {
         // 2. A brand-new person starts a household and enters the code.
         // Unique per run: earlier runs left dozens of QA Invite Kitchens in Your Invites.
         let newName = "QA Invite Kitchen \(Int(Date().timeIntervalSince1970) % 1_000_000)"
-        app = signInAsNewPerson(app, householdName: newName)
+        let newSubject = "qa-invite-\(Int.random(in: 10000...99999))"
+        app = signInAsNewPerson(app, householdName: newName, subject: newSubject)
         openGiveAFreeMonth(app)
         let field = app.textFields["Code"]
         reveal(field, in: app, maxSwipes: 6)
@@ -61,24 +62,27 @@ final class ReferralQATests: XCTestCase {
         snap(app, "Your free month, recipes done (\(mode))")
         planADinner(app)
 
-        // 4. The invite counts: the new household's banner shows on the next open.
-        XCUIDevice.shared.press(.home)
-        sleep(2)
-        app.activate()
-        // The free month confirmation shows once, over the banner.
+        // 4. The invite counts. Planning rechecks the free month, and the confirmation shows
+        // once. No Home press: on iPad it can bring the app back as a small window.
         let freeMonth = app.descendants(matching: .any)["FreeMonthOn"].firstMatch
-        XCTAssertTrue(freeMonth.waitForExistence(timeout: 20), "No free month confirmation")
+        XCTAssertTrue(freeMonth.waitForExistence(timeout: 30), "No free month confirmation")
         XCTAssertTrue(app.staticTexts["Your free month of Plus is on"].exists, "The confirmation says something else")
         snap(app, "Your free month is on (\(mode))")
-        app.buttons["Done"].firstMatch.tap()
+        freeMonth.buttons["Done"].tap()
         XCTAssertTrue(waitGone(freeMonth, timeout: 5), "The confirmation didn't close")
+        // The news banner shows on the next sign-in.
+        signOut(app)
+        signIn(app, subject: newSubject)
+        // A new person's taste questions can come up first; they wait.
+        let later = app.buttons["Set Up Later"]
+        if later.waitForExistence(timeout: 8) { later.tap() }
         let banner = app.descendants(matching: .any)["NewsBanner"].firstMatch
         XCTAssertTrue(banner.waitForExistence(timeout: 20), "No banner for the new household")
         XCTAssertTrue(
             app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Your free month of Plus is on.'"))
                 .firstMatch.exists, "The new household's banner says something else")
         snap(app, "Banner, free month on (\(mode))")
-        app.buttons["Close"].firstMatch.tap()
+        banner.buttons["Close"].firstMatch.tap()
         XCTAssertTrue(waitGone(banner, timeout: 5), "The banner didn't close")
         signOut(app)
 
@@ -97,7 +101,12 @@ final class ReferralQATests: XCTestCase {
         // Each invite row reads as one element: "name, how it's going, status".
         let row = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label BEGINSWITH %@", newName)).firstMatch
-        reveal(row, in: app, maxSwipes: 8)
+        // Newest first, so it's near the top of the list: stop the moment it's on screen. A
+        // reveal that waits for it to clear the bottom third can swipe it past the top on iPad.
+        let screen = app.frame
+        for _ in 0..<10 where !(row.exists && screen.intersects(row.frame) && row.frame.minY > screen.minY + 60) {
+            app.swipeUp(velocity: .slow)
+        }
         XCTAssertTrue(row.exists, "The invite isn't in Your Invites")
         snap(app, "Your Invites, free month earned (\(mode))")
     }

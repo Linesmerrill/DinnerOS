@@ -62,8 +62,11 @@ extension XCTestCase {
     }
 
     @MainActor
-    func signInAsNewPerson(_ app: XCUIApplication, householdName: String) -> XCUIApplication {
-        signIn(app, subject: "qa-invite-\(Int.random(in: 10000...99999))")
+    func signInAsNewPerson(
+        _ app: XCUIApplication, householdName: String,
+        subject: String = "qa-invite-\(Int.random(in: 10000...99999))"
+    ) -> XCUIApplication {
+        signIn(app, subject: subject)
         XCTAssertTrue(app.staticTexts["Create a Household"].waitForExistence(timeout: 15))
         app.staticTexts["Create a Household"].tap()
         let name = app.textFields["Household name"]
@@ -105,6 +108,9 @@ extension XCTestCase {
         XCTAssertTrue(add.waitForExistence(timeout: 10), "Nothing to plan")
         add.tap()
         sleep(2)
-        app.buttons["Done"].firstMatch.tap()
+        // The sheet's own Done; on iPad another Done can come first.
+        let done = app.navigationBars["Add Recipes"].buttons["Done"]
+        if done.exists { done.tap() } else { app.buttons["Done"].firstMatch.tap() }
+        XCTAssertTrue(waitGone(app.navigationBars["Add Recipes"], timeout: 5), "Add Recipes didn't close")
     }
 }

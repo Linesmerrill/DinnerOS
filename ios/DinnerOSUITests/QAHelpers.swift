@@ -63,14 +63,39 @@ extension XCTestCase {
         // Hittable isn't enough: a pinned bottom bar (Open in Walmart, Add to Week) can sit over
         // an element XCTest still calls hittable. On an SE, Open in Walmart, its note and the tab
         // bar cover the bottom third, so keep it above that.
+        // Judged by its top edge, so a tall section (a checklist) counts once its top is in the
+        // upper half.
         func clear() -> Bool {
             guard element.exists, element.isHittable else { return false }
             let screen = app.frame
-            return element.frame.maxY < screen.minY + screen.height * 0.62
+            let top = element.frame.minY - screen.minY
+            return top > screen.height * 0.08 && top < screen.height * 0.55
         }
+        // A swipe can carry it from under the bar to under the top of the screen, or off it
+        // altogether in a lazy list; then scroll back a little.
+        func pastTheTop() -> Bool {
+            element.exists && element.frame.minY < app.frame.minY + app.frame.height * 0.08
+        }
+        var seen = false
         while !clear(), swipes < maxSwipes {
-            app.swipeUp(velocity: .slow)
+            // Never seen after half the swipes: it's above, not below.
+            let lookUp = !seen && !element.exists && swipes >= maxSwipes / 2
+            if pastTheTop() || (seen && !element.exists) || lookUp {
+                scrollBack(app)
+            } else {
+                seen = seen || element.exists
+                app.swipeUp(velocity: .slow)
+            }
             swipes += 1
         }
+    }
+
+    /// Scrolls content back toward the top with a drag that starts mid-screen. A downward swipe
+    /// on iPadOS 26 can turn a full-screen app into a small window, which then breaks typing.
+    @MainActor
+    func scrollBack(_ app: XCUIApplication) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+        start.press(forDuration: 0.05, thenDragTo: end)
     }
 }
