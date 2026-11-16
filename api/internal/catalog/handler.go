@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
+	"github.com/Linesmerrill/DinnerOS/api/internal/photosearch"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 )
@@ -22,6 +24,14 @@ type HandlerOptions struct {
 	Authorizer households.Authorizer
 	Tokens     auth.AccessTokenValidator
 	Logger     *slog.Logger
+	// Credits says who took a shared recipe's photo when it came from photo
+	// search (decision 705). Optional.
+	Credits PhotoCredits
+}
+
+// PhotoCredits finds the credit kept for a picked photo by its address.
+type PhotoCredits interface {
+	PhotoCredit(ctx context.Context, imageURL string) *photosearch.Credit
 }
 
 // Handler serves the discovery and catalog endpoints.
@@ -121,16 +131,18 @@ type CatalogListResponse struct {
 // CatalogRecipeResponse is returned by GET .../catalog/recipes/{id}.
 type CatalogRecipeResponse struct {
 	CatalogSummaryResponse
-	Description string                      `json:"description,omitempty"`
-	SourceURL   string                      `json:"sourceUrl,omitempty"`
-	Servings    []int                       `json:"servings"`
-	PrepMinutes int                         `json:"prepMinutes,omitempty"`
-	Difficulty  int                         `json:"difficulty,omitempty"`
-	Utensils    []string                    `json:"utensils"`
-	Allergens   []string                    `json:"allergens"`
-	Nutrition   []recipes.NutrientResponse  `json:"nutritionPerServing"`
-	Ingredients []CatalogIngredientResponse `json:"ingredients"`
-	Steps       []recipes.StepResponse      `json:"steps"`
+	// ImageCredit says who took a photo picked from photo search.
+	ImageCredit *recipes.ImageCreditResponse `json:"imageCredit,omitempty"`
+	Description string                       `json:"description,omitempty"`
+	SourceURL   string                       `json:"sourceUrl,omitempty"`
+	Servings    []int                        `json:"servings"`
+	PrepMinutes int                          `json:"prepMinutes,omitempty"`
+	Difficulty  int                          `json:"difficulty,omitempty"`
+	Utensils    []string                     `json:"utensils"`
+	Allergens   []string                     `json:"allergens"`
+	Nutrition   []recipes.NutrientResponse   `json:"nutritionPerServing"`
+	Ingredients []CatalogIngredientResponse  `json:"ingredients"`
+	Steps       []recipes.StepResponse       `json:"steps"`
 }
 
 // CatalogIngredientResponse is an ingredient line on a catalog recipe. Unlike
@@ -186,7 +198,11 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, "catalog get failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, recipeResponse(found))
+	resp := recipeResponse(found)
+	if h.opts.Credits != nil {
+		resp.ImageCredit = recipes.NewImageCreditResponse(h.opts.Credits.PhotoCredit(r.Context(), resp.ImageURL))
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) add(w http.ResponseWriter, r *http.Request) {

@@ -363,8 +363,8 @@ final class RecipeLibrary {
         defaults.set(available, forKey: Self.photoSearchKey)
     }
 
-    /// Keeps a photo found on the web as the household's own and returns its link.
-    func useFoundPhoto(_ photoID: String) async throws -> String {
+    /// Picks a photo found with photo search: where to show it from and who to credit.
+    func useFoundPhoto(_ photoID: String) async throws -> RecipePhotoPick {
         guard let api, let householdID else { throw AuthSessionError.notConfigured }
         return try await session.authorized { token in
             try await api.useFoundPhoto(householdID: householdID, photoID: photoID, accessToken: token)

@@ -1,7 +1,9 @@
 import Foundation
 import StoreKit
+import SwiftUI
 import Synchronization
 import Testing
+import UIKit
 
 @testable import DinnerOS
 
@@ -123,5 +125,70 @@ struct ReviewReadinessTests {
             search: { _, _ in RecipePhotoSearchPage(photos: [], nextPage: nil) },
             onPicked: { _ in }, onFound: { _ in })
         #expect(on.shownPlace == .web)
+    }
+
+    // MARK: Unsplash credits (decision 705)
+
+    @Test func aPickCarriesItsAddressAndCredit() throws {
+        let json = #"""
+            {"imageUrl":"https://images.unsplash.com/photo-1?ixid=a&w=1080",
+             "credit":{"name":"Ana Lima","profileUrl":"https://unsplash.com/@ana?utm_medium=referral&utm_source=dinneros",
+                       "sourceName":"Unsplash","sourceUrl":"https://unsplash.com/?utm_medium=referral&utm_source=dinneros"}}
+            """#
+        let pick = try JSONCoding.makeDecoder().decode(RecipePhotoPick.self, from: Data(json.utf8))
+        #expect(pick.imageURL == "https://images.unsplash.com/photo-1?ixid=a&w=1080")
+        let credit = try #require(pick.credit)
+        #expect(credit.text == "Photo by Ana Lima on Unsplash")
+        #expect(String(credit.attributed.characters) == "Photo by Ana Lima on Unsplash")
+        let links = credit.attributed.runs.compactMap(\.link)
+        #expect(
+            links.map(\.absoluteString) == [
+                "https://unsplash.com/@ana?utm_medium=referral&utm_source=dinneros",
+                "https://unsplash.com/?utm_medium=referral&utm_source=dinneros",
+            ])
+    }
+
+    @Test func aSearchPageNamesItsSourceAndEachPhotographer() throws {
+        let json = #"""
+            {"photos":[{"id":"abc","thumbnailUrl":"https://images.unsplash.com/photo-1?w=400","credit":"Ana",
+                        "creditUrl":"https://unsplash.com/@ana?utm_source=dinneros&utm_medium=referral"}],
+             "nextPage":2,"sourceName":"Unsplash","sourceUrl":"https://unsplash.com/?utm_source=dinneros&utm_medium=referral"}
+            """#
+        let page = try JSONCoding.makeDecoder().decode(RecipePhotoSearchPage.self, from: Data(json.utf8))
+        #expect(page.sourceName == "Unsplash" && page.nextPage == 2)
+        let credit = try #require(page.photos[0].photoCredit(source: page.sourceName, sourceURL: page.sourceURL))
+        #expect(credit.text == "Photo by Ana on Unsplash")
+        #expect(credit.profileURL?.absoluteString.contains("utm_source=dinneros") == true)
+        // An older API's page has no source, so no credit line is made up.
+        #expect(page.photos[0].photoCredit(source: nil, sourceURL: nil) == nil)
+    }
+
+    @Test func aPickedPhotoKeepsItsCreditInTheFormAndLosesItWhenRemoved() async throws {
+        let model = RecipePhotoModel()
+        var url: String?
+        let binding = Binding(get: { url }, set: { url = $0 })
+        let credit = PhotoCredit(name: "Ana", profileURL: nil, sourceName: "Unsplash", sourceURL: nil)
+        let source = RecipePhotoSource(
+            upload: { _ in "https://api.test/api/v1/recipe-photos/0123456789abcdef0123456789abcdef" },
+            search: { _, _ in RecipePhotoSearchPage(photos: [], nextPage: nil) },
+            useFound: { _ in RecipePhotoPick(imageURL: "https://images.unsplash.com/photo-1", credit: credit) })
+        await model.use(RecipeFoundPhoto(id: "abc", thumbnailURL: "x"), to: binding, source: source)
+        #expect(url == "https://images.unsplash.com/photo-1" && model.credit == credit)
+        model.remove(binding)
+        #expect(url == nil && model.credit == nil)
+        // A photo of their own has no credit.
+        await model.send(UIImage(systemName: "star")!.withTintColor(.red), to: binding, source: source)
+        #expect(model.credit == nil)
+    }
+
+    @Test func aRecipeDecodesItsPhotoCredit() throws {
+        var json = String(decoding: RecipeFixtures.detail(), as: UTF8.self)
+        json = json.replacingOccurrences(
+            of: #""isAddon": false"#,
+            with:
+                #""imageCredit":{"name":"Ana","profileUrl":"https://unsplash.com/@ana","sourceName":"Unsplash","sourceUrl":"https://unsplash.com/"},"isAddon": false"#
+        )
+        let recipe = try JSONCoding.makeDecoder().decode(Recipe.self, from: Data(json.utf8))
+        #expect(recipe.imageCredit?.text == "Photo by Ana on Unsplash")
     }
 }

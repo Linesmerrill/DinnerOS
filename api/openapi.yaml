@@ -1104,11 +1104,10 @@ paths:
     get:
       summary: Search for recipe photos
       description: |
-        Photos to pick for a recipe, found by name (decision 692). Requires
-        `recipes.edit`. The search runs on the server, so no key ships in the
-        app; Pexels is the default provider and pages are cached for an hour.
-        Thumbnails load straight from the provider. Off until PEXELS_API_KEY
-        is set.
+        Photos to pick for a recipe, found by name on Unsplash (decisions 692,
+        705). Requires `recipes.edit`. The search runs on the server, so no key
+        ships in the app; pages are cached for an hour. Thumbnails load straight
+        from Unsplash. Off until UNSPLASH_ACCESS_KEY is set.
       operationId: searchRecipePhotos
       tags: [recipes]
       security:
@@ -1145,17 +1144,45 @@ paths:
           $ref: "#/components/responses/PhotoSearchFailed"
         "503":
           $ref: "#/components/responses/PhotoSearchOff"
+  /api/v1/households/{householdId}/recipe-photos/search-status:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: Whether photo search is on
+      description: |
+        `available` is false when the server has no UNSPLASH_ACCESS_KEY, so the
+        app hides Search the Web (decision 704). Requires `recipes.edit`. Never
+        asks the provider.
+      operationId: recipePhotoSearchStatus
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Whether photo search is on.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [available]
+                properties:
+                  available:
+                    type: boolean
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/households/{householdId}/recipe-photos/from-search:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
     post:
-      summary: Keep a photo from a search
+      summary: Pick a photo from a search
       description: |
-        Downloads a search result and keeps it like an uploaded photo, so it
-        shows offline and outlasts the provider. Requires `recipes.edit`. The
-        phone names the result by its `id`; the server asks the provider where
-        the photo is and downloads only from the provider's image host. The
-        answer's `imageUrl` is used like one from POST .../recipe-photos.
+        Picks a search result. Requires `recipes.edit`. The phone names the
+        result by its `id`; the server looks it up on Unsplash, calls its
+        download_location as Unsplash's guidelines ask, and keeps the
+        photographer's credit. The photo is hotlinked: `imageUrl` is Unsplash's
+        own address, which a recipe save or edit accepts as its `imageUrl`.
       operationId: keepSearchedRecipePhoto
       tags: [recipes]
       security:
@@ -1171,14 +1198,14 @@ paths:
                 id:
                   type: string
                   description: A result's `id` from the search.
-                  example: "1028714"
+                  example: Dwu85P9SOIk
       responses:
         "201":
-          description: The kept photo's address.
+          description: Where to show the photo from, and who to credit.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RecipePhotoUpload"
+                $ref: "#/components/schemas/RecipePhotoPick"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -6682,6 +6709,9 @@ components:
           type: string
         imageUrl:
           type: string
+        imageCredit:
+          $ref: "#/components/schemas/ImageCredit"
+          description: Who took a photo picked from photo search; omitted for the household's own.
         isAddon:
           type: boolean
         servings:
@@ -6996,10 +7026,10 @@ components:
             properties:
               id:
                 type: string
-                example: "1028714"
+                example: Dwu85P9SOIk
               thumbnailUrl:
                 type: string
-                example: https://images.pexels.com/photos/1028714/pexels-photo-1028714.jpeg?auto=compress&cs=tinysrgb&h=350
+                example: https://images.unsplash.com/photo-1555939594-58d7cb561ad1?ixid=abc&w=400
               width:
                 type: integer
               height:
@@ -7007,9 +7037,44 @@ components:
               credit:
                 type: string
                 description: The photographer's name.
+              creditUrl:
+                type: string
+                description: The photographer's Unsplash page, tagged utm_source=dinneros&utm_medium=referral.
+        sourceName:
+          type: string
+          example: Unsplash
+        sourceUrl:
+          type: string
+          example: https://unsplash.com/?utm_medium=referral&utm_source=dinneros
         nextPage:
           type: integer
           description: The page to ask for next, or 0 when there are no more.
+    RecipePhotoPick:
+      type: object
+      required: [imageUrl, credit]
+      properties:
+        imageUrl:
+          type: string
+          example: https://images.unsplash.com/photo-1555939594-58d7cb561ad1?ixid=abc&w=1080
+        credit:
+          $ref: "#/components/schemas/ImageCredit"
+    ImageCredit:
+      type: object
+      description: '"Photo by <name> on <sourceName>", each linked (decision 705).'
+      required: [name, profileUrl, sourceName, sourceUrl]
+      properties:
+        name:
+          type: string
+          example: Ana Lima
+        profileUrl:
+          type: string
+          example: https://unsplash.com/@ana?utm_medium=referral&utm_source=dinneros
+        sourceName:
+          type: string
+          example: Unsplash
+        sourceUrl:
+          type: string
+          example: https://unsplash.com/?utm_medium=referral&utm_source=dinneros
     RecipePhotoUpload:
       type: object
       required: [imageUrl]

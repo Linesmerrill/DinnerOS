@@ -180,7 +180,9 @@ func (h *Handler) createRecipe(w http.ResponseWriter, r *http.Request) {
 		h.internalError(w, r, "create recipe failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusCreated, newRecipeResponse(stored, h.timeBands(r.Context(), actor.HouseholdID)))
+	resp := newRecipeResponse(stored, h.timeBands(r.Context(), actor.HouseholdID))
+	h.creditPhoto(r.Context(), &resp)
+	httpx.WriteJSON(w, http.StatusCreated, resp)
 }
 
 // setSharing serves PUT .../recipes/{recipeId}/sharing: the household's

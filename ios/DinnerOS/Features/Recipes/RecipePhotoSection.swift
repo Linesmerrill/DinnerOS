@@ -7,8 +7,8 @@ struct RecipePhotoSource {
     let upload: (Data) async throws -> String
     /// A page of photos on the web for a search.
     let search: (String, Int) async throws -> RecipePhotoSearchPage
-    /// Keeps a found photo as the household's own and returns its link.
-    let useFound: (String) async throws -> String
+    /// Picks a found photo: where to show it from and who to credit.
+    let useFound: (String) async throws -> RecipePhotoPick
     /// Whether to offer Search the Web. Off when the server has no photo search.
     var searchAvailable = true
 }
@@ -24,6 +24,8 @@ final class RecipePhotoModel {
     var errorMessage: String?
     /// The picked photo, shown while it uploads and after, so there's no wait to see it.
     private(set) var preview: UIImage?
+    /// Who took the photo, when it came from photo search. Shown under it.
+    var credit: PhotoCredit?
 
     var cameraAvailable: Bool { UIImagePickerController.isSourceTypeAvailable(.camera) }
 
@@ -32,6 +34,7 @@ final class RecipePhotoModel {
     func remove(_ imageURL: Binding<String?>) {
         imageURL.wrappedValue = nil
         preview = nil
+        credit = nil
     }
 
     /// Sends a photo from the camera or the library.
@@ -40,28 +43,32 @@ final class RecipePhotoModel {
             errorMessage = String(localized: "Couldn't open that photo. Try another one.")
             return
         }
-        await replace(imageURL, showing: image) { try await source.upload(jpeg) }
+        await replace(imageURL, showing: image) { (try await source.upload(jpeg), nil) }
     }
 
-    /// Keeps a photo found on the web.
+    /// Uses a photo found with photo search, hotlinked from where it lives, with its credit.
     func use(_ found: RecipeFoundPhoto, to imageURL: Binding<String?>, source: RecipePhotoSource) async {
-        await replace(imageURL, showing: nil) { try await source.useFound(found.id) }
+        await replace(imageURL, showing: nil) {
+            let pick = try await source.useFound(found.id)
+            return (pick.imageURL, pick.credit)
+        }
     }
 
     private func replace(
-        _ imageURL: Binding<String?>, showing image: UIImage?, link: () async throws -> String
+        _ imageURL: Binding<String?>, showing image: UIImage?,
+        link: () async throws -> (String, PhotoCredit?)
     ) async {
-        let previous = (imageURL.wrappedValue, preview)
+        let previous = (imageURL.wrappedValue, preview, credit)
         preview = image
         isUploading = true
         errorMessage = nil
         defer { isUploading = false }
         do {
-            imageURL.wrappedValue = try await link()
+            (imageURL.wrappedValue, credit) = try await link()
         } catch is CancellationError {
-            (imageURL.wrappedValue, preview) = previous
+            (imageURL.wrappedValue, preview, credit) = previous
         } catch {
-            (imageURL.wrappedValue, preview) = previous
+            (imageURL.wrappedValue, preview, credit) = previous
             // A found photo can fail for its own reasons ("isn't there anymore"), which the
             // server says in plain words.
             errorMessage =
@@ -152,6 +159,9 @@ struct RecipePhotoSection: View {
                 }
                 .disabled(model.isUploading)
             }
+            if model.hasPhoto(imageURL), let credit = model.credit {
+                PhotoCreditLine(credit: credit)
+            }
             if let errorMessage = model.errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle")
                     .font(.footnote)
@@ -240,5 +250,18 @@ struct CameraPicker: UIViewControllerRepresentable {
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             done(nil)
         }
+    }
+}
+
+/// "Photo by <name> on Unsplash", with the photographer and Unsplash linked, as Unsplash asks
+/// wherever one of its photos is shown (decision 705).
+struct PhotoCreditLine: View {
+    let credit: PhotoCredit
+
+    var body: some View {
+        Text(credit.attributed)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .accessibilityIdentifier("PhotoCredit")
     }
 }

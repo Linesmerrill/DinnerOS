@@ -78,6 +78,9 @@ struct CatalogRecipeDetailView: View {
     private func header(_ recipe: CatalogRecipe) -> some View {
         RecipeImage(url: recipe.imageURL, title: recipe.name)
             .clipShape(.rect(cornerRadius: 12))
+        if recipe.imageURL != nil, let credit = recipe.imageCredit {
+            PhotoCreditLine(credit: credit)
+        }
         if let headline = recipe.headline, !headline.isEmpty {
             Text(headline)
                 .font(.headline)

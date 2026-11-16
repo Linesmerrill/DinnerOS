@@ -97,9 +97,10 @@ func (s *Service) CreateFromDraft(ctx context.Context, householdID string, d Dra
 		source = SourceUser
 		// A recipe read from a page keeps only its title, servings,
 		// ingredients, and link (decision 670), whatever the request carried.
-		// The member's own photo (decision 687) is theirs, so it stays.
+		// The member's own photo (decision 687) is theirs, so it stays, and so
+		// does one they picked from photo search (decision 705).
 		own := ""
-		if IsOwnPhotoURL(strings.TrimSpace(d.ImageURL)) {
+		if IsPickablePhotoURL(strings.TrimSpace(d.ImageURL)) {
 			own = strings.TrimSpace(d.ImageURL)
 		}
 		d = Draft{Name: d.Name, Servings: d.Servings, SourceURL: d.SourceURL, ImageURL: own, Ingredients: d.Ingredients}

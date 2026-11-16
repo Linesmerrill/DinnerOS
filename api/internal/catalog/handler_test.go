@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
+	"github.com/Linesmerrill/DinnerOS/api/internal/photosearch"
 )
 
 const (
@@ -202,5 +203,41 @@ func TestAddRequiresRecipesEdit(t *testing.T) {
 	}
 	if decode[AddToLibraryResponse](t, again).Created {
 		t.Error("the second add reported created")
+	}
+}
+
+type fakeCredits struct{ asked []string }
+
+func (f *fakeCredits) PhotoCredit(_ context.Context, imageURL string) *photosearch.Credit {
+	f.asked = append(f.asked, imageURL)
+	return &photosearch.Credit{Name: "Ana Lima", ProfileURL: "https://unsplash.com/@ana?utm_medium=referral&utm_source=dinneros"}
+}
+
+func TestCatalogDetailCreditsAPickedPhoto(t *testing.T) {
+	h := newHarness(t, nil)
+	credits := &fakeCredits{}
+	r := chi.NewRouter()
+	r.Route("/api/v1", NewHandler(HandlerOptions{
+		Service: h.service, Authorizer: testAuthorizer, Tokens: fakeTokens{}, Credits: credits,
+	}).Mount)
+	s := &testServer{router: r, harness: h}
+	id := publish(t, h, "hf-1", "Shakshuka")
+	rec := s.do(t, http.MethodGet, "/api/v1/households/"+hhAda+"/catalog/recipes/"+id, userAda)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d (%s)", rec.Code, rec.Body.String())
+	}
+	for _, want := range []string{`"imageCredit"`, `"name":"Ana Lima"`, `"sourceName":"Unsplash"`, `utm_source=dinneros`} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("detail is missing %s: %s", want, rec.Body.String())
+		}
+	}
+	if len(credits.asked) != 1 {
+		t.Errorf("asked %d times", len(credits.asked))
+	}
+	// Without credits wired, no credit.
+	plain := newTestServer(t)
+	id = publish(t, plain.harness, "hf-2", "Soup")
+	if body := plain.do(t, http.MethodGet, "/api/v1/households/"+hhAda+"/catalog/recipes/"+id, userAda).Body.String(); strings.Contains(body, "imageCredit") {
+		t.Errorf("credit without credits wired: %s", body)
 	}
 }

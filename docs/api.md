@@ -531,21 +531,29 @@ phone called. Put that in a draft's `imageUrl` on save, or in an edit.
 `GET /api/v1/recipe-photos/{id}` needs no sign-in (the ID is 128 random bits)
 and serves the image, cached for a year. Photos are deleted with the household.
 
-Photo search (decision 692), both `recipes.edit`:
+Photo search (decisions 692, 705), both `recipes.edit`, from Unsplash:
 `GET /api/v1/households/{householdId}/recipe-photos/search?q=brownies&page=1`
-answers `{"photos": [{"id", "thumbnailUrl", "width", "height", "credit"}],
-"nextPage": 2}` (30 a page; `nextPage` 0 when there are no more, and past page
-50 the list is empty). Thumbnails load straight from the provider. A blank `q`
-is 400 "Type what to search for."; a provider failure is 502
-`photo_search_failed`; with no `PEXELS_API_KEY` both routes answer 503
-`photo_search_off` "Photo search isn't available right now."
+answers `{"photos": [{"id", "thumbnailUrl", "width", "height", "credit",
+"creditUrl"}], "nextPage": 2, "sourceName": "Unsplash", "sourceUrl"}` (30 a
+page; `nextPage` 0 when there are no more, and past page 50 the list is empty;
+family-safe results only). `credit` is the photographer's name and `creditUrl`
+their Unsplash page; both links carry `utm_source=dinneros&utm_medium=referral`.
+Thumbnails load straight from Unsplash. A blank `q` is 400 "Type what to search
+for."; a provider failure is 502 `photo_search_failed`; with no
+`UNSPLASH_ACCESS_KEY` both routes answer 503 `photo_search_off` "Photo search
+isn't available right now."
 `GET /api/v1/households/{householdId}/recipe-photos/search-status` answers
 `{"available": true}` (false with no key) without asking the provider, so the
 app offers Search the Web only when it will work.
 `POST /api/v1/households/{householdId}/recipe-photos/from-search` `{"id":
-"1028714"}` downloads that result, from the address the provider gives for
-it and only from its image host, keeps it like an uploaded photo and answers
-201 `{"imageUrl"}` exactly as the upload does. A result that's gone is 404
+"Dwu85P9SOIk"}` looks the result up on Unsplash by its ID (never trusting an
+address from the phone), calls its `download_location` as Unsplash's
+guidelines ask, keeps the photographer's credit by the photo's address, and
+answers 201 `{"imageUrl", "credit": {"name", "profileUrl", "sourceName",
+"sourceUrl"}}`. The photo is hotlinked, not copied: `imageUrl` is Unsplash's
+own `urls.regular` address on images.unsplash.com, which a recipe save or
+edit accepts as its `imageUrl`. Every recipe response (and a shared recipe's
+detail) with such a photo carries `imageCredit` in the same shape. A result that's gone is 404
 "That photo isn't there anymore. Pick another one."
 
 `POST /api/v1/households/{householdId}/recipes/swap-preview` (`recipes.edit`)

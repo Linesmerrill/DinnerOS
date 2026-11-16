@@ -15,8 +15,9 @@ type fakeSearcher struct {
 	mu      sync.Mutex
 	queries []string
 	pages   []int
+	picks   []string
 	err     error
-	images  map[string]photosearch.Image
+	picked  map[string]photosearch.Picked
 }
 
 func (f *fakeSearcher) Search(_ context.Context, q string, page int) (photosearch.Page, error) {
@@ -27,27 +28,56 @@ func (f *fakeSearcher) Search(_ context.Context, q string, page int) (photosearc
 		return photosearch.Page{}, f.err
 	}
 	return photosearch.Page{
-		Photos:   []photosearch.Result{{ID: "101", ThumbnailURL: "https://images.pexels.com/photos/101/a.jpeg?h=350", Width: 4000, Height: 3000, Credit: "Ana"}},
+		Photos: []photosearch.Result{{
+			ID: "abc_123", ThumbnailURL: "https://images.unsplash.com/photo-1?w=400", Width: 4000, Height: 3000,
+			Credit: photosearch.Credit{Name: "Ana", ProfileURL: "https://unsplash.com/@ana?utm_medium=referral&utm_source=dinneros"},
+		}},
 		NextPage: page + 1,
 	}, nil
 }
 
-func (f *fakeSearcher) Fetch(_ context.Context, id string) (photosearch.Image, error) {
+func (f *fakeSearcher) Pick(_ context.Context, id string) (photosearch.Picked, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.err != nil {
-		return photosearch.Image{}, f.err
+		return photosearch.Picked{}, f.err
 	}
-	img, ok := f.images[id]
+	p, ok := f.picked[id]
 	if !ok {
-		return photosearch.Image{}, photosearch.ErrNotFound
+		return photosearch.Picked{}, photosearch.ErrNotFound
 	}
-	return img, nil
+	f.picks = append(f.picks, id)
+	return p, nil
+}
+
+type memoryCredits struct {
+	mu      sync.Mutex
+	credits map[string]photosearch.Credit
+}
+
+func newMemoryCredits() *memoryCredits {
+	return &memoryCredits{credits: map[string]photosearch.Credit{}}
+}
+
+func (m *memoryCredits) SavePhotoCredit(_ context.Context, imageURL string, c photosearch.Credit) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.credits[imageURL] = c
+	return nil
+}
+
+func (m *memoryCredits) PhotoCredit(_ context.Context, imageURL string) (photosearch.Credit, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.credits[imageURL]
+	return c, ok, nil
 }
 
 func newPhotoSearchTestServer(t *testing.T, searcher *fakeSearcher) (*recipeTestServer, *memoryPhotos) {
 	t.Helper()
 	photos := newMemoryPhotos()
 	srv := newRecipeTestServer(t, func(o *HandlerOptions) {
-		o.Service.WithPhotos(photos)
+		o.Service.WithPhotos(photos).WithPhotoCredits(newMemoryCredits())
 		if searcher != nil {
 			o.Service.WithPhotoSearch(searcher)
 		}
@@ -66,8 +96,9 @@ func TestPhotoSearchRoute(t *testing.T) {
 	}
 	got := decodeBody[PhotoSearchResponse](t, rec)
 	if len(got.Photos) != 1 || got.Photos[0] != (PhotoSearchResult{
-		ID: "101", ThumbnailURL: "https://images.pexels.com/photos/101/a.jpeg?h=350", Width: 4000, Height: 3000, Credit: "Ana",
-	}) || got.NextPage != 3 {
+		ID: "abc_123", ThumbnailURL: "https://images.unsplash.com/photo-1?w=400", Width: 4000, Height: 3000, Credit: "Ana",
+		CreditURL: "https://unsplash.com/@ana?utm_medium=referral&utm_source=dinneros",
+	}) || got.NextPage != 3 || got.SourceName != "Unsplash" || !strings.Contains(got.SourceURL, "utm_medium=referral") {
 		t.Errorf("search = %+v", got)
 	}
 	if searcher.queries[0] != "No Bake Cookies" || searcher.pages[0] != 2 {
@@ -94,44 +125,70 @@ func TestPhotoSearchRoute(t *testing.T) {
 		t.Errorf("signed out = %d", rec.Code)
 	}
 
-	searcher.err = errors.New("pexels down")
+	searcher.err = errors.New("unsplash down")
 	rec = srv.do(t, http.MethodGet, path+"?q=brownies", "", userAda)
 	wantError(t, rec, http.StatusBadGateway, "photo_search_failed")
-	if !strings.Contains(rec.Body.String(), "Couldn't search for photos. Try again.") || strings.Contains(rec.Body.String(), "pexels down") {
+	if !strings.Contains(rec.Body.String(), "Couldn't search for photos. Try again.") || strings.Contains(rec.Body.String(), "unsplash down") {
 		t.Errorf("failure body = %s", rec.Body.String())
 	}
 }
 
-func TestPhotoFromSearchKeepsItLikeAnUpload(t *testing.T) {
-	searcher := &fakeSearcher{images: map[string]photosearch.Image{
-		"101": {Data: testJPEG, Credit: "Ana"},
-		"102": {Data: []byte("<html>not a photo</html>")},
+const pickedPhoto = "https://images.unsplash.com/photo-1?ixid=abc&w=1080"
+
+func TestPickingAPhotoHotlinksItAndCreditsThePhotographer(t *testing.T) {
+	searcher := &fakeSearcher{picked: map[string]photosearch.Picked{
+		"abc_123": {ImageURL: pickedPhoto, Credit: photosearch.Credit{Name: "Ana Lima", ProfileURL: "https://unsplash.com/@ana?utm_medium=referral&utm_source=dinneros"}},
 	}}
 	srv, photos := newPhotoSearchTestServer(t, searcher)
 	path := photosPath(hhAda) + "/from-search"
 
-	rec := srv.do(t, http.MethodPost, path, `{"id":"101"}`, userAda)
+	rec := srv.do(t, http.MethodPost, path, `{"id":"abc_123"}`, userAda)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("from search = %d %s", rec.Code, rec.Body.String())
 	}
-	imageURL := decodeBody[PhotoUploadResponse](t, rec).ImageURL
-	if !IsOwnPhotoURL(imageURL) {
-		t.Fatalf("imageUrl %q isn't one of ours", imageURL)
+	got := decodeBody[PhotoPickResponse](t, rec)
+	if got.ImageURL != pickedPhoto || got.Credit == nil || got.Credit.Name != "Ana Lima" ||
+		got.Credit.SourceName != "Unsplash" || got.Credit.SourceURL != "https://unsplash.com/?utm_medium=referral&utm_source=dinneros" {
+		t.Fatalf("pick = %+v %+v", got, got.Credit)
 	}
-	if len(photos.photos) != 1 {
-		t.Fatalf("stored %d photos; want 1", len(photos.photos))
+	// Hotlinked, never copied.
+	if len(photos.photos) != 0 {
+		t.Errorf("a picked photo was stored: %d", len(photos.photos))
 	}
-	for _, p := range photos.photos {
-		if p.HouseholdID != hhAda || p.ContentType != "image/jpeg" {
-			t.Errorf("stored %+v", p)
-		}
+	if len(searcher.picks) != 1 {
+		t.Errorf("picks = %v", searcher.picks)
 	}
-	// It saves with a recipe like an uploaded photo.
+
+	// Saved with a recipe, the recipe carries the credit.
 	created := decodeBody[RecipeResponse](t, srv.do(t, http.MethodPost, recipesPath(hhAda), mustJSON(t, DraftResponse{
-		Name: "Brownies", ImageURL: imageURL, Ingredients: []DraftIngredientWire{{Name: "cocoa", Quantity: "1", Unit: "cup"}}, Steps: []string{"Bake."},
+		Name: "Brownies", ImageURL: pickedPhoto, Ingredients: []DraftIngredientWire{{Name: "cocoa", Quantity: "1", Unit: "cup"}}, Steps: []string{"Bake."},
 	}), userAda))
-	if created.ImageURL != imageURL {
-		t.Errorf("recipe imageUrl = %q; want %q", created.ImageURL, imageURL)
+	if created.ImageURL != pickedPhoto || created.ImageCredit == nil || created.ImageCredit.Name != "Ana Lima" ||
+		!strings.Contains(created.ImageCredit.ProfileURL, "utm_source=dinneros") {
+		t.Fatalf("created = %q %+v", created.ImageURL, created.ImageCredit)
+	}
+	fetched := decodeBody[RecipeResponse](t, srv.do(t, http.MethodGet, recipesPath(hhAda)+"/"+created.ID, "", userAda))
+	if fetched.ImageCredit == nil || fetched.ImageCredit.Name != "Ana Lima" {
+		t.Errorf("fetched credit = %+v", fetched.ImageCredit)
+	}
+
+	// An edit can switch to a picked photo, and back to none.
+	edit := func(body string) RecipeResponse {
+		rec := srv.do(t, http.MethodPut, recipesPath(hhAda)+"/"+created.ID+"/edits", body, userAda)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("edit %s = %d %s", body, rec.Code, rec.Body.String())
+		}
+		return decodeBody[RecipeResponse](t, rec)
+	}
+	if r := edit(`{"imageUrl":""}`); r.ImageURL != "" || r.ImageCredit != nil {
+		t.Errorf("removed = %q %+v", r.ImageURL, r.ImageCredit)
+	}
+	if r := edit(`{"imageUrl":"` + pickedPhoto + `"}`); r.ImageCredit == nil {
+		t.Errorf("edited to a picked photo without credit")
+	}
+	// Any other outside address is still refused.
+	if rec := srv.do(t, http.MethodPut, recipesPath(hhAda)+"/"+created.ID+"/edits", `{"imageUrl":"https://elsewhere.test/a.jpg"}`, userAda); rec.Code < 400 {
+		t.Errorf("outside photo = %d", rec.Code)
 	}
 
 	for _, tc := range []struct {
@@ -139,7 +196,6 @@ func TestPhotoFromSearchKeepsItLikeAnUpload(t *testing.T) {
 		status          int
 	}{
 		{`{"id":"999"}`, "not_found", "That photo isn't there anymore. Pick another one.", http.StatusNotFound},
-		{`{"id":"102"}`, "photo_search_failed", "That photo can't be used. Pick another one.", http.StatusBadGateway},
 		{`{"id":""}`, "validation_failed", "Pick a photo first.", http.StatusBadRequest},
 	} {
 		rec := srv.do(t, http.MethodPost, path, tc.body, userAda)
@@ -148,11 +204,25 @@ func TestPhotoFromSearchKeepsItLikeAnUpload(t *testing.T) {
 			t.Errorf("%s body = %s", tc.body, rec.Body.String())
 		}
 	}
-	if len(photos.photos) != 1 {
-		t.Errorf("a failed pick stored a photo: %d", len(photos.photos))
+	searcher.err = errors.New("unsplash down")
+	rec = srv.do(t, http.MethodPost, path, `{"id":"abc_123"}`, userAda)
+	wantError(t, rec, http.StatusBadGateway, "photo_search_failed")
+	if strings.Contains(rec.Body.String(), "unsplash down") {
+		t.Errorf("leaked the error: %s", rec.Body.String())
 	}
-	if rec := srv.do(t, http.MethodPost, path, `{"id":"101"}`, userViewer); rec.Code != http.StatusForbidden {
+	if rec := srv.do(t, http.MethodPost, path, `{"id":"abc_123"}`, userViewer); rec.Code != http.StatusForbidden {
 		t.Errorf("viewer = %d", rec.Code)
+	}
+}
+
+func TestAnUploadedPhotoHasNoCredit(t *testing.T) {
+	srv, _ := newPhotoSearchTestServer(t, &fakeSearcher{})
+	own := "https://example.com/api/v1/recipe-photos/0123456789abcdef0123456789abcdef"
+	created := decodeBody[RecipeResponse](t, srv.do(t, http.MethodPost, recipesPath(hhAda), mustJSON(t, DraftResponse{
+		Name: "Soup", ImageURL: own, Ingredients: []DraftIngredientWire{{Name: "salt", Quantity: "1", Unit: "tsp"}}, Steps: []string{"Stir."},
+	}), userAda))
+	if created.ImageCredit != nil {
+		t.Errorf("own photo credited: %+v", created.ImageCredit)
 	}
 }
 

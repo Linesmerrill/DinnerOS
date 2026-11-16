@@ -46,6 +46,7 @@ nonisolated struct CatalogSummary: Decodable, Hashable, Sendable, Identifiable {
         case imageURLString = "imageUrl"
         case isAddon, totalMinutes, cookMinutes, timeBand, calories, proteinGrams, cuisines, tags, inLibrary
         case libraryRecipeID = "libraryRecipeId"
+        case imageCredit
         case reasons, promotion
     }
 }
@@ -120,6 +121,8 @@ nonisolated struct CatalogRecipe: Decodable, Equatable, Sendable, Identifiable {
     let steps: [RecipeStep]
     let inLibrary: Bool
     let libraryRecipeID: String?
+    /// Who took a photo picked from photo search.
+    var imageCredit: PhotoCredit? = nil
 
     var imageURL: URL? { imageURLString.flatMap { URL(string: $0) } }
     var sourceURL: URL? { sourceURLString.flatMap { URL(string: $0) } }

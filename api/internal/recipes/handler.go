@@ -198,16 +198,19 @@ type RecipeListResponse struct {
 
 // RecipeResponse is returned by GET /households/{householdId}/recipes/{recipeId}.
 type RecipeResponse struct {
-	ID              string                     `json:"id"`
-	HouseholdID     string                     `json:"householdId"`
-	Source          string                     `json:"source"`
-	SourceRecipeID  string                     `json:"sourceRecipeId"`
-	SourceAliases   []string                   `json:"sourceAliases"`
-	SourceURL       string                     `json:"sourceUrl,omitempty"`
-	Name            string                     `json:"name"`
-	Headline        string                     `json:"headline,omitempty"`
-	Description     string                     `json:"description,omitempty"`
-	ImageURL        string                     `json:"imageUrl,omitempty"`
+	ID             string   `json:"id"`
+	HouseholdID    string   `json:"householdId"`
+	Source         string   `json:"source"`
+	SourceRecipeID string   `json:"sourceRecipeId"`
+	SourceAliases  []string `json:"sourceAliases"`
+	SourceURL      string   `json:"sourceUrl,omitempty"`
+	Name           string   `json:"name"`
+	Headline       string   `json:"headline,omitempty"`
+	Description    string   `json:"description,omitempty"`
+	ImageURL       string   `json:"imageUrl,omitempty"`
+	// ImageCredit says who took a photo picked from photo search; omitted for
+	// the household's own (decision 705).
+	ImageCredit     *ImageCreditResponse       `json:"imageCredit,omitempty"`
 	IsAddon         bool                       `json:"isAddon"`
 	Servings        []int                      `json:"servings"`
 	PrepMinutes     int                        `json:"prepMinutes,omitempty"`
@@ -514,6 +517,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := newRecipeResponse(recipe, h.timeBands(r.Context(), actor.HouseholdID))
+	h.creditPhoto(r.Context(), &resp)
 	resp.InCatalog = h.opts.Service.InCatalog(r.Context(), recipe)
 	resp.HouseholdRating, resp.MyRating = ratingFields(summaries[recipe.ID])
 	httpx.WriteJSON(w, http.StatusOK, resp)

@@ -32,6 +32,8 @@ type Service struct {
 	// photoSearch finds photos by a recipe's name (photo_search.go). Nil
 	// until WithPhotoSearch.
 	photoSearch photosearch.Searcher
+	// photoCredits keeps who took each picked photo. Nil until WithPhotoCredits.
+	photoCredits PhotoCreditStore
 	// plans takes a deleted recipe off upcoming weeks and puts it back on a
 	// restore (delete.go). Nil until WithPlans.
 	plans UpcomingPlans

@@ -64,6 +64,7 @@ func (h *Handler) restoreRecipe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := newRecipeResponse(recipe, h.timeBands(r.Context(), actor.HouseholdID))
+	h.creditPhoto(r.Context(), &resp)
 	resp.InCatalog = h.opts.Service.InCatalog(r.Context(), recipe)
 	resp.HouseholdRating, resp.MyRating = ratingFields(summaries[recipe.ID])
 	httpx.WriteJSON(w, http.StatusOK, resp)

@@ -96,6 +96,11 @@ struct RecipeDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 hero
+                if let recipe, recipe.imageURL != nil, let credit = recipe.imageCredit {
+                    PhotoCreditLine(credit: credit)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 6)
+                }
                 // A plain stack, not a lazy one: the page has a handful of sections, and on iOS 26
                 // a LazyVStack here kept re-placing its items and never settled when a recipe
                 // with steps was opened right after it was saved (100% CPU, no state changing).

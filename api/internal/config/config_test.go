@@ -223,9 +223,13 @@ func TestLoadProduction(t *testing.T) {
 		"EMAIL_FROM":             "Renamed <invites@example.com>",
 		"HEROKU_BUILD_COMMIT":    "abc123",
 		"HEROKU_SLUG_COMMIT":     "ignored-when-build-commit-set",
+		"UNSPLASH_API_BASE":      "http://localhost:8099",
 	}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.UnsplashAPIBase != "" {
+		t.Errorf("UnsplashAPIBase = %q; production must ignore it", cfg.UnsplashAPIBase)
 	}
 	if !cfg.IsProduction() {
 		t.Error("IsProduction() = false, want true")
@@ -454,12 +458,15 @@ func TestLoadOperators(t *testing.T) {
 	}
 }
 
-func TestLoadPexelsKey(t *testing.T) {
-	if cfg, err := Load(env(nil)); err != nil || cfg.PexelsAPIKey != "" {
-		t.Fatalf("default PexelsAPIKey = %q, %v; want empty", cfg.PexelsAPIKey, err)
+func TestLoadUnsplashKey(t *testing.T) {
+	if cfg, err := Load(env(nil)); err != nil || cfg.UnsplashAccessKey != "" {
+		t.Fatalf("default UnsplashAccessKey = %q, %v; want empty", cfg.UnsplashAccessKey, err)
 	}
-	if cfg, _ := Load(env(map[string]string{"PEXELS_API_KEY": "  not-a-real-key \n"})); cfg.PexelsAPIKey != "not-a-real-key" {
-		t.Fatalf("PexelsAPIKey = %q; want it trimmed", cfg.PexelsAPIKey)
+	if cfg, _ := Load(env(map[string]string{"UNSPLASH_ACCESS_KEY": "  not-a-real-key \n"})); cfg.UnsplashAccessKey != "not-a-real-key" {
+		t.Fatalf("UnsplashAccessKey = %q; want it trimmed", cfg.UnsplashAccessKey)
+	}
+	if cfg, _ := Load(env(map[string]string{"UNSPLASH_API_BASE": "http://localhost:8099"})); cfg.UnsplashAPIBase != "http://localhost:8099" {
+		t.Fatalf("UnsplashAPIBase = %q in development", cfg.UnsplashAPIBase)
 	}
 }
 

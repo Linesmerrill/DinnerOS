@@ -11,6 +11,8 @@ struct SuggestedPhotoBanner: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var dismissed = false
+    @State private var sourceName: String?
+    @State private var sourceURL: URL?
 
     private var dismissKey: String { "suggestedPhotoDismissed.\(recipe.id)" }
 
@@ -29,6 +31,9 @@ struct SuggestedPhotoBanner: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Add this photo?")
                             .font(.subheadline.weight(.semibold))
+                        if let credit = found.photoCredit(source: sourceName, sourceURL: sourceURL) {
+                            PhotoCreditLine(credit: credit)
+                        }
                         if let errorMessage {
                             Text(errorMessage)
                                 .font(.footnote)
@@ -62,8 +67,14 @@ struct SuggestedPhotoBanner: View {
             dismissed = true
             return
         }
-        // No suggestion is fine: offline, search turned off, or nothing found.
-        found = try? await library.searchPhotos(recipe.name, page: 1).photos.first
+        // Search only when the server can (decision 704). No suggestion is fine: offline,
+        // search turned off, or nothing found.
+        await library.loadPhotoSearchStatus()
+        guard library.photoSearchAvailable else { return }
+        guard let page = try? await library.searchPhotos(recipe.name, page: 1) else { return }
+        sourceName = page.sourceName
+        sourceURL = page.sourceURL
+        found = page.photos.first
     }
 
     private func use(_ photo: RecipeFoundPhoto) {
@@ -72,8 +83,8 @@ struct SuggestedPhotoBanner: View {
         Task {
             defer { isSaving = false }
             do {
-                let link = try await library.useFoundPhoto(photo.id)
-                let saved = try await library.editRecipe(recipeID: recipe.id, request: .photo(link))
+                let pick = try await library.useFoundPhoto(photo.id)
+                let saved = try await library.editRecipe(recipeID: recipe.id, request: .photo(pick.imageURL))
                 onSaved(saved)
             } catch is CancellationError {
                 return

@@ -128,6 +128,8 @@ type MongoStore struct {
 	reviews     *mongo.Collection
 	findings    *mongo.Collection
 	photos      *mongo.Collection
+	// photoCredits is who took each picked Unsplash photo, by its address.
+	photoCredits *mongo.Collection
 }
 
 var _ Store = (*MongoStore)(nil)
@@ -135,11 +137,12 @@ var _ Store = (*MongoStore)(nil)
 // NewMongoStore returns a store using db.
 func NewMongoStore(db *mongo.Database) *MongoStore {
 	return &MongoStore{
-		recipes:     db.Collection(RecipesCollection),
-		ingredients: db.Collection(IngredientsCollection),
-		reviews:     db.Collection(ImportReviewsCollection),
-		findings:    db.Collection(FindingsCollection),
-		photos:      db.Collection(PhotosCollection),
+		recipes:      db.Collection(RecipesCollection),
+		ingredients:  db.Collection(IngredientsCollection),
+		reviews:      db.Collection(ImportReviewsCollection),
+		findings:     db.Collection(FindingsCollection),
+		photos:       db.Collection(PhotosCollection),
+		photoCredits: db.Collection(PhotoCreditsCollection),
 	}
 }
 

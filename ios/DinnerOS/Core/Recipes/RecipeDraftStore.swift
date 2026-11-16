@@ -101,8 +101,8 @@ final class RecipeDraftStore {
         }
     }
 
-    /// Keeps a photo found on the web as the household's own and returns its link.
-    func useFoundPhoto(_ photoID: String) async throws -> String {
+    /// Picks a photo found with photo search: where to show it from and who to credit.
+    func useFoundPhoto(_ photoID: String) async throws -> RecipePhotoPick {
         guard let api else { throw AuthSessionError.notConfigured }
         let householdID = householdID
         return try await session.authorized { token in

@@ -70,12 +70,11 @@ nonisolated extension RecipesAPI {
                 .authorized(with: accessToken))
     }
 
-    /// Saves a photo found on the web as the household's own and returns its link.
-    func useFoundPhoto(householdID: String, photoID: String, accessToken: String) async throws -> String {
+    /// Picks a photo found with photo search: returns where to show it from and who to credit.
+    func useFoundPhoto(householdID: String, photoID: String, accessToken: String) async throws -> RecipePhotoPick {
         let request = try APIRequest.post(
             "/api/v1/households/\(householdID)/recipe-photos/from-search", body: ["id": photoID])
-        let uploaded: RecipePhotoUpload = try await client.send(request.authorized(with: accessToken))
-        return uploaded.imageURL
+        return try await client.send(request.authorized(with: accessToken))
     }
 
     /// Turns the global-catalog opt-in on or off for one of the household's recipes.

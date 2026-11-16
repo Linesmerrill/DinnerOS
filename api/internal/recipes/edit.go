@@ -161,7 +161,7 @@ func editedPhoto(r Recipe, raw string) (string, error) {
 		return "", invalidEdit("only recipes you added can get a new photo")
 	}
 	raw = strings.TrimSpace(raw)
-	if raw != "" && !IsOwnPhotoURL(raw) {
+	if raw != "" && !IsPickablePhotoURL(raw) {
 		return "", invalidEdit("that photo can't be used. Add it again from your phone")
 	}
 	return raw, nil

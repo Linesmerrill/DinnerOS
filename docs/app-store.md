@@ -87,14 +87,14 @@ no ads or third-party analytics. `ios/DinnerOS/PrivacyInfo.xcprivacy` declares t
 | Location: Coarse Location | Yes (ZIP code, when someone looks for a store) | Yes | App Functionality |
 | Purchases: Purchase History | Yes (Plus subscription events) | Yes | App Functionality |
 | Usage Data: Product Interaction | Yes (planned, cooked, skipped, sent to a store) | Yes | App Functionality, Analytics, Product Personalization |
-| User Content: Photos or Videos | Yes (recipe photos someone takes, picks from their library, or finds with photo search; location and camera details are removed first) | Yes | App Functionality |
+| User Content: Photos or Videos | Yes (recipe photos someone takes or picks from their library; location and camera details are removed first) | Yes | App Functionality |
 | User Content: Other User Content | Yes (recipes, notes, ratings, grocery lists, prices entered) | Yes | App Functionality |
 | Other Data | Yes (rough weather and evening busyness labels for Autopilot) | Yes | App Functionality, Product Personalization |
 
 Not collected: precise location, contacts, order screenshots (read on the phone and never
 sent), calendar events, health, financial info, browsing history, search history,
-diagnostics, device ID, advertising data. Photo search words pass through our server to Pexels and
-aren't kept, so they aren't search history.
+diagnostics, device ID, advertising data. Photo search words pass through our server to Unsplash and
+aren't kept, so they aren't search history. A picked Unsplash photo is loaded from Unsplash.
 
 ## In-app purchases
 

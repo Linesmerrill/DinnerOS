@@ -156,12 +156,20 @@ nonisolated struct RecipePhotoSearchPage: Decodable, Equatable, Sendable {
     let photos: [RecipeFoundPhoto]
     /// The page after this one, or nil at the end.
     let nextPage: Int?
+    /// Where the photos come from, for "Photos from Unsplash".
+    var sourceName: String? = nil
+    var sourceURL: URL? = nil
 
-    enum CodingKeys: String, CodingKey { case photos, nextPage }
+    enum CodingKeys: String, CodingKey {
+        case photos, nextPage, sourceName
+        case sourceURL = "sourceUrl"
+    }
 
-    init(photos: [RecipeFoundPhoto], nextPage: Int?) {
+    init(photos: [RecipeFoundPhoto], nextPage: Int?, sourceName: String? = nil, sourceURL: URL? = nil) {
         self.photos = photos
         self.nextPage = nextPage
+        self.sourceName = sourceName
+        self.sourceURL = sourceURL
     }
 
     init(from decoder: any Decoder) throws {
@@ -169,6 +177,56 @@ nonisolated struct RecipePhotoSearchPage: Decodable, Equatable, Sendable {
         photos = try container.decodeIfPresent([RecipeFoundPhoto].self, forKey: .photos) ?? []
         let next = try container.decodeIfPresent(Int.self, forKey: .nextPage) ?? 0
         nextPage = next > 0 ? next : nil
+        sourceName = try? container.decodeIfPresent(String.self, forKey: .sourceName)
+        sourceURL = (try? container.decodeIfPresent(String.self, forKey: .sourceURL)).flatMap {
+            $0.flatMap(URL.init(string:))
+        }
+    }
+}
+
+/// Who took a photo found with photo search: "Photo by <name> on <sourceName>", each linked.
+nonisolated struct PhotoCredit: Decodable, Equatable, Sendable {
+    let name: String
+    let profileURL: URL?
+    let sourceName: String
+    let sourceURL: URL?
+
+    enum CodingKeys: String, CodingKey {
+        case name, sourceName
+        case profileURL = "profileUrl"
+        case sourceURL = "sourceUrl"
+    }
+
+    /// The credit line with both names linked, as Unsplash asks.
+    var attributed: AttributedString {
+        var name = AttributedString(self.name)
+        name.link = profileURL
+        var source = AttributedString(sourceName)
+        source.link = sourceURL
+        return AttributedString(localized: "Photo by \(name) on \(source)")
+    }
+
+    /// The same line, unlinked, for VoiceOver and the photo's label.
+    var text: String { String(localized: "Photo by \(name) on \(sourceName)") }
+}
+
+extension RecipeFoundPhoto {
+    /// The credit to show with this search result, once the page has said where it's from.
+    func photoCredit(source: String?, sourceURL: URL?) -> PhotoCredit? {
+        guard let credit, let source else { return nil }
+        return PhotoCredit(
+            name: credit, profileURL: creditURL.flatMap(URL.init(string:)), sourceName: source, sourceURL: sourceURL)
+    }
+}
+
+/// A photo picked from photo search: where to show it from, and who to credit.
+nonisolated struct RecipePhotoPick: Decodable, Equatable, Sendable {
+    let imageURL: String
+    let credit: PhotoCredit?
+
+    enum CodingKeys: String, CodingKey {
+        case credit
+        case imageURL = "imageUrl"
     }
 }
 
@@ -183,11 +241,15 @@ nonisolated struct RecipeFoundPhoto: Decodable, Equatable, Sendable, Identifiabl
     let thumbnailURL: String
     var width: Int? = nil
     var height: Int? = nil
+    /// The photographer's name.
     var credit: String? = nil
+    /// The photographer's page, tagged as a referral from DinnerOS.
+    var creditURL: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, width, height, credit
         case thumbnailURL = "thumbnailUrl"
+        case creditURL = "creditUrl"
     }
 }
 

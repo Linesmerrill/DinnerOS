@@ -110,6 +110,10 @@ struct RecipeEditView: View {
             .sheet(item: $reorder) { target in reorderSheet(target) }
             .task { await library.loadIngredientNames() }
             .task { await library.loadPhotoSearchStatus() }
+            .onAppear {
+                // A photo picked earlier keeps its credit while the recipe is edited.
+                if photo.credit == nil, draft.imageURL == recipe.imageURLString { photo.credit = recipe.imageCredit }
+            }
             .navigationTitle("Edit Recipe")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

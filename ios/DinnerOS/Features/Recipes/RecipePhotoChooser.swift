@@ -96,6 +96,8 @@ struct RecipePhotoSearchView: View {
     @State private var nextPage: Int?
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var sourceName: String?
+    @State private var sourceURL: URL?
     @FocusState private var searchFocused: Bool
 
     init(
@@ -164,12 +166,27 @@ struct RecipePhotoSearchView: View {
                                         ProgressView()
                                     }
                                 }
+                                .overlay(alignment: .bottomLeading) {
+                                    // Every photo names who took it (Unsplash's guidelines).
+                                    if let name = photo.credit {
+                                        Text(name)
+                                            .font(.caption2)
+                                            .lineLimit(1)
+                                            .foregroundStyle(.white)
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 2)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .background(.black.opacity(0.45))
+                                    }
+                                }
                                 .clipped()
                                 .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(
-                            photo.credit.map { String(localized: "Photo by \($0)") } ?? String(localized: "Photo")
+                            photo.photoCredit(source: sourceName, sourceURL: sourceURL)?.text
+                                ?? photo.credit.map { String(localized: "Photo by \($0)") }
+                                ?? String(localized: "Photo")
                         )
                         .onAppear {
                             if photo.id == photos.last?.id { Task { await more() } }
@@ -181,11 +198,18 @@ struct RecipePhotoSearchView: View {
                     ProgressView()
                         .padding()
                 }
-                if !photos.isEmpty {
-                    Text("Photos from Pexels")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding()
+                if !photos.isEmpty, let sourceName {
+                    Group {
+                        if let sourceURL {
+                            Link(String(localized: "Photos from \(sourceName)"), destination: sourceURL)
+                        } else {
+                            Text("Photos from \(sourceName)")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .font(.footnote)
+                    .padding()
+                    .accessibilityIdentifier("PhotoSource")
                 }
             }
             .scrollDismissesKeyboard(.immediately)
@@ -234,6 +258,10 @@ struct RecipePhotoSearchView: View {
             let known = Set(photos.map(\.id))
             photos += result.photos.filter { !known.contains($0.id) }
             nextPage = result.nextPage
+            if let name = result.sourceName {
+                sourceName = name
+                sourceURL = result.sourceURL
+            }
         } catch is CancellationError {
             return
         } catch {

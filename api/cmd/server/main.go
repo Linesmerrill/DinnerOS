@@ -162,14 +162,16 @@ func run() error {
 		WithReports(catalog.NewMongoReports(db.Database()))
 	recipeService := recipes.NewService(recipes.NewMongoStore(db.Database())).WithCatalog(catalogService).
 		WithPhotos(recipes.NewMongoStore(db.Database()))
-	// Photo search for recipes runs here so the Pexels key never ships in the
-	// app; it stays off until PEXELS_API_KEY is set.
-	if cfg.PexelsAPIKey != "" {
-		recipeService.WithPhotoSearch(photosearch.NewPexels(photosearch.PexelsOptions{
-			APIKey: cfg.PexelsAPIKey, MaxBytes: recipes.MaxPhotoBytes,
+	// Photo search for recipes runs here so the Unsplash key never ships in
+	// the app; it stays off until UNSPLASH_ACCESS_KEY is set. Credits are read
+	// either way, so photos picked earlier keep theirs.
+	recipeService.WithPhotoCredits(recipes.NewMongoStore(db.Database()))
+	if cfg.UnsplashAccessKey != "" {
+		recipeService.WithPhotoSearch(photosearch.NewUnsplash(photosearch.UnsplashOptions{
+			AccessKey: cfg.UnsplashAccessKey, APIBase: cfg.UnsplashAPIBase,
 		}))
 	} else {
-		logger.Info("PEXELS_API_KEY is not set; recipe photo search is off")
+		logger.Info("UNSPLASH_ACCESS_KEY is not set; recipe photo search is off")
 	}
 	catalogService.SetLibrary(recipeService)
 	// New households get a copy of STARTER_RECIPES_HOUSEHOLD_ID's recipes in
@@ -329,6 +331,7 @@ func run() error {
 		Authorizer: householdService,
 		Tokens:     tokens,
 		Logger:     logger,
+		Credits:    recipeService,
 	})
 	autopilotHandler := recommendations.NewHandler(recommendations.HandlerOptions{
 		RequirePlus: requirePlus,

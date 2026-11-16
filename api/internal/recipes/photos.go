@@ -16,8 +16,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
+	"github.com/Linesmerrill/DinnerOS/api/internal/photosearch"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb"
 )
@@ -246,4 +248,38 @@ func (s *MongoStore) GetPhoto(ctx context.Context, id string) (Photo, error) {
 		return Photo{}, fmt.Errorf("get photo: %w", err)
 	}
 	return Photo{ID: d.ID, HouseholdID: d.HouseholdID.Hex(), ContentType: d.ContentType, Data: d.Data, CreatedAt: d.CreatedAt.UTC()}, nil
+}
+
+// --- Photo credits ----------------------------------------------------------------
+
+type photoCreditDoc struct {
+	ImageURL   string    `bson:"_id"`
+	Name       string    `bson:"name"`
+	ProfileURL string    `bson:"profileUrl"`
+	SavedAt    time.Time `bson:"savedAt"`
+}
+
+// SavePhotoCredit implements PhotoCreditStore. Picking the same photo again
+// refreshes its credit.
+func (s *MongoStore) SavePhotoCredit(ctx context.Context, imageURL string, c photosearch.Credit) error {
+	_, err := s.photoCredits.ReplaceOne(ctx, bson.D{{Key: "_id", Value: imageURL}},
+		photoCreditDoc{ImageURL: imageURL, Name: c.Name, ProfileURL: c.ProfileURL, SavedAt: time.Now().UTC()},
+		options.Replace().SetUpsert(true))
+	if err != nil {
+		return fmt.Errorf("save photo credit: %w", err)
+	}
+	return nil
+}
+
+// PhotoCredit implements PhotoCreditStore.
+func (s *MongoStore) PhotoCredit(ctx context.Context, imageURL string) (photosearch.Credit, bool, error) {
+	var d photoCreditDoc
+	err := s.photoCredits.FindOne(ctx, bson.D{{Key: "_id", Value: imageURL}}).Decode(&d)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return photosearch.Credit{}, false, nil
+	}
+	if err != nil {
+		return photosearch.Credit{}, false, fmt.Errorf("get photo credit: %w", err)
+	}
+	return photosearch.Credit{Name: d.Name, ProfileURL: d.ProfileURL}, true, nil
 }
