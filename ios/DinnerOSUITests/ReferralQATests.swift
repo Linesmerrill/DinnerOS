@@ -36,7 +36,8 @@ final class ReferralQATests: XCTestCase {
 
         // 2. A brand-new person starts a household and enters the code.
         // Unique per run: earlier runs left dozens of QA Invite Kitchens in Your Invites.
-        let newName = "QA Invite Kitchen \(Int(Date().timeIntervalSince1970) % 1_000_000)"
+        // Random too: the matrix runs this on several simulators at once.
+        let newName = "QA Invite Kitchen \(Int(Date().timeIntervalSince1970) % 100_000)\(Int.random(in: 100...999))"
         let newSubject = "qa-invite-\(Int.random(in: 10000...99999))"
         app = signInAsNewPerson(app, householdName: newName, subject: newSubject)
         openGiveAFreeMonth(app)
@@ -91,9 +92,11 @@ final class ReferralQATests: XCTestCase {
         XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The sharer didn't get to the Menu")
         let sharerBanner = app.descendants(matching: .any)["NewsBanner"].firstMatch
         XCTAssertTrue(sharerBanner.waitForExistence(timeout: 20), "No banner for the sharer")
+        // It names the newest invite that counted, which in a parallel run can be another
+        // simulator's household.
         XCTAssertTrue(
-            app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "\(newName) joined from your invite."))
-                .firstMatch.exists, "The sharer's banner doesn't name the new household")
+            app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", " joined from your invite."))
+                .firstMatch.exists, "The sharer's banner doesn't name a new household")
         snap(app, "Banner, invite counted (\(mode))")
         sharerBanner.buttons.matching(NSPredicate(format: "label != 'Close'")).firstMatch.tap()
         // Tapping it opens Give a Free Month.
