@@ -222,4 +222,56 @@ struct MenuChromeCollapseTests {
     @Test func theCollapsedBarIsSmallEvenAtAccessibilitySizes() {
         #expect(WeekStripMetrics.collapsedHeight(for: .accessibility5) < 80)
     }
+
+    // MARK: - Layout, not the reader (decision 702)
+
+    /// Far down All Meals the strip changing form made the list measure rows again and move the
+    /// offset by tens of points on its own, which flipped the strip back: a loop. These are the
+    /// offsets that loop produced, arriving with no finger on the screen.
+    @Test func offsetsTheLayoutMovesNeverChangeTheStrip() {
+        var collapse = MenuChromeCollapse()
+        collapse.update(offset: 0)
+        collapse.update(offset: 57_100)
+        collapse.update(offset: 57_150)
+        #expect(!collapse.isExpanded)
+        for offset: CGFloat in [57_146.4, 57_167.4, 57_133.3, 57_212.7, 57_245, 57_146.4, 57_202.7, 57_128.8] {
+            collapse.update(offset: offset, readerScrolling: false)
+            #expect(!collapse.isExpanded, "The strip changed at \(offset) with nobody scrolling")
+        }
+    }
+
+    /// Travel measured after the layout settled starts from where it settled, not from where
+    /// the reader last turned.
+    @Test func travelAfterTheLayoutMovesStartsWhereItLanded() {
+        var collapse = MenuChromeCollapse()
+        collapse.update(offset: 0)
+        collapse.update(offset: 500)
+        #expect(!collapse.isExpanded)
+        // The layout pulls the offset up 30 points on its own: under expandTravel's worth twice over.
+        collapse.update(offset: 470, readerScrolling: false)
+        collapse.update(offset: 440, readerScrolling: false)
+        #expect(!collapse.isExpanded)
+        // Then the reader scrolls up 20 points from there: still short of expandTravel.
+        collapse.update(offset: 420)
+        #expect(!collapse.isExpanded)
+        collapse.update(offset: 410)
+        #expect(collapse.isExpanded)
+    }
+
+    /// The top still always shows the strip, scrolling or not.
+    @Test func theTopShowsTheStripEvenWithNobodyScrolling() {
+        var collapse = MenuChromeCollapse()
+        collapse.update(offset: 0)
+        collapse.update(offset: 400)
+        collapse.update(offset: 2, readerScrolling: false)
+        #expect(collapse.isExpanded)
+    }
+
+    @Test func onlyADragOrItsCoastCountsAsTheReader() {
+        #expect(MenuScroll.isReaderScrolling(.tracking))
+        #expect(MenuScroll.isReaderScrolling(.interacting))
+        #expect(MenuScroll.isReaderScrolling(.decelerating))
+        #expect(!MenuScroll.isReaderScrolling(.idle))
+        #expect(!MenuScroll.isReaderScrolling(.animating))
+    }
 }

@@ -67,6 +67,15 @@ type PhotoSearchResult struct {
 	Credit string `json:"credit"`
 }
 
+// PhotoSearchStatusResponse is the body of GET .../recipe-photos/search-status:
+// whether the app should offer photo search at all.
+type PhotoSearchStatusResponse struct {
+	Available bool `json:"available"`
+}
+
+// PhotoSearchAvailable reports whether a photo search provider is configured.
+func (s *Service) PhotoSearchAvailable() bool { return s.photoSearch != nil }
+
 // PhotoFromSearchRequest is the body of POST .../recipe-photos/from-search.
 type PhotoFromSearchRequest struct {
 	ID string `json:"id"`
@@ -74,11 +83,16 @@ type PhotoFromSearchRequest struct {
 
 func (h *Handler) mountPhotoSearch(r chi.Router, edit func(http.Handler) http.Handler) {
 	r.With(edit).Get("/households/{householdId}/recipe-photos/search", h.searchPhotos)
+	r.With(edit).Get("/households/{householdId}/recipe-photos/search-status", h.photoSearchStatus)
 	r.With(edit).Post("/households/{householdId}/recipe-photos/from-search", h.photoFromSearch)
 }
 
 func photoSearchOff(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteError(w, r, http.StatusServiceUnavailable, "photo_search_off", "Photo search isn't available right now.")
+}
+
+func (h *Handler) photoSearchStatus(w http.ResponseWriter, _ *http.Request) {
+	httpx.WriteJSON(w, http.StatusOK, PhotoSearchStatusResponse{Available: h.opts.Service.PhotoSearchAvailable()})
 }
 
 func (h *Handler) searchPhotos(w http.ResponseWriter, r *http.Request) {

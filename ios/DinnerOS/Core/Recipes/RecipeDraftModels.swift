@@ -172,6 +172,11 @@ nonisolated struct RecipePhotoSearchPage: Decodable, Equatable, Sendable {
     }
 }
 
+/// Whether the server can search the web for photos.
+nonisolated struct RecipePhotoSearchStatus: Decodable, Equatable, Sendable {
+    let available: Bool
+}
+
 /// A photo found on the web: a small image for the grid, and who took it.
 nonisolated struct RecipeFoundPhoto: Decodable, Equatable, Sendable, Identifiable {
     let id: String

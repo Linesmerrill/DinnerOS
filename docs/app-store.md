@@ -87,12 +87,14 @@ no ads or third-party analytics. `ios/DinnerOS/PrivacyInfo.xcprivacy` declares t
 | Location: Coarse Location | Yes (ZIP code, when someone looks for a store) | Yes | App Functionality |
 | Purchases: Purchase History | Yes (Plus subscription events) | Yes | App Functionality |
 | Usage Data: Product Interaction | Yes (planned, cooked, skipped, sent to a store) | Yes | App Functionality, Analytics, Product Personalization |
+| User Content: Photos or Videos | Yes (recipe photos someone takes, picks from their library, or finds with photo search; location and camera details are removed first) | Yes | App Functionality |
 | User Content: Other User Content | Yes (recipes, notes, ratings, grocery lists, prices entered) | Yes | App Functionality |
 | Other Data | Yes (rough weather and evening busyness labels for Autopilot) | Yes | App Functionality, Product Personalization |
 
-Not collected: precise location, contacts, photos or videos (order screenshots are read on the
-phone and never sent), calendar events, health, financial info, browsing history, search history,
-diagnostics, device ID, advertising data.
+Not collected: precise location, contacts, order screenshots (read on the phone and never
+sent), calendar events, health, financial info, browsing history, search history,
+diagnostics, device ID, advertising data. Photo search words pass through our server to Pexels and
+aren't kept, so they aren't search history.
 
 ## In-app purchases
 
@@ -117,21 +119,18 @@ review is rejected for a Plus reason, set it back to off; nothing else changes.
 
 ## App Review notes
 
-Paste into App Review Information, Notes:
+Paste into App Review Information, Notes (also `ios/fastlane/metadata/review_information/notes.txt`).
+There is no demo account: a reviewer signs in with their own Apple ID.
 
-> DinnerOS is a dinner planner for households. Sign in with the demo account, or create a new
-> account with Sign in with Apple. A new household starts with a library of recipes so there is
-> something to plan with.
+> DinnerOS is a dinner planner for households. To start, tap Continue with Apple and create a household. It comes with a library of recipes, so there is something to plan with right away.
 >
-> To see and buy the subscriptions: go to the Household tab and tap DinnerOS Plus. The purchase
-> screen shows both plans (Monthly and Yearly), the 14-day free trial, the renewal terms, Restore
-> purchases, and links to the Privacy Policy and Terms of Use. Plus can also be reached from the
-> Menu tab by tapping Plan with Autopilot. After buying, Household > DinnerOS Plus opens Your Plus,
-> where Manage Subscription, Restore Purchases and Request a Refund use Apple's own sheets.
+> DinnerOS Plus: go to the Household tab and tap DinnerOS Plus. The purchase screen shows both plans (Monthly and Yearly), the 14-day free trial, the renewal terms, Restore purchases, and links to the Privacy Policy and Terms of Use. You can also reach it from the Menu tab by tapping Plan with Autopilot. After buying, Household > DinnerOS Plus opens Your Plus, where Manage Subscription, Restore Purchases and Request a Refund use Apple's own sheets.
 >
-> Sending a grocery list to Walmart or Kroger opens the store's own site or app to finish the
-> order; DinnerOS never takes payment for groceries. Location, calendar and Reminders access are
-> optional and only asked for when someone turns on the feature that uses them.
+> Invite codes: every household gets a code under Household > Give a Free Month to share with friends. Codes are free and never sold, and there is no way to buy one in the app or anywhere else. When a new household joins with a code and finishes setup (saves 3 recipes and plans a dinner), both households get a free month of Plus. The sharer can earn a limited number of months. The code does nothing for a household that already exists, and it only adds time to our own Plus access. It never replaces or changes an App Store purchase.
+>
+> Grocery stores: sending a list to Walmart works without signing in. It opens Walmart's site or app with the items, and you check out there. Kroger asks you to sign in with your own Kroger account before it can add items to your cart, so that step needs a Kroger account. DinnerOS never takes payment for groceries.
+>
+> Location, calendar and Reminders access are optional and only asked for when you turn on the feature that uses them.
 >
 > Account deletion: Household tab > Account > Delete Account.
 

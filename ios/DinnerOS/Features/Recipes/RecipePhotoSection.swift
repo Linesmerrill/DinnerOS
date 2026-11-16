@@ -9,6 +9,8 @@ struct RecipePhotoSource {
     let search: (String, Int) async throws -> RecipePhotoSearchPage
     /// Keeps a found photo as the household's own and returns its link.
     let useFound: (String) async throws -> String
+    /// Whether to offer Search the Web. Off when the server has no photo search.
+    var searchAvailable = true
 }
 
 /// The photo being added: what's showing, whether it's sending, and what went wrong. The form
@@ -89,7 +91,7 @@ private struct RecipePhotoPickers: ViewModifier {
         content
             .sheet(isPresented: $model.showsChooser) {
                 RecipePhotoChooser(
-                    initialQuery: searchText, search: source.search,
+                    initialQuery: searchText, searchAvailable: source.searchAvailable, search: source.search,
                     onPicked: { image in
                         model.showsChooser = false
                         Task { await model.send(image, to: $imageURL, source: source) }

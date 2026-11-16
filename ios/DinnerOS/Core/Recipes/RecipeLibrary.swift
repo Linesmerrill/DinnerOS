@@ -37,10 +37,14 @@ final class RecipeLibrary {
     private(set) var recentlyDeleted: DeletedRecipe?
     /// Names offered while an ingredient is typed. Empty until `loadIngredientNames`.
     private(set) var ingredientNames = IngredientNameIndex.empty
+    /// Whether Choose Photo offers Search the Web. Off until the server says it's on, and kept
+    /// from the last answer so it holds offline. Never on when a search would only fail.
+    private(set) var photoSearchAvailable: Bool
 
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let api: RecipesAPI?
     @ObservationIgnored private let pageSize: Int
+    @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var details: [String: Recipe] = [:]
     /// Incremented whenever the list restarts, so a slow response for old filters or an
     /// old household can't overwrite newer state.
@@ -48,10 +52,17 @@ final class RecipeLibrary {
 
     private static let logger = Logger(subsystem: "DinnerOS", category: "recipes")
 
-    init(session: AuthSession, api: RecipesAPI?, pageSize: Int = RecipeLibrary.pageSize) {
+    static let photoSearchKey = "recipes.photoSearchAvailable"
+
+    init(
+        session: AuthSession, api: RecipesAPI?, pageSize: Int = RecipeLibrary.pageSize,
+        defaults: UserDefaults = .standard
+    ) {
         self.session = session
         self.api = api
         self.pageSize = pageSize
+        self.defaults = defaults
+        photoSearchAvailable = defaults.bool(forKey: Self.photoSearchKey)
     }
 
     /// A library frozen with the given items, for SwiftUI previews. It has no network access.
@@ -69,7 +80,7 @@ final class RecipeLibrary {
     /// A separate library over the same API, for a picker whose search and paging must
     /// not change this list. A preview library's copy starts with the same items.
     func makeIndependentCopy() -> RecipeLibrary {
-        let copy = RecipeLibrary(session: session, api: api, pageSize: pageSize)
+        let copy = RecipeLibrary(session: session, api: api, pageSize: pageSize, defaults: defaults)
         if api == nil {
             copy.householdID = householdID
             copy.phase = phase
@@ -316,9 +327,40 @@ final class RecipeLibrary {
     /// Photos on the web for a search, a page at a time.
     func searchPhotos(_ query: String, page: Int) async throws -> RecipePhotoSearchPage {
         guard let api, let householdID else { throw AuthSessionError.notConfigured }
-        return try await session.authorized { token in
-            try await api.searchPhotos(householdID: householdID, query: query, page: page, accessToken: token)
+        do {
+            return try await session.authorized { token in
+                try await api.searchPhotos(householdID: householdID, query: query, page: page, accessToken: token)
+            }
+        } catch {
+            notePhotoSearchError(error)
+            throw error
         }
+    }
+
+    /// Asks the server whether photo search is on. Offline, or against an API without the
+    /// route, the last answer stays (off if there never was one).
+    func loadPhotoSearchStatus() async {
+        guard let api, let householdID else { return }
+        do {
+            let status = try await session.authorized { token in
+                try await api.photoSearchStatus(householdID: householdID, accessToken: token)
+            }
+            setPhotoSearchAvailable(status.available)
+        } catch let error as APIError where error.status == 404 {
+            setPhotoSearchAvailable(false)
+        } catch {
+            // Offline: keep the last answer.
+        }
+    }
+
+    /// A search the server turned down because photo search is off hides it from then on.
+    func notePhotoSearchError(_ error: any Error) {
+        if (error as? APIError)?.code == "photo_search_off" { setPhotoSearchAvailable(false) }
+    }
+
+    private func setPhotoSearchAvailable(_ available: Bool) {
+        photoSearchAvailable = available
+        defaults.set(available, forKey: Self.photoSearchKey)
     }
 
     /// Keeps a photo found on the web as the household's own and returns its link.

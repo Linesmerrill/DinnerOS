@@ -19,6 +19,11 @@ import Foundation
 /// * **Hysteresis, asymmetric on purpose.** Collapsing needs `collapseTravel` points of downward
 ///   travel; restoring needs only `expandTravel`, which is smaller. A few points of jitter moves
 ///   nothing either way, and where the two could disagree the strip comes back.
+/// * **Only the reader's own scrolling counts.** Far down a lazy list, the strip changing form
+///   makes SwiftUI measure rows again, which moves the offset by tens of points with no finger
+///   on the screen. Read as travel, that flipped the strip back, which moved the offset again: a
+///   loop that kept the main thread busy and left the list blank (decision 702). Offsets that
+///   arrive while the reader isn't dragging or coasting only move the anchor.
 ///
 /// Nothing here animates or measures: `MenuScroll.collapseAnimation(reduceMotion:)` decides
 /// whether the change is animated, and `WeekStripMetrics` decides how tall each form is.
@@ -62,13 +67,16 @@ nonisolated struct MenuChromeCollapse: Equatable {
     ///
     /// `offset` is the distance scrolled down from the top, so it grows as the reader moves away
     /// from the first card and can go slightly negative while rubber-banding.
+    /// `readerScrolling` is false when nobody is dragging or coasting the list: the offset then
+    /// moved because the layout did, and decides nothing except at the top.
     @discardableResult
-    mutating func update(offset: CGFloat) -> Bool {
+    mutating func update(offset: CGFloat, readerScrolling: Bool = true) -> Bool {
         defer { lastOffset = offset }
 
-        guard !isHeld else {
-            // Something other than the reader is moving the scroll view; see `hold()`. Follow
-            // the offset, so travel measured after the release starts from where it lands.
+        guard !isHeld, readerScrolling || offset <= Self.topThreshold else {
+            // Something other than the reader is moving the scroll view: a jump (see `hold()`)
+            // or the layout settling. Follow the offset, so travel measured afterwards starts
+            // from where it lands.
             anchor = offset
             isDescending = nil
             return isExpanded

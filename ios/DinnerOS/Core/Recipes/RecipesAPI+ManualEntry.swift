@@ -63,6 +63,13 @@ nonisolated extension RecipesAPI {
         return try await client.send(request.authorized(with: accessToken))
     }
 
+    /// Whether photo search is on. Off when the server has no photo provider.
+    func photoSearchStatus(householdID: String, accessToken: String) async throws -> RecipePhotoSearchStatus {
+        try await client.send(
+            APIRequest.get("/api/v1/households/\(householdID)/recipe-photos/search-status")
+                .authorized(with: accessToken))
+    }
+
     /// Saves a photo found on the web as the household's own and returns its link.
     func useFoundPhoto(householdID: String, photoID: String, accessToken: String) async throws -> String {
         let request = try APIRequest.post(

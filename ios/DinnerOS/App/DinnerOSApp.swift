@@ -41,6 +41,7 @@ struct DinnerOSApp: App {
                 .environment(dependencies.deviceContext)
                 .environment(dependencies.intentRouter)
                 .environment(dependencies.offline)
+                .task { await BuildChannelStore.shared.resolve() }
                 .task {
                     // Back online: reload what's on screen so saved answers give way to live ones.
                     let dependencies = dependencies

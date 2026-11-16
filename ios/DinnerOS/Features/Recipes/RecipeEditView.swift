@@ -103,11 +103,13 @@ struct RecipeEditView: View {
                 source: RecipePhotoSource(
                     upload: { try await library.uploadPhoto($0) },
                     search: { try await library.searchPhotos($0, page: $1) },
-                    useFound: { try await library.useFoundPhoto($0) })
+                    useFound: { try await library.useFoundPhoto($0) },
+                    searchAvailable: library.photoSearchAvailable)
             )
             .sheet(item: $ingredientSheet) { target in ingredientEditor(target) }
             .sheet(item: $reorder) { target in reorderSheet(target) }
             .task { await library.loadIngredientNames() }
+            .task { await library.loadPhotoSearchStatus() }
             .navigationTitle("Edit Recipe")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

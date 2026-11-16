@@ -39,6 +39,8 @@ struct MenuView: View {
     /// Whether the week strip is showing its pills, and where the menu is scrolled to.
     @State private var collapse = MenuChromeCollapse()
     @State private var scrollOffset: CGFloat = 0
+    /// Whether the reader is dragging or coasting the menu. Only then can the strip change form.
+    @State private var readerScrolling = false
     /// The menu's tallest visible height, so a narrowed All Meals can fill it (see below).
     @State private var viewportHeight: CGFloat = 0
 
@@ -309,7 +311,11 @@ struct MenuView: View {
                 // under the results when the keyboard closed (iPad, landscape).
                 if reading.height > viewportHeight { viewportHeight = reading.height }
                 scrollOffset = offset
-                changeStrip { collapse.update(offset: offset) }
+                let reader = readerScrolling
+                changeStrip { collapse.update(offset: offset, readerScrolling: reader) }
+            }
+            .onScrollPhaseChange { _, phase in
+                readerScrolling = MenuScroll.isReaderScrolling(phase)
             }
             // Closing the keyboard during a search could leave the menu scrolled back to the
             // top on iPad in landscape, away from the results. Bring All Meals back once the
@@ -515,6 +521,14 @@ nonisolated enum MenuScroll {
     /// strip's form again. Longer than the jump's own animation, so every offset it produces is
     /// absorbed rather than read as a gesture.
     static let jumpSettle = Duration.milliseconds(350)
+
+    /// A finger on the list, or the coast after it. Not idle, and not an animated jump.
+    static func isReaderScrolling(_ phase: ScrollPhase) -> Bool {
+        switch phase {
+        case .tracking, .interacting, .decelerating: true
+        default: false
+        }
+    }
 }
 
 #Preview("Menu") {

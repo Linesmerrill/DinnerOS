@@ -2,9 +2,11 @@ import PhotosUI
 import SwiftUI
 
 /// Choose Photo: search the web for the dish, already filled in with the recipe's name, or pick
-/// from the phone's library. Web photos come from our server, which keeps the search key.
+/// from the phone's library. Web photos come from our server, which keeps the search key. When
+/// the server has no photo search, only the library shows, so nothing fails or comes back empty.
 struct RecipePhotoChooser: View {
     let initialQuery: String
+    var searchAvailable = true
     let search: (String, Int) async throws -> RecipePhotoSearchPage
     let onPicked: (UIImage) -> Void
     let onFound: (RecipeFoundPhoto) -> Void
@@ -22,14 +24,16 @@ struct RecipePhotoChooser: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                Picker("Where", selection: $place) {
-                    Text("Search the Web").tag(Place.web)
-                    Text("Photo Library").tag(Place.library)
+                if searchAvailable {
+                    Picker("Where", selection: $place) {
+                        Text("Search the Web").tag(Place.web)
+                        Text("Photo Library").tag(Place.library)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
                 }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                switch place {
+                switch shownPlace {
                 case .web:
                     RecipePhotoSearchView(initialQuery: initialQuery, search: search, onFound: onFound)
                 case .library:
@@ -45,6 +49,9 @@ struct RecipePhotoChooser: View {
             }
         }
     }
+
+    /// The library alone when web search is off.
+    var shownPlace: Place { searchAvailable ? place : .library }
 
     private var library: some View {
         VStack(spacing: 0) {

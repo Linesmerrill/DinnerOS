@@ -47,7 +47,8 @@ final class AddRecipeQATests: XCTestCase {
         reveal(total, in: app, maxSwipes: 3)
         XCTAssertTrue(total.waitForExistence(timeout: 3), "Total didn't add up")
 
-        // Choose Photo opens the chooser with both places.
+        // Choose Photo opens the chooser. The local API has no photo search key, so there's no
+        // Search the Web, only the library (decision 704).
         // It's near the top of the form, and checking the total scrolled to the bottom.
         let choose = app.buttons["Choose Photo"]
         for _ in 0..<6 where !(choose.exists && choose.isHittable && choose.frame.minY > app.frame.height * 0.15) {
@@ -55,10 +56,10 @@ final class AddRecipeQATests: XCTestCase {
         }
         choose.tap()
         XCTAssertTrue(app.navigationBars["Choose a Photo"].waitForExistence(timeout: 5), "Choose Photo opened nothing")
-        snap(app, "04 Choose a Photo, web")
-        app.buttons["Photo Library"].firstMatch.tap()
         sleep(2)
-        snap(app, "05 Choose a Photo, library")
+        XCTAssertFalse(app.buttons["Search the Web"].exists, "Search the Web showed with photo search off")
+        XCTAssertFalse(app.textFields["Search for a photo"].exists, "The photo search box showed with search off")
+        snap(app, "04 Choose a Photo, library only")
         app.buttons["Cancel"].firstMatch.tap()
 
         // Two ingredients in the New Ingredient sheet, with a suggestion and a note.

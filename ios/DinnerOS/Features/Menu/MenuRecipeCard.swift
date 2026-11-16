@@ -4,7 +4,7 @@ import SwiftUI
 /// and badges. The photo carries a `+` that adds the recipe to the shown week (`✓` once it's
 /// there); full-width cards use an Add button under the text instead.
 struct MenuRecipeCard: View {
-    enum Size {
+    nonisolated enum Size: Sendable {
         /// In a carousel, a fixed width with the next card peeking.
         case carousel
         /// One per row in All Meals.
@@ -232,4 +232,36 @@ struct MenuRecipeCard: View {
     }
     .menuPreviewEnvironment()
     .environment(\.dynamicTypeSize, .accessibility3)
+}
+
+/// A recipe card as one row of a lazy list or carousel, with its photo warm-up.
+///
+/// SwiftUI can build a lazy stack's rows on its render thread (`com.apple.SwiftUI.AsyncRenderer`)
+/// while it lays out a scroll. A row closure tied to the main actor checks its thread when it
+/// starts and stops the app there (decision 701). So the row closure only makes this value,
+/// through a `nonisolated` init that touches nothing on the main actor, and SwiftUI runs `body`
+/// on the main thread as it does for every view.
+struct MenuCardRow: View {
+    let index: Int
+    let card: MenuCard
+    let size: MenuRecipeCard.Size
+    let canAdd: Bool
+    let photoURLs: [URL?]
+    let photoWidth: CGFloat
+
+    nonisolated init(
+        index: Int, card: MenuCard, size: MenuRecipeCard.Size, canAdd: Bool, photoURLs: [URL?], photoWidth: CGFloat
+    ) {
+        self.index = index
+        self.card = card
+        self.size = size
+        self.canAdd = canAdd
+        self.photoURLs = photoURLs
+        self.photoWidth = photoWidth
+    }
+
+    var body: some View {
+        MenuRecipeCard(card: card, size: size, canAdd: canAdd)
+            .prefetchesPhotos(after: index, in: photoURLs, pointWidth: photoWidth)
+    }
 }

@@ -539,6 +539,9 @@ answers `{"photos": [{"id", "thumbnailUrl", "width", "height", "credit"}],
 is 400 "Type what to search for."; a provider failure is 502
 `photo_search_failed`; with no `PEXELS_API_KEY` both routes answer 503
 `photo_search_off` "Photo search isn't available right now."
+`GET /api/v1/households/{householdId}/recipe-photos/search-status` answers
+`{"available": true}` (false with no key) without asking the provider, so the
+app offers Search the Web only when it will work.
 `POST /api/v1/households/{householdId}/recipe-photos/from-search` `{"id":
 "1028714"}` downloads that result, from the address the provider gives for
 it and only from its image host, keeps it like an uploaded photo and answers

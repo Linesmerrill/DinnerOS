@@ -69,13 +69,18 @@ struct FeedbackView: View {
     }
 }
 
-/// The row that opens `FeedbackView`, for the Household tab and the setup screen.
+/// The row that opens `FeedbackView`, for the Household tab and the setup screen. Only in
+/// TestFlight and development builds: the steps are TestFlight's.
 struct FeedbackLink: View {
+    private let builds = BuildChannelStore.shared
+
     var body: some View {
-        NavigationLink {
-            FeedbackView()
-        } label: {
-            Label("Feedback & Bugs", systemImage: "bubble.left.and.exclamationmark.bubble.right")
+        if builds.channel?.showsBetaFeedback == true {
+            NavigationLink {
+                FeedbackView()
+            } label: {
+                Label("Feedback & Bugs", systemImage: "bubble.left.and.exclamationmark.bubble.right")
+            }
         }
     }
 }

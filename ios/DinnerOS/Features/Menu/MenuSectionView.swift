@@ -31,16 +31,17 @@ struct MenuSectionView: View {
                     .foregroundStyle(Color.secondary)
                     .padding(.horizontal, 16)
             } else {
-                // Read outside the row builder: SwiftUI can build lazy rows on its render
-                // thread, where reading main-actor state crashes.
+                // Read outside the row builder, which can run on SwiftUI's render thread
+                // (decision 701).
                 let urls = photoURLs
                 let canAdd = canAdd
                 let width = MenuRecipeCard.carouselWidth(for: dynamicTypeSize)
                 ScrollView(.horizontal) {
                     LazyHStack(alignment: .top, spacing: 12) {
-                        ForEach(Array(section.items.enumerated()), id: \.element.id) { index, card in
-                            MenuRecipeCard(card: card, canAdd: canAdd)
-                                .prefetchesPhotos(after: index, in: urls, pointWidth: width)
+                        ForEach(Array(section.items.enumerated()), id: \.element.id) { @Sendable index, card in
+                            MenuCardRow(
+                                index: index, card: card, size: .carousel, canAdd: canAdd, photoURLs: urls,
+                                photoWidth: width)
                         }
                     }
                     .scrollTargetLayout()

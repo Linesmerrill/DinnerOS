@@ -1,0 +1,59 @@
+import Foundation
+import Observation
+import StoreKit
+
+/// Where this copy of the app came from: the App Store, TestFlight, or Xcode. Feedback & Bugs
+/// points testers at TestFlight, so it shows only in TestFlight and development builds.
+enum BuildChannel: Equatable, Sendable {
+    case appStore
+    case testFlight
+    case development
+
+    /// Beta feedback belongs to TestFlight; App Store builds don't mention it.
+    var showsBetaFeedback: Bool { self != .appStore }
+
+    /// The channel from what StoreKit says, falling back to the receipt's file name when
+    /// StoreKit can't answer (offline on first launch). Unknown counts as the App Store, so a
+    /// reviewer never sees beta wording.
+    static func from(environment: AppStore.Environment?, receiptName: String?, debug: Bool) -> BuildChannel {
+        if debug { return .development }
+        switch environment {
+        case .xcode?: return .development
+        case .sandbox?: return .testFlight
+        case .production?: return .appStore
+        default: break
+        }
+        return receiptName == "sandboxReceipt" ? .testFlight : .appStore
+    }
+
+    /// Asks StoreKit where this build came from.
+    static func lookUp() async -> BuildChannel {
+        #if DEBUG
+            let debug = true
+        #else
+            let debug = false
+        #endif
+        var environment: AppStore.Environment?
+        if !debug, let result = try? await AppTransaction.shared {
+            switch result {
+            case .verified(let transaction), .unverified(let transaction, _):
+                environment = transaction.environment
+            }
+        }
+        return from(
+            environment: environment, receiptName: Bundle.main.appStoreReceiptURL?.lastPathComponent, debug: debug)
+    }
+}
+
+/// The build's channel, looked up once at launch. Nil until then, which hides beta rows.
+@MainActor @Observable
+final class BuildChannelStore {
+    static let shared = BuildChannelStore()
+
+    private(set) var channel: BuildChannel?
+
+    func resolve() async {
+        guard channel == nil else { return }
+        channel = await BuildChannel.lookUp()
+    }
+}

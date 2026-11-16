@@ -87,8 +87,9 @@ struct AllMealsSection: View {
             if list.items.isEmpty {
                 emptyState
             } else {
-                // Read outside the row builder: SwiftUI can build lazy rows on its render
-                // thread, where reading main-actor state crashes.
+                // Read outside the row builder, which can run on SwiftUI's render thread: the
+                // `@Sendable` row closure isn't tied to the main actor and only makes the row
+                // (decision 701).
                 let urls = photoURLs
                 let canAdd = canAdd
                 let width = MenuRecipeCard.fullWidthEstimate
@@ -96,9 +97,10 @@ struct AllMealsSection: View {
                     if let refreshError = list.refreshError {
                         FormErrorLabel(message: refreshError)
                     }
-                    ForEach(Array(list.items.enumerated()), id: \.element.id) { index, card in
-                        MenuRecipeCard(card: card, size: .fullWidth, canAdd: canAdd)
-                            .prefetchesPhotos(after: index, in: urls, pointWidth: width)
+                    ForEach(Array(list.items.enumerated()), id: \.element.id) { @Sendable index, card in
+                        MenuCardRow(
+                            index: index, card: card, size: .fullWidth, canAdd: canAdd, photoURLs: urls,
+                            photoWidth: width)
                     }
                     pageFooter
                 }

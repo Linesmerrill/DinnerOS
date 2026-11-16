@@ -169,3 +169,33 @@ func TestPhotoSearchOffWithoutAKey(t *testing.T) {
 		}
 	}
 }
+
+func TestPhotoSearchStatus(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		searcher *fakeSearcher
+		want     bool
+	}{
+		{"with a key", &fakeSearcher{}, true},
+		{"without a key", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, _ := newPhotoSearchTestServer(t, tc.searcher)
+			rec := srv.do(t, http.MethodGet, photosPath(hhAda)+"/search-status", "", userAda)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d %s", rec.Code, rec.Body.String())
+			}
+			if got := decodeBody[PhotoSearchStatusResponse](t, rec); got.Available != tc.want {
+				t.Errorf("available = %v, want %v", got.Available, tc.want)
+			}
+			// Never asks the provider.
+			if tc.searcher != nil && len(tc.searcher.queries) != 0 {
+				t.Errorf("searched %v", tc.searcher.queries)
+			}
+		})
+	}
+	srv, _ := newPhotoSearchTestServer(t, &fakeSearcher{})
+	if rec := srv.do(t, http.MethodGet, photosPath(hhAda)+"/search-status", "", ""); rec.Code != http.StatusUnauthorized {
+		t.Errorf("signed out = %d", rec.Code)
+	}
+}

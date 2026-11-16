@@ -212,8 +212,16 @@ struct RecipeDraftReviewForm: View {
             photo, imageURL: $store.draft.imageURL, searchText: store.draft.name,
             source: RecipePhotoSource(
                 upload: { try await store.uploadPhoto($0) },
-                search: { try await store.searchPhotos($0, page: $1) },
-                useFound: { try await store.useFoundPhoto($0) })
+                search: { query, page in
+                    do {
+                        return try await store.searchPhotos(query, page: page)
+                    } catch {
+                        library.notePhotoSearchError(error)
+                        throw error
+                    }
+                },
+                useFound: { try await store.useFoundPhoto($0) },
+                searchAvailable: library.photoSearchAvailable)
         )
         .sheet(item: $ingredientSheet) { target in
             ingredientEditor(target)
@@ -222,6 +230,7 @@ struct RecipeDraftReviewForm: View {
             reorderSheet(target)
         }
         .task { await library.loadIngredientNames() }
+        .task { await library.loadPhotoSearchStatus() }
     }
 
     private var form: some View {
