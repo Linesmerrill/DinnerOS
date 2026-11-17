@@ -115,8 +115,11 @@ final class InviteLinkQATests: XCTestCase {
         XCTAssertTrue(waitGone(checklist, timeout: 5), "Not Now didn't close the checklist")
         card.tap()
         XCTAssertTrue(checklist.waitForExistence(timeout: 10), "The card didn't open the checklist again")
-        // Plan a Dinner opens Add Recipes on the Menu.
-        app.buttons["ChecklistGo-dinner"].tap()
+        // Plan a Dinner opens Add Recipes on the Menu. On a small phone the Plus lines above the
+        // steps push it below the fold.
+        let planDinner = app.buttons["ChecklistGo-dinner"]
+        reveal(planDinner, in: app, maxSwipes: 4)
+        planDinner.tap()
         XCTAssertTrue(waitGone(checklist, timeout: 5))
         XCTAssertTrue(app.searchFields["Search recipes"].firstMatch.waitForExistence(timeout: 10), "No Add Recipes")
         snap(app, "Checklist, Plan a Dinner opens Add Recipes (\(mode))")

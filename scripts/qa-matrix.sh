@@ -132,11 +132,12 @@ run_config() {
     xcrun simctl ui "$id" appearance "${config#*-}"
     for test in $TESTS; do
         if [ -n "$PAIRS" ]; then echo "$PAIRS" | grep -qxF "$config|$test" || continue; fi
-        # The end-to-end add tests run once, on the large iPhone in light; companions and cuisine
-        # also run on the iPad on its side, where their forms are a sheet.
+        # The end-to-end add tests run once each, spread over the configs with the shortest runs
+        # so no simulator goes past 30 minutes: adding by hand on the large iPhone, companions and
+        # cuisine on the small iPhone and on the iPad on its side (where their forms are a sheet).
         case $test in
         AddRecipeQATests | SaveThenOpenQATests) [ "$config" = large-light ] || continue ;;
-        CompanionQATests | CuisineQATests) case $config in large-light | ipadL-light) ;; *) continue ;; esac ;;
+        CompanionQATests | CuisineQATests) case $config in small-dark | ipadL-dark) ;; *) continue ;; esac ;;
         esac
         run_test "$config" "$id" "$test" 1
     done
