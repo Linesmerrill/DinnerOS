@@ -117,8 +117,12 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/households/{householdId}/recipes/parse` `{text}` or `{url}` → recipe draft (nothing is stored) | `recipes.edit` | 4a | ✅ |
 | POST | `/api/v1/households/{householdId}/recipes` reviewed draft → `201` recipe (private to the household) | `recipes.edit` | 4a | ✅ |
 | PUT | `/api/v1/households/{householdId}/recipes/{recipeId}/sharing` `{sharedToCatalog}` → `{recipeId, sharedToCatalog, inCatalog}` | `recipes.edit` | 4a | ✅ |
-| GET | `/api/v1/households/{householdId}/discover` `?cuisine&tag&ingredient&limit&cursor` → `{items, nextCursor, total}`, excluding the household's own recipes | `household.view` | 4a | ✅ |
-| GET | `/api/v1/households/{householdId}/catalog/recipes` `?q&cuisine&tag&ingredient&limit&cursor` → `{items, nextCursor, total}`, the household's own marked `inLibrary` | `household.view` | 4a | ✅ |
+| GET | `/api/v1/households/{householdId}/discover` `?cuisine&tag&ingredient&maxMinutes&minServings&limit&cursor` → `{items, nextCursor, total}`, excluding the household's own recipes | `household.view` | 4a | ✅ |
+| GET | `/api/v1/households/{householdId}/discover/home` → `{sections, filters, browseTitle, searchPrompt, seeAllTitle, emptyTitle, emptyText, noMatchTitle, noMatchText}` | `household.view` | 114 | ✅ |
+| GET | `/api/v1/households/{householdId}/discover/sections/{sectionId}` `?limit&cursor` → one row in full `{id, title, subtitle?, type, sponsorLabel?, items, hasMore, nextCursor, total}` | `household.view` | 114 | ✅ |
+| GET | `/api/v1/households/{householdId}/catalog/recipes` `?q&cuisine&tag&ingredient&maxMinutes&minServings&limit&cursor` → `{items, nextCursor, total, filters}`, the household's own marked `inLibrary` | `household.view` | 4a | ✅ |
+| GET, POST | `/api/v1/admin/discover/collections` → `{collections, rules}`; body `{id, title, subtitle?, type, recipeIds?, rule?, startsAt?, endsAt?, position, sponsor?}` | operators (`OPERATOR_USER_IDS`) | 114 | ✅ |
+| PUT, DELETE | `/api/v1/admin/discover/collections/{collectionId}` → the row / `204` | operators (`OPERATOR_USER_IDS`) | 114 | ✅ |
 | GET | `/api/v1/households/{householdId}/catalog/recipes/{catalogRecipeId}` → catalog recipe | `household.view` | 4a | ✅ |
 | POST | `/api/v1/households/{householdId}/catalog/recipes/{catalogRecipeId}/add` → `201 {recipeId, created}` (`200` when it was already there) | `recipes.edit` | 4a | ✅ |
 | GET | `/api/v1/households/{householdId}/plans` `?from&to` → `{items: [{week, startDate, status, entryCount, updatedAt}]}` | `household.view` | 6 | ✅ |
@@ -825,6 +829,43 @@ profile — a new one, or one that has never opened Autopilot — gets every sco
 at 0, which is a deterministic alphabetical page rather than nothing.
 
 Results here always have `inLibrary: false`; that is what the screen is for.
+
+### Discover: rows, filters, and See All
+
+`GET /api/v1/households/{householdId}/discover/home` (`household.view`) is the
+top of Shared Recipes (decisions 710 to 714). `sections` are the rows, in order,
+each `{id, title, subtitle?, type, sponsorLabel?, sponsorUrl?, items, hasMore}`
+with up to 12 recipe summaries. Every row comes from the same ranked set as
+discovery, so the household's restrictions apply, and recipes it already has
+come back `inLibrary` and last. A row with nothing in it is left out.
+
+The rows are collections: built in (`chefs-picks` "Chef's Picks This Week",
+`top-rated`, `trending`, `seasonal` "Seasonal Favorites", `quick`, `crowd` "Feeds
+a Crowd"), overridden or added by operators in `catalog_collections`. `type` is
+`editorial` (ordered `recipeIds`, falling back to its rule while it has none),
+`algorithmic` (a `rule`), or `sponsored` (always shown with `sponsorLabel`,
+"Sponsored by X"). None ships sponsored. A row with `startsAt`/`endsAt` shows only
+inside those dates.
+
+`filters` are the chips: `[{id, title, param, options: [{value, label}]}]` for
+Cuisine (the cuisines Shared Recipes has, canonical values), Time
+(`maxMinutes` 30, 45, 60) and Servings (`minServings` 2, 4, 6). The app sends a
+choice's `value` as `param` on discover or search. `maxMinutes` keeps recipes
+whose total time is known and at most that; `minServings` keeps recipes with any
+serving size at least that; `cuisine` matches canonically, so `mexican` finds
+"Mexican".
+
+`GET .../discover/sections/{sectionId}` is one row in full for See All, paged
+with `limit` and `cursor`.
+
+Adding a recipe from Shared Recipes records a save in `catalog_saves`
+(Trending counts the last 7 days, Top Rated counts all). Add-ons never appear in
+Shared Recipes: they are never published, and any published before are left
+out of every read, including by ID.
+
+Operators (`OPERATOR_USER_IDS`) list, create, replace, and delete rows at
+`/api/v1/admin/discover/collections`. Deleting a stored row that overrides a
+built-in one brings the built-in back. Everyone else gets `403`.
 
 ### Search the catalog
 

@@ -1296,6 +1296,20 @@ paths:
           schema:
             type: string
             maxLength: 100
+        - name: maxMinutes
+          in: query
+          description: Keep recipes whose total time is known and at most this many minutes.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1440
+        - name: minServings
+          in: query
+          description: Keep recipes with a serving size of at least this many.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
         - name: limit
           in: query
           description: Page size. Values above 100 are treated as 100.
@@ -1318,6 +1332,154 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/discover/home:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: The rows and filter chips at the top of Shared Recipes
+      description: |
+        Rows the server picks (decision 710), each with up to 12 recipes, from
+        the same ranked set as discovery: the household's restrictions apply
+        and recipes it has come back `inLibrary`, last. Empty rows are left
+        out. Add-ons never appear. Requires `household.view`.
+      operationId: discoverHome
+      tags: [catalog]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The rows, the chips, and the words around Browse All.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoverHomeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/discover/sections/{sectionId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - name: sectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: One row of Shared Recipes in full (See All)
+      operationId: discoverSection
+      tags: [catalog]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 24
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of the row.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoverSectionPageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/admin/discover/collections:
+    get:
+      summary: List the rows of Shared Recipes (operators)
+      description: Built-in rows and stored ones, in order. Only `OPERATOR_USER_IDS` may call it.
+      operationId: listDiscoverCollections
+      tags: [catalog]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Every row and the rules a row can use.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoverCollectionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      summary: Create or replace a row (operators)
+      operationId: putDiscoverCollection
+      tags: [catalog]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiscoverCollection"
+      responses:
+        "200":
+          description: The stored row.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoverCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/admin/discover/collections/{collectionId}:
+    parameters:
+      - name: collectionId
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      summary: Replace a row (operators); the path's ID wins
+      operationId: replaceDiscoverCollection
+      tags: [catalog]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiscoverCollection"
+      responses:
+        "200":
+          description: The stored row.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoverCollection"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    delete:
+      summary: Delete a stored row (operators); a built-in row comes back
+      operationId: deleteDiscoverCollection
+      tags: [catalog]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Deleted.
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
@@ -1362,6 +1524,20 @@ paths:
           schema:
             type: string
             maxLength: 100
+        - name: maxMinutes
+          in: query
+          description: Keep recipes whose total time is known and at most this many minutes.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1440
+        - name: minServings
+          in: query
+          description: Keep recipes with a serving size of at least this many.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
         - name: limit
           in: query
           description: Page size. Values above 100 are treated as 100.
@@ -6929,6 +7105,171 @@ components:
         emptyText:
           type: string
           example: You already have every recipe other households have shared. Check back later.
+        filters:
+          type: array
+          description: The filter chips, on a first search page only.
+          items:
+            $ref: "#/components/schemas/CatalogFilterGroup"
+    CatalogFilterGroup:
+      type: object
+      required: [id, title, param, options]
+      properties:
+        id:
+          type: string
+          enum: [cuisine, time, servings]
+        title:
+          type: string
+          example: Time
+        param:
+          type: string
+          description: The query parameter a choice's value is sent as.
+          example: maxMinutes
+        options:
+          type: array
+          items:
+            type: object
+            required: [value, label]
+            properties:
+              value:
+                type: string
+                example: "30"
+              label:
+                type: string
+                example: 30 min or less
+    DiscoverSection:
+      type: object
+      required: [id, title, type, items, hasMore]
+      properties:
+        id:
+          type: string
+          example: chefs-picks
+        title:
+          type: string
+          example: Chef's Picks This Week
+        subtitle:
+          type: string
+        type:
+          type: string
+          enum: [editorial, algorithmic, sponsored]
+        sponsorLabel:
+          type: string
+          description: Set only on a sponsored row, and always shown.
+          example: Sponsored by Example Foods
+        sponsorUrl:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CatalogSummary"
+        hasMore:
+          type: boolean
+    DiscoverHomeResponse:
+      type: object
+      required: [sections, filters]
+      properties:
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiscoverSection"
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/CatalogFilterGroup"
+        browseTitle:
+          type: string
+          example: Browse All
+        searchPrompt:
+          type: string
+          example: Search shared recipes
+        seeAllTitle:
+          type: string
+          example: See All
+        emptyTitle:
+          type: string
+        emptyText:
+          type: string
+        noMatchTitle:
+          type: string
+          example: No Recipes Match
+        noMatchText:
+          type: string
+          example: Try another word or fewer filters.
+    DiscoverSectionPageResponse:
+      allOf:
+        - $ref: "#/components/schemas/DiscoverSection"
+        - type: object
+          required: [total]
+          properties:
+            nextCursor:
+              type: string
+            total:
+              type: integer
+    DiscoverCollection:
+      type: object
+      required: [id, title, type]
+      properties:
+        id:
+          type: string
+          description: Lowercase words joined by dashes.
+          example: fall-soups
+        title:
+          type: string
+          maxLength: 60
+        subtitle:
+          type: string
+          maxLength: 120
+        type:
+          type: string
+          enum: [editorial, algorithmic, sponsored]
+        recipeIds:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+        rule:
+          type: string
+          enum: [best, top-rated, trending, seasonal, quick, crowd]
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        position:
+          type: integer
+        sponsor:
+          type: object
+          required: [name]
+          properties:
+            name:
+              type: string
+            url:
+              type: string
+              description: https only.
+            label:
+              type: string
+        builtIn:
+          type: boolean
+          readOnly: true
+        active:
+          type: boolean
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+    DiscoverCollectionListResponse:
+      type: object
+      required: [collections, rules]
+      properties:
+        collections:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiscoverCollection"
+        rules:
+          type: array
+          items:
+            type: string
     EditRecipeRequest:
       type: object
       properties:

@@ -25,6 +25,23 @@ nonisolated struct CatalogAPI: Sendable {
         return try await client.send(request.authorized(with: accessToken))
     }
 
+    /// The top of Shared Recipes: the server's rows and filter chips. The answer
+    /// is saved like every `GET`, so the rows still show offline.
+    func home(householdID: String, accessToken: String) async throws -> DiscoverHome {
+        try await client.send(
+            APIRequest.get("/api/v1/households/\(householdID)/discover/home").authorized(with: accessToken))
+    }
+
+    /// One row in full, for See All.
+    func section(
+        householdID: String, id: String, cursor: String?, limit: Int, accessToken: String
+    ) async throws -> DiscoverSectionPage {
+        let escaped = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        var request = APIRequest.get("/api/v1/households/\(householdID)/discover/sections/\(escaped)")
+        request.queryItems = Self.queryItems(query: CatalogQuery(), includeSearch: false, cursor: cursor, limit: limit)
+        return try await client.send(request.authorized(with: accessToken))
+    }
+
     func recipe(householdID: String, id: String, accessToken: String) async throws -> CatalogRecipe {
         try await client.send(
             APIRequest.get("/api/v1/households/\(householdID)/catalog/recipes/\(id)").authorized(with: accessToken))
@@ -66,6 +83,12 @@ nonisolated struct CatalogAPI: Sendable {
         }
         if let tag = query.tag, !tag.isEmpty {
             items.append(URLQueryItem(name: "tag", value: tag))
+        }
+        if let minutes = query.maxMinutes, minutes > 0 {
+            items.append(URLQueryItem(name: "maxMinutes", value: String(minutes)))
+        }
+        if let servings = query.minServings, servings > 0 {
+            items.append(URLQueryItem(name: "minServings", value: String(servings)))
         }
         items.append(URLQueryItem(name: "limit", value: String(limit)))
         if let cursor, !cursor.isEmpty {

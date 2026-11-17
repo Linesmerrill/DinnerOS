@@ -2,9 +2,10 @@ import Foundation
 import Observation
 import os
 
-/// The Shared Recipes browse surface and catalog search.
+/// Shared Recipes: the server's rows at the top (`home`), and Browse All below
+/// them with search and filter chips (`items`).
 ///
-/// One store serves both: with no search text it asks for discovery, which
+/// Browse All is one list for both: with no search text it asks for discovery, which
 /// leaves out what the household already has; with search text it asks the
 /// catalog, which marks those recipes instead of hiding them. Typing and
 /// clearing therefore moves between the two without a second store to keep in
@@ -40,6 +41,26 @@ final class DiscoverStore {
     /// The last add that failed, for an alert.
     var addError: String?
 
+    /// The rows at the top, from the server; `nil` until the first answer.
+    private(set) var home: DiscoverHome?
+    private(set) var isLoadingHome = false
+    /// Set when the rows couldn't load and there are none saved to show.
+    private(set) var homeError: String?
+    /// Recipes saved from Shared Recipes since the screen loaded, by catalog ID,
+    /// so every card of the recipe shows it at once.
+    private(set) var saved: [String: String] = [:]
+
+    /// The filter chips: the server's, or time and servings from an older server.
+    var filterGroups: [CatalogFilterGroup] {
+        if let filters = home?.filters, !filters.isEmpty { return filters }
+        return DiscoverHome.fallbackFilters
+    }
+
+    /// Whether the household already has this recipe, counting saves made here.
+    func isSaved(_ summary: CatalogSummary) -> Bool {
+        summary.inLibrary || saved[summary.id] != nil
+    }
+
     var hasMore: Bool { nextCursor != nil }
     var isSearching: Bool { query.isSearching }
 
@@ -63,10 +84,13 @@ final class DiscoverStore {
     }
 
     /// A store frozen with `items`, for SwiftUI previews. It has no network access.
-    static func preview(session: AuthSession, items: [CatalogSummary], phase: Phase = .loaded) -> DiscoverStore {
+    static func preview(
+        session: AuthSession, items: [CatalogSummary], home: DiscoverHome? = nil, phase: Phase = .loaded
+    ) -> DiscoverStore {
         let store = DiscoverStore(session: session, api: nil)
         store.householdID = "household-preview"
         store.items = items
+        store.home = home
         store.phase = phase
         return store
     }
@@ -78,10 +102,60 @@ final class DiscoverStore {
     func activate(householdID: String) async {
         if householdID != self.householdID {
             clear()
+            home = nil
+            saved = [:]
             query = CatalogQuery()
             self.householdID = householdID
         }
-        await load()
+        async let rows: Void = loadHome(force: false)
+        async let list: Void = load()
+        _ = await (rows, list)
+    }
+
+    /// Loads the rows at the top. They stay on screen while a refresh is out.
+    func loadHome(force: Bool = true) async {
+        guard let api, let householdID, !isLoadingHome, force || home == nil else { return }
+        isLoadingHome = true
+        defer { isLoadingHome = false }
+        do {
+            let fresh = try await session.authorized { token in
+                try await api.home(householdID: householdID, accessToken: token)
+            }
+            // A household switched while this was out gets its own rows.
+            guard self.householdID == householdID else { return }
+            home = fresh
+            homeError = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            Self.logger.notice("Discover home failed: \(Self.describe(error), privacy: .public)")
+            if home == nil { homeError = HouseholdStore.message(for: error) }
+        }
+    }
+
+    /// Sets or clears one filter chip.
+    func setFilter(param: String, value: String?) async {
+        var next = query
+        next.setValue(value, forParam: param)
+        await setQuery(next)
+    }
+
+    /// Clears every filter chip, keeping the search text.
+    func clearFilters() async {
+        var next = query
+        next.cuisine = nil
+        next.maxMinutes = nil
+        next.minServings = nil
+        await setQuery(next)
+    }
+
+    /// One page of a row, for See All.
+    func sectionPage(id: String, cursor: String?) async throws -> DiscoverSectionPage {
+        guard let api, let householdID else { throw APIError.invalidResponse }
+        let limit = pageSize
+        return try await session.authorized { token in
+            try await api.section(householdID: householdID, id: id, cursor: cursor, limit: limit, accessToken: token)
+        }
     }
 
     /// Loads the first page unless it's loaded or loading.
@@ -108,7 +182,9 @@ final class DiscoverStore {
     /// Pull to refresh: items stay on screen until the response arrives.
     func refresh() async {
         guard phase != .idle else { return }
-        await loadFirstPage(clearing: false)
+        async let rows: Void = loadHome(force: true)
+        async let list: Void = loadFirstPage(clearing: false)
+        _ = await (rows, list)
     }
 
     /// Loads the next page when there is one and nothing else is loading.
@@ -203,6 +279,11 @@ final class DiscoverStore {
                 try await api.report(householdID: householdID, id: id, reason: reason, accessToken: token)
             }
             items.removeAll { $0.id == id }
+            if var home {
+                for s in home.sections.indices { home.sections[s].items.removeAll { $0.id == id } }
+                home.sections.removeAll { $0.items.isEmpty }
+                self.home = home
+            }
             reportMessage = result.message
             return true
         } catch is CancellationError {
@@ -214,19 +295,20 @@ final class DiscoverStore {
         }
     }
 
+    /// Marks the recipe saved everywhere it shows: Browse All and every row.
+    /// It stays on screen, marked, rather than jumping away under a finger.
     private func mark(id: String, libraryRecipeID: String) {
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
-        if isSearching {
-            let item = items[index]
-            items[index] = CatalogSummary(
-                id: item.id, catalogKey: item.catalogKey, source: item.source, name: item.name,
-                headline: item.headline, imageURLString: item.imageURLString, isAddon: item.isAddon,
-                totalMinutes: item.totalMinutes, cookMinutes: item.cookMinutes, timeBand: item.timeBand,
-                calories: item.calories, proteinGrams: item.proteinGrams, cuisines: item.cuisines, tags: item.tags,
-                inLibrary: true, libraryRecipeID: libraryRecipeID, reasons: item.reasons, promotion: item.promotion)
-        } else {
-            items.remove(at: index)
+        saved[id] = libraryRecipeID
+        if let index = items.firstIndex(where: { $0.id == id }) {
+            items[index] = items[index].marked(libraryRecipeID: libraryRecipeID)
         }
+        guard var home else { return }
+        for s in home.sections.indices {
+            for i in home.sections[s].items.indices where home.sections[s].items[i].id == id {
+                home.sections[s].items[i] = home.sections[s].items[i].marked(libraryRecipeID: libraryRecipeID)
+            }
+        }
+        self.home = home
     }
 
     // MARK: - Lifecycle
@@ -234,6 +316,9 @@ final class DiscoverStore {
     /// Forgets everything, for sign-out.
     func reset() {
         clear()
+        home = nil
+        homeError = nil
+        saved = [:]
         householdID = nil
         query = CatalogQuery()
     }

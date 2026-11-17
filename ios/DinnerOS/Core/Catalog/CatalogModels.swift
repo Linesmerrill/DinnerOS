@@ -41,6 +41,15 @@ nonisolated struct CatalogSummary: Decodable, Hashable, Sendable, Identifiable {
         RecipeFormat.displayMinutes(cook: cookMinutes, prep: nil, total: totalMinutes)
     }
 
+    /// This recipe, marked as the household's own.
+    func marked(libraryRecipeID: String) -> CatalogSummary {
+        CatalogSummary(
+            id: id, catalogKey: catalogKey, source: source, name: name, headline: headline,
+            imageURLString: imageURLString, isAddon: isAddon, totalMinutes: totalMinutes, cookMinutes: cookMinutes,
+            timeBand: timeBand, calories: calories, proteinGrams: proteinGrams, cuisines: cuisines, tags: tags,
+            inLibrary: true, libraryRecipeID: libraryRecipeID, reasons: reasons, promotion: promotion)
+    }
+
     fileprivate enum CodingKeys: String, CodingKey {
         case id, catalogKey, source, name, headline
         case imageURLString = "imageUrl"
@@ -175,6 +184,10 @@ nonisolated struct CatalogQuery: Equatable, Sendable {
     var search: String = ""
     var cuisine: String?
     var tag: String?
+    /// Total time at most this many minutes.
+    var maxMinutes: Int?
+    /// Serves at least this many.
+    var minServings: Int?
 
     static let maxSearchLength = 100
 
@@ -186,9 +199,165 @@ nonisolated struct CatalogQuery: Equatable, Sendable {
     /// Whether two queries would produce the same request.
     func isSameRequest(as other: CatalogQuery) -> Bool {
         normalizedSearch == other.normalizedSearch && cuisine == other.cuisine && tag == other.tag
+            && maxMinutes == other.maxMinutes && minServings == other.minServings
     }
 
     var isSearching: Bool { !normalizedSearch.isEmpty }
+
+    /// Whether any filter chip is set.
+    var hasFilters: Bool { cuisine != nil || maxMinutes != nil || minServings != nil }
+
+    /// The value set for a filter chip's query parameter, as the server named it.
+    func value(forParam param: String) -> String? {
+        switch param {
+        case "cuisine": cuisine
+        case "maxMinutes": maxMinutes.map(String.init)
+        case "minServings": minServings.map(String.init)
+        default: nil
+        }
+    }
+
+    /// Sets (or with `nil`, clears) a filter chip's query parameter.
+    mutating func setValue(_ value: String?, forParam param: String) {
+        switch param {
+        case "cuisine": cuisine = value
+        case "maxMinutes": maxMinutes = value.flatMap { Int($0) }
+        case "minServings": minServings = value.flatMap { Int($0) }
+        default: break
+        }
+    }
+}
+
+/// The top of Shared Recipes (`GET .../discover/home`): rows the server picks,
+/// the filter chips, and the words around Browse All.
+nonisolated struct DiscoverHome: Decodable, Equatable, Sendable {
+    var sections: [DiscoverSection]
+    var filters: [CatalogFilterGroup]
+    var browseTitle: String?
+    var searchPrompt: String?
+    var seeAllTitle: String?
+    var emptyTitle: String?
+    var emptyText: String?
+    var noMatchTitle: String?
+    var noMatchText: String?
+
+    fileprivate enum CodingKeys: String, CodingKey {
+        case sections, filters, browseTitle, searchPrompt, seeAllTitle, emptyTitle, emptyText, noMatchTitle,
+            noMatchText
+    }
+
+    init(
+        sections: [DiscoverSection], filters: [CatalogFilterGroup], browseTitle: String? = nil,
+        searchPrompt: String? = nil, seeAllTitle: String? = nil, emptyTitle: String? = nil, emptyText: String? = nil,
+        noMatchTitle: String? = nil, noMatchText: String? = nil
+    ) {
+        self.sections = sections
+        self.filters = filters
+        self.browseTitle = browseTitle
+        self.searchPrompt = searchPrompt
+        self.seeAllTitle = seeAllTitle
+        self.emptyTitle = emptyTitle
+        self.emptyText = emptyText
+        self.noMatchTitle = noMatchTitle
+        self.noMatchText = noMatchText
+    }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            sections: try c.decodeIfPresent([DiscoverSection].self, forKey: .sections) ?? [],
+            filters: try c.decodeIfPresent([CatalogFilterGroup].self, forKey: .filters) ?? [],
+            browseTitle: try c.decodeIfPresent(String.self, forKey: .browseTitle),
+            searchPrompt: try c.decodeIfPresent(String.self, forKey: .searchPrompt),
+            seeAllTitle: try c.decodeIfPresent(String.self, forKey: .seeAllTitle),
+            emptyTitle: try c.decodeIfPresent(String.self, forKey: .emptyTitle),
+            emptyText: try c.decodeIfPresent(String.self, forKey: .emptyText),
+            noMatchTitle: try c.decodeIfPresent(String.self, forKey: .noMatchTitle),
+            noMatchText: try c.decodeIfPresent(String.self, forKey: .noMatchText))
+    }
+
+    /// The chips to show when the server sent none (an older server): time and servings.
+    static let fallbackFilters: [CatalogFilterGroup] = [
+        CatalogFilterGroup(
+            id: "time", title: String(localized: "Time"), param: "maxMinutes",
+            options: [
+                CatalogFilterOption(value: "30", label: String(localized: "30 min or less")),
+                CatalogFilterOption(value: "45", label: String(localized: "45 min or less")),
+                CatalogFilterOption(value: "60", label: String(localized: "1 hour or less")),
+            ]),
+        CatalogFilterGroup(
+            id: "servings", title: String(localized: "Servings"), param: "minServings",
+            options: [
+                CatalogFilterOption(value: "2", label: "2+"), CatalogFilterOption(value: "4", label: "4+"),
+                CatalogFilterOption(value: "6", label: "6+"),
+            ]),
+    ]
+}
+
+/// One row at the top of Shared Recipes, chosen by the server.
+nonisolated struct DiscoverSection: Decodable, Hashable, Sendable, Identifiable {
+    let id: String
+    let title: String
+    var subtitle: String?
+    /// Only a paid row has one, and it is always shown ("Sponsored by X").
+    var sponsorLabel: String?
+    var items: [CatalogSummary]
+    /// More recipes than `items` behind See All.
+    var hasMore: Bool
+
+    fileprivate enum CodingKeys: String, CodingKey {
+        case id, title, subtitle, sponsorLabel, items, hasMore
+    }
+
+    init(
+        id: String, title: String, subtitle: String? = nil, sponsorLabel: String? = nil, items: [CatalogSummary],
+        hasMore: Bool = false
+    ) {
+        self.id = id
+        self.title = title
+        self.subtitle = subtitle
+        self.sponsorLabel = sponsorLabel
+        self.items = items
+        self.hasMore = hasMore
+    }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try c.decode(String.self, forKey: .id), title: try c.decode(String.self, forKey: .title),
+            subtitle: try c.decodeIfPresent(String.self, forKey: .subtitle),
+            sponsorLabel: try c.decodeIfPresent(String.self, forKey: .sponsorLabel),
+            items: try c.decodeIfPresent([CatalogSummary].self, forKey: .items) ?? [],
+            hasMore: try c.decodeIfPresent(Bool.self, forKey: .hasMore) ?? false)
+    }
+}
+
+/// A row in full, a page at a time (`GET .../discover/sections/{id}`), for See All.
+nonisolated struct DiscoverSectionPage: Decodable, Equatable, Sendable {
+    let section: DiscoverSection
+    let nextCursor: String?
+
+    fileprivate enum CodingKeys: String, CodingKey { case nextCursor }
+
+    init(from decoder: any Decoder) throws {
+        section = try DiscoverSection(from: decoder)
+        nextCursor = try decoder.container(keyedBy: CodingKeys.self).decodeIfPresent(String.self, forKey: .nextCursor)
+    }
+}
+
+/// A filter chip (Cuisine, Time, Servings) and its choices, named by the server.
+nonisolated struct CatalogFilterGroup: Decodable, Hashable, Sendable, Identifiable {
+    let id: String
+    let title: String
+    /// The query parameter a choice's value is sent as.
+    let param: String
+    let options: [CatalogFilterOption]
+}
+
+nonisolated struct CatalogFilterOption: Decodable, Hashable, Sendable, Identifiable {
+    let value: String
+    let label: String
+    var id: String { value }
 }
 
 /// Why someone reports a shared recipe (decision 686).

@@ -54,7 +54,7 @@ func TestDiscoverHomeRoute(t *testing.T) {
 		t.Errorf("filters = %+v", resp.Filters)
 	}
 	body := rec.Body.String()
-	for _, bad := range []string{"Garlic Bread", "sponsorLabel", "householdId", "—"} {
+	for _, bad := range []string{"Garlic Bread", "sponsorLabel", "householdId", "\u2014"} {
 		if strings.Contains(body, bad) {
 			t.Errorf("home has %q: %s", bad, body)
 		}

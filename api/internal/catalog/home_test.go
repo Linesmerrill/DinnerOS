@@ -484,7 +484,7 @@ func TestDefaultCollectionsShipNoSponsoredRow(t *testing.T) {
 		if err := c.Validate(); err != nil {
 			t.Errorf("%s: %v", c.ID, err)
 		}
-		if strings.ContainsAny(c.Title+c.Subtitle, "—–") {
+		if strings.ContainsAny(c.Title+c.Subtitle, "\u2014\u2013") {
 			t.Errorf("%s has a dash in its words", c.ID)
 		}
 	}

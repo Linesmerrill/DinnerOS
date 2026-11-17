@@ -75,7 +75,7 @@ struct DiscoverStoreTests {
         #expect(harness.store.phase == .loaded)
     }
 
-    @Test func addingWhileBrowsingRemovesTheRowAndTellsTheLibrary() async throws {
+    @Test func addingMarksTheRecipeEverywhereAndTellsTheLibrary() async throws {
         let harness = try await makeHarness()
         await harness.store.activate(householdID: "household-1")
         let added = Counter()
@@ -84,9 +84,94 @@ struct DiscoverStoreTests {
 
         let ok = await harness.store.add(item)
         #expect(ok)
-        #expect(harness.store.items.isEmpty, "a recipe you now own doesn't belong in 'things you don't have'")
+        // It stays where it was, marked, in Browse All and in every row that has it.
+        #expect(harness.store.items.map(\.id) == ["c1"])
+        #expect(harness.store.items.first?.inLibrary == true)
+        let rows = try #require(harness.store.home?.sections)
+        #expect(rows.allSatisfy { row in row.items.filter { $0.id == "c1" }.allSatisfy(\.inLibrary) })
+        #expect(rows[0].items.first { $0.id == "c9" }?.inLibrary == false)
+        #expect(harness.store.isSaved(item))
         #expect(added.value == 1)
         #expect(harness.server.requestedPaths.contains { $0.hasPrefix("POST") && $0.hasSuffix("/add") })
+    }
+
+    @Test func theRowsComeFromTheServer() async throws {
+        let harness = try await makeHarness()
+        await harness.store.activate(householdID: "household-1")
+        let home = try #require(harness.store.home)
+        #expect(home.sections.map(\.id) == ["chefs-picks", "pasta-week"])
+        #expect(home.sections[0].hasMore)
+        #expect(home.sections[0].subtitle == "Our favorites right now")
+        #expect(home.sections[1].sponsorLabel == "Sponsored by Test Pasta")
+        #expect(harness.store.filterGroups.map(\.id) == ["cuisine", "time", "servings"])
+        #expect(home.browseTitle == "Browse All")
+        #expect(harness.server.requestedPaths.contains { $0.hasSuffix("/discover/home") })
+    }
+
+    @Test func rowsThatFailKeepWhatWasShownAndFallBackToBuiltInChips() async throws {
+        let harness = try await makeHarness()
+        harness.server.failHome()
+        await harness.store.activate(householdID: "household-1")
+        #expect(harness.store.home == nil)
+        #expect(harness.store.homeError != nil)
+        // Browse All still works, with time and servings chips.
+        #expect(harness.store.items.map(\.name) == ["Alpha Bowl"])
+        #expect(harness.store.filterGroups.map(\.param) == ["maxMinutes", "minServings"])
+
+        harness.server.failHome(false)
+        await harness.store.refresh()
+        #expect(harness.store.home?.sections.count == 2)
+        harness.server.failHome()
+        await harness.store.refresh()
+        #expect(harness.store.home?.sections.count == 2, "a failed refresh emptied the rows")
+    }
+
+    @Test func filterChipsAreSentAndCleared() async throws {
+        let harness = try await makeHarness()
+        await harness.store.activate(householdID: "household-1")
+        await harness.store.setFilter(param: "maxMinutes", value: "30")
+        await harness.store.setFilter(param: "cuisine", value: "thai")
+        await harness.store.setFilter(param: "minServings", value: "6")
+        let last = try #require(harness.server.requestedPaths.last)
+        #expect(last.contains("/discover?"))
+        #expect(last.contains("maxMinutes=30"))
+        #expect(last.contains("cuisine=thai"))
+        #expect(last.contains("minServings=6"))
+        #expect(harness.store.query.hasFilters)
+
+        await harness.store.setSearch("beta")
+        let searched = try #require(harness.server.requestedPaths.last)
+        #expect(searched.contains("/catalog/recipes?") && searched.contains("q=beta") && searched.contains("maxMinutes=30"))
+
+        await harness.store.clearFilters()
+        #expect(!harness.store.query.hasFilters)
+        #expect(harness.store.query.search == "beta")
+        #expect(!(try #require(harness.server.requestedPaths.last)).contains("maxMinutes"))
+    }
+
+    @Test func seeAllReadsTheWholeRow() async throws {
+        let harness = try await makeHarness()
+        await harness.store.activate(householdID: "household-1")
+        let page = try await harness.store.sectionPage(id: "quick", cursor: nil)
+        #expect(page.section.title == "Quick")
+        #expect(page.section.items.map(\.name) == ["Fast Bowl"])
+        #expect(page.nextCursor == nil)
+        #expect(try #require(harness.server.requestedPaths.last).contains("/discover/sections/quick"))
+    }
+
+    @Test func aQueryReadsAndWritesItsChips() {
+        var query = CatalogQuery()
+        query.setValue("45", forParam: "maxMinutes")
+        query.setValue("4", forParam: "minServings")
+        query.setValue("mexican", forParam: "cuisine")
+        #expect(query.maxMinutes == 45 && query.minServings == 4 && query.cuisine == "mexican")
+        #expect(query.value(forParam: "maxMinutes") == "45")
+        #expect(!query.isSameRequest(as: CatalogQuery()))
+        query.setValue(nil, forParam: "maxMinutes")
+        #expect(query.maxMinutes == nil)
+        let items = CatalogAPI.queryItems(query: query, includeSearch: true, cursor: nil, limit: 5)
+        #expect(items.contains(URLQueryItem(name: "minServings", value: "4")))
+        #expect(!items.contains { $0.name == "maxMinutes" })
     }
 
     @Test func addingWhileSearchingMarksTheRowInstead() async throws {
@@ -128,6 +213,7 @@ struct DiscoverStoreTests {
         await harness.store.activate(householdID: "household-1")
         harness.store.reset()
         #expect(harness.store.items.isEmpty)
+        #expect(harness.store.home == nil)
         #expect(harness.store.phase == .idle)
     }
 
