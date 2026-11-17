@@ -4,6 +4,7 @@
 #
 #   scripts/qa-matrix.sh                      # every config, every test
 #   CONFIGS="ipadL-light" TESTS="UnsplashPhotoQATests" scripts/qa-matrix.sh   # a targeted rerun
+#   RERUN=/path/to/old/summary.txt scripts/qa-matrix.sh   # only what failed there, nothing else
 #
 # Needs two local APIs on local Mongo (docs/development.md): 8082 with no photo search key, and
 # 8083 with UNSPLASH_ACCESS_KEY=qa-not-a-real-key pointed at cmd/fakeunsplash. Start both with
@@ -21,6 +22,16 @@ ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-
 CONFIGS=${CONFIGS:-$ALL}
 TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeChooserQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests"}
 STALL=${STALL:-600}
+# RERUN: a summary.txt from an earlier run. Only its FAILED config and test pairs run again.
+RERUN=${RERUN:-}
+PAIRS=""
+if [ -n "$RERUN" ]; then
+    PAIRS=$(grep -E ": FAILED" "$RERUN" | sed -E 's/^([^ ]+) ([^:]+):.*/\1|\2/' |
+        sed -E 's#AppSweepQATests/testSweep(Light|Dark)#AppSweepQATests/SWEEP#')
+    [ -n "$PAIRS" ] || { echo "Nothing failed in $RERUN"; exit 0; }
+    CONFIGS=$(echo "$PAIRS" | cut -d'|' -f1 | sort -u | tr '\n' ' ')
+    TESTS=$(echo "$PAIRS" | cut -d'|' -f2 | sort -u | tr '\n' ' ')
+fi
 RUNTIME_PHONE=${RUNTIME_PHONE:-com.apple.CoreSimulator.SimRuntime.iOS-26-2}
 RUNTIME_IPAD=${RUNTIME_IPAD:-com.apple.CoreSimulator.SimRuntime.iOS-26-4}
 mkdir -p "$OUT"
@@ -120,6 +131,7 @@ run_config() {
     xcrun simctl bootstatus "$id" -b >/dev/null 2>&1
     xcrun simctl ui "$id" appearance "${config#*-}"
     for test in $TESTS; do
+        if [ -n "$PAIRS" ]; then echo "$PAIRS" | grep -qxF "$config|$test" || continue; fi
         # The end-to-end add tests run once, on the large iPhone in light; companions and cuisine
         # also run on the iPad on its side, where their forms are a sheet.
         case $test in
