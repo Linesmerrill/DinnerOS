@@ -19,6 +19,8 @@ struct HouseholdView: View {
     @Environment(\.openURL) private var openURL
     @Environment(ShoppingStore.self) private var shopping: ShoppingStore?
     @Environment(PlusStore.self) private var plus: PlusStore?
+    /// Optional so previews needn't supply one.
+    @Environment(NextStepsStore.self) private var nextSteps: NextStepsStore?
 
     @State private var me: MeResponse?
     /// Every household's store requests; `nil` for anyone who doesn't run DinnerOS.
@@ -84,6 +86,7 @@ struct HouseholdView: View {
                             PlusInviteView()
                         } label: {
                             Label("Give a Free Month", systemImage: "gift")
+                                .nextStepDot(.giveFreeMonth)
                         }
                         plusRow(plus)
                     }
@@ -102,6 +105,7 @@ struct HouseholdView: View {
                                     AutopilotPreferencesView()
                                 } label: {
                                     Label("Autopilot Preferences", systemImage: "sparkles")
+                                        .nextStepDot(.autopilotPreferences)
                                 }
                                 // Import bookkeeping follows `recipes.import`, and hides against an
                                 // API without the route.
@@ -110,7 +114,7 @@ struct HouseholdView: View {
                                         ImportReviewView()
                                     } label: {
                                         Label("Import Review", systemImage: "tray.full")
-                                            .badge(importReviews.digest.openCount)
+                                            .nextStepDot(.importReview)
                                     }
                                 }
                             } footer: {
@@ -123,7 +127,7 @@ struct HouseholdView: View {
                         .householdSettingsAutosave(households.settings)
                     } label: {
                         Label("Planning", systemImage: "calendar")
-                            .badge(importReviews.digest.openCount)
+                            .nextStepDot(.planning)
                     }
                     NavigationLink {
                         page("Households") {
@@ -159,6 +163,8 @@ struct HouseholdView: View {
         }
         .navigationTitle(String(localized: "Household"))
         .task { await loadAccount() }
+        // Each time the tab shows, including coming back from a step just finished.
+        .task { await nextSteps?.load() }
         .task { storeRequests = try? await shopping?.storeRequestSummary() ?? nil }
         .task { referrals = try? await plus?.referralSummary() ?? nil }
         // Only for someone who could act on it: without `recipes.import` the row is hidden and

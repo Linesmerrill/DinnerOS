@@ -30,6 +30,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/invitations"
 	"github.com/Linesmerrill/DinnerOS/api/internal/kroger"
 	"github.com/Linesmerrill/DinnerOS/api/internal/menu"
+	"github.com/Linesmerrill/DinnerOS/api/internal/nextsteps"
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
 	"github.com/Linesmerrill/DinnerOS/api/internal/photosearch"
@@ -488,6 +489,14 @@ func run() error {
 		Tokens:  tokens,
 		Logger:  logger,
 	})
+	// Next steps (decisions 736-739): what the household should do next, as
+	// red dots in the app. Read on request from the services above.
+	nextStepsHandler := nextsteps.NewHandler(nextsteps.HandlerOptions{
+		Service: nextsteps.NewService(nextsteps.Registry(nextsteps.Sources{
+			Plus: plusService, Autopilot: autopilotService, Imports: recipeService,
+		}), logger),
+		Authorizer: householdService, Tokens: tokens, Logger: logger,
+	})
 	deviceTokenHandler := push.NewHandler(push.HandlerOptions{
 		Service: push.NewService(push.NewMongoStore(db.Database()), logger),
 		Tokens:  tokens,
@@ -535,6 +544,11 @@ func run() error {
 				cooking.NewHandler(cooking.NewStore(db.Database()), householdService, tokens, logger).Mount(r)
 				shelflife.NewHandler(shelfLifeService, householdService, tokens, logger).Mount(r)
 				behavior.eventHandler.Mount(r)
+				nextStepsHandler.Mount(r)
+				// UI tests give their own new household Plus (decision 738).
+				if cfg.DevLoginEnabled() {
+					plus.NewDevCompHandler(plus.NewMongoComps(db.Database()), householdService, tokens, logger).Mount(r)
+				}
 			},
 		}),
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelWarn),

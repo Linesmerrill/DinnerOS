@@ -20,7 +20,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-${TMPDIR:-/tmp}/dinneros-qa}
 ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-light ipadP-dark"
 CONFIGS=${CONFIGS:-$ALL}
-TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeChooserQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests"}
+TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeChooserQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests"}
 STALL=${STALL:-600}
 # RERUN: a summary.txt from an earlier run. Only its FAILED config and test pairs run again.
 RERUN=${RERUN:-}
@@ -134,7 +134,8 @@ run_config() {
         if [ -n "$PAIRS" ]; then echo "$PAIRS" | grep -qxF "$config|$test" || continue; fi
         # The end-to-end add tests run once each, on configs without the referral and invite
         # tests: adding by hand on the large iPhone, companions and cuisine on the small iPhone and
-        # on the iPad on its side (where their forms are a sheet).
+        # on the iPad on its side (where their forms are a sheet), and the next-step dots (about a
+        # minute) on the large iPhone and the upright iPad, the two lightest configs.
         # The long flow tests (referral, invite link, AnyList) check what a person does, not how a
         # screen looks, so each runs on one appearance per device: 4 configs, not 8. Screens and
         # sweeps still run on all 8. The two groups are split so every config finishes in about the
@@ -146,6 +147,7 @@ run_config() {
             case $config in large-dark | small-light | ipadL-dark | ipadP-light) ;; *) continue ;; esac ;;
         AddRecipeQATests | SaveThenOpenQATests) [ "$config" = large-dark ] || continue ;;
         CompanionQATests | CuisineQATests) case $config in small-light | ipadL-dark) ;; *) continue ;; esac ;;
+        NextStepDotQATests) case $config in large-dark | ipadP-light) ;; *) continue ;; esac ;;
         esac
         run_test "$config" "$id" "$test" 1
     done

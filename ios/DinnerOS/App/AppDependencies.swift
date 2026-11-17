@@ -23,6 +23,8 @@ final class AppDependencies {
     let importReviews: ImportReviewStore
     /// The global recipe catalog: Shared Recipes and catalog search.
     let discover: DiscoverStore
+    /// What the household should do next, as red dots on the Household tab and its rows.
+    let nextSteps: NextStepsStore
     let plans: PlanStore
     let widgets: WidgetSync
     let pantry: PantryStore
@@ -79,6 +81,7 @@ final class AppDependencies {
         recipes = RecipeLibrary(session: session, api: client.map { RecipesAPI(client: $0) })
         importReviews = ImportReviewStore(session: session, api: client.map { RecipesAPI(client: $0) })
         discover = DiscoverStore(session: session, api: client.map { CatalogAPI(client: $0) })
+        nextSteps = NextStepsStore(session: session, api: client.map { NextStepsAPI(client: $0) })
         // A recipe added from the catalog is the household's from then on, so
         // the library refreshes rather than guessing at the new row.
         discover.recipeWasAdded = { [recipes] _ in
