@@ -246,7 +246,10 @@ under 30 minutes. The standard:
 2. **Timeouts.** Each test has a 10-minute limit. A run with no output for 10 minutes is killed,
    its simulator restarted, and only that test retried once.
 3. **Targeted reruns.** After a fix, rerun only what failed, never the whole matrix:
-   `CONFIGS="ipadL-light" TESTS="UnsplashPhotoQATests" scripts/qa-matrix.sh`.
+   `RERUN=<old OUT>/summary.txt OUT=<new folder> scripts/qa-matrix.sh` runs exactly the failed config
+   and test pairs from that summary, or name them by hand:
+   `CONFIGS="ipadL-light" TESTS="UnsplashPhotoQATests" scripts/qa-matrix.sh`. Don't edit the script
+   while a run is going: bash reads it as it runs.
 4. **Local APIs** on local Mongo: 8082 with no photo search key, 8083 with the fake Unsplash
    (below), both with `REFERRAL_MAX_PER_30_DAYS=1000` and `AUTH_RATE_BURST=1000` (eight simulators sign in and
    out from one address, and the default of 10 at once turns them away with "Too many attempts").
