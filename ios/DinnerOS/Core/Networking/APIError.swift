@@ -100,6 +100,11 @@ extension APIError: LocalizedError {
                     localized: "Nothing to add: every meal is switched off, or its day or recipe is already planned.")
             case "proposal_stale":
                 String(localized: "A suggested recipe changed or was removed. Plan the week again.")
+            case "sign_in_failed" where !message.isEmpty:
+                // Email sign-in: "That email and password didn't work."
+                message
+            case "sign_in_failed":
+                String(localized: "That email and password didn't work.")
             case "validation_failed" where !message.isEmpty:
                 // The API documents validation messages as safe to show.
                 message

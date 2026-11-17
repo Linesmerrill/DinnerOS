@@ -108,8 +108,10 @@ Review screenshots: the purchase screen with each plan selected (`docs/app-store
 
 ## DinnerOS Plus at release
 
-`PLUS_ENABLED` is off, so only `PLUS_TEST_HOUSEHOLDS` see the purchase screen. A reviewer signs
-in with their own Apple ID, so their new household won't see Plus unless it's on for everyone.
+`PLUS_ENABLED` is off, so only `PLUS_TEST_HOUSEHOLDS` see the purchase screen. Neither the demo
+account's household nor one a reviewer makes with their own Apple ID is a test household, so
+neither sees Plus unless it's on for everyone. Never add the demo household to
+`PLUS_TEST_HOUSEHOLDS` or comp it: the reviewer must see the normal purchase screen.
 
 **Plan:** set `PLUS_ENABLED=true` on Heroku when the build is submitted for review (no app update
 needed). From then on, Autopilot and the cost view need Plus in every household, so TestFlight
@@ -120,11 +122,36 @@ review is rejected for a Plus reason, set it back to off; nothing else changes.
 ## App Review notes
 
 Paste into App Review Information, Notes (also `ios/fastlane/metadata/review_information/notes.txt`).
-There is no demo account: a reviewer signs in with their own Apple ID.
+The notes point App Review at a demo account (decision 752), and a reviewer can still use their
+own Apple ID.
+
+**Demo account.** One account signs in with an email and a password: Sign in with email, a small
+link under Continue with Apple and Google, shows only while the API has `REVIEW_ACCOUNT_EMAIL`
+and `REVIEW_ACCOUNT_PASSWORD` set on Heroku (`GET /api/v1/auth/options`). The repo is public, so
+neither value is ever in git. To set it up for a submission:
+
+1. Pick an email we control (it's only a sign-in name; nothing is sent to it) and a password of
+   at least 16 characters, and set both on Heroku: `heroku config:set REVIEW_ACCOUNT_EMAIL=...
+   REVIEW_ACCOUNT_PASSWORD=...`. The startup log says `reviewAccount=true`, never the values.
+2. Put the same two in `ios/fastlane/metadata/review_information/demo_user.txt` and
+   `demo_password.txt` on the release Mac (both are in `.gitignore`). `submit_review` sends them
+   as the Sign-In Information and marks a demo account as required; without both files it sends
+   none, as before.
+3. Sign in once on a phone to check: the household "Our Kitchen" with five recipes we wrote
+   (`api/internal/reviewaccount/recipes.json`), no starter library, and the normal Plus purchase
+   screen (no Plus on the house).
+
+Only that one email works. A wrong email or password gets "That email and password didn't work."
+Each address gets 5 tries, then one a minute, and 5 wrong tries in 15 minutes lock it out for 15
+minutes. The household is seeded the first time the account signs in; after that it stays as the
+reviewer left it. Deleting the account works as for anyone, and the next sign-in makes a fresh
+seeded household. To turn it off after review, unset both variables.
+
+The notes:
 
 > DinnerOS plans a household's dinners for the week, makes one grocery list, and walks you through cooking.
 >
-> No demo account is needed. Tap Continue with Apple, then Create a Household and give it any name. A new household comes with a small library of recipes, so you can plan right away.
+> Demo account: on the sign-in screen, tap Sign in with email (under Continue with Apple), then enter the email and password in the Sign-In Information fields. It opens a household that already has five recipes, so you can plan right away. You can also sign in with your own Apple ID, then Create a Household and give it any name. A new household comes with a small library of recipes.
 >
 > Things to try:
 > 1. Menu tab: tap a recipe to open it, then Start Cooking for the steps and timers.

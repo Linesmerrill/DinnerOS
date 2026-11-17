@@ -487,6 +487,7 @@ vars or GitHub Secrets.
 | `AUTH_RATE_BURST` | optional | Sign-in requests one address may make at once, default 10 (refills one every 6 seconds). Raise only for local QA. Not a secret. |
 | `REFERRAL_QUALIFY_DAYS`, `REFERRAL_MIN_DINNERS`, `REFERRAL_MIN_RECIPES`, `REFERRAL_MAX_PER_30_DAYS` | optional | Referral thresholds, defaults 14, 1, 1, and 3. Not secrets. |
 | `STARTER_RECIPES_HOUSEHOLD_ID` | optional | The 24-character hex ID of the household whose recipes every new household receives as a starter library. Empty (the default) disables it; a malformed value stops the API at startup. Not a secret. See [Starter recipe library](#starter-recipe-library). |
+| `REVIEW_ACCOUNT_EMAIL`, `REVIEW_ACCOUNT_PASSWORD` | optional | The App Review demo account (decision 752): the one email and password that Sign in with email accepts. **Both are secrets** (the repo is public; never commit them). Off unless both are set; a half-set pair, an address that isn't an email, or a password under 16 characters leaves it off with a startup warning and never stops the API. The startup log says `reviewAccount=true` or `false`, never the values. Its household gets five recipes of our own, no starter library, and no Plus. See docs/app-store.md, App Review notes. |
 | `OPENAI_API_KEY` | future | platform.openai.com → API keys (backend only) |
 
 ### GitHub Actions

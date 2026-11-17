@@ -16,11 +16,14 @@ import (
 type Provider string
 
 // Supported providers. ProviderDev exists only for local development and tests;
-// its route is never mounted in production.
+// its route is never mounted in production. ProviderReview is the one App
+// Review account, signed in with the email and password the server is
+// configured with (REVIEW_ACCOUNT_EMAIL, REVIEW_ACCOUNT_PASSWORD).
 const (
 	ProviderApple  Provider = "apple"
 	ProviderGoogle Provider = "google"
 	ProviderDev    Provider = "dev"
+	ProviderReview Provider = "review"
 )
 
 // Errors returned by stores and the service.

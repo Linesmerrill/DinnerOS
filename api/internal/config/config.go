@@ -126,6 +126,10 @@ type Config struct {
 	// disables it.
 	StarterRecipesHouseholdID string
 
+	// ReviewAccount is the App Review account's email and password
+	// (REVIEW_ACCOUNT_*). Off unless both are set.
+	ReviewAccount ReviewAccount
+
 	// Referrals are the referral thresholds (REFERRAL_*, decision 698).
 	Referrals Referrals
 	// DeviceCheck signs Apple DeviceCheck requests (DEVICECHECK_*, by
@@ -298,6 +302,7 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("revenueCatWebhook", c.Plus.WebhookSecret != ""),
 		slog.Bool("instacartAffiliateLinks", c.Instacart.Enabled() && c.Instacart.Affiliate),
 		slog.String("starterRecipesHouseholdId", c.StarterRecipesHouseholdID),
+		slog.Bool("reviewAccount", c.ReviewAccount.Enabled()),
 		slog.Bool("apnsEnabled", c.APNs.Enabled()),
 		slog.String("apnsKeyId", c.APNs.KeyID),
 		slog.String("apnsTopic", c.APNs.Topic),
@@ -395,6 +400,7 @@ func Load(getenv func(string) string) (Config, error) {
 	errs = append(errs, loadAPNs(&cfg, get)...)
 	errs = append(errs, loadSIWA(&cfg, get)...)
 	errs = append(errs, loadReferrals(&cfg, get)...)
+	loadReviewAccount(&cfg, get)
 
 	if err := errors.Join(errs...); err != nil {
 		return Config{}, fmt.Errorf("invalid configuration: %w", err)

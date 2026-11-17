@@ -168,6 +168,14 @@ def asc_text(dir, name)
   File.file?(path) ? File.read(path, encoding: "UTF-8").strip : nil
 end
 
+# The App Review demo account (decision 752) from demo_user.txt and demo_password.txt, which live
+# only on the release Mac (.gitignore), or nil when either is missing or empty.
+def demo_account(review_dir)
+  user = asc_text(review_dir, "demo_user.txt").to_s
+  password = asc_text(review_dir, "demo_password.txt").to_s
+  user.empty? || password.empty? ? nil : { user: user, password: password }
+end
+
 # The listing, straight through the API: this fastlane's deliver didn't save it.
 def set_listing(app_id, meta, contact)
   client = Spaceship::ConnectAPI.client.tunes_request_client
@@ -201,7 +209,10 @@ def set_listing(app_id, meta, contact)
   detail = client.get("v1/appStoreVersions/#{version.id}/appStoreReviewDetail").body["data"] rescue nil
   attrs = { contactFirstName: contact["first_name"], contactLastName: contact["last_name"],
             contactEmail: contact["email_address"], contactPhone: contact["phone_number"],
-            notes: asc_text(File.join(meta, "review_information"), "notes.txt"), demoAccountRequired: false }
+            notes: asc_text(File.join(meta, "review_information"), "notes.txt") }
+  demo = demo_account(File.join(meta, "review_information"))
+  attrs.merge!(demo ? { demoAccountName: demo[:user], demoAccountPassword: demo[:password], demoAccountRequired: true } :
+                      { demoAccountRequired: false })
   if detail
     client.patch("v1/appStoreReviewDetails/#{detail['id']}", { data: { type: "appStoreReviewDetails", id: detail["id"], attributes: attrs } })
   else
@@ -501,6 +512,8 @@ platform :ios do
     UI.user_error!("No screenshots in #{shots}") if Dir[File.join(staged, "*.png")].empty?
 
     make_free_everywhere(Spaceship::ConnectAPI::App.find(CompactAppID).id)
+    demo = demo_account(review)
+    UI.important("No demo_user.txt and demo_password.txt: no demo account is sent") unless demo
     deliver(
       api_key: api_key,
       app_identifier: CompactAppID,
@@ -511,8 +524,8 @@ platform :ios do
       app_review_information: {
         first_name: contact["first_name"], last_name: contact["last_name"],
         email_address: contact["email_address"], phone_number: contact["phone_number"],
-        notes: File.read(File.join(review, "notes.txt")).strip, demo_required: false
-      },
+        notes: File.read(File.join(review, "notes.txt")).strip
+      }.merge(demo ? { demo_user: demo[:user], demo_password: demo[:password], demo_required: true } : { demo_required: false }),
       submission_information: { export_compliance_uses_encryption: false, add_id_info_uses_idfa: false },
       automatic_release: false,
       precheck_include_in_app_purchases: false,

@@ -147,6 +147,18 @@ type Starter struct {
 	hold    time.Duration
 	logger  *slog.Logger
 	wg      sync.WaitGroup
+	// skip, when set, names households that get no starter library (the
+	// App Review account's, decision 752). Set it before serving requests.
+	skip func(ctx context.Context, householdID string) bool
+}
+
+// SkipWhen sets which new households get no starter library. Call it before
+// the API serves requests. It returns st.
+func (st *Starter) SkipWhen(skip func(ctx context.Context, householdID string) bool) *Starter {
+	if st != nil {
+		st.skip = skip
+	}
+	return st
 }
 
 // StarterOptions configures a Starter.
@@ -188,6 +200,10 @@ func (st *Starter) Enabled() bool { return st != nil && st.source != "" }
 // household exists either way, and cmd/seedstarter can re-run the copy.
 func (st *Starter) HouseholdCreated(ctx context.Context, householdID string) {
 	if !st.Enabled() || householdID == st.source {
+		return
+	}
+	if st.skip != nil && st.skip(ctx, householdID) {
+		st.logger.InfoContext(ctx, "starter recipes skipped for this household", "householdId", householdID)
 		return
 	}
 	done := make(chan struct{})

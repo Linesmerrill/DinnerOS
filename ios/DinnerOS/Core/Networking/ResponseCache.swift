@@ -35,10 +35,11 @@ nonisolated final class ResponseCache: Sendable {
 
     /// The key is the request's URL, which carries the household and every parameter.
     /// Live state that's worse stale than missing is never saved: a replayed cooking session
-    /// would undo checks made since.
+    /// would undo checks made since, and replayed sign-in options would offer a way in that
+    /// needs the server anyway.
     static func key(for request: URLRequest) -> String? {
         guard request.httpMethod == "GET", let url = request.url?.absoluteString,
-            !url.contains("/cook-sessions/")
+            !url.contains("/cook-sessions/"), !url.contains("/api/v1/auth/")
         else { return nil }
         let digest = SHA256.hash(data: Data(url.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()

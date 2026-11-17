@@ -84,3 +84,6 @@ vendor/bundle/
 /ios/fastlane/metadata/review_information/last_name.txt
 /ios/fastlane/metadata/review_information/email_address.txt
 /ios/fastlane/metadata/review_information/phone_number.txt
+# The App Review demo account (decision 752): same values as REVIEW_ACCOUNT_* on Heroku.
+/ios/fastlane/metadata/review_information/demo_user.txt
+/ios/fastlane/metadata/review_information/demo_password.txt

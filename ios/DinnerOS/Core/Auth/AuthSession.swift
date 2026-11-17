@@ -130,6 +130,13 @@ final class AuthSession {
         Self.logger.info("Signed in (new user: \(response.isNewUser, privacy: .public))")
     }
 
+    /// What the sign-in screen offers besides Apple and Google. Offline, or with no server,
+    /// nothing extra shows.
+    func signInOptions() async -> SignInOptions {
+        guard let api else { return .none }
+        return (try? await api.signInOptions()) ?? .none
+    }
+
     /// Runs `willSignOut`, clears local credentials, then revokes the sign-in on the server
     /// on a best-effort basis. The Keychain is cleared even if the server call fails.
     func signOut() async {

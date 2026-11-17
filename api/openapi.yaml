@@ -306,6 +306,63 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /api/v1/auth/options:
+    get:
+      summary: What the sign-in screen offers
+      description: |
+        Public and unauthenticated. `reviewSignIn` is true while the server has
+        the App Review account set up (`REVIEW_ACCOUNT_EMAIL` and
+        `REVIEW_ACCOUNT_PASSWORD`, decision 752).
+      operationId: authOptions
+      tags: [auth]
+      responses:
+        "200":
+          description: The sign-in options.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthOptionsResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/auth/review-sign-in:
+    post:
+      summary: Sign in to the App Review account
+      description: |
+        Signs in the one App Review account with the email and password the
+        server is configured with (provider `review`). The route exists only
+        while both are set; otherwise it returns 404. Any other email, or a
+        wrong password, gets 401 `sign_in_failed` with one message. Each
+        address gets 5 tries and then one a minute, and 5 wrong tries in 15
+        minutes lock it out for 15 minutes (50 from everyone lock the
+        account). The first sign-in sets up a household with five recipes of
+        our own, without the starter library or Plus.
+      operationId: signInReview
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewSignInRequest"
+      responses:
+        "200":
+          description: Signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: That email and password didn't work.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/auth/refresh:
     post:
       summary: Rotate a refresh token
@@ -9331,6 +9388,25 @@ components:
           type: string
           maxLength: 100
           example: Ada
+    ReviewSignInRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          maxLength: 254
+          example: review@example.test
+        password:
+          type: string
+          maxLength: 256
+    AuthOptionsResponse:
+      type: object
+      required: [reviewSignIn]
+      properties:
+        reviewSignIn:
+          type: boolean
+          description: The server has the App Review account set up, so the sign-in screen offers Sign in with email.
     RefreshTokenRequest:
       type: object
       additionalProperties: false

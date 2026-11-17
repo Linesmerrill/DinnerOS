@@ -9,7 +9,9 @@
 # Needs two local APIs on local Mongo (docs/development.md): 8082 with no photo search key, and
 # 8083 with UNSPLASH_ACCESS_KEY=qa-not-a-real-key pointed at cmd/fakeunsplash. Start both with
 # REFERRAL_MAX_PER_30_DAYS=1000 so parallel referral runs don't use up the sharer's slots, and
-# AUTH_RATE_BURST=1000 so eight simulators signing in at once aren't told to wait.
+# AUTH_RATE_BURST=1000 so eight simulators signing in at once aren't told to wait. Start 8082 with
+# REVIEW_ACCOUNT_EMAIL and REVIEW_ACCOUNT_PASSWORD too, and export the same two here: they reach
+# ReviewAccountQATests as TEST_RUNNER_QA_REVIEW_*. Without them that test is left out.
 # 8083 also gets STARTER_RECIPES_HOUSEHOLD_ID from scripts/qa-starter-library.sh, so the review
 # path test sees a starter library in a brand-new household.
 #
@@ -22,7 +24,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-${TMPDIR:-/tmp}/dinneros-qa}
 ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-light ipadP-dark"
 CONFIGS=${CONFIGS:-$ALL}
-TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests"}
+TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests"}
 STALL=${STALL:-600}
 # RERUN: a summary.txt from an earlier run. Only its FAILED config and test pairs run again.
 RERUN=${RERUN:-}
@@ -88,6 +90,7 @@ run_test() {
     TEST_RUNNER_QA_API_BASE=http://localhost:$port TEST_RUNNER_QA_PHOTO_SEARCH=$search TEST_RUNNER_QA_MODE=$mode TEST_RUNNER_QA_ORIENTATION=$orientation \
         TEST_RUNNER_QA_APP_QA_HUD_SECONDS=3 TEST_RUNNER_QA_APP_QA_MOMENT_SECONDS=12 TEST_RUNNER_QA_MANUAL_NAME="Sip Fudge" \
         TEST_RUNNER_QA_IMPORTED_NAME="Street Cart-Style Chicken Bowls" \
+        TEST_RUNNER_QA_REVIEW_EMAIL="${REVIEW_ACCOUNT_EMAIL:-}" TEST_RUNNER_QA_REVIEW_PASSWORD="${REVIEW_ACCOUNT_PASSWORD:-}" \
         xcodebuild test-without-building -xctestrun "$xctestrun" -destination "id=$id" \
         -test-timeouts-enabled YES -maximum-test-execution-time-allowance 600 \
         -resultBundlePath "$OUT/$name.xcresult" -only-testing:"DinnerOSUITests/$test" \
@@ -163,6 +166,14 @@ run_config() {
         ReviewPathQATests) case $config in large-light | ipadP-dark) ;; *) continue ;; esac ;;
         AccountDeletionQATests) [ "$config" = large-dark ] || continue ;;
         PermissionsDeniedQATests) [ "$config" = small-light ] || continue ;;
+        # The App Review account (decision 752) is one account, so its test runs once, and only
+        # when the review account's email and password are exported for it.
+        ReviewAccountQATests)
+            [ "$config" = ipadL-dark ] || continue
+            if [ -z "${REVIEW_ACCOUNT_EMAIL:-}" ] || [ -z "${REVIEW_ACCOUNT_PASSWORD:-}" ]; then
+                echo "$config $test: skipped (export REVIEW_ACCOUNT_EMAIL and REVIEW_ACCOUNT_PASSWORD)" >>"$OUT/summary.txt"
+                continue
+            fi ;;
         esac
         run_test "$config" "$id" "$test" 1
     done

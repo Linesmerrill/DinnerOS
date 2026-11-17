@@ -39,6 +39,9 @@ type HandlerOptions struct {
 	// sign-in after it succeeds, so the server can keep the Apple refresh
 	// token that account deletion revokes (api/internal/siwa).
 	AppleCodes AppleCodeSaver
+	// Review, when set, mounts POST /auth/review-sign-in for the App Review
+	// account (review.go). GET /auth/options says whether it's on.
+	Review *ReviewSignIn
 }
 
 // AppleCodeSaver keeps what a Sign in with Apple authorization code is worth.
@@ -82,6 +85,10 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Post("/logout", h.logout)
 		if h.opts.DevLoginEnabled {
 			r.Post("/dev", h.signInDev)
+		}
+		r.Get("/options", h.options)
+		if h.opts.Review.Enabled() {
+			r.Post("/review-sign-in", h.signInReview)
 		}
 	})
 	r.With(RequireAuth(h.opts.Tokens)).Get("/me", h.me)

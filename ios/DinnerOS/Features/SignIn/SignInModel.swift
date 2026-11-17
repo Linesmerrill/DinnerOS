@@ -9,6 +9,7 @@ final class SignInModel {
         case apple
         case google
         case developer
+        case email
     }
 
     private(set) var inFlight: Method?
@@ -18,6 +19,16 @@ final class SignInModel {
     var isWorking: Bool { inFlight != nil }
     var canRetry: Bool { retryMethod != nil }
     var isGoogleAvailable: Bool { google != nil }
+
+    /// Email sign-in for the App Review account (decision 752). It shows only while the
+    /// server says the account is set up; offline it stays hidden.
+    private(set) var isEmailSignInAvailable = false
+    var isEmailFormOpen = false
+    var email = ""
+    var password = ""
+    var canSubmitEmail: Bool {
+        !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty && !isWorking
+    }
 
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let google: GoogleSignInService?
@@ -85,6 +96,27 @@ final class SignInModel {
         }
     }
 
+    // MARK: Email
+
+    /// Asks the server whether email sign-in is on. A failure leaves it hidden.
+    func loadOptions() async {
+        isEmailSignInAvailable = await session.signInOptions().reviewSignIn
+    }
+
+    func signInWithEmail() async {
+        guard canSubmitEmail else { return }
+        let email = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let password = password
+        await run(.email) { [session] in
+            try await session.signIn { api in
+                try await api.signInWithEmail(email: email, password: password)
+            }
+        }
+        // A wrong password is typed again, not retried as it was.
+        if retryMethod == .email { retryMethod = nil }
+        if errorMessage == nil { self.password = "" }
+    }
+
     // MARK: Development
 
     #if DEBUG
@@ -121,6 +153,8 @@ final class SignInModel {
             #if DEBUG
                 await signInForDevelopment()
             #endif
+        case .email:
+            await signInWithEmail()
         case nil:
             break
         }

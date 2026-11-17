@@ -40,6 +40,7 @@ private struct SignInScreen: View {
             .scrollBounceBehavior(.basedOnSize)
         }
         .background(backdrop)
+        .task { await model.loadOptions() }
         .onChange(of: model.errorMessage) { _, message in
             if let message {
                 AccessibilityNotification.Announcement(message).post()
@@ -89,6 +90,10 @@ private struct SignInScreen: View {
                 GoogleSignInButton {
                     Task { await model.signInWithGoogle() }
                 }
+            }
+
+            if model.isEmailSignInAvailable {
+                EmailSignInSection(model: model)
             }
 
             #if DEBUG
