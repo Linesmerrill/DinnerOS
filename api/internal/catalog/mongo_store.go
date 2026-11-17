@@ -556,7 +556,7 @@ func (s *MongoStore) Search(ctx context.Context, f Filter) ([]Recipe, int, error
 					{Key: "localField", Value: "_id"},
 					{Key: "foreignField", Value: "fingerprint"},
 					{Key: "pipeline", Value: bson.A{
-						bson.D{{Key: "$match", Value: bson.D{{Key: "source", Value: bson.D{{Key: "$nin", Value: recipes.WithheldSources()}}}}}},
+						bson.D{{Key: "$match", Value: served()}},
 						bson.D{{Key: "$sort", Value: representativeOrder()}},
 					}},
 					{Key: "as", Value: "members"},
@@ -617,10 +617,22 @@ func representative(members []entryDoc) Recipe {
 // narrowing builds the exact filters shared by search and counting, all of
 // them against folded fields so they need no collation.
 func narrowing(f Filter) bson.D {
-	// A meal kit's recipes are never served (decision 672).
-	out := bson.D{{Key: "source", Value: bson.D{{Key: "$nin", Value: recipes.WithheldSources()}}}}
-	if key := fold(f.Cuisine); key != "" {
+	out := served()
+	if len(f.CuisineAny) > 0 {
+		out = append(out, bson.E{Key: "cuisineKeys", Value: bson.D{{Key: "$in", Value: f.CuisineAny}}})
+	} else if key := fold(f.Cuisine); key != "" {
 		out = append(out, bson.E{Key: "cuisineKeys", Value: key})
+	}
+	if f.MaxMinutes > 0 {
+		// The total time is recipes.CookMinutes: the larger of the two.
+		minutes := bson.D{{Key: "$max", Value: bson.A{"$prepMinutes", "$totalMinutes"}}}
+		out = append(out, bson.E{Key: "$expr", Value: bson.D{{Key: "$and", Value: bson.A{
+			bson.D{{Key: "$gt", Value: bson.A{minutes, 0}}},
+			bson.D{{Key: "$lte", Value: bson.A{minutes, f.MaxMinutes}}},
+		}}}})
+	}
+	if f.MinServings > 0 {
+		out = append(out, bson.E{Key: "servings", Value: bson.D{{Key: "$gte", Value: f.MinServings}}})
 	}
 	if key := fold(f.Tag); key != "" {
 		out = append(out, bson.E{Key: "tagKeys", Value: key})
@@ -629,6 +641,25 @@ func narrowing(f Filter) bson.D {
 		out = append(out, bson.E{Key: "ingredientKeys", Value: key})
 	}
 	return out
+}
+
+// served matches the entries any list may show: none from a meal kit
+// (decision 672) and no add-ons (decision 713).
+func served() bson.D {
+	return bson.D{
+		{Key: "source", Value: bson.D{{Key: "$nin", Value: recipes.WithheldSources()}}},
+		{Key: "isAddon", Value: bson.D{{Key: "$ne", Value: true}}},
+	}
+}
+
+// Cuisines implements Store.
+func (s *MongoStore) Cuisines(ctx context.Context) ([]string, error) {
+	res := s.entries.Distinct(ctx, "cuisines", served())
+	var out []string
+	if err := res.Decode(&out); err != nil {
+		return nil, translate(err)
+	}
+	return out, nil
 }
 
 // fold is the comparison form of a label: trimmed and lowercased. Cuisines
@@ -655,7 +686,7 @@ func (s *MongoStore) Scan(ctx context.Context, limit int) ([]Recipe, error) {
 		return nil, nil
 	}
 	cur, err := s.entries.Aggregate(ctx, mongo.Pipeline{
-		{{Key: "$match", Value: bson.D{{Key: "source", Value: bson.D{{Key: "$nin", Value: recipes.WithheldSources()}}}}}},
+		{{Key: "$match", Value: served()}},
 		{{Key: "$project", Value: bson.D{{Key: "steps", Value: 0}, {Key: "description", Value: 0}}}},
 		{{Key: "$sort", Value: append(bson.D{{Key: "fingerprint", Value: 1}}, representativeOrder()...)}},
 		{{Key: "$group", Value: bson.D{

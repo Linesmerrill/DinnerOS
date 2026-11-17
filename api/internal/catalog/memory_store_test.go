@@ -137,6 +137,23 @@ func (m *memoryStore) Scan(_ context.Context, limit int) ([]Recipe, error) {
 	return out, nil
 }
 
+func (m *memoryStore) Cuisines(context.Context) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []string
+	for _, e := range m.entries {
+		if !servable(e) {
+			continue
+		}
+		for _, c := range e.Content.Cuisines {
+			if !slices.Contains(out, c) {
+				out = append(out, c)
+			}
+		}
+	}
+	return out, nil
+}
+
 func (m *memoryStore) Groups(_ context.Context, ids []string) (map[string]string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -159,7 +159,11 @@ func run() error {
 	// it. Recipes flow one way: an import publishes public-source recipes
 	// into it, and a household copies an entry into its own library.
 	catalogService := catalog.NewService(catalog.ServiceOptions{Store: catalog.NewMongoStore(db.Database())}).
-		WithReports(catalog.NewMongoReports(db.Database()))
+		WithReports(catalog.NewMongoReports(db.Database())).
+		// The rows at the top of Shared Recipes (decisions 710 and 711).
+		WithSaves(catalog.NewMongoSaves(db.Database())).
+		WithRatings(catalog.NewMongoRatings(db.Database())).
+		WithCollections(catalog.NewMongoCollections(db.Database()))
 	recipeService := recipes.NewService(recipes.NewMongoStore(db.Database())).WithCatalog(catalogService).
 		WithPhotos(recipes.NewMongoStore(db.Database()))
 	// Photo search for recipes runs here so the Unsplash key never ships in
@@ -332,6 +336,7 @@ func run() error {
 		Tokens:     tokens,
 		Logger:     logger,
 		Credits:    recipeService,
+		Operators:  cfg.OperatorUserIDs,
 	})
 	autopilotHandler := recommendations.NewHandler(recommendations.HandlerOptions{
 		RequirePlus: requirePlus,
@@ -570,6 +575,7 @@ func indexSets() []mongodb.IndexSet {
 		recipes.Indexes(),
 		catalog.Indexes(),
 		catalog.ReportIndexes(),
+		catalog.SaveIndexes(),
 		planning.Indexes(),
 		pantry.Indexes(),
 		notifications.Indexes(),

@@ -27,6 +27,9 @@ type HandlerOptions struct {
 	// Credits says who took a shared recipe's photo when it came from photo
 	// search (decision 705). Optional.
 	Credits PhotoCredits
+	// Operators are the user IDs who may edit the rows of Shared Recipes
+	// (OPERATOR_USER_IDS).
+	Operators []string
 }
 
 // PhotoCredits finds the credit kept for a picked photo by its address.
@@ -61,10 +64,18 @@ func (h *Handler) Mount(r chi.Router) {
 		edit := households.RequirePermission(h.opts.Authorizer, households.PermRecipesEdit, h.logger)
 		const base = "/households/{householdId}"
 		r.With(view).Get(base+"/discover", h.discover)
+		r.With(view).Get(base+"/discover/home", h.home)
+		r.With(view).Get(base+"/discover/sections/{sectionId}", h.section)
 		r.With(view).Get(base+"/catalog/recipes", h.search)
 		r.With(view).Get(base+"/catalog/recipes/{catalogRecipeId}", h.get)
 		r.With(edit).Post(base+"/catalog/recipes/{catalogRecipeId}/add", h.add)
 		r.With(view).Post(base+"/catalog/recipes/{catalogRecipeId}/report", h.report)
+
+		// Operators edit the rows of Shared Recipes (decision 714).
+		r.Get("/admin/discover/collections", h.listCollections)
+		r.Post("/admin/discover/collections", h.putCollection)
+		r.Put("/admin/discover/collections/{collectionId}", h.putCollection)
+		r.Delete("/admin/discover/collections/{collectionId}", h.deleteCollection)
 	})
 }
 
@@ -126,7 +137,71 @@ type CatalogListResponse struct {
 	// nothing new for the household.
 	EmptyTitle string `json:"emptyTitle"`
 	EmptyText  string `json:"emptyText"`
+	// Filters are the filter chips and their choices, on a first page only.
+	Filters []FilterGroupResponse `json:"filters,omitempty"`
 }
+
+// FilterGroupResponse is one filter chip: Cuisine, Time, or Servings.
+type FilterGroupResponse struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	// Param is the query parameter a choice's value goes in.
+	Param   string                 `json:"param"`
+	Options []FilterOptionResponse `json:"options"`
+}
+
+// FilterOptionResponse is one choice under a filter chip.
+type FilterOptionResponse struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
+// DiscoverSectionResponse is one row at the top of Shared Recipes.
+type DiscoverSectionResponse struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Subtitle string `json:"subtitle,omitempty"`
+	// Type is editorial, algorithmic, or sponsored.
+	Type string `json:"type"`
+	// SponsorLabel ("Sponsored by X") is set only on a sponsored row, and
+	// the app always shows it.
+	SponsorLabel string                   `json:"sponsorLabel,omitempty"`
+	SponsorURL   string                   `json:"sponsorUrl,omitempty"`
+	Items        []CatalogSummaryResponse `json:"items"`
+	// HasMore is true when See All shows more than Items.
+	HasMore bool `json:"hasMore"`
+}
+
+// DiscoverHomeResponse is returned by GET .../discover/home.
+type DiscoverHomeResponse struct {
+	Sections []DiscoverSectionResponse `json:"sections"`
+	Filters  []FilterGroupResponse     `json:"filters"`
+	// The words around Browse All.
+	BrowseTitle  string `json:"browseTitle"`
+	SearchPrompt string `json:"searchPrompt"`
+	SeeAllTitle  string `json:"seeAllTitle"`
+	EmptyTitle   string `json:"emptyTitle"`
+	EmptyText    string `json:"emptyText"`
+	// NoMatchTitle and NoMatchText are for a search or filters with no results.
+	NoMatchTitle string `json:"noMatchTitle"`
+	NoMatchText  string `json:"noMatchText"`
+}
+
+// DiscoverSectionPageResponse is returned by GET .../discover/sections/{id}.
+type DiscoverSectionPageResponse struct {
+	DiscoverSectionResponse
+	NextCursor string `json:"nextCursor,omitempty"`
+	Total      int    `json:"total"`
+}
+
+// The words around Browse All.
+const (
+	BrowseTitle  = "Browse All"
+	SearchPrompt = "Search shared recipes"
+	SeeAllTitle  = "See All"
+	NoMatchTitle = "No Recipes Match"
+	NoMatchText  = "Try another word or fewer filters."
+)
 
 // CatalogRecipeResponse is returned by GET .../catalog/recipes/{id}.
 type CatalogRecipeResponse struct {
@@ -189,7 +264,75 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, "catalog search failed", err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, listResponse(page))
+	resp := listResponse(page)
+	if q.Cursor == "" {
+		groups, err := h.opts.Service.FilterGroups(r.Context())
+		if err != nil {
+			h.fail(w, r, "catalog filters failed", err)
+			return
+		}
+		resp.Filters = filterResponses(groups)
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) home(w http.ResponseWriter, r *http.Request) {
+	home, err := h.opts.Service.Home(r.Context(), householdID(r))
+	if err != nil {
+		h.fail(w, r, "discover home failed", err)
+		return
+	}
+	resp := DiscoverHomeResponse{
+		Sections: make([]DiscoverSectionResponse, 0, len(home.Sections)), Filters: filterResponses(home.Filters),
+		BrowseTitle: BrowseTitle, SearchPrompt: SearchPrompt, SeeAllTitle: SeeAllTitle,
+		EmptyTitle: EmptyTitle, EmptyText: EmptyText, NoMatchTitle: NoMatchTitle, NoMatchText: NoMatchText,
+	}
+	for _, sec := range home.Sections {
+		resp.Sections = append(resp.Sections, sectionResponse(sec.Collection, sec.Items, sec.More))
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) section(w http.ResponseWriter, r *http.Request) {
+	q, ok := h.query(w, r, false)
+	if !ok {
+		return
+	}
+	c, page, err := h.opts.Service.Section(r.Context(), householdID(r), chi.URLParam(r, "sectionId"), q)
+	if err != nil {
+		h.fail(w, r, "discover section failed", err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, DiscoverSectionPageResponse{
+		DiscoverSectionResponse: sectionResponse(c, page.Items, page.NextCursor != ""),
+		NextCursor:              page.NextCursor, Total: page.Total,
+	})
+}
+
+func sectionResponse(c Collection, items []Result, more bool) DiscoverSectionResponse {
+	out := DiscoverSectionResponse{
+		ID: c.ID, Title: c.Title, Subtitle: c.Subtitle, Type: c.Type, SponsorLabel: c.SponsorLabel(),
+		Items: make([]CatalogSummaryResponse, 0, len(items)), HasMore: more,
+	}
+	if out.SponsorLabel != "" && c.Sponsor != nil {
+		out.SponsorURL = c.Sponsor.URL
+	}
+	for _, it := range items {
+		out.Items = append(out.Items, summaryResponse(it))
+	}
+	return out
+}
+
+func filterResponses(groups []FilterGroup) []FilterGroupResponse {
+	out := make([]FilterGroupResponse, 0, len(groups))
+	for _, g := range groups {
+		fg := FilterGroupResponse{ID: g.ID, Title: g.Title, Param: g.Param, Options: make([]FilterOptionResponse, 0, len(g.Options))}
+		for _, o := range g.Options {
+			fg.Options = append(fg.Options, FilterOptionResponse(o))
+		}
+		out = append(out, fg)
+	}
+	return out
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
@@ -274,6 +417,15 @@ func (h *Handler) query(w http.ResponseWriter, r *http.Request, withText bool) (
 		Ingredient: v.Get("ingredient"),
 		Cursor:     v.Get("cursor"),
 	}
+	var err error
+	if q.MaxMinutes, err = ParseFilterInt(v.Get("maxMinutes")); err != nil {
+		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", "maxMinutes must be a positive whole number")
+		return Query{}, false
+	}
+	if q.MinServings, err = ParseFilterInt(v.Get("minServings")); err != nil {
+		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", "minServings must be a positive whole number")
+		return Query{}, false
+	}
 	if withText {
 		q.Text = v.Get("q")
 	}
@@ -292,6 +444,8 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, msg string, err e
 	switch {
 	case errors.Is(err, ErrInvalidQuery):
 		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", publicMessage(err))
+	case errors.Is(err, ErrInvalidCollection):
+		httpx.WriteError(w, r, http.StatusBadRequest, "validation_failed", collectionMessage(err))
 	case errors.Is(err, ErrNotFound):
 		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "recipe not found")
 	default:
