@@ -122,17 +122,26 @@ review is rejected for a Plus reason, set it back to off; nothing else changes.
 Paste into App Review Information, Notes (also `ios/fastlane/metadata/review_information/notes.txt`).
 There is no demo account: a reviewer signs in with their own Apple ID.
 
-> DinnerOS is a dinner planner for households. To start, tap Continue with Apple and create a household. It comes with a library of recipes, so there is something to plan with right away.
+> DinnerOS plans a household's dinners for the week, makes one grocery list, and walks you through cooking.
 >
-> DinnerOS Plus: go to the Household tab and tap DinnerOS Plus. The purchase screen shows both plans (Monthly and Yearly), the 14-day free trial, the renewal terms, Restore purchases, and links to the Privacy Policy and Terms of Use. You can also reach it from the Menu tab by tapping Plan with Autopilot. After buying, Household > DinnerOS Plus opens Your Plus, where Manage Subscription, Restore Purchases and Request a Refund use Apple's own sheets.
+> No demo account is needed. Tap Continue with Apple, then Create a Household and give it any name. A new household comes with a small library of recipes, so you can plan right away.
 >
-> Invite codes: every household gets a code under Household > Give a Free Month to share with friends. Codes are free and never sold, and there is no way to buy one in the app or anywhere else. When a new household joins with a code and finishes setup (saves 3 recipes and plans a dinner), both households get a free month of Plus. The sharer can earn a limited number of months. The code does nothing for a household that already exists, and it only adds time to our own Plus access. It never replaces or changes an App Store purchase.
+> Things to try:
+> 1. Menu tab: tap a recipe to open it, then Start Cooking for the steps and timers.
+> 2. Menu tab: tap the ... button for Add a Recipe (write one, or import one from a recipe link), Shared Recipes and Companions.
+> 3. Menu tab: By Day shows the week night by night.
+> 4. Shop tab: the week's grocery list. Pick Walmart to choose products and send the list.
+> 5. Household tab: members, invites and your account.
 >
-> Grocery stores: sending a list to Walmart works without signing in. It opens Walmart's site or app with the items, and you check out there. Kroger asks you to sign in with your own Kroger account before it can add items to your cart, so that step needs a Kroger account. DinnerOS never takes payment for groceries.
+> DinnerOS Plus is an auto-renewing subscription: Monthly ($4.99) or Yearly ($39.99), each with a 14-day free trial. Plus turns on Autopilot, which picks the week's dinners for you, and shows what each week costs. To see the purchase screen, tap Plan with Autopilot on the Menu tab, or go to Household > DinnerOS Plus. It shows both plans, the trial, the renewal terms, Restore purchases, and links to the Privacy Policy and Terms of Use. You can buy with a sandbox Apple Account. After buying, Household > DinnerOS Plus opens Your Plus, where Manage Subscription, Restore Purchases and Request a Refund use Apple's own screens.
 >
-> Location, calendar and Reminders access are optional and only asked for when you turn on the feature that uses them.
+> Free month (optional, not needed for review): Household > Give a Free Month shows a code to share with another household. When a new household enters it and finishes the setup steps the app lists, both households get a free month of Plus. The sharer can earn a limited number of months, and a code does nothing for a household that already exists. Codes are free and never sold, and there is no way to buy one. A code only adds our own Plus time. It never replaces or changes an App Store purchase.
 >
-> Account deletion: Household tab > Account > Delete Account.
+> Grocery stores (optional): sending a list to Walmart works without signing in. It opens Walmart's site or app with the items, and you check out there. Kroger and its other stores ask you to sign in with your own Kroger account before items go into a cart, so that step needs a real store account. DinnerOS never takes payment for groceries.
+>
+> Location, calendar, Reminders, camera and notifications are optional. The app only asks when you use the feature that needs them, and everything else works if you say no.
+>
+> Delete your account: Household > Account > Delete Account.
 
 Copyright: © 2026 Merrill Lines. The App Review contact is in `ios/fastlane/metadata/review_information/` on the release Mac only, never in git.
 
@@ -146,10 +155,20 @@ pass its ID with `-exclude`.
 
 ## Screenshots
 
-Taken in the simulator with sample data (status bar 9:41, full battery), at the exact sizes App
-Store Connect asks for. Upload in this order.
+Taken in the simulator with sample data (status bar 9:41, full battery), at sizes App Store
+Connect takes for the largest iPhone and iPad. Upload in this order.
 
-6.9" iPhone, 1320 x 2868 (`store-screenshots/iphone/`, not in git: they show starter recipe photos):
+To retake them: run a local API with development sign-in, `PLUS_ENABLED=true` and a starter
+library of hand-written recipes with plain names and DinnerOS's own photos (never imported ones),
+make a household for the sign-in subject `jordan` with a Plus trial (a local RevenueCat webhook
+event) and two dinners planned this week, set Autopilot up and choose Walmart. Then run
+`StoreScreenshotsQATests` (`testPhoneScreenshots` on an iPhone 16 Plus, `testPadScreenshots` on
+an iPad Pro 12.9-inch) after `xcrun simctl status_bar <id> override --time 9:41 --batteryState
+charged --batteryLevel 100 --wifiBars 3 --cellularBars 4`. Each shot is a named attachment in the
+result bundle. `QA_ONLY=household` on an iPhone 17 Pro Max retakes the Household screens in
+`store-screenshots/household/`.
+
+6.7" iPhone, 1290 x 2796 (`store-screenshots/iphone/`, not in git: they show recipe photos):
 
 1. `01-menu.png` This week's dinners
 2. `02-week.png` The week by day
@@ -160,7 +179,7 @@ Store Connect asks for. Upload in this order.
 7. `07-timer.png` Setting a timer
 8. `08-your-plus.png` Your Plus
 
-13" iPad, 2752 x 2064 landscape (`store-screenshots/ipad/`):
+13" iPad, 2732 x 2048 landscape (`store-screenshots/ipad/`):
 
 1. `01-menu.png` This week's dinners
 2. `02-recipe.png` A recipe

@@ -99,6 +99,27 @@ nonisolated enum WeekStripMetrics {
     }
 }
 
+/// Brings the selected week pill into view after the strip appears: one scroll, then a few more
+/// tries a moment apart until `isDone`, because a lazy row only guesses where pills it hasn't laid
+/// out are. Stops at once when its task is cancelled (the strip left the screen), and then returns
+/// `false`, so nothing scrolls a strip that is gone.
+enum WeekStripSettle {
+    @MainActor
+    static func run(
+        tries: Int = 4, pause: Duration = .milliseconds(250), isDone: () -> Bool, scroll: () -> Void
+    ) async -> Bool {
+        guard !Task.isCancelled else { return false }
+        scroll()
+        for _ in 0..<tries {
+            try? await Task.sleep(for: pause)
+            if Task.isCancelled { return false }
+            if isDone() { break }
+            scroll()
+        }
+        return true
+    }
+}
+
 /// The week pills across the top of the Menu screen: a **Past** link, then one pill per week
 /// with its dates and counts. It scrolls to the selected week and loads earlier weeks when
 /// scrolled back, down to the household's first week.
@@ -134,6 +155,8 @@ struct WeekStrip: View {
     /// lazy row never reached, so this is what says a scroll landed.
     @State private var isSelectedVisible = false
     @State private var stripWidth: CGFloat = 402
+    /// Scrolls the selected week into view after the strip appears; cancelled when it goes.
+    @State private var settleTask: Task<Void, Never>?
 
     /// What the pills need at this text size, capped so the strip can't take the screen.
     private var pillHeight: CGFloat {
@@ -276,18 +299,22 @@ struct WeekStrip: View {
                 // Pills that went away with the old strip never said they left the screen.
                 isSelectedVisible = false
                 scrolledWeek = plans.week.description
-                Task { @MainActor in
-                    proxy.scrollTo(plans.week.description, anchor: .center)
+                settleTask?.cancel()
+                settleTask = Task { @MainActor in
                     // A lazy row guesses where pills it hasn't laid out are, so a long jump can
                     // land weeks off (it opened on October after a search). Each try lays out
                     // more of the row, so try again until the selected pill is on screen.
-                    for _ in 0..<4 {
-                        try? await Task.sleep(for: .milliseconds(250))
-                        if hasDragged || isSelectedVisible { break }
+                    let finished = await WeekStripSettle.run(isDone: { hasDragged || isSelectedVisible }) {
                         proxy.scrollTo(plans.week.description, anchor: .center)
                     }
-                    canLoadEarlier = true
+                    if finished { canLoadEarlier = true }
                 }
+            }
+            // Scrolling a strip that has gone (collapsed, or the menu changed view) crashed in
+            // SwiftUI's scrollTo: stop trying once it leaves the screen.
+            .onDisappear {
+                settleTask?.cancel()
+                settleTask = nil
             }
         }
         // A horizontal ScrollView takes all the height it is offered, and as a top
