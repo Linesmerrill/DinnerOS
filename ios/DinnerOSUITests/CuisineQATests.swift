@@ -104,9 +104,13 @@ final class CuisineQATests: XCTestCase {
         reveal(editCuisine, in: app)
         XCTAssertEqual(editCuisine.value as? String, "Mexican")
         editCuisine.tap()
+        XCTAssertTrue(app.navigationBars["Cuisine"].waitForExistence(timeout: 5))
+        // Search for it: on a small phone Italian sits below the fold, where the list hasn't
+        // built it yet.
+        app.searchFields.firstMatch.tap()
+        app.searchFields.firstMatch.typeText("Ital")
         let italian = app.buttons["CuisineOption-italian"]
         XCTAssertTrue(italian.waitForExistence(timeout: 5), "No Italian in the cuisine list")
-        reveal(italian, in: app)
         italian.tap()
         XCTAssertTrue(waitGone(app.navigationBars["Cuisine"]), "Picking one didn't close the list")
         XCTAssertEqual(editCuisine.value as? String, "Italian")

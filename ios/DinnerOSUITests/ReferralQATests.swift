@@ -91,16 +91,20 @@ final class ReferralQATests: XCTestCase {
         // 5. The sharer: their banner, and the invite marked as earned.
         signIn(app, subject: "dev-simulator")
         XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30), "The sharer didn't get to the Menu")
+        // The banner names the newest invite that counted and shows once. In a parallel run
+        // another simulator signed in as the same sharer can see it first, so without it, go to
+        // Give a Free Month directly: the earned invite is what matters.
         let sharerBanner = app.descendants(matching: .any)["NewsBanner"].firstMatch
-        XCTAssertTrue(sharerBanner.waitForExistence(timeout: 20), "No banner for the sharer")
-        // It names the newest invite that counted, which in a parallel run can be another
-        // simulator's household.
-        XCTAssertTrue(
-            app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", " joined from your invite."))
-                .firstMatch.exists, "The sharer's banner doesn't name a new household")
-        snap(app, "Banner, invite counted (\(mode))")
-        sharerBanner.buttons.matching(NSPredicate(format: "label != 'Close'")).firstMatch.tap()
-        // Tapping it opens Give a Free Month.
+        if sharerBanner.waitForExistence(timeout: 20) {
+            XCTAssertTrue(
+                app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", " joined from your invite."))
+                    .firstMatch.exists, "The sharer's banner doesn't name a new household")
+            snap(app, "Banner, invite counted (\(mode))")
+            sharerBanner.buttons.matching(NSPredicate(format: "label != 'Close'")).firstMatch.tap()
+            // Tapping it opens Give a Free Month.
+        } else {
+            openGiveAFreeMonth(app)
+        }
         XCTAssertTrue(app.navigationBars["Give a Free Month"].waitForExistence(timeout: 10))
         // Each invite row reads as one element: "name, how it's going, status".
         let row = app.descendants(matching: .any)
