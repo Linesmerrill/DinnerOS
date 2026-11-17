@@ -452,6 +452,9 @@ vars or GitHub Secrets.
 | `DEVELOPMENT_TEAM` | secret | Apple Team ID (as above) |
 | `TESTFLIGHT_ENABLED` | variable | Set to `true` once the setup above is complete |
 | `TESTFLIGHT_EXTERNAL_GROUPS` | variable | Optional. Comma-separated external TestFlight group names (e.g. `Friends & Family`). When set, every main build is also distributed to those groups and submitted for Beta App Review, with the commit subject as "What to Test". The job then waits for build processing, so it takes longer. Empty keeps builds internal-only. To ship one build to internal testers only, run iOS CI from main by hand with `internal_only` checked (and push that commit with `[skip ci]` so the push run doesn't also send it out). |
+
+Cloudflare Pages also skips a push whose newest commit says `[skip ci]`, so the website does not deploy with an internal-only release. Deploy it by pushing a website-only commit to main without `[skip ci]` afterwards: it touches no `ios/` or `api/` path, so no CI runs and nothing goes to TestFlight.
+
 | `PRODUCTION_API_BASE_URL` | variable | The production API URL, e.g. `https://<app>.herokuapp.com` |
 
 ## Weekly numbers
