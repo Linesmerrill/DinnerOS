@@ -40,7 +40,9 @@ final class PermissionsDeniedQATests: XCTestCase {
             NSPredicate(format: "label CONTAINS[c] 'location' OR label CONTAINS[c] 'Find Stores'")
         )
         .firstMatch
-        if find.waitForExistence(timeout: 8) {
+        // On a small phone the store finder is below the fold.
+        if !find.waitForExistence(timeout: 5) { reveal(find, in: app, maxSwipes: 6) }
+        if find.exists {
             find.tap()
             dontAllow()
             let message = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Location is off'")).firstMatch

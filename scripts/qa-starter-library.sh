@@ -9,7 +9,7 @@ BASE=${1:-http://localhost:8082}
 case $BASE in http://localhost:* | http://127.0.0.1:*) ;; *) echo "local APIs only" >&2; exit 1 ;; esac
 
 token=$(curl -sf -X POST "$BASE/api/v1/auth/dev" -H 'Content-Type: application/json' \
-    -d '{"subject":"qa-starter-library","email":"starter@example.test"}' |
+    -d '{"subject":"qa-starter-library-2","email":"starter@example.test"}' |
     python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])')
 auth=(-H "Authorization: Bearer $token" -H 'Content-Type: application/json')
 
@@ -33,6 +33,8 @@ if [ "$count" -lt 3 ]; then
         $'Tomato Basil Pasta\nServes 2\n25 minutes\nIngredients\n8 oz spaghetti\n1 pint cherry tomatoes\n2 Tbsp olive oil\n1 handful basil\nSteps\nBoil the pasta until tender.\nCook the tomatoes in the oil until they burst, about 8 minutes.\nToss with the pasta and torn basil.'; do
         draft=$(curl -sf -X POST "$BASE/api/v1/households/$hid/recipes/parse" "${auth[@]}" \
             -d "$(python3 -c 'import json,sys; print(json.dumps({"text": sys.argv[1]}))' "$text")")
+        # Cards show a time, which the review path test looks for.
+        draft=$(echo "$draft" | python3 -c 'import json,sys; d=json.load(sys.stdin); d["totalMinutes"]=d.get("totalMinutes") or 30; print(json.dumps(d))')
         curl -sf -X POST "$BASE/api/v1/households/$hid/recipes" "${auth[@]}" -d "$draft" >/dev/null
     done
 fi

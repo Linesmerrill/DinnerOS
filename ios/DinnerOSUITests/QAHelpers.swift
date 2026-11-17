@@ -66,8 +66,11 @@ extension XCTestCase {
         // Judged by its top edge, so a tall section (a checklist) counts once its top is in the
         // upper half.
         func clear() -> Bool {
-            guard element.exists, element.isHittable else { return false }
+            // Asking an off-screen or zero-size element if it's hittable fails the test outright
+            // ("Activation point invalid"), so check its frame first.
             let screen = app.frame
+            guard element.exists, !element.frame.isEmpty, screen.intersects(element.frame), element.isHittable
+            else { return false }
             let top = element.frame.minY - screen.minY
             return top > screen.height * 0.08 && top < screen.height * 0.55
         }
