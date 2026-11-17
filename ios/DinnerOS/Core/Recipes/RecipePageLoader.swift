@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import WebKit
 
 /// Loads a recipe page on this phone, for a site that turns the server away. The page's HTML
@@ -125,6 +126,7 @@ final class WebPageReader: NSObject, WKNavigationDelegate {
         let reader = WebPageReader()
         return try await withCheckedThrowingContinuation { continuation in
             reader.continuation = continuation
+            reader.attachToWindow()
             start(reader.webView)
             reader.timeout = Task { @MainActor [weak reader] in
                 try? await Task.sleep(for: .seconds(20) + renderWait)
@@ -193,6 +195,22 @@ final class WebPageReader: NSObject, WKNavigationDelegate {
         timeout?.cancel()
         polling?.cancel()
         webView.stopLoading()
+        webView.removeFromSuperview()
         continuation.resume(with: result)
+    }
+
+    /// WebKit slows the scripts of a web view that isn't in a window, so a page that builds its
+    /// recipe with a timer or a late request may never show it. The view goes in the app's
+    /// window, behind everything, invisible and untouchable.
+    private func attachToWindow() {
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+        let window = windows.first { $0.isKeyWindow } ?? windows.first
+        guard let window else { return }
+        webView.alpha = 0.01
+        webView.isUserInteractionEnabled = false
+        webView.accessibilityElementsHidden = true
+        window.insertSubview(webView, at: 0)
     }
 }
