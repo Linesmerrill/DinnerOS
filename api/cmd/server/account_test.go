@@ -65,6 +65,8 @@ var accountDeletionKinds = map[string]collectionKind{
 	recipes.IngredientsCollection:     global,
 	catalog.RecipesCollection:         global,
 	catalog.ReportsCollection:         householdData,
+	catalog.SavesCollection:           householdData,
+	catalog.CollectionsCollection:     global,
 	planning.PlansCollection:          householdData,
 	pantry.ItemsCollection:            householdData,
 	pantry.PurchasesCollection:        householdData,

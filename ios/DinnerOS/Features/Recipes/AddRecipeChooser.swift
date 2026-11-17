@@ -52,6 +52,8 @@ struct AddRecipeChooser: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var path: [AddRecipeChoice] = []
+    /// The companion editor has its own navigation bar, so it opens as a sheet, not a push.
+    @State private var addingCompanion = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -77,6 +79,14 @@ struct AddRecipeChooser: View {
             }
             .navigationDestination(for: AddRecipeChoice.self) { choice in
                 destination(choice)
+            }
+        }
+        .sheet(isPresented: $addingCompanion) {
+            if let householdID = households.current?.household.id {
+                CompanionEditorView(householdID: householdID, onSaved: {
+                    addingCompanion = false
+                    dismiss()
+                })
             }
         }
         .accessibilityIdentifier("AddRecipeChooser")
@@ -110,6 +120,8 @@ struct AddRecipeChooser: View {
     private func pick(_ choice: AddRecipeChoice) {
         if choice == .shared {
             onBrowseShared()
+        } else if choice == .companion {
+            addingCompanion = true
         } else {
             path.append(choice)
         }
@@ -122,11 +134,7 @@ struct AddRecipeChooser: View {
             AddRecipeForm(start: .write, title: "Write Your Own", onSaved: onSaved, fromChooser: true) { dismiss() }
         case .importIt:
             AddRecipeForm(start: .importIt, title: "Import From a Website", onSaved: onSaved, fromChooser: true) { dismiss() }
-        case .companion:
-            if let householdID = households.current?.household.id {
-                CompanionEditorView(householdID: householdID, onSaved: { dismiss() })
-            }
-        case .shared:
+        case .companion, .shared:
             EmptyView()
         }
     }

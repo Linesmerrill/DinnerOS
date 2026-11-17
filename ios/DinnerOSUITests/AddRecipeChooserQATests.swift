@@ -61,15 +61,15 @@ final class AddRecipeChooserQATests: XCTestCase {
         snap(app, "Add a Recipe, Import From a Website (\(mode))")
         back(app, from: "Import From a Website")
 
-        // Add a Companion: the companion editor (or its stand-in until companions ship).
+        // Add a Companion: the companion editor, as its own sheet over the choices.
         app.buttons["AddChoice-companion"].tap()
         let companion = app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier IN %@", ["CompanionName", "CompanionEditor"])
         ).firstMatch
         XCTAssertTrue(companion.waitForExistence(timeout: 5), "Add a Companion opened something else")
         snap(app, "Add a Recipe, Add a Companion (\(mode))")
-        app.navigationBars.element(boundBy: 0).buttons.firstMatch.tap()
-        XCTAssertTrue(app.buttons["AddChoice-shared"].waitForExistence(timeout: 5), "Back didn't return to the choices")
+        app.navigationBars["New Companion"].buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["AddChoice-shared"].waitForExistence(timeout: 5), "Cancel didn't return to the choices")
 
         // Browse Shared Recipes closes the choices and opens Shared Recipes.
         app.buttons["AddChoice-shared"].tap()
