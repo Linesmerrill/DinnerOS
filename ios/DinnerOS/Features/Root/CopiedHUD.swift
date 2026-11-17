@@ -5,12 +5,13 @@ import UIKit
 /// same way: a centered HUD with a check mark, a success haptic, and a VoiceOver announcement.
 enum Clipboard {
     /// Copies `text` and shows the Copied HUD. `expiresAfter` takes it off the clipboard later,
-    /// for codes that shouldn't linger there.
+    /// and keeps it off the person's other devices, for codes that shouldn't linger there.
     @MainActor
     static func copy(_ text: String, expiresAfter: TimeInterval? = nil) {
         if let expiresAfter {
             UIPasteboard.general.setItems(
-                [["public.plain-text": text]], options: [.expirationDate: Date.now.addingTimeInterval(expiresAfter)])
+                [["public.plain-text": text]],
+                options: [.expirationDate: Date.now.addingTimeInterval(expiresAfter), .localOnly: true])
         } else {
             UIPasteboard.general.string = text
         }

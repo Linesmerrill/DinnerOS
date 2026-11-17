@@ -91,6 +91,26 @@ extension PlusStore {
         return !defaults.bool(forKey: Self.referralCardHiddenKey(householdID))
     }
 
+    static func freeMonthCardHiddenKey(_ householdID: String, monthID: String) -> String {
+        "plus.freeMonthCardHidden.\(householdID).\(monthID)"
+    }
+
+    /// A free month ready to redeem, for the Menu card, unless its card was hidden here.
+    var menuFreeMonth: FreeMonth? {
+        _ = hiddenCardsVersion
+        guard let householdID = currentHouseholdID, let month = status?.openFreeMonth, month.isReady,
+            !defaults.bool(forKey: Self.freeMonthCardHiddenKey(householdID, monthID: month.id))
+        else { return nil }
+        return month
+    }
+
+    /// Hide on the free month's Menu card. Give a Free Month still has it.
+    func hideFreeMonthCard(_ month: FreeMonth) {
+        guard let householdID = currentHouseholdID else { return }
+        defaults.set(true, forKey: Self.freeMonthCardHiddenKey(householdID, monthID: month.id))
+        bumpHiddenCards()
+    }
+
     /// Hide on the Menu card. Give a Free Month still has the checklist.
     func hideReferralCard() {
         guard let householdID = currentHouseholdID else { return }

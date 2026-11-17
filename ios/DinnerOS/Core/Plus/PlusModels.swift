@@ -9,7 +9,8 @@ nonisolated struct PlusStatus: Codable, Hashable, Sendable {
     let expiresAt: Date?
     let willRenew: Bool
     let billingIssue: Bool
-    /// When free months from invites end.
+    /// When a free month from an invite ends, for one from before free months came as Apple
+    /// offer codes. New free months are in `freeMonths`.
     let freeUntil: Date?
     /// The purchase screen's words, while Plus is on.
     let offer: PlusOffer?
@@ -18,9 +19,15 @@ nonisolated struct PlusStatus: Codable, Hashable, Sendable {
     /// This household's progress toward the free month from an invite code it entered
     /// (decision 698). Missing from an older API, and when no code was entered.
     var referralProgress: ReferralProgress? = nil
+    /// Free months earned from invites, each an Apple offer code to redeem (decision 755).
+    /// Missing from an older API.
+    var freeMonths: [FreeMonth]? = nil
 
     /// Whether a Plus feature is open: always while Plus is off.
     var hasPlus: Bool { !enabled || active }
+
+    /// The free month to show first: one ready to redeem, else one on the way.
+    var openFreeMonth: FreeMonth? { FreeMonth.firstOpen(freeMonths) }
 
     /// The plan shown when the server isn't reachable and nothing is saved: Plus off.
     static let off = PlusStatus(
@@ -78,6 +85,67 @@ nonisolated struct ReferralProgress: Codable, Hashable, Sendable {
         let done: Bool
         var count: Int? = nil
         var target: Int? = nil
+    }
+}
+
+/// A free month earned from an invite (decision 755). It comes as an Apple offer code, so
+/// redeeming it starts DinnerOS Plus through Apple with the first month free. The words come
+/// from the API.
+nonisolated struct FreeMonth: Codable, Hashable, Sendable, Identifiable {
+    let id: String
+    /// "ready", "owed" (waiting for a code) or "redeemed".
+    let state: String
+    /// "Your free month is ready".
+    let title: String
+    let message: String
+    let earnedAt: Date
+    /// "Redeem", while it's ready.
+    var redeemText: String? = nil
+    /// What redeeming starts, said before the button. Ready only.
+    var terms: String? = nil
+
+    var isReady: Bool { state == "ready" }
+    var isOwed: Bool { state == "owed" }
+    var isRedeemed: Bool { state == "redeemed" }
+
+    /// The button's words.
+    var buttonTitle: String {
+        if let redeemText, !redeemText.isEmpty { return redeemText }
+        return String(localized: "Redeem")
+    }
+
+    /// What redeeming starts: the API's words, or the bundled ones.
+    var termsText: String {
+        if let terms, !terms.isEmpty { return terms }
+        return Self.bundledTerms
+    }
+
+    static let bundledTerms = String(
+        localized:
+            "Redeeming starts DinnerOS Plus with the first month free. After that it renews at the normal price unless you cancel in your Apple account settings."
+    )
+
+    /// The first ready month, else the first on the way. Redeemed ones aren't shown.
+    static func firstOpen(_ months: [FreeMonth]?) -> FreeMonth? {
+        guard let months else { return nil }
+        return months.first(where: \.isReady) ?? months.first(where: \.isOwed)
+    }
+}
+
+/// A free month's code, revealed for redeeming
+/// (`POST /households/{id}/plus/free-months/{monthId}/reveal`). Never logged.
+nonisolated struct FreeMonthCode: Codable, Hashable, Sendable {
+    let code: String
+    /// Apple's redeem page with the code filled in, when the API knows the app's Apple ID.
+    var redeemURL: URL? = nil
+    /// "Your code is copied. Paste it in Apple's screen."
+    var copiedText: String? = nil
+
+    static let bundledCopiedText = String(localized: "Your code is copied. Paste it in Apple's screen.")
+
+    private enum CodingKeys: String, CodingKey {
+        case code, copiedText
+        case redeemURL = "redeemUrl"
     }
 }
 
@@ -231,7 +299,7 @@ nonisolated struct PlusInvites: Codable, Hashable, Sendable {
     let monthsCap: Int
     /// "3 of 12".
     let capText: String
-    /// When free months end, while they last.
+    /// When free months from before offer codes end, while they last.
     let freeUntil: Date?
     /// Shown when no one has used the code.
     let emptyText: String
@@ -245,6 +313,9 @@ nonisolated struct PlusInvites: Codable, Hashable, Sendable {
     var expired: Int? = nil
     /// Each household that used the code, newest first, with where it stands.
     var items: [PlusInviteItem]? = nil
+    /// This household's free months, each an Apple offer code (decision 755). Missing from an
+    /// older API.
+    var freeMonths: [FreeMonth]? = nil
 }
 
 /// One household that used this household's code: "Pending, needs 2 more recipes",
@@ -284,7 +355,8 @@ nonisolated struct PlusInviteJoin: Codable, Hashable, Sendable {
     let status: String
 }
 
-/// This household's own use of another household's code.
+/// This household's own use of another household's code, for a free month from before offer
+/// codes.
 nonisolated struct PlusUsedCode: Codable, Hashable, Sendable {
     let at: Date
     /// When the free month from it ends.

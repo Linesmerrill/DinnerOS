@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Invite another household, or use another household's code. Both get a free month of
-/// Plus once the new household plans a dinner and saves recipes (decisions 675 and 698).
+/// Plus once the new household plans a dinner and saves recipes (decisions 675 and 698), as an
+/// Apple offer code to redeem here (decision 755).
 struct PlusInviteView: View {
     @Environment(PlusStore.self) private var plus
     @State private var loadError: String?
@@ -40,6 +41,10 @@ struct PlusInviteView: View {
             // A household that entered a code sees what's left first.
             if let progress = pendingProgress {
                 ReferralChecklistSection(progress: progress)
+                    .id(Self.progressID)
+            } else if let month = plus.openFreeMonth {
+                // An earned free month, ready to redeem or on the way (decision 755).
+                FreeMonthSection(month: month)
                     .id(Self.progressID)
             }
             if let howItWorks = plus.referral?.howItWorks {
@@ -141,7 +146,7 @@ struct PlusInviteView: View {
             Text("Got a Code?")
         } footer: {
             Text(
-                "Enter another household's code. Once you add a recipe and plan a dinner, you both get a free month of Plus."
+                "Enter another household's code. Once you add a recipe and plan a dinner, you both get a free month of Plus to redeem through Apple."
             )
         }
     }

@@ -138,3 +138,33 @@ extension XCTestCase {
         XCTAssertTrue(waitGone(app.navigationBars["Add Recipes"], timeout: 5), "Add Recipes didn't close")
     }
 }
+
+/// Fake free month codes in the local API's pool (decision 755), so a free month earned in a
+/// test is ready to redeem rather than on the way. The route is only there with developer
+/// sign-in on. The codes are made up and Apple never sees them.
+enum OfferCodeSeed {
+    static var base: String { ProcessInfo.processInfo.environment["QA_API_BASE"] ?? "http://localhost:8082" }
+
+    /// Adds `count` codes, signed in as a throwaway developer.
+    static func seed(count: Int = 4) async throws {
+        let login = try await call("/api/v1/auth/dev", token: nil, body: ["subject": "qa-offer-codes"])
+        let token = try XCTUnwrap(login["accessToken"] as? String)
+        _ = try await call("/api/v1/plus/dev/offer-codes", token: token, body: ["count": count])
+    }
+
+    private static func call(_ path: String, token: String?, body: [String: Any]) async throws -> [String: Any] {
+        var request = URLRequest(url: URL(string: base + path)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            throw NSError(
+                domain: "OfferCodeSeed", code: status,
+                userInfo: [NSLocalizedDescriptionKey: "POST \(path) answered \(status)"])
+        }
+        return try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+    }
+}

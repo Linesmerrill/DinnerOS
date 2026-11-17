@@ -104,8 +104,9 @@ extension APIError: LocalizedError {
                 // The API documents validation messages as safe to show.
                 message
             case "plus_required", "code_not_found", "code_not_allowed", "code_taken", "code_invalid",
-                "code_changed", "code_change_limit", "code_replaced":
-                // DinnerOS Plus and invite codes: the API writes these for people.
+                "code_changed", "code_change_limit", "code_replaced", "free_month_not_found",
+                "free_month_on_the_way", "free_month_redeemed":
+                // DinnerOS Plus, invite codes and free months: the API writes these for people.
                 message.isEmpty ? String(localized: "Something went wrong. Try again.") : message
             case "fetch_failed" where !message.isEmpty, "page_needs_phone" where !message.isEmpty:
                 // The API says what went wrong with the page in a sentence written for people:

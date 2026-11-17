@@ -12,6 +12,13 @@ protocol PlusPurchasing: Sendable {
     /// `userID` is the member buying; the API shows them as who started Plus.
     func purchase(productID: String, householdID: String, userID: String?) async throws -> PlusPurchaseResult
     func restore(householdID: String) async throws
+    /// Asks the App Store's middleman for the household's latest purchases, after a free
+    /// month's code may have gone in through Apple's sheet (decision 755).
+    func refreshCustomerInfo(householdID: String) async
+}
+
+extension PlusPurchasing {
+    func refreshCustomerInfo(householdID: String) async {}
 }
 
 /// Why buying didn't start.
@@ -53,8 +60,17 @@ final class PlusStore {
     /// A new household's code just went in: the Menu shows the checklist once its own welcome
     /// is out of the way, since two sheets can't show at once.
     var checklistWaiting = false
-    /// "Your free month is unlocked", shown once when the checklist is done.
+    /// "Your free month is ready", shown once when the checklist is done.
     var freeMonthOn: ReferralProgress?
+    /// The free month whose code is being fetched and redeemed.
+    private(set) var redeemingMonthID: String?
+    /// What the last Redeem said: the code is copied, or what went wrong. Shown under the
+    /// free month it was for.
+    private(set) var freeMonthNotice: FreeMonthNotice?
+    /// Shows Apple's redeem sheet. Tests put a stand-in here.
+    @ObservationIgnored var redeemer: any OfferCodeRedeeming = StoreKitOfferCodeRedeemer()
+    /// How long "Your code is copied" shows before Apple's sheet covers it.
+    @ObservationIgnored var redeemSheetDelay: Duration = .seconds(1.5)
     /// "Step 2 done", shown once as each checklist step finishes (decision 729).
     var stepDone: ReferralStepMoment?
     /// Why a saved code couldn't be used, in the server's words.
@@ -296,6 +312,76 @@ final class PlusStore {
         try? await loadReferral()
     }
 
+    // MARK: Free months (decision 755)
+
+    /// The free month to show: from Give a Free Month's answer when it has one, else Plus.
+    var openFreeMonth: FreeMonth? {
+        FreeMonth.firstOpen(referral?.invites?.freeMonths) ?? status?.openFreeMonth
+    }
+
+    /// Redeem: gets the month's code, copies it, then opens Apple's redeem sheet, where the
+    /// person pastes it. Apple's sheet can't be filled in for them, so the clipboard does it;
+    /// Apple's redeem page, which can, is the fallback when the sheet won't show. Afterwards
+    /// Plus is checked again, since RevenueCat tells the API about the redemption.
+    func redeemFreeMonth(_ month: FreeMonth) async {
+        guard let api, let householdID, redeemingMonthID == nil, month.isReady else { return }
+        redeemingMonthID = month.id
+        freeMonthNotice = nil
+        defer { redeemingMonthID = nil }
+        let revealed: FreeMonthCode
+        do {
+            revealed = try await session.authorized { token in
+                try await api.revealFreeMonth(householdID: householdID, monthID: month.id, accessToken: token)
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            freeMonthNotice = FreeMonthNotice(
+                monthID: month.id, text: HouseholdStore.message(for: error), isError: true)
+            // A month that turned out to be on the way or already used shows as it is now.
+            await reloadFreeMonths()
+            return
+        }
+        guard householdID == self.householdID else { return }
+        redeemer.copy(revealed.code)
+        freeMonthNotice = FreeMonthNotice(
+            monthID: month.id, text: revealed.copiedText ?? FreeMonthCode.bundledCopiedText, isError: false)
+        Self.logger.info("Free month code revealed")
+        try? await Task.sleep(for: redeemSheetDelay)
+        var result = OfferCodeSheetResult.closed
+        do {
+            result = try await redeemer.presentRedeemSheet()
+        } catch {
+            Self.logger.notice("Redeem sheet failed: \(String(describing: error), privacy: .public)")
+            if let url = revealed.redeemURL, await redeemer.open(url) {
+                // The App Store takes it from here; Plus is checked when the app comes back.
+            } else {
+                freeMonthNotice = FreeMonthNotice(
+                    monthID: month.id,
+                    text: String(
+                        localized:
+                            "Apple's screen didn't open. Your code is copied. In the App Store, tap your picture, then Redeem Gift Card or Code."
+                    ),
+                    isError: true)
+            }
+        }
+        await purchaser.refreshCustomerInfo(householdID: householdID)
+        if result == .redeemed {
+            freeMonthNotice = FreeMonthNotice(
+                monthID: month.id, text: String(localized: "Your free month went through. Plus is starting."),
+                isError: false)
+            _ = await waitForPlus()
+        } else {
+            await reload()
+        }
+        await reloadFreeMonths()
+    }
+
+    /// Give a Free Month's answer again, when it's been loaded.
+    private func reloadFreeMonths() async {
+        if referral != nil { try? await loadReferral() }
+    }
+
     /// Referrals across every household, or nil for anyone who doesn't run DinnerOS or an API
     /// without the route.
     func referralSummary() async throws -> PlusReferralSummary? {
@@ -306,6 +392,13 @@ final class PlusStore {
             return nil
         }
     }
+}
+
+/// What Redeem last said, under the free month it was for.
+nonisolated struct FreeMonthNotice: Hashable, Sendable {
+    let monthID: String
+    let text: String
+    let isError: Bool
 }
 
 #if DEBUG

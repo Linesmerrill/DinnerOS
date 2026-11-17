@@ -264,7 +264,7 @@ struct InviteCodeSetupSection: View {
                         Text(saved.title ?? String(localized: "Your invite code is saved"))
                             .font(.headline)
                         Text(
-                            "Create your household next. Then add a recipe and plan a dinner, and you both get a free month of Plus."
+                            "Create your household next. Then add a recipe and plan a dinner, and you both get a free month of Plus to redeem through Apple."
                         )
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -302,7 +302,7 @@ struct InviteCodeSetupSection: View {
         } footer: {
             // Once a code is saved, the row above already says this.
             if plus.savedInvite?.accepted != true {
-                Text("From a friend's DinnerOS link. You both get a free month of Plus.")
+                Text("From a friend's DinnerOS link. You both get a free month of Plus to redeem through Apple.")
             }
         }
         .onAppear {
@@ -443,6 +443,10 @@ struct ReferralChecklistSheet: View {
     var body: some View {
         NavigationStack {
             List {
+                // The checklist is done: the free month itself, ready or on the way.
+                if let month = plus.openFreeMonth, progress?.isPending != true {
+                    FreeMonthSection(month: month)
+                }
                 if let progress {
                     if progress.isPending {
                         Section {
@@ -457,7 +461,7 @@ struct ReferralChecklistSheet: View {
                             ReferralChecklist(progress: progress) { dismiss() }
                         }
                     }
-                } else {
+                } else if plus.openFreeMonth == nil {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                 }
@@ -520,6 +524,9 @@ struct ReferralMenuCard: View {
             if plus.showsReferralCard, let progress = plus.pendingReferral {
                 card(progress)
                     .padding(.horizontal, 16)
+            } else if let month = plus.menuFreeMonth {
+                readyCard(month)
+                    .padding(.horizontal, 16)
             }
         }
         // Saving recipes and planning a dinner change the count; check again when they might
@@ -535,6 +542,43 @@ struct ReferralMenuCard: View {
     private struct SetupCounts: Equatable {
         let recipes: Int
         let meals: Int
+    }
+
+    /// "Your free month is ready": opens the free month with Redeem.
+    private func readyCard(_ month: FreeMonth) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Button {
+                plus.showsChecklist = true
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "gift.fill")
+                        .font(.title2)
+                        .foregroundStyle(.tint)
+                        .accessibilityHidden(true)
+                    Text(month.title)
+                        .font(.headline)
+                        .foregroundStyle(Color.primary)
+                    Spacer(minLength: 4)
+                    Text(month.buttonTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.tint)
+                    Image(systemName: "chevron.forward")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Shows how to redeem your free month")
+            .accessibilityIdentifier("FreeMonthMenuCard")
+            Button("Hide") { plus.hideFreeMonthCard(month) }
+                .font(.subheadline)
+                .buttonStyle(.borderless)
+                .accessibilityHint("You can still find it in Give a Free Month")
+        }
+        .padding(14)
+        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16))
     }
 
     private func card(_ progress: ReferralProgress) -> some View {

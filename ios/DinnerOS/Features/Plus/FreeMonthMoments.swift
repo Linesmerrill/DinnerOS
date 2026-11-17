@@ -4,7 +4,7 @@ import UIKit
 // MARK: - Where the moments show
 
 extension View {
-    /// "Step 2 done" and "Your free month is unlocked" (decision 729), in a window of their own
+    /// "Step 2 done" and "Your free month is ready" (decisions 729 and 755), in a window of their own
     /// over the app: they show above any sheet, and touches outside the card go to the app
     /// underneath, so nobody's flow stops. Attach once, inside the Plus environment.
     func freeMonthMoments() -> some View {
@@ -235,10 +235,12 @@ private struct StepDots: View {
     }
 }
 
-// MARK: - The free month is unlocked
+// MARK: - The free month is ready
 
-/// The last step's bigger moment: "Your free month is unlocked" in the middle of the screen,
-/// with confetti falling over everything. Fades on its own; Done or a tap closes it sooner.
+/// The last step's bigger moment, in the middle of the screen with confetti falling over
+/// everything (decision 729). The free month comes as an Apple offer code (decision 755), so a
+/// ready one says what redeeming starts and has Redeem; it stays until it's closed. One still
+/// on the way says so and fades on its own.
 struct FreeMonthUnlockedCard: View {
     let hitArea: MomentHitArea
     let close: () -> Void
@@ -248,6 +250,16 @@ struct FreeMonthUnlockedCard: View {
     @ScaledMetric(relativeTo: .largeTitle) private var markSize: CGFloat = 60
     @State private var shown = false
     @State private var closing = false
+    /// The month as it was when the card opened, so Redeem's refresh doesn't swap it out.
+    @State private var pinned: FreeMonth?
+
+    private var month: FreeMonth? { pinned ?? plus.openFreeMonth }
+
+    private var title: String {
+        if let month { return month.title }
+        // An API from before offer codes, with a free month in its own database.
+        return String(localized: "Your free month is unlocked")
+    }
 
     var body: some View {
         ZStack {
@@ -269,6 +281,14 @@ struct FreeMonthUnlockedCard: View {
         }
         .task { await run() }
         .onDisappear { hitArea.frame = .null }
+        .onChange(of: plus.freeMonthNotice) { _, notice in
+            // The code is copied: get out of the way of Apple's sheet, which opens next.
+            guard let notice, let month, notice.monthID == month.id, !notice.isError else { return }
+            Task {
+                try? await Task.sleep(for: .seconds(1))
+                dismiss()
+            }
+        }
     }
 
     private var card: some View {
@@ -277,32 +297,41 @@ struct FreeMonthUnlockedCard: View {
                 .font(.system(size: markSize))
                 .foregroundStyle(.tint)
                 .overlay(alignment: .bottomTrailing) {
-                    Image(systemName: "checkmark.circle.fill")
+                    Image(systemName: month?.isOwed == true ? "hourglass.circle.fill" : "checkmark.circle.fill")
                         .font(.system(size: markSize * 0.42))
                         .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, .green)
+                        .foregroundStyle(.white, month?.isOwed == true ? .orange : .green)
                         .offset(x: markSize * 0.18, y: markSize * 0.12)
                 }
                 .symbolEffect(.bounce, value: shown && !reduceMotion)
                 .padding(.bottom, 4)
                 .accessibilityHidden(true)
-            Text("Your free month is unlocked")
+            Text(title)
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
-            if let until = plus.status?.freeUntil {
-                Text("Plus is free until \(PlusText.day(until)).")
+            if let month {
+                Text(month.message)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                if month.isReady {
+                    FreeMonthRedeemControls(month: month)
+                        .multilineTextAlignment(.leading)
+                        .padding(.top, 4)
+                    Button("Not Now", action: dismiss)
+                        .frame(minHeight: 44)
+                } else {
+                    doneButton
+                }
+            } else {
+                if let until = plus.status?.freeUntil {
+                    Text("Plus is free until \(PlusText.day(until)).")
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                doneButton
             }
-            Button(action: dismiss) {
-                Text("Done")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: 32)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .padding(.top, 4)
         }
         .padding(28)
         .frame(maxWidth: 420)
@@ -310,17 +339,34 @@ struct FreeMonthUnlockedCard: View {
         .background(Color(.tertiarySystemBackground), in: .rect(cornerRadius: 28))
         .shadow(color: .black.opacity(0.25), radius: 28, y: 10)
         .contentShape(.rect)
-        .onTapGesture(perform: dismiss)
+        .onTapGesture {
+            // A ready month waits for Redeem or Not Now; a tap elsewhere shouldn't lose it.
+            if month?.isReady != true { dismiss() }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("FreeMonthUnlocked")
     }
 
+    private var doneButton: some View {
+        Button(action: dismiss) {
+            Text("Done")
+                .font(.headline)
+                .frame(maxWidth: .infinity, minHeight: 32)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .padding(.top, 4)
+    }
+
     private func run() async {
+        pinned = plus.openFreeMonth
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        AccessibilityNotification.Announcement(String(localized: "Your free month is unlocked")).post()
+        AccessibilityNotification.Announcement(title).post()
         withAnimation(reduceMotion ? .easeOut(duration: 0.25) : .spring(duration: 0.5, bounce: 0.4)) {
             shown = true
         }
+        // Redeem needs reading first, so a ready month stays until it's closed.
+        guard month?.isReady != true else { return }
         let seconds = ReferralMoments.seconds(
             ReferralMoments.unlockedSeconds, voiceOver: UIAccessibility.isVoiceOverRunning)
         try? await Task.sleep(for: .seconds(seconds))
