@@ -166,7 +166,7 @@ struct CompanionEditorView: View {
     private var goesWithSection: some View {
         Section {
             ValueChipGroup(
-                options: cuisineOptions, selection: $draft.cuisines, maxCount: 12, initialCount: 12)
+                options: cuisineOptions, selection: $draft.cuisines, maxCount: 12, initialCount: 60)
             NavigationLink {
                 CompanionRecipePicker(selection: $draft.recipes)
             } label: {
