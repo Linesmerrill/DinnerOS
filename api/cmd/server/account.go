@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/catalog"
+	"github.com/Linesmerrill/DinnerOS/api/internal/companions"
 	"log/slog"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -48,6 +49,7 @@ func newAccountService(db *mongo.Database, householdService *households.Service,
 			shopping.NewMongoStore(db),
 			skips.NewMongoStore(db),
 			sameitems.NewMongoStore(db),
+			companions.NewMongoStore(db),
 			ratingStore,
 			eventStore,
 			recommendations.NewMongoStore(db),

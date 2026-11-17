@@ -140,6 +140,9 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/same-items` → `{items}` | `household.view` | 8 | ✅ |
 | POST | `/api/v1/households/{householdId}/same-items` `{variantKey, variantName, keptKey, keptName}` → `201` link, or `200` when it replaced that name's link | `plan.edit` | 8 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/same-items/{linkId}` → `204` | `plan.edit` | 8 | ✅ |
+| GET | `/api/v1/households/{householdId}/companions` → `{items, frequencies, modes}` | `household.view` | 114 | ✅ |
+| POST | `/api/v1/households/{householdId}/companions` → `201` companion | `recipes.edit` | 114 | ✅ |
+| GET, PUT, DELETE | `/api/v1/households/{householdId}/companions/{companionId}` → companion, or `204` | `household.view`; changes `recipes.edit` | 114 | ✅ |
 | GET | `/api/v1/households/{householdId}/recipes/{recipeId}/customizations` `?servings&entryId&week` → `{recipeId, servings, groups}` | `household.view` | 6 | ✅ |
 | PUT | `/api/v1/households/{householdId}/plans/{week}/entries/{entryId}/customization` `{selections}` → plan | `plan.edit` | 6 | ✅ |
 | GET | `/api/v1/ingredients` `?q&limit` → `{items: [{id, key, name, category, categoryConfident, imageUrl?}]}` | bearer | 7 | ✅ |
@@ -1464,6 +1467,67 @@ the same ingredients ([pantry-usage.md](pantry-usage.md)).
 | 400 | `invalid_request` | Body is empty, malformed, has unknown fields, or wrong types |
 | 403 | `forbidden` | Skipping or resuming without `plan.edit` |
 | 404 | `not_found` | Not a member of the household; no such skip |
+
+
+## Companions
+
+Things that go with dinner but aren't dinner (decisions 715-719): a store item
+("Tortilla chips") or one of the household's add-on recipes ("Garlic Bread").
+
+`GET /api/v1/households/{householdId}/companions` (`household.view`) →
+`{items, frequencies, modes}`. The household's own companions come first, then
+ones made from add-on recipes, each oldest first. `frequencies` and `modes`
+are the editor's choices with the words to show (`Every Week`, `Every 2
+Weeks`, `Once a Month`, `Only With Meals It Goes With`; `Add It for Me`, `Just
+Suggest It`, `Never`).
+
+A companion: `{id, name, storeItem, quantity, unit, productUrl, linkedRecipe:
+{id, name} | null, cuisines, recipes: [{id, name}], mealCategories, frequency,
+mode, summary, lastListedWeek, lastListedAt, createdAt, updatedAt}`.
+`frequency` is `every_week`, `every_2_weeks`, `every_month` or `none`; `mode`
+is `auto`, `suggest` or `never`. `summary` is the line the list shows ("Goes
+with Mexican · Suggested").
+
+`POST .../companions` and `PUT .../companions/{companionId}` (`recipes.edit`)
+take `{name, storeItem, quantity, unit, productUrl, cuisines, recipeIds,
+mealCategories, frequency, mode}`; only `name` is required. Cuisines are
+stored in canonical form; `productUrl` must be http or https; `recipeIds` must
+be the household's recipes. `400 validation_failed` carries a message the app
+shows ("Give it a name."). `DELETE` → `204`.
+
+**Add-ons become companions on first read.** The first time a household's
+companions are listed or evaluated, every add-on recipe without a companion
+gets one: named for the recipe, linked to it, `mode: suggest`, `frequency:
+none`, with the cuisines of pairing rules that match on cuisines alone and the
+meal categories of rules that match on meal categories alone. It runs again
+on every read and does nothing once each add-on has one (a unique index on
+the linked recipe). Deleting a companion made from an add-on hides it, so it
+isn't made again. The add-on recipe is never changed or deleted, and its
+rules keep working: a rule and its companion offer the same add-on under one
+key (`recipe:<id>`), shown once, as the rule.
+
+**In the week's suggestions.** `GET .../autopilot/weeks/{week}/pairings` offers
+companions after rules and before learned pairings, with `source: companion`
+and `companionId`. A companion is due for a planned main meal when the meal's
+cuisine (or its region) is one of its cuisines, the meal is one of its
+recipes, or the meal is in one of its meal categories (reason "Goes with
+Mexican meals"). It is also due when its frequency says so since
+`lastListedWeek`; then it shows once, with the week's first main meal ("You
+get it every 2 weeks"), and its grocery line reads just its name. A store item
+companion's key is `companion:<id>`.
+
+- `suggest`: offered, with Add (`pairings/accept`) and Not This Week
+  (`pairings/dismiss`).
+- `auto`: added for you. Reading the week's pairings adds due store items to
+  the list and plans due linked add-ons; building the grocery list adds due
+  store items only (it never changes the plan). Never in a finalized week or
+  a past one. Taking one off the list keeps it off that week.
+- `never`: nothing. For a companion made from an add-on, that add-on's rule
+  and learned pairings are hidden too.
+
+Accepting, or an `auto` add, records the week on the companion
+(`lastListedWeek`, `lastListedAt`), as does accepting a rule's pairing for a
+linked add-on.
 
 ## Pantry
 
@@ -3731,7 +3795,8 @@ usually has ([autopilot.md](autopilot.md#add-on-pairings)).
   meals. `entryId` narrows it to one meal, for the "you added a pasta dish"
   prompt.
 - At most 3 `pairings` per meal: rules first (`always`, then `suggest`), then
-  learned ones by confidence. `source` is `rule` or `learned`; `target.kind`
+  learned ones by confidence (companions sit between them, see
+  [Companions](#companions)). `source` is `rule`, `learned` or `companion`; `target.kind`
   is `recipe` or `grocery_item`; `confidence` and `learned` are present when
   history backs the pairing (also for a rule).
 - Pairings already in the week or dismissed are left out here. An add-on

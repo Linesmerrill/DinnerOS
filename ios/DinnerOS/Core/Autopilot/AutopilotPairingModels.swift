@@ -21,6 +21,8 @@ nonisolated struct PairingSource: RawRepresentable, Codable, Hashable, Sendable 
     static let rule = PairingSource(rawValue: "rule")
     /// The household's own history.
     static let learned = PairingSource(rawValue: "learned")
+    /// One of the household's companions (decisions 715-719).
+    static let companion = PairingSource(rawValue: "companion")
 }
 
 /// How often a rule applies (`AutopilotPairingFrequency`).
@@ -268,8 +270,13 @@ nonisolated struct Pairing: Decodable, Hashable, Sendable, Identifiable {
     var inPlan: Bool
     /// A learned pairing with a meal category, which `pairings/rules` can keep as a rule.
     var canMakeRule: Bool
+    /// The household companion behind it, also when a rule offers the same add-on.
+    var companionID: String?
 
     var id: String { key }
+
+    /// Whether one of the household's companions offers it.
+    var isCompanion: Bool { source == .companion || companionID != nil }
 
     var name: String {
         switch target {
@@ -300,6 +307,7 @@ nonisolated struct Pairing: Decodable, Hashable, Sendable, Identifiable {
         case key, target, servings, source, frequency, mealCategory, confidence, learned, reason
         case ruleID = "ruleId"
         case inPlan, canMakeRule
+        case companionID = "companionId"
     }
 
     private enum TargetKeys: String, CodingKey {
@@ -310,7 +318,7 @@ nonisolated struct Pairing: Decodable, Hashable, Sendable, Identifiable {
         key: String, target: Target, servings: Int? = nil, source: PairingSource = .rule,
         frequency: PairingFrequency = .suggest, mealCategory: MealCategory? = nil, confidence: Double? = nil,
         learned: LearnedPairing? = nil, reason: String? = nil, ruleID: String? = nil, inPlan: Bool = false,
-        canMakeRule: Bool = false
+        canMakeRule: Bool = false, companionID: String? = nil
     ) {
         self.key = key
         self.target = target
@@ -324,6 +332,7 @@ nonisolated struct Pairing: Decodable, Hashable, Sendable, Identifiable {
         self.ruleID = ruleID
         self.inPlan = inPlan
         self.canMakeRule = canMakeRule
+        self.companionID = companionID
     }
 
     /// A target of an unknown kind fails, so a lossy list leaves the pairing out: there is
@@ -354,7 +363,8 @@ nonisolated struct Pairing: Decodable, Hashable, Sendable, Identifiable {
             reason: container.decodeLenient(String.self, forKey: .reason).flatMap { $0.isEmpty ? nil : $0 },
             ruleID: container.decodeLenient(String.self, forKey: .ruleID),
             inPlan: container.decodeLenientBool(forKey: .inPlan) ?? false,
-            canMakeRule: container.decodeLenientBool(forKey: .canMakeRule) ?? false)
+            canMakeRule: container.decodeLenientBool(forKey: .canMakeRule) ?? false,
+            companionID: container.decodeLenient(String.self, forKey: .companionID))
     }
 }
 

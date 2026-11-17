@@ -2684,6 +2684,146 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/companions:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    get:
+      summary: List the household's companions
+      description: |
+        Things that go with dinner (decisions 715-719): store items such as
+        tortilla chips, and the household's add-on recipes. The household's own
+        companions come first, then ones made from add-on recipes, each oldest
+        first. The first read makes one companion for every add-on recipe that
+        has none (linked to it, `mode: suggest`, paired with what the
+        household's pairing rules pair it with); the recipes themselves are
+        never changed. Also returns the editor's choices with their labels.
+        Requires `household.view`.
+      operationId: listCompanions
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The companions and the editor's choices.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanionList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      summary: Add a companion
+      description: |
+        Only `name` is required. `frequency` defaults to `none` when the
+        companion goes with cuisines, recipes or meal categories, else
+        `every_week`; `mode` defaults to `suggest`. A household may make 100.
+        Requires `recipes.edit`.
+      operationId: createCompanion
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanionRequest"
+      responses:
+        "201":
+          description: The new companion.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Companion"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/companions/{companionId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+      - name: companionId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get a companion
+      description: Requires `household.view`.
+      operationId: getCompanion
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The companion.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Companion"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Change a companion
+      description: |
+        Replaces what a member edits. Its link to an add-on recipe and when it
+        was last on a list stay. Requires `recipes.edit`.
+      operationId: updateCompanion
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanionRequest"
+      responses:
+        "200":
+          description: The changed companion.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Companion"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete a companion
+      description: |
+        A companion made from an add-on recipe is hidden rather than removed,
+        so it isn't made again; the recipe is never touched. Requires
+        `recipes.edit`.
+      operationId: deleteCompanion
+      tags: [autopilot]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Deleted.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/households/{householdId}/grocery-skips:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -6363,6 +6503,140 @@ components:
         type: string
         example: 66e5a1f2c3b4a5d6e7f80d01
   schemas:
+    CompanionRecipe:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    CompanionOption:
+      type: object
+      required: [value, label]
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+          example: Just Suggest It
+    Companion:
+      type: object
+      required: [id, name, storeItem, quantity, unit, productUrl, linkedRecipe, cuisines, recipes, mealCategories, frequency, mode, summary, lastListedWeek, lastListedAt, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          example: Chips and salsa
+        storeItem:
+          type: [string, "null"]
+          description: What goes on the list; null when it goes on under its name.
+          example: Tortilla chips
+        quantity:
+          type: [number, "null"]
+        unit:
+          type: [string, "null"]
+          description: An ingredient unit code, set with quantity.
+        productUrl:
+          type: [string, "null"]
+          description: An http or https link to the product.
+        linkedRecipe:
+          description: The add-on recipe it was made from; accepting it plans that recipe.
+          oneOf:
+            - $ref: "#/components/schemas/CompanionRecipe"
+            - type: "null"
+        cuisines:
+          type: array
+          items:
+            type: string
+          description: Canonical cuisine values; a meal of one of them (or of a cuisine in its region) is due.
+        recipes:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanionRecipe"
+        mealCategories:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutopilotMealCategory"
+          description: Carried over from a pairing rule by migration.
+        frequency:
+          type: string
+          enum: [every_week, every_2_weeks, every_month, none]
+        mode:
+          type: string
+          enum: [auto, suggest, never]
+          description: "`auto` adds it to the list for you, `suggest` offers it, `never` turns it off (for a linked add-on, its rule and learned pairings too)."
+        summary:
+          type: string
+          example: Goes with Mexican · Suggested
+        lastListedWeek:
+          type: [string, "null"]
+          description: The last week it went on a grocery list or into the plan.
+          example: 2026-W47
+        lastListedAt:
+          type: [string, "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CompanionList:
+      type: object
+      required: [items, frequencies, modes]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Companion"
+        frequencies:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanionOption"
+        modes:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanionOption"
+    CompanionRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 60
+        storeItem:
+          type: [string, "null"]
+          maxLength: 60
+        quantity:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 99
+        unit:
+          type: [string, "null"]
+        productUrl:
+          type: [string, "null"]
+        cuisines:
+          type: array
+          items:
+            type: string
+          maxItems: 12
+        recipeIds:
+          type: array
+          items:
+            type: string
+          maxItems: 20
+        mealCategories:
+          type: array
+          items:
+            type: string
+        frequency:
+          type: string
+          enum: [every_week, every_2_weeks, every_month, none]
+        mode:
+          type: string
+          enum: [auto, suggest, never]
     PlusStatus:
       type: object
       required: [enabled, active, trial, willRenew, billingIssue]
@@ -12742,8 +13016,8 @@ components:
       enum: [recipe, grocery_item]
     AutopilotPairingSource:
       type: string
-      description: "`rule`: a household rule. `learned`: the household's history."
-      enum: [rule, learned]
+      description: "`rule`: a household rule. `learned`: the household's history. `companion`: one of the household's companions."
+      enum: [rule, learned, companion]
     AutopilotPairingFrequency:
       type: string
       description: "`always`: included with a proposed meal unless taken out. `suggest`: offered."
@@ -12831,7 +13105,7 @@ components:
           example: 0.49
     AutopilotPairing:
       type: object
-      required: [key, target, servings, source, frequency, mealCategory, confidence, learned, reason, ruleId, inPlan, canMakeRule]
+      required: [key, target, servings, source, frequency, mealCategory, confidence, learned, reason, ruleId, inPlan, canMakeRule, companionId]
       properties:
         key:
           type: string
@@ -12875,6 +13149,9 @@ components:
         canMakeRule:
           type: boolean
           description: A learned pairing with a meal category, which `pairings/rules` can keep as a rule.
+        companionId:
+          type: [string, "null"]
+          description: The household companion behind it, also when a rule offers the same add-on; null otherwise.
     AutopilotProposalPairing:
       allOf:
         - $ref: "#/components/schemas/AutopilotPairing"
@@ -12955,7 +13232,7 @@ components:
     AutopilotPairingGroceryItem:
       type: object
       description: A paired grocery item on the week's grocery list.
-      required: [id, key, groceryItem, entryId, recipe, source, ruleId, text, addedBy, addedAt]
+      required: [id, key, groceryItem, entryId, recipe, source, ruleId, companionId, text, addedBy, addedAt]
       properties:
         id:
           type: string
@@ -12979,11 +13256,15 @@ components:
           $ref: "#/components/schemas/AutopilotPairingSource"
         ruleId:
           type: [string, "null"]
+        companionId:
+          type: [string, "null"]
         text:
           type: string
+          description: Just the name for a companion due by how often it's bought rather than for the meal.
           example: Club crackers for Chicken Noodle Soup
         addedBy:
           type: string
+          description: Empty when a companion set to `auto` added it.
         addedAt:
           type: string
           format: date-time

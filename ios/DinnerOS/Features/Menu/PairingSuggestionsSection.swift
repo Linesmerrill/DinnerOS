@@ -31,7 +31,7 @@ struct PairingSuggestionsSection: View {
             VStack(alignment: .leading, spacing: 12) {
                 MenuSectionHeader(
                     title: String(localized: "Goes well with your meals"),
-                    subtitle: String(localized: "Add-ons Autopilot suggests for this week")
+                    subtitle: String(localized: "Sides and extras for this week's dinners")
                 )
                 .padding(.horizontal, 16)
                 VStack(spacing: 0) {
@@ -78,7 +78,7 @@ struct PairingSuggestionsSection: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
-                Button("Not This Time") {
+                Button("Not This Week") {
                     perform { try await pairings.dismiss(entryID: meal.entryID, key: pairing.key) }
                 }
                 .buttonStyle(.bordered)
@@ -95,6 +95,7 @@ struct PairingSuggestionsSection: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(PairingFormat.addPrompt(pairing)) \(withMeal(meal))")
+        .accessibilityIdentifier(pairing.isCompanion ? "CompanionSuggestion" : "PairingSuggestion")
     }
 
     /// "with Chicken Noodle Soup on Thursday", or without the day when it's unscheduled.

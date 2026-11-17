@@ -31,6 +31,11 @@ func CanonicalCuisine(s string) string { return canonicalCuisine(s) }
 // CuisineLabel returns a known canonical cuisine's display label, or "".
 func CuisineLabel(value string) string { return cuisineLabel(value) }
 
+// IsMealCategory reports whether value is one of MealCategoryOptions.
+func IsMealCategory(value string) bool {
+	return slices.Contains(optionValues(MealCategoryOptions), value)
+}
+
 // CanonicalTag returns the canonical form of a tag.
 func CanonicalTag(s string) string { return canonicalTag(s) }
 

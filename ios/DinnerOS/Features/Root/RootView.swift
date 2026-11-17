@@ -21,6 +21,7 @@ struct RootView: View {
     @Environment(MealPlanner.self) private var planner
     @Environment(PairingsStore.self) private var pairings
     @Environment(MealSwapStore.self) private var swaps
+    @Environment(CompanionsStore.self) private var companions: CompanionsStore?
     /// Optional so previews needn't supply one.
     @Environment(PushNotificationStore.self) private var push: PushNotificationStore?
 
@@ -53,6 +54,7 @@ struct RootView: View {
                     planner.reset()
                     pairings.reset()
                     swaps.reset()
+                    companions?.reset()
                     // At launch there's no user while the session restores; only a real
                     // sign-out discards queued events.
                     if session.state == .signedOut {

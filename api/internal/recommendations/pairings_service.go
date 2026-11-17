@@ -9,6 +9,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/companions"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/grocery"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
@@ -41,11 +42,21 @@ type pairingData struct {
 	learned           map[string][]PairingStats
 	state             WeekPairings
 	facts             map[string]mealFacts
+	// week is the week pairings are for; companions are due by it.
+	week       planning.Week
+	companions []companions.Companion
 }
 
-// loadPairings loads the profile, catalog, overrides, 26 weeks of plans, and
-// the week's pairing state, and learns pairings from every week but w.
+// loadPairings loads the profile, catalog, overrides, companions, 26 weeks
+// of plans, and the week's pairing state, and learns pairings from every week
+// but w.
 func (s *Service) loadPairings(ctx context.Context, householdID string, w planning.Week) (*pairingData, error) {
+	return s.loadPairingData(ctx, householdID, w, true)
+}
+
+// loadPairingData is loadPairings, without the plan history and learned
+// pairings unless history is set.
+func (s *Service) loadPairingData(ctx context.Context, householdID string, w planning.Week, history bool) (*pairingData, error) {
 	if s.pairings == nil {
 		return nil, ErrPairingsUnavailable
 	}
@@ -65,9 +76,11 @@ func (s *Service) loadPairings(ctx context.Context, householdID string, w planni
 	if err != nil {
 		return nil, fmt.Errorf("load recipe overrides: %w", err)
 	}
-	plans, err := s.plans.ListPlans(ctx, householdID, w.AddWeeks(-(planning.MaxRangeWeeks - 1)).String(), w.String())
-	if err != nil {
-		return nil, fmt.Errorf("load plans: %w", err)
+	var plans []planning.Plan
+	if history {
+		if plans, err = s.plans.ListPlans(ctx, householdID, w.AddWeeks(-(planning.MaxRangeWeeks - 1)).String(), w.String()); err != nil {
+			return nil, fmt.Errorf("load plans: %w", err)
+		}
 	}
 	state, err := s.pairings.GetWeekPairings(ctx, householdID, w.String())
 	switch {
@@ -79,7 +92,7 @@ func (s *Service) loadPairings(ctx context.Context, householdID string, w planni
 	d := &pairingData{
 		profile: profile, householdServings: servings, state: state,
 		byID: make(map[string]recipes.Recipe, len(catalog)), overrides: make(map[string]RecipeOverride, len(overrideList)),
-		facts: map[string]mealFacts{},
+		facts: map[string]mealFacts{}, week: w,
 	}
 	for _, r := range catalog {
 		d.byID[r.ID] = r
@@ -87,7 +100,10 @@ func (s *Service) loadPairings(ctx context.Context, householdID string, w planni
 	for _, o := range overrideList {
 		d.overrides[o.RecipeID] = o
 	}
-	d.learned = buildPairingHistory(catalog, d.overrides, plans, w.String()).learned()
+	if history {
+		d.learned = buildPairingHistory(catalog, d.overrides, plans, w.String()).learned()
+	}
+	s.loadCompanions(ctx, d, householdID, catalog)
 	return d, nil
 }
 
@@ -163,6 +179,16 @@ func (d *pairingData) suggest(sub pairingSubject, plan planning.Plan) []Pairing 
 			add(p)
 		}
 	}
+	for _, p := range d.companionPairings(sub, main, facts, plan) {
+		if i, ok := seen[p.Key]; ok {
+			// A rule already offers the companion's add-on.
+			if out[i].CompanionID == "" {
+				out[i].CompanionID = p.CompanionID
+			}
+			continue
+		}
+		add(p)
+	}
 	var stats []PairingStats
 	for _, c := range facts.categories {
 		stats = append(stats, d.learned[c]...)
@@ -192,6 +218,9 @@ func (d *pairingData) suggest(sub pairingSubject, plan planning.Plan) []Pairing 
 		p.Reason = fmt.Sprintf("You usually have %s with %s (%d%% of %s weeks)", targetName(p), category.short,
 			int(math.Round(st.Confidence()*100)), category.week)
 		add(p)
+	}
+	if off := d.turnedOff(); off != nil {
+		out = slices.DeleteFunc(out, func(p Pairing) bool { return off[p.Key] })
 	}
 	d.mark(out, sub, plan)
 	return out
@@ -349,6 +378,9 @@ func (s *Service) WeekPairings(ctx context.Context, householdID, userID, week, e
 	if err != nil {
 		return WeekPairingsView{}, err
 	}
+	if userID != "" {
+		plan, _ = s.applyAutoCompanions(ctx, d, w, plan, userID, true)
+	}
 	view := d.weekView(w, plan, entryID)
 	s.recordEntrySuggestions(ctx, householdID, userID, w, view.Meals)
 	return view, nil
@@ -478,7 +510,8 @@ func (s *Service) AcceptPairing(ctx context.Context, householdID, userID, week, 
 			}
 			g := WeekGroceryItem{
 				ID: newID(), Key: key, GroceryItem: *p.GroceryItem, ForEntryID: entryID, ForRecipeID: entry.RecipeID,
-				ForRecipeName: d.byID[entry.RecipeID].Name, Source: p.Source, RuleID: p.RuleID, AddedBy: userID, AddedAt: now,
+				ForRecipeName: d.byID[entry.RecipeID].Name, Source: p.Source, RuleID: p.RuleID, CompanionID: p.CompanionID,
+				Standalone: p.Standalone, AddedBy: userID, AddedAt: now,
 			}
 			next.GroceryItems = append(next.GroceryItems, g)
 			decision.GroceryItemID, item = g.ID, &g
@@ -516,6 +549,7 @@ func (s *Service) AcceptPairing(ctx context.Context, householdID, userID, week, 
 			accepted.GroceryItemID = item.ID
 		}
 		_ = saved
+		s.markListed(ctx, householdID, w, []Pairing{p}, now)
 		s.record(ctx, events.Event{
 			HouseholdID: householdID, UserID: userID, Type: events.TypePairingAccepted, RecipeID: entry.RecipeID, Week: w.String(),
 			OccurredAt: now, Payload: accepted,
@@ -692,6 +726,13 @@ func (s *Service) RemovePairingGroceryItem(ctx context.Context, householdID, use
 		state.GroceryItems = slices.Delete(slices.Clone(state.GroceryItems), i, i+1)
 		if j := state.decision(item.ForEntryID, item.Key); j >= 0 {
 			state.Decisions = slices.Delete(slices.Clone(state.Decisions), j, j+1)
+		}
+		if item.CompanionID != "" {
+			// Taken off the list on purpose: an Add It for Me companion
+			// mustn't put it back this week.
+			state.setDecision(PairingDecision{
+				EntryID: item.ForEntryID, Key: item.Key, Status: DecisionDismissed, DecidedBy: userID, DecidedAt: s.now().UTC(),
+			})
 		}
 		state.UpdatedAt = s.now().UTC()
 		if _, err := s.pairings.SaveWeekPairings(ctx, state); !errors.Is(err, ErrConflict) {
@@ -910,6 +951,7 @@ func (s *Service) GroceryExtras(ctx context.Context, plan planning.Plan) ([]groc
 	if s.pairings == nil {
 		return nil, nil
 	}
+	s.applyAutoGroceries(ctx, plan)
 	state, err := s.pairings.GetWeekPairings(ctx, plan.HouseholdID, plan.Week.String())
 	if isNotFound(err) {
 		return nil, nil
@@ -937,4 +979,25 @@ func (s *Service) GroceryExtras(ctx context.Context, plan planning.Plan) ([]groc
 		lines = append(lines, line)
 	}
 	return lines, nil
+}
+
+// applyAutoGroceries puts the week's due Add It for Me store items on its
+// list before the list is read, so they show up even when nobody opened the
+// week's suggestions. It only reads further when the household has such a
+// companion. Recipes are planned from the week's suggestions instead, so
+// reading a list never changes the plan.
+func (s *Service) applyAutoGroceries(ctx context.Context, plan planning.Plan) {
+	if s.companions == nil || len(plan.Entries) == 0 {
+		return
+	}
+	list, err := s.companions.Active(ctx, plan.HouseholdID)
+	if err != nil || !hasAutoCompanions(list) {
+		return
+	}
+	d, err := s.loadPairingData(ctx, plan.HouseholdID, plan.Week, false)
+	if err != nil {
+		s.logger.WarnContext(ctx, "add companions to the list", "householdId", plan.HouseholdID, "error", err)
+		return
+	}
+	s.applyAutoCompanions(ctx, d, plan.Week, plan, "", false)
 }

@@ -107,6 +107,8 @@ type PairingJSON struct {
 	RuleID       *string             `json:"ruleId"`
 	InPlan       bool                `json:"inPlan"`
 	CanMakeRule  bool                `json:"canMakeRule"`
+	// CompanionID is the household companion behind it, or null.
+	CompanionID *string `json:"companionId"`
 }
 
 // ProposalPairingJSON is a pairing on a proposal slot.
@@ -136,6 +138,7 @@ type PairingGroceryItemJSON struct {
 	Recipe      ProposalRecipeJSON `json:"recipe"`
 	Source      string             `json:"source"`
 	RuleID      *string            `json:"ruleId"`
+	CompanionID *string            `json:"companionId"`
 	Text        string             `json:"text"`
 	AddedBy     string             `json:"addedBy"`
 	AddedAt     time.Time          `json:"addedAt"`
@@ -299,6 +302,7 @@ func pairingJSON(p Pairing) PairingJSON {
 		Key: p.Key, Target: PairingTargetJSON{Kind: p.Kind}, Source: p.Source, Frequency: p.Frequency,
 		MealCategory: optionalString(p.MealCategory), Reason: p.Reason, RuleID: optionalString(p.RuleID), InPlan: p.InPlan,
 		CanMakeRule: p.Source == PairingSourceLearned && p.Recipe != nil && p.MealCategory != "",
+		CompanionID: optionalString(p.CompanionID),
 	}
 	if r := p.Recipe; r != nil {
 		pj.Target.Recipe = &PairingRecipeJSON{
@@ -339,7 +343,7 @@ func pairingGroceryItemJSON(g WeekGroceryItem) PairingGroceryItemJSON {
 	return PairingGroceryItemJSON{
 		ID: g.ID, Key: g.Key, GroceryItem: groceryItemJSON(g.GroceryItem), EntryID: g.ForEntryID,
 		Recipe: ProposalRecipeJSON{ID: g.ForRecipeID, Name: g.ForRecipeName}, Source: g.Source, RuleID: optionalString(g.RuleID),
-		Text: g.Text(), AddedBy: g.AddedBy, AddedAt: g.AddedAt,
+		CompanionID: optionalString(g.CompanionID), Text: g.Text(), AddedBy: g.AddedBy, AddedAt: g.AddedAt,
 	}
 }
 
