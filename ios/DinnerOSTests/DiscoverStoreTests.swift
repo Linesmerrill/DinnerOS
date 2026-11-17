@@ -141,7 +141,8 @@ struct DiscoverStoreTests {
 
         await harness.store.setSearch("beta")
         let searched = try #require(harness.server.requestedPaths.last)
-        #expect(searched.contains("/catalog/recipes?") && searched.contains("q=beta") && searched.contains("maxMinutes=30"))
+        #expect(
+            searched.contains("/catalog/recipes?") && searched.contains("q=beta") && searched.contains("maxMinutes=30"))
 
         await harness.store.clearFilters()
         #expect(!harness.store.query.hasFilters)

@@ -226,7 +226,8 @@ struct DiscoverView: View {
                 ContentUnavailableView(
                     discover.home?.noMatchTitle ?? String(localized: "No Recipes Match"),
                     systemImage: "magnifyingglass",
-                    description: Text(discover.home?.noMatchText ?? String(localized: "Try another word or fewer filters.")))
+                    description: Text(
+                        discover.home?.noMatchText ?? String(localized: "Try another word or fewer filters.")))
             } else {
                 ContentUnavailableView(
                     discover.emptyTitle ?? String(localized: "Nothing New Right Now"),
@@ -488,7 +489,8 @@ struct DiscoverFilterChip: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .foregroundStyle(selected == nil ? Color.primary : Color.white)
-            .background(selected == nil ? AnyShapeStyle(Color(.secondarySystemBackground)) : AnyShapeStyle(.tint), in: .capsule)
+            .background(
+                selected == nil ? AnyShapeStyle(Color(.secondarySystemBackground)) : AnyShapeStyle(.tint), in: .capsule)
         }
         .accessibilityLabel(selectedLabel.map { "\(group.title): \($0)" } ?? group.title)
         .accessibilityIdentifier("DiscoverFilter-\(group.id)")
@@ -531,8 +533,11 @@ struct DiscoverErrorRow: View {
     let session = HouseholdPreviewData.session()
     let home = DiscoverHome(
         sections: [
-            DiscoverSection(id: "chefs-picks", title: "Chef's Picks This Week", subtitle: "Our favorites right now", items: CatalogPreviewData.summaries),
-            DiscoverSection(id: "quick", title: "Quick", subtitle: "30 minutes or less", items: CatalogPreviewData.summaries),
+            DiscoverSection(
+                id: "chefs-picks", title: "Chef's Picks This Week", subtitle: "Our favorites right now",
+                items: CatalogPreviewData.summaries),
+            DiscoverSection(
+                id: "quick", title: "Quick", subtitle: "30 minutes or less", items: CatalogPreviewData.summaries),
         ], filters: DiscoverHome.fallbackFilters)
     NavigationStack {
         DiscoverView()

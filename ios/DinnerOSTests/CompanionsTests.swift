@@ -43,7 +43,10 @@ struct CompanionsTests {
 
     @Test func olderServerGetsTheBundledChoices() throws {
         let list = try JSONCoding.makeDecoder().decode(CompanionList.self, from: Data(#"{"items": []}"#.utf8))
-        #expect(list.frequencies.map(\.label) == ["Every Week", "Every 2 Weeks", "Once a Month", "Only With Meals It Goes With"])
+        #expect(
+            list.frequencies.map(\.label) == [
+                "Every Week", "Every 2 Weeks", "Once a Month", "Only With Meals It Goes With",
+            ])
         #expect(list.modes.map(\.label) == ["Add It for Me", "Just Suggest It", "Never"])
     }
 

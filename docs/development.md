@@ -243,17 +243,23 @@ under 30 minutes. The standard:
 
 1. **Parallel.** One simulator per config ("QA matrix <config>"), all 8 at once. The app is built
    once per API port (`build-for-testing`), then every config runs `test-without-building`.
-2. **Timeouts.** Each test has a 10-minute limit. A run with no output for 10 minutes is killed,
+2. **Coverage split.** Screen tests and sweeps run on all 8 configs. The long flow tests
+   (referral, invite link, AnyList) run on one appearance per device, 4 configs each, and the
+   one-off add tests (by hand, companions, cuisine) go to the configs without referral and invite
+   runs, so every simulator finishes in about the same time. Build 114's first full run, with
+   every test on every config, took 38 minutes: referral (7 min), invite link (5 min) and AnyList
+   (4 min) on all 8 configs, with 8 simulators slowing each other down.
+3. **Timeouts.** Each test has a 10-minute limit. A run with no output for 10 minutes is killed,
    its simulator restarted, and only that test retried once.
-3. **Targeted reruns.** After a fix, rerun only what failed, never the whole matrix:
+4. **Targeted reruns.** After a fix, rerun only what failed, never the whole matrix:
    `RERUN=<old OUT>/summary.txt OUT=<new folder> scripts/qa-matrix.sh` runs exactly the failed config
    and test pairs from that summary, or name them by hand:
    `CONFIGS="ipadL-light" TESTS="UnsplashPhotoQATests" scripts/qa-matrix.sh`. Don't edit the script
    while a run is going: bash reads it as it runs.
-4. **Local APIs** on local Mongo: 8082 with no photo search key, 8083 with the fake Unsplash
+5. **Local APIs** on local Mongo: 8082 with no photo search key, 8083 with the fake Unsplash
    (below), both with `REFERRAL_MAX_PER_30_DAYS=1000` and `AUTH_RATE_BURST=1000` (eight simulators sign in and
    out from one address, and the default of 10 at once turns them away with "Too many attempts").
-5. **Report.** `summary.txt` lists each config and test as ok or FAILED with the first error, and
+6. **Report.** `summary.txt` lists each config and test as ok or FAILED with the first error, and
    the time. If a run goes past 30 minutes, say why from the logs before rerunning anything.
 
 ## Photo search QA (Unsplash)

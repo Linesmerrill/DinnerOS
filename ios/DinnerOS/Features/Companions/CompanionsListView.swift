@@ -135,6 +135,7 @@ struct CompanionsListView: View {
                 Companion(
                     id: "2", name: "Garlic Bread", linkedRecipe: CompanionRecipe(id: "r1", name: "Garlic Bread"),
                     mealCategories: ["pasta"], summary: "Goes with pasta meals · Suggested"),
-            ]))
+            ])
+    )
     .environment(HouseholdPreviewData.store(session: session))
 }

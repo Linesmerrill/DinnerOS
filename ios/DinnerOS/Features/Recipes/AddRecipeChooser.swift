@@ -83,10 +83,12 @@ struct AddRecipeChooser: View {
         }
         .sheet(isPresented: $addingCompanion) {
             if let householdID = households.current?.household.id {
-                CompanionEditorView(householdID: householdID, onSaved: {
-                    addingCompanion = false
-                    dismiss()
-                })
+                CompanionEditorView(
+                    householdID: householdID,
+                    onSaved: {
+                        addingCompanion = false
+                        dismiss()
+                    })
             }
         }
         .accessibilityIdentifier("AddRecipeChooser")
@@ -133,7 +135,9 @@ struct AddRecipeChooser: View {
         case .write:
             AddRecipeForm(start: .write, title: "Write Your Own", onSaved: onSaved, fromChooser: true) { dismiss() }
         case .importIt:
-            AddRecipeForm(start: .importIt, title: "Import From a Website", onSaved: onSaved, fromChooser: true) { dismiss() }
+            AddRecipeForm(start: .importIt, title: "Import From a Website", onSaved: onSaved, fromChooser: true) {
+                dismiss()
+            }
         case .companion, .shared:
             EmptyView()
         }

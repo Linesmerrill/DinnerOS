@@ -132,12 +132,20 @@ run_config() {
     xcrun simctl ui "$id" appearance "${config#*-}"
     for test in $TESTS; do
         if [ -n "$PAIRS" ]; then echo "$PAIRS" | grep -qxF "$config|$test" || continue; fi
-        # The end-to-end add tests run once each, spread over the configs with the shortest runs
-        # so no simulator goes past 30 minutes: adding by hand on the large iPhone, companions and
-        # cuisine on the small iPhone and on the iPad on its side (where their forms are a sheet).
+        # The end-to-end add tests run once each, on configs without the referral and invite
+        # tests: adding by hand on the large iPhone, companions and cuisine on the small iPhone and
+        # on the iPad on its side (where their forms are a sheet).
+        # The long flow tests (referral, invite link, AnyList) check what a person does, not how a
+        # screen looks, so each runs on one appearance per device: 4 configs, not 8. Screens and
+        # sweeps still run on all 8. The two groups are split so every config finishes in about the
+        # same time.
         case $test in
-        AddRecipeQATests | SaveThenOpenQATests) [ "$config" = large-light ] || continue ;;
-        CompanionQATests | CuisineQATests) case $config in small-dark | ipadL-dark) ;; *) continue ;; esac ;;
+        ReferralQATests | InviteLinkQATests)
+            case $config in large-light | small-dark | ipadL-light | ipadP-dark) ;; *) continue ;; esac ;;
+        AnyListGuideQATests)
+            case $config in large-dark | small-light | ipadL-dark | ipadP-light) ;; *) continue ;; esac ;;
+        AddRecipeQATests | SaveThenOpenQATests) [ "$config" = large-dark ] || continue ;;
+        CompanionQATests | CuisineQATests) case $config in small-light | ipadL-dark) ;; *) continue ;; esac ;;
         esac
         run_test "$config" "$id" "$test" 1
     done

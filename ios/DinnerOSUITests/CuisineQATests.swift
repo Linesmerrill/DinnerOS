@@ -24,6 +24,9 @@ final class CuisineQATests: XCTestCase {
         XCTAssertTrue(nameField.waitForExistence(timeout: 5), "The typed recipe form didn't open")
         nameField.tap()
         nameField.typeText(name)
+        // Put the keyboard away: on a small phone it covers the details below the name.
+        app.staticTexts["Recipe"].tap()
+        XCTAssertTrue(waitGone(app.keyboards.firstMatch), "The keyboard stayed up")
 
         // The title names Mexican food, so Cuisine fills in. Pick it by hand if it didn't.
         let cuisine = app.buttons["RecipeCuisine"]

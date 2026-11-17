@@ -230,7 +230,10 @@ enum CompanionCuisines {
         ("indian", "Indian"), ("italian", "Italian"), ("japanese", "Japanese"), ("korean", "Korean"),
         ("mediterranean", "Mediterranean"), ("mexican", "Mexican"), ("middle eastern", "Middle Eastern"),
         ("thai", "Thai"), ("vietnamese", "Vietnamese"),
-    ].map { AutopilotOption(value: $0.0, label: String(localized: String.LocalizationValue($0.1)), description: nil, recipeCount: nil) }
+    ].map {
+        AutopilotOption(
+            value: $0.0, label: String(localized: String.LocalizationValue($0.1)), description: nil, recipeCount: nil)
+    }
 }
 
 /// Picks the main meals a companion goes with, over its own copy of the library so the
@@ -309,7 +312,8 @@ struct CompanionRecipePicker: View {
         }
         .overlay {
             if meals.isEmpty, !picker.hasMore, picker.phase == .loaded {
-                ContentUnavailableView("No Recipes", systemImage: "fork.knife", description: Text("Add a recipe first."))
+                ContentUnavailableView(
+                    "No Recipes", systemImage: "fork.knife", description: Text("Add a recipe first."))
             }
         }
     }

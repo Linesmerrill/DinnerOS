@@ -314,7 +314,7 @@ func (s *MongoCollections) Put(ctx context.Context, c Collection) error {
 	for _, id := range c.RecipeIDs {
 		oid, err := mongodb.ParseID(id)
 		if err != nil {
-			return fmt.Errorf("%w: One of the recipe IDs isn't a shared recipe ID.", ErrInvalidCollection)
+			return fmt.Errorf("%w: %s", ErrInvalidCollection, "One of the recipe IDs isn't a shared recipe ID.")
 		}
 		d.RecipeIDs = append(d.RecipeIDs, oid)
 	}
