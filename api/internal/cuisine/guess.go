@@ -86,10 +86,14 @@ var dishCuisines = map[string][]string{
 var notCuisines = []string{"french fries", "french fry", "french bread", "greek yogurt", "pacific", "english muffin"}
 
 // nameKeys are the cuisine names a title may say, from the table: every
-// known value and alias.
+// standard value and alias. A region in a title ("Asian Slaw") says too
+// little to guess from.
 var nameKeys = func() map[string]string {
 	m := map[string]string{}
 	for _, e := range table {
+		if !e.Standard {
+			continue
+		}
 		m[e.Value] = e.Value
 		for _, a := range e.Aliases {
 			m[a] = e.Value
@@ -133,11 +137,12 @@ func find(text, phrase string) int {
 }
 
 // Guess returns the cuisine a recipe most likely is, from its tags and name,
-// as one canonical value, or nil when nothing says. A tag naming a cuisine
-// wins, then a cuisine named in the title, then the first dish word in it.
+// as one standard canonical value, or nil when nothing says. A tag naming a
+// standard cuisine wins, then one named in the title, then the first dish
+// word in it.
 func Guess(name string, tags []string) []string {
 	for _, t := range tags {
-		if c := Canonical(t); Known(c) {
+		if c := Canonical(t); IsStandard(c) {
 			return []string{c}
 		}
 	}
@@ -181,10 +186,12 @@ func earliest(text string, keys map[string]string) string {
 	return best
 }
 
-// Fill is a recipe's cuisines for reading: its own, canonical, or a guess
-// when it has none and the household never chose (chosen false).
+// Fill is a recipe's cuisines for reading: its own as Shown, or a guess
+// when none of its own is a standard cuisine and the household never chose
+// (chosen false). A recipe stored with only "Southern Europe" shows what its
+// title names, or nothing.
 func Fill(own []string, chosen bool, name string, tags []string) []string {
-	if c := Clean(own); len(c) > 0 || chosen {
+	if c := Shown(own); len(c) > 0 || chosen {
 		return c
 	}
 	return Guess(name, tags)

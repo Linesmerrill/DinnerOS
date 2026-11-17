@@ -26,7 +26,7 @@ struct AutopilotOnboardingTests {
     /// The live catalog's shape: counts roll up, so every region outranks the cuisines under it.
     private var catalogCuisines: [AutopilotOption] {
         [
-            option("asian", "Asian", 123), option("north american", "North American", 110),
+            option("asian", "Asian", 123), option("american", "American", 110),
             option("european", "European", 80), option("southern european", "Southern European", 74),
             option("latin american", "Latin American", 68), option("east asian", "East Asian", 60),
             option("italian", "Italian", 32), option("mexican", "Mexican", 26),
@@ -167,7 +167,7 @@ struct AutopilotOnboardingTests {
 
         #expect(
             tiles.map(\.value) == [
-                "north american", "east asian", "italian", "mexican", "southeast asian", "caribbean",
+                "american", "east asian", "italian", "mexican", "southeast asian", "caribbean",
             ])
         // No tile is a region of another, whatever the counts said.
         for (index, tile) in tiles.enumerated() {
@@ -179,12 +179,12 @@ struct AutopilotOnboardingTests {
         #expect(CuisineTiles.top(catalogCuisines) == tiles)
     }
 
-    /// A region is still the better tile when nothing under it has enough recipes: North
+    /// A region is still the better tile when nothing under it has enough recipes:
     /// American keeps its 110 rather than handing them to Southwestern's 1.
     @Test func aRegionIsOfferedWhenNothingUnderItHasEnoughRecipes() {
         let tiles = CuisineTiles.top(catalogCuisines)
 
-        #expect(tiles.first?.value == "north american")
+        #expect(tiles.first?.value == "american")
         #expect(tiles.contains { $0.value == "east asian" })
         #expect(!tiles.contains { $0.value == "japanese" })
 
@@ -197,7 +197,7 @@ struct AutopilotOnboardingTests {
     @Test func theGridIsCappedAndCountsDecideTheOrder() {
         let tiles = CuisineTiles.top(catalogCuisines, limit: 3)
 
-        #expect(tiles.map(\.value) == ["north american", "east asian", "italian"])
+        #expect(tiles.map(\.value) == ["american", "east asian", "italian"])
         #expect(tiles.map(\.recipeCount) == [110, 60, 32])
         #expect(CuisineTiles.top(catalogCuisines, limit: 0).isEmpty)
     }
@@ -218,7 +218,7 @@ struct AutopilotOnboardingTests {
         let tiles = CuisineTiles.top(catalogCuisines, limit: 3)
         // The same top recipe wins for all three, with different runners-up.
         let candidates = [
-            "north american": [photo("shared"), photo("burger")],
+            "american": [photo("shared"), photo("burger")],
             "east asian": [photo("shared"), photo("ramen")],
             "italian": [photo("shared"), photo("pasta")],
         ]
@@ -237,7 +237,7 @@ struct AutopilotOnboardingTests {
     @Test func aTileWithNoUnusedPhotoShowsNoneRatherThanARepeat() {
         let tiles = CuisineTiles.top(catalogCuisines, limit: 3)
         let candidates = [
-            "north american": [photo("shared")],
+            "american": [photo("shared")],
             // Only the recipe the first tile took, so this one has nothing left.
             "east asian": [photo("shared")],
             // A cuisine whose recipes have no photos at all.

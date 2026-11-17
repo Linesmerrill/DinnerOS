@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot"
+	"github.com/Linesmerrill/DinnerOS/api/internal/cuisine"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 )
 
@@ -194,11 +195,11 @@ func TestVocabulary(t *testing.T) {
 		}
 		return options[i], true
 	}
-	if o, ok := find(v.Cuisines, "north american"); !ok || o.RecipeCount != 4 || o.Label != "North American" || v.Cuisines[0].Value != "north american" {
-		t.Errorf("north american = %+v; American, Southern, and Tex-Mex recipes count for their region, most used first: %+v", o, v.Cuisines[:3])
+	if o, ok := find(v.Cuisines, "american"); !ok || o.RecipeCount != 4 || o.Label != "American" || v.Cuisines[0].Value != "american" {
+		t.Errorf("american = %+v; American, Southern, and Tex-Mex recipes count for American, most used first: %+v", o, v.Cuisines[:3])
 	}
-	if o, ok := find(v.Cuisines, "american"); ok {
-		t.Errorf("american = %+v; it's an alias of north american", o)
+	if o, ok := find(v.Cuisines, "north american"); ok {
+		t.Errorf("north american = %+v; it's American now (decision 732)", o)
 	}
 	if o, ok := find(v.Cuisines, "thai"); !ok || o.RecipeCount != 0 || o.Label != "Thai" {
 		t.Errorf("starter cuisine thai = %+v, %v", o, ok)
@@ -218,7 +219,8 @@ func TestVocabulary(t *testing.T) {
 		r.Cuisines = []string{string(rune('a'+i%26)) + string(rune('a'+i/26))}
 		many = append(many, r)
 	}
-	if got := len(buildVocabulary(many).Cuisines); got != MaxVocabularyOptions {
-		t.Errorf("cuisines = %d, want the cap %d", got, MaxVocabularyOptions)
+	// Made-up cuisines aren't standard, so they're never offered.
+	if got := len(buildVocabulary(many).Cuisines); got != len(cuisine.Standard()) {
+		t.Errorf("cuisines = %d, want the %d standard ones", got, len(cuisine.Standard()))
 	}
 }

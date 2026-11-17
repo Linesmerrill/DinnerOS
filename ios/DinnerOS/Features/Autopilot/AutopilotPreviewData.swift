@@ -76,7 +76,7 @@ enum AutopilotPreviewData {
     /// unused photo was left for, which shows the plain tinted fallback.
     static let cuisineTiles: [CuisineTile] = [
         CuisineTile(
-            value: "north american", label: "North American", recipeCount: 110,
+            value: "american", label: "American", recipeCount: 110,
             imageURL: URL(string: "https://img.example.com/f_auto,q_auto,w_600/recipe-4.jpg")),
         CuisineTile(
             value: "east asian", label: "East Asian", recipeCount: 60,

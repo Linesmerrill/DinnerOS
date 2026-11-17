@@ -314,9 +314,11 @@ The detail carries the same `cookMinutes`, `timeBand`, `calories`, and
   `proteinGrams` are read from it; show the list itself for everything else.
 - `allergens` is the recipe's allergen list, and `difficulty` the source's own
   scale when it gave one.
-- `cuisines` are as the source or the household gave them. `cuisineValues`
-  are the same as canonical cuisine values, and `cuisineLabels` as the app
-  shows them ("Mexican"), in the same order. A recipe with no cuisine that the
+- `cuisineValues` are the recipe's cuisines on the standard list, as canonical
+  values, and `cuisineLabels` as the app shows them ("Mexican"), in the same
+  order; `cuisines` repeats `cuisineLabels` for older apps. What was stored
+  reads onto the list: "North America" is `american`, and a region like
+  "Southern Europe" isn't shown (decision 732). A recipe with no cuisine that the
   household never set shows the cuisine its title or tags name
   ("Carnitas Tacos" → `mexican`), worked out on each read and never written
   over the stored recipe; one with nothing to go on, or set to none, has
@@ -878,7 +880,17 @@ top of Shared Recipes (decisions 710 to 714). `sections` are the rows, in order,
 each `{id, title, subtitle?, type, sponsorLabel?, sponsorUrl?, items, hasMore}`
 with up to 12 recipe summaries. Every row comes from the same ranked set as
 discovery, so the household's restrictions apply, and recipes it already has
-come back `inLibrary` and last. A row with nothing in it is left out.
+come back `inLibrary` and last. A row with nothing in it is left out. A row
+(and its See All) shows one of near copies, the best ranked: titles that match
+without case, punctuation, and filler words like "Recipe", from the same site
+or with mostly the same main ingredients. A row leaves out recipes an earlier
+row showed when it still has 6 new ones, and otherwise puts its new ones first
+(decision 733).
+
+Every summary's `cuisines` are display labels from the standard list
+(decision 732): "North America" reads as "American", and a region like
+"Southern Europe" isn't shown; a recipe with none of its own shows the one its
+title names.
 
 The rows are collections: built in (`chefs-picks` "Chef's Picks This Week",
 `top-rated`, `trending`, `seasonal` "Seasonal Favorites", `quick`, `crowd` "Feeds
@@ -889,7 +901,7 @@ a Crowd"), overridden or added by operators in `catalog_collections`. `type` is
 inside those dates.
 
 `filters` are the chips: `[{id, title, param, options: [{value, label}]}]` for
-Cuisine (the cuisines Shared Recipes has, canonical values), Time
+Cuisine (the standard cuisines Shared Recipes has, canonical values), Time
 (`maxMinutes` 30, 45, 60) and Servings (`minServings` 2, 4, 6). The app sends a
 choice's `value` as `param` on discover or search. `maxMinutes` keeps recipes
 whose total time is known and at most that; `minServings` keeps recipes with any
@@ -3384,7 +3396,7 @@ every change needs `plan.edit`.
   - Cuisines, tags, and excluded ingredients are free text, trimmed,
     lowercased, and deduplicated: at most 30 values of 40 characters (50
     excluded ingredients of 60 characters). Cuisines and tags are stored in
-    canonical form (`North America` → `north american`; see
+    canonical form (`North America` → `american`; see
     [autopilot.md](autopilot.md#cuisines)), and stored profiles read that way
     too.
   - Proteins, diets, allergens, equipment, days, `novelty`, `timeBand`, and
@@ -3477,7 +3489,7 @@ derives from a recipe:
   "cookMinutes": 90,
   "timeBand": "long",
   "cuisines": ["southern"],
-  "cuisineRegions": ["north american"],
+  "cuisineRegions": ["american"],
   "tags": [],
   "proteins": ["pork"],
   "allergens": [],
@@ -4122,7 +4134,7 @@ it back with the same `sort`; a cursor from another sort is
 ```json
 {
   "proteins": [{ "value": "chicken", "label": "Chicken", "count": 128 }],
-  "cuisines": [{ "value": "north american", "label": "North American", "count": 96 }],
+  "cuisines": [{ "value": "american", "label": "American", "count": 96 }],
   "tags": [{ "value": "one pot", "label": "One Pot", "count": 41 }],
   "maxMinutes": [15, 20, 30, 45],
   "sorts": [{ "value": "recommended", "label": "Recommended" }]

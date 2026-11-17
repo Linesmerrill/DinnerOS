@@ -186,7 +186,7 @@ func taste(a recommendations.RecipeAttributes, p recommendations.Profile) (float
 }
 
 // label turns a stored value back into something to show ("north american" →
-// "North American", "chicken" → "chicken"). Known cuisines have a display
+// "American", "chicken" → "chicken"). Known cuisines have a display
 // label; anything else is shown as the household typed it.
 func label(value string) string {
 	if l := recommendations.CuisineLabel(recommendations.CanonicalCuisine(value)); l != "" {

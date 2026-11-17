@@ -121,7 +121,7 @@ func TestNormalizePairingRulesKeepsIDsAndCanonicalizes(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := rules[0]
-	if r.Label != "Pasta night" || !slices.Equal(r.When.Cuisines, []string{"north american"}) || !slices.Equal(r.When.Tags, []string{"comfort food"}) {
+	if r.Label != "Pasta night" || !slices.Equal(r.When.Cuisines, []string{"american"}) || !slices.Equal(r.When.Tags, []string{"comfort food"}) {
 		t.Fatalf("normalized = %+v", r)
 	}
 	again, err := normalizePairingRules(rules)

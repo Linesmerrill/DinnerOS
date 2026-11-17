@@ -19,9 +19,10 @@ import (
 
 func TestCanonicalCuisine(t *testing.T) {
 	for in, want := range map[string]string{
-		"North America":      "north american",
-		" north   American ": "north american",
-		"American":           "north american",
+		"North America":      "american",
+		" north   American ": "american",
+		"American":           "american",
+		"USA":                "american",
 		"East Asia":          "east asian",
 		"East Asian":         "east asian",
 		"Asian":              "asian",
@@ -63,15 +64,37 @@ func TestCuisineHierarchy(t *testing.T) {
 	r.Cuisines = []string{"Southern Europe", "Italian", "southern european"}
 	r.Tags = []string{"FamilyFriendly", "Family Friendly"}
 	a := attributes(r, nil, defaultBands)
-	if !slices.Equal(a.Cuisines, []string{"southern european", "italian"}) || !slices.Equal(a.CuisineRegions, []string{"european"}) ||
+	// The region shows nowhere but still matches (decision 732).
+	regions := []string{"southern european", "european"}
+	if !slices.Equal(a.Cuisines, []string{"italian"}) || !slices.Equal(a.CuisineRegions, regions) ||
 		!slices.Equal(a.Tags, []string{"family friendly"}) {
 		t.Errorf("attributes = cuisines %v, regions %v, tags %v", a.Cuisines, a.CuisineRegions, a.Tags)
 	}
-	if it := a.item(r); !slices.Equal(it.Cuisines, []string{"southern european", "italian"}) || !slices.Equal(it.CuisineRegions, []string{"european"}) {
+	if it := a.item(r); !slices.Equal(it.Cuisines, []string{"italian"}) || !slices.Equal(it.CuisineRegions, regions) {
 		t.Errorf("item cuisines = %v, regions %v", it.Cuisines, it.CuisineRegions)
 	}
-	if got := newAttributesResponse(a).CuisineRegions; !slices.Equal(got, []string{"european"}) {
+	if got := newAttributesResponse(a).CuisineRegions; !slices.Equal(got, regions) {
 		t.Errorf("response regions = %v", got)
+	}
+
+	// A recipe stored with only a region, or an unknown value, shows none
+	// and matches what it stored.
+	for _, tc := range []struct {
+		stored        []string
+		name          string
+		shown, region []string
+	}{
+		{[]string{"East Asia"}, "Dinner", nil, []string{"east asian", "asian"}},
+		{[]string{"North America"}, "Dinner", []string{"american"}, nil},
+		{[]string{"Southern Europe"}, "Pesto Penne", []string{"italian"}, []string{"southern european", "european"}},
+		{[]string{"Klingon"}, "Dinner", nil, []string{"klingon"}},
+	} {
+		r := recipeWith(tc.name, "Rice")
+		r.Cuisines = tc.stored
+		a := attributes(r, nil, defaultBands)
+		if !slices.Equal(a.Cuisines, tc.shown) || !slices.Equal(a.CuisineRegions, tc.region) {
+			t.Errorf("%q %v: cuisines %v, regions %v; want %v, %v", tc.name, tc.stored, a.Cuisines, a.CuisineRegions, tc.shown, tc.region)
+		}
 	}
 }
 
@@ -123,7 +146,7 @@ func TestProfilesReadAndWriteCanonicalValues(t *testing.T) {
 	stored.WeekdayRules = []WeekdayRule{{Day: "tue", Label: "Taco Tuesday", Cuisines: []string{"southwest", "latin america"}, Frequency: "every_week"}}
 	got := canonicalProfile(stored)
 	for name, pair := range map[string][2][]string{
-		"likes.cuisines":    {got.Taste.Likes.Cuisines, {"north american", "thai"}},
+		"likes.cuisines":    {got.Taste.Likes.Cuisines, {"american", "thai"}},
 		"likes.tags":        {got.Taste.Likes.Tags, {"family friendly"}},
 		"dislikes.cuisines": {got.Taste.Dislikes.Cuisines, {"east asian"}},
 		"excludedCuisines":  {got.Restrictions.ExcludedCuisines, {"middle eastern"}},
@@ -149,7 +172,7 @@ func TestProfilesReadAndWriteCanonicalValues(t *testing.T) {
 	written := DefaultProfile(hhA)
 	written.Taste.Likes.Cuisines = []string{"North America", "north american", "East Asia"}
 	written, err := normalizeProfile(written)
-	if err != nil || !slices.Equal(written.Taste.Likes.Cuisines, []string{"east asian", "north american"}) {
+	if err != nil || !slices.Equal(written.Taste.Likes.Cuisines, []string{"american", "east asian"}) {
 		t.Fatalf("written likes = %v, %v", written.Taste.Likes.Cuisines, err)
 	}
 	if again := canonicalProfile(written); !reflect.DeepEqual(again, written) {
@@ -166,7 +189,7 @@ func TestProfilesReadAndWriteCanonicalValues(t *testing.T) {
 	stored.Version = 1
 	env.store.profiles[hhA] = stored
 	p, err := env.svc.Profile(ctx, hhA)
-	if err != nil || !slices.Equal(p.Taste.Likes.Cuisines, []string{"north american", "thai"}) {
+	if err != nil || !slices.Equal(p.Taste.Likes.Cuisines, []string{"american", "thai"}) {
 		t.Fatalf("read profile likes = %v, %v", p.Taste.Likes.Cuisines, err)
 	}
 	same := Taste{Likes: Choices{Cuisines: []string{"North America", "Thai"}, Tags: []string{"Family Friendly"}}, Dislikes: Choices{Cuisines: []string{"East Asian"}}}
@@ -203,26 +226,27 @@ func TestVocabularyMergesCuisineSpellings(t *testing.T) {
 		}
 		byValue[o.Value] = o
 	}
+	// Only standard cuisines are listed (decision 732): both spellings of
+	// North America count as American, and regions and unknown values
+	// aren't offered.
 	for value, want := range map[string]Option{
-		"north american":    {Label: "North American", RecipeCount: 5},
-		"asian":             {Label: "Asian", RecipeCount: 5},
-		"east asian":        {Label: "East Asian", RecipeCount: 3},
-		"european":          {Label: "European", RecipeCount: 4},
-		"southern european": {Label: "Southern European", RecipeCount: 4},
-		"italian":           {Label: "Italian", RecipeCount: 3},
-		"klingon fusion":    {Label: "Klingon Fusion", RecipeCount: 1},
-		"thai":              {Label: "Thai", RecipeCount: 0},
+		"american": {Label: "American", RecipeCount: 5},
+		"italian":  {Label: "Italian", RecipeCount: 3},
+		"thai":     {Label: "Thai", RecipeCount: 0},
 	} {
 		if got := byValue[value]; got.Label != want.Label || got.RecipeCount != want.RecipeCount {
 			t.Errorf("%s = %+v, want %+v", value, got, want)
 		}
 	}
-	for _, gone := range []string{"north america", "east asia", "southern europe", "american"} {
+	for _, gone := range []string{
+		"north american", "north america", "asian", "east asian", "east asia", "european", "southern european",
+		"southern europe", "klingon fusion",
+	} {
 		if o, ok := byValue[gone]; ok {
-			t.Errorf("%q = %+v; it should merge into its canonical value", gone, o)
+			t.Errorf("%q = %+v; only standard cuisines are listed", gone, o)
 		}
 	}
-	if v.Cuisines[0].Value != "asian" && v.Cuisines[0].Value != "north american" {
+	if v.Cuisines[0].Value != "american" {
 		t.Errorf("most used first: %+v", v.Cuisines[:2])
 	}
 }
@@ -244,7 +268,7 @@ func TestVocabularyAlwaysHasTheStandardCuisines(t *testing.T) {
 			t.Errorf("empty catalog: missing %q", want)
 		}
 	}
-	if o := empty.Cuisines[0]; o.Value != "brazilian" || o.Label != "Brazilian" {
+	if o := empty.Cuisines[0]; o.Value != "american" || o.Label != "American" {
 		t.Errorf("standard list isn't alphabetical: first %+v", o)
 	}
 

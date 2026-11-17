@@ -184,7 +184,7 @@ func buildRecipe(r ImportRecipe, ingredientID func(ImportIngredient) string) Rec
 		PrepMinutes:    r.PrepMinutes,
 		TotalMinutes:   r.TotalMinutes,
 		Difficulty:     r.Difficulty,
-		Cuisines:       uniqueStrings(r.Cuisines, ""),
+		Cuisines:       cuisine.Clean(r.Cuisines),
 		Tags:           uniqueStrings(r.Tags, ""),
 		Utensils:       uniqueStrings(r.Utensils, ""),
 		Allergens:      uniqueStrings(r.Allergens, ""),

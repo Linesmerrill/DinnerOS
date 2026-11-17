@@ -378,16 +378,11 @@ func (s *Service) cuisineSpellings(ctx context.Context, cuisine string) ([]strin
 	return out, nil
 }
 
-// hasCuisine reports whether any of the recipe's cuisines is cuisine, read
-// canonically.
+// hasCuisine reports whether the recipe shows cuisine, read canonically: the
+// same cuisines its card shows (decision 732), so an American chip finds a
+// recipe stored with "North America".
 func hasCuisine(c recipes.Recipe, cuisine string) bool {
-	want := recommendations.CanonicalCuisine(cuisine)
-	for _, v := range c.Cuisines {
-		if recommendations.CanonicalCuisine(v) == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.ShownCuisines(), recommendations.CanonicalCuisine(cuisine))
 }
 
 // withinMinutes reports whether the recipe's total time is known and at most

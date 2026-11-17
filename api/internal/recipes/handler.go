@@ -222,10 +222,14 @@ type RecipeResponse struct {
 	Calories     *int                 `json:"calories"`
 	ProteinGrams *int                 `json:"proteinGrams"`
 	Difficulty   int                  `json:"difficulty,omitempty"`
-	Cuisines     []string             `json:"cuisines"`
-	// CuisineValues are the recipe's cuisines as canonical values, with a
-	// guess from the title when it has none and the household never picked
-	// (decision 721). CuisineLabels are the same, as the app shows them.
+	// Cuisines are CuisineLabels too: an older app shows this list when
+	// CuisineLabels is empty, and it must never show a stored region like
+	// "Southern Europe" (decision 732).
+	Cuisines []string `json:"cuisines"`
+	// CuisineValues are the standard cuisines the recipe shows, as canonical
+	// values, with a guess from the title when it has none and the household
+	// never picked (decisions 721, 732). CuisineLabels are the same, as the
+	// app shows them.
 	CuisineValues   []string                   `json:"cuisineValues"`
 	CuisineLabels   []string                   `json:"cuisineLabels"`
 	Tags            []string                   `json:"tags"`
@@ -339,7 +343,7 @@ func newRecipeResponse(r Recipe, bands autopilot.TimeBands) RecipeResponse {
 		SourceAliases: orEmpty(r.SourceAliases), SourceURL: r.SourceURL,
 		Name: r.Name, Headline: r.Headline, Description: r.Description, ImageURL: r.ImageURL, IsAddon: r.IsAddon,
 		Servings: orEmpty(r.Servings), PrepMinutes: r.PrepMinutes, TotalMinutes: r.TotalMinutes, CookMinutes: r.CookMinutes(), Difficulty: r.Difficulty,
-		Cuisines: orEmpty(r.Cuisines), Tags: orEmpty(r.Tags), Utensils: orEmpty(r.Utensils), Allergens: orEmpty(r.Allergens),
+		Tags: orEmpty(r.Tags), Utensils: orEmpty(r.Utensils), Allergens: orEmpty(r.Allergens),
 		Nutrition:   make([]NutrientResponse, 0, len(r.Nutrition)),
 		Ingredients: make([]RecipeIngredientResponse, 0, len(r.Ingredients)),
 		Steps:       make([]StepResponse, 0, len(r.Steps)),
@@ -352,6 +356,7 @@ func newRecipeResponse(r Recipe, bands autopilot.TimeBands) RecipeResponse {
 	for _, v := range resp.CuisineValues {
 		resp.CuisineLabels = append(resp.CuisineLabels, cuisine.DisplayLabel(v))
 	}
+	resp.Cuisines = resp.CuisineLabels
 	if !r.EditedAt.IsZero() {
 		edited := r.EditedAt.UTC()
 		resp.EditedAt = &edited

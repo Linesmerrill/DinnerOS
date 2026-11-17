@@ -35,7 +35,7 @@ func editedCuisines(values []string) ([]string, error) {
 	if len(distinct) > cuisine.MaxPerRecipe {
 		return nil, invalidEdit("pick up to 5 cuisines")
 	}
-	return cuisine.Clean(values), nil
+	return cuisine.Shown(values), nil
 }
 
 // CuisineGuessRequest is the body of POST .../recipes/cuisine-guess: a
@@ -69,11 +69,21 @@ func (h *Handler) guessCuisine(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
+// savedDraftCuisines are the cuisines a saved draft stores: the member's
+// pick on the standard list, or the page's own, canonical, so a region the
+// page named still matches in Autopilot without being shown (decision 732).
+func savedDraftCuisines(d Draft) []string {
+	if d.CuisinesChosen {
+		return cuisine.Shown(d.Cuisines)
+	}
+	return cuisine.Clean(d.Cuisines)
+}
+
 // draftCuisines are the cuisines a draft shows for review: the member's pick
 // when they made one, else the page's own, canonical, or a guess.
 func draftCuisines(d Draft) []string {
 	if d.CuisinesChosen {
-		return cuisine.Clean(d.Cuisines)
+		return cuisine.Shown(d.Cuisines)
 	}
 	return cuisine.Fill(d.Cuisines, false, d.Name, d.Tags)
 }

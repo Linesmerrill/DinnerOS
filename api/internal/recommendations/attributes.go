@@ -22,10 +22,13 @@ type RecipeAttributes struct {
 	// CookMinutes is recipes.CookMinutes; 0 means unknown.
 	CookMinutes int
 	TimeBand    string
-	// Cuisines are canonical (canonicalCuisine).
+	// Cuisines are the standard cuisines the recipe shows, canonical
+	// (recipes.Recipe.ShownCuisines, decision 732).
 	Cuisines []string
 	// CuisineRegions are the broader regions of Cuisines, which Autopilot
-	// matches too ("italian" → "southern european", "european").
+	// matches too ("italian" → "southern european", "european"), and any
+	// region or unknown value the recipe stored that it doesn't show
+	// (matchRegions).
 	CuisineRegions []string
 	// Tags are canonical (canonicalTag).
 	Tags      []string
@@ -229,7 +232,7 @@ func attributes(r recipes.Recipe, override *RecipeOverride, bands autopilot.Time
 		RecipeID: r.ID, CookMinutes: r.CookMinutes(), Cuisines: canonicalCuisines(r.ShownCuisines()), Tags: canonicalTags(r.Tags),
 		Proteins: classifyProteins(names), Override: override,
 	}
-	a.CuisineRegions = cuisineRegions(a.Cuisines)
+	a.CuisineRegions = matchRegions(a.Cuisines, r.Cuisines)
 	a.TimeBand = string(bands.Of(a.CookMinutes))
 	a.Allergens = classifyAllergens(r.Allergens, names)
 	a.Diets = classifyDiets(a.Tags, a.Allergens, names)

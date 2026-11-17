@@ -32,9 +32,9 @@ func TestEditRecipeCuisines(t *testing.T) {
 		t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
 	}
 	got := decodeBody[RecipeResponse](t, rec)
-	if !slices.Equal(got.Cuisines, []string{"middle eastern", "italian"}) ||
+	if !slices.Equal(got.CuisineValues, []string{"middle eastern", "italian"}) || !slices.Equal(got.Cuisines, got.CuisineLabels) ||
 		!slices.Equal(got.CuisineLabels, []string{"Middle Eastern", "Italian"}) {
-		t.Errorf("edited = %v %v", got.Cuisines, got.CuisineLabels)
+		t.Errorf("edited = %v %v %v", got.CuisineValues, got.Cuisines, got.CuisineLabels)
 	}
 	if got.EditedAt != nil {
 		t.Errorf("a cuisine alone marked the recipe edited")
@@ -96,7 +96,7 @@ func TestDraftCuisines(t *testing.T) {
 		Ingredients: line, Cuisines: []string{"Tex Mex"}, CuisinesChosen: true,
 	}
 	rec = srv.do(t, http.MethodPost, recipesPath(hhAda), mustJSON(t, page), userAda)
-	if got := decodeBody[RecipeResponse](t, rec); !slices.Equal(got.Cuisines, []string{"tex-mex"}) {
+	if got := decodeBody[RecipeResponse](t, rec); !slices.Equal(got.CuisineValues, []string{"tex-mex"}) {
 		t.Errorf("page recipe cuisines = %v (status %d, %s)", got.Cuisines, rec.Code, rec.Body.String())
 	}
 
@@ -135,9 +135,51 @@ func TestShownCuisines(t *testing.T) {
 	if got := r.ShownCuisines(); got != nil {
 		t.Errorf("chosen none = %v", got)
 	}
-	r = Recipe{Name: "Chicken Tikka Masala", Cuisines: []string{"South Asia"}}
-	if got := r.ShownCuisines(); !slices.Equal(got, []string{"south asian"}) {
-		t.Errorf("own = %v", got)
+	// Own cuisines read onto the standard list; a pure region isn't shown,
+	// so the title's guess fills in (decision 732).
+	for _, tc := range []struct {
+		name string
+		own  []string
+		want []string
+	}{
+		{"Chicken Tikka Masala", []string{"South Asia"}, []string{"indian"}},
+		{"Roast Chicken", []string{"Southern Europe"}, nil},
+		{"Roast Chicken", []string{"North America", "North American"}, []string{"american"}},
+		{"Chicken Tikka Masala", []string{"Thai"}, []string{"thai"}},
+	} {
+		r := Recipe{Name: tc.name, Cuisines: tc.own}
+		if got := r.ShownCuisines(); !slices.Equal(got, tc.want) {
+			t.Errorf("%q %v = %v, want %v", tc.name, tc.own, got, tc.want)
+		}
+	}
+}
+
+// A member's pick is stored on the standard list; a page's or a file's own
+// cuisines are stored canonical, regions kept for matching (decision 732).
+func TestCuisinesNormalizedOnWrite(t *testing.T) {
+	for _, tc := range []struct {
+		in   []string
+		want []string
+	}{
+		{[]string{"North America", "North American"}, []string{"american"}},
+		{[]string{"Southern Europe", "Italian"}, []string{"italian"}},
+		{[]string{"Southern Europe"}, nil},
+		{[]string{"Klingon"}, nil},
+	} {
+		got, err := editedCuisines(tc.in)
+		if err != nil || !slices.Equal(got, tc.want) {
+			t.Errorf("editedCuisines(%q) = %q, %v; want %q", tc.in, got, err, tc.want)
+		}
+		if got := savedDraftCuisines(Draft{Cuisines: tc.in, CuisinesChosen: true}); !slices.Equal(got, tc.want) {
+			t.Errorf("chosen draft %q = %q; want %q", tc.in, got, tc.want)
+		}
+	}
+	if got := savedDraftCuisines(Draft{Cuisines: []string{"North America", "Southern Europe"}}); !slices.Equal(got, []string{"american", "southern european"}) {
+		t.Errorf("page draft = %q", got)
+	}
+	file := ImportRecipe{Name: "Weeknight Dinner", Cuisines: []string{"North America", "North American", "East Asia"}}
+	if got := buildRecipe(file, func(ImportIngredient) string { return "" }).Cuisines; !slices.Equal(got, []string{"american", "east asian"}) {
+		t.Errorf("imported = %q", got)
 	}
 }
 

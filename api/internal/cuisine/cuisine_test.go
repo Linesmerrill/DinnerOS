@@ -48,7 +48,7 @@ func TestTable(t *testing.T) {
 // Middle Eastern, and no broad regions (decision 722).
 func TestStandard(t *testing.T) {
 	std := Standard()
-	for _, want := range []string{"mexican", "italian", "indian", "thai", "mediterranean", "middle eastern", "tex-mex", "ethiopian"} {
+	for _, want := range []string{"american", "mexican", "italian", "indian", "thai", "mediterranean", "middle eastern", "tex-mex", "ethiopian"} {
 		if !slices.Contains(std, want) {
 			t.Errorf("standard list is missing %q", want)
 		}
@@ -60,6 +60,53 @@ func TestStandard(t *testing.T) {
 	}
 	if len(std) < 35 {
 		t.Errorf("standard list has %d cuisines", len(std))
+	}
+}
+
+// What a person sees is always a standard cuisine: variants of one map onto
+// it, and regions, styles that aren't on the list, and unknown words are
+// left out rather than guessed (decision 732).
+func TestShown(t *testing.T) {
+	for _, tc := range []struct {
+		in   []string
+		want []string
+	}{
+		{[]string{"North America"}, []string{"american"}},
+		{[]string{"North American"}, []string{"american"}},
+		{[]string{"american"}, []string{"american"}},
+		{[]string{" USA "}, []string{"american"}},
+		{[]string{"United States"}, []string{"american"}},
+		{[]string{"North America", "North American", "American"}, []string{"american"}},
+		{[]string{"Southern Europe"}, nil},
+		{[]string{"Southern European", "Italian"}, []string{"italian"}},
+		{[]string{"East Asia", "Japanese"}, []string{"japanese"}},
+		{[]string{"Asian"}, nil},
+		{[]string{"Latin American", "Fusion", "Caribbean"}, nil},
+		{[]string{"Middle East"}, []string{"middle eastern"}},
+		{[]string{"Tex Mex", "tex-mex"}, []string{"tex-mex"}},
+		{[]string{"Southern"}, []string{"southern"}},
+		{[]string{"Klingon", "Comfort Food", ""}, nil},
+		{[]string{"thai", "korean", "greek", "french", "german", "irish"}, []string{"thai", "korean", "greek", "french", "german"}},
+		{nil, nil},
+	} {
+		if got := Shown(tc.in); !slices.Equal(got, tc.want) {
+			t.Errorf("Shown(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+	for _, v := range Shown([]string{"North America", "Italian", "Middle East"}) {
+		if !IsStandard(v) || DisplayLabel(v) == "" {
+			t.Errorf("%q isn't a standard cuisine with a label", v)
+		}
+	}
+	if DisplayLabel("american") != "American" {
+		t.Errorf("american's label = %q", DisplayLabel("american"))
+	}
+	if IsStandard("north american") || IsStandard("southern european") || IsStandard("klingon") || !IsStandard("american") {
+		t.Error("IsStandard is wrong for a region, an unknown word, or American")
+	}
+	// American still covers its styles for matching.
+	if got := Ancestors("cajun"); !slices.Equal(got, []string{"american"}) {
+		t.Errorf("Ancestors(cajun) = %v", got)
 	}
 }
 
@@ -104,6 +151,13 @@ func TestGuess(t *testing.T) {
 		{"Mediterranean Quinoa Bowl", nil, "mediterranean"},
 		{"Tex-Mex Rice Skillet", nil, "tex-mex"},
 		{"Cajun Shrimp Pasta", nil, "cajun"},
+		{"All-American Cheeseburgers", nil, "american"},
+		// A region says too little: the dish word decides, or nothing does.
+		{"Asian Chicken Lettuce Wraps", nil, ""},
+		{"Caribbean Jerk Chicken", nil, "jamaican"},
+		{"Weeknight Noodles", []string{"East Asian"}, ""},
+		{"Penne Bake", []string{"Southern Europe"}, "italian"},
+		{"Weeknight Burgers", []string{"North America"}, "american"},
 		// A tag that names a cuisine wins over the title.
 		{"Weeknight Noodles", []string{"Quick", "Japanese"}, "japanese"},
 		{"Chicken Bowls", []string{"Family Friendly", "Tacos"}, "mexican"},
@@ -143,5 +197,23 @@ func TestFill(t *testing.T) {
 	}
 	if got := Fill(nil, false, "Carnitas Tacos", nil); !slices.Equal(got, []string{"mexican"}) {
 		t.Errorf("guess = %v", got)
+	}
+	// Stored variants read as the standard cuisine; a pure region gives way
+	// to the title's guess, or to nothing.
+	for _, tc := range []struct {
+		own    []string
+		chosen bool
+		name   string
+		want   []string
+	}{
+		{[]string{"North America"}, false, "Burgers", []string{"american"}},
+		{[]string{"Southern Europe"}, false, "Pesto Penne", []string{"italian"}},
+		{[]string{"Southern Europe"}, false, "Roast Chicken", nil},
+		{[]string{"Southern Europe"}, true, "Pesto Penne", nil},
+		{[]string{"East Asian", "Korean"}, false, "Pesto Penne", []string{"korean"}},
+	} {
+		if got := Fill(tc.own, tc.chosen, tc.name, nil); !slices.Equal(got, tc.want) {
+			t.Errorf("Fill(%q, %v, %q) = %q, want %q", tc.own, tc.chosen, tc.name, got, tc.want)
+		}
 	}
 }

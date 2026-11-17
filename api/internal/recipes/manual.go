@@ -12,7 +12,6 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
-	"github.com/Linesmerrill/DinnerOS/api/internal/cuisine"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 )
 
@@ -189,7 +188,7 @@ func draftImportRecipe(d Draft, source string) (ImportRecipe, error) {
 		PrepMinutes:    d.PrepMinutes,
 		TotalMinutes:   d.TotalMinutes,
 		Nutrition:      importNutrients(nutrition),
-		Cuisines:       cuisine.Clean(d.Cuisines),
+		Cuisines:       savedDraftCuisines(d),
 		CuisinesChosen: d.CuisinesChosen,
 		Tags:           labels(d.Tags),
 	}
