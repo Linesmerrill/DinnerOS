@@ -18,7 +18,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-${TMPDIR:-/tmp}/dinneros-qa}
 ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-light ipadP-dark"
 CONFIGS=${CONFIGS:-$ALL}
-TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeQATests SaveThenOpenQATests"}
+TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeChooserQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests"}
 STALL=${STALL:-600}
 RUNTIME_PHONE=${RUNTIME_PHONE:-com.apple.CoreSimulator.SimRuntime.iOS-26-2}
 RUNTIME_IPAD=${RUNTIME_IPAD:-com.apple.CoreSimulator.SimRuntime.iOS-26-4}
@@ -69,7 +69,7 @@ run_test() {
     xctestrun=$(ls "$OUT/dd-$port"/Build/Products/*.xctestrun | head -1)
     xcrun simctl uninstall "$id" com.linesmerrill.dinneros 2>/dev/null
     rm -rf "$OUT/$name.xcresult"
-    TEST_RUNNER_QA_PHOTO_SEARCH=$search TEST_RUNNER_QA_MODE=$mode TEST_RUNNER_QA_ORIENTATION=$orientation \
+    TEST_RUNNER_QA_API_BASE=http://localhost:$port TEST_RUNNER_QA_PHOTO_SEARCH=$search TEST_RUNNER_QA_MODE=$mode TEST_RUNNER_QA_ORIENTATION=$orientation \
         TEST_RUNNER_QA_APP_QA_HUD_SECONDS=3 TEST_RUNNER_QA_MANUAL_NAME="Sip Fudge" \
         TEST_RUNNER_QA_IMPORTED_NAME="Street Cart-Style Chicken Bowls" \
         xcodebuild test-without-building -xctestrun "$xctestrun" -destination "id=$id" \
@@ -119,8 +119,12 @@ run_config() {
     xcrun simctl bootstatus "$id" -b >/dev/null 2>&1
     xcrun simctl ui "$id" appearance "${config#*-}"
     for test in $TESTS; do
-        # The end-to-end add tests run once, on the large iPhone in light.
-        case $test in AddRecipeQATests | SaveThenOpenQATests) [ "$config" = large-light ] || continue ;; esac
+        # The end-to-end add tests run once, on the large iPhone in light; companions and cuisine
+        # also run on the iPad on its side, where their forms are a sheet.
+        case $test in
+        AddRecipeQATests | SaveThenOpenQATests) [ "$config" = large-light ] || continue ;;
+        CompanionQATests | CuisineQATests) case $config in large-light | ipadL-light) ;; *) continue ;; esac ;;
+        esac
         run_test "$config" "$id" "$test" 1
     done
     xcrun simctl shutdown "$id"
