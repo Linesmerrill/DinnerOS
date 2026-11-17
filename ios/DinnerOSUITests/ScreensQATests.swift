@@ -53,7 +53,8 @@ final class ScreensQATests: XCTestCase {
         app.staticTexts["Shared Recipes"].firstMatch.tap()
         sleep(3)
         shot(app, "Shared Recipes")
-        let first = app.cells.firstMatch.exists ? app.cells.firstMatch : app.scrollViews.buttons.element(boundBy: 0)
+        // A recipe card in one of the rows (decision 710).
+        let first = app.buttons["DiscoverCard"].firstMatch
         if first.waitForExistence(timeout: 5) {
             first.tap()
             sleep(3)

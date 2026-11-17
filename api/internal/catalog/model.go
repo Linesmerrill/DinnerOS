@@ -141,6 +141,9 @@ const (
 	MaxOffset       = 1000
 	maxQueryLength  = 100
 	maxFilterLength = 100
+	// The largest time and servings filters accepted.
+	maxFilterMinutes  = 24 * 60
+	maxFilterServings = 50
 )
 
 // Query selects a page of the catalog.
@@ -153,6 +156,11 @@ type Query struct {
 	Cuisine    string
 	Tag        string
 	Ingredient string
+	// MaxMinutes keeps recipes whose total time (recipes.CookMinutes) is
+	// known and at most this; MinServings keeps recipes that serve at least
+	// this many. Zero means no limit (decision 712).
+	MaxMinutes  int
+	MinServings int
 	// ExcludeLibrary drops entries the household already has. Discovery sets
 	// it; search does not, and marks them instead.
 	ExcludeLibrary bool
@@ -166,8 +174,15 @@ type Filter struct {
 	Cuisine    string
 	Tag        string
 	Ingredient string
-	Offset     int
-	Limit      int
+	// Cuisine matches canonically (recommendations.CanonicalCuisine), so
+	// "Mexican" and "mexican" are one choice. CuisineAny are the stored
+	// spellings that mean it, folded, which the store matches exactly; the
+	// service fills it.
+	CuisineAny  []string
+	MaxMinutes  int
+	MinServings int
+	Offset      int
+	Limit       int
 	// HiddenGroups are groups (groupKey) the household must not see: ones it
 	// reported and ones enough households reported. The store drops them
 	// before paging and counting.
@@ -181,7 +196,14 @@ func (q Query) validate() (Filter, error) {
 		Cuisine:    strings.TrimSpace(q.Cuisine),
 		Tag:        strings.TrimSpace(q.Tag),
 		Ingredient: strings.TrimSpace(q.Ingredient),
-		Limit:      q.Limit,
+		MaxMinutes: q.MaxMinutes, MinServings: q.MinServings,
+		Limit: q.Limit,
+	}
+	if f.MaxMinutes < 0 || f.MaxMinutes > maxFilterMinutes {
+		return Filter{}, fmt.Errorf("%w: maxMinutes must be between 1 and %d", ErrInvalidQuery, maxFilterMinutes)
+	}
+	if f.MinServings < 0 || f.MinServings > maxFilterServings {
+		return Filter{}, fmt.Errorf("%w: minServings must be between 1 and %d", ErrInvalidQuery, maxFilterServings)
 	}
 	if utf8.RuneCountInString(f.Text) > maxQueryLength {
 		return Filter{}, fmt.Errorf("%w: q must be at most %d characters", ErrInvalidQuery, maxQueryLength)

@@ -42,6 +42,35 @@ nonisolated enum CatalogFixtures {
          "inLibrary":false,"timeBand":"medium","calories":null,"proteinGrams":null,"reasons":[]}
         """#.utf8)
 
+    /// The top of Shared Recipes: two rows, one of them paid, and the chips.
+    static func home(_ firstRow: [String]? = nil) -> Data {
+        let row = (firstRow ?? [summary(id: "c1", name: "Alpha Bowl"), summary(id: "c9", name: "Nine Bowl")])
+            .joined(separator: ",")
+        return Data(
+            #"""
+            {"sections":[
+              {"id":"chefs-picks","title":"Chef's Picks This Week","subtitle":"Our favorites right now",
+               "type":"editorial","items":[\#(row)],"hasMore":true},
+              {"id":"pasta-week","title":"Pasta Week","type":"sponsored","sponsorLabel":"Sponsored by Test Pasta",
+               "items":[\#(summary(id: "c1", name: "Alpha Bowl"))],"hasMore":false}],
+             "filters":[
+              {"id":"cuisine","title":"Cuisine","param":"cuisine","options":[{"value":"thai","label":"Thai"}]},
+              {"id":"time","title":"Time","param":"maxMinutes","options":[{"value":"30","label":"30 min or less"}]},
+              {"id":"servings","title":"Servings","param":"minServings","options":[{"value":"6","label":"6+"}]}],
+             "browseTitle":"Browse All","searchPrompt":"Search shared recipes","seeAllTitle":"See All",
+             "emptyTitle":"Nothing New Right Now","emptyText":"Check back later.",
+             "noMatchTitle":"No Recipes Match","noMatchText":"Try another word or fewer filters."}
+            """#.utf8)
+    }
+
+    /// One row in full, for See All.
+    static func sectionPage(nextCursor: String? = nil) -> Data {
+        let cursor = nextCursor.map { #","nextCursor":"\#($0)""# } ?? ""
+        return Data(
+            #"{"id":"quick","title":"Quick","type":"algorithmic","items":[\#(summary(id: "c5", name: "Fast Bowl"))],"hasMore":false,"total":1\#(cursor)}"#
+                .utf8)
+    }
+
     static func addResult(recipeID: String, created: Bool) -> Data {
         Data(#"{"recipeId":"\#(recipeID)","created":\#(created)}"#.utf8)
     }
@@ -65,7 +94,9 @@ nonisolated final class FakeCatalogServer: Sendable {
         var searchPages: [Data]
         var detail: Data
         var addResult: Data
+        var home: Data = CatalogFixtures.home()
         var failNext: Bool = false
+        var failHome: Bool = false
     }
 
     private let state: Mutex<State>
@@ -78,8 +109,14 @@ nonisolated final class FakeCatalogServer: Sendable {
     /// Paths requested, in order, each as "METHOD path?query".
     var requestedPaths: [String] { calls.withLock { $0 } }
 
+    /// Fails the next list, detail, or add request. The rows at the top have their own switch.
     func failNext() {
         state.withLock { $0.failNext = true }
+    }
+
+    /// Fails every request for the rows at the top until turned off.
+    func failHome(_ fail: Bool = true) {
+        state.withLock { $0.failHome = fail }
     }
 
     func handle(_ request: URLRequest) -> (status: Int, body: Data) {
@@ -90,6 +127,13 @@ nonisolated final class FakeCatalogServer: Sendable {
         let query = components.query.map { "?" + $0 } ?? ""
         calls.withLock { $0.append(method + " " + components.path + query) }
         return state.withLock { state in
+            if components.path.hasSuffix("/discover/home") {
+                return state.failHome
+                    ? (500, Data(#"{"error":{"code":"internal","message":"nope"}}"#.utf8)) : (200, state.home)
+            }
+            if components.path.contains("/discover/sections/") {
+                return (200, CatalogFixtures.sectionPage())
+            }
             if state.failNext {
                 state.failNext = false
                 return (500, Data(#"{"error":{"code":"internal","message":"nope"}}"#.utf8))

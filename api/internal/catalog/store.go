@@ -36,4 +36,8 @@ type Store interface {
 	// maps to its own group. Reports are kept per entry and apply to the
 	// whole group.
 	Groups(ctx context.Context, ids []string) (map[string]string, error)
+	// Cuisines returns every cuisine spelling stored on an entry a list may
+	// show, as stored. Browse turns them into its cuisine choices and matches
+	// a choice against every spelling that means it.
+	Cuisines(ctx context.Context) ([]string, error)
 }

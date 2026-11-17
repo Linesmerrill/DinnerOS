@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -41,11 +42,14 @@ type ServiceOptions struct {
 
 // Service implements publishing, discovery, search, and adding to a library.
 type Service struct {
-	store   Store
-	library Library
-	taste   Taste
-	reports ReportStore
-	now     func() time.Time
+	store       Store
+	library     Library
+	taste       Taste
+	reports     ReportStore
+	saves       SaveStore
+	ratings     RatingSignals
+	collections CollectionStore
+	now         func() time.Time
 }
 
 // NewService returns a Service.
@@ -140,6 +144,17 @@ func (s *Service) Search(ctx context.Context, householdID string, q Query) (Page
 	// The store drops hidden groups before paging, so the count and the
 	// cursor are right.
 	f.HiddenGroups = hiddenList(s.hidden(ctx, householdID))
+	if f.Cuisine != "" {
+		spellings, err := s.cuisineSpellings(ctx, f.Cuisine)
+		if err != nil {
+			return Page{}, fmt.Errorf("search catalog: %w", err)
+		}
+		if len(spellings) == 0 {
+			// No stored recipe has that cuisine.
+			return Page{Items: []Result{}}, nil
+		}
+		f.CuisineAny = spellings
+	}
 	entries, total, err := s.store.Search(ctx, f)
 	if err != nil {
 		return Page{}, fmt.Errorf("search catalog: %w", err)
@@ -164,7 +179,7 @@ func (s *Service) Get(ctx context.Context, householdID, id string) (Result, erro
 	if err != nil {
 		return Result{}, err
 	}
-	if recipes.CatalogWithheld(e.Content.Source) || isHidden(e, s.hidden(ctx, householdID)) {
+	if !servable(e) || isHidden(e, s.hidden(ctx, householdID)) {
 		return Result{}, ErrNotFound
 	}
 	out := []Result{{Recipe: e}}
@@ -181,27 +196,43 @@ func (s *Service) Add(ctx context.Context, householdID, id string) (recipes.Reci
 	if err != nil {
 		return recipes.Recipe{}, false, err
 	}
-	if recipes.CatalogWithheld(e.Content.Source) || isHidden(e, s.hidden(ctx, householdID)) {
+	if !servable(e) || isHidden(e, s.hidden(ctx, householdID)) {
 		return recipes.Recipe{}, false, ErrNotFound
 	}
 	if s.library == nil {
 		return recipes.Recipe{}, false, errors.New("catalog: no library is wired")
 	}
-	return s.library.AddFromCatalog(ctx, householdID, Content(e.Content))
+	stored, created, err := s.library.AddFromCatalog(ctx, householdID, Content(e.Content))
+	if err != nil || !created {
+		return stored, created, err
+	}
+	// Trending and Top Rated count saves (decision 711). Only a new copy
+	// counts, so tapping Save twice is one save; a failed write costs a
+	// count, never the save itself.
+	if s.saves != nil {
+		_ = s.saves.Record(ctx, Save{CatalogID: e.ID, Group: groupKey(e), HouseholdID: householdID, At: s.now().UTC()})
+	}
+	return stored, created, nil
 }
 
 // --- helpers ------------------------------------------------------------------
 
-// shown drops entries from withheld sources (a meal kit's recipes, decision
-// 672). Entries published before the rule stay stored but are never served.
+// shown drops entries that are never served: ones from withheld sources (a
+// meal kit's recipes, decision 672) and add-ons (decision 713). Entries
+// published before those rules stay stored but are never served.
 func shown(entries []Recipe) []Recipe {
 	out := entries[:0:0]
 	for _, e := range entries {
-		if !recipes.CatalogWithheld(e.Content.Source) {
+		if servable(e) {
 			out = append(out, e)
 		}
 	}
 	return out
+}
+
+// servable reports whether an entry may be shown or added at all.
+func servable(e Recipe) bool {
+	return !recipes.CatalogWithheld(e.Content.Source) && !e.Content.IsAddon
 }
 
 func (s *Service) tasteOf(ctx context.Context, householdID string) (recommendations.Profile, autopilot.TimeBands) {
@@ -277,7 +308,7 @@ func libraryID(e Recipe, have map[string]string) string {
 
 // narrow applies the exact filters in memory, for the scanned discovery set.
 func narrow(entries []Recipe, f Filter) []Recipe {
-	if f.Cuisine == "" && f.Tag == "" && f.Ingredient == "" && f.Text == "" {
+	if f.Cuisine == "" && f.Tag == "" && f.Ingredient == "" && f.Text == "" && f.MaxMinutes == 0 && f.MinServings == 0 {
 		return entries
 	}
 	out := make([]Recipe, 0, len(entries))
@@ -293,7 +324,16 @@ func narrow(entries []Recipe, f Filter) []Recipe {
 // Discovery ranks a scanned set in memory, so it matches in memory too;
 // search leaves the same work to the text index.
 func matches(e Recipe, f Filter) bool {
-	if key := fold(f.Cuisine); key != "" && !containsFold(e.Content.Cuisines, key) {
+	if e.Content.IsAddon {
+		return false
+	}
+	if f.Cuisine != "" && !hasCuisine(e.Content, f.Cuisine) {
+		return false
+	}
+	if f.MaxMinutes > 0 && !withinMinutes(e.Content, f.MaxMinutes) {
+		return false
+	}
+	if f.MinServings > 0 && !servesAtLeast(e.Content, f.MinServings) {
 		return false
 	}
 	if key := fold(f.Tag); key != "" && !containsFold(e.Content.Tags, key) {
@@ -319,6 +359,48 @@ func matches(e Recipe, f Filter) bool {
 		}
 	}
 	return true
+}
+
+// cuisineSpellings returns the folded stored spellings of cuisine, read
+// canonically ("Mexican", "mexican " for "mexican").
+func (s *Service) cuisineSpellings(ctx context.Context, cuisine string) ([]string, error) {
+	stored, err := s.store.Cuisines(ctx)
+	if err != nil {
+		return nil, err
+	}
+	want := recommendations.CanonicalCuisine(cuisine)
+	var out []string
+	for _, v := range stored {
+		if k := fold(v); recommendations.CanonicalCuisine(v) == want && !slices.Contains(out, k) {
+			out = append(out, k)
+		}
+	}
+	return out, nil
+}
+
+// hasCuisine reports whether any of the recipe's cuisines is cuisine, read
+// canonically.
+func hasCuisine(c recipes.Recipe, cuisine string) bool {
+	want := recommendations.CanonicalCuisine(cuisine)
+	for _, v := range c.Cuisines {
+		if recommendations.CanonicalCuisine(v) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// withinMinutes reports whether the recipe's total time is known and at most
+// limit. An unknown time is not "quick": it is left out.
+func withinMinutes(c recipes.Recipe, limit int) bool {
+	m := recipes.CookMinutes(c.PrepMinutes, c.TotalMinutes)
+	return m > 0 && m <= limit
+}
+
+// servesAtLeast reports whether any of the recipe's serving sizes is at
+// least n.
+func servesAtLeast(c recipes.Recipe, n int) bool {
+	return slices.ContainsFunc(c.Servings, func(s int) bool { return s >= n })
 }
 
 // page cuts one page out of ranked results and returns the cursor for the

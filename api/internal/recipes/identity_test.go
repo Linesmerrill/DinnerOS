@@ -140,6 +140,9 @@ func TestPublicSourceAndPublishable(t *testing.T) {
 		{"a pasted page", Recipe{Source: SourceUser, Name: "A"}, false},
 		{"an operator import of unknown provenance", Recipe{Source: SourceImport, SourceRecipeID: "1", Name: "A"}, false},
 		{"a typed recipe the household shared", Recipe{Source: SourceManual, Name: "A", SharedToCatalog: true}, true},
+		// Add-ons never reach Shared Recipes, shared or not (decision 713).
+		{"an add-on the household shared", Recipe{Source: SourceManual, Name: "A", IsAddon: true, SharedToCatalog: true}, false},
+		{"an imported add-on the household shared", Recipe{Source: SourceImport, SourceRecipeID: "1", Name: "A", IsAddon: true, SharedToCatalog: true}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := Publishable(tc.recipe); got != tc.want {

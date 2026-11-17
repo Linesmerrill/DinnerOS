@@ -181,7 +181,8 @@ func normalizeQuantityText(q string) string {
 
 // Publishable reports whether this recipe may be copied into the global
 // catalog: it comes from a known public source, or the household explicitly
-// shared it. Add-ons are publishable like any other recipe.
+// shared it. Add-ons never are (decision 713): a side or a drink someone keeps
+// on their list is not a dinner to find in Shared Recipes.
 func Publishable(r Recipe) bool {
-	return CatalogKey(r) != "" && !CatalogWithheld(r.Source) && (PublicSource(r.Source) || r.SharedToCatalog)
+	return CatalogKey(r) != "" && !r.IsAddon && !CatalogWithheld(r.Source) && (PublicSource(r.Source) || r.SharedToCatalog)
 }
