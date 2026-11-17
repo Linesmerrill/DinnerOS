@@ -13,7 +13,9 @@ import (
 //     card plugin publish for search engines.
 //  2. schema.org Recipe in microdata (itemprop attributes), on older sites.
 //  3. A recipe card's own markup (WP Recipe Maker, Tasty Recipes, Mediavine
-//     Create), then an "Ingredients" heading followed by a list.
+//     Create), then list items the page marks as ingredients and steps (a
+//     store's recipe page rendered by its scripts, decision 727), then an
+//     "Ingredients" heading followed by a list.
 //
 // Only the title, the servings, and the ingredient lines are kept (decision
 // 670): a page's photos and written steps are the publisher's, and the saved
@@ -25,6 +27,7 @@ const (
 	PageJSONLD    = "json-ld"
 	PageMicrodata = "microdata"
 	PageCard      = "recipe-card"
+	PageMarkup    = "page-markup"
 	PageText      = "page-text"
 )
 
@@ -46,6 +49,9 @@ func ParsePage(page string) (d Draft, method string, ok bool) {
 	}
 	if d, ok := recipeFromCard(root); ok {
 		return linkDraft(d), PageCard, true
+	}
+	if d, ok := recipeFromMarkedLists(root); ok {
+		return linkDraft(d), PageMarkup, true
 	}
 	if d, ok := recipeFromHeading(root); ok {
 		return linkDraft(d), PageText, true
@@ -303,7 +309,8 @@ func pageTitle(root *html.Node) string {
 // addLine adds one ingredient line, or starts a group when the line is a
 // heading ("For the sauce:").
 func addLine(d *Draft, text, group string) {
-	text = strings.TrimSpace(whitespaceRe.ReplaceAllString(text, " "))
+	// "2⁄3" is written with the fraction slash (U+2044) on some pages.
+	text = strings.TrimSpace(whitespaceRe.ReplaceAllString(strings.ReplaceAll(text, "⁄", "/"), " "))
 	if text == "" || len(d.Ingredients) >= maxDraftIngredients {
 		return
 	}

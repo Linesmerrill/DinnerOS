@@ -31,8 +31,12 @@ final class RecipeDraftStore {
     @ObservationIgnored private let session: AuthSession
     @ObservationIgnored private let api: RecipesAPI?
     @ObservationIgnored private let householdID: String
-    /// Loads a page on this phone; replaced in tests.
-    @ObservationIgnored var pageLoader: @Sendable (String) async throws -> String = RecipePageLoader.load
+    /// The link that couldn't be read, so Write Your Own can keep it as the recipe's source.
+    private(set) var failedLink: String?
+    /// Fetches a page on this phone with a browser's headers; replaced in tests.
+    @ObservationIgnored var pageLoader: @Sendable (String) async throws -> String = RecipePageLoader.fetch
+    /// Opens a page in the hidden web view and waits for it to render; replaced in tests.
+    @ObservationIgnored var webPageLoader: @Sendable (String) async throws -> String = RecipePageLoader.render
 
     private static let logger = Logger(subsystem: "DinnerOS", category: "recipes")
 
@@ -59,21 +63,77 @@ final class RecipeDraftStore {
         }
     }
 
-    /// Reads a recipe page. The server fetches it; when the site turns the server away, this
-    /// phone loads the page like a browser would and sends it to the server to read.
+    /// Reads a recipe page. The server reads it, always; this phone only loads the page for it
+    /// when the server can't (decision 728):
+    ///
+    /// 1. The server fetches the link.
+    /// 2. `fetch_failed` (the site turned it away): this phone fetches the page like Safari and
+    ///    sends it.
+    /// 3. Still no recipe, or the phone's fetch failed, or `page_needs_phone` (a store site like
+    ///    Kroger's that builds its recipe in the browser): the hidden web view opens the page,
+    ///    waits for the recipe to show, and sends that.
+    ///
+    /// If nothing works, the screen shows what went wrong and offers Write Your Own with the
+    /// link kept, and Paste Text.
     func parse(url: String) async {
         let trimmed = RecipePageLoader.link(in: url)
         guard !trimmed.isEmpty else { return }
-        let loader = pageLoader
+        failedLink = nil
+        let fetch = pageLoader
+        let render = webPageLoader
+        let householdID = householdID
         await parse { api, token in
+            try await Self.read(
+                trimmed, householdID: householdID, api: api, token: token, fetch: fetch, render: render)
+        }
+        if step == .entry, errorMessage != nil {
+            failedLink = trimmed
+        }
+    }
+
+    private static func read(
+        _ link: String, householdID: String, api: RecipesAPI, token: String,
+        fetch: @Sendable (String) async throws -> String, render: @Sendable (String) async throws -> String
+    ) async throws -> RecipeDraft {
+        let refused: APIError
+        do {
+            return try await api.parseRecipe(householdID: householdID, url: link, accessToken: token)
+        } catch let error as APIError where error.code == "fetch_failed" || error.code == "page_needs_phone" {
+            refused = error
+        }
+        var lastError: any Error = refused
+        if refused.code == "fetch_failed" {
+            let page: String?
             do {
-                return try await api.parseRecipe(householdID: self.householdID, url: trimmed, accessToken: token)
-            } catch let error as APIError where error.code == "fetch_failed" {
-                guard let html = try? await loader(trimmed) else { throw error }
-                return try await api.parseRecipe(
-                    householdID: self.householdID, url: trimmed, html: html, accessToken: token)
+                page = try await fetch(link)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                page = nil  // The phone couldn't fetch it either; the web view is next.
+            }
+            if let page {
+                do {
+                    return try await api.parseRecipe(
+                        householdID: householdID, url: link, html: page, accessToken: token)
+                } catch let error as APIError where error.code == "fetch_failed" {
+                    lastError = error
+                }
             }
         }
+        let rendered: String
+        do {
+            rendered = try await render(link)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // "That site only shows its recipes in a web browser" says nothing useful once the
+            // browser couldn't load it either.
+            if (lastError as? APIError)?.code == "page_needs_phone" {
+                throw RecipeImportError.pageDidNotLoad
+            }
+            throw lastError
+        }
+        return try await api.parseRecipe(householdID: householdID, url: link, html: rendered, accessToken: token)
     }
 
     /// The member picked the cuisine, even None. No guess replaces it after this.
@@ -103,7 +163,16 @@ final class RecipeDraftStore {
     func startBlank() {
         draft = RecipeDraft(steps: [""])
         errorMessage = nil
+        failedLink = nil
         step = .review
+    }
+
+    /// Write Your Own after a link couldn't be read: the blank form, with the link saved as
+    /// where the recipe came from.
+    func writeOwnKeepingLink() {
+        let link = failedLink
+        startBlank()
+        draft.sourceURL = link
     }
 
     /// Sends the member's photo and returns its link. The draft takes it when they save.
@@ -137,6 +206,7 @@ final class RecipeDraftStore {
     func startOver() {
         draft = RecipeDraft()
         errorMessage = nil
+        failedLink = nil
         step = .entry
     }
 
@@ -195,9 +265,18 @@ final class RecipeDraftStore {
         }
     }
 
-    /// Status and code only — never a response body, and never what was pasted.
+    /// Status and code only, never a response body, and never what was pasted.
     private static func describe(_ error: any Error) -> String {
         guard let apiError = error as? APIError else { return "\(type(of: error))" }
         return apiError.code ?? "\(apiError.status ?? 0)"
+    }
+}
+
+/// A link the phone couldn't load either, after the server sent it to the phone.
+enum RecipeImportError: LocalizedError {
+    case pageDidNotLoad
+
+    var errorDescription: String? {
+        String(localized: "That page didn't load. Check the link and try again.")
     }
 }

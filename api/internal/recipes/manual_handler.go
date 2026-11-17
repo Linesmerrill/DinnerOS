@@ -148,8 +148,7 @@ func (h *Handler) parseRecipe(w http.ResponseWriter, r *http.Request) {
 		}
 		d, _, ok := ParsePage(req.HTML)
 		if !ok {
-			httpx.WriteError(w, r, http.StatusUnprocessableEntity, "fetch_failed",
-				"Couldn't find a recipe on that page. Copy the recipe text and paste it instead.")
+			httpx.WriteError(w, r, http.StatusUnprocessableEntity, CodeFetchFailed, msgNoRecipe)
 			return
 		}
 		d.SourceURL = target.String()
@@ -158,8 +157,12 @@ func (h *Handler) parseRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 	d, err := h.fetcher().Fetch(r.Context(), link)
 	if err != nil {
-		if errors.Is(err, ErrFetch) {
-			httpx.WriteError(w, r, http.StatusUnprocessableEntity, "fetch_failed", publicMessage(err))
+		// A page that can't be read answers 422 with a code the app acts on
+		// and a sentence it shows: fetch_failed (the app loads the page
+		// itself), or page_needs_phone (it goes straight to its web view).
+		var fe *FetchError
+		if errors.As(err, &fe) {
+			httpx.WriteError(w, r, http.StatusUnprocessableEntity, fe.Code, fe.Message)
 			return
 		}
 		h.internalError(w, r, "fetch recipe page failed", err)

@@ -149,9 +149,25 @@ struct AddRecipeForm: View {
                     Label(message, systemImage: "exclamationmark.triangle")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("ImportError")
                 }
             }
-            if !fromChooser {
+            // A link that couldn't be read is never a dead end: write it in with the link kept,
+            // or paste the recipe's text.
+            if store.failedLink != nil, mode == .link {
+                Section {
+                    Button("Write Your Own") {
+                        store.writeOwnKeepingLink()
+                    }
+                    .accessibilityIdentifier("ImportFailedWriteOwn")
+                    Button("Paste Text") {
+                        mode = .text
+                    }
+                    .accessibilityIdentifier("ImportFailedPasteText")
+                } footer: {
+                    Text("Type the recipe in and we'll keep the link with it, or paste the recipe's text.")
+                }
+            } else if !fromChooser {
                 Section {
                     Button("Type It Myself") {
                         store.startBlank()
@@ -180,6 +196,8 @@ struct AddRecipeForm: View {
                 switch store.step {
                 case .entry, .parsing:
                     Button("Next") {
+                        // Out of the way of the progress and, if it fails, what to do next.
+                        Keyboard.dismiss()
                         Task {
                             switch mode {
                             case .text: await store.parse(text: text)
@@ -280,6 +298,21 @@ struct RecipeDraftReviewForm: View {
                             Label("View Recipe", systemImage: "safari")
                         }
                     }
+                }
+            }
+            if !store.draft.fromURL, let link = store.draft.sourceURL, let url = URL(string: link) {
+                // Written in after a link couldn't be read: the link is saved with it.
+                Section {
+                    Link(destination: url) {
+                        Label("View Recipe", systemImage: "safari")
+                    }
+                    .accessibilityIdentifier("DraftSourceLink")
+                    .accessibilityValue(link)
+                    Button("Remove Link", role: .destructive) {
+                        store.draft.sourceURL = nil
+                    }
+                } footer: {
+                    Text("We'll save this link with your recipe.")
                 }
             }
             if !warnings.isEmpty {
