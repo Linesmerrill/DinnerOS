@@ -13,6 +13,7 @@ import (
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
 	"github.com/Linesmerrill/DinnerOS/api/internal/catalog"
+	"github.com/Linesmerrill/DinnerOS/api/internal/companions"
 	"github.com/Linesmerrill/DinnerOS/api/internal/cooking"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
@@ -90,6 +91,7 @@ var accountDeletionKinds = map[string]collectionKind{
 	shopping.UsualsPromptsCollection: householdData,
 	skips.Collection:                 householdData,
 	sameitems.Collection:             householdData,
+	companions.Collection:            householdData,
 	plus.Collection:                  householdData,
 	plus.FreeTimeCollection:          householdData,
 	plus.ReferralCodesCollection:     householdData,

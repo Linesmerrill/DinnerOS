@@ -90,6 +90,8 @@ type pairingDoc struct {
 	Learned      *learnedDoc       `bson:"learned,omitempty"`
 	Reason       string            `bson:"reason"`
 	Included     bool              `bson:"included"`
+	CompanionID  string            `bson:"companionId,omitempty"`
+	Standalone   bool              `bson:"standalone,omitempty"`
 }
 
 type decisionDoc struct {
@@ -113,6 +115,8 @@ type weekGroceryItemDoc struct {
 	ForRecipeName string        `bson:"forRecipeName"`
 	Source        string        `bson:"source"`
 	RuleID        string        `bson:"ruleId,omitempty"`
+	CompanionID   string        `bson:"companionId,omitempty"`
+	Standalone    bool          `bson:"standalone,omitempty"`
 	AddedBy       bson.ObjectID `bson:"addedBy"`
 	AddedAt       time.Time     `bson:"addedAt"`
 }
@@ -184,7 +188,7 @@ func newPairingDocs(in *ids, pairings []Pairing) []pairingDoc {
 		d := pairingDoc{
 			Key: p.Key, Kind: p.Kind, GroceryItem: newGroceryItemDoc(p.GroceryItem), Servings: p.Servings, Source: p.Source,
 			Frequency: p.Frequency, MealCategory: p.MealCategory, RuleID: p.RuleID, Confidence: p.Confidence, Reason: p.Reason,
-			Included: p.Included,
+			Included: p.Included, CompanionID: p.CompanionID, Standalone: p.Standalone,
 		}
 		if r := p.Recipe; r != nil {
 			d.Recipe = &pairingRecipeDoc{
@@ -207,7 +211,7 @@ func pairingsFromDocs(docs []pairingDoc) []Pairing {
 		p := Pairing{
 			Key: d.Key, Kind: d.Kind, GroceryItem: d.GroceryItem.toGroceryItem(), Servings: d.Servings, Source: d.Source,
 			Frequency: d.Frequency, MealCategory: d.MealCategory, RuleID: d.RuleID, Confidence: d.Confidence, Reason: d.Reason,
-			Included: d.Included,
+			Included: d.Included, CompanionID: d.CompanionID, Standalone: d.Standalone,
 		}
 		if r := d.Recipe; r != nil {
 			p.Recipe = &PairingRecipe{
@@ -233,14 +237,15 @@ func newWeekPairingsDoc(wp WeekPairings) (weekPairingsDoc, error) {
 	for _, dec := range wp.Decisions {
 		d.Decisions = append(d.Decisions, decisionDoc{
 			EntryID: dec.EntryID, Key: dec.Key, Status: dec.Status, AddedEntryID: dec.AddedEntryID, GroceryItemID: dec.GroceryItemID,
-			DecidedBy: in.parse("decided by", dec.DecidedBy), DecidedAt: dec.DecidedAt,
+			DecidedBy: in.optional("decided by", dec.DecidedBy), DecidedAt: dec.DecidedAt,
 		})
 	}
 	for _, g := range wp.GroceryItems {
 		d.GroceryItems = append(d.GroceryItems, weekGroceryItemDoc{
 			ID: in.parse("grocery item id", g.ID), Key: g.Key, Name: g.Name, Quantity: g.Quantity, Unit: g.Unit,
 			ForEntryID: g.ForEntryID, ForRecipeID: in.parse("grocery item recipe id", g.ForRecipeID), ForRecipeName: g.ForRecipeName,
-			Source: g.Source, RuleID: g.RuleID, AddedBy: in.parse("added by", g.AddedBy), AddedAt: g.AddedAt,
+			Source: g.Source, RuleID: g.RuleID, CompanionID: g.CompanionID, Standalone: g.Standalone,
+			AddedBy: in.optional("added by", g.AddedBy), AddedAt: g.AddedAt,
 		})
 	}
 	return d, in.err
@@ -258,7 +263,7 @@ func (d weekPairingsDoc) toWeekPairings() WeekPairings {
 		wp.GroceryItems = append(wp.GroceryItems, WeekGroceryItem{
 			ID: g.ID.Hex(), Key: g.Key, GroceryItem: GroceryItem{Name: g.Name, Quantity: g.Quantity, Unit: g.Unit},
 			ForEntryID: g.ForEntryID, ForRecipeID: g.ForRecipeID.Hex(), ForRecipeName: g.ForRecipeName, Source: g.Source,
-			RuleID: g.RuleID, AddedBy: hexOrEmpty(g.AddedBy), AddedAt: g.AddedAt.UTC(),
+			RuleID: g.RuleID, CompanionID: g.CompanionID, Standalone: g.Standalone, AddedBy: hexOrEmpty(g.AddedBy), AddedAt: g.AddedAt.UTC(),
 		})
 	}
 	return wp

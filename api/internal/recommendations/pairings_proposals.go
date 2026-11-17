@@ -173,7 +173,8 @@ func (s *Service) finishProposalPairings(ctx context.Context, householdID, userI
 		}
 		g := WeekGroceryItem{
 			ID: newID(), Key: c.pairing.Key, GroceryItem: *c.pairing.GroceryItem, ForEntryID: main.ID, ForRecipeID: main.RecipeID,
-			ForRecipeName: c.slot.RecipeName, Source: c.pairing.Source, RuleID: c.pairing.RuleID, AddedBy: userID, AddedAt: now,
+			ForRecipeName: c.slot.RecipeName, Source: c.pairing.Source, RuleID: c.pairing.RuleID, CompanionID: c.pairing.CompanionID,
+			Standalone: c.pairing.Standalone, AddedBy: userID, AddedAt: now,
 		}
 		items, itemChoice[g.ID] = append(items, g), c
 	}
@@ -197,6 +198,11 @@ func (s *Service) finishProposalPairings(ctx context.Context, householdID, userI
 			HouseholdID: householdID, UserID: userID, Type: events.TypePairingAccepted, RecipeID: main.RecipeID, Week: w.String(), OccurredAt: now, Payload: payload,
 		})
 	}
+	listed := make([]Pairing, 0, len(added))
+	for _, a := range added {
+		listed = append(listed, a.Pairing)
+	}
+	s.markListed(ctx, householdID, w, listed, now)
 	if !explicit {
 		return added
 	}

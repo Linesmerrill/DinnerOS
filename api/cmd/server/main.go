@@ -20,6 +20,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot/baseline"
 	"github.com/Linesmerrill/DinnerOS/api/internal/catalog"
+	"github.com/Linesmerrill/DinnerOS/api/internal/companions"
 	"github.com/Linesmerrill/DinnerOS/api/internal/config"
 	"github.com/Linesmerrill/DinnerOS/api/internal/cooking"
 	"github.com/Linesmerrill/DinnerOS/api/internal/customize"
@@ -320,6 +321,20 @@ func run() error {
 		Pantry:     pantryService,
 		Logger:     logger,
 	})
+	// Companions (decisions 715-719): things that go with dinner. Autopilot
+	// offers them in the week's suggestions and puts the ones set to Add It
+	// for Me on the list; the household's add-on recipes become companions
+	// the first time they're read, and its pairing rules say what they go
+	// with.
+	companionService := companions.NewService(companions.Options{
+		Store: companions.NewMongoStore(db.Database()), Recipes: recipeService, Hints: autopilotService,
+		CanonicalCuisine: recommendations.CanonicalCuisine, CuisineLabel: recommendations.CuisineLabel,
+		MealCategory: recommendations.IsMealCategory, Logger: logger,
+	})
+	autopilotService.WithCompanions(companionService)
+	companionHandler := companions.NewHandler(companions.HandlerOptions{
+		Service: companionService, Authorizer: householdService, Tokens: tokens, Logger: logger,
+	})
 	// Grocery items accepted as Autopilot pairings join the week's list (and
 	// so the shopping handoff).
 	planService.WithExtras(autopilotService)
@@ -497,6 +512,7 @@ func run() error {
 				householdHandler.Mount(r)
 				invitationHandler.Mount(r)
 				recipeHandler.Mount(r)
+				companionHandler.Mount(r)
 				catalogHandler.Mount(r)
 				planHandler.Mount(r)
 				skipHandler.Mount(r)
@@ -578,6 +594,7 @@ func indexSets() []mongodb.IndexSet {
 		shopping.Indexes(),
 		skips.Indexes(),
 		sameitems.Indexes(),
+		companions.Indexes(),
 		plus.Indexes(),
 		plus.ReferralIndexes(),
 		plus.BillingIndexes(),

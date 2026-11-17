@@ -86,6 +86,7 @@ type Service struct {
 	plans      Planner
 	pantry     PantryReader
 	pairings   PairingStore
+	companions CompanionSource
 	logger     *slog.Logger
 	now        func() time.Time
 }

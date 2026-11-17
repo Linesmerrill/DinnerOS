@@ -294,6 +294,15 @@ func (p *ids) parse(field, hex string) bson.ObjectID {
 	return id
 }
 
+// optional is parse for an ID that may be empty (a companion that adds
+// itself has no member), which is stored as the zero ID.
+func (p *ids) optional(field, hex string) bson.ObjectID {
+	if hex == "" {
+		return bson.ObjectID{}
+	}
+	return p.parse(field, hex)
+}
+
 func hexOrEmpty(id bson.ObjectID) string {
 	if id.IsZero() {
 		return ""

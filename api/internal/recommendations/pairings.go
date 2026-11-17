@@ -40,6 +40,13 @@ type Pairing struct {
 	// Included: accepting the proposal adds it unless the member leaves it
 	// out. Proposal slots only.
 	Included bool
+	// CompanionID is the household companion behind the pairing, also when
+	// a rule offers the same add-on; accepting it records the week on the
+	// companion.
+	CompanionID string
+	// Standalone: a companion due by how often it's bought, shown with the
+	// week's first meal rather than because it goes with that meal.
+	Standalone bool
 }
 
 // PairingRecipe is a snapshot of an add-on recipe for display.
@@ -113,12 +120,22 @@ type WeekGroceryItem struct {
 	ForRecipeName string
 	Source        string
 	RuleID        string
-	AddedBy       string
-	AddedAt       time.Time
+	CompanionID   string
+	// Standalone items are due by how often they're bought, not for the meal.
+	Standalone bool
+	// AddedBy is empty when a companion set to Add It for Me added it.
+	AddedBy string
+	AddedAt time.Time
 }
 
-// Text is the item's provenance: "Club crackers for Chicken Noodle Soup".
-func (g WeekGroceryItem) Text() string { return g.Name + " for " + g.ForRecipeName }
+// Text is the item's provenance: "Club crackers for Chicken Noodle Soup", or
+// just the name for an item that isn't for one meal.
+func (g WeekGroceryItem) Text() string {
+	if g.Standalone || g.ForRecipeName == "" {
+		return g.Name
+	}
+	return g.Name + " for " + g.ForRecipeName
+}
 
 func (wp WeekPairings) decision(entryID, key string) int {
 	for i, d := range wp.Decisions {
