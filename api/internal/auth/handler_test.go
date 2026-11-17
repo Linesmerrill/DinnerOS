@@ -98,6 +98,7 @@ type serverConfig struct {
 	devLogin       bool
 	withoutGoogle  bool
 	rateLimitBurst int
+	appleCodes     AppleCodeSaver
 }
 
 func newAuthTestServer(t *testing.T, cfg serverConfig) *authTestServer {
@@ -125,7 +126,7 @@ func newAuthTestServer(t *testing.T, cfg serverConfig) *authTestServer {
 		Tokens:    tokens,
 		Logger:    logger,
 	})
-	opts := HandlerOptions{Service: svc, Tokens: tokens, Logger: logger, DevLoginEnabled: cfg.devLogin}
+	opts := HandlerOptions{Service: svc, Tokens: tokens, Logger: logger, DevLoginEnabled: cfg.devLogin, AppleCodes: cfg.appleCodes}
 	if cfg.rateLimitBurst > 0 {
 		opts.RateLimit = ratelimit.New(ratelimit.Options{Burst: cfg.rateLimitBurst, Now: clock.Now}).Middleware
 	}

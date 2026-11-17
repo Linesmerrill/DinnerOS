@@ -1,6 +1,7 @@
 import SwiftUI
 
 /// "Delete Account", with its destructive confirmation (App Review guideline 5.1.1(v)).
+/// Someone who signs in with Apple then confirms with Apple (`AccountDeletion`).
 ///
 /// The dialog is attached to the button itself: on iOS 26 a confirmation dialog is a popover
 /// that points at the view it's attached to. On success the session signs out and the root
@@ -12,6 +13,10 @@ struct DeleteAccountButton: View {
     @State private var isConfirming = false
     @State private var isDeleting = false
     @State private var errorMessage: String?
+    @State private var usesApple = false
+    @State private var apple = AppleReauthorization()
+
+    private var deletion: AccountDeletion { AccountDeletion(session: session, apple: apple) }
 
     var body: some View {
         Button(role: .destructive) {
@@ -26,6 +31,7 @@ struct DeleteAccountButton: View {
             }
         }
         .disabled(isDeleting)
+        .task { usesApple = await deletion.usesApple() }
         .accessibilityHint("Permanently deletes your \(configuration.displayName) account.")
         .confirmationDialog(
             "Delete your \(configuration.displayName) account?",
@@ -35,9 +41,15 @@ struct DeleteAccountButton: View {
             Button("Delete Account", role: .destructive) { delete() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(
-                "This permanently deletes your account and ratings, and any household where you're the only member, with its plans, recipes, and pantry. Households you share stay with the other members; if you're a household's only admin, its longest-standing member becomes admin. This can't be undone."
-            )
+            if usesApple {
+                Text(
+                    "This permanently deletes your account and ratings, and any household where you're the only member, with its plans, recipes, and pantry. Households you share stay with the other members; if you're a household's only admin, its longest-standing member becomes admin. This can't be undone.\n\nNext, confirm with Apple to delete your account."
+                )
+            } else {
+                Text(
+                    "This permanently deletes your account and ratings, and any household where you're the only member, with its plans, recipes, and pantry. Households you share stay with the other members; if you're a household's only admin, its longest-standing member becomes admin. This can't be undone."
+                )
+            }
         }
         .alert(
             "Couldn't Delete Your Account",
@@ -55,7 +67,7 @@ struct DeleteAccountButton: View {
             isDeleting = true
             defer { isDeleting = false }
             do {
-                try await session.deleteAccount()
+                _ = try await deletion.delete()
             } catch is CancellationError {
                 // Nothing to report.
             } catch {

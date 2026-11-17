@@ -118,7 +118,7 @@ var privacyPage = template.Must(template.New("privacy").Parse(`<!doctype html>
 
 <h2>What we collect</h2>
 <ul>
-<li><strong>Your account.</strong> When you sign in with Apple or Google we receive an account identifier from them, and your name and email address if you share them. With Sign in with Apple you can hide your email.</li>
+<li><strong>Your account.</strong> When you sign in with Apple or Google we receive an account identifier from them, and your name and email address if you share them. With Sign in with Apple you can hide your email, and we keep a key from Apple so that deleting your account also disconnects DinnerOS from your Apple ID.</li>
 <li><strong>Household data.</strong> Household names, members and their roles, time zone, servings, and invitations you send (including the invitee's email address).</li>
 <li><strong>What you plan and keep.</strong> Recipes (including order history files you choose to import), weekly plans, grocery lists and skipped ingredients, pantry items and purchases, Autopilot preferences, store settings and saved products, and the grocery prices, order totals, and meal kit spend you enter.</li>
 <li><strong>Ratings and activity in the app.</strong> Recipe ratings, and events such as viewing, planning, cooking, or skipping a recipe, which power suggestions for your household.</li>

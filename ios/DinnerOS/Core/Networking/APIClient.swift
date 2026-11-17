@@ -67,6 +67,10 @@ nonisolated struct APIRequest: Sendable {
         APIRequest(method: .delete, path: path, body: nil, bearerToken: nil)
     }
 
+    static func delete(_ path: String, body: some Encodable) throws -> APIRequest {
+        APIRequest(method: .delete, path: path, body: try JSONCoding.makeEncoder().encode(body), bearerToken: nil)
+    }
+
     func authorized(with accessToken: String) -> APIRequest {
         var copy = self
         copy.bearerToken = accessToken

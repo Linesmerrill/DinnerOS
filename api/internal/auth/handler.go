@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -34,7 +35,25 @@ type HandlerOptions struct {
 	RateLimit func(http.Handler) http.Handler
 	// DevLoginEnabled mounts POST /auth/dev. Only set it in development.
 	DevLoginEnabled bool
+	// AppleCodes, when set, gets the authorization code from each Apple
+	// sign-in after it succeeds, so the server can keep the Apple refresh
+	// token that account deletion revokes (api/internal/siwa).
+	AppleCodes AppleCodeSaver
 }
+
+// AppleCodeSaver keeps what a Sign in with Apple authorization code is worth.
+// It runs after the response, detached from the request, and must not fail
+// sign-in: it logs its own errors.
+type AppleCodeSaver interface {
+	SaveFromCode(ctx context.Context, userID, code string)
+}
+
+// maxAuthorizationCodeLength bounds an Apple authorization code (about 64
+// characters today). A longer one is ignored, never rejected.
+const maxAuthorizationCodeLength = 1024
+
+// appleCodeTimeout bounds the exchange of an Apple authorization code.
+const appleCodeTimeout = 20 * time.Second
 
 // Handler serves the authentication endpoints.
 type Handler struct {
@@ -122,6 +141,8 @@ type appleSignInRequest struct {
 	IdentityToken string `json:"identityToken"`
 	Nonce         string `json:"nonce"`
 	FullName      string `json:"fullName"`
+	// AuthorizationCode is Apple's one-time code, optional.
+	AuthorizationCode string `json:"authorizationCode"`
 }
 
 type googleSignInRequest struct {
@@ -166,6 +187,22 @@ func (h *Handler) signInWithApple(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := h.opts.Service.SignInWithProvider(r.Context(), users.ProviderApple, req.IdentityToken, req.Nonce, fullName)
 	h.writeSignIn(w, r, users.ProviderApple, res, err)
+	if err == nil {
+		h.saveAppleCode(r.Context(), res.User.ID, req.AuthorizationCode)
+	}
+}
+
+// saveAppleCode hands the code to AppleCodes in the background, so Apple's
+// token endpoint never slows or fails a sign-in.
+func (h *Handler) saveAppleCode(ctx context.Context, userID, code string) {
+	if h.opts.AppleCodes == nil || code == "" || len(code) > maxAuthorizationCodeLength {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), appleCodeTimeout)
+		defer cancel()
+		h.opts.AppleCodes.SaveFromCode(ctx, userID, code)
+	}()
 }
 
 func (h *Handler) signInWithGoogle(w http.ResponseWriter, r *http.Request) {

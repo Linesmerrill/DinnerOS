@@ -8,6 +8,9 @@ enum AppleSignIn {
     nonisolated struct Credential: Equatable, Sendable {
         let identityToken: String
         let fullName: String?
+        /// Apple's one-time code. The API trades it for the token it revokes when the
+        /// account is deleted.
+        var authorizationCode: String? = nil
     }
 
     nonisolated enum Failure: Error, Equatable {
@@ -37,7 +40,16 @@ enum AppleSignIn {
         else {
             throw Failure.missingIdentityToken
         }
-        return Credential(identityToken: identityToken, fullName: formattedFullName(appleID.fullName))
+        return Credential(
+            identityToken: identityToken, fullName: formattedFullName(appleID.fullName),
+            authorizationCode: authorizationCode(from: appleID))
+    }
+
+    /// The credential's one-time authorization code, if Apple sent one.
+    static func authorizationCode(from appleID: ASAuthorizationAppleIDCredential) -> String? {
+        guard let data = appleID.authorizationCode, let code = String(data: data, encoding: .utf8), !code.isEmpty
+        else { return nil }
+        return code
     }
 
     /// Apple provides the name only on the first authorization. Returns `nil` when no

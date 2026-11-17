@@ -196,6 +196,51 @@ schedule).
   `REFERRAL_MIN_RECIPES` (1), and `REFERRAL_MAX_PER_30_DAYS` (3). The app's
   words follow them.
 
+### Sign in with Apple revocation
+
+Decisions 750 and 751. When someone deletes their account, the API tells
+Apple to end DinnerOS's Sign in with Apple authorization for them, as App
+Review requires (guideline 5.1.1(v)). It is off until the key below is set;
+off, sign-in and deletion work exactly as before and the startup log says
+`signInWithAppleRevocation="not configured"`.
+
+Status: **not set yet.** Hark creates the key once the developer portal is
+back, then sets the three Heroku config vars.
+
+1. **Apple:** developer.apple.com → Certificates, Identifiers & Profiles →
+   **Keys** → **+**. Name it `DinnerOS Sign in with Apple`, tick **Sign in with
+   Apple**, click **Configure**, pick the primary App ID
+   **com.linesmerrill.dinneros** (team `6VTPDG2HNK`), save, **Continue**,
+   **Register**. Note the 10-character **Key ID** and **Download** the
+   `AuthKey_<KEYID>.p8` file. Apple allows the download once; keep it only in
+   the Heroku config var.
+2. **Heroku:** set the vars without printing them:
+
+   ```bash
+   heroku config:set -a dinneros-api SIWA_KEY_ID=<key id> SIWA_TEAM_ID=6VTPDG2HNK \
+     SIWA_PRIVATE_KEY="$(cat AuthKey_<KEYID>.p8)"
+   ```
+
+   Then delete the downloaded file. The dyno restarts; its startup log line
+   shows `signInWithAppleRevocation=configured` (never the key or Key ID). A
+   bad or partial set stops the API at startup with a message naming the
+   variable, so check the release with `heroku logs -a dinneros-api --tail`.
+
+How it works: the app sends Apple's one-time authorization code with each
+Apple sign-in, and the API trades it at `https://appleid.apple.com/auth/token`
+for a refresh token, stored encrypted per user. At deletion an Apple user
+confirms with Apple once more, the app sends that fresh code with `DELETE
+/me`, and the API revokes both tokens at `https://appleid.apple.com/auth/revoke`
+before deleting the account and the stored token. People who signed in before
+build 116 have no stored token, so their fresh code is what gets revoked.
+Apple failures are logged (status and Apple's error code only) and never stop a
+sign-in or a deletion. After a test deletion, the Apple ID's **Sign in with
+Apple** list (Settings → your name → Sign in with Apple) no longer shows
+DinnerOS.
+
+The API must be deployed before an app build that sends the code: the old API
+rejects the unknown `authorizationCode` field.
+
 ### Removed: meal-kit recipe import
 
 The in-app HelloFresh import is gone (decision in
@@ -435,6 +480,8 @@ vars or GitHub Secrets.
 | `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_AUTH_KEY` | push | ✅ Set. developer.apple.com → Certificates, Identifiers & Profiles → **Keys** → a key with **Apple Push Notifications service (APNs)** enabled (one key serves sandbox and production). `APNS_KEY_ID` is its 10-character key ID, `APNS_TEAM_ID` is `6VTPDG2HNK`, and `APNS_AUTH_KEY` is the **entire** downloaded `AuthKey_XXXX.p8`, BEGIN and END lines included (literal `\n` escapes are accepted too). Apple allows downloading it once; store it only here. Set all three or none: none makes push a logged no-op, a partial or unparseable set stops the API and the sweep at startup. Read only by `/sendreminders`. See [Push notifications](#push-notifications). |
 | `APNS_TOPIC` | push | Optional; defaults to `APPLE_BUNDLE_ID` (`com.linesmerrill.dinneros`). |
 | `DEVICECHECK_KEY_ID`, `DEVICECHECK_TEAM_ID`, `DEVICECHECK_PRIVATE_KEY` | referrals | Optional; each defaults to its `APNS_*` value, so the APNs key is used. The key must have DeviceCheck enabled. The private key is a **secret** (the whole `.p8`). Set all three (after defaults) or none: a partial or unparseable set stops the API at startup. Read by the web dyno. Check with `/devicecheckprobe`. See [Referrals and DeviceCheck](#referrals-and-devicecheck). |
+| `SIWA_KEY_ID`, `SIWA_TEAM_ID`, `SIWA_PRIVATE_KEY` | account deletion | Not set yet. developer.apple.com → Certificates, Identifiers & Profiles → **Keys** → a key with **Sign in with Apple** enabled and configured for the primary App ID `com.linesmerrill.dinneros`. `SIWA_KEY_ID` is its 10-character key ID, `SIWA_TEAM_ID` is `6VTPDG2HNK`, and `SIWA_PRIVATE_KEY` is the **entire** `AuthKey_XXXX.p8`, BEGIN and END lines included (literal `\n` escapes are accepted too). The private key is a **secret**: never print or commit it. Set all three to revoke Apple sign-in when an account is deleted, or none (revocation off). A partial or unparseable set stops the API at startup. Read by the web dyno. See [Sign in with Apple revocation](#sign-in-with-apple-revocation). |
+| `SIWA_CLIENT_ID` | optional | Defaults to `APPLE_BUNDLE_ID` (`com.linesmerrill.dinneros`), the audience Apple identity tokens are checked against. Change it only if the app's bundle ID changes. Not a secret. |
 | `AUTH_RATE_BURST` | optional | Sign-in requests one address may make at once, default 10 (refills one every 6 seconds). Raise only for local QA. Not a secret. |
 | `REFERRAL_QUALIFY_DAYS`, `REFERRAL_MIN_DINNERS`, `REFERRAL_MIN_RECIPES`, `REFERRAL_MAX_PER_30_DAYS` | optional | Referral thresholds, defaults 14, 1, 1, and 3. Not secrets. |
 | `STARTER_RECIPES_HOUSEHOLD_ID` | optional | The 24-character hex ID of the household whose recipes every new household receives as a starter library. Empty (the default) disables it; a malformed value stops the API at startup. Not a secret. See [Starter recipe library](#starter-recipe-library). |

@@ -30,6 +30,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/sameitems"
 	"github.com/Linesmerrill/DinnerOS/api/internal/shelflife"
 	"github.com/Linesmerrill/DinnerOS/api/internal/shopping"
+	"github.com/Linesmerrill/DinnerOS/api/internal/siwa"
 	"github.com/Linesmerrill/DinnerOS/api/internal/skips"
 	"github.com/Linesmerrill/DinnerOS/api/internal/substitutes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/users"
@@ -55,6 +56,7 @@ var accountDeletionKinds = map[string]collectionKind{
 	households.MembershipsCollection:  householdsModule,
 	users.IdentitiesCollection:        userOnly,
 	auth.SessionsCollection:           userOnly,
+	siwa.Collection:                   userOnly,
 	push.Collection:                   userOnly,
 	invitations.InvitationsCollection: householdData,
 	recipes.RecipesCollection:         householdData,

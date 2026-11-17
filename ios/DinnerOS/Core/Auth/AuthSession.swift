@@ -154,13 +154,15 @@ final class AuthSession {
     /// registration is forgotten the same way as at sign-out. If the deletion fails the user
     /// stays signed in and the error is thrown. On success there is no logout call: the
     /// server already deleted every session.
-    func deleteAccount() async throws {
+    func deleteAccount(appleAuthorizationCode: String? = nil) async throws {
         guard let api else { throw AuthSessionError.notConfigured }
         guard currentUser != nil else { throw AuthSessionError.signedOut }
         if let willSignOut {
             await willSignOut()
         }
-        try await authorized { token in try await api.deleteAccount(accessToken: token) }
+        try await authorized { token in
+            try await api.deleteAccount(accessToken: token, appleAuthorizationCode: appleAuthorizationCode)
+        }
         Self.logger.info("Account deleted")
         clearLocalSession()
     }
