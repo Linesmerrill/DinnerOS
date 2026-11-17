@@ -105,6 +105,8 @@ final class WebPageReader: NSObject, WKNavigationDelegate {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.mediaTypesRequiringUserActionForPlayback = .all
+        // Name it the way Safari does; some sites turn away a web view that doesn't.
+        configuration.applicationNameForUserAgent = "Version/26.0 Mobile/15E148 Safari/604.1"
         webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), configuration: configuration)
         super.init()
         webView.navigationDelegate = self

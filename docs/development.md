@@ -104,6 +104,17 @@ them in its web view. To check what the server makes of such a page, open it in
 Safari, copy the `<html>` element's outerHTML from the Web Inspector into a
 file, and pass it as `LIVE_HTML`. Never commit a saved page.
 
+The whole path on a simulator (phone web view, then the local API) is
+`LiveImportQATests`, skipped unless asked for:
+
+```
+TEST_RUNNER_QA_LIVE_IMPORT=1 CONFIGS=large-light TESTS=LiveImportQATests scripts/qa-matrix.sh
+```
+
+Kroger's bot wall can refuse a whole network, a Mac and its simulators
+included (Safari on the simulator shows a blank page). Then only a real phone
+on another network can check it.
+
 ## iOS
 
 Open the project in Xcode, choose the **DinnerOS** scheme, and run on an iPhone
