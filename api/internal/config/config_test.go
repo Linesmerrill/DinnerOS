@@ -514,6 +514,18 @@ func TestLoadInstacart(t *testing.T) {
 	}
 }
 
+// APP_STORE_APP_ID is the app's numeric Apple ID, for the free month redeem
+// link (decision 755).
+func TestAppStoreAppID(t *testing.T) {
+	cfg, err := Load(env(map[string]string{"APP_STORE_APP_ID": " 6612345678 "}))
+	if err != nil || cfg.Plus.AppStoreID != "6612345678" {
+		t.Errorf("app id = %q, %v", cfg.Plus.AppStoreID, err)
+	}
+	if _, err := Load(env(map[string]string{"APP_STORE_APP_ID": "com.linesmerrill.dinneros"})); err == nil || !strings.Contains(err.Error(), "APP_STORE_APP_ID") {
+		t.Errorf("bundle ID accepted: %v", err)
+	}
+}
+
 func TestPlusTestHouseholds(t *testing.T) {
 	cfg, err := Load(env(map[string]string{"PLUS_TEST_HOUSEHOLDS": " 6af70f85f009186daa3236f7, 6AF70F85F009186DAA3236F8 ,"}))
 	if err != nil {

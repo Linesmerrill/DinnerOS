@@ -207,7 +207,7 @@ func TestCodesAreUniqueAndRetiredForever(t *testing.T) {
 func TestPendingInviteSurvivesCodeChange(t *testing.T) {
 	ctx := t.Context()
 	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
-	s, _, free, _ := referralService(t, now)
+	s, _, _, _ := referralService(t, now)
 	old, _ := s.Referral(ctx, hh)
 	if _, err := s.Redeem(ctx, hhB, old.Code); err != nil {
 		t.Fatal(err)
@@ -225,9 +225,7 @@ func TestPendingInviteSurvivesCodeChange(t *testing.T) {
 	if harnessOf(s).state(hhB) != StateQualified {
 		t.Errorf("state = %q, want qualified", harnessOf(s).state(hhB))
 	}
-	if !free.m[hh].Equal(now.Add(month)) || !free.m[hhB].Equal(now.Add(month)) {
-		t.Errorf("free = %v / %v", free.m[hh], free.m[hhB])
-	}
+	harnessOf(s).oneReadyMonth(hh, hhB)
 	if info, _ := s.Referral(ctx, hh); info.Rewarded != 1 || info.Counts.Qualified != 1 {
 		t.Errorf("sharer = %+v", info)
 	}

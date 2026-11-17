@@ -194,6 +194,10 @@ type Plus struct {
 	// TestHouseholds are household IDs Plus is on for while Enabled is false
 	// (PLUS_TEST_HOUSEHOLDS, comma-separated), for trying purchases.
 	TestHouseholds []string
+	// AppStoreID is the app's numeric Apple ID (APP_STORE_APP_ID), for the
+	// redeem link that fills in a free month code (decision 755). Empty
+	// sends no link; the app opens Apple's redeem sheet either way.
+	AppStoreID string
 }
 
 // Instacart holds the Instacart Developer Platform key. The key is a
@@ -447,6 +451,9 @@ func ParseAPNsKey(raw string) (*ecdsa.PrivateKey, error) {
 // objectIDPattern matches a MongoDB ObjectID in hex.
 var objectIDPattern = regexp.MustCompile(`^[0-9a-f]{24}$`)
 
+// appStoreIDPattern is an app's Apple ID: digits only.
+var appStoreIDPattern = regexp.MustCompile(`^[0-9]{6,12}$`)
+
 // impactIDPattern matches one numeric Impact identifier.
 var impactIDPattern = regexp.MustCompile(`^[0-9]{1,20}$`)
 
@@ -500,6 +507,11 @@ func loadShopping(cfg *Config, get func(key, fallback string) string) []error {
 	if s := cfg.Plus.WebhookSecret; s != "" && len(s) < 24 {
 		cfg.Plus.WebhookSecret = ""
 		errs = append(errs, errors.New("REVENUECAT_WEBHOOK_SECRET must be at least 24 characters (openssl rand -hex 24)"))
+	}
+	cfg.Plus.AppStoreID = strings.TrimSpace(get("APP_STORE_APP_ID", ""))
+	if id := cfg.Plus.AppStoreID; id != "" && !appStoreIDPattern.MatchString(id) {
+		cfg.Plus.AppStoreID = ""
+		errs = append(errs, errors.New("APP_STORE_APP_ID must be the app's numeric Apple ID from App Store Connect"))
 	}
 	for _, id := range strings.Split(get("PLUS_TEST_HOUSEHOLDS", ""), ",") {
 		if id = strings.ToLower(strings.TrimSpace(id)); id == "" {

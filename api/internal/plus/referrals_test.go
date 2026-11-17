@@ -66,6 +66,29 @@ type harness struct {
 	homes   *fakeHouseholds
 	ids     *fakeIdentities
 	notes   *memoryNotifier
+	offers  *memoryOfferCodes
+	alerts  *memoryAlerts
+}
+
+// months is a household's free months.
+func (h *harness) months(id string) []FreeMonth {
+	h.t.Helper()
+	m, err := h.s.FreeMonths(h.t.Context(), id)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return m
+}
+
+// readyMonths counts a household's months with a code.
+func (h *harness) readyMonths(id string) int {
+	n := 0
+	for _, m := range h.months(id) {
+		if m.State == MonthReady {
+			n++
+		}
+	}
+	return n
 }
 
 var harnesses sync.Map // *Service -> *harness
@@ -83,6 +106,9 @@ func newHarness(t *testing.T, now time.Time) *harness {
 		Setup: h.setup, History: h.history, Devices: h.devices, Locks: &memoryLocks{m: map[string]time.Time{}},
 		Households: h.homes, Identities: h.ids, Notifier: h.notes, DeviceCheck: h.dc,
 	})
+	h.offers, h.alerts = newMemoryOfferCodes(), &memoryAlerts{}
+	h.offers.stock(40, now.Add(180*24*time.Hour))
+	h.s.WithOfferCodes(OfferCodeOptions{Store: h.offers, Alerts: h.alerts, AlertTo: "alerts@example.com", AppStoreID: "1234567890"})
 	h.s.now = func() time.Time { return now }
 	harnesses.Store(h.s, h)
 	t.Cleanup(func() { harnesses.Delete(h.s) })
@@ -187,20 +213,18 @@ func TestReferralGivesBothHouseholdsAFreeMonth(t *testing.T) {
 		t.Fatalf("redeem = %+v, %v; want pending, no free time yet", st, err)
 	}
 	setUpHousehold(s, hhB)
-	if ok, _ := s.HasPlus(ctx, hhB); !ok {
-		t.Error("new household has no Plus")
+	// Each gets a code to redeem with Apple, not Plus from our database
+	// (decision 755): Plus starts when Apple says the subscription did.
+	h := harnessOf(s)
+	h.oneReadyMonth(hh, hhB)
+	if ok, _ := s.HasPlus(ctx, hhB); ok {
+		t.Error("a code that isn't redeemed unlocked Plus")
 	}
-	if st, _ := s.Status(ctx, hh); !st.Active || !st.FreeUntil.Equal(now.Add(month)) {
+	if st, _ := s.Status(ctx, hh); st.Active || !st.FreeUntil.IsZero() {
 		t.Errorf("sharer = %+v", st)
 	}
 	if info, _ := s.Referral(ctx, hh); info.Rewarded != 1 || info.MonthsLeft != MaxReferralMonths-1 {
 		t.Errorf("after one = %+v", info)
-	}
-
-	// Free time ends.
-	s.now = func() time.Time { return now.Add(month + time.Hour) }
-	if ok, _ := s.HasPlus(ctx, hhB); ok {
-		t.Error("still Plus after the free month")
 	}
 }
 
@@ -250,7 +274,7 @@ func TestReferralRules(t *testing.T) {
 func TestReferralMonthsAreCapped(t *testing.T) {
 	ctx := t.Context()
 	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
-	s, _, free, _ := referralService(t, now)
+	s, _, _, _ := referralService(t, now)
 	h := harnessOf(s)
 	s.rules.MaxPer30Days = 100
 	code, _ := s.Referral(ctx, hh)
@@ -263,12 +287,10 @@ func TestReferralMonthsAreCapped(t *testing.T) {
 			t.Fatalf("redeem %d (%s): %v", i, id, err)
 		}
 		h.setUp(id)
-		if !free.m[id].Equal(now.Add(month)) {
-			t.Errorf("household %d got %v", i, free.m[id])
-		}
+		h.oneReadyMonth(id)
 	}
-	if want := now.Add(MaxReferralMonths * month); !free.m[hh].Equal(want) {
-		t.Errorf("sharer free until %v, want %v", free.m[hh], want)
+	if n := len(h.months(hh)); n != MaxReferralMonths {
+		t.Errorf("sharer has %d months, want %d", n, MaxReferralMonths)
 	}
 	info, _ := s.Referral(ctx, hh)
 	if info.MonthsLeft != 0 || info.Rewarded != MaxReferralMonths {
@@ -279,21 +301,22 @@ func TestReferralMonthsAreCapped(t *testing.T) {
 	}
 }
 
-// A paying household's free month starts when its paid time ends, since
-// Apple keeps billing it.
-func TestReferralMonthWaitsForPaidTime(t *testing.T) {
+// A paying sharer gets a code like anyone else; Apple applies it at its next
+// renewal. No database date is written.
+func TestReferralMonthForAPayingSharer(t *testing.T) {
 	ctx := t.Context()
 	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
 	s, subs, free, _ := referralService(t, now)
 	paidTo := now.Add(10 * 24 * time.Hour)
-	subs.m[hh] = Entitlement{HouseholdID: hh, WillRenew: true, ExpiresAt: paidTo, LastEventAt: now}
+	subs.m[hh] = Entitlement{HouseholdID: hh, WillRenew: true, ExpiresAt: paidTo, LastEventAt: now, Since: now.Add(-90 * 24 * time.Hour)}
 	code, _ := s.Referral(ctx, hh)
 	if _, err := s.Redeem(ctx, hhB, code.Code); err != nil {
 		t.Fatal(err)
 	}
 	setUpHousehold(s, hhB)
-	if !free.m[hh].Equal(paidTo.Add(month)) {
-		t.Errorf("sharer free until %v, want %v", free.m[hh], paidTo.Add(month))
+	harnessOf(s).oneReadyMonth(hh)
+	if len(free.m) != 0 {
+		t.Errorf("database dates written: %v", free.m)
 	}
 }
 
@@ -357,8 +380,13 @@ func TestReferralRoutes(t *testing.T) {
 	rec = do(http.MethodGet, "/households/"+hhB+"/plus", "u2", "")
 	st = StatusResponse{}
 	_ = json.Unmarshal(rec.Body.Bytes(), &st)
-	if !st.Active || st.FreeUntil == nil || st.ReferralProgress == nil || st.ReferralProgress.State != "qualified" {
+	if st.Active || st.FreeUntil != nil || st.ReferralProgress == nil || st.ReferralProgress.State != "qualified" ||
+		st.ReferralProgress.Message != FreeMonthReadyTitle || len(st.FreeMonths) != 1 || st.FreeMonths[0].State != "ready" ||
+		st.FreeMonths[0].Terms != FreeMonthTerms || st.FreeMonths[0].RedeemText != "Redeem" {
 		t.Errorf("after setup = %s", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), `"code"`) {
+		t.Errorf("the status holds a code: %s", rec.Body.String())
 	}
 
 	// The status carries the offer while Plus is on.

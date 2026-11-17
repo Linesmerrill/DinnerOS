@@ -42,6 +42,23 @@ func (h *harness) noMonths(ids ...string) {
 		if until, _ := h.free.FreeUntil(h.t.Context(), id); !until.IsZero() {
 			h.t.Errorf("%s got free time until %v", id, until)
 		}
+		if m := h.months(id); len(m) != 0 {
+			h.t.Errorf("%s got free months %+v", id, m)
+		}
+	}
+}
+
+// oneReadyMonth checks each household got exactly one month with a code,
+// and no date (decision 755).
+func (h *harness) oneReadyMonth(ids ...string) {
+	h.t.Helper()
+	for _, id := range ids {
+		if until, _ := h.free.FreeUntil(h.t.Context(), id); !until.IsZero() {
+			h.t.Errorf("%s got a database date %v; only codes are given now", id, until)
+		}
+		if m := h.months(id); len(m) != 1 || m[0].State != MonthReady {
+			h.t.Errorf("%s months = %+v, want one ready", id, m)
+		}
 	}
 }
 
@@ -85,18 +102,21 @@ func TestReferralQualifiesOnceForARealHousehold(t *testing.T) {
 	wg.Wait()
 	h.sweep()
 
+	h.oneReadyMonth(hhNew, hh)
 	for _, id := range []string{hhNew, hh} {
-		if until, _ := h.free.FreeUntil(ctx, id); !until.Equal(qualifyNow.Add(month)) {
-			t.Errorf("%s free until %v, want one month", id, until)
-		}
 		if got := h.notes.to(id); len(got) != 1 || !got[0].Banner {
 			t.Errorf("%s notifications = %+v, want one banner", id, got)
 		}
 	}
-	if got := h.notes.to(hhNew)[0]; got.Body != "Your free month of Plus is on. Thanks for joining from Lines's invite." {
-		t.Errorf("referred body = %q", got.Body)
+	// Two months, two codes, both taken from the pool once.
+	if st, _ := h.offers.Stock(ctx, qualifyNow); st.Given != 2 || st.Available != 38 {
+		t.Errorf("stock = %+v, want 2 given of 40", st)
 	}
-	if got := h.notes.to(hh)[0]; got.Body != "Garcias joined from your invite. You earned a free month of Plus." {
+	if got := h.notes.to(hhNew)[0]; got.Title != FreeMonthReadyTitle ||
+		got.Body != "Thanks for joining from Lines's invite. Redeem it in DinnerOS to start Plus with the first month free." {
+		t.Errorf("referred = %q %q", got.Title, got.Body)
+	}
+	if got := h.notes.to(hh)[0]; got.Body != "Garcias joined from your invite. Your free month is ready." {
 		t.Errorf("referrer body = %q", got.Body)
 	}
 	if r, _, _ := h.refs.UsedBy(ctx, hhNew); !r.Settled || r.Checks != ChecksPassed {
@@ -303,12 +323,10 @@ func TestReferralFourthIn30DaysWaitsForTheWindow(t *testing.T) {
 	if h.state(last) != StateQualified {
 		t.Fatalf("fourth at 30 days = %q, want qualified", h.state(last))
 	}
-	if until, _ := h.free.FreeUntil(t.Context(), last); until.IsZero() {
-		t.Error("fourth got no month")
-	}
-	// Four months back to back from the first.
-	if until, _ := h.free.FreeUntil(t.Context(), hh); !until.Equal(qualifyNow.Add(4 * month)) {
-		t.Errorf("sharer free until %v, want %v", until, qualifyNow.Add(4*month))
+	h.oneReadyMonth(last)
+	// Four months, each its own code.
+	if n := h.readyMonths(hh); n != 4 {
+		t.Errorf("sharer has %d ready months, want 4", n)
 	}
 }
 
@@ -331,9 +349,7 @@ func TestReferralAtTheCapStillPaysTheNewHousehold(t *testing.T) {
 	if h.state(hhNew) != StateQualified {
 		t.Fatalf("state = %q", h.state(hhNew))
 	}
-	if until, _ := h.free.FreeUntil(t.Context(), hhNew); !until.Equal(qualifyNow.Add(month)) {
-		t.Errorf("new household free until %v", until)
-	}
+	h.oneReadyMonth(hhNew)
 	h.noMonths(hh)
 	got := h.notes.to(hh)
 	if len(got) != 1 || got[0].Body != "Garcias joined from your invite. You've already earned the most free months." {
@@ -442,7 +458,9 @@ func TestReferralHowItWorksFollowsTheRules(t *testing.T) {
 		"Share your code with friends, family, even that one aunt.",
 		"They download DinnerOS, start a new household, and enter your code.",
 		"Once they plan a dinner and add a recipe, the invite counts.",
-		"Within 24 hours you both get a free month of Plus. We'll send you a notification when it's on.",
+		"Within 24 hours you both get a free month of Plus. We'll send you a notification when it's ready.",
+		// The month is a subscription offer, and it says so up front (decision 755).
+		"Redeem it through Apple: Plus starts with the first month free, then renews at the normal price unless you cancel.",
 	}
 	if how.Title != "How it works" || strings.Join(how.Steps, "|") != strings.Join(want, "|") {
 		t.Errorf("how it works = %+v", how)
@@ -542,9 +560,14 @@ func TestReferralInviteDetails(t *testing.T) {
 func TestReferralCopyIsPlain(t *testing.T) {
 	rules := DefaultReferralRules()
 	texts := append([]string{
-		rules.SummaryFooter(), ReferredTitle, ReferrerTitle, ReferredBody("Lines"), ReferredBody(""),
-		ReferrerBody("Garcias", false), ReferrerBody("", true), ProgressWaiting, ProgressQualified, ProgressExpired,
+		rules.SummaryFooter(), ReferredTitle(true), ReferredTitle(false), ReferrerTitle,
+		ReferredBody("Lines", true), ReferredBody("", false),
+		ReferrerBody("Garcias", false, true), ReferrerBody("Garcias", false, false), ReferrerBody("", true, false),
+		ProgressWaiting, ProgressQualified, ProgressExpired,
 		InviteCountsSoon, InviteEarned, InviteEarnedAtCap, InviteExpired, InviteStatusPending,
+		FreeMonthReadyTitle, FreeMonthReadyText, FreeMonthOwedTitle, FreeMonthOwedText, FreeMonthRedeemedTitle,
+		FreeMonthRedeemedText, FreeMonthRedeemText, FreeMonthTerms, FreeMonthCopiedText, FreeMonthNotFoundText,
+		FreeMonthOwedError, FreeMonthRedeemedErr, FreeMonthReadyBody,
 	}, rules.HowItWorks().Steps...)
 	raw, _ := json.Marshal(rules.ProgressFor(Referral{State: StatePending}, Setup{}))
 	texts = append(texts, string(raw), PlusExplainerTitle)

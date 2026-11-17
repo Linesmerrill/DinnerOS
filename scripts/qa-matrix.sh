@@ -137,7 +137,7 @@ run_config() {
         # on the iPad on its side (where their forms are a sheet), and the next-step dots (about a
         # minute) on the large iPhone and the upright iPad, the two lightest configs.
         # ReferralQATests also covers the free month moments ("Step 2 done" after its recipe, then
-        # "Your free month is unlocked"), so they run on the same 4 configs at no extra cost.
+        # "Your free month is ready" with Redeem), so they run on the same 4 configs at no extra cost.
         # The long flow tests (referral, invite link, AnyList) check what a person does, not how a
         # screen looks, so each runs on one appearance per device: 4 configs, not 8. Screens and
         # sweeps still run on all 8. The two groups are split so every config finishes in about the
@@ -175,6 +175,18 @@ if [ "$free_gb" -lt 10 ]; then
 fi
 need8083=no
 for t in $TESTS; do [ "$t" = UnsplashPhotoQATests ] && need8083=yes; done
+# Each invite that counts takes a free month code from the local pool (decision 755). Seed made-up
+# ones through the development-only route, so the referral tests end at "Your free month is ready".
+seed_offer_codes() {
+    local port=$1 token
+    token=$(curl -fsS -X POST "http://localhost:$port/api/v1/auth/dev" -H 'Content-Type: application/json' \
+        -d '{"subject":"qa-matrix-offer-codes"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])') &&
+        curl -fsS -o /dev/null -X POST "http://localhost:$port/api/v1/plus/dev/offer-codes" \
+            -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"count":200}' ||
+        { echo "couldn't seed free month codes on $port: is that API running with developer sign-in on?"; exit 1; }
+}
+seed_offer_codes 8082
+[ $need8083 = yes ] && seed_offer_codes 8083
 build 8082 &
 [ $need8083 = yes ] && build 8083 &
 wait
