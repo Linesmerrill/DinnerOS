@@ -29,6 +29,12 @@ import (
 // Italian recipes, while "italian" stays a distinct, more specific choice.
 // "asian" is a parent region rather than a synonym of "east asian": catalogs
 // use it for East and Southeast Asian dishes alike.
+//
+// Regions are for matching only. What a person sees is always one of the
+// standard cuisines (Shown): "North America" and "American" read as
+// American, and a pure region like "Southern Europe" or "Asian" is not shown
+// at all, because guessing which country it meant would often be wrong
+// (decision 732).
 
 // Entry is one known cuisine.
 type Entry struct {
@@ -53,7 +59,6 @@ var table = []Entry{
 	{"western european", "Western European", "european", nil, false},
 	{"eastern european", "Eastern European", "european", nil, false},
 	{"northern european", "Northern European", "european", []string{"nordic", "scandinavian"}, false},
-	{"north american", "North American", "", []string{"american", "usa"}, false},
 	{"latin american", "Latin American", "", []string{"latin", "latino"}, false},
 	{"caribbean", "Caribbean", "latin american", nil, false},
 	{"central american", "Central American", "latin american", nil, false},
@@ -87,10 +92,11 @@ var table = []Entry{
 	{"hungarian", "Hungarian", "eastern european", nil, true},
 	{"polish", "Polish", "eastern european", nil, true},
 	{"russian", "Russian", "eastern european", nil, true},
-	{"southern", "Southern", "north american", []string{"southern us", "soul food"}, true},
-	{"southwestern", "Southwestern", "north american", []string{"southwest"}, true},
-	{"tex-mex", "Tex-Mex", "north american", []string{"tex mex", "texmex"}, true},
-	{"cajun", "Cajun", "north american", []string{"creole"}, true},
+	{"american", "American", "", []string{"north american", "usa", "united states"}, true},
+	{"southern", "Southern", "american", []string{"southern us", "soul food"}, true},
+	{"southwestern", "Southwestern", "american", []string{"southwest"}, true},
+	{"tex-mex", "Tex-Mex", "american", []string{"tex mex", "texmex"}, true},
+	{"cajun", "Cajun", "american", []string{"creole"}, true},
 	{"hawaiian", "Hawaiian", "pacific islander", nil, true},
 	{"mexican", "Mexican", "latin american", nil, true},
 	{"cuban", "Cuban", "caribbean", nil, true},
@@ -187,6 +193,31 @@ func Standard() []string {
 	for _, e := range table {
 		if e.Standard {
 			out = append(out, e.Value)
+		}
+	}
+	return out
+}
+
+// IsStandard reports whether value is a standard cuisine's canonical value.
+func IsStandard(value string) bool {
+	e, ok := byKey[value]
+	return ok && e.Value == value && e.Standard
+}
+
+// Shown is the cuisines a person sees for values: each canonical, only the
+// standard ones, without repeats, in order, at most MaxPerRecipe. Stored
+// values are read through it, so a recipe saved with "North America" shows
+// American and one saved with only "Southern Europe" shows none, without
+// rewriting what was stored (decision 732).
+func Shown(values []string) []string {
+	var out []string
+	for _, v := range values {
+		c := Canonical(v)
+		if !IsStandard(c) || slices.Contains(out, c) {
+			continue
+		}
+		if out = append(out, c); len(out) == MaxPerRecipe {
+			break
 		}
 	}
 	return out

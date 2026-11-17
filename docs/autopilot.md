@@ -197,8 +197,8 @@ and weekday rules.
 
 1. Trim, lowercase, and single-space the label.
 2. A known value or alias maps to its canonical value: `latin` → `latin
-   american`, `middle east` → `middle eastern`, `american` → `north
-   american`, `southwest` → `southwestern`, `tex mex` → `tex-mex`.
+   american`, `middle east` → `middle eastern`, `north american` and `usa`
+   → `american`, `southwest` → `southwestern`, `tex mex` → `tex-mex`.
 3. Otherwise a trailing region noun becomes its adjective (`southern europe` →
    `southern european`, `central africa` → `central african`), and step 2 is
    tried again.
@@ -216,7 +216,7 @@ Canonical cuisines form a small hierarchy, so choices keep their specificity:
 | `southern european` | `european` | `italian`, `greek`, `spanish`, `portuguese` |
 | `western european` | `european` | `french`, `german`, `british`, `irish` |
 | `eastern european` | `european` | `hungarian`, `polish`, `russian` |
-| `north american` | | `southern`, `southwestern`, `tex-mex`, `cajun` |
+| `american` | | `southern`, `southwestern`, `tex-mex`, `cajun` |
 | `latin american` | | `mexican`, `caribbean` (`cuban`, `jamaican`), `central american`, `south american` (`brazilian`, `peruvian`) |
 | `middle eastern` | | `lebanese`, `turkish`, `persian` |
 | `african` | | `north african` (`moroccan`), `west african`, `east african` (`ethiopian`) |
@@ -247,10 +247,20 @@ Canonical cuisines form a small hierarchy, so choices keep their specificity:
   as a partial one (−0.10), never both: two Italian dinners repeat fully,
   Italian and French partially, Italian and Thai not at all.
 - `asian` is the parent of `east asian`, not a synonym: catalogs use it for
-  East and Southeast Asian dishes alike. `american` means `north american`.
-  `mediterranean` spans regions, so it has no parent.
-- Vocabulary counts roll up: a region's `recipeCount` is how many recipes a
-  like of it matches. Known values have title-case labels.
+  East and Southeast Asian dishes alike. `north america` and `north american`
+  mean `american`, a standard cuisine. `mediterranean` spans regions, so it
+  has no parent.
+- **People only ever see standard cuisines** (`cuisine.Shown`, decision 732):
+  the recipe page, Shared Recipes cards and chips, the vocabulary (every
+  picker, filter, and Autopilot list), and weekday habits. Regions and unknown
+  values are for matching only. A recipe stored with only a region ("Southern
+  Europe") shows the cuisine its title names, or none, and still matches likes,
+  exclusions, and rules for that region through `cuisineRegions`, which also
+  carries every stored value the recipe doesn't show. A profile that liked a
+  region before keeps it.
+- Vocabulary counts roll up: a cuisine's `recipeCount` is how many recipes a
+  like of it matches (American counts Southern and Cajun recipes too). Known
+  values have title-case labels.
 - Profiles saved before canonicalization are read canonically, and writes store
   canonical values. If merging spellings makes a stored value both liked and
   disliked or excluded, the restrictive choice wins when read.

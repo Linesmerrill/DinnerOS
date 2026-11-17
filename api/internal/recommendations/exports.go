@@ -25,7 +25,7 @@ func (a RecipeAttributes) Suits(method string) bool {
 }
 
 // CanonicalCuisine returns the canonical form of a cuisine label
-// ("North America" → "north american").
+// ("North America" → "american").
 func CanonicalCuisine(s string) string { return canonicalCuisine(s) }
 
 // CuisineLabel returns a known canonical cuisine's display label, or "".

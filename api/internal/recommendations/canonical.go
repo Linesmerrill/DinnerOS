@@ -47,6 +47,23 @@ func cuisineRegions(cuisines []string) []string {
 	return out
 }
 
+// matchRegions are what a recipe matches beyond the standard cuisines it
+// shows: their regions, then every other value the recipe stored (a region
+// like "Southern Europe", or an unknown one) with its own regions. A recipe
+// stored as only "Asian" shows no cuisine (decision 732) but an exclusion of
+// Asian still covers it.
+func matchRegions(shown, stored []string) []string {
+	out := cuisineRegions(shown)
+	for _, c := range canonicalCuisines(stored) {
+		for _, v := range withAncestors(c) {
+			if !slices.Contains(shown, v) && !slices.Contains(out, v) {
+				out = append(out, v)
+			}
+		}
+	}
+	return out
+}
+
 // Tags are less messy than cuisines: normalizeValue already merges case and
 // spacing, and what remains are distinct marketing labels rather than
 // synonyms. tagAliases only joins spellings that differ by a missing space.

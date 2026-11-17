@@ -100,28 +100,23 @@ var (
 	}
 )
 
-// withStandardCuisines keeps counted cuisines first (most used first) and
-// adds every standard cuisine the catalog doesn't use, alphabetically, so a
-// recipe's cuisine picker always has the usual choices (decision 722). The
-// standard ones are never cut by the cap; other counted ones fill the rest.
+// withStandardCuisines is the standard list only (decision 732): the counted
+// ones first (most used first), then every standard cuisine the catalog
+// doesn't use, alphabetically, so a recipe's cuisine picker always has the
+// usual choices (decision 722). Regions and unknown values are left out: a
+// person only ever picks or sees a standard cuisine.
 func withStandardCuisines(counted []Option) []Option {
-	standard := cuisine.Standard()
-	room := MaxVocabularyOptions - len(standard)
 	var out []Option
 	have := map[string]bool{}
 	for _, o := range counted {
-		isStandard := slices.Contains(standard, o.Value)
-		if !isStandard {
-			if room <= 0 {
-				continue
-			}
-			room--
+		if !cuisine.IsStandard(o.Value) || have[o.Value] {
+			continue
 		}
 		out = append(out, o)
 		have[o.Value] = true
 	}
 	var missing []Option
-	for _, v := range standard {
+	for _, v := range cuisine.Standard() {
 		if !have[v] {
 			missing = append(missing, Option{Value: v, Label: cuisine.Label(v)})
 		}
@@ -164,13 +159,9 @@ func buildVocabulary(catalog []recipes.Recipe) Vocabulary {
 		for _, d := range recipeDishes(r, recipeMealCategories(r, nil)) {
 			dishCounts[d]++
 		}
-		// The source's own spellings name unknown cuisines best; a recipe
-		// with none counts for the cuisine its title names (decision 721).
-		if len(r.Cuisines) > 0 {
-			cuisines.addAll(r.Cuisines)
-		} else {
-			cuisines.addAll(r.ShownCuisines())
-		}
+		// A recipe counts for the standard cuisines it shows: its own read
+		// onto the list, or the one its title names (decisions 721, 732).
+		cuisines.addAll(r.ShownCuisines())
 		tags.addAll(r.Tags)
 		for _, p := range classifyProteins(ingredientTokens(r)) {
 			proteinCounts[p]++

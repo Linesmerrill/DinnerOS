@@ -10,7 +10,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/Linesmerrill/DinnerOS/api/internal/recommendations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/cuisine"
 )
 
 // The top of Shared Recipes (decision 710): rows of recipes, one per active
@@ -82,6 +82,8 @@ func (s *Service) Home(ctx context.Context, householdID string) (Home, error) {
 	sig := &signals{service: s}
 	now := s.now().UTC()
 	out := Home{Sections: []Section{}}
+	// Rows try not to repeat what an earlier row showed (decision 733).
+	shownAbove := nearIndex{}
 	for _, c := range cols {
 		if !c.Active(now) {
 			continue
@@ -93,9 +95,12 @@ func (s *Service) Home(ctx context.Context, householdID string) (Home, error) {
 		if len(items) == 0 {
 			continue
 		}
-		out.Sections = append(out.Sections, Section{
-			Collection: s.dressed(c), Items: items[:min(len(items), SectionSize)], More: len(items) > SectionSize,
-		})
+		row := freshFirst(items, shownAbove)
+		row = row[:min(len(row), SectionSize)]
+		for _, it := range row {
+			shownAbove.add(nearKeyOf(it.Content))
+		}
+		out.Sections = append(out.Sections, Section{Collection: s.dressed(c), Items: row, More: len(items) > len(row)})
 	}
 	if out.Filters, err = s.FilterGroups(ctx); err != nil {
 		return Home{}, err
@@ -135,20 +140,23 @@ func (s *Service) FilterGroups(ctx context.Context) ([]FilterGroup, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list cuisines: %w", err)
 	}
-	cuisine := FilterGroup{ID: "cuisine", Title: "Cuisine", Param: "cuisine", Options: []FilterOption{}}
+	// Only standard cuisines are choices (decision 732): "North America"
+	// and "American" are one American chip, and a region like "Southern
+	// Europe" is none.
+	group := FilterGroup{ID: "cuisine", Title: "Cuisine", Param: "cuisine", Options: []FilterOption{}}
 	seen := map[string]bool{}
 	for _, v := range stored {
-		c := recommendations.CanonicalCuisine(v)
-		if c == "" || seen[c] {
+		c := cuisine.Canonical(v)
+		if !cuisine.IsStandard(c) || seen[c] {
 			continue
 		}
 		seen[c] = true
-		cuisine.Options = append(cuisine.Options, FilterOption{Value: c, Label: titleCase(label(v))})
+		group.Options = append(group.Options, FilterOption{Value: c, Label: cuisine.Label(c)})
 	}
-	slices.SortFunc(cuisine.Options, func(a, b FilterOption) int { return cmp.Compare(a.Label, b.Label) })
+	slices.SortFunc(group.Options, func(a, b FilterOption) int { return cmp.Compare(a.Label, b.Label) })
 	out := []FilterGroup{}
-	if len(cuisine.Options) > 0 {
-		out = append(out, cuisine)
+	if len(group.Options) > 0 {
+		out = append(out, group)
 	}
 	out = append(out,
 		FilterGroup{ID: "time", Title: "Time", Param: "maxMinutes", Options: []FilterOption{
@@ -235,6 +243,8 @@ func (s *Service) fill(ctx context.Context, c Collection, pool []Result, sig *si
 	if err != nil {
 		return nil, err
 	}
+	// The pool is ranked, so the best-ranked of near copies stays.
+	items = withoutNearCopies(items)
 	slices.SortStableFunc(items, func(a, b Result) int {
 		return cmp.Compare(boolInt(a.LibraryRecipeID != ""), boolInt(b.LibraryRecipeID != ""))
 	})
@@ -406,17 +416,6 @@ func words(s string) string {
 	return strings.Join(strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '\''
 	}), " ")
-}
-
-// titleCase capitalizes each word of a cuisine label ("thai" → "Thai").
-func titleCase(s string) string {
-	fields := strings.Fields(s)
-	for i, f := range fields {
-		r := []rune(f)
-		r[0] = unicode.ToUpper(r[0])
-		fields[i] = string(r)
-	}
-	return strings.Join(fields, " ")
 }
 
 func boolInt(b bool) int {

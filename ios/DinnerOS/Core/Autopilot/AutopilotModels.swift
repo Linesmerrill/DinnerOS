@@ -1094,7 +1094,7 @@ nonisolated struct AutopilotRecipeAttributes: Decodable, Equatable, Sendable {
     let recipeID: String
     let cookMinutes: Int?
     let timeBand: AutopilotTimeBand
-    /// Canonical and lowercase, such as `north american`.
+    /// Canonical and lowercase, such as `american`.
     let cuisines: [String]
     /// Broader regions of `cuisines`, nearest first. Likes, exclusions, and rules match them too.
     /// `nil` from a server older than canonical cuisines.

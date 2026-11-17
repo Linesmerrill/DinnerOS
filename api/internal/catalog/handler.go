@@ -12,6 +12,7 @@ import (
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot"
+	"github.com/Linesmerrill/DinnerOS/api/internal/cuisine"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/photosearch"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
@@ -483,7 +484,7 @@ func summaryResponse(it Result) CatalogSummaryResponse {
 		ID: it.ID, CatalogKey: it.CatalogKey, Source: c.Source, Name: c.Name, Headline: c.Headline,
 		ImageURL: c.ImageURL, IsAddon: c.IsAddon, TotalMinutes: c.TotalMinutes, CookMinutes: cook,
 		TimeBand: recipes.TimeBandOf(cook, autopilot.TimeBands{}), Calories: facts.Calories, ProteinGrams: facts.ProteinGrams,
-		Cuisines: orEmpty(c.Cuisines), Tags: orEmpty(c.Tags),
+		Cuisines: shownCuisineLabels(c), Tags: orEmpty(c.Tags),
 		InLibrary: it.LibraryRecipeID != "", LibraryRecipeID: it.LibraryRecipeID, Reasons: orEmpty(it.Reasons),
 	}
 }
@@ -514,6 +515,17 @@ func recipeResponse(it Result) CatalogRecipeResponse {
 	}
 	for _, s := range c.Steps {
 		out.Steps = append(out.Steps, recipes.StepResponse(s))
+	}
+	return out
+}
+
+// shownCuisineLabels are the cuisines a card shows: the recipe's own read
+// onto the standard list, or the one its title names, as labels ("North
+// America" shows "American", "Southern Europe" nothing; decision 732).
+func shownCuisineLabels(c recipes.Recipe) []string {
+	out := []string{}
+	for _, v := range c.ShownCuisines() {
+		out = append(out, cuisine.DisplayLabel(v))
 	}
 	return out
 }

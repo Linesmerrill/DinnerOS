@@ -355,14 +355,18 @@ struct DiscoverCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 RecipeImage(url: summary.imageURL, pointWidth: width ?? 240, title: summary.name)
                     .clipShape(.rect(cornerRadius: 14))
+                // The time and cuisine sit right under the name, one line or two; cards in a
+                // row line up at the top, and the space a short name leaves goes below.
                 VStack(alignment: .leading, spacing: 4) {
                     Text(summary.name)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
                         .multilineTextAlignment(.leading)
-                        .lineLimit(2, reservesSpace: true)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     facts
                 }
+                Spacer(minLength: 0)
             }
             .contentShape(.rect)
         }

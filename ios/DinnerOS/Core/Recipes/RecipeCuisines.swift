@@ -7,8 +7,9 @@ import Foundation
 nonisolated enum RecipeCuisines {
     /// The standard cuisines, as the server sends them, for an API that hasn't answered yet.
     static let standard: [AutopilotOption] = [
-        ("brazilian", "Brazilian"), ("british", "British"), ("cajun", "Cajun"), ("chinese", "Chinese"),
-        ("cuban", "Cuban"), ("ethiopian", "Ethiopian"), ("filipino", "Filipino"), ("french", "French"),
+        ("american", "American"), ("brazilian", "Brazilian"), ("british", "British"), ("cajun", "Cajun"),
+        ("chinese", "Chinese"), ("cuban", "Cuban"), ("ethiopian", "Ethiopian"), ("filipino", "Filipino"),
+        ("french", "French"),
         ("german", "German"), ("greek", "Greek"), ("hawaiian", "Hawaiian"), ("hungarian", "Hungarian"),
         ("indian", "Indian"), ("indonesian", "Indonesian"), ("irish", "Irish"), ("italian", "Italian"),
         ("jamaican", "Jamaican"), ("japanese", "Japanese"), ("korean", "Korean"), ("lebanese", "Lebanese"),

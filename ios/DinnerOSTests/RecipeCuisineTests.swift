@@ -100,6 +100,10 @@ struct RecipeCuisineTests {
         #expect(RecipeCuisines.filter(choices, query: " ").count == choices.count)
         #expect(RecipeCuisines.standard.contains { $0.value == "mediterranean" })
         #expect(RecipeCuisines.standard.contains { $0.value == "middle eastern" })
+        // The bundled list matches the server's: American, and no regions (decision 732).
+        #expect(RecipeCuisines.standard.first?.value == "american")
+        #expect(RecipeCuisines.standard.count == 37)
+        #expect(!RecipeCuisines.standard.contains { $0.value.hasPrefix("north ") || $0.value.hasSuffix(" european") })
     }
 
     @Test @MainActor func aGuessFillsInUntilTheMemberPicks() async throws {

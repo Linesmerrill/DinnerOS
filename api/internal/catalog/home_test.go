@@ -293,6 +293,64 @@ func TestFilterGroupsOfferThePresentCuisines(t *testing.T) {
 	}
 }
 
+// Stored cuisines read onto the standard list everywhere Shared Recipes
+// shows them: chips, cards, and the cuisine filter (decision 732).
+func TestCuisinesReadOntoTheStandardList(t *testing.T) {
+	h := newHarness(t, nil)
+	seedHome(t, h)
+	publishWith(t, h, "hf-burger", "Smash Burgers", func(r *recipes.Recipe) { r.Cuisines = []string{"North America"} })
+	publishWith(t, h, "hf-ribs", "Sticky Ribs", func(r *recipes.Recipe) { r.Cuisines = []string{"North American"} })
+	publishWith(t, h, "hf-roast", "Roast Chicken", func(r *recipes.Recipe) { r.Cuisines = []string{"Southern Europe"} })
+	publishWith(t, h, "hf-bowl", "Noodle Bowl", func(r *recipes.Recipe) { r.Cuisines = []string{"East Asia", "Japanese"} })
+
+	groups, err := h.service.FilterGroups(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var labels []string
+	for _, o := range groups[0].Options {
+		labels = append(labels, o.Label+"="+o.Value)
+	}
+	if want := []string{"American=american", "Italian=italian", "Japanese=japanese", "Mexican=mexican"}; !slices.Equal(labels, want) {
+		t.Errorf("cuisine chips = %v; want %v", labels, want)
+	}
+
+	for _, q := range []Query{{Cuisine: "american"}, {Cuisine: "North America"}} {
+		s, err := h.service.Search(t.Context(), hhAda, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, err := h.service.Discover(t.Context(), hhAda, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for where, page := range map[string]Page{"search": s, "discover": d} {
+			got := resultNames(page)
+			slices.Sort(got)
+			if want := []string{"Smash Burgers", "Sticky Ribs"}; !slices.Equal(got, want) {
+				t.Errorf("%s %q = %v; want %v", where, q.Cuisine, got, want)
+			}
+		}
+	}
+
+	d, err := h.service.Discover(t.Context(), hhAda, Query{Limit: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cards := map[string][]string{}
+	for _, it := range d.Items {
+		cards[it.Content.Name] = summaryResponse(it).Cuisines
+	}
+	for name, want := range map[string][]string{
+		"Smash Burgers": {"American"}, "Sticky Ribs": {"American"}, "Roast Chicken": {},
+		"Noodle Bowl": {"Japanese"}, "Quick Tacos": {"Mexican"}, "Lemon Asparagus Pasta": {"Italian"},
+	} {
+		if got, ok := cards[name]; !ok || !slices.Equal(got, want) {
+			t.Errorf("%s card cuisines = %q; want %q", name, got, want)
+		}
+	}
+}
+
 func TestHomeAppliesRestrictionsAndMarksTheLibrary(t *testing.T) {
 	profile := recommendations.Profile{Version: 1, Restrictions: recommendations.Restrictions{ExcludedCuisines: []string{"mexican"}}}
 	h := newHarness(t, func(o *ServiceOptions) { o.Taste = fakeTaste{profile: profile} })
