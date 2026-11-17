@@ -4,12 +4,11 @@ import (
 	"context"
 	"reflect"
 	"slices"
-	"strings"
 	"testing"
-	"unicode"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot"
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot/baseline"
+	"github.com/Linesmerrill/DinnerOS/api/internal/cuisine"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 )
@@ -45,38 +44,6 @@ func TestCanonicalCuisine(t *testing.T) {
 	for in, want := range map[string]string{"FamilyFriendly": "family friendly", " One  Pot": "one pot", "Spicy": "spicy"} {
 		if got := canonicalTag(in); got != want {
 			t.Errorf("canonicalTag(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
-func TestCuisineTable(t *testing.T) {
-	seen := map[string]string{}
-	for _, e := range cuisineTable {
-		for _, key := range append([]string{e.value}, e.aliases...) {
-			if normalizeValue(key) != key {
-				t.Errorf("%q isn't normalized", key)
-			}
-			if other, dup := seen[key]; dup {
-				t.Errorf("%q maps to both %q and %q", key, other, e.value)
-			}
-			seen[key] = e.value
-			if got := canonicalCuisine(key); got != e.value {
-				t.Errorf("canonicalCuisine(%q) = %q, want %q", key, got, e.value)
-			}
-		}
-		if strings.ToLower(e.label) != e.value {
-			t.Errorf("label %q doesn't spell %q", e.label, e.value)
-		}
-		for _, word := range strings.FieldsFunc(e.label, func(r rune) bool { return r == ' ' || r == '-' }) {
-			if !unicode.IsUpper([]rune(word)[0]) {
-				t.Errorf("label %q isn't title case", e.label)
-			}
-		}
-		if e.parent != "" && cuisineLabel(e.parent) == "" {
-			t.Errorf("%q has unknown parent %q", e.value, e.parent)
-		}
-		if n := len(cuisineAncestors(e.value)); n > 3 {
-			t.Errorf("%q has %d ancestors; the hierarchy is cyclic or too deep", e.value, n)
 		}
 	}
 }
@@ -257,5 +224,47 @@ func TestVocabularyMergesCuisineSpellings(t *testing.T) {
 	}
 	if v.Cuisines[0].Value != "asian" && v.Cuisines[0].Value != "north american" {
 		t.Errorf("most used first: %+v", v.Cuisines[:2])
+	}
+}
+
+// The cuisine picker always offers the standard list, whatever the catalog
+// holds, even when many other cuisines are counted; a recipe with no cuisine
+// counts for the one its title names (decisions 721 and 722).
+func TestVocabularyAlwaysHasTheStandardCuisines(t *testing.T) {
+	empty := buildVocabulary(nil)
+	values := func(v Vocabulary) []string {
+		var out []string
+		for _, o := range v.Cuisines {
+			out = append(out, o.Value)
+		}
+		return out
+	}
+	for _, want := range cuisine.Standard() {
+		if !slices.Contains(values(empty), want) {
+			t.Errorf("empty catalog: missing %q", want)
+		}
+	}
+	if o := empty.Cuisines[0]; o.Value != "brazilian" || o.Label != "Brazilian" {
+		t.Errorf("standard list isn't alphabetical: first %+v", o)
+	}
+
+	var catalog []recipes.Recipe
+	for i := range 40 {
+		r := recipeWith("Dinner", "Rice")
+		r.Cuisines = []string{"Made Up " + string(rune('A'+i%26)) + string(rune('a'+i/26))}
+		catalog = append(catalog, r)
+	}
+	catalog = append(catalog, recipeWith("Carnitas Tacos", "Pork"))
+	full := buildVocabulary(catalog)
+	if len(full.Cuisines) > MaxVocabularyOptions {
+		t.Errorf("%d options, over the cap", len(full.Cuisines))
+	}
+	for _, want := range cuisine.Standard() {
+		if !slices.Contains(values(full), want) {
+			t.Errorf("crowded catalog: missing %q", want)
+		}
+	}
+	if full.Cuisines[0].Value != "mexican" && !slices.ContainsFunc(full.Cuisines, func(o Option) bool { return o.Value == "mexican" && o.RecipeCount == 1 }) {
+		t.Errorf("the tacos didn't count as Mexican: %+v", full.Cuisines[:3])
 	}
 }

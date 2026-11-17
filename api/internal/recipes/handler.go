@@ -14,6 +14,7 @@ import (
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot"
+	"github.com/Linesmerrill/DinnerOS/api/internal/cuisine"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/httpx"
@@ -113,6 +114,7 @@ func (h *Handler) Mount(r chi.Router) {
 		// draft. Both are static paths, which win over /{recipeId} in chi.
 		edit := households.RequirePermission(h.opts.Authorizer, households.PermRecipesEdit, h.logger)
 		r.With(edit).Post("/households/{householdId}/recipes/parse", h.parseRecipe)
+		r.With(view).Post("/households/{householdId}/recipes/cuisine-guess", h.guessCuisine)
 		r.With(edit).Post("/households/{householdId}/recipes", h.createRecipe)
 		r.With(edit).Put("/households/{householdId}/recipes/{recipeId}/sharing", h.setSharing)
 		// Editing a recipe (decision 667): the swap preview stores nothing.
@@ -210,17 +212,22 @@ type RecipeResponse struct {
 	ImageURL       string   `json:"imageUrl,omitempty"`
 	// ImageCredit says who took a photo picked from photo search; omitted for
 	// the household's own (decision 705).
-	ImageCredit     *ImageCreditResponse       `json:"imageCredit,omitempty"`
-	IsAddon         bool                       `json:"isAddon"`
-	Servings        []int                      `json:"servings"`
-	PrepMinutes     int                        `json:"prepMinutes,omitempty"`
-	TotalMinutes    int                        `json:"totalMinutes,omitempty"`
-	CookMinutes     int                        `json:"cookMinutes,omitempty"`
-	TimeBand        *autopilot.TimeBand        `json:"timeBand"`
-	Calories        *int                       `json:"calories"`
-	ProteinGrams    *int                       `json:"proteinGrams"`
-	Difficulty      int                        `json:"difficulty,omitempty"`
-	Cuisines        []string                   `json:"cuisines"`
+	ImageCredit  *ImageCreditResponse `json:"imageCredit,omitempty"`
+	IsAddon      bool                 `json:"isAddon"`
+	Servings     []int                `json:"servings"`
+	PrepMinutes  int                  `json:"prepMinutes,omitempty"`
+	TotalMinutes int                  `json:"totalMinutes,omitempty"`
+	CookMinutes  int                  `json:"cookMinutes,omitempty"`
+	TimeBand     *autopilot.TimeBand  `json:"timeBand"`
+	Calories     *int                 `json:"calories"`
+	ProteinGrams *int                 `json:"proteinGrams"`
+	Difficulty   int                  `json:"difficulty,omitempty"`
+	Cuisines     []string             `json:"cuisines"`
+	// CuisineValues are the recipe's cuisines as canonical values, with a
+	// guess from the title when it has none and the household never picked
+	// (decision 721). CuisineLabels are the same, as the app shows them.
+	CuisineValues   []string                   `json:"cuisineValues"`
+	CuisineLabels   []string                   `json:"cuisineLabels"`
 	Tags            []string                   `json:"tags"`
 	Utensils        []string                   `json:"utensils"`
 	Allergens       []string                   `json:"allergens"`
@@ -339,6 +346,11 @@ func newRecipeResponse(r Recipe, bands autopilot.TimeBands) RecipeResponse {
 		OrderWeeks:  orEmpty(r.OrderWeeks), TimesOrdered: r.TimesOrdered, LastOrderedWeek: r.LastOrderedWeek,
 		SharedToCatalog: r.SharedToCatalog, InCatalog: Publishable(r),
 		CreatedAt: r.CreatedAt.UTC(), UpdatedAt: r.UpdatedAt.UTC(),
+	}
+	resp.CuisineValues = orEmpty(r.ShownCuisines())
+	resp.CuisineLabels = make([]string, 0, len(resp.CuisineValues))
+	for _, v := range resp.CuisineValues {
+		resp.CuisineLabels = append(resp.CuisineLabels, cuisine.DisplayLabel(v))
 	}
 	if !r.EditedAt.IsZero() {
 		edited := r.EditedAt.UTC()

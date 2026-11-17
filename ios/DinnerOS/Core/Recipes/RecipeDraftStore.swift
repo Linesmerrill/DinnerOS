@@ -76,6 +76,29 @@ final class RecipeDraftStore {
         }
     }
 
+    /// The member picked the cuisine, even None. No guess replaces it after this.
+    func pickCuisines(_ values: [String]) {
+        draft.cuisines = values
+        draft.cuisinesChosen = true
+    }
+
+    /// The cuisine last filled in from the title, so a new title can replace it.
+    @ObservationIgnored private var guessedCuisines: [String] = []
+
+    /// Fills in the cuisine the title names, until the member picks one. A guess only
+    /// replaces nothing or an earlier guess, never a page's own cuisine.
+    func guessCuisine(using guess: (String) async -> [String]?) async {
+        let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard draft.cuisinesChosen != true, !name.isEmpty else { return }
+        guard draft.cuisines.isEmpty || draft.cuisines == guessedCuisines else { return }
+        guard let found = await guess(name), draft.cuisinesChosen != true,
+            draft.name.trimmingCharacters(in: .whitespacesAndNewlines) == name,
+            draft.cuisines.isEmpty || draft.cuisines == guessedCuisines
+        else { return }
+        guessedCuisines = found
+        draft.cuisines = found
+    }
+
     /// Starts an empty draft, for typing a recipe from scratch.
     func startBlank() {
         draft = RecipeDraft(steps: [""])

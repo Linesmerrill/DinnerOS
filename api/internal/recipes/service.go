@@ -395,6 +395,10 @@ func mergeStored(r, stored Recipe, released []ImportRecipe) Recipe {
 	if !stored.EditedAt.IsZero() {
 		r.EditedAt, r.Ingredients, r.Steps = stored.EditedAt, stored.Ingredients, stored.Steps
 	}
+	// So does a cuisine the household picked, even none (decision 720).
+	if stored.CuisinesChosen {
+		r.Cuisines, r.CuisinesChosen = stored.Cuisines, true
+	}
 	aliases, weeks := releaseIDs(
 		slices.Concat(stored.SourceAliases, r.SourceAliases, []string{stored.SourceRecipeID}),
 		slices.Concat(stored.OrderWeeks, r.OrderWeeks), r.OrderWeeks, released)

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/cuisine"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 )
 
@@ -46,6 +47,9 @@ type ImportRecipe struct {
 	Ingredients    []ImportIngredient `json:"ingredients"`
 	Steps          []ImportStep       `json:"steps"`
 	OrderWeeks     []string           `json:"orderWeeks"`
+	// CuisinesChosen marks cuisines the member picked while adding the
+	// recipe, even none. A file never carries it.
+	CuisinesChosen bool `json:"-"`
 }
 
 // ImportNutrient is a per-serving nutrition value.
@@ -184,6 +188,12 @@ func buildRecipe(r ImportRecipe, ingredientID func(ImportIngredient) string) Rec
 		Tags:           uniqueStrings(r.Tags, ""),
 		Utensils:       uniqueStrings(r.Utensils, ""),
 		Allergens:      uniqueStrings(r.Allergens, ""),
+		CuisinesChosen: r.CuisinesChosen,
+	}
+	// A recipe that says no cuisine gets the one its title or tags name
+	// (decision 721), unless the member picked none.
+	if len(out.Cuisines) == 0 && !out.CuisinesChosen {
+		out.Cuisines = cuisine.Guess(out.Name, out.Tags)
 	}
 
 	seen := map[int]bool{}

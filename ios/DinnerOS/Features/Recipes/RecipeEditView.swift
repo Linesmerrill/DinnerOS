@@ -81,6 +81,11 @@ struct RecipeEditView: View {
                         RecipePhotoSection(model: photo, imageURL: $draft.imageURL)
                         timesSection
                     }
+                    Section {
+                        RecipeCuisineField(values: draft.cuisines, options: library.cuisineOptions) {
+                            draft.cuisines = $0
+                        }
+                    }
                     ingredientsSection
                     stepsSection
                     if draft.canChangePhoto {
@@ -110,6 +115,7 @@ struct RecipeEditView: View {
             .sheet(item: $reorder) { target in reorderSheet(target) }
             .task { await library.loadIngredientNames() }
             .task { await library.loadPhotoSearchStatus() }
+            .task { await library.loadCuisineOptions() }
             .onAppear {
                 // A photo picked earlier keeps its credit while the recipe is edited.
                 if photo.credit == nil, draft.imageURL == recipe.imageURLString { photo.credit = recipe.imageCredit }

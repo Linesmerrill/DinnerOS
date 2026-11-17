@@ -115,6 +115,7 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | GET | `/api/v1/households/{householdId}/recipes/import-reviews` `?status=open\|resolved\|all&limit` → `{items}`, oldest first | `recipes.import` | 4 | ✅ |
 | POST | `/api/v1/households/{householdId}/recipes/import-reviews/resolve` `{ids, resolution, recipeId?}` → `{resolved}` (`same_recipe`, `different_recipe`, `dismissed`; up to 500 ids) | `recipes.import` | 4 | ✅ |
 | POST | `/api/v1/households/{householdId}/recipes/parse` `{text}` or `{url}` → recipe draft (nothing is stored) | `recipes.edit` | 4a | ✅ |
+| POST | `/api/v1/households/{householdId}/recipes/cuisine-guess` `{name, tags?}` → `{cuisines, labels}`, the cuisine the title names (nothing is stored) | `household.view` | 114 | ✅ |
 | POST | `/api/v1/households/{householdId}/recipes` reviewed draft → `201` recipe (private to the household) | `recipes.edit` | 4a | ✅ |
 | PUT | `/api/v1/households/{householdId}/recipes/{recipeId}/sharing` `{sharedToCatalog}` → `{recipeId, sharedToCatalog, inCatalog}` | `recipes.edit` | 4a | ✅ |
 | GET | `/api/v1/households/{householdId}/discover` `?cuisine&tag&ingredient&maxMinutes&minServings&limit&cursor` → `{items, nextCursor, total}`, excluding the household's own recipes | `household.view` | 4a | ✅ |
@@ -310,6 +311,13 @@ The detail carries the same `cookMinutes`, `timeBand`, `calories`, and
   `proteinGrams` are read from it; show the list itself for everything else.
 - `allergens` is the recipe's allergen list, and `difficulty` the source's own
   scale when it gave one.
+- `cuisines` are as the source or the household gave them. `cuisineValues`
+  are the same as canonical cuisine values, and `cuisineLabels` as the app
+  shows them ("Mexican"), in the same order. A recipe with no cuisine that the
+  household never set shows the cuisine its title or tags name
+  ("Carnitas Tacos" → `mexican`), worked out on each read and never written
+  over the stored recipe; one with nothing to go on, or set to none, has
+  empty lists (decisions 720 and 721).
 - Each step has an optional `imageUrl`, and each ingredient line carries the
   catalog ingredient's `imageUrl` when it has one.
 - Ingredient lines have no allergens of their own: the
@@ -452,6 +460,14 @@ An optional `imageUrl` changes the photo of a recipe the household added
 upload below. Sent with no ingredients and no steps, only the photo changes.
 On any other recipe it is `validation_failed`, "Only recipes you added can get
 a new photo."
+
+An optional `cuisines` sets the cuisine of any recipe, meal kit recipes
+included (decision 720): cuisine values from the autopilot vocabulary
+(`["mexican"]`), stored canonical, at most 5, each up to 60 characters; `[]`
+means none, and absent keeps them. A household's pick outlasts a later import
+of the same recipe. Sent alone it doesn't mark the recipe edited, so a meal
+kit recipe still takes the kit's later fixes to its ingredients and steps.
+Errors are sentences: "Pick up to 5 cuisines."
 
 An optional `nutritionPerServing` replaces the nutrition of a recipe the
 household added (decision 694): absent keeps it, `[]` clears it. It takes the
@@ -763,6 +779,12 @@ Both require `recipes.edit`.
   recipe shows a View Recipe button for the page and the note "Imported
   recipes can have mistakes. Please check the ingredients before you shop."
   It can be edited without steps.
+- **Cuisine.** A draft's `cuisines` are canonical cuisine values: the page's
+  own `recipeCuisine`, or else a guess from the title and tags, or `[]` when
+  nothing says (decision 721). When saving, the app sends the member's pick
+  with `"cuisinesChosen": true`; the recipe keeps it, even `[]`, a page's
+  recipe included. Without `cuisinesChosen` (older apps) the saved recipe gets
+  the guess when it has no cuisine.
 - **The page is data.** Nothing in it selects a code path, and the recipe lands
   in the household's library, never in the global catalog.
 - The saved recipe's `source` is `manual` (typed) or `user` (from a page).
@@ -3317,6 +3339,12 @@ preference screens:
   meals, most used first, followed by a starter list (`recipeCount: 0`), at
   most 60 each, so onboarding works before any recipes are imported. Proteins
   list every protein with its recipe count.
+- Cuisines always include the standard list: every country and style cuisine
+  (Mexican, Italian, Tex-Mex, …) plus Mediterranean and Middle Eastern, the
+  unused ones alphabetically after the counted ones. The cap never cuts a
+  standard cuisine; other counted values fill what's left. A recipe with no
+  cuisine counts for the one its title names. The app's recipe cuisine picker
+  reads this list (decision 722).
 - A cuisine counts for its regions too: an Italian recipe counts for
   `italian`, `southern european`, and `european`, so `recipeCount` is how many
   recipes a like of the value matches. Known cuisines have title-case labels;
@@ -3484,7 +3512,7 @@ for unknown fields).
   "status": "proposed",
   "version": 2,
   "attempt": 1,
-  "modelVersion": "baseline-2026.10",
+  "modelVersion": "baseline-2026.11",
   "inputsHash": "9f2c4b1d0a7e6c35",
   "requestedMeals": 5,
   "plannedMeals": 3,
@@ -3605,7 +3633,7 @@ week. Nothing is stored: they are recomputed from events each time.
 
 ```json
 {
-  "modelVersion": "baseline-2026.10",
+  "modelVersion": "baseline-2026.11",
   "interactions": 214,
   "adjustments": [
     { "kind": "item", "key": "66e5a1f2c3b4a5d6e7f80915", "label": "Beef Tacos", "recipeId": "66e5a1f2c3b4a5d6e7f80915",

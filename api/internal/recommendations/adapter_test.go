@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/autopilot"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
@@ -92,5 +93,53 @@ func TestBuildInputCarriesSkipReasons(t *testing.T) {
 			t.Errorf("%s: interaction = {kind: %q, reason: %q}; want {kind: %q, reason: %q}",
 				tc.name, got.Kind, got.Reason, tc.wantKind, tc.wantReason)
 		}
+	}
+}
+
+// A cooked meal carries the weekday it was cooked, so Autopilot learns a
+// day's habits from cooking as well as planning. A week ending unanswered
+// is no night anyone cooked, and a skip has no day (decision 724).
+func TestBuildInputGivesCookedMealsTheirWeekday(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	w := mustWeek(t, testWeek)
+
+	if _, _, err := env.events.Insert(ctx, []events.Event{
+		{
+			HouseholdID: hhA, UserID: userAda, Type: events.TypeRecipeCooked, RecipeID: rTacos, Week: testWeek,
+			Payload: events.RecipeCooked{Date: "2026-09-15"}, OccurredAt: testNow,
+		},
+		{
+			HouseholdID: hhA, UserID: userAda, Type: events.TypeRecipeCooked, RecipeID: rCurry, Week: testWeek,
+			Payload: events.RecipeCooked{Date: "2026-09-18", Implicit: true}, OccurredAt: testNow,
+		},
+		{
+			HouseholdID: hhA, UserID: userAda, Type: events.TypeRecipeSkipped, RecipeID: rSalmon, Week: testWeek,
+			Payload: events.RecipeSkipped{Date: "2026-09-16"}, OccurredAt: testNow,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	profile, err := env.svc.Profile(ctx, hhA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, _, err := env.svc.buildInput(ctx, hhA, w, profile, WeekContext{}, planning.Plan{}, DeviceSignals{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	days := map[string]autopilot.Day{}
+	for _, h := range in.History {
+		if h.Kind == autopilot.KindSkipped || h.Kind == autopilot.KindCooked {
+			days[h.ItemID] = h.Day
+		}
+	}
+	for id, want := range map[string]autopilot.Day{rTacos: autopilot.Tuesday, rCurry: "", rSalmon: ""} {
+		if days[id] != want {
+			t.Errorf("%s: day %q, want %q", id, days[id], want)
+		}
+	}
+	if weekdayOf(time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)) != autopilot.Monday || weekdayOf(time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)) != autopilot.Sunday {
+		t.Error("weekdayOf is off by a day")
 	}
 }

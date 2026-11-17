@@ -214,8 +214,8 @@ func (m *model) score(s *slot, it *item) cand {
 	// Mondays. A weekday rule says it outright, so it wins (decision 637).
 	var theme float64
 	var themeText string
-	if t := m.dayThemes[s.day]; t != nil && s.rule == nil && t.matches(it) {
-		theme, themeText = t.share, t.text(day)
+	if t := m.dayThemes[s.day]; t != nil && s.rule == nil {
+		theme, themeText = t.value(it, day)
 	}
 	explain("dayTheme", themeText, add(SignalDayTheme, theme, w.DayTheme), false)
 

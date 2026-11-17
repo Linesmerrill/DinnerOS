@@ -28,6 +28,10 @@ type EditRecipeRequest struct {
 	// Nutrition, when present, replaces the per-serving nutrition; []
 	// clears it (decision 694).
 	Nutrition *[]NutrientResponse `json:"nutritionPerServing,omitempty"`
+	// Cuisines, when present, are the household's pick on any recipe, as
+	// cuisine values from the autopilot vocabulary; [] means none. They're
+	// stored canonical and kept through a re-import (decision 720).
+	Cuisines *[]string `json:"cuisines,omitempty"`
 }
 
 // EditIngredientRequest is one ingredient line. ingredientId is the line's
@@ -97,7 +101,7 @@ func (h *Handler) editRecipe(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &req) {
 		return
 	}
-	in := EditInput{Steps: req.Steps, ImageURL: req.ImageURL, Name: req.Name, PrepMinutes: req.PrepMinutes, TotalMinutes: req.TotalMinutes}
+	in := EditInput{Steps: req.Steps, ImageURL: req.ImageURL, Name: req.Name, PrepMinutes: req.PrepMinutes, TotalMinutes: req.TotalMinutes, Cuisines: req.Cuisines}
 	if req.Nutrition != nil {
 		nutrition := nutrientsFromWire(*req.Nutrition)
 		in.Nutrition = &nutrition

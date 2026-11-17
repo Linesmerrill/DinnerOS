@@ -925,6 +925,59 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/households/{householdId}/recipes/cuisine-guess:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdID"
+    post:
+      summary: Guess a recipe's cuisine from its title
+      description: |
+        The cuisine a recipe's title or tags name ("Carnitas Tacos" →
+        `mexican`), so Add Recipe can fill it in while the member types
+        (decision 721). Requires `household.view`. Nothing is stored. Both
+        lists are empty when nothing says.
+      operationId: guessRecipeCuisine
+      tags: [recipes]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 200
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: The guess.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cuisines, labels]
+                properties:
+                  cuisines:
+                    type: array
+                    items:
+                      type: string
+                    example: [mexican]
+                  labels:
+                    type: array
+                    items:
+                      type: string
+                    example: [Mexican]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/households/{householdId}/recipes/parse:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"
@@ -6859,7 +6912,7 @@ components:
           description: none when no plan is stored for the week.
     Recipe:
       type: object
-      required: [id, householdId, source, sourceRecipeId, sourceAliases, name, isAddon, servings, cuisines, tags, utensils, allergens, nutritionPerServing, ingredients, steps, orderWeeks, timesOrdered, createdAt, updatedAt, householdRating, myRating]
+      required: [id, householdId, source, sourceRecipeId, sourceAliases, name, isAddon, servings, cuisines, cuisineValues, cuisineLabels, tags, utensils, allergens, nutritionPerServing, ingredients, steps, orderWeeks, timesOrdered, createdAt, updatedAt, householdRating, myRating]
       properties:
         id:
           type: string
@@ -6921,8 +6974,24 @@ components:
           description: The source's difficulty scale, when it gave one.
         cuisines:
           type: array
+          description: As the source or the household gave them.
           items:
             type: string
+        cuisineValues:
+          type: array
+          description: |
+            The cuisines as canonical values, with a guess from the title or
+            tags when the recipe has none and the household never set them
+            (decisions 720 and 721). Worked out on each read.
+          items:
+            type: string
+          example: [mexican]
+        cuisineLabels:
+          type: array
+          description: The same cuisines as the app shows them, in the same order.
+          items:
+            type: string
+          example: [Mexican]
         tags:
           type: array
           items:
@@ -7326,6 +7395,18 @@ components:
           minimum: 0
           maximum: 2880
           description: Prep plus cook time of a recipe the household added. Absent keeps it, 0 clears it.
+        cuisines:
+          type: array
+          maxItems: 5
+          description: |
+            The household's cuisines for any recipe, meal kit ones included:
+            values from the autopilot vocabulary, stored canonical. Absent
+            keeps them, [] means none. Kept through a re-import; sent alone
+            it doesn't mark the recipe edited (decision 720).
+          items:
+            type: string
+            maxLength: 60
+          example: [mexican]
         nutritionPerServing:
           type: array
           maxItems: 9
@@ -7567,8 +7648,17 @@ components:
             $ref: "#/components/schemas/TypedNutrient"
         cuisines:
           type: array
+          description: |
+            Canonical cuisine values. A parsed draft has the page's own or a
+            guess from the title and tags (decision 721).
           items:
             type: string
+        cuisinesChosen:
+          type: boolean
+          description: |
+            Sent when saving: the member picked `cuisines`, even none, so the
+            recipe keeps them and gets no guess. A page's recipe keeps them too
+            (decision 720).
         tags:
           type: array
           items:

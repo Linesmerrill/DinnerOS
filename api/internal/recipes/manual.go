@@ -12,6 +12,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/cuisine"
 	"github.com/Linesmerrill/DinnerOS/api/internal/ingredients"
 )
 
@@ -50,11 +51,14 @@ type Draft struct {
 	PrepMinutes  int
 	TotalMinutes int
 	// Nutrition is per serving, as the member typed it (decision 694).
-	Nutrition   []Nutrient
-	Cuisines    []string
-	Tags        []string
-	Ingredients []DraftIngredient
-	Steps       []string
+	Nutrition []Nutrient
+	Cuisines  []string
+	// CuisinesChosen means the member picked Cuisines, even none, so the
+	// saved recipe keeps them and gets no guess (decision 720).
+	CuisinesChosen bool
+	Tags           []string
+	Ingredients    []DraftIngredient
+	Steps          []string
 	// Warnings explain what a parser could not read. They are advice for the
 	// person reviewing, never a reason to refuse.
 	Warnings []string
@@ -98,12 +102,16 @@ func (s *Service) CreateFromDraft(ctx context.Context, householdID string, d Dra
 		// A recipe read from a page keeps only its title, servings,
 		// ingredients, and link (decision 670), whatever the request carried.
 		// The member's own photo (decision 687) is theirs, so it stays, and so
-		// does one they picked from photo search (decision 705).
+		// does one they picked from photo search (decision 705), and so does
+		// the cuisine, which the member saw and could change (decision 720).
 		own := ""
 		if IsPickablePhotoURL(strings.TrimSpace(d.ImageURL)) {
 			own = strings.TrimSpace(d.ImageURL)
 		}
-		d = Draft{Name: d.Name, Servings: d.Servings, SourceURL: d.SourceURL, ImageURL: own, Ingredients: d.Ingredients}
+		d = Draft{
+			Name: d.Name, Servings: d.Servings, SourceURL: d.SourceURL, ImageURL: own, Ingredients: d.Ingredients,
+			Cuisines: d.Cuisines, CuisinesChosen: d.CuisinesChosen,
+		}
 		if strings.TrimSpace(d.SourceURL) == "" {
 			return Recipe{}, fmt.Errorf("%w: a recipe from a page needs the page's link", ErrInvalidDraft)
 		}
@@ -181,7 +189,8 @@ func draftImportRecipe(d Draft, source string) (ImportRecipe, error) {
 		PrepMinutes:    d.PrepMinutes,
 		TotalMinutes:   d.TotalMinutes,
 		Nutrition:      importNutrients(nutrition),
-		Cuisines:       labels(d.Cuisines),
+		Cuisines:       cuisine.Clean(d.Cuisines),
+		CuisinesChosen: d.CuisinesChosen,
 		Tags:           labels(d.Tags),
 	}
 	for i, line := range d.Ingredients {

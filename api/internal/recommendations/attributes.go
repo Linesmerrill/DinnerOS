@@ -226,7 +226,7 @@ var methodKeywords = map[string][]phrase{
 func attributes(r recipes.Recipe, override *RecipeOverride, bands autopilot.TimeBands) RecipeAttributes {
 	names := ingredientTokens(r)
 	a := RecipeAttributes{
-		RecipeID: r.ID, CookMinutes: r.CookMinutes(), Cuisines: canonicalCuisines(r.Cuisines), Tags: canonicalTags(r.Tags),
+		RecipeID: r.ID, CookMinutes: r.CookMinutes(), Cuisines: canonicalCuisines(r.ShownCuisines()), Tags: canonicalTags(r.Tags),
 		Proteins: classifyProteins(names), Override: override,
 	}
 	a.CuisineRegions = cuisineRegions(a.Cuisines)

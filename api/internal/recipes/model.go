@@ -60,7 +60,12 @@ type Recipe struct {
 	PrepMinutes    int
 	TotalMinutes   int
 	Difficulty     int
-	Cuisines       []string
+	// Cuisines are as the source or the household gave them. Read them
+	// through ShownCuisines, which fills in a guess (decision 721).
+	Cuisines []string
+	// CuisinesChosen is true once the household picked the cuisines, even
+	// none: a re-import keeps them and no guess replaces them.
+	CuisinesChosen bool
 	Tags           []string
 	Utensils       []string
 	Allergens      []string

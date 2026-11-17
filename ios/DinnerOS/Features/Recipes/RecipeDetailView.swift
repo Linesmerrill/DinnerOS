@@ -371,6 +371,13 @@ struct RecipeDetailView: View {
             }
             RecipeStatsRow(stats: stats)
                 .padding(.top, 4)
+            if let cuisine = cuisineText {
+                Label(cuisine, systemImage: "globe")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.secondary)
+                    .accessibilityLabel("Cuisine: \(cuisine)")
+                    .accessibilityIdentifier("RecipeCuisineShown")
+            }
             if !tags.isEmpty {
                 ChipFlowLayout(spacing: 6) {
                     ForEach(tags, id: \.self) { tag in
@@ -394,10 +401,18 @@ struct RecipeDetailView: View {
             })
     }
 
+    /// The recipe's cuisine as the server names it ("Mexican"), or nil.
+    private var cuisineText: String? {
+        guard let labels = recipe?.cuisineLabels, !labels.isEmpty else { return nil }
+        return labels.formatted(.list(type: .and))
+    }
+
     /// Imported tags carry the source's own slugs ("latin-american-faves", "seo"); show the
     /// ones a person would recognize, spelled out.
     private var tags: [String] {
-        let values = (recipe?.tags ?? summary.tags) + (recipe?.cuisines ?? [])
+        // The cuisine has its own line when the server names it.
+        let cuisines = (recipe?.cuisineLabels.isEmpty ?? true) ? (recipe?.cuisines ?? []) : []
+        let values = (recipe?.tags ?? summary.tags) + cuisines
         var seen = Set<String>()
         return values.compactMap { value -> String? in
             let spelled = value.replacingOccurrences(of: "-", with: " ")

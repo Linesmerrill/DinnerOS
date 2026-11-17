@@ -16,7 +16,11 @@ nonisolated struct RecipeDraft: Codable, Equatable, Sendable {
     var servings: Int = 0
     var prepMinutes: Int?
     var totalMinutes: Int?
+    /// Cuisine values ("mexican"): the page's own or the server's guess until the member picks.
     var cuisines: [String] = []
+    /// True once the member picked the cuisine, even None: the recipe keeps it as picked.
+    /// Left out until then, so the server can still guess from the title.
+    var cuisinesChosen: Bool?
     var tags: [String] = []
     var ingredients: [RecipeDraftIngredient] = []
     var steps: [String] = []
@@ -33,7 +37,7 @@ nonisolated struct RecipeDraft: Codable, Equatable, Sendable {
         case name, headline, description
         case sourceURL = "sourceUrl"
         case imageURL = "imageUrl"
-        case servings, prepMinutes, totalMinutes, cuisines, tags, ingredients, steps, warnings
+        case servings, prepMinutes, totalMinutes, cuisines, cuisinesChosen, tags, ingredients, steps, warnings
         case fromURL = "fromUrl"
         case nutritionPerServing
     }
