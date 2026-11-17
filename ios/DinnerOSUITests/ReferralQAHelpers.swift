@@ -110,6 +110,19 @@ extension XCTestCase {
         app.navigationBars.buttons.firstMatch.tap()
     }
 
+    /// "Step 2 done" and "2 of 3 done" (`number`, `done`, `total`) in the card over the app, then a tap closes it. It
+    /// fades on its own too, so check it as soon as it shows.
+    @MainActor
+    func expectStepDone(_ app: XCUIApplication, number: Int, done: Int, of total: Int, name: String) {
+        let card = app.descendants(matching: .any)["StepDoneCard"].firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 15), "No Step \(number) done card")
+        XCTAssertTrue(card.label.hasPrefix("Step \(number) done"), "The card says \(card.label)")
+        XCTAssertTrue(card.label.contains("\(done) of \(total) done"), "The card says \(card.label)")
+        snap(app, name)
+        card.tap()
+        XCTAssertTrue(waitGone(card, timeout: 5), "Tapping the step card didn't close it")
+    }
+
     /// One recipe on this week's menu.
     @MainActor
     func planADinner(_ app: XCUIApplication) {

@@ -82,7 +82,7 @@ run_test() {
     xcrun simctl uninstall "$id" com.linesmerrill.dinneros 2>/dev/null
     rm -rf "$OUT/$name.xcresult"
     TEST_RUNNER_QA_API_BASE=http://localhost:$port TEST_RUNNER_QA_PHOTO_SEARCH=$search TEST_RUNNER_QA_MODE=$mode TEST_RUNNER_QA_ORIENTATION=$orientation \
-        TEST_RUNNER_QA_APP_QA_HUD_SECONDS=3 TEST_RUNNER_QA_MANUAL_NAME="Sip Fudge" \
+        TEST_RUNNER_QA_APP_QA_HUD_SECONDS=3 TEST_RUNNER_QA_APP_QA_MOMENT_SECONDS=12 TEST_RUNNER_QA_MANUAL_NAME="Sip Fudge" \
         TEST_RUNNER_QA_IMPORTED_NAME="Street Cart-Style Chicken Bowls" \
         xcodebuild test-without-building -xctestrun "$xctestrun" -destination "id=$id" \
         -test-timeouts-enabled YES -maximum-test-execution-time-allowance 600 \
@@ -135,6 +135,8 @@ run_config() {
         # The end-to-end add tests run once each, on configs without the referral and invite
         # tests: adding by hand on the large iPhone, companions and cuisine on the small iPhone and
         # on the iPad on its side (where their forms are a sheet).
+        # ReferralQATests also covers the free month moments ("Step 2 done" after its recipe, then
+        # "Your free month is unlocked"), so they run on the same 4 configs at no extra cost.
         # The long flow tests (referral, invite link, AnyList) check what a person does, not how a
         # screen looks, so each runs on one appearance per device: 4 configs, not 8. Screens and
         # sweeps still run on all 8. The two groups are split so every config finishes in about the

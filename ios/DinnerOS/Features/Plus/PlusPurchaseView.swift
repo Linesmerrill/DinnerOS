@@ -266,18 +266,9 @@ struct PlusPurchasePresenter: ViewModifier {
             .sheet(isPresented: $plus.showsChecklist) {
                 ReferralChecklistSheet()
             }
-            // A card over the app, not a sheet: it waits under any sheet that's open (Add
-            // Recipes, say) and shows when that closes, instead of being dropped.
-            .overlay {
-                if let progress = plus.freeMonthOn {
-                    FreeMonthOnView(progress: progress) {
-                        plus.freeMonthOn = nil
-                        plus.freeMonthShown()
-                    }
-                    .transition(.opacity)
-                }
-            }
-            .animation(.easeOut(duration: 0.2), value: plus.freeMonthOn?.id)
+            // "Step 2 done" and "Your free month is unlocked": over everything, sheets
+            // included, without stopping what the person is doing.
+            .freeMonthMoments()
             .alert(
                 "Couldn't Use Your Invite Code",
                 isPresented: Binding(get: { plus.inviteError != nil }, set: { if !$0 { plus.inviteError = nil } })

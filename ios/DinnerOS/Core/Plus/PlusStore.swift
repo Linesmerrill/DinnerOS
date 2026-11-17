@@ -53,8 +53,10 @@ final class PlusStore {
     /// A new household's code just went in: the Menu shows the checklist once its own welcome
     /// is out of the way, since two sheets can't show at once.
     var checklistWaiting = false
-    /// "Your free month of Plus is on", shown once when the checklist is done.
+    /// "Your free month is unlocked", shown once when the checklist is done.
     var freeMonthOn: ReferralProgress?
+    /// "Step 2 done", shown once as each checklist step finishes (decision 729).
+    var stepDone: ReferralStepMoment?
     /// Why a saved code couldn't be used, in the server's words.
     var inviteError: String?
     /// The Menu card's Hide, per household. Bumped so views reading it update.

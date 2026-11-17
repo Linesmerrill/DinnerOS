@@ -2,7 +2,7 @@ import XCTest
 
 /// An invite from start to finish on the local API (decision 698): the sharer's How it works
 /// and code, a brand-new household entering it, the checklist ticking off as it adds a
-/// recipe and plans a dinner, then the free month and a banner for each household. In
+/// recipe and plans a dinner (a "Step 2 done" card along the way), then the free month and a banner for each household. In
 /// development the API stands in for DeviceCheck, which the simulator can't use.
 final class ReferralQATests: XCTestCase {
     override func setUp() {
@@ -59,19 +59,21 @@ final class ReferralQATests: XCTestCase {
 
         // 3. A recipe, then a dinner: the checklist ticks off.
         addPastedRecipe(app, name: "QA Invite Soup 1")
+        // The step that just finished gets its own moment over the Menu (decision 729).
+        expectStepDone(app, number: 2, done: 2, of: 3, name: "Step 2 done (\(mode))")
         openGiveAFreeMonth(app)
         reveal(progress, in: app)
         snap(app, "Your free month, recipes done (\(mode))")
         planADinner(app)
 
-        // 4. The invite counts. Planning rechecks the free month, and the confirmation shows
+        // 4. The invite counts. Planning rechecks the free month, and the bigger moment shows
         // once. No Home press: on iPad it can bring the app back as a small window.
-        let freeMonth = app.descendants(matching: .any)["FreeMonthOn"].firstMatch
-        XCTAssertTrue(freeMonth.waitForExistence(timeout: 30), "No free month confirmation")
-        XCTAssertTrue(app.staticTexts["Your free month of Plus is on"].exists, "The confirmation says something else")
-        snap(app, "Your free month is on (\(mode))")
+        let freeMonth = app.descendants(matching: .any)["FreeMonthUnlocked"].firstMatch
+        XCTAssertTrue(freeMonth.waitForExistence(timeout: 30), "No free month card")
+        XCTAssertTrue(app.staticTexts["Your free month is unlocked"].exists, "The free month card says something else")
+        snap(app, "Your free month is unlocked (\(mode))")
         freeMonth.buttons["Done"].tap()
-        XCTAssertTrue(waitGone(freeMonth, timeout: 5), "The confirmation didn't close")
+        XCTAssertTrue(waitGone(freeMonth, timeout: 5), "The free month card didn't close")
         // The news banner shows on the next sign-in.
         signOut(app)
         signIn(app, subject: newSubject)

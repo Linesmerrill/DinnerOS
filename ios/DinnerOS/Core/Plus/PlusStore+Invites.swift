@@ -11,6 +11,7 @@ extension PlusStore {
     static func referralCardHiddenKey(_ householdID: String) -> String { "plus.referralCardHidden.\(householdID)" }
     static func referralPendingKey(_ householdID: String) -> String { "plus.referralPending.\(householdID)" }
     static func freeMonthShownKey(_ householdID: String) -> String { "plus.freeMonthShown.\(householdID)" }
+    static func referralStepsSeenKey(_ householdID: String) -> String { "plus.referralStepsSeen.\(householdID)" }
 
     static func loadSavedInvite(_ defaults: UserDefaults) -> SavedInvite? {
         guard let data = defaults.data(forKey: savedInviteKey) else { return nil }
@@ -97,26 +98,34 @@ extension PlusStore {
         bumpHiddenCards()
     }
 
-    // MARK: The free month confirmation
+    // MARK: The free month moments
 
-    /// Remembers a checklist seen waiting on this device, and shows the confirmation once when
-    /// it's done. A household that finished before this device saw it waiting gets no surprise.
+    /// Remembers a checklist seen waiting on this device, shows "Step 2 done" once as each step
+    /// finishes, and the free month card once when it's done. A household that finished before
+    /// this device saw it waiting gets no surprise.
     func noteReferralProgress(_ progress: ReferralProgress?, householdID: String) {
         guard let progress else { return }
+        let seenKey = Self.referralStepsSeenKey(householdID)
+        let seen = defaults.stringArray(forKey: seenKey).map(Set.init)
+        let (moment, nowSeen) = ReferralMoments.stepJustDone(progress, seen: seen)
+        if nowSeen != seen { defaults.set(nowSeen.sorted(), forKey: seenKey) }
         switch progress.state {
         case "pending":
             defaults.set(true, forKey: Self.referralPendingKey(householdID))
+            if let moment, freeMonthOn == nil { stepDone = moment }
         case "qualified":
             guard defaults.bool(forKey: Self.referralPendingKey(householdID)),
                 !defaults.bool(forKey: Self.freeMonthShownKey(householdID)), freeMonthOn == nil
             else { return }
+            // The bigger moment takes the place of the last step's.
+            stepDone = nil
             freeMonthOn = progress
         default:
             defaults.removeObject(forKey: Self.referralPendingKey(householdID))
         }
     }
 
-    /// The confirmation closed: don't show it again here.
+    /// The free month card closed: don't show it again here.
     func freeMonthShown() {
         guard let householdID = currentHouseholdID else { return }
         defaults.set(true, forKey: Self.freeMonthShownKey(householdID))

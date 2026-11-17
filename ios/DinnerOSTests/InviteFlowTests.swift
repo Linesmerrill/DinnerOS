@@ -187,6 +187,97 @@ struct InviteFlowTests {
         #expect(store.freeMonthOn == nil)
     }
 
+    // MARK: Step done (decision 729)
+
+    nonisolated static func decoded(_ state: String, recipes: Int = 0, dinner: Bool = false) throws -> ReferralProgress
+    {
+        let json = "{\"x\":0" + progress(state, recipes: recipes, dinner: dinner) + "}"
+        struct Wrapper: Decodable { let referralProgress: ReferralProgress }
+        return try JSONCoding.makeDecoder().decode(Wrapper.self, from: Data(json.utf8)).referralProgress
+    }
+
+    @Test func theFirstLookRemembersWhatsDoneWithoutACard() throws {
+        let (moment, seen) = ReferralMoments.stepJustDone(try Self.decoded("pending", recipes: 3), seen: nil)
+        #expect(moment == nil)
+        #expect(seen == ["household", "recipes"])
+    }
+
+    @Test func aStepThatJustFinishedGetsItsNumberAndCount() throws {
+        let (moment, seen) = ReferralMoments.stepJustDone(
+            try Self.decoded("pending", recipes: 3), seen: ["household"])
+        let step = try #require(moment)
+        #expect(step.stepID == "recipes")
+        #expect(step.title == "Step 2 done")
+        #expect(step.countText == "2 of 3 done")
+        #expect(step.message == "Save 3 recipes and plan a dinner to unlock your free month")
+        #expect(seen == ["household", "recipes"])
+        // Seen once, never again.
+        #expect(ReferralMoments.stepJustDone(try Self.decoded("pending", recipes: 3), seen: seen).moment == nil)
+    }
+
+    @Test func aStepDoneOutOfOrderKeepsItsOwnNumber() throws {
+        let step = try #require(
+            ReferralMoments.stepJustDone(try Self.decoded("pending", dinner: true), seen: ["household"]).moment)
+        #expect(step.title == "Step 3 done")
+        #expect(step.countText == "2 of 3 done")
+    }
+
+    @Test func twoStepsAtOnceGetOneCardForTheLast() throws {
+        let step = try #require(
+            ReferralMoments.stepJustDone(try Self.decoded("pending", recipes: 3, dinner: true), seen: ["household"])
+                .moment)
+        #expect(step.stepID == "dinner")
+        #expect(step.countText == "3 of 3 done")
+    }
+
+    @Test func aFinishedOrExpiredChecklistGetsNoStepCard() throws {
+        for state in ["qualified", "expired"] {
+            let (moment, seen) = ReferralMoments.stepJustDone(
+                try Self.decoded(state, recipes: 3, dinner: true), seen: ["household"])
+            #expect(moment == nil)
+            #expect(seen == ["household", "recipes", "dinner"])
+        }
+    }
+
+    @Test func theStoreShowsEachStepOnceAndTheFreeMonthTakesOver() async throws {
+        let state = Mutex(("pending", 0, false))
+        let (store, _) = try await makeStore { _ in
+            let (name, recipes, dinner) = state.withLock { $0 }
+            return (200, PlusFixtures.status(extra: Self.progress(name, recipes: recipes, dinner: dinner)))
+        }
+        await store.activate(householdID: "household-1")
+        // The household step was done before the code went in: no card for it.
+        #expect(store.stepDone == nil)
+        state.withLock { $0 = ("pending", 3, false) }
+        await store.reload()
+        #expect(store.stepDone?.title == "Step 2 done")
+        store.stepDone = nil
+        await store.reload()
+        #expect(store.stepDone == nil)
+        // The last step and the free month in one check: only the bigger moment.
+        state.withLock { $0 = ("qualified", 3, true) }
+        await store.reload()
+        #expect(store.stepDone == nil)
+        #expect(store.freeMonthOn?.state == "qualified")
+    }
+
+    @Test func whatsBeenCelebratedLastsThroughARestart() async throws {
+        let state = Mutex(("pending", 0, false))
+        let handler: StubTransport.Handler = { _ in
+            let (name, recipes, dinner) = state.withLock { $0 }
+            return (200, PlusFixtures.status(extra: Self.progress(name, recipes: recipes, dinner: dinner)))
+        }
+        let (first, _) = try await makeStore(handler)
+        await first.activate(householdID: "household-1")
+        state.withLock { $0 = ("pending", 3, false) }
+        await first.reload()
+        #expect(first.stepDone != nil)
+        // Same device, app opened again.
+        let (second, _) = try await makeStore(handler)
+        await second.activate(householdID: "household-1")
+        #expect(second.stepDone == nil)
+    }
+
     @Test func anOlderAPIStillGetsASummaryLine() throws {
         let json = #"""
             {"state":"pending","message":"m","steps":[{"id":"dinner","title":"Plan a dinner","done":true},
