@@ -42,7 +42,7 @@
   <main id="main" class="page">
     <div class="wrap">
       <h1>Privacy Policy</h1>
-      <p class="updated">Last updated November 14, 2026</p>
+      <p class="updated">Last updated November 17, 2026</p>
 
       <p>DinnerOS helps a household plan dinners, shop, and cook. This page covers what we collect, why, and how to delete it. "We" means the people who make DinnerOS.</p>
 
@@ -57,7 +57,10 @@
       <p>Your household's name, time zone, how many people you usually cook for, who's in it, and each member's role. When you invite someone by email, we keep their email address so we can send the invite and show it as pending.</p>
 
       <h3>What you plan, cook, and buy</h3>
-      <p>Your meal plans, the recipes you save or add, ratings, notes, Autopilot settings, food preferences and things you avoid, your pantry, your grocery lists, saved products, and the prices and order totals you enter. If you add a recipe from a link, our server opens that web page to read the recipe from it.</p>
+      <p>Your meal plans, the recipes you save or add, ratings, notes, Autopilot settings, food preferences and things you avoid, your pantry, your grocery lists, saved products, and the prices and order totals you enter. If you add a recipe from a link, our server opens that web page to read the recipe from it. For a few sites, like Kroger's, your phone opens the page instead and sends us only the recipe it found.</p>
+
+      <h3>Recipes you share</h3>
+      <p>Sharing is off until your household turns it on. Recipes your household shares show in Shared Recipes, where other households can find and copy them. Shared recipes never carry your name, your household's name, your notes, or your ratings. A recipe that was shared stays in Shared Recipes after you stop sharing it or delete your account, and copies other households saved stay with them.</p>
 
 <h3>Recipe photos</h3>
 <p>If you add a photo to a recipe, your phone shrinks it and removes its location and camera details, then sends it to us. We keep it on our server with the recipe. It shows to your household, and to other households if you share the recipe. It's deleted with your household. If you search for a photo instead, our server sends the words you search for to Unsplash, a free photo library. The photo you pick stays on Unsplash and your phone loads it from there, so Unsplash sees your phone's internet address when it shows the photo, as any website would. We keep the photographer's name to credit them.</p>
@@ -83,6 +86,9 @@
       <h3>DinnerOS Plus</h3>
       <p>Apple handles payment for Plus. We use a company called RevenueCat to keep track of subscriptions. RevenueCat and we see that your household subscribed, which plan, and when it renews or ends. Neither of us sees your card or Apple account details. Purchases are recorded under your household's DinnerOS ID and the DinnerOS ID of the member who bought it, not your name or email, so your household can see who started Plus. We keep a history of your household's Plus events, like when a trial started, a renewal, or a refund, with the amount charged. If you use an invite code, we record which households it connected so we can give each one its free month.</p>
 
+      <h3>Invite codes and fair use</h3>
+      <p>Each household can earn a free month from an invite code only once. To check that, the app asks Apple's DeviceCheck whether your phone was already used to start another household. Apple keeps a yes or no for the phone. We keep only that yes or no for your household, not anything that identifies the phone. We also keep a scrambled code made from your Apple or Google sign-in, with the households it was part of. It can't be turned back into your name or email, and it stays after you delete your account so the same person can't claim the same free month twice.</p>
+
       <h3>How the app is used</h3>
       <p>We record what happens in the app, such as viewing, planning, cooking, or skipping a recipe, or sending a list to a store. These events help DinnerOS suggest dinners your household likes, and let us count how many households use the app each week and fix what isn't working. These events are tied to your household inside our own database. We don't send them to analytics or advertising companies.</p>
 
@@ -99,13 +105,14 @@
       <h2>Who else handles your data</h2>
       <p>We use a small number of companies to run DinnerOS. They only get what they need to do their part:</p>
       <ul>
-        <li><strong>Apple</strong> for sign-in, notifications, payments, and weather.</li>
+        <li><strong>Apple</strong> for sign-in, notifications, payments, weather, and the invite code check.</li>
         <li><strong>Google</strong> for sign-in, if you choose it.</li>
         <li><strong>Heroku</strong> (Salesforce) runs our servers.</li>
         <li><strong>MongoDB Atlas</strong> stores our database.</li>
-        <li><strong>Resend</strong> sends household invite emails.</li>
+        <li><strong>Resend</strong> sends household invite emails. It gets the email address you invite.</li>
         <li><strong>RevenueCat</strong> tracks Plus subscriptions.</li>
-        <li><strong>Walmart and Kroger</strong> get the items on your list when you send it to them. What happens in their apps and websites is covered by their own privacy policies.</li>
+        <li><strong>Unsplash</strong> gets the words you type when you search for a recipe photo.</li>
+        <li><strong>Walmart, Kroger, and Instacart</strong> get the items on your list when you send it to them. Instacart gets only item names and amounts. Kroger also gets your ZIP code when you look for a store. What happens in their apps and websites is covered by their own privacy policies.</li>
       </ul>
       <p>Some links to stores may include a tag that tells the store DinnerOS sent you. If you buy something, the store may pay us a commission. It doesn't change your price.</p>
       <p>We may also share information if the law requires it, or to protect people's safety or the security of DinnerOS.</p>
@@ -114,8 +121,8 @@
       <p>DinnerOS is built for sharing. Members of your household can see the plan, recipes, pantry, lists, and ratings in that household, along with each member's name.</p>
 
       <h2>Keeping and deleting your data</h2>
-      <p>We keep your data while you have an account. You can delete your account in the app: open the Household tab, tap Account, then tap Delete Account. That deletes your account and your ratings. Any household where you're the only member is deleted too, with its plans, recipes, and pantry. Households you share stay with the other members.</p>
-      <p>Deleted data is removed from our database right away. Copies may stay in backups and logs for a short time before they expire. Deleting your account doesn't cancel a Plus subscription, because Apple bills it. Cancel it in your Apple account settings.</p>
+      <p>We keep your data while you have an account. You can delete your account in the app: open the Household tab, tap Account, then tap Delete Account. That deletes your account and your ratings. Any household where you're the only member is deleted too, with its plans, recipes, and pantry. Households you share stay with the other members. You can also email <a href="mailto:support@dinneros.app">support@dinneros.app</a> from the address on your account and ask us to delete it.</p>
+      <p>Deleted data is removed from our database right away, except shared recipes and the invite code check described above. Copies may stay in backups and logs for a short time before they expire. Deleting your account doesn't cancel a Plus subscription, because Apple bills it. Cancel it in your Apple account settings.</p>
 
       <h2>Your choices and rights</h2>
       <p>You can see and change most of your data in the app. You can turn off calendar, location, Reminders, and notifications access at any time in your iPhone's Settings. To get a copy of your data, correct something, or ask us anything about your privacy, email <a href="mailto:support@dinneros.app">support@dinneros.app</a>. We'll answer within 30 days, wherever you live.</p>
