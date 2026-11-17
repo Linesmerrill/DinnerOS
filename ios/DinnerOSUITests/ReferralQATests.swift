@@ -1,8 +1,8 @@
 import XCTest
 
 /// An invite from start to finish on the local API (decision 698): the sharer's How it works
-/// and code, a brand-new household entering it, the checklist ticking off as it saves 3
-/// recipes and plans a dinner, then the free month and a banner for each household. In
+/// and code, a brand-new household entering it, the checklist ticking off as it adds a
+/// recipe and plans a dinner, then the free month and a banner for each household. In
 /// development the API stands in for DeviceCheck, which the simulator can't use.
 final class ReferralQATests: XCTestCase {
     override func setUp() {
@@ -49,15 +49,16 @@ final class ReferralQATests: XCTestCase {
         let progress = app.descendants(matching: .any)["ReferralProgress"].firstMatch
         XCTAssertTrue(progress.waitForExistence(timeout: 10), "No progress after entering the code")
         XCTAssertTrue(
-            app.staticTexts["Save 3 recipes and plan a dinner to unlock your free month"].exists,
+            app.staticTexts["Add a recipe and plan a dinner to unlock your free month"].exists,
             "The progress message is missing")
+        XCTAssertTrue(
+            app.descendants(matching: .any)["PlusExplainer"].firstMatch.exists,
+            "Give a Free Month doesn't say what Plus is")
         reveal(progress, in: app)
         snap(app, "Your free month, nothing done yet (\(mode))")
 
-        // 3. Three recipes, then a dinner: the checklist ticks off.
-        for number in 1...3 {
-            addPastedRecipe(app, name: "QA Invite Soup \(number)")
-        }
+        // 3. A recipe, then a dinner: the checklist ticks off.
+        addPastedRecipe(app, name: "QA Invite Soup 1")
         openGiveAFreeMonth(app)
         reveal(progress, in: app)
         snap(app, "Your free month, recipes done (\(mode))")

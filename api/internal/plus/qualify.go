@@ -52,7 +52,7 @@ type ReferralRules struct {
 const (
 	DefaultQualifyDays  = 14
 	DefaultMinDinners   = 1
-	DefaultMinRecipes   = 3
+	DefaultMinRecipes   = 1
 	DefaultMaxPer30Days = 3
 )
 

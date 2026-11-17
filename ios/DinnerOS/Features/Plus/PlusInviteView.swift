@@ -111,7 +111,7 @@ struct PlusInviteView: View {
             } else if redeemed {
                 Section {
                     Label(
-                        "Code saved. Plan a dinner and save a few recipes to unlock your free month.",
+                        "Code saved. Add a recipe and plan a dinner to unlock your free month.",
                         systemImage: "gift")
                 }
             }
@@ -141,7 +141,7 @@ struct PlusInviteView: View {
             Text("Got a Code?")
         } footer: {
             Text(
-                "Enter another household's code. Once you plan a dinner and save a few recipes, you both get a free month of Plus."
+                "Enter another household's code. Once you add a recipe and plan a dinner, you both get a free month of Plus."
             )
         }
     }

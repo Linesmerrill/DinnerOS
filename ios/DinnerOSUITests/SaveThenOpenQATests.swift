@@ -15,7 +15,7 @@ final class SaveThenOpenQATests: XCTestCase {
 
         app.buttons["Week Menu"].tap()
         app.buttons["Add a Recipe"].tap()
-        app.buttons["Type It Myself"].tap()
+        app.buttons["AddChoice-write"].tap()
         let nameField = app.textFields["Recipe name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
         nameField.tap()
@@ -29,7 +29,7 @@ final class SaveThenOpenQATests: XCTestCase {
         XCTAssertTrue(waitGone(app.keyboards.firstMatch), "Done didn't put the keyboard away")
 
         app.buttons["Save"].tap()
-        XCTAssertTrue(waitGone(app.navigationBars["Add a Recipe"], timeout: 15), "Save didn't close the form")
+        XCTAssertTrue(waitGone(app.navigationBars["Write Your Own"], timeout: 15), "Save didn't close the form")
 
         // Save opens the new recipe. It must settle: every query below waits for the app to idle.
         XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 15), "The saved recipe didn't open")

@@ -47,7 +47,7 @@ final class InviteLinkQATests: XCTestCase {
         XCTAssertTrue(title.waitForExistence(timeout: 10), "No 'invited you' title")
         XCTAssertTrue(app.staticTexts["You both get a free month of Plus once you're set up."].exists)
         XCTAssertTrue(app.buttons["Accept"].exists && app.buttons["Not Now"].exists)
-        for step in ["Create your household", "Save 3 recipes", "Plan a dinner"] {
+        for step in ["Create your household", "Add a recipe", "Plan a dinner"] {
             XCTAssertTrue(app.staticTexts[step].exists, "The invite screen is missing \(step)")
         }
         snap(app, "Invite link, new person (\(mode))")
@@ -74,20 +74,47 @@ final class InviteLinkQATests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Free month: 1 of 3 done"].waitForExistence(timeout: 10), "Wrong count")
         XCTAssertTrue(app.descendants(matching: .any)["ChecklistTimeLeft"].exists, "No time left")
         XCTAssertTrue(app.staticTexts["14 days left"].exists, "The time left isn't 14 days")
+        // What Plus is, at the top, and the ways to add a recipe (decisions 706 and 708).
+        let explainer = app.descendants(matching: .any)["PlusExplainer"].firstMatch
+        XCTAssertTrue(explainer.exists, "The checklist doesn't say what Plus is")
+        XCTAssertTrue(explainer.label.contains("What is DinnerOS Plus?"), "The explainer says \(explainer.label)")
+        XCTAssertTrue(explainer.label.contains("Autopilot"), "The explainer doesn't mention Autopilot")
+        let recipeStep = "Add a recipe: write your own, import one from a website, or pick one from Shared Recipes."
+        XCTAssertTrue(app.staticTexts[recipeStep].exists, "The recipe step says something else")
+        XCTAssertTrue(
+            app.staticTexts["Add a recipe and plan a dinner to unlock your free month"].exists
+                || app.descendants(matching: .any).matching(
+                    NSPredicate(format: "label CONTAINS 'Add a recipe and plan a dinner to unlock your free month'")
+                ).firstMatch.exists,
+            "The checklist message says something else")
         snap(app, "Checklist after setup (\(mode))")
-        // Find Recipes goes to Shared Recipes.
-        app.buttons["ChecklistGo-recipes"].tap()
-        XCTAssertTrue(waitGone(checklist, timeout: 5), "Find Recipes didn't close the checklist")
-        XCTAssertTrue(app.navigationBars["Shared Recipes"].waitForExistence(timeout: 10), "Find Recipes went elsewhere")
-        app.navigationBars.buttons.firstMatch.tap()
+        // Add a Recipe opens the Add a Recipe choices.
+        let go = app.buttons["ChecklistGo-recipes"]
+        XCTAssertEqual(go.label, "Add a Recipe")
+        go.tap()
+        XCTAssertTrue(waitGone(checklist, timeout: 5), "Add a Recipe didn't close the checklist")
+        XCTAssertTrue(app.navigationBars["Add a Recipe"].waitForExistence(timeout: 10), "Add a Recipe went elsewhere")
+        for id in ["AddChoice-write", "AddChoice-import", "AddChoice-shared", "AddChoice-companion"] {
+            XCTAssertTrue(app.buttons[id].exists, "The choices are missing \(id)")
+        }
+        snap(app, "Checklist, Add a Recipe opens the choices (\(mode))")
+        app.navigationBars["Add a Recipe"].buttons["Cancel"].tap()
+        XCTAssertTrue(waitGone(app.navigationBars["Add a Recipe"], timeout: 5), "Cancel didn't close the choices")
 
-        // 5. The Menu card: the count, opens the checklist, then Hide.
+        // 5. The Menu card: the count, opens the checklist, Not Now closes it, then Hide.
         let card = app.buttons["ReferralMenuCard"].firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 10), "No checklist card on the Menu")
         XCTAssertTrue(card.label.contains("Free month: 1 of 3 done"), "The card says \(card.label)")
         snap(app, "Menu, free month card (\(mode))")
         card.tap()
         XCTAssertTrue(checklist.waitForExistence(timeout: 10), "The card didn't open the checklist")
+        let notNow = app.buttons["ChecklistNotNow"]
+        XCTAssertTrue(notNow.waitForExistence(timeout: 5), "The checklist has no Not Now")
+        XCTAssertEqual(notNow.label, "Not Now")
+        notNow.tap()
+        XCTAssertTrue(waitGone(checklist, timeout: 5), "Not Now didn't close the checklist")
+        card.tap()
+        XCTAssertTrue(checklist.waitForExistence(timeout: 10), "The card didn't open the checklist again")
         // Plan a Dinner opens Add Recipes on the Menu.
         app.buttons["ChecklistGo-dinner"].tap()
         XCTAssertTrue(waitGone(checklist, timeout: 5))

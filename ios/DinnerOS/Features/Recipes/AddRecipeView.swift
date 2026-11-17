@@ -1,61 +1,93 @@
 import SwiftUI
 
-/// Adding a recipe by hand: paste text or a link, review what came back, save.
-///
-/// The review step is the point. Everything on it was read by a parser from
-/// text nobody checked, so a person confirms it before it becomes one of the
-/// household's recipes — and it stays the household's: a typed or pasted
-/// recipe never enters the global catalog.
+/// Where Add a Recipe starts: a blank form to write it, or reading a link or pasted text.
+enum AddRecipeStart: Hashable {
+    /// Write Your Own: the blank form.
+    case write
+    /// Import From a Website: a link, or the recipe's text pasted in.
+    case importIt
+}
+
+/// Adding a recipe by hand on its own sheet: a link shared from Safari opens here, already
+/// reading it. The Add a Recipe choices push `AddRecipeForm` instead.
 struct AddRecipeView: View {
     /// A link shared from Safari: the screen opens on it and reads it right away.
     var initialLink: String? = nil
+    var start: AddRecipeStart = .importIt
     /// Called with the saved recipe so the caller can dismiss and show it.
     var onSaved: (Recipe) -> Void = { _ in }
 
-    @Environment(HouseholdStore.self) private var households
-    @Environment(RecipeLibrary.self) private var library
     @Environment(\.dismiss) private var dismiss
 
+    var body: some View {
+        NavigationStack {
+            AddRecipeForm(start: start, initialLink: initialLink, title: "Add a Recipe", onSaved: onSaved) {
+                dismiss()
+            }
+        }
+    }
+}
+
+/// Adding a recipe by hand: write it, or paste text or a link, review what came back, save.
+///
+/// The review step is the point. Everything on it was read by a parser from
+/// text nobody checked, so a person confirms it before it becomes one of the
+/// household's recipes, and it stays the household's: a typed or pasted
+/// recipe never enters the global catalog.
+struct AddRecipeForm: View {
+    let start: AddRecipeStart
+    var initialLink: String? = nil
+    let title: LocalizedStringKey
+    var onSaved: (Recipe) -> Void = { _ in }
+    /// Pushed from the Add a Recipe choices: Back goes to them, so there's no Cancel, and
+    /// Write Your Own is already a choice, so there's no Type It Myself.
+    var fromChooser = false
+    /// Closes the whole sheet (Cancel, and after Save).
+    let close: () -> Void
+
+    @Environment(HouseholdStore.self) private var households
+    @Environment(RecipeLibrary.self) private var library
+
     @State private var store: RecipeDraftStore?
-    @State private var mode: EntryMode = .text
+    @State private var mode: EntryMode = .link
     @State private var text = ""
     @State private var link = ""
 
     private enum EntryMode: String, CaseIterable, Identifiable {
-        case text
         case link
+        case text
 
         var id: String { rawValue }
 
         var title: LocalizedStringKey {
             switch self {
-            case .text: "Paste Text"
             case .link: "Paste a Link"
+            case .text: "Paste Text"
             }
         }
     }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if let store {
-                    content(store)
-                } else {
-                    ProgressView()
-                }
+        Group {
+            if let store {
+                content(store)
+            } else {
+                ProgressView()
             }
-            .navigationTitle("Add a Recipe")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { toolbar }
-            .task {
-                guard store == nil, let householdID = households.current?.household.id else { return }
-                let store = library.makeDraftStore(householdID: householdID)
-                self.store = store
-                if let initialLink {
-                    mode = .link
-                    link = initialLink
-                    await store.parse(url: initialLink)
-                }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { toolbar }
+        .task {
+            guard store == nil, let householdID = households.current?.household.id else { return }
+            let store = library.makeDraftStore(householdID: householdID)
+            self.store = store
+            if start == .write {
+                store.startBlank()
+            } else if let initialLink {
+                mode = .link
+                link = initialLink
+                await store.parse(url: initialLink)
             }
         }
     }
@@ -119,9 +151,11 @@ struct AddRecipeView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Section {
-                Button("Type It Myself") {
-                    store.startBlank()
+            if !fromChooser {
+                Section {
+                    Button("Type It Myself") {
+                        store.startBlank()
+                    }
                 }
             }
         }
@@ -136,8 +170,10 @@ struct AddRecipeView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            Button("Cancel") { dismiss() }
+        if !fromChooser {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { close() }
+            }
         }
         ToolbarItem(placement: .confirmationAction) {
             if let store {
@@ -157,7 +193,7 @@ struct AddRecipeView: View {
                         Task {
                             if let recipe = await store.save() {
                                 onSaved(recipe)
-                                dismiss()
+                                close()
                             }
                         }
                     }

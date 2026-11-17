@@ -125,6 +125,10 @@ type ProgressResponse struct {
 	Summary string `json:"summary,omitempty"`
 	// TimeLeft is "14 days left" while ExpiresAt is set.
 	TimeLeft string `json:"timeLeft,omitempty"`
+	// PlusTitle and PlusLines say what Plus is, at the top of the
+	// checklist ("What is DinnerOS Plus?").
+	PlusTitle string   `json:"plusTitle,omitempty"`
+	PlusLines []string `json:"plusLines,omitempty"`
 }
 
 // ProgressStepResponse is one step: household, recipes, or dinner.
@@ -141,7 +145,7 @@ func progressResponse(p *Progress) *ProgressResponse {
 		return nil
 	}
 	out := &ProgressResponse{State: p.State, Message: p.Message, Steps: make([]ProgressStepResponse, 0, len(p.Steps)), ExpiresAt: timePtr(p.ExpiresAt),
-		Summary: p.Summary, TimeLeft: p.TimeLeft}
+		Summary: p.Summary, TimeLeft: p.TimeLeft, PlusTitle: p.PlusTitle, PlusLines: p.PlusLines}
 	for _, st := range p.Steps {
 		out.Steps = append(out.Steps, ProgressStepResponse(st))
 	}

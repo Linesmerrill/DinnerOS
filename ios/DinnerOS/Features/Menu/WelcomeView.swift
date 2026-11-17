@@ -39,7 +39,7 @@ struct WelcomeView: View {
                     if canAddRecipe {
                         option(
                             "Add a Recipe", systemImage: "square.and.pencil",
-                            detail: "Paste a link or type one in.", choice: .addRecipe)
+                            detail: "Write your own or import one from a website.", choice: .addRecipe)
                     }
                 }
             }

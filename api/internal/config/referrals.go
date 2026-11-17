@@ -26,7 +26,7 @@ type Referrals struct {
 const (
 	DefaultReferralQualifyDays  = 14
 	DefaultReferralMinDinners   = 1
-	DefaultReferralMinRecipes   = 3
+	DefaultReferralMinRecipes   = 1
 	DefaultReferralMaxPer30Days = 3
 )
 

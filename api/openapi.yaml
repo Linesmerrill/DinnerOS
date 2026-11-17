@@ -5938,7 +5938,7 @@ paths:
       summary: Use another household's invite code
       description: |
         Records a pending referral (decision 698). Nothing is free yet: once
-        this household plans REFERRAL_MIN_DINNERS dinners and saves
+        this household plans REFERRAL_MIN_DINNERS dinners and adds
         REFERRAL_MIN_RECIPES recipes within REFERRAL_QUALIFY_DAYS, and the
         anti-farming checks pass, both households get 30 free days of Plus
         (within 24 hours) and a `plus.referral` notification. The response's
@@ -6168,19 +6168,29 @@ components:
       required: [state, message, steps]
       properties:
         state: {type: string, enum: [pending, qualified, expired]}
-        message: {type: string, example: Plan a dinner and save 3 recipes to unlock your free month}
+        message: {type: string, example: Add a recipe and plan a dinner to unlock your free month}
         steps:
           type: array
           items:
             type: object
             required: [id, title, done, count, target]
             properties:
-              id: {type: string, enum: [dinner, recipes]}
-              title: {type: string, example: Save 3 recipes}
+              id: {type: string, enum: [household, recipes, dinner]}
+              title: {type: string, example: "Add a recipe: write your own, import one from a website, or pick one from Shared Recipes."}
               done: {type: boolean}
               count: {type: integer, description: Done so far, at most target}
               target: {type: integer}
         expiresAt: {type: string, format: date-time, description: While pending with setup unfinished}
+        summary: {type: string, example: "Free month: 1 of 3 done"}
+        timeLeft: {type: string, example: 14 days left}
+        plusTitle:
+          type: string
+          description: What Plus is, shown at the top of the checklist (decision 708).
+          example: What is DinnerOS Plus?
+        plusLines:
+          type: array
+          items: {type: string}
+          example: ["Plus plans your week for you.", "Autopilot picks dinners your household will like and fits them to your busy nights.", "You also see what each week costs and what you saved."]
     DeviceCheckToken:
       type: object
       description: |

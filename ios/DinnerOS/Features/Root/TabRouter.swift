@@ -16,6 +16,8 @@ final class TabRouter {
     var showsNotifications = false
     /// The free month checklist's Plan a Dinner: the Menu opens Add Recipes.
     var addMealsRequested = false
+    /// The free month checklist's Add a Recipe: the Menu opens the Add a Recipe choices.
+    var addRecipeRequested = false
 
     /// Set by the tab shell (`MainTabView.configureRouter()`).
     @ObservationIgnored var check = NotificationSubjectCheck(pantryItemExists: { _ in true })

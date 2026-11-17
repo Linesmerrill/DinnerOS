@@ -12,11 +12,11 @@ final class AddRecipeQATests: XCTestCase {
         let app = launchSignedIn()
         let name = "QA No Bake Cookies \(Int.random(in: 100...999))"
 
-        // Open Add a Recipe and type it myself.
+        // Open Add a Recipe and write it myself.
         app.buttons["Week Menu"].tap()
         app.buttons["Add a Recipe"].tap()
-        snap(app, "01 Add a Recipe, entry")
-        app.buttons["Type It Myself"].tap()
+        snap(app, "01 Add a Recipe, choices")
+        app.buttons["AddChoice-write"].tap()
         let nameField = app.textFields["Recipe name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
         snap(app, "02 Review form, empty")

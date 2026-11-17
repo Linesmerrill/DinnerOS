@@ -66,9 +66,8 @@ func TestReferralQualifiesOnceForARealHousehold(t *testing.T) {
 	}
 
 	h.s.DinnersPlanned(ctx, hhNew, 1)
-	h.s.RecipesSaved(ctx, hhNew, 2)
 	if h.state(hhNew) != StatePending {
-		t.Fatalf("qualified with 2 recipes")
+		t.Fatalf("qualified with no recipes")
 	}
 	h.s.RecipesSaved(ctx, hhNew, 1)
 	if h.state(hhNew) != StateQualified {
@@ -442,28 +441,60 @@ func TestReferralHowItWorksFollowsTheRules(t *testing.T) {
 	want := []string{
 		"Share your code with friends, family, even that one aunt.",
 		"They download DinnerOS, start a new household, and enter your code.",
-		"Once they plan a dinner and save 3 recipes, the invite counts.",
+		"Once they plan a dinner and add a recipe, the invite counts.",
 		"Within 24 hours you both get a free month of Plus. We'll send you a notification when it's on.",
 	}
 	if how.Title != "How it works" || strings.Join(how.Steps, "|") != strings.Join(want, "|") {
 		t.Errorf("how it works = %+v", how)
 	}
 	r := ReferralRules{QualifyDays: 7, MinDinners: 2, MinRecipes: 1, MaxPer30Days: 3}
-	if got := r.HowItWorks().Steps[2]; got != "Once they plan 2 dinners and save a recipe, the invite counts." {
+	if got := r.HowItWorks().Steps[2]; got != "Once they plan 2 dinners and add a recipe, the invite counts." {
 		t.Errorf("2 dinners, 1 recipe = %q", got)
 	}
-	if got := r.SummaryFooter(); !strings.Contains(got, "plan 2 dinners and save a recipe") || !strings.Contains(got, "7 days") {
+	if got := r.SummaryFooter(); !strings.Contains(got, "plan 2 dinners and add a recipe") || !strings.Contains(got, "7 days") {
 		t.Errorf("footer = %q", got)
 	}
 	p := r.ProgressFor(Referral{State: StatePending}, Setup{})
-	if p.Message != "Save a recipe and plan 2 dinners to unlock your free month" || p.Steps[0].Title != "Create your household" ||
-		!p.Steps[0].Done || p.Steps[1].Title != "Save a recipe" || p.Steps[2].Title != "Plan 2 dinners" || p.Steps[2].Target != 2 ||
-		p.Summary != "Free month: 1 of 3 done" {
+	if p.Message != "Add a recipe and plan 2 dinners to unlock your free month" || p.Steps[0].Title != "Create your household" ||
+		!p.Steps[0].Done || p.Steps[1].Title != "Add a recipe: write your own, import one from a website, or pick one from Shared Recipes." ||
+		p.Steps[2].Title != "Plan 2 dinners" || p.Steps[2].Target != 2 || p.Summary != "Free month: 1 of 3 done" {
 		t.Errorf("progress = %+v", p)
 	}
-	if p := DefaultReferralRules().ProgressFor(Referral{State: StatePending}, Setup{Recipes: 2}); p.Message != "Save 3 recipes and plan a dinner to unlock your free month" ||
-		p.Steps[1].Count != 2 || p.Steps[1].Target != 3 || p.Steps[1].Done {
+	// The default is one recipe (decision 706).
+	if p := DefaultReferralRules().ProgressFor(Referral{State: StatePending}, Setup{}); p.Message != "Add a recipe and plan a dinner to unlock your free month" ||
+		p.Steps[1].Count != 0 || p.Steps[1].Target != 1 || p.Steps[1].Done {
 		t.Errorf("default progress = %+v", p)
+	}
+	three := ReferralRules{QualifyDays: 14, MinDinners: 1, MinRecipes: 3, MaxPer30Days: 3}
+	if p := three.ProgressFor(Referral{State: StatePending}, Setup{Recipes: 2}); p.Message != "Add 3 recipes and plan a dinner to unlock your free month" ||
+		p.Steps[1].Title != "Add 3 recipes: write your own, import them from a website, or pick them from Shared Recipes." ||
+		p.Steps[1].Count != 2 || p.Steps[1].Target != 3 || p.Steps[1].Done {
+		t.Errorf("3 recipes progress = %+v", p)
+	}
+	if p := three.ProgressFor(Referral{State: StatePending}, Setup{Dinners: 1}); p.Message != "Add 3 recipes to unlock your free month" {
+		t.Errorf("only recipes left = %q", p.Message)
+	}
+}
+
+// The checklist says what Plus is, in a title and a few lines (decision 708).
+func TestReferralProgressExplainsPlus(t *testing.T) {
+	for _, state := range []ReferralState{StatePending, StateQualified, StateExpired} {
+		p := DefaultReferralRules().ProgressFor(Referral{State: state}, Setup{})
+		if p.PlusTitle != "What is DinnerOS Plus?" || len(p.PlusLines) < 2 || len(p.PlusLines) > 3 {
+			t.Errorf("%s: plus = %q %q", state, p.PlusTitle, p.PlusLines)
+		}
+		joined := strings.Join(p.PlusLines, " ")
+		for _, want := range []string{"Autopilot", "costs", "saved"} {
+			if !strings.Contains(joined, want) {
+				t.Errorf("%s: plus lines %q don't mention %q", state, joined, want)
+			}
+		}
+	}
+	// Each progress gets its own copy of the lines.
+	p := DefaultReferralRules().ProgressFor(Referral{State: StatePending}, Setup{})
+	p.PlusLines[0] = "changed"
+	if PlusExplainerLines[0] == "changed" {
+		t.Error("changing a progress changed the shared lines")
 	}
 }
 
@@ -477,10 +508,10 @@ func TestReferralInviteDetails(t *testing.T) {
 		state string
 		want  string
 	}{
-		"nothing yet":     {pending(Setup{}), "pending", "Needs a dinner planned and 3 more recipes"},
-		"a dinner":        {pending(Setup{Dinners: 1, Recipes: 1}), "pending", "Needs 2 more recipes"},
-		"recipes":         {pending(Setup{Recipes: 3}), "pending", "Needs a dinner planned"},
-		"one recipe left": {pending(Setup{Dinners: 1, Recipes: 2}), "pending", "Needs 1 more recipe"},
+		"nothing yet":     {pending(Setup{}), "pending", "Needs a dinner planned and a recipe"},
+		"a dinner":        {pending(Setup{Dinners: 1}), "pending", "Needs a recipe"},
+		"recipes":         {pending(Setup{Recipes: 1}), "pending", "Needs a dinner planned"},
+		"one recipe left": {pending(Setup{Dinners: 1, Recipes: 0}), "pending", "Needs a recipe"},
 		"set up":          {InviteItem{Referral: Referral{State: StateReady, Checks: ChecksPassed, SetupMetAt: qualifyNow}}, "pending", InviteCountsSoon},
 		"blocked":         {InviteItem{Referral: Referral{State: StatePending, Checks: ChecksBlocked}}, "pending", ""},
 		"unchecked":       {InviteItem{Referral: Referral{State: StatePending}}, "pending", ""},
@@ -493,6 +524,12 @@ func TestReferralInviteDetails(t *testing.T) {
 		}
 	}
 	two := ReferralRules{MinDinners: 2, MinRecipes: 3}
+	if _, got := two.InviteDetail(pending(Setup{Dinners: 2, Recipes: 1})); got != "Needs 2 more recipes" {
+		t.Errorf("2 of 3 recipes left = %q", got)
+	}
+	if _, got := two.InviteDetail(pending(Setup{Dinners: 2, Recipes: 2})); got != "Needs 1 more recipe" {
+		t.Errorf("1 of 3 recipes left = %q", got)
+	}
 	if _, got := two.InviteDetail(pending(Setup{Recipes: 3})); got != "Needs 2 dinners planned" {
 		t.Errorf("2 dinners = %q", got)
 	}
@@ -510,7 +547,8 @@ func TestReferralCopyIsPlain(t *testing.T) {
 		InviteCountsSoon, InviteEarned, InviteEarnedAtCap, InviteExpired, InviteStatusPending,
 	}, rules.HowItWorks().Steps...)
 	raw, _ := json.Marshal(rules.ProgressFor(Referral{State: StatePending}, Setup{}))
-	texts = append(texts, string(raw))
+	texts = append(texts, string(raw), PlusExplainerTitle)
+	texts = append(texts, PlusExplainerLines...)
 	for _, s := range texts {
 		for _, bad := range []string{"—", "referral", "household_id", "DeviceCheck", "qualif"} {
 			if strings.Contains(strings.ToLower(s), strings.ToLower(bad)) && !strings.Contains(s, `"state"`) {

@@ -42,7 +42,8 @@ type Service struct {
 }
 
 // SaveListener hears that a household added recipes to its library by
-// importing or typing them, not from the starter library or Shared Recipes.
+// importing or typing them, or by picking one from Shared Recipes, not from
+// the starter library.
 // *plus.Service implements it, for the setup a referral needs (decision
 // 698). It must return quickly and cannot fail the save.
 type SaveListener interface {

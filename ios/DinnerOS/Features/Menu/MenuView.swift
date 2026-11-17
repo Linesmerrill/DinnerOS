@@ -27,7 +27,7 @@ struct MenuView: View {
     @State private var mode: MenuMode = .menu
     @State private var autopilotFlow = WeekAutopilotFlow()
     @State private var isAddingRecipes = false
-    /// The "Add a Recipe" sheet: paste text or a link, review, save.
+    /// The "Add a Recipe" sheet: the choices (write, import, Shared Recipes, a companion).
     @State private var isAddingOwnRecipe = false
     /// The new-member welcome and what was picked on it (acted on once it closes, so two
     /// sheets never overlap).
@@ -134,7 +134,7 @@ struct MenuView: View {
             .notificationsToolbar()
             .modifier(MenuDestinations())
             .modifier(
-                AddOwnRecipeSheet(
+                AddRecipeChooserSheet(
                     isPresented: $isAddingOwnRecipe, canAdd: canAddOwnRecipe,
                     onSaved: { recipe in
                         // The new recipe opens, and the menu picks it up behind it.
@@ -143,8 +143,21 @@ struct MenuView: View {
                                 id: recipe.id, name: recipe.name, imageURLString: recipe.imageURLString)
                         ])
                         Task { await menu.reload() }
+                    },
+                    onBrowseShared: {
+                        tabs?.menuPath = NavigationPath([DiscoverRoute()])
                     })
             )
+            // The free month checklist's Add a Recipe.
+            .onChange(of: tabs?.addRecipeRequested ?? false, initial: true) { _, requested in
+                guard requested else { return }
+                tabs?.addRecipeRequested = false
+                if canAddOwnRecipe {
+                    isAddingOwnRecipe = true
+                } else {
+                    tabs?.menuPath = NavigationPath([DiscoverRoute()])
+                }
+            }
             // Also when the week start day changes: the server moved meals between weeks.
             .task(id: household?.weekScope) {
                 guard let household else { return }
@@ -262,7 +275,7 @@ struct MenuView: View {
                     // library has nothing to plan, so getting recipes in comes first (#530).
                     // A new household's free month checklist, until it's done or hidden.
                     ReferralMenuCard()
-                    GetStartedSection()
+                    GetStartedSection { isAddingOwnRecipe = true }
                     YourMealsSection(flow: autopilotFlow)
                     // Always shown, so recipes other households shared are never hidden in a menu.
                     SharedRecipesEntry()
@@ -579,41 +592,6 @@ private struct MenuAutoRefresh: ViewModifier {
                 await week
             }
         }
-    }
-}
-
-/// The "Add a Recipe" sheet, and a recipe link shared from Safari: it waits in the keychain
-/// until the app comes forward, then opens the sheet already reading it.
-private struct AddOwnRecipeSheet: ViewModifier {
-    @Binding var isPresented: Bool
-    let canAdd: Bool
-    let onSaved: (Recipe) -> Void
-
-    @State private var sharedLink: String?
-    /// The recipe just saved, opened once the sheet has finished closing.
-    @State private var saved: Recipe?
-    @Environment(\.scenePhase) private var phase
-
-    func body(content: Content) -> some View {
-        content
-            .sheet(
-                isPresented: $isPresented,
-                onDismiss: {
-                    guard let recipe = saved else { return }
-                    saved = nil
-                    onSaved(recipe)
-                }
-            ) {
-                AddRecipeView(initialLink: sharedLink, onSaved: { saved = $0 })
-            }
-            .onChange(of: isPresented) { _, isOpen in
-                if !isOpen { sharedLink = nil }
-            }
-            .onChange(of: phase, initial: true) { _, phase in
-                guard phase == .active, canAdd, !isPresented, let link = SharedRecipeLink.take() else { return }
-                sharedLink = link
-                isPresented = true
-            }
     }
 }
 

@@ -349,7 +349,8 @@ func TestReferralRoutes(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &st)
 	if rec.Code != http.StatusOK || st.Active || st.FreeUntil != nil || st.ReferralProgress == nil ||
 		st.ReferralProgress.State != "pending" || len(st.ReferralProgress.Steps) != 3 ||
-		st.ReferralProgress.Summary != "Free month: 1 of 3 done" || st.ReferralProgress.TimeLeft != "14 days left" {
+		st.ReferralProgress.Summary != "Free month: 1 of 3 done" || st.ReferralProgress.TimeLeft != "14 days left" ||
+		!strings.Contains(rec.Body.String(), `"plusTitle":"What is DinnerOS Plus?"`) || len(st.ReferralProgress.PlusLines) != len(PlusExplainerLines) {
 		t.Errorf("redeem = %d %s", rec.Code, rec.Body.String())
 	}
 	setUpHousehold(s, hhB)
