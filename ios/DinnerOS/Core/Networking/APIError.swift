@@ -107,7 +107,11 @@ extension APIError: LocalizedError {
                 "code_changed", "code_change_limit", "code_replaced":
                 // DinnerOS Plus and invite codes: the API writes these for people.
                 message.isEmpty ? String(localized: "Something went wrong. Try again.") : message
-            case "fetch_failed":
+            case "fetch_failed" where !message.isEmpty, "page_needs_phone" where !message.isEmpty:
+                // The API says what went wrong with the page in a sentence written for people:
+                // the site turned it away, the page didn't load, or it has no recipe.
+                message
+            case "fetch_failed", "page_needs_phone":
                 String(
                     localized:
                         "Couldn't find a recipe at that link. Check the link, or copy the recipe and paste it as text.")

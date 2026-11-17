@@ -1023,8 +1023,12 @@ paths:
           $ref: "#/components/responses/PayloadTooLarge"
         "422":
           description: |
-            The page could not be fetched or held no readable recipe. The
-            message never repeats anything the page said.
+            The page could not be fetched or held no readable recipe. `code`
+            is `fetch_failed` (the app loads the page itself and sends it as
+            `html`) or `page_needs_phone` (a Kroger-family store page the
+            server never fetches; the app renders it in a web view and sends
+            that). `message` is a plain sentence saying why, safe to show as
+            it is; it never repeats anything the page said.
           content:
             application/json:
               schema:

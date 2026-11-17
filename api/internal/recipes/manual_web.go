@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"html"
 	"io"
 	"net"
@@ -27,12 +26,67 @@ const (
 	maxRedirects  = 3
 )
 
-// ErrFetch means a recipe page could not be fetched or read. Its message
-// after the prefix is safe to show: it never contains anything the page said.
+// ErrFetch means a recipe page could not be fetched or read. Every such
+// error is a *FetchError, whose Message is a sentence the app shows as it is:
+// it never contains anything the page said.
 var ErrFetch = errors.New("recipes: fetch failed")
 
-func fetchErrf(format string, args ...any) error {
-	return fmt.Errorf("%w: %s", ErrFetch, fmt.Sprintf(format, args...))
+// Error codes a failed page read answers with.
+const (
+	// CodeFetchFailed: the page couldn't be read here, or had no recipe. The
+	// app loads the page itself and sends it (decision 670).
+	CodeFetchFailed = "fetch_failed"
+	// CodePageNeedsPhone: the site only shows its recipe in a browser, so the
+	// server doesn't try; the app opens it in its hidden web view right away.
+	CodePageNeedsPhone = "page_needs_phone"
+)
+
+// What a member is told when a page can't be read (decision 726).
+const (
+	msgNoRecipe   = "We couldn't find a recipe on that page."
+	msgBlocked    = "That site didn't let us read the page."
+	msgNotLoaded  = "That page didn't load. Check the link and try again."
+	msgNeedsPhone = "That site only shows its recipes in a web browser."
+	msgNotAddress = "That doesn't look like a web address."
+	msgNotPublic  = "That address isn't on the public internet."
+	msgNotPage    = "That link isn't a web page."
+)
+
+// FetchError is why a page couldn't be read: a code for the app and a
+// sentence for the member.
+type FetchError struct {
+	Code    string
+	Message string
+}
+
+func (e *FetchError) Error() string { return "recipes: fetch failed: " + e.Message }
+
+// Is makes every FetchError an ErrFetch.
+func (e *FetchError) Is(target error) bool { return target == ErrFetch }
+
+func fetchErr(message string) error { return &FetchError{Code: CodeFetchFailed, Message: message} }
+
+// browserOnlySites only show a recipe once a browser has run the page's
+// scripts, and turn away anything that isn't one: Kroger and every store it
+// runs under another name. The raw page is an empty shell, so the server
+// doesn't fetch it at all (decision 725).
+var browserOnlySites = []string{
+	"kroger.com", "frysfood.com", "ralphs.com", "kingsoopers.com", "smithsfoodanddrug.com",
+	"fredmeyer.com", "qfc.com", "dillons.com", "bakersplus.com", "citymarket.com", "gerbes.com",
+	"jaycfoods.com", "pay-less.com", "food4less.com", "foodsco.net", "marianos.com", "picknsave.com",
+	"metromarket.net", "harristeeter.com",
+}
+
+// NeedsBrowser reports whether a page's site only shows its recipe in a
+// browser.
+func NeedsBrowser(host string) bool {
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	for _, site := range browserOnlySites {
+		if host == site || strings.HasSuffix(host, "."+site) {
+			return true
+		}
+	}
+	return false
 }
 
 // WebFetcher fetches a recipe page. The zero value is usable and builds its
@@ -59,13 +113,16 @@ func (f *WebFetcher) Fetch(ctx context.Context, rawURL string) (Draft, error) {
 	if err != nil {
 		return Draft{}, err
 	}
+	if NeedsBrowser(target.Hostname()) {
+		return Draft{}, &FetchError{Code: CodePageNeedsPhone, Message: msgNeedsPhone}
+	}
 	client := f.HTTPClient
 	if client == nil {
 		client = f.client()
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {
-		return Draft{}, fetchErrf("the address could not be used")
+		return Draft{}, fetchErr(msgNotAddress)
 	}
 	// A plain, honest user agent. No cookies, no credentials, no referer:
 	// this request carries nothing of the household's.
@@ -74,29 +131,57 @@ func (f *WebFetcher) Fetch(ctx context.Context, rawURL string) (Draft, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		if errors.Is(err, errBlockedAddress) {
-			return Draft{}, fetchErrf("that address is not reachable from the internet")
-		}
-		return Draft{}, fetchErrf("the page could not be reached")
+		return Draft{}, transportFetchError(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return Draft{}, fetchErrf("the page answered %d", resp.StatusCode)
+	switch {
+	case refusedStatus(resp.StatusCode):
+		return Draft{}, fetchErr(msgBlocked)
+	case resp.StatusCode != http.StatusOK:
+		return Draft{}, fetchErr(msgNotLoaded)
 	}
 	if ct := resp.Header.Get("Content-Type"); ct != "" && !strings.Contains(strings.ToLower(ct), "html") {
-		return Draft{}, fetchErrf("that link is not a web page")
+		return Draft{}, fetchErr(msgNotPage)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxFetchBytes))
 	if err != nil {
-		return Draft{}, fetchErrf("the page could not be read")
+		return Draft{}, transportFetchError(err)
 	}
 
 	d, _, ok := ParsePage(string(body))
 	if !ok {
-		return Draft{}, fetchErrf("couldn't find a recipe on that page. Copy the recipe text and paste it instead")
+		return Draft{}, fetchErr(msgNoRecipe)
 	}
 	d.SourceURL = target.String()
 	return d, nil
+}
+
+// refusedStatus is an answer that means the site turned us away rather than
+// that the page is missing.
+func refusedStatus(code int) bool {
+	switch code {
+	case http.StatusUnauthorized, http.StatusForbidden, http.StatusNotAcceptable,
+		http.StatusTooManyRequests, http.StatusUnavailableForLegalReasons:
+		return true
+	}
+	return false
+}
+
+// transportFetchError says why a request got no usable answer. A site that
+// drops the connection, the way bot walls answer a server, turned us away;
+// anything else is a page that didn't load.
+func transportFetchError(err error) error {
+	var fe *FetchError
+	switch {
+	case errors.As(err, &fe):
+		return fe
+	case errors.Is(err, errBlockedAddress):
+		return fetchErr(msgNotPublic)
+	case errors.Is(err, syscall.ECONNRESET), strings.Contains(err.Error(), "stream error"),
+		strings.Contains(err.Error(), "INTERNAL_ERROR"):
+		return fetchErr(msgBlocked)
+	}
+	return fetchErr(msgNotLoaded)
 }
 
 // client returns the guarded HTTP client: bounded time, bounded redirects,
@@ -123,7 +208,7 @@ func (f *WebFetcher) client() *http.Client {
 		Transport: &http.Transport{DialContext: dialer.DialContext, DisableKeepAlives: true},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= maxRedirects {
-				return fetchErrf("the page redirected too many times")
+				return fetchErr(msgNotLoaded)
 			}
 			if _, err := parseFetchURL(req.URL.String()); err != nil {
 				return err
@@ -153,11 +238,14 @@ func parseFetchURL(raw string) (*url.URL, error) {
 		return nil, err
 	}
 	host := u.Hostname()
+	if strings.EqualFold(host, "localhost") || strings.HasSuffix(strings.ToLower(host), ".localhost") {
+		return nil, fetchErr(msgNotPublic)
+	}
 	if !strings.Contains(host, ".") {
-		return nil, fetchErrf("that doesn't look like a web address")
+		return nil, fetchErr(msgNotAddress)
 	}
 	if ip := net.ParseIP(host); ip != nil && !publicIP(ip) {
-		return nil, fetchErrf("that address is not reachable from the internet")
+		return nil, fetchErr(msgNotPublic)
 	}
 	return u, nil
 }
@@ -167,16 +255,16 @@ func parseFetchURL(raw string) (*url.URL, error) {
 func parseLooseURL(raw string) (*url.URL, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
-		return nil, fetchErrf("that doesn't look like a web address")
+		return nil, fetchErr(msgNotAddress)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return nil, fetchErrf("only http and https addresses can be read")
+		return nil, fetchErr("Only links that start with http or https can be read.")
 	}
 	if u.User != nil {
-		return nil, fetchErrf("addresses with a username or password can't be read")
+		return nil, fetchErr("Links with a username or password in them can't be read.")
 	}
 	if u.Hostname() == "" {
-		return nil, fetchErrf("that doesn't look like a web address")
+		return nil, fetchErr(msgNotAddress)
 	}
 	u.Fragment = ""
 	return u, nil

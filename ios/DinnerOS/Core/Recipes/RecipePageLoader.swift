@@ -21,20 +21,19 @@ nonisolated enum RecipePageLoader {
         return trimmed
     }
 
-    /// Loads the page: a plain request first, then, for a site that wants a real browser,
-    /// a hidden web view. Returns the page trimmed for sending.
-    @Sendable static func load(_ link: String) async throws -> String {
-        do {
-            return try await fetch(link)
-        } catch {
-            guard let url = URL(string: link) else { throw error }
-            let page = try await WebPageReader.read(url)
-            return trimmed(page)
+    /// Opens the page in a hidden web view, waits for its scripts to put the recipe on the
+    /// page, and returns the page as rendered, trimmed for sending. Store sites like Kroger's
+    /// only have the recipe after this; their raw page is an empty shell.
+    @Sendable static func render(_ link: String) async throws -> String {
+        guard let url = URL(string: link), url.scheme == "https" || url.scheme == "http" else {
+            throw URLError(.badURL)
         }
+        let page = try await WebPageReader.read(url)
+        return trimmed(page)
     }
 
     /// Fetches the page with a browser's headers.
-    static func fetch(_ link: String) async throws -> String {
+    @Sendable static func fetch(_ link: String) async throws -> String {
         guard let url = URL(string: link), url.scheme == "https" || url.scheme == "http" else {
             throw URLError(.badURL)
         }
@@ -72,13 +71,35 @@ nonisolated enum RecipePageLoader {
     }
 }
 
-/// Opens a page in a hidden, private web view and reads its HTML once it has loaded. No
+/// Opens a page in a hidden, private web view and reads its HTML once the recipe is on it. No
 /// cookies or website data are kept, and the view is thrown away afterwards.
 @MainActor
-private final class WebPageReader: NSObject, WKNavigationDelegate {
+final class WebPageReader: NSObject, WKNavigationDelegate {
+    /// How long to wait, after the page loads, for its scripts to show the recipe.
+    static let renderWait: Duration = .seconds(15)
+    static let pollEvery: Duration = .milliseconds(500)
+
+    /// True once the page shows a recipe the server can read: schema.org data, a recipe
+    /// card, or list items marked as ingredients (decision 728).
+    static let recipeReadyScript = """
+        (() => {
+          for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+            if (/"@type"\\s*:\\s*(\\[[^\\]]*)?"Recipe"/.test(s.textContent)) return true;
+          }
+          if (document.querySelector('[itemprop="recipeIngredient"], [itemprop="ingredients"], ' +
+              '.wprm-recipe-container, .tasty-recipes, .mv-create-card')) return true;
+          const scope = document.querySelector('[itemtype*="schema.org/recipe" i]');
+          const items = scope
+            ? scope.querySelectorAll('li[data-testid*="ingredient" i], li[class*="ingredient" i], li[itemprop*="ingredient" i]')
+            : document.querySelectorAll('li[data-testid*="recipe" i][data-testid*="ingredient" i]');
+          return items.length > 0;
+        })()
+        """
+
     private let webView: WKWebView
     private var continuation: CheckedContinuation<String, any Error>?
     private var timeout: Task<Void, Never>?
+    private var polling: Task<Void, Never>?
 
     private override init() {
         let configuration = WKWebViewConfiguration()
@@ -90,26 +111,61 @@ private final class WebPageReader: NSObject, WKNavigationDelegate {
     }
 
     static func read(_ url: URL) async throws -> String {
+        try await read { $0.load(URLRequest(url: url, timeoutInterval: 20)) }
+    }
+
+    /// Reads a page given as HTML, the same way; for tests of the wait.
+    static func read(html: String, baseURL: URL) async throws -> String {
+        try await read { $0.loadHTMLString(html, baseURL: baseURL) }
+    }
+
+    private static func read(_ start: (WKWebView) -> Void) async throws -> String {
         let reader = WebPageReader()
         return try await withCheckedThrowingContinuation { continuation in
             reader.continuation = continuation
-            reader.webView.load(URLRequest(url: url, timeoutInterval: 20))
+            start(reader.webView)
             reader.timeout = Task { @MainActor [weak reader] in
-                try? await Task.sleep(for: .seconds(25))
+                try? await Task.sleep(for: .seconds(20) + renderWait)
                 reader?.finish(.failure(URLError(.timedOut)))
             }
         }
     }
 
+    /// A page that isn't there fails now rather than after the wait. Other errors stay: a
+    /// bot check answers 403 and then reloads the real page once it passes.
+    func webView(
+        _ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse
+    ) async -> WKNavigationResponsePolicy {
+        if navigationResponse.isForMainFrame, let http = navigationResponse.response as? HTTPURLResponse,
+            [404, 410].contains(http.statusCode)
+        {
+            finish(.failure(URLError(.fileDoesNotExist)))
+            return .cancel
+        }
+        return .allow
+    }
+
+    /// Once the page has loaded, checks every half second until its scripts have put the
+    /// recipe on it, for up to `renderWait`, then sends what's there either way. A bot check
+    /// that reloads the page finishes again; the same wait carries on.
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor in
-            // A bot check may reload the page once it passes; give it a moment.
-            try? await Task.sleep(for: .seconds(1.5))
-            let html = try? await webView.evaluateJavaScript("document.documentElement.outerHTML") as? String
-            if let html, !html.isEmpty {
-                finish(.success(html))
-            } else {
-                finish(.failure(URLError(.cannotParseResponse)))
+            guard polling == nil else { return }
+            polling = Task { @MainActor [weak self] in
+                let clock = ContinuousClock()
+                let deadline = clock.now + Self.renderWait
+                while clock.now < deadline, !Task.isCancelled {
+                    if let ready = try? await webView.evaluateJavaScript(Self.recipeReadyScript) as? Bool, ready {
+                        break
+                    }
+                    try? await Task.sleep(for: Self.pollEvery)
+                }
+                let html = try? await webView.evaluateJavaScript("document.documentElement.outerHTML") as? String
+                if let html, !html.isEmpty {
+                    self?.finish(.success(html))
+                } else {
+                    self?.finish(.failure(URLError(.cannotParseResponse)))
+                }
             }
         }
     }
@@ -133,6 +189,7 @@ private final class WebPageReader: NSObject, WKNavigationDelegate {
         guard let continuation else { return }
         self.continuation = nil
         timeout?.cancel()
+        polling?.cancel()
         webView.stopLoading()
         continuation.resume(with: result)
     }

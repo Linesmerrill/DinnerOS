@@ -12,11 +12,17 @@ struct RecipeDraftStoreTests {
     private func makeHarness(
         parse: Data = CatalogFixtures.draft, created: Data = RecipeFixtures.detail(), status: Int = 200,
         acceptsPhonePage: Bool = false,
+        /// Answers a parse request from its JSON body, in place of `status` and `acceptsPhonePage`.
+        parseResponse: (@Sendable ([String: String]) -> (Int, Data))? = nil,
         pageLoader: @escaping @Sendable (String) async throws -> String = { _ in throw URLError(.notConnectedToInternet)
-        }
+        },
+        webPageLoader: @escaping @Sendable (String) async throws -> String = { _ in throw URLError(.timedOut) }
     ) async throws -> Harness {
         let transport = StubTransport { request in
             guard let path = request.url?.path() else { return (400, Data()) }
+            if path.hasSuffix("/recipes/parse"), let parseResponse {
+                return parseResponse(request.jsonBody ?? [:])
+            }
             if path.hasSuffix("/recipes/parse") {
                 if acceptsPhonePage, request.jsonBody?["html"] != nil {
                     return (200, parse)
@@ -43,7 +49,28 @@ struct RecipeDraftStoreTests {
         let store = RecipeDraftStore(
             session: session, api: RecipesAPI(client: client), householdID: "household-1")
         store.pageLoader = pageLoader
+        store.webPageLoader = webPageLoader
         return Harness(store: store, transport: transport)
+    }
+
+    private nonisolated static func failure(_ code: String, _ message: String) -> (Int, Data) {
+        (422, Data(#"{"error":{"code":"\#(code)","message":"\#(message)"}}"#.utf8))
+    }
+
+    /// Counts calls to a page loader and answers each with `answer`.
+    private nonisolated final class LoaderCalls: @unchecked Sendable {
+        private let lock = NSLock()
+        private var links: [String] = []
+        var count: Int { lock.withLock { links.count } }
+
+        func loader(_ answer: @escaping @Sendable (String) throws -> String)
+            -> @Sendable (String) async throws -> String
+        {
+            { link in
+                self.lock.withLock { self.links.append(link) }
+                return try answer(link)
+            }
+        }
     }
 
     @Test func pastedTextBecomesADraftToReview() async throws {
@@ -67,13 +94,141 @@ struct RecipeDraftStoreTests {
         #expect(request.jsonBody?["url"] == "https://example.test/recipe")
     }
 
-    @Test func aFailedParseStaysOnTheEntryStepWithAMessage() async throws {
+    @Test func aFailedParseStaysOnTheEntryStepWithTheServersMessage() async throws {
         let harness = try await makeHarness(status: 422)
         await harness.store.parse(url: "https://example.test/not-a-recipe")
         #expect(harness.store.step == .entry)
+        // The server's message is written for people, so it's shown as it is.
+        #expect(harness.store.errorMessage == "nope")
+        #expect(harness.store.failedLink == "https://example.test/not-a-recipe")
+    }
+
+    @Test func aFailureWithNoMessageSaysSoPlainly() {
+        let error = APIError.server(status: 422, code: "fetch_failed", message: "", requestID: nil)
         #expect(
-            harness.store.errorMessage
+            error.errorDescription
                 == "Couldn't find a recipe at that link. Check the link, or copy the recipe and paste it as text.")
+    }
+
+    @Test func aStoreSiteGoesStraightToTheWebView() async throws {
+        let fetches = LoaderCalls()
+        let renders = LoaderCalls()
+        let harness = try await makeHarness(
+            parseResponse: { body in
+                body["html"] == "<rendered>"
+                    ? (200, CatalogFixtures.draft)
+                    : Self.failure("page_needs_phone", "That site only shows its recipes in a web browser.")
+            },
+            pageLoader: fetches.loader { _ in "<shell>" },
+            webPageLoader: renders.loader { _ in "<rendered>" })
+        await harness.store.parse(url: "https://www.frysfood.com/r/plant-based-calzones-recipe/62519060")
+        #expect(harness.store.step == .review)
+        #expect(fetches.count == 0, "the phone's plain fetch only gets the store's empty shell")
+        #expect(renders.count == 1)
+        #expect(harness.transport.requests.count == 2)
+        #expect(
+            harness.transport.requests.last?.jsonBody?["url"]
+                == "https://www.frysfood.com/r/plant-based-calzones-recipe/62519060")
+    }
+
+    @Test func anEmptyShellFromThePhonesFetchFallsBackToTheWebView() async throws {
+        let renders = LoaderCalls()
+        let harness = try await makeHarness(
+            parseResponse: { body in
+                switch body["html"] {
+                case nil: Self.failure("fetch_failed", "That site didn't let us read the page.")
+                case "<rendered>": (200, CatalogFixtures.draft)
+                default: Self.failure("fetch_failed", "We couldn't find a recipe on that page.")
+                }
+            },
+            pageLoader: { _ in "<shell>" },
+            webPageLoader: renders.loader { _ in "<rendered>" })
+        await harness.store.parse(url: "https://shop.example.test/r/hand-pies")
+        #expect(harness.store.step == .review)
+        #expect(renders.count == 1)
+        #expect(harness.transport.requests.map { $0.jsonBody?["html"] } == [nil, "<shell>", "<rendered>"])
+    }
+
+    @Test func aPageThePhoneCantFetchIsOpenedInTheWebView() async throws {
+        let harness = try await makeHarness(
+            parseResponse: { body in
+                body["html"] == "<rendered>"
+                    ? (200, CatalogFixtures.draft)
+                    : Self.failure("fetch_failed", "That site didn't let us read the page.")
+            },
+            pageLoader: { _ in throw URLError(.badServerResponse) },
+            webPageLoader: { _ in "<rendered>" })
+        await harness.store.parse(url: "https://example.test/blocked")
+        #expect(harness.store.step == .review)
+        #expect(harness.transport.requests.count == 2)
+    }
+
+    @Test func whenNothingWorksTheMessageSaysWhyAndWriteYourOwnKeepsTheLink() async throws {
+        let link = "https://example.test/no-recipe-here"
+        let harness = try await makeHarness(
+            parseResponse: { body in
+                body["html"] == nil
+                    ? Self.failure("fetch_failed", "That site didn't let us read the page.")
+                    : Self.failure("fetch_failed", "We couldn't find a recipe on that page.")
+            },
+            pageLoader: { _ in "<shell>" },
+            webPageLoader: { _ in "<rendered>" })
+        await harness.store.parse(url: link)
+        #expect(harness.store.step == .entry)
+        #expect(harness.store.errorMessage == "We couldn't find a recipe on that page.")
+        #expect(harness.store.failedLink == link)
+        #expect(harness.transport.requests.count == 3)
+
+        harness.store.writeOwnKeepingLink()
+        #expect(harness.store.step == .review)
+        #expect(harness.store.errorMessage == nil)
+        #expect(harness.store.draft.sourceURL == link)
+        #expect(!harness.store.draft.fromURL, "a typed recipe keeps its steps and times")
+        #expect(harness.store.draft.steps == [""])
+
+        harness.store.draft.name = "Hand Pies"
+        await harness.store.save()
+        let sent = try #require(harness.transport.requests.last?.httpBody)
+        let body = try #require(try JSONSerialization.jsonObject(with: sent) as? [String: Any])
+        #expect(body["sourceUrl"] as? String == link)
+        #expect(body["fromUrl"] as? Bool == false)
+    }
+
+    @Test func aStoreSiteTheWebViewCantLoadSaysThePageDidntLoad() async throws {
+        let harness = try await makeHarness(
+            parseResponse: { _ in Self.failure("page_needs_phone", "That site only shows its recipes in a web browser.")
+            })
+        await harness.store.parse(url: "https://www.kroger.com/r/x")
+        #expect(harness.store.errorMessage == "That page didn't load. Check the link and try again.")
+        #expect(harness.store.failedLink == "https://www.kroger.com/r/x")
+    }
+
+    @Test func whenThePhoneCantLoadThePageEitherTheServersReasonIsShown() async throws {
+        let harness = try await makeHarness(
+            parseResponse: { _ in Self.failure("fetch_failed", "That page didn't load. Check the link and try again.") }
+        )
+        await harness.store.parse(url: "https://recipes.invalid/nope")
+        #expect(harness.store.errorMessage == "That page didn't load. Check the link and try again.")
+        #expect(harness.transport.requests.count == 1, "nothing to send when neither loader got the page")
+    }
+
+    @Test func otherServerErrorsAreNotRetriedOnThePhone() async throws {
+        let renders = LoaderCalls()
+        let harness = try await makeHarness(
+            parseResponse: { _ in (403, Data(#"{"error":{"code":"forbidden","message":"no"}}"#.utf8)) },
+            webPageLoader: renders.loader { _ in "<rendered>" })
+        await harness.store.parse(url: "https://example.test/a")
+        #expect(harness.store.errorMessage == "Your role in this household doesn't allow that.")
+        #expect(renders.count == 0)
+        #expect(harness.store.failedLink == "https://example.test/a")
+    }
+
+    @Test func startingAgainClearsTheFailedLink() async throws {
+        let harness = try await makeHarness(status: 422)
+        await harness.store.parse(url: "https://example.test/not-a-recipe")
+        harness.store.startBlank()
+        #expect(harness.store.failedLink == nil)
+        #expect(harness.store.draft.sourceURL == nil)
     }
 
     @Test func aSiteThatTurnsTheServerAwayIsLoadedOnThePhone() async throws {

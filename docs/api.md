@@ -768,9 +768,25 @@ Both require `recipes.edit`.
   redirects, 2 MB, and 8 seconds. When a site turns the server away
   (`422 fetch_failed`), the app loads the page itself and sends it again as
   `{"url", "html"}`; the server then reads that HTML and fetches nothing.
+  Kroger and its other stores (Fry's, Ralphs, King Soopers, Smith's, Fred
+  Meyer, QFC and the rest; `browserOnlySites`) only show a recipe after a
+  browser runs the page, so the server doesn't fetch them and answers
+  `422 page_needs_phone` at once; the app opens the page in its hidden web
+  view, waits for the recipe to show, and sends that (decisions 725, 728).
+- **A failed read says why** in `error.message`, a sentence the app shows as
+  it is (decision 726): "That site didn't let us read the page." (401, 403,
+  406, 429, 451, or a dropped HTTP/2 stream), "That page didn't load. Check
+  the link and try again." (other statuses, timeouts, no such host), "We
+  couldn't find a recipe on that page.", "That link isn't a web page.", "That
+  address isn't on the public internet.", "That doesn't look like a web
+  address.", or "That site only shows its recipes in a web browser."
 - **Reading a page** tries, in order: a schema.org `Recipe` in JSON-LD, the
   same in microdata, a recipe card plugin's markup (WP Recipe Maker, Tasty
-  Recipes, Mediavine Create), then an "Ingredients" heading followed by lists.
+  Recipes, Mediavine Create), list items the page marks as ingredients (inside
+  a schema.org Recipe scope by test id, class, or itemprop; elsewhere only a
+  test id naming the recipe and its ingredients, like a rendered Kroger page's
+  `RecipeDetail-ingredients`; the title drops a trailing " Recipe"; decision
+  727), then an "Ingredients" heading followed by lists.
   Ingredient lines are split into amount, unit, name, and a `note` ("diced",
   "to taste"), under the `group` heading they came from; ranges take the larger
   amount, "1 cup plus 2 tablespoons" adds up, and "1 lb / 450 g" keeps the

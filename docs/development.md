@@ -84,6 +84,26 @@ In production, `instruction_findings` collects what reads wrong in members'
 own recipes (see [api.md](api.md#cooking-instructions)); it's the list of
 phrasings to add next.
 
+### Checking recipe links on real sites
+
+Page reading is tested on synthetic pages in `internal/recipes/testdata/pages`
+(made-up recipes in each site's markup). To try real sites, run the live check.
+It uses the network, so it's off in CI and in `make api-test`:
+
+```bash
+scripts/live-import-check.sh                                  # the Fry's link from build 115
+scripts/live-import-check.sh https://example.com/some-recipe  # any links
+LIVE_HTML=/tmp/page.html scripts/live-import-check.sh         # also read a saved page
+```
+
+Each link goes through the server's own fetch and reports how long it took and
+what was read, or the message the app would show. Kroger and its other stores
+(Fry's, Ralphs, King Soopers and the rest) answer `page_needs_phone` right away:
+their pages only have the recipe after a browser runs them, so the app reads
+them in its web view. To check what the server makes of such a page, open it in
+Safari, copy the `<html>` element's outerHTML from the Web Inspector into a
+file, and pass it as `LIVE_HTML`. Never commit a saved page.
+
 ## iOS
 
 Open the project in Xcode, choose the **DinnerOS** scheme, and run on an iPhone

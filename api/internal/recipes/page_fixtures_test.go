@@ -282,8 +282,21 @@ var pageFixtures = []pageFixture{
 			{7, "scallions", "2", "", "sliced", "Noodles"},
 		}},
 
+	// --- A store's page once a browser has run it (decision 727) -------------------
+	{file: "kroger-rendered.html", ok: true, method: PageMarkup, name: "Smoky Black Bean Hand Pies", servings: 0, count: 12, noAmount: true,
+		lines: []fixtureLine{
+			{0, "warm water", "2/3", "cup", "around 100°F", ""}, // "2⁄3", the fraction slash
+			{2, "all-purpose flour", "2 1/2", "cup", "", ""},
+			{4, "olive oil", "3", "tbsp", "divided", ""},
+			{5, "black beans", "1", "can", "15 oz, rinsed and drained", ""},
+			{9, "chopped cilantro", "1/4", "cup", "", ""},
+			{11, "Salsa", "", "", "for serving", ""},
+		}},
+
 	// --- Not a recipe --------------------------------------------------------------
 	{file: "no-recipe.html", ok: false},
+	// The same store's page as it's sent, before its scripts run: an empty shell.
+	{file: "kroger-shell.html", ok: false},
 }
 
 func TestPageFixtures(t *testing.T) {

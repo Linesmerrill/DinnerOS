@@ -32,6 +32,35 @@ struct RecipePageImportTests {
         #expect(RecipePageLoader.trimmed(huge).utf8.count == RecipePageLoader.maxBytes)
     }
 
+    /// A store page's scripts put the recipe on the page after it loads: the web view waits
+    /// for it, rather than reading the empty page at once or sleeping a fixed time.
+    @Test @MainActor func theWebViewWaitsForTheRecipeToRender() async throws {
+        let page = """
+            <html><body><div id="root"></div><script>
+            setTimeout(() => {
+              document.getElementById('root').innerHTML =
+                '<div itemscope itemtype="http://schema.org/Recipe"><h1>Quick Slaw Recipe</h1><ul>' +
+                '<li data-testid="RecipeDetail-ingredients">2 cups shredded cabbage</li></ul></div>';
+            }, 1500);
+            </script></body></html>
+            """
+        let start = ContinuousClock.now
+        let html = try await WebPageReader.read(
+            html: page, baseURL: try #require(URL(string: "https://shop.example.test/r/slaw")))
+        let waited = ContinuousClock.now - start
+        #expect(html.contains("RecipeDetail-ingredients"), "read the page before its recipe showed")
+        #expect(waited >= .seconds(1.4))
+        #expect(waited < .seconds(10), "kept waiting after the recipe showed")
+    }
+
+    @Test @MainActor func theReadyCheckKnowsARecipeFromAnEmptyShell() async throws {
+        let shell = try await WebPageReader.read(
+            html:
+                #"<html><body><div id="root"></div><script type="application/ld+json">{"@type":"Recipe","name":"Soup"}</script></body></html>"#,
+            baseURL: try #require(URL(string: "https://example.test/")))
+        #expect(shell.contains("Soup"), "a page with JSON-LD is ready at once")
+    }
+
     @Test func aDraftFromAPageCarriesNotesGroupsAndTheReminder() throws {
         let json = """
             {"name":"Tacos","servings":4,"sourceUrl":"https://example.test/tacos","fromUrl":true,
