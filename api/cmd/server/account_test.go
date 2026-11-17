@@ -65,6 +65,9 @@ var accountDeletionKinds = map[string]collectionKind{
 	recipes.IngredientsCollection:     global,
 	catalog.RecipesCollection:         global,
 	catalog.ReportsCollection:         householdData,
+	catalog.BlocksCollection:          householdData,
+	// Operators' keep or remove on a catalog entry; no household in it.
+	catalog.ReviewsCollection:         global,
 	catalog.SavesCollection:           householdData,
 	catalog.CollectionsCollection:     global,
 	planning.PlansCollection:          householdData,

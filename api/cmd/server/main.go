@@ -161,6 +161,8 @@ func run() error {
 	// into it, and a household copies an entry into its own library.
 	catalogService := catalog.NewService(catalog.ServiceOptions{Store: catalog.NewMongoStore(db.Database())}).
 		WithReports(catalog.NewMongoReports(db.Database())).
+		// Hiding a cook and operator reviews (decision 744).
+		WithModeration(catalog.NewMongoBlocks(db.Database()), catalog.NewMongoReviews(db.Database())).
 		// The rows at the top of Shared Recipes (decisions 710 and 711).
 		WithSaves(catalog.NewMongoSaves(db.Database())).
 		WithRatings(catalog.NewMongoRatings(db.Database())).
@@ -352,6 +354,9 @@ func run() error {
 		Logger:     logger,
 		Credits:    recipeService,
 		Operators:  cfg.OperatorUserIDs,
+		// Each new report of a shared recipe is emailed (decision 744).
+		ReportAlerts:  reportAlerter(cfg),
+		ReportAlertTo: cfg.ReportAlertEmail,
 	})
 	autopilotHandler := recommendations.NewHandler(recommendations.HandlerOptions{
 		RequirePlus: requirePlus,
@@ -604,6 +609,7 @@ func indexSets() []mongodb.IndexSet {
 		recipes.Indexes(),
 		catalog.Indexes(),
 		catalog.ReportIndexes(),
+		catalog.ModerationIndexes(),
 		catalog.SaveIndexes(),
 		planning.Indexes(),
 		pantry.Indexes(),
@@ -728,6 +734,17 @@ func newWalmartProvider(cfg config.Config) *providers.Walmart {
 		opts.Affiliate = &providers.ImpactAffiliate{PublisherID: w.PublisherID, AdID: w.AdID, CampaignID: w.CampaignID}
 	}
 	return providers.NewWalmart(opts)
+}
+
+// reportAlerter sends report emails through Resend, or is nil when email
+// isn't sent through Resend or no REPORT_ALERT_EMAIL is set.
+func reportAlerter(cfg config.Config) catalog.ReportAlerter {
+	if cfg.EmailProvider != config.EmailProviderResend || cfg.ReportAlertEmail == "" {
+		return nil
+	}
+	return invitations.NewResendProvider(invitations.ResendOptions{
+		APIKey: cfg.ResendAPIKey, From: cfg.EmailFrom, AppName: cfg.AppName,
+	})
 }
 
 // newEmailProvider picks the EmailProvider named by EMAIL_PROVIDER. Config

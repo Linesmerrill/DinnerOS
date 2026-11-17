@@ -46,6 +46,8 @@ type Service struct {
 	library     Library
 	taste       Taste
 	reports     ReportStore
+	blocks      BlockStore
+	reviews     ReviewStore
 	saves       SaveStore
 	ratings     RatingSignals
 	collections CollectionStore
@@ -84,7 +86,10 @@ func (s *Service) PublishRecipes(ctx context.Context, rs []recipes.Recipe) (int,
 			continue
 		}
 		// The origin is taken before Content strips the household.
-		entries = append(entries, Recipe{CatalogKey: recipes.CatalogKey(r), Origin: recipes.CatalogOrigin(r), Content: Content(r)})
+		entries = append(entries, Recipe{
+			CatalogKey: recipes.CatalogKey(r), Origin: recipes.CatalogOrigin(r), Publisher: recipes.CatalogPublisherKey(r),
+			Content: Content(r),
+		})
 	}
 	if len(entries) == 0 {
 		return 0, nil

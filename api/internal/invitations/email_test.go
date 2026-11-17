@@ -138,6 +138,27 @@ func TestResendProviderSends(t *testing.T) {
 	}
 }
 
+func TestResendProviderSendsPlainText(t *testing.T) {
+	var got map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Errorf("decode body: %v", err)
+		}
+		_, _ = io.WriteString(w, `{"id":"x"}`)
+	}))
+	defer server.Close()
+	p := NewResendProvider(ResendOptions{APIKey: "k", From: "DinnerOS <a@example.com>", BaseURL: server.URL, HTTPClient: server.Client()})
+	if err := p.SendPlain(context.Background(), "ops@example.com", "Hello", "Body"); err != nil {
+		t.Fatal(err)
+	}
+	if got["subject"] != "Hello" || got["text"] != "Body" || got["from"] != "DinnerOS <a@example.com>" {
+		t.Errorf("body = %v", got)
+	}
+	if _, ok := got["html"]; ok {
+		t.Errorf("a plain email sent html: %v", got)
+	}
+}
+
 func TestResendProviderErrorsDoNotLeakKey(t *testing.T) {
 	const apiKey = "re_live_secret_key_123"
 	tests := []struct {

@@ -58,7 +58,8 @@ func (m *memoryStore) Upsert(_ context.Context, entries []Recipe, now time.Time)
 		prev := m.entries[i]
 		// Content clears the entry's own ID, as newEntryDoc does before it
 		// hashes, so an unchanged re-publish hashes the same.
-		if contentHash(Content(prev.Content)) == contentHash(e.Content) && prev.entryKey() == e.entryKey() && prev.CatalogKey == e.CatalogKey {
+		if contentHash(Content(prev.Content)) == contentHash(e.Content) && prev.entryKey() == e.entryKey() && prev.CatalogKey == e.CatalogKey &&
+			prev.Publisher == e.Publisher {
 			continue
 		}
 		e.ID, e.Content.ID, e.FirstPublishedAt, e.UpdatedAt = prev.ID, prev.ID, prev.FirstPublishedAt, now
@@ -164,6 +165,18 @@ func (m *memoryStore) Groups(_ context.Context, ids []string) (map[string]string
 			if e.ID == id {
 				out[id] = groupKey(e)
 			}
+		}
+	}
+	return out, nil
+}
+
+func (m *memoryStore) IDsByPublisher(_ context.Context, publishers []string) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []string
+	for _, e := range m.entries {
+		if e.Publisher != "" && slices.Contains(publishers, e.Publisher) {
+			out = append(out, e.ID)
 		}
 	}
 	return out, nil

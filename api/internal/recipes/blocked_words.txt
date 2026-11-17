@@ -1,0 +1,54 @@
+# Words that keep a recipe out of Shared Recipes (decision 744). One per line,
+# lowercase. A plain word matches a whole word; a word ending in * matches any
+# word starting with it. Lines starting with # are notes.
+#
+# Kitchen words that look rude are left out on purpose: dick (spotted dick),
+# cock (cock-a-leekie), faggots (a British meatball dish), balls, breast,
+# thighs, rump, nuts, wiener, beaver, crack, hooker, butt, prick (prick the
+# potatoes), naked and nude (naked burrito, nude cake), retard (retard the
+# dough).
+fuck*
+motherfuck*
+shit
+shits
+shitty
+shitting
+bullshit
+horseshit
+cunt*
+bitch
+bitches
+bitching
+asshole*
+bastard*
+twat*
+wanker*
+whore*
+slut*
+porn*
+blowjob*
+handjob*
+dildo*
+rape
+raped
+rapist*
+nigger*
+nigga*
+chink
+chinks
+spic
+spics
+kike
+kikes
+wetback*
+gook
+gooks
+tranny
+trannies
+fag
+fags
+dyke
+dykes
+nazi*
+hitler
+kys

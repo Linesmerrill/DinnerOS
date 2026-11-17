@@ -38,6 +38,11 @@ type Recipe struct {
 	// updates the entry even when its CatalogKey changed. Importer recipes
 	// have none: one entry per importer recipe ID, shared by every household.
 	Origin string
+	// Publisher is recipes.CatalogPublisherKey of the household a typed or
+	// pasted entry came from: an opaque hash, never the household, so a
+	// member can hide every recipe from that cook (decision 744). Importer
+	// recipes have none.
+	Publisher string
 	// Content is the recipe itself. Its HouseholdID, OrderWeeks,
 	// TimesOrdered, LastOrderedWeek, SharedToCatalog, and CatalogKey are
 	// always zero: the catalog holds content, never a household's history.

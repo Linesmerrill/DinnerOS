@@ -59,7 +59,7 @@ type resendEmailRequest struct {
 	From    string   `json:"from"`
 	To      []string `json:"to"`
 	Subject string   `json:"subject"`
-	HTML    string   `json:"html"`
+	HTML    string   `json:"html,omitempty"`
 	Text    string   `json:"text"`
 }
 
@@ -69,9 +69,19 @@ func (p *ResendProvider) SendHouseholdInvitation(ctx context.Context, e Househol
 	if err != nil {
 		return err
 	}
-	body, err := json.Marshal(resendEmailRequest{
+	return p.send(ctx, resendEmailRequest{
 		From: p.opts.From, To: []string{e.To}, Subject: msg.Subject, HTML: msg.HTML, Text: msg.Text,
 	})
+}
+
+// SendPlain sends a plain-text email, for notes to the people who run
+// DinnerOS (a reported shared recipe, decision 744).
+func (p *ResendProvider) SendPlain(ctx context.Context, to, subject, text string) error {
+	return p.send(ctx, resendEmailRequest{From: p.opts.From, To: []string{to}, Subject: subject, Text: text})
+}
+
+func (p *ResendProvider) send(ctx context.Context, msg resendEmailRequest) error {
+	body, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("invitations: encode resend request: %w", err)
 	}

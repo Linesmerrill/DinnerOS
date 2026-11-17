@@ -45,6 +45,12 @@ func (m *memoryReports) Reporters(context.Context) (map[string][]string, error) 
 	return out, nil
 }
 
+func (m *memoryReports) All(context.Context) ([]Report, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.list), nil
+}
+
 // A household that reports a recipe never sees it again; others still do
 // until enough households report it.
 func TestReportHidesTheRecipe(t *testing.T) {

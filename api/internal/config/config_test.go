@@ -137,6 +137,8 @@ func TestLoadEmail(t *testing.T) {
 		{name: "unknown provider", env: map[string]string{"EMAIL_PROVIDER": "smtp"}, wantErr: "EMAIL_PROVIDER must be"},
 		{name: "invalid from", env: map[string]string{"EMAIL_FROM": "not an address"}, wantErr: "EMAIL_FROM must be"},
 		{name: "website URL", env: map[string]string{"WEBSITE_URL": "https://dinneros.app/"}, wantProvider: EmailProviderLog},
+		{name: "report alert email", env: map[string]string{"REPORT_ALERT_EMAIL": " reports@example.com "}, wantProvider: EmailProviderLog},
+		{name: "report alert email not an address", env: map[string]string{"REPORT_ALERT_EMAIL": "reports"}, wantErr: "REPORT_ALERT_EMAIL"},
 		{name: "website URL over http", env: map[string]string{"WEBSITE_URL": "http://dinneros.app"}, wantErr: "WEBSITE_URL"},
 		{name: "website URL with a path", env: map[string]string{"WEBSITE_URL": "https://dinneros.app/home"}, wantErr: "WEBSITE_URL"},
 		{name: "plus test households", env: map[string]string{"PLUS_TEST_HOUSEHOLDS": " 6af70f85f009186daa3236f7, 6AF70F85F009186DAA3236F8 ,"}, wantProvider: EmailProviderLog},

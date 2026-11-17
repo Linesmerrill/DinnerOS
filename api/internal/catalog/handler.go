@@ -31,6 +31,16 @@ type HandlerOptions struct {
 	// Operators are the user IDs who may edit the rows of Shared Recipes
 	// (OPERATOR_USER_IDS).
 	Operators []string
+	// ReportAlerts emails ReportAlertTo about each new report (decision
+	// 744). Both optional: without them a report is only logged.
+	ReportAlerts  ReportAlerter
+	ReportAlertTo string
+}
+
+// ReportAlerter sends a plain-text email. *invitations.ResendProvider
+// implements it.
+type ReportAlerter interface {
+	SendPlain(ctx context.Context, to, subject, text string) error
 }
 
 // PhotoCredits finds the credit kept for a picked photo by its address.
@@ -71,6 +81,11 @@ func (h *Handler) Mount(r chi.Router) {
 		r.With(view).Get(base+"/catalog/recipes/{catalogRecipeId}", h.get)
 		r.With(edit).Post(base+"/catalog/recipes/{catalogRecipeId}/add", h.add)
 		r.With(view).Post(base+"/catalog/recipes/{catalogRecipeId}/report", h.report)
+		r.With(view).Post(base+"/catalog/recipes/{catalogRecipeId}/hide-cook", h.hideCook)
+
+		// Operators review reported recipes (decision 744).
+		r.Get("/admin/catalog/reports", h.listReports)
+		r.Post("/admin/catalog/reports/{catalogRecipeId}/review", h.reviewReport)
 
 		// Operators edit the rows of Shared Recipes (decision 714).
 		r.Get("/admin/discover/collections", h.listCollections)
@@ -209,16 +224,19 @@ type CatalogRecipeResponse struct {
 	CatalogSummaryResponse
 	// ImageCredit says who took a photo picked from photo search.
 	ImageCredit *recipes.ImageCreditResponse `json:"imageCredit,omitempty"`
-	Description string                       `json:"description,omitempty"`
-	SourceURL   string                       `json:"sourceUrl,omitempty"`
-	Servings    []int                        `json:"servings"`
-	PrepMinutes int                          `json:"prepMinutes,omitempty"`
-	Difficulty  int                          `json:"difficulty,omitempty"`
-	Utensils    []string                     `json:"utensils"`
-	Allergens   []string                     `json:"allergens"`
-	Nutrition   []recipes.NutrientResponse   `json:"nutritionPerServing"`
-	Ingredients []CatalogIngredientResponse  `json:"ingredients"`
-	Steps       []recipes.StepResponse       `json:"steps"`
+	// CanHideCook is true when the recipe was shared by a household, so the
+	// app can offer to hide every recipe from that cook (decision 744).
+	CanHideCook bool                        `json:"canHideCook"`
+	Description string                      `json:"description,omitempty"`
+	SourceURL   string                      `json:"sourceUrl,omitempty"`
+	Servings    []int                       `json:"servings"`
+	PrepMinutes int                         `json:"prepMinutes,omitempty"`
+	Difficulty  int                         `json:"difficulty,omitempty"`
+	Utensils    []string                    `json:"utensils"`
+	Allergens   []string                    `json:"allergens"`
+	Nutrition   []recipes.NutrientResponse  `json:"nutritionPerServing"`
+	Ingredients []CatalogIngredientResponse `json:"ingredients"`
+	Steps       []recipes.StepResponse      `json:"steps"`
 }
 
 // CatalogIngredientResponse is an ingredient line on a catalog recipe. Unlike
@@ -398,8 +416,10 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if created {
-		// Operators read reports from the logs and the catalog_reports collection.
+		// Operators review reports at GET /admin/catalog/reports; each new
+		// one is logged and, when set up, emailed (decision 744).
 		h.logger.WarnContext(r.Context(), "shared recipe reported", "catalogRecipeId", id, "reason", req.Reason)
+		h.alert(r.Context(), id, req.Reason, req.Note)
 	}
 	httpx.WriteJSON(w, http.StatusOK, ReportResponse{Hidden: true, Message: ReportThanks})
 }
@@ -492,8 +512,8 @@ func summaryResponse(it Result) CatalogSummaryResponse {
 func recipeResponse(it Result) CatalogRecipeResponse {
 	c := it.Content
 	out := CatalogRecipeResponse{
-		CatalogSummaryResponse: summaryResponse(it),
-		Description:            c.Description, SourceURL: c.SourceURL, Servings: orEmpty(c.Servings),
+		CatalogSummaryResponse: summaryResponse(it), CanHideCook: HidesCook(it.Recipe),
+		Description: c.Description, SourceURL: c.SourceURL, Servings: orEmpty(c.Servings),
 		PrepMinutes: c.PrepMinutes, Difficulty: c.Difficulty,
 		Utensils: orEmpty(c.Utensils), Allergens: orEmpty(c.Allergens),
 		Nutrition:   make([]recipes.NutrientResponse, 0, len(c.Nutrition)),
