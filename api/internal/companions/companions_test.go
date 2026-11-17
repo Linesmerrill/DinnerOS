@@ -184,7 +184,9 @@ func newTestService(store Store, rs *fakeRecipes, hints HintSource) *Service {
 // --- model ------------------------------------------------------------------------
 
 func TestNormalize(t *testing.T) {
-	canon := func(s string) string { return map[string]string{"mexico": "mexican"}[s] + strings.TrimPrefix(s, "mexico") }
+	canon := func(s string) string {
+		return map[string]string{"mexico": "mexican"}[s] + strings.TrimPrefix(s, "mexico")
+	}
 	for _, tt := range []struct {
 		name    string
 		in      Input
