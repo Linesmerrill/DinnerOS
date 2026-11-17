@@ -3,6 +3,7 @@ package config
 import (
 	"crypto/ecdsa"
 	"errors"
+	"strings"
 )
 
 // SIWA is the Sign in with Apple key the API uses to revoke a user's Apple
@@ -16,6 +17,8 @@ type SIWA struct {
 	ClientID string
 	// PrivateKey is the parsed .p8 (ES256) key. Never log it.
 	PrivateKey *ecdsa.PrivateKey
+	// Problem says why a partly set or bad key was left off. Never the key.
+	Problem string
 }
 
 // Enabled reports whether a Sign in with Apple key is configured.
@@ -26,12 +29,17 @@ func (s SIWA) logState() string {
 	if s.Enabled() {
 		return "configured"
 	}
+	if s.Problem != "" {
+		return "not configured: " + s.Problem
+	}
 	return "not configured"
 }
 
 // loadSIWA reads SIWA_* into cfg. cfg.AppleBundleID must already be set.
-// The three required values are all set or all empty; errors never include
-// the key.
+// A partly set or bad key never stops the API: Heroku restarts it after each
+// config change, so setting the three values one at a time would otherwise
+// take it down. Revocation stays off and the startup log says why, never
+// with the key.
 func loadSIWA(cfg *Config, get func(key, fallback string) string) []error {
 	keyID, teamID, rawKey := get("SIWA_KEY_ID", ""), get("SIWA_TEAM_ID", ""), get("SIWA_PRIVATE_KEY", "")
 	if keyID == "" && teamID == "" && rawKey == "" {
@@ -49,7 +57,12 @@ func loadSIWA(cfg *Config, get func(key, fallback string) string) []error {
 		errs = append(errs, err)
 	}
 	if len(errs) > 0 {
-		return append(errs, errors.New("SIWA_KEY_ID, SIWA_TEAM_ID, and SIWA_PRIVATE_KEY must all be set, or all be empty"))
+		msgs := make([]string, 0, len(errs))
+		for _, e := range errs {
+			msgs = append(msgs, e.Error())
+		}
+		cfg.SIWA = SIWA{Problem: strings.Join(msgs, "; ")}
+		return nil
 	}
 	cfg.SIWA = SIWA{KeyID: keyID, TeamID: teamID, ClientID: get("SIWA_CLIENT_ID", cfg.AppleBundleID), PrivateKey: key}
 	return nil

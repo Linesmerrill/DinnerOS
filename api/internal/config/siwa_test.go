@@ -55,7 +55,9 @@ func TestLoadSIWA(t *testing.T) {
 	}
 }
 
-func TestLoadSIWARejectsPartialOrBadValues(t *testing.T) {
+// A partly set or bad key leaves revocation off and says why, but never stops
+// the API from starting (Heroku restarts it after each config change).
+func TestLoadSIWALeavesPartialOrBadValuesOff(t *testing.T) {
 	p8 := generatedP8(t, elliptic.P256())
 	for name, vars := range map[string]map[string]string{
 		"key ID only":   {"SIWA_KEY_ID": "SIWAKEY123"},
@@ -67,13 +69,16 @@ func TestLoadSIWARejectsPartialOrBadValues(t *testing.T) {
 		"private only":  {"SIWA_PRIVATE_KEY": p8},
 		"team ID alone": {"SIWA_TEAM_ID": "6VTPDG2HNK"},
 	} {
-		_, err := Load(env(vars))
-		if err == nil || !strings.Contains(err.Error(), "SIWA_") {
-			t.Errorf("%s: err = %v", name, err)
+		cfg, err := Load(env(vars))
+		if err != nil {
+			t.Errorf("%s: startup failed: %v", name, err)
 			continue
 		}
-		if strings.Contains(err.Error(), "PRIVATE KEY-") {
-			t.Errorf("%s: error includes the key", name)
+		if cfg.SIWA.Enabled() || !strings.Contains(cfg.SIWA.logState(), "SIWA_") {
+			t.Errorf("%s: enabled = %v, log = %q", name, cfg.SIWA.Enabled(), cfg.SIWA.logState())
+		}
+		if strings.Contains(cfg.SIWA.logState(), "PRIVATE KEY") {
+			t.Errorf("%s: the log includes the key", name)
 		}
 	}
 }

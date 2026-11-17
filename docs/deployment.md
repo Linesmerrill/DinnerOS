@@ -223,8 +223,10 @@ back, then sets the three Heroku config vars.
 
    Then delete the downloaded file. The dyno restarts; its startup log line
    shows `signInWithAppleRevocation=configured` (never the key or Key ID). A
-   bad or partial set stops the API at startup with a message naming the
-   variable, so check the release with `heroku logs -a dinneros-api --tail`.
+   bad or partial set never stops the API: revocation stays off and the log
+   line reads `not configured: <what's wrong>`, naming the variable. Set all
+   three in one command as above, then check with
+   `heroku logs -a dinneros-api --tail`.
 
 How it works: the app sends Apple's one-time authorization code with each
 Apple sign-in, and the API trades it at `https://appleid.apple.com/auth/token`
