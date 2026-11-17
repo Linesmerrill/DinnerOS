@@ -280,6 +280,10 @@ under 30 minutes. The standard:
    referral and invite runs, so every simulator finishes in about the same time. Build 114's first full run, with
    every test on every config, took 38 minutes: referral (7 min), invite link (5 min) and AnyList
    (4 min) on all 8 configs, with 8 simulators slowing each other down.
+   Build 116's referral test grew to about 10 minutes (Redeem and the step-done cards), and its
+   first full run took 33.5 minutes with invite link on the same 4 configs. Invite link now runs
+   on large-dark, small-dark and both upright iPads, and AnyList on large-light, small-light and
+   both iPads on their side. The script's comments list where each test runs.
 3. **Timeouts.** Each test has a 10-minute limit. A run with no output for 10 minutes is killed,
    its simulator restarted, and only that test retried once.
 4. **Targeted reruns.** After a fix, rerun only what failed, never the whole matrix:
