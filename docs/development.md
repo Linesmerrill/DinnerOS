@@ -290,6 +290,9 @@ under 30 minutes. The standard:
 5. **Local APIs** on local Mongo: 8082 with no photo search key, 8083 with the fake Unsplash
    (below), both with `REFERRAL_MAX_PER_30_DAYS=1000` and `AUTH_RATE_BURST=1000` (eight simulators sign in and
    out from one address, and the default of 10 at once turns them away with "Too many attempts").
+   8083 also copies a small starter library into new households for `ReviewPathQATests`: make
+   it with `scripts/qa-starter-library.sh http://localhost:8082` (it prints the household ID; run it
+   again any time, it reuses the same one) and start 8083 with `STARTER_RECIPES_HOUSEHOLD_ID=<id>`.
 6. **Report.** `summary.txt` lists each config and test as ok or FAILED with the first error, and
    the time. If a run goes past 30 minutes, say why from the logs before rerunning anything.
 

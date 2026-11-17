@@ -10,6 +10,8 @@
 # 8083 with UNSPLASH_ACCESS_KEY=qa-not-a-real-key pointed at cmd/fakeunsplash. Start both with
 # REFERRAL_MAX_PER_30_DAYS=1000 so parallel referral runs don't use up the sharer's slots, and
 # AUTH_RATE_BURST=1000 so eight simulators signing in at once aren't told to wait.
+# 8083 also gets STARTER_RECIPES_HOUSEHOLD_ID from scripts/qa-starter-library.sh, so the review
+# path test sees a starter library in a brand-new household.
 #
 # The app is built once per API port (build-for-testing), then every config runs
 # test-without-building at the same time. Each test has a 10-minute limit, and a run with no
@@ -76,6 +78,8 @@ run_test() {
     case $config in ipadL-*) orientation=landscape ;; esac
     test=${test/SWEEP/$([ "$mode" = dark ] && echo testSweepDark || echo testSweepLight)}
     [ "$test" = UnsplashPhotoQATests ] && { port=8083; search=on; }
+    # The review path needs a starter library, which only 8083 copies into new households.
+    [ "$test" = ReviewPathQATests ] && port=8083
     local name="$config-$(echo "$test" | tr '/' '-')"
     local xctestrun
     xctestrun=$(ls "$OUT/dd-$port"/Build/Products/*.xctestrun | head -1)
@@ -174,7 +178,7 @@ if [ "$free_gb" -lt 10 ]; then
     exit 1
 fi
 need8083=no
-for t in $TESTS; do [ "$t" = UnsplashPhotoQATests ] && need8083=yes; done
+for t in $TESTS; do case $t in UnsplashPhotoQATests | ReviewPathQATests) need8083=yes ;; esac; done
 build 8082 &
 [ $need8083 = yes ] && build 8083 &
 wait
