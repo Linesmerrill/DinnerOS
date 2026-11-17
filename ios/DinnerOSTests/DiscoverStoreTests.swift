@@ -63,6 +63,31 @@ struct DiscoverStoreTests {
         #expect(!harness.store.hasMore)
     }
 
+    /// Hiding a cook takes the recipe off the list, says so, and reloads so the cook's other
+    /// recipes go too.
+    @Test func hidingACookReloadsTheLists() async throws {
+        let harness = try await makeHarness()
+        await harness.store.activate(householdID: "household-1")
+        let before = harness.server.requestedPaths.count
+        #expect(await harness.store.hideCook(id: "c1"))
+        let paths = harness.server.requestedPaths.dropFirst(before)
+        #expect(paths.first == "POST /api/v1/households/household-1/catalog/recipes/c1/hide-cook")
+        #expect(paths.contains { $0.contains("/discover/home") })
+        #expect(paths.contains { $0.contains("/discover") && !$0.contains("/discover/home") })
+        #expect(harness.store.reportTitle == "Hidden")
+        #expect(harness.store.reportMessage == "You won't see recipes from this cook again.")
+    }
+
+    @Test func aCatalogRecipeSaysWhetherItsCookCanBeHidden() throws {
+        let decoder = JSONCoding.makeDecoder()
+        let plain = try decoder.decode(CatalogRecipe.self, from: CatalogFixtures.detail)
+        #expect(!plain.hidesCook)
+        var json = try #require(JSONSerialization.jsonObject(with: CatalogFixtures.detail) as? [String: Any])
+        json["canHideCook"] = true
+        let shared = try decoder.decode(CatalogRecipe.self, from: JSONSerialization.data(withJSONObject: json))
+        #expect(shared.hidesCook)
+    }
+
     @Test func aFailedFirstPageIsRetryable() async throws {
         let harness = try await makeHarness()
         harness.server.failNext()

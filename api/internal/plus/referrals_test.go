@@ -378,6 +378,13 @@ func TestOfferCopy(t *testing.T) {
 			t.Errorf("offer contains %q", bad)
 		}
 	}
+	// Apple's renewal terms (guideline 3.1.2): renews automatically, how and
+	// when to cancel.
+	for _, want := range []string{"Apple account", "renews automatically", "until you cancel", "24 hours before", "free trial"} {
+		if !strings.Contains(o.Terms, want) {
+			t.Errorf("terms %q have no %q", o.Terms, want)
+		}
+	}
 	if len(o.Links) != 2 || o.Links[0].URL != PrivacyURL || o.Links[1].URL != TermsURL {
 		t.Errorf("links = %+v, want privacy then terms", o.Links)
 	}

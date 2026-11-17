@@ -69,7 +69,7 @@ struct DiscoverView: View {
             Text("You won't see it again. We'll take a look.")
         }
         .alert(
-            "Reported", isPresented: Binding(presenting: Bindable(discover).reportMessage),
+            discover.reportTitle, isPresented: Binding(presenting: Bindable(discover).reportMessage),
             presenting: discover.reportMessage
         ) { _ in
             Button("OK") {}
@@ -77,7 +77,7 @@ struct DiscoverView: View {
             Text(message)
         }
         .alert(
-            "Couldn't Report That Recipe", isPresented: Binding(presenting: Bindable(discover).reportError),
+            discover.reportErrorTitle, isPresented: Binding(presenting: Bindable(discover).reportError),
             presenting: discover.reportError
         ) { _ in
             Button("OK") {}

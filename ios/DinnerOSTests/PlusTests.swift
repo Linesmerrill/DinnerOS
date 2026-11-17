@@ -358,10 +358,32 @@ struct PlusStoreTests {
         let offer = try JSONCoding.makeDecoder().decode(PlusOffer.self, from: Data(PlusFixtures.offer.utf8))
         let yearly = offer.plans[0]
         let product = PlusProduct(id: yearly.productID, displayPrice: "$39.99", trialEligible: true)
-        #expect(PlusText.chargeLine(yearly, product: product, trialDays: 14) == "Free for 14 days, then $39.99 a year.")
+        #expect(
+            PlusText.chargeLine(yearly, product: product, trialDays: 14)
+                == "Free for 14 days, then $39.99 a year. Renews until you cancel.")
         #expect(
             PlusText.chargeLine(offer.plans[1], product: nil, trialDays: 0) == "$4.99 a month. Renews until you cancel."
         )
+    }
+
+    /// The trial length and billing period come from the App Store when it says, so the
+    /// screen can't promise a trial App Store Connect doesn't give.
+    @Test func theTrialAndPeriodComeFromTheAppStore() throws {
+        let offer = try JSONCoding.makeDecoder().decode(PlusOffer.self, from: Data(PlusFixtures.offer.utf8))
+        let yearly = offer.plans[0]
+        let unknown = PlusProduct(id: yearly.productID, displayPrice: "$39.99", trialEligible: true)
+        #expect(PlusText.trialDays(offerDays: 14, product: nil) == 14)
+        #expect(PlusText.trialDays(offerDays: 14, product: unknown) == 14)
+        let week = PlusProduct(id: yearly.productID, displayPrice: "$39.99", trialEligible: true, trialDays: 7)
+        #expect(PlusText.trialDays(offerDays: 14, product: week) == 7)
+        #expect(PlusText.buyTitle(offer, product: week) == "Try it free for 7 days")
+        #expect(PlusText.buyTitle(offer, product: unknown) == offer.trialText)
+        let used = PlusProduct(id: yearly.productID, displayPrice: "$39.99", trialEligible: false, trialDays: 14)
+        #expect(PlusText.trialDays(offerDays: 14, product: used) == 0)
+        #expect(PlusText.buyTitle(offer, product: used) == offer.buyText)
+        // A product billed monthly says so even under a yearly-looking ID.
+        let monthly = PlusProduct(id: yearly.productID, displayPrice: "$4.99", trialEligible: true, billedYearly: false)
+        #expect(PlusText.price(yearly, product: monthly) == "$4.99 a month")
     }
 
     @Test func betaHouseholdsSeeTheThankYouOnce() async throws {

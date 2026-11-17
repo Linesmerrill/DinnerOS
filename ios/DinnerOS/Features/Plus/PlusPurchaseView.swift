@@ -149,13 +149,13 @@ struct PlusPurchaseView: View {
         }
     }
 
-    /// "Free for 14 days, then $39.99 a year." or "$39.99 a year." for the selected plan.
+    /// "Free for 14 days, then $39.99 a year. Renews until you cancel." for the selected plan.
     private func chargeLine(_ offer: PlusOffer) -> String {
         guard let plan = offer.plans.first(where: { $0.productID == selectedID(offer) }) ?? offer.plans.first
         else { return "" }
         let product = plus.products[plan.productID]
-        let trial = offer.trialDays > 0 && (product?.trialEligible ?? true)
-        return PlusText.chargeLine(plan, product: product, trialDays: trial ? offer.trialDays : 0)
+        return PlusText.chargeLine(
+            plan, product: product, trialDays: PlusText.trialDays(offerDays: offer.trialDays, product: product))
     }
 
     /// The yearly plan unless another was picked.
@@ -166,9 +166,7 @@ struct PlusPurchaseView: View {
     /// The trial button while the App Store still offers this person a trial, or before it
     /// has answered.
     private func buttonTitle(_ offer: PlusOffer) -> String {
-        let product = plus.products[selectedID(offer)]
-        let trial = offer.trialDays > 0 && (product?.trialEligible ?? true)
-        return trial ? offer.trialText : offer.buyText
+        PlusText.buyTitle(offer, product: plus.products[selectedID(offer)])
     }
 
     private func buy(_ productID: String) {
@@ -312,7 +310,7 @@ extension View {
             ],
             trialDays: 14, trialText: "Try it free for 14 days", buyText: "Get DinnerOS Plus",
             terms:
-                "Plus renews automatically until you cancel. Cancel anytime in your Apple account settings at least a day before it renews.",
+                "Payment goes through your Apple account. Plus renews automatically until you cancel. Cancel in your Apple account settings at least 24 hours before the free trial or the current period ends.",
             restoreText: "Restore purchases", freeText: "Sending your list to a store is always free.")
         static let free = PlusStatus(
             enabled: true, active: false, trial: false, expiresAt: nil, willRenew: false, billingIssue: false,

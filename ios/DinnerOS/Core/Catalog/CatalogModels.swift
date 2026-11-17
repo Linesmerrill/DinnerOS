@@ -132,9 +132,12 @@ nonisolated struct CatalogRecipe: Decodable, Equatable, Sendable, Identifiable {
     let libraryRecipeID: String?
     /// Who took a photo picked from photo search.
     var imageCredit: PhotoCredit? = nil
+    /// True when a household shared it, so its cook can be hidden (decision 744).
+    var canHideCook: Bool? = nil
 
     var imageURL: URL? { imageURLString.flatMap { URL(string: $0) } }
     var sourceURL: URL? { sourceURLString.flatMap { URL(string: $0) } }
+    var hidesCook: Bool { canHideCook == true }
 
     var displayMinutes: Int? {
         RecipeFormat.displayMinutes(cook: cookMinutes, prep: prepMinutes, total: totalMinutes)
@@ -147,6 +150,7 @@ nonisolated struct CatalogRecipe: Decodable, Equatable, Sendable, Identifiable {
         case isAddon, servings, prepMinutes, totalMinutes, cookMinutes, cuisines, tags, allergens
         case ingredients, steps, inLibrary
         case libraryRecipeID = "libraryRecipeId"
+        case canHideCook
     }
 }
 

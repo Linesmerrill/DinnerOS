@@ -16,6 +16,7 @@ struct CatalogRecipeDetailView: View {
     @State private var isAdding = false
     @State private var addedRecipeID: String?
     @State private var isChoosingReason = false
+    @State private var isConfirmingHideCook = false
     @Environment(\.dismiss) private var dismiss
 
     private var canAdd: Bool {
@@ -51,10 +52,30 @@ struct CatalogRecipeDetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button("Report Recipe", systemImage: "flag") { isChoosingReason = true }
+                    // Only for a recipe a household shared: a meal kit's has no cook to hide.
+                    if recipe?.hidesCook == true {
+                        Button("Hide Recipes From This Cook", systemImage: "hand.raised") {
+                            isConfirmingHideCook = true
+                        }
+                    }
                 } label: {
                     Label("More", systemImage: "ellipsis.circle")
                 }
+                .accessibilityIdentifier("catalogRecipe.more")
             }
+        }
+        .confirmationDialog(
+            "Hide recipes from this cook?", isPresented: $isConfirmingHideCook, titleVisibility: .visible
+        ) {
+            Button("Hide Their Recipes", role: .destructive) {
+                Task {
+                    // The list shows the thank-you; this page goes away.
+                    if await discover.hideCook(id: route.id) { dismiss() }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You won't see anything they share in Shared Recipes.")
         }
         .confirmationDialog(
             "Why are you reporting this recipe?", isPresented: $isChoosingReason, titleVisibility: .visible

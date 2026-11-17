@@ -316,6 +316,11 @@ nonisolated struct PlusProduct: Hashable, Sendable {
     let displayPrice: String
     /// Whether the App Store still offers this person the free trial.
     let trialEligible: Bool
+    /// The free trial's length in days as set in App Store Connect, or nil when the
+    /// product has none or the App Store didn't say.
+    var trialDays: Int? = nil
+    /// True when it bills once a year, false once a month, nil when the App Store didn't say.
+    var billedYearly: Bool? = nil
 }
 
 /// What happened when someone tapped buy.
@@ -350,11 +355,27 @@ nonisolated enum PlusText {
         return String(localized: "You have DinnerOS Plus.")
     }
 
-    /// What the selected plan charges: "Free for 14 days, then $39.99 a year." with a trial.
+    /// What the selected plan charges: "Free for 14 days, then $39.99 a year. Renews until
+    /// you cancel." with a trial.
     static func chargeLine(_ plan: PlusPlan, product: PlusProduct?, trialDays: Int) -> String {
         let price = Self.price(plan, product: product)
         guard trialDays > 0 else { return String(localized: "\(price). Renews until you cancel.") }
-        return String(localized: "Free for \(trialDays) days, then \(price).")
+        return String(localized: "Free for \(trialDays) days, then \(price). Renews until you cancel.")
+    }
+
+    /// The free trial's length: the App Store's when it said, the API's otherwise. 0 when
+    /// this person can't have a trial.
+    static func trialDays(offerDays: Int, product: PlusProduct?) -> Int {
+        guard offerDays > 0, product?.trialEligible ?? true else { return 0 }
+        return product?.trialDays ?? offerDays
+    }
+
+    /// The buy button: the API's trial words, or the App Store's trial length when it
+    /// differs from what the API said.
+    static func buyTitle(_ offer: PlusOffer, product: PlusProduct?) -> String {
+        let days = trialDays(offerDays: offer.trialDays, product: product)
+        guard days > 0 else { return offer.buyText }
+        return days == offer.trialDays ? offer.trialText : String(localized: "Try it free for \(days) days")
     }
 
     /// "Nov 13, 2026".
@@ -377,7 +398,7 @@ nonisolated enum PlusText {
     /// The plan's price line: the App Store's price when known, the API's words otherwise.
     static func price(_ plan: PlusPlan, product: PlusProduct?) -> String {
         guard let product else { return plan.priceText }
-        if plan.productID.hasSuffix(".yearly") {
+        if product.billedYearly ?? plan.productID.hasSuffix(".yearly") {
             return String(localized: "\(product.displayPrice) a year")
         }
         return String(localized: "\(product.displayPrice) a month")

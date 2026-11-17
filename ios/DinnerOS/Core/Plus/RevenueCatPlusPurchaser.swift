@@ -59,12 +59,27 @@ nonisolated final class RevenueCatPlusPurchaser: PlusPurchasing, @unchecked Send
         var out: [PlusProduct] = []
         for product in found {
             let eligibility = await purchases.checkTrialOrIntroDiscountEligibility(product: product)
+            let trial = product.introductoryDiscount.flatMap {
+                $0.paymentMode == .freeTrial ? $0.subscriptionPeriod : nil
+            }
             out.append(
                 PlusProduct(
                     id: product.productIdentifier, displayPrice: product.localizedPriceString,
-                    trialEligible: eligibility == .eligible))
+                    trialEligible: eligibility == .eligible, trialDays: trial.map(Self.days),
+                    billedYearly: product.subscriptionPeriod.map { $0.unit == .year }))
         }
         return out
+    }
+
+    /// Days in a period, for the trial: a week is 7, a month 30, a year 365.
+    static func days(_ period: RevenueCat.SubscriptionPeriod) -> Int {
+        switch period.unit {
+        case .day: period.value
+        case .week: period.value * 7
+        case .month: period.value * 30
+        case .year: period.value * 365
+        @unknown default: period.value
+        }
     }
 
     func purchase(productID: String, householdID: String, userID: String?) async throws -> PlusPurchaseResult {
