@@ -34,6 +34,9 @@ struct RecipePageImportTests {
 
     /// A store page's scripts put the recipe on the page after it loads: the web view waits
     /// for it, rather than reading the empty page at once or sleeping a fixed time.
+    /// Waits for the recipe the page's script adds, and sends the page as soon as it shows,
+    /// not after the full wait. Judged by what the page held, not by the clock, so a busy
+    /// machine doesn't fail it.
     @Test @MainActor func theWebViewWaitsForTheRecipeToRender() async throws {
         let page = """
             <html><body><div id="root"></div><script>
@@ -42,15 +45,13 @@ struct RecipePageImportTests {
                 '<div itemscope itemtype="http://schema.org/Recipe"><h1>Quick Slaw Recipe</h1><ul>' +
                 '<li data-testid="RecipeDetail-ingredients">2 cups shredded cabbage</li></ul></div>';
             }, 1500);
+            setTimeout(() => { document.body.insertAdjacentHTML('beforeend', '<p>late-' + 'marker</p>'); }, 12000);
             </script></body></html>
             """
-        let start = ContinuousClock.now
         let html = try await WebPageReader.read(
             html: page, baseURL: try #require(URL(string: "https://shop.example.test/r/slaw")))
-        let waited = ContinuousClock.now - start
-        #expect(html.contains("RecipeDetail-ingredients"), "read the page before its recipe showed")
-        #expect(waited >= .seconds(1.4))
-        #expect(waited < .seconds(10), "kept waiting after the recipe showed")
+        #expect(html.contains("RecipeDetail-ingredients"), "read the page before its recipe showed: \(html.prefix(300))")
+        #expect(!html.contains("late-marker</p>"), "kept waiting after the recipe showed")
     }
 
     @Test @MainActor func theReadyCheckKnowsARecipeFromAnEmptyShell() async throws {
