@@ -108,6 +108,20 @@ struct DiscoverStoreTests {
         #expect(harness.server.requestedPaths.contains { $0.hasSuffix("/discover/home") })
     }
 
+    @Test func anEmptyRowIsNeverShownEvenAPaidOne() throws {
+        let json = Data(
+            #"""
+            {"sections":[
+              {"id":"pasta-week","title":"Pasta Week","type":"sponsored","sponsorLabel":"Sponsored by Test Pasta",
+               "items":[],"hasMore":false},
+              {"id":"quick","title":"Quick","type":"algorithmic","items":[\#(CatalogFixtures.summary(id: "c5", name: "Fast Bowl"))],
+               "hasMore":false}],
+             "filters":[]}
+            """#.utf8)
+        let home = try JSONCoding.makeDecoder().decode(DiscoverHome.self, from: json)
+        #expect(home.sections.map(\.id) == ["quick"])
+    }
+
     @Test func rowsThatFailKeepWhatWasShownAndFallBackToBuiltInChips() async throws {
         let harness = try await makeHarness()
         harness.server.failHome()

@@ -90,6 +90,9 @@ nonisolated struct PlusComp: Codable, Hashable, Sendable {
     /// What Plus includes, the purchase screen's list. Missing from an older API.
     var benefitsTitle: String? = nil
     var benefits: [String]? = nil
+
+    /// Given to a household that tested the beta (`cmd/compbeta`), not to a QA or other comp.
+    var isBeta: Bool { reason == "beta" }
 }
 
 /// The purchase screen's words, from the API so they change without an app update.

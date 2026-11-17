@@ -151,7 +151,7 @@ var privacyPage = template.Must(template.New("privacy").Parse(`<!doctype html>
 <p>We don't sell, rent, or share your data with anyone else, except if required by law.</p>
 
 <h2>Deleting your data</h2>
-<p>In the app, go to <strong>Household → Delete Account</strong>. This deletes your account, sign-ins, sessions, device tokens, and your ratings right away. Households where you were the only member are deleted with everything in them. Households you share stay with the other members (if you were the only admin, the longest-standing member becomes admin), and activity you recorded there no longer names you.</p>
+<p>In the app, go to <strong>Household → Account → Delete Account</strong>. This deletes your account, sign-ins, sessions, device tokens, and your ratings right away. Households where you were the only member are deleted with everything in them. Households you share stay with the other members (if you were the only admin, the longest-standing member becomes admin), and activity you recorded there no longer names you.</p>
 <p>You can also email <a href="mailto:{{.ContactEmail}}">{{.ContactEmail}}</a> to ask for a copy or deletion of your data. Deleted data can remain in database backups until those backups expire.</p>
 
 <h2>Children</h2>

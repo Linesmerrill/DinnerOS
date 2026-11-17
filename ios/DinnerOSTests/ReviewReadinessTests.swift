@@ -15,14 +15,24 @@ struct ReviewReadinessTests {
 
     @Test func theAppStoreHidesBetaFeedback() {
         let store = BuildChannel.from(environment: .production, receiptName: "receipt", debug: false)
-        #expect(store == .appStore && !store.showsBetaFeedback)
+        #expect(store == .appStore && !store.showsBetaFeedback(testedTheBeta: true))
     }
 
     @Test func testFlightAndXcodeShowBetaFeedback() {
         #expect(BuildChannel.from(environment: .sandbox, receiptName: "sandboxReceipt", debug: false) == .testFlight)
         #expect(BuildChannel.from(environment: .xcode, receiptName: nil, debug: false) == .development)
         #expect(BuildChannel.from(environment: .production, receiptName: "receipt", debug: true) == .development)
-        #expect(BuildChannel.testFlight.showsBetaFeedback && BuildChannel.development.showsBetaFeedback)
+        #expect(BuildChannel.testFlight.showsBetaFeedback(testedTheBeta: true))
+        #expect(BuildChannel.development.showsBetaFeedback(testedTheBeta: false))
+    }
+
+    /// App Review installs the same sandbox build TestFlight does, so a sandbox build shows the
+    /// TestFlight steps only to a household with the beta comp, never to a new account.
+    @Test func aSandboxBuildHidesBetaFeedbackFromANewAccount() throws {
+        #expect(!BuildChannel.testFlight.showsBetaFeedback(testedTheBeta: false))
+        let beta = PlusComp(reason: "beta", since: .now, thanksTitle: "", thanksText: "")
+        let qa = PlusComp(reason: "qa", since: .now, thanksTitle: "", thanksText: "")
+        #expect(beta.isBeta && !qa.isBeta)
     }
 
     @Test func withoutStoreKitTheReceiptDecidesAndUnknownMeansTheAppStore() {
