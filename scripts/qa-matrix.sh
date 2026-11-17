@@ -20,7 +20,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-${TMPDIR:-/tmp}/dinneros-qa}
 ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-light ipadP-dark"
 CONFIGS=${CONFIGS:-$ALL}
-TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests"}
+TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests"}
 STALL=${STALL:-600}
 # RERUN: a summary.txt from an earlier run. Only its FAILED config and test pairs run again.
 RERUN=${RERUN:-}
@@ -154,6 +154,11 @@ run_config() {
         CompanionQATests | CuisineQATests) case $config in small-light | ipadL-dark) ;; *) continue ;; esac ;;
         NextStepDotQATests) case $config in large-dark | ipadP-light) ;; *) continue ;; esac ;;
         ReportRecipeQATests) case $config in small-dark | ipadL-light) ;; *) continue ;; esac ;;
+        # Pre-submission checks (decisions 741, 749): the review path on one iPhone and one iPad,
+        # account deletion and denied permissions once each, on configs with time to spare.
+        ReviewPathQATests) case $config in large-light | ipadP-dark) ;; *) continue ;; esac ;;
+        AccountDeletionQATests) [ "$config" = large-dark ] || continue ;;
+        PermissionsDeniedQATests) [ "$config" = small-light ] || continue ;;
         esac
         run_test "$config" "$id" "$test" 1
     done
