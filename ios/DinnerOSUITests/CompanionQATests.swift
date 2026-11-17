@@ -163,6 +163,18 @@ private struct CompanionSeed {
         let recipeID = try XCTUnwrap(recipe["id"] as? String)
         let week = nextWeek(
             timeZone: household["timeZone"] as? String, weekStartsOn: household["weekStartsOn"] as? String)
+        // The shared test household's next week fills up over many runs (other tests plan there
+        // too) and a week holds at most 50 dinners: make room by taking off the oldest.
+        if let current = try? await call(api, "GET", "households/\(householdID)/plans/\(week)", token: token) {
+            let entries = ((current["plan"] as? [String: Any]) ?? current)["entries"] as? [[String: Any]] ?? []
+            if entries.count > 40 {
+                let oldest = entries.sorted { ($0["addedAt"] as? String ?? "") < ($1["addedAt"] as? String ?? "") }
+                for entry in oldest.prefix(entries.count - 40) {
+                    guard let id = entry["id"] as? String else { continue }
+                    _ = try? await call(api, "DELETE", "households/\(householdID)/plans/\(week)/entries/\(id)", token: token)
+                }
+            }
+        }
         let plan = try await call(
             api, "POST", "households/\(householdID)/plans/\(week)/entries", token: token,
             body: ["recipeId": recipeID, "day": NSNull(), "servings": 2])
@@ -174,6 +186,10 @@ private struct CompanionSeed {
 
     /// Takes the seeded dinner off the week and deletes it, so the shared household stays small.
     func cleanUp() async throws {
+        if !entryID.isEmpty {
+            _ = try? await Self.call(
+                api, "DELETE", "households/\(householdID)/plans/\(week)/entries/\(entryID)", token: token)
+        }
         _ = try? await Self.call(api, "DELETE", "households/\(householdID)/recipes/\(recipeID)", token: token)
     }
 
