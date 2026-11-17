@@ -50,7 +50,9 @@ struct RecipePageImportTests {
             """
         let html = try await WebPageReader.read(
             html: page, baseURL: try #require(URL(string: "https://shop.example.test/r/slaw")))
-        #expect(html.contains("RecipeDetail-ingredients"), "read the page before its recipe showed: \(html.prefix(300))")
+        #expect(
+            html.contains("RecipeDetail-ingredients"),
+            "read the page before its recipe showed: \(html.prefix(300))")
         #expect(!html.contains("late-marker</p>"), "kept waiting after the recipe showed")
     }
 
