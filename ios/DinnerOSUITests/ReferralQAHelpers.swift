@@ -91,6 +91,13 @@ extension XCTestCase {
         let add = app.buttons["Add a Recipe"].firstMatch
         if !add.exists || !add.isHittable { app.buttons["Week Menu"].tap() }
         app.buttons["Add a Recipe"].firstMatch.tap()
+        // The choices, then Import From a Website, which also takes pasted text.
+        let importChoice = app.buttons["AddChoice-import"]
+        XCTAssertTrue(importChoice.waitForExistence(timeout: 5), "Add a Recipe didn't show its choices")
+        importChoice.tap()
+        let pasteText = app.buttons["Paste Text"].firstMatch
+        XCTAssertTrue(pasteText.waitForExistence(timeout: 5), "Import has no Paste Text")
+        pasteText.tap()
         let text = app.textViews.firstMatch
         XCTAssertTrue(text.waitForExistence(timeout: 5))
         text.tap()

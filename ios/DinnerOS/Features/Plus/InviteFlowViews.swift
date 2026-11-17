@@ -264,7 +264,7 @@ struct InviteCodeSetupSection: View {
                         Text(saved.title ?? String(localized: "Your invite code is saved"))
                             .font(.headline)
                         Text(
-                            "Create your household next. Then save a few recipes and plan a dinner, and you both get a free month of Plus."
+                            "Create your household next. Then add a recipe and plan a dinner, and you both get a free month of Plus."
                         )
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -330,8 +330,9 @@ struct InviteCodeSetupSection: View {
 
 // MARK: - The checklist
 
-/// "Create your household", "Save 3 recipes", "Plan a dinner": a check that fills in as each
-/// is done, and a button that goes to where you do it. `onGo` runs first, to close a sheet.
+/// "Create your household", "Add a recipe: ...", "Plan a dinner": a check that fills in as
+/// each is done, and a button that goes to where you do it. Tapping the row does the same.
+/// `onGo` runs first, to close a sheet.
 struct ReferralChecklist: View {
     let progress: ReferralProgress
     var onGo: (() -> Void)?
@@ -356,7 +357,7 @@ struct ReferralChecklist: View {
                     }
                 }
                 Spacer(minLength: 8)
-                if !step.done, progress.isPending, let tabs, let label = Self.goLabel(step.id) {
+                if canGo(step), let tabs, let label = Self.goLabel(step.id) {
                     Button(label) { go(step.id, tabs: tabs) }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -364,6 +365,11 @@ struct ReferralChecklist: View {
                 }
             }
             .padding(.vertical, 2)
+            .contentShape(.rect)
+            .onTapGesture {
+                guard canGo(step), let tabs else { return }
+                go(step.id, tabs: tabs)
+            }
             .accessibilityElement(children: .contain)
             .accessibilityLabel(Text(step.title))
             .accessibilityValue(step.done ? Text("Done") : Text("Not done yet"))
@@ -371,9 +377,13 @@ struct ReferralChecklist: View {
         }
     }
 
+    private func canGo(_ step: ReferralProgress.Step) -> Bool {
+        !step.done && progress.isPending && Self.goLabel(step.id) != nil
+    }
+
     static func goLabel(_ id: String) -> String? {
         switch id {
-        case "recipes": String(localized: "Find Recipes")
+        case "recipes": String(localized: "Add a Recipe")
         case "dinner": String(localized: "Plan a Dinner")
         default: nil
         }
@@ -383,8 +393,10 @@ struct ReferralChecklist: View {
         onGo?()
         switch id {
         case "recipes":
+            // The Add a Recipe choices, which include Shared Recipes (decision 706).
             tabs.selection = .menu
-            tabs.menuPath = NavigationPath([DiscoverRoute()])
+            tabs.menuPath = NavigationPath()
+            tabs.addRecipeRequested = true
         case "dinner":
             tabs.selection = .menu
             tabs.menuPath = NavigationPath()
@@ -424,10 +436,19 @@ struct ReferralChecklistSheet: View {
     @Environment(PlusStore.self) private var plus
     @Environment(\.dismiss) private var dismiss
 
+    private var progress: ReferralProgress? {
+        plus.pendingReferral ?? plus.status?.referralProgress
+    }
+
     var body: some View {
         NavigationStack {
             List {
-                if let progress = plus.pendingReferral ?? plus.status?.referralProgress {
+                if let progress {
+                    if progress.isPending {
+                        Section {
+                            PlusExplainer(progress: progress)
+                        }
+                    }
                     Section {
                         ReferralChecklistHeader(progress: progress)
                     }
@@ -445,7 +466,13 @@ struct ReferralChecklistSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    // While there's still something to do, closing it is putting it off.
+                    if progress?.isPending == true {
+                        Button("Not Now") { dismiss() }
+                            .accessibilityIdentifier("ChecklistNotNow")
+                    } else {
+                        Button("Done") { dismiss() }
+                    }
                 }
             }
             .task { await plus.reload() }
@@ -459,11 +486,21 @@ struct ReferralChecklistSection: View {
     let progress: ReferralProgress
 
     var body: some View {
+        // What Plus is goes in its own section, so the checklist's identifier doesn't cover it.
+        if progress.isPending {
+            Section {
+                PlusExplainer(progress: progress)
+            } header: {
+                Text("Your Free Month")
+            }
+        }
         Section {
             ReferralChecklistHeader(progress: progress)
             ReferralChecklist(progress: progress)
         } header: {
-            Text("Your Free Month")
+            if !progress.isPending {
+                Text("Your Free Month")
+            }
         }
         .accessibilityIdentifier("ReferralProgress")
     }

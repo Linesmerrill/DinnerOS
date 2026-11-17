@@ -35,7 +35,7 @@ func TestInvitePreviewRoute(t *testing.T) {
 		p.Message != "You both get a free month of Plus once you're set up." || p.Code != info.Code {
 		t.Fatalf("preview = %d %s", rec.Code, rec.Body.String())
 	}
-	if strings.Join(p.Steps, "|") != "Create your household|Save 3 recipes|Plan a dinner" {
+	if strings.Join(p.Steps, "|") != "Create your household|Add a recipe|Plan a dinner" {
 		t.Errorf("steps = %q", p.Steps)
 	}
 	if p.ForExisting.Title != "This code is for new households" || p.ForOwn.Title != "That's your own code" ||

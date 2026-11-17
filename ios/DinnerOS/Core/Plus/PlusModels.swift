@@ -33,7 +33,7 @@ nonisolated struct PlusStatus: Codable, Hashable, Sendable {
 nonisolated struct ReferralProgress: Codable, Hashable, Sendable {
     /// "pending", "qualified" or "expired".
     let state: String
-    /// "Plan a dinner and save 3 recipes to unlock your free month".
+    /// "Add a recipe and plan a dinner to unlock your free month".
     let message: String
     let steps: [Step]
     /// When a pending invite stops counting. Gone once setup is done.
@@ -42,8 +42,30 @@ nonisolated struct ReferralProgress: Codable, Hashable, Sendable {
     var summary: String? = nil
     /// "14 days left", while `expiresAt` is set.
     var timeLeft: String? = nil
+    /// "What is DinnerOS Plus?" and a few lines under it, at the top of the checklist
+    /// (decision 708). Missing from an older API.
+    var plusTitle: String? = nil
+    var plusLines: [String]? = nil
 
     var isPending: Bool { state == "pending" }
+
+    /// The explainer's title, or the bundled one for an API that doesn't send it.
+    var explainerTitle: String {
+        if let plusTitle, !plusTitle.isEmpty { return plusTitle }
+        return String(localized: "What is DinnerOS Plus?")
+    }
+
+    /// The explainer's lines, or the bundled ones for an API that doesn't send them.
+    var explainerLines: [String] {
+        if let plusLines, !plusLines.isEmpty { return plusLines }
+        return Self.bundledPlusLines
+    }
+
+    static let bundledPlusLines = [
+        String(localized: "Plus plans your week for you."),
+        String(localized: "Autopilot picks dinners your household will like and fits them to your busy nights."),
+        String(localized: "You also see what each week costs and what you saved."),
+    ]
 
     /// The Menu card's line, worked out here for an API that doesn't send one.
     var summaryText: String {

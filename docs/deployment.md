@@ -193,7 +193,7 @@ schedule).
   device token payload` means the key is accepted; `401` or `403` means it
   isn't.
 - **Thresholds.** `REFERRAL_QUALIFY_DAYS` (14), `REFERRAL_MIN_DINNERS` (1),
-  `REFERRAL_MIN_RECIPES` (3), and `REFERRAL_MAX_PER_30_DAYS` (3). The app's
+  `REFERRAL_MIN_RECIPES` (1), and `REFERRAL_MAX_PER_30_DAYS` (3). The app's
   words follow them.
 
 ### Removed: meal-kit recipe import
@@ -435,7 +435,7 @@ vars or GitHub Secrets.
 | `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_AUTH_KEY` | push | ✅ Set. developer.apple.com → Certificates, Identifiers & Profiles → **Keys** → a key with **Apple Push Notifications service (APNs)** enabled (one key serves sandbox and production). `APNS_KEY_ID` is its 10-character key ID, `APNS_TEAM_ID` is `6VTPDG2HNK`, and `APNS_AUTH_KEY` is the **entire** downloaded `AuthKey_XXXX.p8`, BEGIN and END lines included (literal `\n` escapes are accepted too). Apple allows downloading it once; store it only here. Set all three or none: none makes push a logged no-op, a partial or unparseable set stops the API and the sweep at startup. Read only by `/sendreminders`. See [Push notifications](#push-notifications). |
 | `APNS_TOPIC` | push | Optional; defaults to `APPLE_BUNDLE_ID` (`com.linesmerrill.dinneros`). |
 | `DEVICECHECK_KEY_ID`, `DEVICECHECK_TEAM_ID`, `DEVICECHECK_PRIVATE_KEY` | referrals | Optional; each defaults to its `APNS_*` value, so the APNs key is used. The key must have DeviceCheck enabled. The private key is a **secret** (the whole `.p8`). Set all three (after defaults) or none: a partial or unparseable set stops the API at startup. Read by the web dyno. Check with `/devicecheckprobe`. See [Referrals and DeviceCheck](#referrals-and-devicecheck). |
-| `REFERRAL_QUALIFY_DAYS`, `REFERRAL_MIN_DINNERS`, `REFERRAL_MIN_RECIPES`, `REFERRAL_MAX_PER_30_DAYS` | optional | Referral thresholds, defaults 14, 1, 3, and 3. Not secrets. |
+| `REFERRAL_QUALIFY_DAYS`, `REFERRAL_MIN_DINNERS`, `REFERRAL_MIN_RECIPES`, `REFERRAL_MAX_PER_30_DAYS` | optional | Referral thresholds, defaults 14, 1, 1, and 3. Not secrets. |
 | `STARTER_RECIPES_HOUSEHOLD_ID` | optional | The 24-character hex ID of the household whose recipes every new household receives as a starter library. Empty (the default) disables it; a malformed value stops the API at startup. Not a secret. See [Starter recipe library](#starter-recipe-library). |
 | `OPENAI_API_KEY` | future | platform.openai.com → API keys (backend only) |
 

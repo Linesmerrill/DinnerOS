@@ -3,6 +3,7 @@ package plus
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -18,12 +19,33 @@ func (r ReferralRules) dinnerPhrase() string {
 	return fmt.Sprintf("plan %d dinners", r.MinDinners)
 }
 
-// recipePhrase is "save a recipe" or "save 3 recipes".
+// recipePhrase is "add a recipe" or "add 3 recipes".
 func (r ReferralRules) recipePhrase() string {
 	if r.MinRecipes == 1 {
-		return "save a recipe"
+		return "add a recipe"
 	}
-	return fmt.Sprintf("save %d recipes", r.MinRecipes)
+	return fmt.Sprintf("add %d recipes", r.MinRecipes)
+}
+
+// recipeStep is the checklist's recipe step, which says the ways to add one
+// (decision 706).
+func (r ReferralRules) recipeStep() string {
+	if r.MinRecipes == 1 {
+		return "Add a recipe: write your own, import one from a website, or pick one from Shared Recipes."
+	}
+	return fmt.Sprintf("Add %d recipes: write your own, import them from a website, or pick them from Shared Recipes.", r.MinRecipes)
+}
+
+// PlusExplainerTitle and PlusExplainerLines say what Plus is, at the top of
+// the free month checklist (decision 708). They name what Plus really does:
+// Autopilot plans the week, and each week's grocery cost and savings.
+const PlusExplainerTitle = "What is DinnerOS Plus?"
+
+// PlusExplainerLines are the lines under PlusExplainerTitle.
+var PlusExplainerLines = []string{
+	"Plus plans your week for you.",
+	"Autopilot picks dinners your household will like and fits them to your busy nights.",
+	"You also see what each week costs and what you saved.",
 }
 
 func capitalize(s string) string {
@@ -72,6 +94,9 @@ type Progress struct {
 	// TimeLeft is "14 days left" while ExpiresAt is set; set by the service,
 	// which knows the time.
 	TimeLeft string
+	// PlusTitle and PlusLines say what Plus is, above the steps.
+	PlusTitle string
+	PlusLines []string
 }
 
 // ProgressStep is one thing the household does for its free month.
@@ -122,7 +147,7 @@ func (r ReferralRules) ProgressFor(ref Referral, setup Setup) Progress {
 	// that step is always done.
 	steps := []ProgressStep{
 		{ID: "household", Title: StepHousehold, Done: true, Count: 1, Target: 1},
-		{ID: "recipes", Title: capitalize(r.recipePhrase()), Done: met || setup.Recipes >= r.MinRecipes,
+		{ID: "recipes", Title: r.recipeStep(), Done: met || setup.Recipes >= r.MinRecipes,
 			Count: min(setup.Recipes, r.MinRecipes), Target: r.MinRecipes},
 		{ID: "dinner", Title: capitalize(r.dinnerPhrase()), Done: met || setup.Dinners >= r.MinDinners,
 			Count: min(setup.Dinners, r.MinDinners), Target: r.MinDinners},
@@ -139,7 +164,11 @@ func (r ReferralRules) ProgressFor(ref Referral, setup Setup) Progress {
 		}
 	}
 	p := Progress{State: publicState(ref.State), Steps: steps,
-		Summary: fmt.Sprintf("Free month: %d of %d done", done, len(steps))}
+		Summary:   fmt.Sprintf("Free month: %d of %d done", done, len(steps)),
+		PlusTitle: PlusExplainerTitle, PlusLines: slices.Clone(PlusExplainerLines)}
+	// The message names what's left in a few words; the recipe step's
+	// title is longer, so it isn't used here.
+	phrases := map[string]string{"recipes": r.recipePhrase(), "dinner": r.dinnerPhrase()}
 	switch ref.State {
 	case StateQualified:
 		p.Message = ProgressQualified
@@ -148,7 +177,12 @@ func (r ReferralRules) ProgressFor(ref Referral, setup Setup) Progress {
 	default:
 		var left []string
 		for _, st := range steps {
-			if !st.Done {
+			if st.Done {
+				continue
+			}
+			if phrase, ok := phrases[st.ID]; ok {
+				left = append(left, phrase)
+			} else {
 				left = append(left, strings.ToLower(st.Title[:1])+st.Title[1:])
 			}
 		}
@@ -229,6 +263,8 @@ func (r ReferralRules) InviteDetail(item InviteItem) (state, detail string) {
 		needs = append(needs, fmt.Sprintf("%d more dinners planned", d))
 	}
 	switch n := r.MinRecipes - item.Setup.Recipes; {
+	case n == 1 && item.Setup.Recipes == 0:
+		needs = append(needs, "a recipe")
 	case n == 1:
 		needs = append(needs, "1 more recipe")
 	case n > 1:

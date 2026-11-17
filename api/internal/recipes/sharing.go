@@ -246,6 +246,11 @@ func (s *Service) Share(ctx context.Context, householdID, recipeID string, share
 // added it here or imported it itself, gets its existing one back untouched,
 // with its ratings and order history intact.
 //
+// A new copy tells the save listener, so a recipe picked from Shared Recipes
+// counts toward a referral's setup (decision 707). Getting an existing or
+// deleted copy back does not, so adding the same recipe again never counts
+// twice.
+//
 // content must be household-free (catalog.Content). Callers authorize first:
 // the HTTP route requires households.PermRecipesEdit.
 func (s *Service) AddFromCatalog(ctx context.Context, householdID string, content Recipe) (Recipe, bool, error) {
@@ -271,7 +276,9 @@ func (s *Service) AddFromCatalog(ctx context.Context, householdID string, conten
 	r.OrderWeeks, r.TimesOrdered, r.LastOrderedWeek = nil, 0, ""
 	r.SharedToCatalog = false
 	r.CreatedAt, r.UpdatedAt = now, now
-	if err := s.store.SaveRecipes(ctx, householdID, []Recipe{r}); err != nil {
+	err := s.store.SaveRecipes(ctx, householdID, []Recipe{r})
+	fresh := err == nil
+	if err != nil {
 		// The unique {householdId, source, sourceRecipeId} index is the last
 		// word when two members add the same recipe at once.
 		if !errors.Is(err, ErrDuplicate) {
@@ -289,6 +296,9 @@ func (s *Service) AddFromCatalog(ctx context.Context, householdID string, conten
 	}
 	if stored.ID == "" {
 		return Recipe{}, false, fmt.Errorf("recipes: added recipe %q is missing after the write", key)
+	}
+	if s.saved != nil && fresh {
+		s.saved.RecipesSaved(ctx, householdID, 1)
 	}
 	return stored, true, nil
 }

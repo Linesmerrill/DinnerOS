@@ -2963,8 +2963,9 @@ paying household's month starts when its paid time ends), only when:
   another household first (Apple DeviceCheck);
 - the two households never shared a member, now or before;
 - within `REFERRAL_QUALIFY_DAYS` (14) of the code, it planned
-  `REFERRAL_MIN_DINNERS` (1) dinners and saved `REFERRAL_MIN_RECIPES` (3)
-  recipes it imported or typed (not the starter library or Shared Recipes);
+  `REFERRAL_MIN_DINNERS` (1) dinners and added `REFERRAL_MIN_RECIPES` (1)
+  recipes it imported, typed, or picked from Shared Recipes (not the starter
+  library; getting back a copy it already had doesn't count again);
 - the sharer had fewer than `REFERRAL_MAX_PER_30_DAYS` (3) referrals qualify
   in the last 30 days. One over waits, shown as pending, past its 14 days,
   until a slot frees.
@@ -2994,17 +2995,28 @@ carry `referralProgress` for a household that entered a code:
 ```json
 {
   "state": "pending",
-  "message": "Save 3 recipes and plan a dinner to unlock your free month",
+  "message": "Add a recipe and plan a dinner to unlock your free month",
   "steps": [
     {"id": "household", "title": "Create your household", "done": true, "count": 1, "target": 1},
-    {"id": "recipes", "title": "Save 3 recipes", "done": false, "count": 1, "target": 3},
+    {"id": "recipes", "title": "Add a recipe: write your own, import one from a website, or pick one from Shared Recipes.", "done": false, "count": 0, "target": 1},
     {"id": "dinner", "title": "Plan a dinner", "done": false, "count": 0, "target": 1}
   ],
   "expiresAt": "2026-11-27T12:00:00Z",
   "summary": "Free month: 1 of 3 done",
-  "timeLeft": "14 days left"
+  "timeLeft": "14 days left",
+  "plusTitle": "What is DinnerOS Plus?",
+  "plusLines": [
+    "Plus plans your week for you.",
+    "Autopilot picks dinners your household will like and fits them to your busy nights.",
+    "You also see what each week costs and what you saved."
+  ]
 }
 ```
+
+`plusTitle` and `plusLines` say what Plus is; the app shows them at the top of
+the checklist, with a bundled copy for older servers (decision 708). With
+`REFERRAL_MIN_RECIPES` above 1 the recipe step reads "Add 3 recipes: write your
+own, import them from a website, or pick them from Shared Recipes."
 
 `state` is `pending`, `qualified`, or `expired`. Steps come in the order a new
 household does them; `household` is always done, since a code needs a
@@ -3026,7 +3038,7 @@ account. It is rate limited by address.
   "householdName": "Lines",
   "title": "Lines invited you to DinnerOS",
   "message": "You both get a free month of Plus once you're set up.",
-  "steps": ["Create your household", "Save 3 recipes", "Plan a dinner"],
+  "steps": ["Create your household", "Add a recipe", "Plan a dinner"],
   "forExisting": {"title": "This code is for new households", "message": "..."},
   "forOwn": {"title": "That's your own code", "message": "..."}
 }

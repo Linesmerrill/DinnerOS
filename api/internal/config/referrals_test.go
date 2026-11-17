@@ -10,7 +10,7 @@ import (
 
 func TestLoadReferrals(t *testing.T) {
 	cfg, err := Load(env(nil))
-	if err != nil || cfg.Referrals != (Referrals{QualifyDays: 14, MinDinners: 1, MinRecipes: 3, MaxPer30Days: 3}) || cfg.DeviceCheck.Enabled() {
+	if err != nil || cfg.Referrals != (Referrals{QualifyDays: 14, MinDinners: 1, MinRecipes: 1, MaxPer30Days: 3}) || cfg.DeviceCheck.Enabled() {
 		t.Fatalf("defaults = %+v %v, %v", cfg.Referrals, cfg.DeviceCheck.Enabled(), err)
 	}
 	cfg, err = Load(env(map[string]string{

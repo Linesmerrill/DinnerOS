@@ -11,14 +11,23 @@ import SwiftUI
 struct GetStartedSection: View {
     /// Where "don't show me this again" is remembered. Injectable so tests needn't touch
     /// the device's own defaults.
-    var dismissals: any FirstRunDismissalStorage = UserDefaultsFirstRunDismissals()
+    var dismissals: any FirstRunDismissalStorage
+    /// Opens the Add a Recipe choices, which the Menu holds. Without one there's no button.
+    var onAddOwnRecipe: (() -> Void)?
 
     @Environment(RecipeLibrary.self) private var library
     @Environment(HouseholdStore.self) private var households
     @Environment(AuthSession.self) private var session
 
     @State private var isDismissed = false
-    @State private var isAddingOwnRecipe = false
+
+    init(
+        dismissals: any FirstRunDismissalStorage = UserDefaultsFirstRunDismissals(),
+        onAddOwnRecipe: (() -> Void)? = nil
+    ) {
+        self.dismissals = dismissals
+        self.onAddOwnRecipe = onAddOwnRecipe
+    }
 
     private var householdID: String? { households.current?.household.id }
     private var userID: String? { session.currentUser?.id }
@@ -43,9 +52,6 @@ struct GetStartedSection: View {
         .onChange(of: DismissalKey(userID: userID, householdID: householdID), initial: true) { _, key in
             guard let userID = key.userID, let householdID = key.householdID else { return }
             isDismissed = dismissals.isDismissed(userID: userID, householdID: householdID)
-        }
-        .sheet(isPresented: $isAddingOwnRecipe) {
-            AddRecipeView()
         }
     }
 
@@ -90,11 +96,11 @@ struct GetStartedSection: View {
             NavigationLink(value: DiscoverRoute()) {
                 Label(SharedRecipes.title, systemImage: SharedRecipes.systemImage)
             }
-            if canAddOwnRecipe {
+            if canAddOwnRecipe, let onAddOwnRecipe {
                 Button {
-                    isAddingOwnRecipe = true
+                    onAddOwnRecipe()
                 } label: {
-                    Label("Add a Recipe Yourself", systemImage: "square.and.pencil")
+                    Label("Add a Recipe", systemImage: "square.and.pencil")
                 }
             }
         }
@@ -127,7 +133,7 @@ private func getStartedPreview(canEdit: Bool = true) -> some View {
     ]
     return NavigationStack {
         ScrollView {
-            GetStartedSection(dismissals: InMemoryFirstRunDismissals())
+            GetStartedSection(dismissals: InMemoryFirstRunDismissals(), onAddOwnRecipe: {})
                 .padding(.horizontal, 16)
         }
     }

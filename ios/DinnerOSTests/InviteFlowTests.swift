@@ -198,8 +198,55 @@ struct InviteFlowTests {
     }
 
     @Test func checklistButtonsNameWhereTheyGo() {
-        #expect(ReferralChecklist.goLabel("recipes") == "Find Recipes")
+        #expect(ReferralChecklist.goLabel("recipes") == "Add a Recipe")
         #expect(ReferralChecklist.goLabel("dinner") == "Plan a Dinner")
         #expect(ReferralChecklist.goLabel("household") == nil)
+    }
+
+    /// The checklist says what Plus is, in the server's words (decision 708).
+    @Test func theServerSaysWhatPlusIs() throws {
+        let json = #"""
+            {"state":"pending","message":"Add a recipe and plan a dinner to unlock your free month",
+             "steps":[{"id":"recipes","title":"Add a recipe: write your own, import one from a website, or pick one from Shared Recipes.","done":false,"count":0,"target":1}],
+             "plusTitle":"What is Plus?","plusLines":["One.","Two."]}
+            """#
+        let progress = try JSONCoding.makeDecoder().decode(ReferralProgress.self, from: Data(json.utf8))
+        #expect(progress.explainerTitle == "What is Plus?")
+        #expect(progress.explainerLines == ["One.", "Two."])
+    }
+
+    /// An older API sends no explainer; the app has its own.
+    @Test func anOlderAPIStillGetsThePlusExplainer() throws {
+        let json = #"{"state":"pending","message":"m","steps":[],"plusLines":[]}"#
+        let progress = try JSONCoding.makeDecoder().decode(ReferralProgress.self, from: Data(json.utf8))
+        #expect(progress.explainerTitle == "What is DinnerOS Plus?")
+        #expect(progress.explainerLines == ReferralProgress.bundledPlusLines)
+        #expect(progress.explainerLines.count == 3)
+        #expect(progress.explainerLines.joined(separator: " ").contains("Autopilot"))
+        #expect(!progress.explainerLines.joined().contains("\u{2014}"))
+    }
+}
+
+/// The Add a Recipe choices (decision 709).
+@MainActor
+struct AddRecipeChoiceTests {
+    @Test func theFourChoicesComeInOrderWithTheirIdentifiers() {
+        #expect(
+            AddRecipeChoice.allCases.map(\.title) == [
+                "Write Your Own", "Import From a Website", "Browse Shared Recipes", "Add a Companion",
+            ])
+        #expect(
+            AddRecipeChoice.allCases.map(\.accessibilityID) == [
+                "AddChoice-write", "AddChoice-import", "AddChoice-shared", "AddChoice-companion",
+            ])
+    }
+
+    @Test func everyChoiceHasAShortPlainSubtitle() {
+        for choice in AddRecipeChoice.allCases {
+            #expect(!choice.subtitle.isEmpty)
+            #expect(choice.subtitle.count < 70, "\(choice) subtitle is long")
+            #expect(choice.subtitle.hasSuffix("."))
+            #expect(!choice.subtitle.contains("\u{2014}"))
+        }
     }
 }
