@@ -348,8 +348,11 @@ func (c Companion) Summary(cuisineLabel func(string) string) string {
 		with = append(with, mealCategoryWords(m))
 	}
 	var parts []string
-	if len(with) > 0 {
+	switch {
+	case len(with) > 0:
 		parts = append(parts, "Goes with "+joinAnd(with))
+	case c.Frequency == FrequencyNone:
+		parts = append(parts, "Not paired with anything yet")
 	}
 	if c.Frequency != FrequencyNone {
 		parts = append(parts, sentenceCase(label(FrequencyOptions, c.Frequency)))

@@ -115,6 +115,17 @@ func (s *Service) ForEvaluation(ctx context.Context, householdID string, catalog
 	for i := range list {
 		freshNames(&list[i], names)
 	}
+	// The household's own first, so a new one isn't lost under a long
+	// list of add-ons; each group stays oldest first.
+	slices.SortStableFunc(list, func(a, b Companion) int {
+		switch {
+		case a.Migrated() == b.Migrated():
+			return 0
+		case b.Migrated():
+			return -1
+		}
+		return 1
+	})
 	return list, nil
 }
 

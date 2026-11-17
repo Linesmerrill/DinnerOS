@@ -276,6 +276,7 @@ func TestSummary(t *testing.T) {
 			"Goes with Mexican, Tex Mex, and Beef Tacos · Every week · Added for you"},
 		{Companion{MealCategories: []string{"pasta"}, Frequency: EveryMonth, Mode: ModeNever}, "Goes with pasta meals · Once a month · Turned off"},
 		{Companion{Frequency: Every2Weeks, Mode: ModeSuggest}, "Every 2 weeks · Suggested"},
+		{Companion{Frequency: FrequencyNone, Mode: ModeSuggest}, "Not paired with anything yet · Suggested"},
 	} {
 		if got := tt.c.Summary(label); got != tt.want {
 			t.Errorf("Summary = %q, want %q", got, tt.want)
@@ -452,8 +453,8 @@ func TestHandler(t *testing.T) {
 	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &list) != nil {
 		t.Fatalf("GET = %d %s", rec.Code, rec.Body)
 	}
-	// The hand-made one plus the two add-ons, made on first read.
-	if len(list.Items) != 3 || len(list.Frequencies) != 4 || list.Modes[1].Label != "Just Suggest It" ||
+	// The hand-made one first, then the two add-ons, made on first read.
+	if len(list.Items) != 3 || list.Items[0].ID != created.ID || list.Items[1].LinkedRecipe == nil || len(list.Frequencies) != 4 || list.Modes[1].Label != "Just Suggest It" ||
 		list.Frequencies[3].Label != "Only With Meals It Goes With" {
 		t.Errorf("list = %s", rec.Body)
 	}
