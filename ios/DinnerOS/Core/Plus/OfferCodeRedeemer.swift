@@ -39,18 +39,11 @@ final class StoreKitOfferCodeRedeemer: OfferCodeRedeeming {
 
     func presentRedeemSheet() async throws -> OfferCodeSheetResult {
         guard let scene = Self.activeScene() else { throw OfferCodeRedeemError.noWindow }
-        if #available(iOS 27.0, *) {
-            guard let presenter = Self.topViewController(in: scene) else { throw OfferCodeRedeemError.noWindow }
-            do {
-                _ = try await AppStore.presentOfferCodeRedeemSheet(from: presenter)
-                return .redeemed
-            } catch StoreKitError.userCancelled {
-                return .closed
-            }
-        } else {
-            try await AppStore.presentOfferCodeRedeemSheet(in: scene)
-            return .closed
-        }
+        // The scene form builds with every Xcode we use; CI's SDK doesn't have the iOS 27
+        // view-controller form yet. It doesn't say whether a code was redeemed, so the caller
+        // refreshes Plus after it closes either way.
+        try await AppStore.presentOfferCodeRedeemSheet(in: scene)
+        return .closed
     }
 
     func open(_ url: URL) async -> Bool {

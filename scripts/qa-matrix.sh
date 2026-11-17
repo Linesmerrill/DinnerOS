@@ -153,17 +153,22 @@ run_config() {
         # checks what a person does, so it runs on the small iPhone and the iPad on its side, the
         # configs without the next-step dots.
         case $test in
-        ReferralQATests | InviteLinkQATests)
+        # Build 116: the referral test grew to about 10 minutes (Redeem and the step-done cards), so
+        # the invite link test moved off its configs and AnyList took its place. Each config then
+        # finishes in about 26 to 30 minutes.
+        ReferralQATests)
             case $config in large-light | small-dark | ipadL-light | ipadP-dark) ;; *) continue ;; esac ;;
+        InviteLinkQATests)
+            case $config in large-dark | small-dark | ipadP-light | ipadP-dark) ;; *) continue ;; esac ;;
         AnyListGuideQATests)
-            case $config in large-dark | small-light | ipadL-dark | ipadP-light) ;; *) continue ;; esac ;;
+            case $config in large-light | small-light | ipadL-dark | ipadL-light) ;; *) continue ;; esac ;;
         AddRecipeQATests | SaveThenOpenQATests) [ "$config" = large-dark ] || continue ;;
         CompanionQATests | CuisineQATests) case $config in small-light | ipadL-dark) ;; *) continue ;; esac ;;
         NextStepDotQATests) case $config in large-dark | ipadP-light) ;; *) continue ;; esac ;;
-        ReportRecipeQATests) case $config in small-dark | ipadL-light) ;; *) continue ;; esac ;;
+        ReportRecipeQATests) case $config in small-light | ipadL-dark) ;; *) continue ;; esac ;;
         # Pre-submission checks (decisions 741, 749): the review path on one iPhone and one iPad,
         # account deletion and denied permissions once each, on configs with time to spare.
-        ReviewPathQATests) case $config in large-light | ipadP-dark) ;; *) continue ;; esac ;;
+        ReviewPathQATests) case $config in small-light | ipadP-dark) ;; *) continue ;; esac ;;
         AccountDeletionQATests) [ "$config" = large-dark ] || continue ;;
         PermissionsDeniedQATests) [ "$config" = small-light ] || continue ;;
         # The App Review account (decision 752) is one account, so its test runs once, and only
