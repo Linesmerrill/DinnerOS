@@ -265,8 +265,8 @@ under 30 minutes. The standard:
    once per API port (`build-for-testing`), then every config runs `test-without-building`.
 2. **Coverage split.** Screen tests and sweeps run on all 8 configs. The long flow tests
    (referral, invite link, AnyList) run on one appearance per device, 4 configs each, and the
-   one-off add tests (by hand, companions, cuisine) go to the configs without referral and invite
-   runs, so every simulator finishes in about the same time. Build 114's first full run, with
+   one-off add tests (by hand, companions, cuisine, next-step dots) go to the configs without
+   referral and invite runs, so every simulator finishes in about the same time. Build 114's first full run, with
    every test on every config, took 38 minutes: referral (7 min), invite link (5 min) and AnyList
    (4 min) on all 8 configs, with 8 simulators slowing each other down.
 3. **Timeouts.** Each test has a 10-minute limit. A run with no output for 10 minutes is killed,

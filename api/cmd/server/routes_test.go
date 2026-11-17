@@ -14,6 +14,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/customize"
 	"github.com/Linesmerrill/DinnerOS/api/internal/events"
 	"github.com/Linesmerrill/DinnerOS/api/internal/menu"
+	"github.com/Linesmerrill/DinnerOS/api/internal/nextsteps"
 	"github.com/Linesmerrill/DinnerOS/api/internal/notifications"
 	"github.com/Linesmerrill/DinnerOS/api/internal/pantry"
 	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
@@ -47,6 +48,7 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		auth.NewHandler(auth.HandlerOptions{}).Mount(r)
 		push.NewHandler(push.HandlerOptions{}).Mount(r)
 		account.NewHandler(account.HandlerOptions{}).Mount(r)
+		nextsteps.NewHandler(nextsteps.HandlerOptions{}).Mount(r)
 	})
 
 	var routes []string
@@ -71,6 +73,7 @@ func TestHouseholdRoutesMountTogether(t *testing.T) {
 		"GET /api/v1/households/{householdId}/cook-sessions/{recipeId}",
 		"POST /api/v1/households/{householdId}/cook-sessions/{recipeId}/ops",
 		"POST /api/v1/households/{householdId}/events",
+		"GET /api/v1/households/{householdId}/next-steps",
 		"PATCH /api/v1/households/{householdId}/pantry/{itemId}",
 		"POST /api/v1/households/{householdId}/pantry/purchases",
 		"GET /api/v1/households/{householdId}/pantry/settings",

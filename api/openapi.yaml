@@ -5153,6 +5153,57 @@ paths:
           $ref: "#/components/responses/PayloadTooLarge"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /api/v1/households/{householdId}/next-steps:
+    get:
+      tags: [households]
+      summary: What the household should do next
+      description: |
+        The steps the household has left that the caller's role can act on
+        (decisions 736-739), each with the stable row keys the app puts a red
+        dot on, from the tab down to the item. Read on request from the rules
+        in api/internal/nextsteps; nothing is stored or pushed, and a step
+        leaves the list as soon as it's done. Today: `autopilotSetup` (Plus
+        and Autopilot never set up), `importReview` (Import Review has items
+        waiting), and `freeMonthSteps` (a code was entered and the free
+        month still has steps left).
+      parameters:
+        - $ref: "#/components/parameters/HouseholdID"
+      responses:
+        "200":
+          description: The pending steps, in a stable order; empty when there's nothing to do
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, path]
+                      properties:
+                        id:
+                          type: string
+                          example: autopilotSetup
+                        path:
+                          type: array
+                          items:
+                            type: string
+                          example: [household, planning, autopilotPreferences]
+  /api/v1/households/{householdId}/plus/dev-comp:
+    post:
+      tags: [households]
+      summary: Give a household Plus on a local API (development only)
+      description: |
+        Mounted only where development sign-in is on, never on a deployed API
+        (decision 738). Gives the caller's household Plus on the house so a UI
+        test can start from a household with Plus. Needs household.update.
+      parameters:
+        - $ref: "#/components/parameters/HouseholdID"
+      responses:
+        "200":
+          description: Whether this call gave it; false when the household already had Plus on the house
   /api/v1/households/{householdId}/notifications:
     parameters:
       - $ref: "#/components/parameters/HouseholdID"

@@ -7,6 +7,7 @@ struct MainTabView: View {
     @Environment(ShoppingStore.self) private var shopping
     @Environment(PantryStore.self) private var pantry
     @Environment(PlusStore.self) private var plus
+    @Environment(NextStepsStore.self) private var nextSteps
     @Environment(\.scenePhase) private var scenePhase
     /// Optional so previews needn't supply one.
     @Environment(PushNotificationStore.self) private var push: PushNotificationStore?
@@ -46,10 +47,14 @@ struct MainTabView: View {
                     }
                 } label: {
                     Label(tab.title, systemImage: tab.systemImage)
+                        .accessibilityValue(nextSteps.shows(tab: tab.nextStepRow) ? Text("Needs attention") : Text(""))
                 }
+                // A plain dot, no number, while a next step is waiting on this tab.
+                .badge(nextSteps.shows(tab: tab.nextStepRow) ? Text("") : nil)
             }
         }
         .offlineBanner()
+        .nextStepsSync()
         .onAppear { configureRouter() }
         // Another household clears the previous one's notifications and badge.
         .task(id: households.current?.household.id) {
