@@ -80,6 +80,20 @@ func TestLoadStarterRecipes(t *testing.T) {
 	}
 }
 
+func TestLoadAuthRateBurst(t *testing.T) {
+	if cfg, err := Load(env(nil)); err != nil || cfg.AuthRateBurst != 10 {
+		t.Fatalf("defaults: AuthRateBurst = %d, %v", cfg.AuthRateBurst, err)
+	}
+	if cfg, err := Load(env(map[string]string{"AUTH_RATE_BURST": "500"})); err != nil || cfg.AuthRateBurst != 500 {
+		t.Fatalf("configured: AuthRateBurst = %d, %v", cfg.AuthRateBurst, err)
+	}
+	for _, bad := range []string{"0", "lots", "20000"} {
+		if _, err := Load(env(map[string]string{"AUTH_RATE_BURST": bad})); err == nil || !strings.Contains(err.Error(), "AUTH_RATE_BURST") {
+			t.Errorf("%q: Load() error = %v", bad, err)
+		}
+	}
+}
+
 func TestLoadEmailDefaults(t *testing.T) {
 	cfg, err := Load(env(nil))
 	if err != nil {

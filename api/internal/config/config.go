@@ -58,6 +58,10 @@ type Config struct {
 	// households, such as store request totals (OPERATOR_USER_IDS, a comma
 	// list of user IDs). Empty means nobody.
 	OperatorUserIDs []string
+	// AuthRateBurst is how many sign-in requests one address may make at once
+	// (AUTH_RATE_BURST, default 10). Local QA raises it: eight simulators sign
+	// in and out from one address.
+	AuthRateBurst int
 	// AuthSigningKeyEphemeral is true when no key was configured in
 	// development and a random per-process key was generated instead.
 	AuthSigningKeyEphemeral bool
@@ -325,6 +329,12 @@ func Load(getenv func(string) string) (Config, error) {
 		errs = append(errs, fmt.Errorf("PORT must be an integer between 1 and 65535, got %q", getenv("PORT")))
 	}
 	cfg.Port = port
+
+	authBurst, err := strconv.Atoi(get("AUTH_RATE_BURST", "10"))
+	if err != nil || authBurst < 1 || authBurst > 10000 {
+		errs = append(errs, fmt.Errorf("AUTH_RATE_BURST must be an integer between 1 and 10000, got %q", getenv("AUTH_RATE_BURST")))
+	}
+	cfg.AuthRateBurst = authBurst
 
 	if err := cfg.LogLevel.UnmarshalText([]byte(get("LOG_LEVEL", "info"))); err != nil {
 		errs = append(errs, fmt.Errorf("LOG_LEVEL: %w", err))

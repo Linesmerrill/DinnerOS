@@ -171,11 +171,7 @@ struct DiscoverView: View {
     private var filterChips: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
-                ForEach(discover.filterGroups) { group in
-                    DiscoverFilterChip(group: group, selected: discover.query.value(forParam: group.param)) { value in
-                        Task { await discover.setFilter(param: group.param, value: value) }
-                    }
-                }
+                // Clear comes first, so a small phone never has it scrolled out of sight.
                 if discover.query.hasFilters {
                     Button("Clear") {
                         Task { await discover.clearFilters() }
@@ -183,6 +179,11 @@ struct DiscoverView: View {
                     .font(.subheadline)
                     .padding(.horizontal, 4)
                     .accessibilityIdentifier("DiscoverFilterClear")
+                }
+                ForEach(discover.filterGroups) { group in
+                    DiscoverFilterChip(group: group, selected: discover.query.value(forParam: group.param)) { value in
+                        Task { await discover.setFilter(param: group.param, value: value) }
+                    }
                 }
             }
             .padding(.horizontal, margin)

@@ -7,7 +7,8 @@
 #
 # Needs two local APIs on local Mongo (docs/development.md): 8082 with no photo search key, and
 # 8083 with UNSPLASH_ACCESS_KEY=qa-not-a-real-key pointed at cmd/fakeunsplash. Start both with
-# REFERRAL_MAX_PER_30_DAYS=1000 so parallel referral runs don't use up the sharer's slots.
+# REFERRAL_MAX_PER_30_DAYS=1000 so parallel referral runs don't use up the sharer's slots, and
+# AUTH_RATE_BURST=1000 so eight simulators signing in at once aren't told to wait.
 #
 # The app is built once per API port (build-for-testing), then every config runs
 # test-without-building at the same time. Each test has a 10-minute limit, and a run with no

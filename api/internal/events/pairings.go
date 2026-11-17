@@ -15,7 +15,7 @@ import (
 // Allowed values for pairing payloads.
 var (
 	PairingKinds       = []string{"recipe", "grocery_item"}
-	PairingSources     = []string{"rule", "learned"}
+	PairingSources     = []string{"rule", "learned", "companion"}
 	PairingFrequencies = []string{"always", "suggest"}
 	// PairingDismissReasons: dismissed by a member, or left out when
 	// accepting a proposal that included it.
@@ -109,8 +109,8 @@ func validPairing(key, kind, source, frequency, category, ruleID string, confide
 	switch {
 	case key == "" || len(key) > maxPairingKey:
 		errs = append(errs, invalid(fmt.Sprintf("key must be 1 to %d characters", maxPairingKey)))
-	case !strings.HasPrefix(key, "recipe:") && !strings.HasPrefix(key, "grocery:"):
-		errs = append(errs, invalid("key must start with recipe: or grocery:"))
+	case !strings.HasPrefix(key, "recipe:") && !strings.HasPrefix(key, "grocery:") && !strings.HasPrefix(key, "companion:"):
+		errs = append(errs, invalid("key must start with recipe:, grocery: or companion:"))
 	}
 	if kind == "" {
 		errs = append(errs, invalid("kind is required"))

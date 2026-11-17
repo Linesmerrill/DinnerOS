@@ -20,8 +20,13 @@ final class SaveThenOpenQATests: XCTestCase {
         XCTAssertTrue(nameField.waitForExistence(timeout: 5))
         nameField.tap()
         nameField.typeText(name)
+        app.staticTexts["Recipe"].tap()
 
-        let step = app.textViews["Step 1"].exists ? app.textViews["Step 1"] : app.textFields["Step 1"]
+        // Step 1 starts below the fold, where the form hasn't built it yet, so look for either
+        // kind of field before scrolling to it.
+        let step = app.descendants(matching: .any).matching(NSPredicate(
+            format: "(identifier == 'Step 1' OR label == 'Step 1') AND (elementType == %d OR elementType == %d)",
+            XCUIElement.ElementType.textView.rawValue, XCUIElement.ElementType.textField.rawValue)).firstMatch
         reveal(step, in: app)
         step.tap()
         step.typeText("Boil the sugar and butter for one minute.")

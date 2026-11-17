@@ -57,7 +57,6 @@ const (
 	jwksFetchTimeout = 5 * time.Second
 	// Auth endpoints allow a burst of 10 requests per client IP, refilling one
 	// token every 6 seconds.
-	authRateBurst = 10
 	authRateEvery = 6 * time.Second
 	// Accepting invitations uses the same budget as sign-in: invite codes are
 	// 50 bits, so guessing needs far more attempts than this allows.
@@ -640,7 +639,7 @@ func newAuthHandler(cfg config.Config, userService *users.Service, tokens *auth.
 		}),
 		Tokens:          tokens,
 		Logger:          logger,
-		RateLimit:       ratelimit.New(ratelimit.Options{Burst: authRateBurst, Every: authRateEvery}).Middleware,
+		RateLimit:       ratelimit.New(ratelimit.Options{Burst: cfg.AuthRateBurst, Every: authRateEvery}).Middleware,
 		DevLoginEnabled: cfg.DevLoginEnabled(),
 	})
 }

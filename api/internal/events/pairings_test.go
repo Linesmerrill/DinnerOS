@@ -71,7 +71,7 @@ func TestPairingPayloadValidation(t *testing.T) {
 		payload Payload
 		want    string
 	}{
-		{"a key without a prefix", func() Payload { p := valid; p.Key = "garlic bread"; return p }(), "recipe: or grocery:"},
+		{"a key without a prefix", func() Payload { p := valid; p.Key = "garlic bread"; return p }(), "recipe:, grocery: or companion:"},
 		{"no key", func() Payload { p := valid; p.Key = ""; return p }(), "key must be"},
 		{"an unknown kind", func() Payload { p := valid; p.Kind = "side"; return p }(), "kind must be one of"},
 		{"an unknown source", func() Payload { p := valid; p.Source = "guess"; return p }(), "source must be one of"},
@@ -85,6 +85,17 @@ func TestPairingPayloadValidation(t *testing.T) {
 				t.Errorf("error = %v, want one about %q", err, tt.want)
 			}
 		})
+	}
+	// A household companion's suggestion is recorded, whether it suggests a recipe or a store item.
+	for _, key := range []string{"recipe:66e5a1f2c3b4a5d6e7f81008", "companion:66e5a1f2c3b4a5d6e7f81009"} {
+		p := valid
+		p.Key, p.Source = key, "companion"
+		if key != valid.Key {
+			p.Kind = "grocery_item"
+		}
+		if err := svc.Record(ctx, Event{HouseholdID: hhA, UserID: userA, Type: TypePairingSuggested, RecipeID: recipeA, Payload: p, OccurredAt: testNow}); err != nil {
+			t.Errorf("a companion suggestion (%s) was refused: %v", key, err)
+		}
 	}
 	// A dismissal needs a reason, and a rule needs its category.
 	if err := svc.Record(ctx, Event{

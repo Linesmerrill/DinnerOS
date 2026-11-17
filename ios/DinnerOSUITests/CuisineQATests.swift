@@ -70,11 +70,18 @@ final class CuisineQATests: XCTestCase {
         app.buttons["2"].firstMatch.tap()
         app.buttons["Next"].firstMatch.tap()
         app.typeText("Pork Shoulder")
-        app.buttons["Done"].firstMatch.tap()
-        XCTAssertTrue(waitGone(app.navigationBars["New Ingredient"]), "New Ingredient didn't close")
-        let step = app.textViews["Step 1"].exists ? app.textViews["Step 1"] : app.textFields["Step 1"]
+        // The sheet's own Done: on an iPad the form behind it has one too. With the keyboard up,
+        // the first Done can only put it away; a second closes the sheet.
+        let sheetDone = app.navigationBars["New Ingredient"].buttons["Done"]
+        (sheetDone.exists ? sheetDone : app.buttons["Done"].firstMatch).tap()
+        if !waitGone(app.navigationBars["New Ingredient"], timeout: 3), sheetDone.exists { sheetDone.tap() }
+        XCTAssertTrue(waitGone(app.navigationBars["New Ingredient"], timeout: 5), "New Ingredient didn't close")
+        // Step 1 can start below the fold, before the form has built it.
+        let step = app.descendants(matching: .any).matching(NSPredicate(
+            format: "(identifier == 'Step 1' OR label == 'Step 1') AND (elementType == %d OR elementType == %d)",
+            XCUIElement.ElementType.textView.rawValue, XCUIElement.ElementType.textField.rawValue)).firstMatch
         reveal(step, in: app)
-        step.tap()
+        step.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         step.typeText("Braise the pork until tender.")
         app.buttons["Done"].firstMatch.tap()
 
