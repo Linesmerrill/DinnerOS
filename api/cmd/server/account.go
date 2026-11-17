@@ -23,6 +23,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/recommendations"
 	"github.com/Linesmerrill/DinnerOS/api/internal/sameitems"
 	"github.com/Linesmerrill/DinnerOS/api/internal/shopping"
+	"github.com/Linesmerrill/DinnerOS/api/internal/siwa"
 	"github.com/Linesmerrill/DinnerOS/api/internal/skips"
 	"github.com/Linesmerrill/DinnerOS/api/internal/substitutes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/users"
@@ -73,6 +74,8 @@ func newAccountService(db *mongo.Database, householdService *households.Service,
 			push.NewMongoStore(db),
 
 			auth.NewMongoSessionStore(db),
+			// The Apple refresh token; the handler revoked it already.
+			siwa.NewMongoStore(db),
 			users.NewMongoStore(db), // last: deletes the user record
 		},
 		Logger: logger,

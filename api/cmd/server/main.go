@@ -46,6 +46,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/sameitems"
 	"github.com/Linesmerrill/DinnerOS/api/internal/shelflife"
 	"github.com/Linesmerrill/DinnerOS/api/internal/shopping"
+	"github.com/Linesmerrill/DinnerOS/api/internal/siwa"
 	"github.com/Linesmerrill/DinnerOS/api/internal/skips"
 	"github.com/Linesmerrill/DinnerOS/api/internal/substitutes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/users"
@@ -155,7 +156,12 @@ func run() error {
 		return err
 	}
 
-	authHandler := newAuthHandler(cfg, userService, tokens, logger)
+	// Sign in with Apple revocation on account deletion (decision 750).
+	appleRevocation, err := newAppleRevocation(cfg, db.Database(), logger)
+	if err != nil {
+		return err
+	}
+	authHandler := newAuthHandler(cfg, userService, tokens, appleRevocation, logger)
 	// The global recipe catalog is a separate collection with no household in
 	// it. Recipes flow one way: an import publishes public-source recipes
 	// into it, and a household copies an entry into its own library.
@@ -493,6 +499,7 @@ func run() error {
 		Service: newAccountService(db.Database(), householdService, logger),
 		Tokens:  tokens,
 		Logger:  logger,
+		Apple:   appleRevocation,
 	})
 	// Next steps (decisions 736-739): what the household should do next, as
 	// red dots in the app. Read on request from the services above.
@@ -602,6 +609,7 @@ func indexSets() []mongodb.IndexSet {
 	return slices.Concat(
 		users.Indexes(),
 		auth.Indexes(),
+		siwa.Indexes(),
 		cooking.Indexes(),
 		shelflife.Indexes(),
 		households.Indexes(),
@@ -631,7 +639,7 @@ func indexSets() []mongodb.IndexSet {
 }
 
 // newAuthHandler wires provider verifiers and the auth HTTP handler.
-func newAuthHandler(cfg config.Config, userService *users.Service, tokens *auth.TokenService, logger *slog.Logger) *auth.Handler {
+func newAuthHandler(cfg config.Config, userService *users.Service, tokens *auth.TokenService, appleCodes auth.AppleCodeSaver, logger *slog.Logger) *auth.Handler {
 	jwksHTTP := &http.Client{Timeout: jwksFetchTimeout}
 	verifiers := map[users.Provider]auth.IdentityVerifier{
 		users.ProviderApple: auth.NewAppleVerifier(cfg.AppleBundleID, auth.VerifierOptions{
@@ -661,6 +669,7 @@ func newAuthHandler(cfg config.Config, userService *users.Service, tokens *auth.
 		Logger:          logger,
 		RateLimit:       ratelimit.New(ratelimit.Options{Burst: cfg.AuthRateBurst, Every: authRateEvery}).Middleware,
 		DevLoginEnabled: cfg.DevLoginEnabled(),
+		AppleCodes:      appleCodes,
 	})
 }
 

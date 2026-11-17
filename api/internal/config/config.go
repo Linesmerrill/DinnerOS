@@ -136,6 +136,10 @@ type Config struct {
 	// APNs signs and addresses Apple push notifications. Unset (the default
 	// in development) makes push a logged no-op.
 	APNs APNs
+
+	// SIWA is the Sign in with Apple key that revokes a user's Apple
+	// sign-in when they delete their account. Unset leaves revocation off.
+	SIWA SIWA
 }
 
 // APNs holds the token-based APNs credentials (docs/deployment.md#push-notifications).
@@ -297,6 +301,7 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("apnsEnabled", c.APNs.Enabled()),
 		slog.String("apnsKeyId", c.APNs.KeyID),
 		slog.String("apnsTopic", c.APNs.Topic),
+		slog.String("signInWithAppleRevocation", c.SIWA.logState()),
 		slog.Bool("deviceCheckEnabled", c.DeviceCheck.Enabled()),
 		slog.String("deviceCheckKeyId", c.DeviceCheck.KeyID),
 		slog.Any("referrals", c.Referrals),
@@ -388,6 +393,7 @@ func Load(getenv func(string) string) (Config, error) {
 		errs = append(errs, fmt.Errorf("STARTER_RECIPES_HOUSEHOLD_ID must be a 24-character hex household ID, got %q", id))
 	}
 	errs = append(errs, loadAPNs(&cfg, get)...)
+	errs = append(errs, loadSIWA(&cfg, get)...)
 	errs = append(errs, loadReferrals(&cfg, get)...)
 
 	if err := errors.Join(errs...); err != nil {
@@ -426,20 +432,26 @@ func loadAPNs(cfg *Config, get func(key, fallback string) string) []error {
 // private key in PEM. Escaped newlines (a literal backslash-n, as a
 // single-line config value may hold them) are accepted.
 func ParseAPNsKey(raw string) (*ecdsa.PrivateKey, error) {
+	return parseP8Key(raw, "APNS_AUTH_KEY")
+}
+
+// parseP8Key parses an Apple .p8 key held in the variable name. Error
+// messages name the variable and never include the key.
+func parseP8Key(raw, name string) (*ecdsa.PrivateKey, error) {
 	if raw == "" {
-		return nil, errors.New("APNS_AUTH_KEY is required: the full contents of the .p8 file")
+		return nil, fmt.Errorf("%s is required: the full contents of the .p8 file", name)
 	}
 	block, _ := pem.Decode([]byte(strings.ReplaceAll(raw, `\n`, "\n")))
 	if block == nil {
-		return nil, errors.New("APNS_AUTH_KEY must be the PEM contents of the .p8 file, including the BEGIN and END lines")
+		return nil, fmt.Errorf("%s must be the PEM contents of the .p8 file, including the BEGIN and END lines", name)
 	}
 	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
-		return nil, errors.New("APNS_AUTH_KEY is not a valid PKCS #8 private key")
+		return nil, fmt.Errorf("%s is not a valid PKCS #8 private key", name)
 	}
 	key, ok := parsed.(*ecdsa.PrivateKey)
 	if !ok || key.Curve != elliptic.P256() {
-		return nil, errors.New("APNS_AUTH_KEY must be a P-256 (ES256) key")
+		return nil, fmt.Errorf("%s must be a P-256 (ES256) key", name)
 	}
 	return key, nil
 }

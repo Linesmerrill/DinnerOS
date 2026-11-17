@@ -4,8 +4,11 @@ import Foundation
 nonisolated struct AuthAPI: Sendable {
     let client: APIClient
 
-    func signInWithApple(identityToken: String, rawNonce: String, fullName: String?) async throws -> SessionResponse {
-        let body = AppleSignInBody(identityToken: identityToken, nonce: rawNonce, fullName: fullName)
+    func signInWithApple(
+        identityToken: String, rawNonce: String, fullName: String?, authorizationCode: String? = nil
+    ) async throws -> SessionResponse {
+        let body = AppleSignInBody(
+            identityToken: identityToken, nonce: rawNonce, fullName: fullName, authorizationCode: authorizationCode)
         return try await client.send(try .post("/api/v1/auth/apple", body: body))
     }
 
@@ -38,9 +41,14 @@ nonisolated struct AuthAPI: Sendable {
     }
 
     /// `DELETE /me`: permanently deletes the account, its sessions and device tokens, and
-    /// any household it was the last member of.
-    func deleteAccount(accessToken: String) async throws {
-        try await client.sendIgnoringBody(APIRequest.delete("/api/v1/me").authorized(with: accessToken))
+    /// any household it was the last member of. `appleAuthorizationCode` is a fresh Sign in
+    /// with Apple code, so the server can end the app's Apple sign-in first.
+    func deleteAccount(accessToken: String, appleAuthorizationCode: String? = nil) async throws {
+        var request = APIRequest.delete("/api/v1/me")
+        if let appleAuthorizationCode {
+            request = try .delete("/api/v1/me", body: DeleteAccountBody(appleAuthorizationCode: appleAuthorizationCode))
+        }
+        try await client.sendIgnoringBody(request.authorized(with: accessToken))
     }
 }
 
@@ -51,6 +59,11 @@ private nonisolated struct AppleSignInBody: Encodable {
     let identityToken: String
     let nonce: String
     let fullName: String?
+    let authorizationCode: String?
+}
+
+private nonisolated struct DeleteAccountBody: Encodable {
+    let appleAuthorizationCode: String
 }
 
 private nonisolated struct GoogleSignInBody: Encodable {

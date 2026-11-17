@@ -66,7 +66,8 @@ final class SignInModel {
                 try await api.signInWithApple(
                     identityToken: pending.credential.identityToken,
                     rawNonce: pending.rawNonce,
-                    fullName: pending.credential.fullName)
+                    fullName: pending.credential.fullName,
+                    authorizationCode: pending.credential.authorizationCode)
             }
         }
         if errorMessage == nil { pendingApple = nil }
