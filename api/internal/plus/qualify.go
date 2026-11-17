@@ -396,6 +396,13 @@ func (s *Service) RunSweeps(ctx context.Context, every time.Duration) {
 		if res.Checked > 0 {
 			s.logger.InfoContext(ctx, "referral sweep", "checked", res.Checked, "failed", res.Failed)
 		}
+		// Codes returned to the pool, or codes that ran out, go to the
+		// months waiting for one.
+		if n, err := s.FillOwed(ctx); err != nil && ctx.Err() == nil {
+			s.logger.ErrorContext(ctx, "free month codes fill failed", "error", err)
+		} else if n > 0 {
+			s.logger.InfoContext(ctx, "free month codes given to waiting months", "count", n)
+		}
 	}
 	run()
 	t := time.NewTicker(every)
@@ -584,60 +591,77 @@ func (s *Service) qualify(ctx context.Context, ref Referral) error {
 	return s.settle(ctx, ref)
 }
 
-// settle pays and announces a qualified referral. Each month is claimed
-// before it is added, so it is added at most once; notifications are
-// deduplicated by key. Settled is set last, so a cut-off settle is finished
-// by the next sweep.
+// settle pays and announces a qualified referral (decision 755). Each month
+// is recorded once under its referral and role, then takes an offer code
+// from the pool, or waits as owed for the next import; the date store
+// (plus_free_time) is never written again. Notifications are deduplicated
+// by key. Settled is set last, so a cut-off settle is finished by the next
+// sweep.
 func (s *Service) settle(ctx context.Context, ref Referral) error {
-	if s.free == nil {
-		return errors.New("plus: no free time store")
+	if s.offerCodes == nil {
+		return errors.New("plus: no offer code store")
 	}
 	now := s.now().UTC()
-	month := FreeMonthDays * 24 * time.Hour
-	grant := func(flag, householdID string) error {
-		ok, err := s.referrals.Claim(ctx, ref.ReferredID, flag)
-		if err != nil || !ok {
-			return err
+	grant := func(flag, role, householdID string) (bool, error) {
+		ready, err := s.grantMonth(ctx, ref, role, householdID, now)
+		if err != nil {
+			return false, err
 		}
-		if _, err := s.free.Extend(ctx, householdID, s.paidUntil(ctx, householdID, now), month); err != nil {
-			s.logger.ErrorContext(ctx, "free month claimed but not added", "householdId", householdID, "referral", ref.ID, "error", err)
-			return err
+		if _, err := s.referrals.Claim(ctx, ref.ReferredID, flag); err != nil {
+			return ready, err
 		}
-		return nil
+		return ready, nil
 	}
-	if err := grant(FlagReferredGranted, ref.ReferredID); err != nil {
+	referredReady, err := grant(FlagReferredGranted, RoleReferred, ref.ReferredID)
+	if err != nil {
 		return err
 	}
+	referrerReady := false
 	if ref.ReferrerRewarded {
-		if err := grant(FlagReferrerGranted, ref.ReferrerID); err != nil {
+		if referrerReady, err = grant(FlagReferrerGranted, RoleReferrer, ref.ReferrerID); err != nil {
 			return err
 		}
 	}
-	if err := s.notifyQualified(ctx, ref); err != nil {
+	if err := s.notifyQualified(ctx, ref, referredReady, referrerReady); err != nil {
 		return err
 	}
-	_, err := s.referrals.Claim(ctx, ref.ReferredID, FlagSettled)
+	_, err = s.referrals.Claim(ctx, ref.ReferredID, FlagSettled)
 	return err
 }
 
-// Notification words.
-const (
-	ReferredTitle = "Your free month of Plus is on"
-	ReferrerTitle = "Your invite counted"
-)
+// ReferrerTitle is the sharer's notification title.
+const ReferrerTitle = "Your invite counted"
+
+// ReferredTitle is the new household's notification title: ready says its
+// code is there, else it's on the way.
+func ReferredTitle(ready bool) string {
+	if ready {
+		return FreeMonthReadyTitle
+	}
+	return FreeMonthOwedTitle
+}
 
 // ReferredBody is the new household's notification.
-func ReferredBody(referrerName string) string {
-	return "Your free month of Plus is on. Thanks for joining from " + possessive(referrerName) + " invite."
+func ReferredBody(referrerName string, ready bool) string {
+	thanks := "Thanks for joining from " + possessive(referrerName) + " invite. "
+	if ready {
+		return thanks + FreeMonthReadyBody
+	}
+	return thanks + FreeMonthOwedText
 }
 
 // ReferrerBody is the sharer's notification; atCap when it already has
-// MaxReferralMonths.
-func ReferrerBody(referredName string, atCap bool) string {
-	if atCap {
-		return nameOr(referredName, "A household") + " joined from your invite. You've already earned the most free months."
+// MaxReferralMonths, ready when its month has a code.
+func ReferrerBody(referredName string, atCap, ready bool) string {
+	joined := nameOr(referredName, "A household") + " joined from your invite. "
+	switch {
+	case atCap:
+		return joined + "You've already earned the most free months."
+	case ready:
+		return joined + FreeMonthReadyTitle + "."
+	default:
+		return joined + FreeMonthOwedTitle + "."
 	}
-	return nameOr(referredName, "A household") + " joined from your invite. You earned a free month of Plus."
 }
 
 func nameOr(name, fallback string) string {
@@ -666,20 +690,20 @@ func (s *Service) householdName(ctx context.Context, id string) string {
 	return h.Name
 }
 
-func (s *Service) notifyQualified(ctx context.Context, ref Referral) error {
+func (s *Service) notifyQualified(ctx context.Context, ref Referral, referredReady, referrerReady bool) error {
 	if s.notifier == nil {
 		return nil
 	}
 	referrerName, referredName := s.householdName(ctx, ref.ReferrerID), s.householdName(ctx, ref.ReferredID)
 	referred := notifications.New{
 		HouseholdID: ref.ReferredID, Type: notifications.TypePlusReferral,
-		Title: ReferredTitle, Body: ReferredBody(referrerName),
+		Title: ReferredTitle(referredReady), Body: ReferredBody(referrerName, referredReady),
 		Subject:   notifications.Subject{Kind: notifications.SubjectPlus},
 		DedupeKey: "plus.referral:" + ref.ReferredID + ":referred", Banner: true,
 	}
 	referrer := notifications.New{
 		HouseholdID: ref.ReferrerID, Type: notifications.TypePlusReferral,
-		Title: ReferrerTitle, Body: ReferrerBody(referredName, !ref.ReferrerRewarded),
+		Title: ReferrerTitle, Body: ReferrerBody(referredName, !ref.ReferrerRewarded, referrerReady),
 		Subject:   notifications.Subject{Kind: notifications.SubjectPlus},
 		DedupeKey: "plus.referral:" + ref.ReferredID + ":referrer", Banner: true,
 	}

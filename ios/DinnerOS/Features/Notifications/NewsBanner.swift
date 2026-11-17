@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A notification shown across the top when the app opens, for news whose push may have gone
-/// unseen ("Your free month of Plus is on."). Tapping opens it; the X puts it away. Either way
+/// unseen ("Your free month is ready."). Tapping opens it; the X puts it away. Either way
 /// it's marked read and doesn't come back.
 struct NewsBanner: View {
     let notification: AppNotification

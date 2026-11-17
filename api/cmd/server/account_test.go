@@ -110,6 +110,10 @@ var accountDeletionKinds = map[string]collectionKind{
 	plus.CompsCollection:            householdData,
 	plus.SetupCollection:            householdData,
 	plus.DevicesCollection:          householdData,
+	// A code the household never saw goes back to the pool; one it saw
+	// keeps only its hash, with no household (decision 755).
+	plus.OfferCodesCollection: householdData,
+	plus.FreeMonthsCollection: householdData,
 	// Hashed sign-in identities and IDs, kept so a deleted account can't
 	// farm referrals again (decision 698).
 	plus.HistoryCollection:                 global,

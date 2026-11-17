@@ -65,6 +65,9 @@ func NewHandler(opts HandlerOptions) *Handler {
 func (h *Handler) Mount(r chi.Router) {
 	r.Post("/webhooks/revenuecat", h.webhook)
 	r.With(auth.RequireAuth(h.opts.Tokens)).Get("/plus/referrals/summary", h.referralSummary)
+	// Operators stock the free month code pool (decision 755).
+	r.With(auth.RequireAuth(h.opts.Tokens), httpx.OverrideBodyLimit(offerImportMaxBytes)).Post("/admin/plus/offer-codes", h.importOfferCodes)
+	r.With(auth.RequireAuth(h.opts.Tokens)).Get("/admin/plus/offer-codes/stock", h.offerStock)
 	// Public: an invite link opens the app before anyone signs in.
 	r.Group(func(r chi.Router) {
 		if h.opts.InviteRateLimit != nil {
@@ -83,6 +86,7 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Use(auth.RequireAuth(h.opts.Tokens))
 		r.Use(households.RequirePermission(h.opts.Authorizer, households.PermPlanEdit, h.logger))
 		r.Post("/households/{householdId}/plus/referral/redeem", h.redeem)
+		r.Post("/households/{householdId}/plus/free-months/{monthId}/reveal", h.revealFreeMonth)
 		r.Group(func(r chi.Router) {
 			if h.opts.CodeRateLimit != nil {
 				r.Use(h.opts.CodeRateLimit)
@@ -111,6 +115,41 @@ type StatusResponse struct {
 	// ReferralProgress is set when this household entered another's code:
 	// how far it is toward the free month (decision 698).
 	ReferralProgress *ProgressResponse `json:"referralProgress,omitempty"`
+	// FreeMonths are the months it earned as offer codes (decision 755).
+	FreeMonths []FreeMonthResponse `json:"freeMonths,omitempty"`
+}
+
+// FreeMonthResponse is one earned month: ready to redeem, on the way, or
+// redeemed. It never holds the code; the reveal call does.
+type FreeMonthResponse struct {
+	ID       string    `json:"id"`
+	State    string    `json:"state"`
+	Title    string    `json:"title"`
+	Message  string    `json:"message"`
+	EarnedAt time.Time `json:"earnedAt"`
+	// RedeemText and Terms are set while it's ready.
+	RedeemText string `json:"redeemText,omitempty"`
+	Terms      string `json:"terms,omitempty"`
+}
+
+func freeMonthResponses(months []FreeMonth) []FreeMonthResponse {
+	if len(months) == 0 {
+		return nil
+	}
+	out := make([]FreeMonthResponse, 0, len(months))
+	for _, m := range months {
+		r := FreeMonthResponse{ID: m.ID, State: string(m.State), EarnedAt: m.EarnedAt}
+		switch m.State {
+		case MonthReady:
+			r.Title, r.Message, r.RedeemText, r.Terms = FreeMonthReadyTitle, FreeMonthReadyText, FreeMonthRedeemText, FreeMonthTerms
+		case MonthRedeemed:
+			r.Title, r.Message = FreeMonthRedeemedTitle, FreeMonthRedeemedText
+		default:
+			r.Title, r.Message = FreeMonthOwedTitle, FreeMonthOwedText
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 // ProgressResponse is a referred household's way to its free month.
@@ -195,6 +234,13 @@ func (h *Handler) statusWithProgress(ctx context.Context, householdID string, st
 		return StatusResponse{}, err
 	}
 	resp.ReferralProgress = progressResponse(p)
+	if st.Enabled {
+		months, err := h.opts.Service.FreeMonths(ctx, householdID)
+		if err != nil {
+			return StatusResponse{}, err
+		}
+		resp.FreeMonths = freeMonthResponses(months)
+	}
 	return resp, nil
 }
 
@@ -271,8 +317,11 @@ type InvitesResponse struct {
 	// Joins are the same invites without names, for app builds before
 	// Items.
 	Joins []InviteJoin `json:"joins"`
-	// UsedCode is set once this household's own code use paid its month.
+	// UsedCode is set once this household's own code use paid its month as
+	// a date, before decision 755.
 	UsedCode *UsedCode `json:"usedCode,omitempty"`
+	// FreeMonths are the months it earned as offer codes.
+	FreeMonths []FreeMonthResponse `json:"freeMonths,omitempty"`
 }
 
 // InviteItemResponse is one household that used the code.
@@ -336,10 +385,21 @@ func invitesResponse(info ReferralInfo, rules ReferralRules) InvitesResponse {
 		}
 		resp.Joins = append(resp.Joins, join)
 	}
-	if u := info.UsedCode; u != nil && u.State == StateQualified {
+	resp.FreeMonths = freeMonthResponses(info.FreeMonths)
+	if u := info.UsedCode; u != nil && u.State == StateQualified && !paidInCode(info.FreeMonths, u.ID) {
 		resp.UsedCode = &UsedCode{At: u.EarnedAt(), FreeUntil: u.EarnedAt().Add(FreeMonthDays * 24 * time.Hour)}
 	}
 	return resp
+}
+
+// paidInCode reports whether the referral paid this household a code.
+func paidInCode(months []FreeMonth, referralID string) bool {
+	for _, m := range months {
+		if m.ReferralID == referralID && m.Role == RoleReferred {
+			return true
+		}
+	}
+	return false
 }
 
 // ReferralSummaryResponse is referrals across every household, for the

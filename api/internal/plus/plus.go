@@ -73,8 +73,9 @@ type Status struct {
 	ExpiresAt    time.Time
 	WillRenew    bool
 	BillingIssue bool
-	// FreeUntil is when free months from referrals end; zero if none. Plus
-	// is active while either a subscription or free time is.
+	// FreeUntil is when a free month from a referral ends; zero if none.
+	// Only months granted before decision 755 are dates; they count as Plus
+	// until they end, and no new ones are written.
 	FreeUntil time.Time
 	// Comp is set while DinnerOS gives the household Plus (decision 682).
 	Comp *Comp
@@ -114,6 +115,12 @@ type Service struct {
 	// testers are households Plus is on for while it's off for everyone
 	// else (PLUS_TEST_HOUSEHOLDS), so a TestFlight purchase can be tried.
 	testers map[string]bool
+	// Offer code free months (offer_codes.go, decision 755); set by
+	// WithOfferCodes.
+	offerCodes OfferCodeStore
+	alerts     Alerter
+	alertTo    string
+	appStoreID string
 }
 
 // Enabled reports whether Plus is switched on (PLUS_ENABLED).
@@ -200,7 +207,10 @@ type Event struct {
 	EventTimestampMs  int64    `json:"event_timestamp_ms"`
 	Environment       string   `json:"environment"`
 	// CancelReason is CUSTOMER_SUPPORT when Apple refunded the purchase.
-	CancelReason  string   `json:"cancel_reason"`
+	CancelReason string `json:"cancel_reason"`
+	// OfferCode is set when the purchase came from redeeming an Apple offer
+	// code (decision 755). Never logged.
+	OfferCode     string   `json:"offer_code"`
 	Price         *float64 `json:"price_in_purchased_currency"`
 	Currency      string   `json:"currency"`
 	PurchasedAtMs *int64   `json:"purchased_at_ms"`
@@ -324,6 +334,17 @@ func (s *Service) Apply(ctx context.Context, ev Event) (Outcome, error) {
 	}
 	if !applied {
 		return OutcomeStale, nil
+	}
+	// A purchase from an offer code is a free month redeemed: the oldest
+	// one the household revealed (decision 755).
+	if strings.TrimSpace(ev.OfferCode) != "" {
+		switch ev.Type {
+		case "INITIAL_PURCHASE", "RENEWAL", "PRODUCT_CHANGE", "UNCANCELLATION":
+			// The event is stored, so a retry would be stale: log, don't fail.
+			if err := s.markOfferRedeemed(ctx, householdID, at); err != nil {
+				s.logger.ErrorContext(ctx, "mark free month redeemed", "householdId", householdID, "error", err)
+			}
+		}
 	}
 	return OutcomeApplied, nil
 }

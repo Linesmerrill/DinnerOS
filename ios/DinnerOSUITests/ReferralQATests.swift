@@ -2,8 +2,10 @@ import XCTest
 
 /// An invite from start to finish on the local API (decision 698): the sharer's How it works
 /// and code, a brand-new household entering it, the checklist ticking off as it adds a
-/// recipe and plans a dinner (a "Step 2 done" card along the way), then the free month and a banner for each household. In
-/// development the API stands in for DeviceCheck, which the simulator can't use.
+/// recipe and plans a dinner (a "Step 2 done" card along the way), then the free month, ready
+/// to redeem through Apple (decision 755), and a banner for each household. In development the
+/// API stands in for DeviceCheck, which the simulator can't use, and the test puts made-up
+/// offer codes in the local pool first.
 final class ReferralQATests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
@@ -13,7 +15,9 @@ final class ReferralQATests: XCTestCase {
     private var mode: String { ProcessInfo.processInfo.environment["QA_MODE"] ?? "light" }
 
     @MainActor
-    func testAnInviteCountsOnceTheNewHouseholdSetsUp() throws {
+    func testAnInviteCountsOnceTheNewHouseholdSetsUp() async throws {
+        // Codes for both free months, so they're ready rather than on the way.
+        try await OfferCodeSeed.seed()
         // 1. The sharer: How it works, then the code. An earlier test may have left another
         // person signed in, so sign in as the sharer explicitly.
         var app = launchSignedIn()
@@ -70,10 +74,21 @@ final class ReferralQATests: XCTestCase {
         // once. No Home press: on iPad it can bring the app back as a small window.
         let freeMonth = app.descendants(matching: .any)["FreeMonthUnlocked"].firstMatch
         XCTAssertTrue(freeMonth.waitForExistence(timeout: 30), "No free month card")
-        XCTAssertTrue(app.staticTexts["Your free month is unlocked"].exists, "The free month card says something else")
-        snap(app, "Your free month is unlocked (\(mode))")
-        freeMonth.buttons["Done"].tap()
-        XCTAssertTrue(waitGone(freeMonth, timeout: 5), "The free month card didn't close")
+        XCTAssertTrue(app.staticTexts["Your free month is ready"].exists, "The free month card says something else")
+        XCTAssertTrue(
+            app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Redeeming starts DinnerOS Plus'"))
+                .firstMatch.exists, "The card doesn't say what redeeming starts")
+        let redeem = freeMonth.buttons["RedeemFreeMonth"]
+        XCTAssertTrue(redeem.exists, "No Redeem on the free month card")
+        snap(app, "Your free month is ready (\(mode))")
+        // Redeem copies the code and says so, then Apple's redeem sheet opens.
+        redeem.tap()
+        XCTAssertTrue(
+            app.staticTexts["Your code is copied. Paste it in Apple's screen."].waitForExistence(timeout: 10),
+            "Redeem didn't say the code is copied")
+        snap(app, "Free month code copied (\(mode))")
+        XCTAssertTrue(waitGone(freeMonth, timeout: 10), "The free month card didn't make way for Apple's screen")
+        expectAppleRedeemSheet(app)
         // The news banner shows on the next sign-in.
         signOut(app)
         signIn(app, subject: newSubject)
@@ -83,9 +98,9 @@ final class ReferralQATests: XCTestCase {
         let banner = app.descendants(matching: .any)["NewsBanner"].firstMatch
         XCTAssertTrue(banner.waitForExistence(timeout: 20), "No banner for the new household")
         XCTAssertTrue(
-            app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Your free month of Plus is on.'"))
+            app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Thanks for joining from'"))
                 .firstMatch.exists, "The new household's banner says something else")
-        snap(app, "Banner, free month on (\(mode))")
+        snap(app, "Banner, free month ready (\(mode))")
         banner.buttons["Close"].firstMatch.tap()
         XCTAssertTrue(waitGone(banner, timeout: 5), "The banner didn't close")
         signOut(app)
@@ -181,6 +196,42 @@ final class ReferralQATests: XCTestCase {
     }
 
     // MARK: Steps
+
+    /// Apple's redeem sheet is the App Store's own screen, drawn over the app by another
+    /// process. Waits for it, takes its picture, and closes it: nobody types a code in a test.
+    @MainActor
+    private func expectAppleRedeemSheet(_ app: XCUIApplication) {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let words = NSPredicate(
+            format: "label CONTAINS[c] 'Redeem' OR label CONTAINS[c] 'code' OR label CONTAINS[c] 'App Store'")
+        var found = false
+        for _ in 0..<20 where !found {
+            let candidates = [
+                app.navigationBars.matching(words).firstMatch, app.staticTexts.matching(words).firstMatch,
+                springboard.staticTexts.matching(words).firstMatch, springboard.alerts.firstMatch,
+                app.alerts.firstMatch,
+            ]
+            // The card's own "Your code is copied" line doesn't count: it's gone by now.
+            found = candidates.contains { $0.exists && $0.label != "Your code is copied. Paste it in Apple's screen." }
+            if !found { sleep(1) }
+        }
+        snap(app, "Apple's redeem screen (\(mode))")
+        XCTAssertTrue(found, "Apple's redeem screen didn't open")
+        // Cancel, Close or OK: whichever Apple's screen has.
+        for label in ["Cancel", "Close", "OK", "Not Now"] {
+            for root in [app, springboard] where root.buttons[label].firstMatch.exists {
+                root.buttons[label].firstMatch.tap()
+                sleep(1)
+            }
+        }
+        // In the simulator the sheet can stay blank while it loads, with no button to close it:
+        // pull it down by its top edge, as a person would.
+        // A pull on the Menu with no sheet up only scrolls it, so this is safe either way.
+        let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1))
+        top.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
+        sleep(2)
+        snap(app, "Apple's redeem screen closed (\(mode))")
+    }
 
     @MainActor
     private func openChangeCode(_ app: XCUIApplication) {

@@ -1,0 +1,122 @@
+{
+  "identifier" : "6C4B8F0E",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21500001",
+      "localizations" : [
+
+      ],
+      "name" : "DinnerOS Plus",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+            {
+              "displayPrice" : "0.0",
+              "eligibility" : [
+                "new",
+                "expired",
+                "existing"
+              ],
+              "internalID" : "6C4B8F11",
+              "isStackable" : true,
+              "paymentMode" : "free",
+              "referenceName" : "Invite free month",
+              "subscriptionPeriod" : "P1M"
+            }
+          ],
+          "displayPrice" : "4.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "6C4B8F10",
+          "introductoryOffer" : {
+            "internalID" : "6C4B8F12",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
+          "localizations" : [
+            {
+              "description" : "Autopilot plans your week and you see what it costs.",
+              "displayName" : "DinnerOS Plus Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.linesmerrill.dinneros.plus.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "DinnerOS Plus Monthly",
+          "subscriptionGroupID" : "21500001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+            {
+              "displayPrice" : "0.0",
+              "eligibility" : [
+                "new",
+                "expired",
+                "existing"
+              ],
+              "internalID" : "6C4B8F21",
+              "isStackable" : true,
+              "paymentMode" : "free",
+              "referenceName" : "Invite free month yearly",
+              "subscriptionPeriod" : "P1M"
+            }
+          ],
+          "displayPrice" : "39.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "6C4B8F20",
+          "introductoryOffer" : {
+            "internalID" : "6C4B8F22",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
+          "localizations" : [
+            {
+              "description" : "Autopilot plans your week and you see what it costs.",
+              "displayName" : "DinnerOS Plus Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.linesmerrill.dinneros.plus.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "DinnerOS Plus Yearly",
+          "subscriptionGroupID" : "21500001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

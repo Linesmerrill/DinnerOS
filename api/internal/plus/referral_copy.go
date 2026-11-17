@@ -61,6 +61,10 @@ type HowItWorks struct {
 	Steps []string
 }
 
+// HowItWorksRedeem is the last step: the free month is a subscription
+// offer, so it says so before anyone earns one (decision 755).
+const HowItWorksRedeem = "Redeem it through Apple: Plus starts with the first month free, then renews at the normal price unless you cancel."
+
 // HowItWorks explains referrals with these rules.
 func (r ReferralRules) HowItWorks() HowItWorks {
 	return HowItWorks{
@@ -69,7 +73,8 @@ func (r ReferralRules) HowItWorks() HowItWorks {
 			"Share your code with friends, family, even that one aunt.",
 			"They download DinnerOS, start a new household, and enter your code.",
 			fmt.Sprintf("Once they %s and %s, the invite counts.", r.dinnerPhrase(), r.recipePhrase()),
-			fmt.Sprintf("Within %d hours you both get a free month of Plus. We'll send you a notification when it's on.", int(RewardWithin.Hours())),
+			fmt.Sprintf("Within %d hours you both get a free month of Plus. We'll send you a notification when it's ready.", int(RewardWithin.Hours())),
+			HowItWorksRedeem,
 		},
 	}
 }
@@ -206,6 +211,22 @@ func (s *Service) progress(ctx context.Context, ref Referral) (Progress, error) 
 	}
 	p := s.rules.ProgressFor(ref, setup)
 	p.TimeLeft = TimeLeftText(p.ExpiresAt, s.now())
+	if ref.State == StateQualified && s.offerCodes != nil {
+		// Since decision 755 the month is a code: ready, or on the way. A
+		// referral paid in a date before that keeps its words.
+		months, err := s.offerCodes.Months(ctx, ref.ReferredID)
+		if err != nil {
+			return Progress{}, err
+		}
+		for _, m := range months {
+			if m.ReferralID == ref.ID && m.Role == RoleReferred {
+				p.Message = FreeMonthReadyTitle
+				if m.State == MonthOwed {
+					p.Message = FreeMonthOwedTitle
+				}
+			}
+		}
+	}
 	return p, nil
 }
 

@@ -112,4 +112,12 @@ nonisolated final class RevenueCatPlusPurchaser: PlusPurchasing, @unchecked Send
     func restore(householdID: String) async throws {
         _ = try await purchases(for: householdID).restorePurchases()
     }
+
+    /// RevenueCat sees an offer code redeemed through Apple's sheet as a purchase; fetching
+    /// fresh customer info sends it on now rather than at the next launch.
+    func refreshCustomerInfo(householdID: String) async {
+        guard let purchases = try? await purchases(for: householdID) else { return }
+        purchases.invalidateCustomerInfoCache()
+        _ = try? await purchases.customerInfo(fetchPolicy: .fetchCurrent)
+    }
 }

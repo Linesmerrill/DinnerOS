@@ -1,9 +1,14 @@
 # Plan: the invite free month through Apple Offer Codes
 
-Status: plan only, on hold until Merrill decides (2026-11-17). Today the free month is a date in our
-own database (`plus_free_time`, granted in `api/internal/plus/qualify.go` `settle`), which the API
-treats as Plus. Apple and RevenueCat never see it. That unlocks paid features outside in-app
-purchase, which guideline 3.1.1 restricts.
+Status: built for build 116 (decisions 755 to 758), after Merrill chose it on 2026-11-17. What's
+below is the plan as written; where the build differs: one offer on the monthly subscription for
+both households (new, existing and expired eligibility) instead of two, and the code pool is
+`plus_offer_codes` with the months in `plus_free_months`. The App Store Connect settings and the
+import steps are in docs/deployment.md, "Free month codes".
+
+Before this, the free month was a date in our own database (`plus_free_time`, granted in
+`api/internal/plus/qualify.go` `settle`), which the API treats as Plus. Apple and RevenueCat never
+saw it. That unlocks paid features outside in-app purchase, which guideline 3.1.1 restricts.
 
 ## What changes
 

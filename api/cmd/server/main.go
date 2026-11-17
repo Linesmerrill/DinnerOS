@@ -278,7 +278,13 @@ func run() error {
 		WithReferrals(plus.NewMongoFreeTime(db.Database()), plus.NewMongoReferrals(db.Database())).
 		WithTestHouseholds(cfg.Plus.TestHouseholds).
 		WithBilling(plus.NewMongoBilling(db.Database())).
-		WithComps(plus.NewMongoComps(db.Database()))
+		WithComps(plus.NewMongoComps(db.Database())).
+		// Each earned free month is an Apple offer code from a pool staff
+		// stock; an empty pool emails REPORT_ALERT_EMAIL (decision 755).
+		WithOfferCodes(plus.OfferCodeOptions{
+			Store: plus.NewMongoOfferCodes(db.Database()), Alerts: alertMailer(cfg), AlertTo: cfg.ReportAlertEmail,
+			AppStoreID: cfg.Plus.AppStoreID,
+		})
 	// A referral pays only once the new household is real and set up
 	// (decision 698): memberships feed the identity history and DeviceCheck,
 	// planned dinners and saved recipes feed the setup, and every one of
@@ -565,6 +571,8 @@ func run() error {
 				// UI tests give their own new household Plus (decision 738).
 				if cfg.DevLoginEnabled() {
 					plus.NewDevCompHandler(plus.NewMongoComps(db.Database()), householdService, tokens, logger).Mount(r)
+					// And made-up free month codes for the local pool (decision 755).
+					plus.NewDevOfferCodesHandler(plusService, tokens, logger).Mount(r)
 				}
 			},
 		}),
@@ -638,6 +646,7 @@ func indexSets() []mongodb.IndexSet {
 		plus.BillingIndexes(),
 		plus.CompIndexes(),
 		plus.QualifyIndexes(),
+		plus.OfferCodeIndexes(),
 		behaviorIndexes(),
 		recommendations.Indexes(),
 	)
@@ -782,6 +791,15 @@ func reportAlerter(cfg config.Config) catalog.ReportAlerter {
 	return invitations.NewResendProvider(invitations.ResendOptions{
 		APIKey: cfg.ResendAPIKey, From: cfg.EmailFrom, AppName: cfg.AppName,
 	})
+}
+
+// alertMailer is reportAlerter for the plus package, or nil. A nil
+// *ResendProvider must not become a non-nil interface.
+func alertMailer(cfg config.Config) plus.Alerter {
+	if a := reportAlerter(cfg); a != nil {
+		return a
+	}
+	return nil
 }
 
 // newEmailProvider picks the EmailProvider named by EMAIL_PROVIDER. Config

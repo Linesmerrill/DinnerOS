@@ -69,6 +69,9 @@
             ReferencedContainer = "container:DinnerOS.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <StoreKitConfigurationFileReference
+         identifier = "../../DinnerOSTests/DinnerOSPlus.storekit">
+      </StoreKitConfigurationFileReference>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"

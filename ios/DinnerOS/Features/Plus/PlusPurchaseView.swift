@@ -40,6 +40,11 @@ struct PlusPurchaseView: View {
                     ReferralProgressContent(progress: progress)
                         .padding(14)
                         .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 14))
+                } else if let month = plus.openFreeMonth, !(plus.status?.active ?? false) {
+                    // An earned free month: redeeming it is how it starts (decision 755).
+                    FreeMonthCard(month: month)
+                        .padding(14)
+                        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 14))
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Image(systemName: "sparkles")

@@ -13,9 +13,9 @@ import (
 // household new to Plus that enters another household's code starts a
 // pending referral. It qualifies once the new household is really set up
 // (qualify.go), and then both households get a free month, the sharer up to
-// MaxReferralMonths. Free months are kept here, not at Apple: Apple keeps
-// billing a paying household, so a free month for one is added after the
-// time it has paid for.
+// MaxReferralMonths. Since decision 755 each month is an Apple offer code
+// (offer_codes.go); months granted before that are dates in
+// plus_free_time, honored until they end.
 
 // Referral errors. Each has a message a person can read in the app.
 var (
@@ -254,8 +254,11 @@ type ReferralInfo struct {
 	// lists up to RecentJoins of them, newest first.
 	Counts ReferralCounts
 	Recent []InviteItem
-	// FreeUntil is when the household's free months end, if they haven't.
+	// FreeUntil is when the household's free months from before decision
+	// 755 end, if they haven't.
 	FreeUntil time.Time
+	// FreeMonths are the months it earned as offer codes, oldest first.
+	FreeMonths []FreeMonth
 	// UsedCode is set when this household entered another's code;
 	// Progress says how far its own referral is.
 	UsedCode *Referral
@@ -335,6 +338,9 @@ func (s *Service) Referral(ctx context.Context, householdID string) (ReferralInf
 			info.FreeUntil = until
 		}
 	}
+	if info.FreeMonths, err = s.FreeMonths(ctx, householdID); err != nil {
+		return ReferralInfo{}, err
+	}
 	return info, nil
 }
 
@@ -378,6 +384,11 @@ func (s *Service) Redeem(ctx context.Context, householdID, code string) (Status,
 	} else if !until.IsZero() {
 		return Status{}, ErrNotNewToPlus
 	}
+	if months, err := s.FreeMonths(ctx, householdID); err != nil {
+		return Status{}, err
+	} else if len(months) > 0 {
+		return Status{}, ErrNotNewToPlus
+	}
 	now := s.now().UTC()
 	ref := Referral{
 		ReferrerID: owner, ReferredID: householdID, At: now, State: StatePending,
@@ -393,13 +404,4 @@ func (s *Service) Redeem(ctx context.Context, householdID, code string) (Status,
 		s.logger.ErrorContext(ctx, "evaluate referral after code entry", "householdId", householdID, "error", err)
 	}
 	return s.Status(ctx, householdID)
-}
-
-// paidUntil is when a household's paid Plus ends, or now if it isn't paying.
-func (s *Service) paidUntil(ctx context.Context, householdID string, now time.Time) time.Time {
-	e, err := s.store.Get(ctx, householdID)
-	if err != nil || !e.Active(now) || e.ExpiresAt.IsZero() || e.ExpiresAt.Before(now) {
-		return now
-	}
-	return e.ExpiresAt
 }

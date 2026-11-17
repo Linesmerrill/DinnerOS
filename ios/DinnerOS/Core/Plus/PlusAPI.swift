@@ -48,6 +48,14 @@ nonisolated struct PlusAPI: Sendable {
         return try await client.send(APIRequest.get("/api/v1/referral-codes/" + escaped))
     }
 
+    /// The code for a free month that's ready, to redeem through Apple (decision 755). Needs
+    /// `plan.edit`. A month still on the way is a 409 with the words to show.
+    func revealFreeMonth(householdID: String, monthID: String, accessToken: String) async throws -> FreeMonthCode {
+        let path = Self.path(householdID) + "/free-months/" + APIRequest.encodePathSegment(monthID) + "/reveal"
+        let request = APIRequest(method: .post, path: path, body: nil, bearerToken: nil).withPercentEncodedPath()
+        return try await client.send(request.authorized(with: accessToken))
+    }
+
     /// Your Plus: plan, status, history and stats.
     func details(householdID: String, accessToken: String) async throws -> PlusDetails {
         try await client.send(APIRequest.get(Self.path(householdID) + "/details").authorized(with: accessToken))

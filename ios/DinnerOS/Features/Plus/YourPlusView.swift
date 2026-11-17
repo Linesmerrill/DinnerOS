@@ -31,6 +31,9 @@ struct YourPlusView: View {
                         Text(details.statsTitle)
                     }
                 }
+                if let month = plus.openFreeMonth {
+                    FreeMonthSection(month: month)
+                }
                 Section {
                     NavigationLink {
                         PlusInviteView()
@@ -40,7 +43,9 @@ struct YourPlusView: View {
                 } header: {
                     Text("Free Months From Invites")
                 } footer: {
-                    Text("Invite another household. Once they set up, you both get a free month.")
+                    Text(
+                        "Invite another household. Once they set up, you both get a free month of Plus to redeem through Apple."
+                    )
                 }
                 if details.canManage {
                     manageSection(details)

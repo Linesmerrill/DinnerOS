@@ -307,6 +307,9 @@ under 30 minutes. The standard:
    The test signs in with email, checks the five seeded recipes and no starter library through
    the API, opens the purchase screen, and deletes the account so the next run is seeded again.
    It runs on one config only (iPad landscape, dark): there is one review account.
+   Each invite that counts takes a free month code from the local pool (decision 755): the matrix
+   seeds 200 made-up codes into each API at start through `POST /api/v1/plus/dev/offer-codes`
+   (developer sign-in only), and `ReferralQATests` seeds a few itself when run alone.
 6. **Report.** `summary.txt` lists each config and test as ok or FAILED with the first error, and
    the time. If a run goes past 30 minutes, say why from the logs before rerunning anything.
 

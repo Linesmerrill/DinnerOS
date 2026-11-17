@@ -206,11 +206,16 @@ func TestIntegrationQualifyStoresMongo(t *testing.T) {
 func TestIntegrationReferralQualifiesOnceMongo(t *testing.T) {
 	client := mongotest.Client(t)
 	ctx := t.Context()
-	if err := client.EnsureIndexes(ctx, append(append(ReferralIndexes(), QualifyIndexes()...), Indexes()...)...); err != nil {
+	if err := client.EnsureIndexes(ctx, append(append(append(ReferralIndexes(), QualifyIndexes()...), Indexes()...), OfferCodeIndexes()...)...); err != nil {
 		t.Fatal(err)
 	}
 	db := client.Database()
 	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+	offers := NewMongoOfferCodes(db)
+	if _, err := offers.Import(ctx, []string{"FLOW00000001", "FLOW00000002", "FLOW00000003"},
+		OfferBatch{Offer: "o", Batch: "b", ExpiresAt: now.Add(90 * 24 * time.Hour)}, now); err != nil {
+		t.Fatal(err)
+	}
 	homes := &fakeHouseholds{m: map[string]households.Household{
 		hh:  {ID: hh, Name: "Lines", CreatedBy: "66e5a1f2c3b4a5d6e7f80b01", CreatedAt: now.Add(-time.Hour)},
 		hhB: {ID: hhB, Name: "Parkers", CreatedBy: "66e5a1f2c3b4a5d6e7f80b02", CreatedAt: now.Add(-time.Hour)},
@@ -220,7 +225,7 @@ func TestIntegrationReferralQualifiesOnceMongo(t *testing.T) {
 	s := NewService(NewMongoStore(db), true).WithReferrals(free, NewMongoReferrals(db)).WithQualify(QualifyOptions{
 		Setup: NewMongoSetup(db), History: NewMongoHistory(db), Devices: NewMongoDevices(db), Locks: NewMongoLocks(db),
 		Households: homes, Identities: &fakeIdentities{subjects: map[string]string{}}, Notifier: notes, DeviceCheck: NewMemoryDeviceCheck(),
-	})
+	}).WithOfferCodes(OfferCodeOptions{Store: offers})
 	s.now = func() time.Time { return now }
 	for _, id := range []string{hh, hhB} {
 		h := homes.m[id]
@@ -240,14 +245,21 @@ func TestIntegrationReferralQualifiesOnceMongo(t *testing.T) {
 	wg.Wait()
 	_, _ = s.Sweep(ctx)
 	for _, id := range []string{hh, hhB} {
-		if until, _ := free.FreeUntil(ctx, id); !until.Equal(now.Add(month)) {
-			t.Errorf("%s free until %v, want one month", id, until)
+		// One month each, as a code; no database date (decision 755).
+		if until, _ := free.FreeUntil(ctx, id); !until.IsZero() {
+			t.Errorf("%s free until %v, want no date", id, until)
+		}
+		if ms, _ := offers.Months(ctx, id); len(ms) != 1 || ms[0].State != MonthReady {
+			t.Errorf("%s months = %+v, want one ready", id, ms)
 		}
 		if n := len(notes.to(id)); n != 1 {
 			t.Errorf("%s notified %d times", id, n)
 		}
 	}
-	if p, _ := s.ReferralProgress(ctx, hhB); p == nil || p.State != "qualified" {
+	if p, _ := s.ReferralProgress(ctx, hhB); p == nil || p.State != "qualified" || p.Message != FreeMonthReadyTitle {
 		t.Errorf("progress = %+v", p)
+	}
+	if st, _ := offers.Stock(ctx, now); st.Given != 2 || st.Available != 1 {
+		t.Errorf("stock = %+v, want 2 given and 1 left", st)
 	}
 }

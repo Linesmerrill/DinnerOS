@@ -47,12 +47,13 @@ func TestReferralInvites(t *testing.T) {
 	if !info.Recent[0].At.Equal(now.Add(24*time.Hour)) || info.Recent[0].ReferredID != hhC {
 		t.Errorf("newest first: %+v", info.Recent)
 	}
-	if want := now.Add(2 * month); !info.FreeUntil.Equal(want) {
-		t.Errorf("free until %v, want %v", info.FreeUntil, want)
+	// Each earned month is a code now, never a date (decision 755).
+	if !info.FreeUntil.IsZero() || len(info.FreeMonths) != 2 || info.FreeMonths[0].State != MonthReady {
+		t.Errorf("free until %v, months %+v; want two ready months and no date", info.FreeUntil, info.FreeMonths)
 	}
 	resp := invitesResponse(info, s.rules)
 	if resp.Joined != 2 || resp.MonthsEarned != 2 || resp.MonthsCap != MaxReferralMonths || resp.CapText != "2 of 12" ||
-		resp.FreeUntil == nil || resp.UsedCode != nil {
+		resp.FreeUntil != nil || resp.UsedCode != nil || len(resp.FreeMonths) != 2 || resp.FreeMonths[0].RedeemText != FreeMonthRedeemText {
 		t.Errorf("response = %+v", resp)
 	}
 	for _, j := range resp.Joins {
@@ -72,18 +73,44 @@ func TestReferralInvites(t *testing.T) {
 		t.Errorf("items = %+v", resp.Items)
 	}
 
-	// The household that joined sees its own use, and when its month ends.
+	// The household that joined sees its own use and its month as a code,
+	// with no end date: the date was for months granted before codes.
 	joined, err := s.Referral(ctx, hhB)
 	if err != nil || joined.UsedCode == nil || joined.UsedCode.ReferrerID != hh {
 		t.Fatalf("joiner = %+v, %v", joined, err)
 	}
-	if u := invitesResponse(joined, s.rules).UsedCode; u == nil || !u.At.Equal(now) || !u.FreeUntil.Equal(now.Add(month)) {
-		t.Errorf("used code = %+v", u)
+	if r := invitesResponse(joined, s.rules); r.UsedCode != nil || len(r.FreeMonths) != 1 {
+		t.Errorf("joiner response = %+v", r)
 	}
+}
 
-	// Free time that ended isn't shown.
-	s.now = func() time.Time { return now.Add(3 * month) }
-	if info, _ := s.Referral(ctx, hh); !info.FreeUntil.IsZero() {
+// A free month granted as a date before codes still shows, and still counts
+// as Plus, until it ends (decision 755).
+func TestLegacyFreeMonthStillCounts(t *testing.T) {
+	ctx := t.Context()
+	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+	s, _, free, refs := referralService(t, now)
+	h := harnessOf(s)
+	free.m[hhB] = now.Add(10 * 24 * time.Hour)
+	// A referral from before decision 698, paid in a date.
+	refs.refs = append(refs.refs, Referral{ID: "000000000000000000000abc", ReferrerID: hh, ReferredID: hhB, At: now.Add(-20 * 24 * time.Hour), ReferrerRewarded: true})
+	if ok, _ := s.HasPlus(ctx, hhB); !ok {
+		t.Error("a running database month isn't Plus")
+	}
+	info, _ := s.Referral(ctx, hhB)
+	resp := invitesResponse(info, s.rules)
+	if resp.FreeUntil == nil || resp.UsedCode == nil || len(resp.FreeMonths) != 0 {
+		t.Errorf("legacy response = %+v", resp)
+	}
+	if st, _ := s.Status(ctx, hhB); !st.FreeUntil.Equal(now.Add(10 * 24 * time.Hour)) {
+		t.Errorf("status = %+v", st)
+	}
+	// It ends, and nothing writes a new date.
+	h.at(now.Add(11 * 24 * time.Hour))
+	if ok, _ := s.HasPlus(ctx, hhB); ok {
+		t.Error("still Plus after the database month ended")
+	}
+	if info, _ := s.Referral(ctx, hhB); !info.FreeUntil.IsZero() {
 		t.Errorf("ended free time shown: %v", info.FreeUntil)
 	}
 }
@@ -143,14 +170,22 @@ func TestReferralInviteRoutes(t *testing.T) {
 	rec = do(http.MethodGet, "/households/"+hh+"/plus/referral", "u1", "")
 	ref = ReferralResponse{}
 	_ = json.Unmarshal(rec.Body.Bytes(), &ref)
-	if ref.Invites.Joined != 1 || len(ref.Invites.Joins) != 1 || ref.Invites.Joins[0].Status != "Counted" || ref.Invites.FreeUntil == nil {
+	if ref.Invites.Joined != 1 || len(ref.Invites.Joins) != 1 || ref.Invites.Joins[0].Status != "Counted" ||
+		ref.Invites.FreeUntil != nil || len(ref.Invites.FreeMonths) != 1 || ref.Invites.FreeMonths[0].State != "ready" {
 		t.Errorf("after a join = %s", rec.Body.String())
 	}
 	rec = do(http.MethodGet, "/households/"+hhB+"/plus/referral", "u2", "")
 	ref = ReferralResponse{}
 	_ = json.Unmarshal(rec.Body.Bytes(), &ref)
-	if ref.Invites.UsedCode == nil {
+	if ref.Invites.UsedCode != nil || len(ref.Invites.FreeMonths) != 1 || ref.ReferralProgress == nil ||
+		ref.ReferralProgress.Message != FreeMonthReadyTitle {
 		t.Errorf("joiner = %s", rec.Body.String())
+	}
+	// No list answer ever holds a code.
+	for _, c := range harnessOf(s).offers.codes {
+		if c.code != "" && strings.Contains(rec.Body.String(), c.code) {
+			t.Errorf("a referral answer holds a code")
+		}
 	}
 
 	// The summary is for the people who run DinnerOS only.
