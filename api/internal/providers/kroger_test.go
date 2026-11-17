@@ -2,6 +2,7 @@ package providers
 
 import (
 	"errors"
+	"net/url"
 	"testing"
 )
 
@@ -100,5 +101,25 @@ func TestKrogerServesSeveralBanners(t *testing.T) {
 	}
 	if len(KrogerBannerKeys()) != 15 {
 		t.Errorf("known banners = %v", KrogerBannerKeys())
+	}
+}
+
+// Every Kroger store's cart and product links open that store's own site over
+// https, so Fry's never sends a shopper to kroger.com.
+func TestKrogerBannerLinksOpenTheirOwnSite(t *testing.T) {
+	for _, key := range KrogerBannerKeys() {
+		k := NewKroger(key)
+		host := KrogerBannerFor(key).Host
+		cart, err := url.Parse(k.CartURL())
+		if err != nil || cart.Scheme != "https" || cart.Host != host || cart.Path != "/cart" {
+			t.Errorf("%s cart = %q", key, k.CartURL())
+		}
+		product, err := url.Parse(k.ProductURL("0001111041700"))
+		if err != nil || product.Scheme != "https" || product.Host != host || product.Path != "/p/item/0001111041700" {
+			t.Errorf("%s product = %q", key, k.ProductURL("0001111041700"))
+		}
+		if k.AffiliateTracked() {
+			t.Errorf("%s links are tracked", key)
+		}
 	}
 }

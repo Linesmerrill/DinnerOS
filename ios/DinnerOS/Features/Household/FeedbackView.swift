@@ -70,12 +70,14 @@ struct FeedbackView: View {
 }
 
 /// The row that opens `FeedbackView`, for the Household tab and the setup screen. Only in
-/// TestFlight and development builds: the steps are TestFlight's.
+/// development builds and, in TestFlight, for households that tested the beta: the steps are
+/// TestFlight's, and App Review sees a sandbox build too.
 struct FeedbackLink: View {
     private let builds = BuildChannelStore.shared
+    @Environment(PlusStore.self) private var plus: PlusStore?
 
     var body: some View {
-        if builds.channel?.showsBetaFeedback == true {
+        if builds.channel?.showsBetaFeedback(testedTheBeta: plus?.status?.comp?.isBeta == true) == true {
             NavigationLink {
                 FeedbackView()
             } label: {

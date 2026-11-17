@@ -265,7 +265,10 @@ nonisolated struct DiscoverHome: Decodable, Equatable, Sendable {
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
-            sections: try c.decodeIfPresent([DiscoverSection].self, forKey: .sections) ?? [],
+            // A row with nothing in it is never shown, a paid one least of all; the server
+            // leaves them out too.
+            sections: (try c.decodeIfPresent([DiscoverSection].self, forKey: .sections) ?? [])
+                .filter { !$0.items.isEmpty },
             filters: try c.decodeIfPresent([CatalogFilterGroup].self, forKey: .filters) ?? [],
             browseTitle: try c.decodeIfPresent(String.self, forKey: .browseTitle),
             searchPrompt: try c.decodeIfPresent(String.self, forKey: .searchPrompt),

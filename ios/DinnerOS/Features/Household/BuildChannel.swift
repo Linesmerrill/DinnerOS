@@ -3,14 +3,23 @@ import Observation
 import StoreKit
 
 /// Where this copy of the app came from: the App Store, TestFlight, or Xcode. Feedback & Bugs
-/// points testers at TestFlight, so it shows only in TestFlight and development builds.
+/// points testers at TestFlight, so it shows only in development builds and to beta households.
 enum BuildChannel: Equatable, Sendable {
     case appStore
     case testFlight
     case development
 
-    /// Beta feedback belongs to TestFlight; App Store builds don't mention it.
-    var showsBetaFeedback: Bool { self != .appStore }
+    /// Beta feedback belongs to TestFlight; App Store builds don't mention it. App Review runs
+    /// the same binary in the sandbox, so StoreKit says `.testFlight` there too: a sandbox
+    /// build shows the TestFlight steps only to a household that tested the beta (its Plus
+    /// comp says so), which a reviewer's new account never is.
+    func showsBetaFeedback(testedTheBeta: Bool) -> Bool {
+        switch self {
+        case .development: true
+        case .testFlight: testedTheBeta
+        case .appStore: false
+        }
+    }
 
     /// The channel from what StoreKit says, falling back to the receipt's file name when
     /// StoreKit can't answer (offline on first launch). Unknown counts as the App Store, so a

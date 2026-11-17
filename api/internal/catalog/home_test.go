@@ -531,6 +531,32 @@ func TestCollectionValidate(t *testing.T) {
 	}
 }
 
+func TestSponsoredRowWithNothingToShowIsLeftOut(t *testing.T) {
+	cols := &memCollections{}
+	h := newHarness(t, nil)
+	h.service.WithCollections(cols)
+	seedHome(t, h)
+	// Every pick is gone, so the paid row has nothing; it must not show as an empty shelf.
+	if _, err := h.service.PutCollection(t.Context(), Collection{
+		ID: "pasta-week", Title: "Pasta Week", Type: TypeSponsored, Position: 5,
+		RecipeIDs: []string{"66e5a1f2c3b4a5d6e7f8dead"}, Sponsor: &Sponsor{Name: "Acme Pasta"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	home, err := h.service.Home(t.Context(), hhAda)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sectionIDs(home); slices.Contains(got, "pasta-week") {
+		t.Errorf("sections = %v; an empty sponsored row showed", got)
+	}
+	for _, s := range home.Sections {
+		if len(s.Items) == 0 {
+			t.Errorf("%s has no recipes", s.ID)
+		}
+	}
+}
+
 func TestDefaultCollectionsShipNoSponsoredRow(t *testing.T) {
 	want := []string{"chefs-picks", "top-rated", "trending", "seasonal", "quick", "crowd"}
 	var got []string
