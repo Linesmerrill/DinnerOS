@@ -44,6 +44,8 @@ final class AppDependencies {
     let menu: MenuStore
     let planner: MealPlanner
     let pairings: PairingsStore
+    /// What goes with dinner: chips with tacos, bread with soup (decisions 715-719).
+    let companions: CompanionsStore
     /// "Try Something Similar": re-picking one planned meal.
     let mealSwaps: MealSwapStore
     /// Calendar and weather context for Autopilot, derived on this device.
@@ -159,6 +161,12 @@ final class AppDependencies {
         }
         pairings.profileDidChange = { [autopilot] profile in
             autopilot.present(profile)
+        }
+        // A saved or deleted companion changes what the week suggests.
+        let companions = CompanionsStore(session: session, api: client.map { CompanionsAPI(client: $0) })
+        self.companions = companions
+        companions.onChange = { [pairings] in
+            Task { await pairings.reload() }
         }
         // Swapping a planned meal for a similar one returns the whole plan, so the week and
         // its grocery list follow without a reload, and the Menu's cards and badges refresh.

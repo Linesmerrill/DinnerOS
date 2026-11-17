@@ -37,6 +37,7 @@ struct DinnerOSApp: App {
                 .environment(dependencies.menu)
                 .environment(dependencies.planner)
                 .environment(dependencies.pairings)
+                .environment(dependencies.companions)
                 .environment(dependencies.mealSwaps)
                 .environment(dependencies.deviceContext)
                 .environment(dependencies.intentRouter)

@@ -476,6 +476,9 @@ struct MenuView: View {
                 NavigationLink(value: PastWeeksRoute()) {
                     Label("Past Weeks", systemImage: "clock.arrow.circlepath")
                 }
+                NavigationLink(value: CompanionsRoute()) {
+                    Label("Companions", systemImage: "takeoutbag.and.cup.and.straw")
+                }
             }
         } label: {
             Label("Week Menu", systemImage: "ellipsis.circle")
@@ -636,6 +639,9 @@ private struct MenuDestinations: ViewModifier {
             }
             .navigationDestination(for: PastWeeksRoute.self) { _ in
                 PastWeeksView()
+            }
+            .navigationDestination(for: CompanionsRoute.self) { _ in
+                CompanionsListView()
             }
             .navigationDestination(for: DiscoverRoute.self) { _ in
                 DiscoverView()

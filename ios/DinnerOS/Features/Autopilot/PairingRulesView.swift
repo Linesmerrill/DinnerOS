@@ -65,6 +65,15 @@ struct PairingRulesView: View {
                     }
                 }
                 Section {
+                    NavigationLink {
+                        CompanionsListView()
+                    } label: {
+                        Label("Companions", systemImage: "takeoutbag.and.cup.and.straw")
+                    }
+                } footer: {
+                    Text("Things that go with dinner, like chips with tacos. Autopilot suggests them or adds them for you.")
+                }
+                Section {
                     if let errorMessage {
                         FormErrorLabel(message: errorMessage)
                     }
