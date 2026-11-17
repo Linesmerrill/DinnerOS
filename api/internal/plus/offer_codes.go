@@ -313,6 +313,11 @@ func (s *Service) requeueExpired(ctx context.Context, now time.Time) error {
 	for _, m := range months {
 		if !m.RevealedAt.IsZero() {
 			if _, err := s.store.Get(ctx, m.HouseholdID); err == nil {
+				// Seen and subscribed since: count it as used, so it stops
+				// coming back here.
+				if _, err := s.offerCodes.MarkRedeemed(ctx, m.HouseholdID, now); err != nil {
+					return err
+				}
 				continue
 			} else if !errors.Is(err, ErrNotFound) {
 				return err

@@ -160,8 +160,12 @@ func TestFreeMonthExpiredCodeIsReplaced(t *testing.T) {
 	if got := h.months(hh); len(got) != 1 || got[0].State != MonthReady || !got[0].CodeExpiresAt.Equal(now.Add(200*24*time.Hour)) {
 		t.Errorf("sharer months = %+v", got)
 	}
-	if got := h.months(hhB); got[0].CodeExpiresAt.After(now.Add(30 * 24 * time.Hour)) {
-		t.Errorf("a revealed month was swapped: %+v", got)
+	if got := h.months(hhB); got[0].CodeExpiresAt.After(now.Add(30*24*time.Hour)) || got[0].State != MonthRedeemed {
+		t.Errorf("a revealed month of a subscriber = %+v, want counted as used, not swapped", got)
+	}
+	// It doesn't come back on the next sweep.
+	if exp, _ := h.offers.ExpiredGiven(t.Context(), now.Add(22*24*time.Hour), 10); len(exp) != 0 {
+		t.Errorf("still expired: %+v", exp)
 	}
 }
 
