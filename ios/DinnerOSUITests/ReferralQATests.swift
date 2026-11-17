@@ -224,6 +224,13 @@ final class ReferralQATests: XCTestCase {
                 sleep(1)
             }
         }
+        // In the simulator the sheet can stay blank while it loads, with no button to close it:
+        // pull it down by its top edge, as a person would.
+        // A pull on the Menu with no sheet up only scrolls it, so this is safe either way.
+        let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1))
+        top.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
+        sleep(2)
+        snap(app, "Apple's redeem screen closed (\(mode))")
     }
 
     @MainActor
