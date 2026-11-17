@@ -43,6 +43,7 @@ import (
 	"github.com/Linesmerrill/DinnerOS/api/internal/push"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recommendations"
+	"github.com/Linesmerrill/DinnerOS/api/internal/reviewaccount"
 	"github.com/Linesmerrill/DinnerOS/api/internal/sameitems"
 	"github.com/Linesmerrill/DinnerOS/api/internal/shelflife"
 	"github.com/Linesmerrill/DinnerOS/api/internal/shopping"
@@ -155,7 +156,6 @@ func run() error {
 		return err
 	}
 
-	authHandler := newAuthHandler(cfg, userService, tokens, logger)
 	// The global recipe catalog is a separate collection with no household in
 	// it. Recipes flow one way: an import publishes public-source recipes
 	// into it, and a household copies an entry into its own library.
@@ -192,6 +192,11 @@ func run() error {
 		logger.Info("STARTER_RECIPES_HOUSEHOLD_ID is not set; new households start with no recipes")
 	}
 	householdService, householdHandler, invitationHandler := newHouseholdHandlers(cfg, db, userService, tokens, starter, logger)
+	review, err := newReviewSignIn(cfg, householdService, recipeService, userService, starter, logger)
+	if err != nil {
+		return err
+	}
+	authHandler := newAuthHandler(cfg, userService, tokens, review, logger)
 	// Sharing recipes with other households is each household's choice, off
 	// until it opts in; turning it on shares what it already has.
 	recipeService.WithSharing(householdService)
@@ -631,7 +636,7 @@ func indexSets() []mongodb.IndexSet {
 }
 
 // newAuthHandler wires provider verifiers and the auth HTTP handler.
-func newAuthHandler(cfg config.Config, userService *users.Service, tokens *auth.TokenService, logger *slog.Logger) *auth.Handler {
+func newAuthHandler(cfg config.Config, userService *users.Service, tokens *auth.TokenService, review *auth.ReviewSignIn, logger *slog.Logger) *auth.Handler {
 	jwksHTTP := &http.Client{Timeout: jwksFetchTimeout}
 	verifiers := map[users.Provider]auth.IdentityVerifier{
 		users.ProviderApple: auth.NewAppleVerifier(cfg.AppleBundleID, auth.VerifierOptions{
@@ -661,7 +666,30 @@ func newAuthHandler(cfg config.Config, userService *users.Service, tokens *auth.
 		Logger:          logger,
 		RateLimit:       ratelimit.New(ratelimit.Options{Burst: cfg.AuthRateBurst, Every: authRateEvery}).Middleware,
 		DevLoginEnabled: cfg.DevLoginEnabled(),
+		Review:          review,
 	})
+}
+
+// newReviewSignIn turns on email sign-in for the App Review account when
+// REVIEW_ACCOUNT_EMAIL and REVIEW_ACCOUNT_PASSWORD are both set (decision
+// 752). Its household is seeded with our own recipes and never gets the
+// starter library.
+func newReviewSignIn(cfg config.Config, householdService *households.Service, recipeService *recipes.Service, userService *users.Service, starter *recipes.Starter, logger *slog.Logger) (*auth.ReviewSignIn, error) {
+	if p := cfg.ReviewAccount.Problem; p != "" {
+		logger.Warn(p)
+	}
+	if !cfg.ReviewAccount.Enabled() {
+		return nil, nil
+	}
+	seeder, err := reviewaccount.NewSeeder(householdService, recipeService, logger)
+	if err != nil {
+		return nil, err
+	}
+	starter.SkipWhen(reviewaccount.SkipStarter(householdService, userService))
+	logger.Info("review sign-in is on for the App Review account")
+	return auth.NewReviewSignIn(auth.ReviewOptions{
+		Email: cfg.ReviewAccount.Email, Password: cfg.ReviewAccount.Password, Seeder: seeder,
+	}), nil
 }
 
 // newHouseholdHandlers wires the households and invitations modules. The

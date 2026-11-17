@@ -290,6 +290,20 @@ under 30 minutes. The standard:
 5. **Local APIs** on local Mongo: 8082 with no photo search key, 8083 with the fake Unsplash
    (below), both with `REFERRAL_MAX_PER_30_DAYS=1000` and `AUTH_RATE_BURST=1000` (eight simulators sign in and
    out from one address, and the default of 10 at once turns them away with "Too many attempts").
+   8082 also runs the App Review account (decision 752) for `ReviewAccountQATests`: export a test
+   email and a fresh password in the shell that starts the API and runs the matrix, and
+   `qa-matrix.sh` passes them to the test as `TEST_RUNNER_QA_REVIEW_EMAIL` and
+   `TEST_RUNNER_QA_REVIEW_PASSWORD` (without them the test is skipped and the summary says so):
+
+   ```bash
+   export REVIEW_ACCOUNT_EMAIL=review@example.test
+   export REVIEW_ACCOUNT_PASSWORD=$(openssl rand -base64 18)
+   PORT=8082 PLUS_ENABLED=true ... go run ./api/cmd/server   # same shell, so it sees both
+   ```
+
+   The test signs in with email, checks the five seeded recipes and no starter library through
+   the API, opens the purchase screen, and deletes the account so the next run is seeded again.
+   It runs on one config only (iPad landscape, dark): there is one review account.
 6. **Report.** `summary.txt` lists each config and test as ok or FAILED with the first error, and
    the time. If a run goes past 30 minutes, say why from the logs before rerunning anything.
 

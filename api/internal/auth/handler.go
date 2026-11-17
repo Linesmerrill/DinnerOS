@@ -34,6 +34,9 @@ type HandlerOptions struct {
 	RateLimit func(http.Handler) http.Handler
 	// DevLoginEnabled mounts POST /auth/dev. Only set it in development.
 	DevLoginEnabled bool
+	// Review, when set, mounts POST /auth/review-sign-in for the App Review
+	// account (review.go). GET /auth/options says whether it's on.
+	Review *ReviewSignIn
 }
 
 // Handler serves the authentication endpoints.
@@ -63,6 +66,10 @@ func (h *Handler) Mount(r chi.Router) {
 		r.Post("/logout", h.logout)
 		if h.opts.DevLoginEnabled {
 			r.Post("/dev", h.signInDev)
+		}
+		r.Get("/options", h.options)
+		if h.opts.Review.Enabled() {
+			r.Post("/review-sign-in", h.signInReview)
 		}
 	})
 	r.With(RequireAuth(h.opts.Tokens)).Get("/me", h.me)

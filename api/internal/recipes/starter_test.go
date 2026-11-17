@@ -127,3 +127,25 @@ func TestStarterHouseholdCreated(t *testing.T) {
 		t.Errorf("disabled starter copied %d recipes", len(got))
 	}
 }
+
+func TestStarterSkipsHouseholdsItIsToldTo(t *testing.T) {
+	store := newMemoryStore()
+	svc := NewService(store)
+	if err := store.SaveRecipes(context.Background(), starterSource, []Recipe{{Source: SourceHelloFresh, SourceRecipeID: "1", Name: "One"}}); err != nil {
+		t.Fatal(err)
+	}
+	const skipped, copied = "00000000000000000000eeee", "00000000000000000000ffff"
+	st := NewStarter(StarterOptions{Service: svc, SourceHouseholdID: starterSource}).
+		SkipWhen(func(_ context.Context, id string) bool { return id == skipped })
+	st.HouseholdCreated(context.Background(), skipped)
+	st.HouseholdCreated(context.Background(), copied)
+	if err := st.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := store.ListRecipesAfter(context.Background(), skipped, "", 10); len(got) != 0 {
+		t.Errorf("skipped household got %d starter recipes, want 0", len(got))
+	}
+	if got, _ := store.ListRecipesAfter(context.Background(), copied, "", 10); len(got) != 1 {
+		t.Errorf("other household got %d starter recipes, want 1", len(got))
+	}
+}

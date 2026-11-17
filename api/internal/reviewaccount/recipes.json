@@ -1,0 +1,142 @@
+{
+  "about": "The App Review account's recipes (decision 752). Written by DinnerOS for this account: our own words, plain names, no photos, nothing imported.",
+  "household": "Our Kitchen",
+  "timeZone": "America/Los_Angeles",
+  "recipes": [
+    {
+      "name": "Lemon Garlic Chicken with Green Beans",
+      "headline": "Golden chicken, a quick pan sauce, and crisp green beans",
+      "servings": 2,
+      "prepMinutes": 10,
+      "totalMinutes": 30,
+      "cuisines": ["american"],
+      "ingredients": [
+        {"name": "Chicken Breast", "quantity": "2", "note": "about 12 oz total"},
+        {"name": "Green Beans", "quantity": "8", "unit": "oz", "note": "trimmed"},
+        {"name": "Garlic", "quantity": "3", "unit": "clove", "note": "minced"},
+        {"name": "Lemon", "quantity": "1"},
+        {"name": "Chicken Stock Concentrate", "quantity": "1", "unit": "tsp"},
+        {"name": "Butter", "quantity": "1", "unit": "tbsp"},
+        {"name": "Olive Oil", "quantity": "1", "unit": "tbsp", "pantryStaple": true},
+        {"name": "Salt", "pantryStaple": true, "note": "to taste"},
+        {"name": "Black Pepper", "pantryStaple": true, "note": "to taste"}
+      ],
+      "steps": [
+        "Pat the chicken dry and season both sides with salt and pepper. Zest the lemon, then cut it in half.",
+        "Heat the oil in a large pan over medium-high heat. Cook the chicken until golden and cooked through, 5 to 7 minutes per side (165°F inside). Move it to a plate.",
+        "Add the green beans to the same pan with a splash of water. Cook, stirring, until bright green and just tender, 4 to 5 minutes. Season with salt and move them to the plates.",
+        "Lower the heat to medium. Add the garlic and cook for 30 seconds. Stir in the stock concentrate, ¼ cup water, the lemon zest and the juice of half the lemon. Simmer until a little thicker, about 2 minutes.",
+        "Turn off the heat and stir in the butter. Slice the chicken, spoon the sauce over it, and serve with the green beans and the other lemon half cut into wedges."
+      ]
+    },
+    {
+      "name": "Black Bean Tacos with Lime Slaw",
+      "headline": "Smoky beans and a crunchy slaw in warm tortillas",
+      "servings": 2,
+      "prepMinutes": 10,
+      "totalMinutes": 20,
+      "cuisines": ["mexican"],
+      "ingredients": [
+        {"name": "Black Beans", "quantity": "1", "unit": "can", "note": "15 oz, drained and rinsed"},
+        {"name": "Flour Tortillas", "quantity": "6", "note": "small"},
+        {"name": "Green Cabbage", "quantity": "2", "unit": "cup", "note": "thinly sliced"},
+        {"name": "Lime", "quantity": "1"},
+        {"name": "Red Onion", "quantity": "0.5"},
+        {"name": "Cilantro", "quantity": "0.25", "unit": "cup", "note": "chopped"},
+        {"name": "Ground Cumin", "quantity": "1", "unit": "tsp"},
+        {"name": "Smoked Paprika", "quantity": "1", "unit": "tsp"},
+        {"name": "Sour Cream", "quantity": "0.25", "unit": "cup"},
+        {"name": "Olive Oil", "quantity": "1", "unit": "tbsp", "pantryStaple": true},
+        {"name": "Salt", "pantryStaple": true, "note": "to taste"}
+      ],
+      "steps": [
+        "Finely chop half the red onion. Toss the cabbage with the juice of half the lime, half the cilantro and a pinch of salt. Set the slaw aside.",
+        "Heat the oil in a pan over medium heat. Cook the onion until soft, about 3 minutes. Add the cumin and paprika and stir for 30 seconds.",
+        "Add the beans and ¼ cup water. Cook, mashing some of the beans with a fork, until thick and warm, about 5 minutes. Season with salt.",
+        "Warm the tortillas in a dry pan for about 30 seconds per side.",
+        "Fill the tortillas with the beans and the slaw. Top with sour cream and the rest of the cilantro, and serve with the other lime half cut into wedges."
+      ]
+    },
+    {
+      "name": "Spaghetti with Tomato and Basil",
+      "headline": "A simple tomato sauce that's ready when the pasta is",
+      "servings": 2,
+      "prepMinutes": 5,
+      "totalMinutes": 25,
+      "cuisines": ["italian"],
+      "ingredients": [
+        {"name": "Spaghetti", "quantity": "6", "unit": "oz"},
+        {"name": "Crushed Tomatoes", "quantity": "1", "unit": "can", "note": "14.5 oz"},
+        {"name": "Tomato Paste", "quantity": "2", "unit": "tbsp"},
+        {"name": "Garlic", "quantity": "2", "unit": "clove", "note": "thinly sliced"},
+        {"name": "Fresh Basil", "quantity": "0.25", "unit": "cup", "note": "torn"},
+        {"name": "Parmesan Cheese", "quantity": "0.25", "unit": "cup", "note": "grated"},
+        {"name": "Red Pepper Flakes", "quantity": "0.25", "unit": "tsp"},
+        {"name": "Olive Oil", "quantity": "2", "unit": "tbsp", "pantryStaple": true},
+        {"name": "Salt", "pantryStaple": true, "note": "to taste"}
+      ],
+      "steps": [
+        "Bring a large pot of salted water to a boil.",
+        "Heat the oil in a large pan over medium heat. Add the garlic and red pepper flakes and cook until the garlic is pale gold, about 1 minute.",
+        "Stir in the tomato paste and cook for 1 minute. Add the crushed tomatoes and a pinch of salt. Simmer, stirring now and then, while the pasta cooks.",
+        "Cook the spaghetti until al dente, about 10 minutes. Save ½ cup of the pasta water, then drain.",
+        "Add the spaghetti to the sauce with a splash of the pasta water and toss until glossy. Stir in most of the basil. Serve with the parmesan and the rest of the basil on top."
+      ]
+    },
+    {
+      "name": "Coconut Chickpea Curry",
+      "headline": "A mild, creamy curry with spinach, served over rice",
+      "servings": 2,
+      "prepMinutes": 10,
+      "totalMinutes": 35,
+      "cuisines": ["indian"],
+      "ingredients": [
+        {"name": "Chickpeas", "quantity": "1", "unit": "can", "note": "15 oz, drained and rinsed"},
+        {"name": "Coconut Milk", "quantity": "2/3", "unit": "cup"},
+        {"name": "Tomato Paste", "quantity": "2", "unit": "tbsp"},
+        {"name": "Baby Spinach", "quantity": "2", "unit": "cup"},
+        {"name": "Yellow Onion", "quantity": "1"},
+        {"name": "Garlic", "quantity": "2", "unit": "clove", "note": "minced"},
+        {"name": "Fresh Ginger", "quantity": "1", "unit": "thumb", "note": "grated"},
+        {"name": "Curry Powder", "quantity": "1", "unit": "tbsp"},
+        {"name": "Vegetable Stock Concentrate", "quantity": "1", "unit": "tsp"},
+        {"name": "Jasmine Rice", "quantity": "0.75", "unit": "cup"},
+        {"name": "Olive Oil", "quantity": "1", "unit": "tbsp", "pantryStaple": true},
+        {"name": "Salt", "pantryStaple": true, "note": "to taste"}
+      ],
+      "steps": [
+        "Rinse the rice. Bring it to a boil in a small pot with 1¼ cups water and a pinch of salt, then cover and cook on low for 15 minutes. Take it off the heat and keep it covered.",
+        "Dice the onion. Heat the oil in a large pan over medium heat and cook the onion until soft, about 5 minutes.",
+        "Add the garlic, ginger and curry powder and stir for 1 minute. Stir in the tomato paste and cook for 1 minute more.",
+        "Add the chickpeas, coconut milk, stock concentrate and ½ cup water. Simmer until slightly thick, about 8 minutes.",
+        "Stir in the spinach until it wilts, about 1 minute. Season with salt. Fluff the rice with a fork and serve the curry over it."
+      ]
+    },
+    {
+      "name": "Beef and Broccoli Stir-Fry",
+      "headline": "Tender beef and broccoli in a savory ginger sauce",
+      "servings": 2,
+      "prepMinutes": 15,
+      "totalMinutes": 30,
+      "cuisines": ["chinese"],
+      "ingredients": [
+        {"name": "Flank Steak", "quantity": "10", "unit": "oz", "note": "thinly sliced against the grain"},
+        {"name": "Broccoli Florets", "quantity": "3", "unit": "cup"},
+        {"name": "Soy Sauce", "quantity": "3", "unit": "tbsp"},
+        {"name": "Brown Sugar", "quantity": "1", "unit": "tbsp"},
+        {"name": "Cornstarch", "quantity": "2", "unit": "tsp"},
+        {"name": "Garlic", "quantity": "2", "unit": "clove", "note": "minced"},
+        {"name": "Fresh Ginger", "quantity": "1", "unit": "thumb", "note": "grated"},
+        {"name": "Jasmine Rice", "quantity": "0.75", "unit": "cup"},
+        {"name": "Vegetable Oil", "quantity": "1", "unit": "tbsp", "pantryStaple": true}
+      ],
+      "steps": [
+        "Rinse the rice. Bring it to a boil in a small pot with 1¼ cups water, then cover and cook on low for 15 minutes. Take it off the heat and keep it covered.",
+        "Stir together the soy sauce, brown sugar, cornstarch and ¼ cup water in a small bowl.",
+        "Heat the oil in a large pan over high heat. Cook the beef in one layer until browned, about 2 minutes, then move it to a plate.",
+        "Add the broccoli and 2 Tbsp water to the pan. Cover and cook until bright green and crisp-tender, about 3 minutes. Add the garlic and ginger and stir for 30 seconds.",
+        "Return the beef to the pan, pour in the sauce and stir until it thickens and coats everything, about 1 minute. Serve over the rice."
+      ]
+    }
+  ]
+}
