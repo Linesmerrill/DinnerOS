@@ -601,7 +601,10 @@ Implemented in `internal/plus` (decisions 675, 698 and 699).
 | `plus_referral_codes` | householdId, code (as shown), codeKey, createdAt, changes (the last 10 change times) | **unique** `{householdId}`; **unique** `{code}`; **unique** `{codeKey}` where it exists |
 | `plus_referral_code_keys` | key (lowercase letters and numbers), householdId (unset once the household is deleted), status (`active`/`retired`), createdAt, retiredAt | **unique** `{key}`; `{householdId}` |
 | `plus_referrals` | householdId (the household that entered the code), referrerId, at, state (`pending`/`ready`/`qualified`/`expired`), expiresAt, setupMetAt, qualifiedAt, referrerRewarded, checks (`passed`/`blocked`, absent when unknown), referredGranted, referrerGranted, settled | **unique** `{householdId}`; `{referrerId}`; `{state, _id}` |
-| `plus_free_time` | householdId, until, updatedAt | **unique** `{householdId}` |
+| `plus_free_time` | householdId, until, updatedAt. Free months from before decision 755; read until they end, never written now | **unique** `{householdId}` |
+| `plus_free_months` | key (`<referralId>:referred` or `:referrer`), householdId, referralId, role, earnedAt, state (`owed`/`ready`/`redeemed`), codeId, givenAt, codeExpiresAt, revealedAt, redeemedAt | **unique** `{key}`; `{householdId, earnedAt}`; `{state, earnedAt}` |
+| `plus_offer_codes` | key (SHA-256 of the code), code (a **secret**; unset once redeemed, expired or its household deleted), offer, batch, expiresAt, importedAt, state (`available`/`given`/`redeemed`/`expired`/`deleted`), householdId, monthId, givenAt, revealedAt, redeemedAt | **unique** `{key}`; **unique** `{monthId}` where it exists; `{state, expiresAt}`; `{householdId}` where it exists |
+| `plus_offer_code_alerts` | _id (`shortage`), alerted, alertedAt, importedAt | `_id` |
 | `plus_household_setup` | householdId, dinners, recipes, updatedAt | **unique** `{householdId}` |
 | `plus_identity_households` | identity (SHA-256 of provider and subject), householdId, userId, at | **unique** `{identity, householdId}`; `{householdId}` |
 | `plus_device_ties` | householdId, owns, elsewhere, updatedAt | **unique** `{householdId}` |
@@ -610,8 +613,10 @@ Implemented in `internal/plus` (decisions 675, 698 and 699).
 
 - **One state change wins.** Moving a referral (`pending` to `ready` or
   `expired`, `ready` to `qualified`) is one `updateOne` guarded by the current
-  state. Each free month is claimed with `{flag: {$ne: true}}` before
-  `plus_free_time` is extended, so a retry never pays twice; `settled` is set
+  state. Each free month is one `plus_free_months` document upserted on its
+  key, and takes its code in one `findOneAndUpdate` on an `available` code
+  (the unique `monthId` stops a second), so a retry never pays twice
+  (decision 755); `settled` is set
   after both months and both notifications (deduplicated by
   `plus.referral:<householdId>:referred|referrer`), and the sweep finishes any
   qualified referral that isn't settled.

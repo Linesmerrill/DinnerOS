@@ -180,6 +180,10 @@ bodies, malformed JSON, unknown fields, wrong types, and trailing data with
 | POST | `/api/v1/households/{householdId}/plus/referral/code` `{custom}` or `{regenerate: true}` → the referral response | `plan.edit` | Plus | ✅ |
 | GET | `/api/v1/referral-codes/{code}` → who invited you, for an invite link ([Invite links](#invite-links)) | none | Plus | ✅ |
 | GET | `/api/v1/plus/referrals/summary` → totals by state and `footerText` | operators | Plus | ✅ |
+| POST | `/api/v1/households/{householdId}/plus/free-months/{monthId}/reveal` → `{code, redeemUrl?, copiedText}` (`no-store`); `404 free_month_not_found`, `409 free_month_on_the_way` or `free_month_redeemed`. The only answer that holds a code (decision 755) | `plan.edit` | Plus | ✅ |
+| POST | `/api/v1/admin/plus/offer-codes?offer=&batch=&expiresAt=` with Apple's CSV as the body → `{added, duplicates, skipped, filled, stock}`. Counts only | operators | Plus | ✅ |
+| GET | `/api/v1/admin/plus/offer-codes/stock` → `{available, given, revealed, redeemed, expired, owed, batches}` | operators | Plus | ✅ |
+| POST | `/api/v1/plus/dev/offer-codes` `{count}` → `{added, filled}`: made-up codes for the local pool. Only with developer sign-in on | signed in | Plus | ✅ |
 | PUT | `/api/v1/households/{householdId}/recipes/{recipeId}/rating` `{score, comment?, tags?}` → rating | `household.view` | 9 | ✅ |
 | DELETE | `/api/v1/households/{householdId}/recipes/{recipeId}/rating` → `204` | `household.view` | 9 | ✅ |
 | GET | `/api/v1/households/{householdId}/recipes/{recipeId}/ratings` → `{householdRating, items}` | `household.view` | 9 | ✅ |
@@ -3045,9 +3049,9 @@ Apple: the API never exchanges an authorization code, so it holds none.
 ## Plus referrals
 
 Decision 698. Entering another household's code makes a **pending**
-referral. Nothing is free yet. It **qualifies**, and both households get 30
-free days of Plus within 24 hours (the sharer up to 12 months in all; a
-paying household's month starts when its paid time ends), only when:
+referral. Nothing is free yet. It **qualifies**, and both households earn a
+free month of Plus within 24 hours (the sharer up to 12 months in all), only
+when:
 
 - the new household's creator had never been in another household, by Apple
   or Google sign-in identity, whatever accounts were deleted since;
@@ -3064,6 +3068,30 @@ paying household's month starts when its paid time ends), only when:
 
 A referral that isn't set up in time **expires**. Nothing a person sees says
 which of the first three checks a referral waits on.
+
+### Free months are Apple offer codes
+
+Decision 755. Each earned month takes one one-time-use offer code from the
+pool (docs/deployment.md, Free month codes). `GET .../plus` and
+`GET .../plus/referral` (under `invites`) list them as `freeMonths`, oldest
+first, never with the code:
+
+```json
+{"id": "6740…", "state": "ready", "title": "Your free month is ready",
+ "message": "Redeem it to start DinnerOS Plus with the first month free.",
+ "earnedAt": "2026-11-17T12:00:00Z", "redeemText": "Redeem",
+ "terms": "Redeeming starts DinnerOS Plus with the first month free. After that it renews at the normal price unless you cancel in your Apple account settings."}
+```
+
+`state` is `ready` (a code is waiting), `owed` ("Your free month is on the
+way": the pool was empty; it fills after the next import and the household is
+notified), or `redeemed`. A month is redeemed when RevenueCat's webhook names
+an `offer_code` on a purchase for a household that revealed a code, or when
+its first subscription started after the reveal. The app asks for the code
+with `POST .../plus/free-months/{id}/reveal`, copies it, and opens Apple's
+redeem sheet; Plus then follows RevenueCat like any purchase. Nothing writes
+`plus_free_time` any more: a date granted before this counts as Plus
+(`freeUntil`) until it ends, and only such a household gets `invites.usedCode`.
 
 ### DeviceCheck token
 

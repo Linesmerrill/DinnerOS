@@ -196,6 +196,108 @@ schedule).
   `REFERRAL_MIN_RECIPES` (1), and `REFERRAL_MAX_PER_30_DAYS` (3). The app's
   words follow them.
 
+### Free month codes (Apple offer codes)
+
+Decision 755. Each free month an invite earns is a one-time-use Apple offer
+code for DinnerOS Plus, from a pool in `plus_offer_codes`. The API gives one
+per earned month the moment the invite counts. With the pool empty the month
+waits as owed, one email goes to `REPORT_ALERT_EMAIL` (Resend must be on), and
+the next import hands codes to every waiting month, oldest first, with a
+"Your free month is ready" notification. Codes that end within 14 days are
+never given. Codes are secrets: never paste one in chat, a ticket or a commit,
+and delete the CSV once it's imported.
+
+**One-time App Store Connect setup** (Hark, once Apple is back):
+
+1. App Store Connect → DinnerOS → Subscriptions → the Plus group →
+   **DinnerOS Plus Monthly** (`com.linesmerrill.dinneros.plus.monthly`) →
+   Offer Codes → **Create Offer Code** (in the newer screen: Subscription
+   Prices → Offer Codes → +).
+2. Settings:
+   - **Reference name:** `Invite free month` (only staff see it; it becomes
+     the import's `offer`).
+   - **Customer eligibility:** tick all three, **New**, **Existing** and
+     **Expired** subscribers. The household that joined is new; the household
+     that shared may already pay or may have lapsed. If App Store Connect
+     won't take all three on one free offer, stop and say so: the pool hands
+     any unused code to any household, so two offers with different
+     eligibility would need the API to keep them apart first.
+   - **Offer type / payment mode:** **Free**.
+   - **Duration:** **1 month**.
+   - **Countries or regions:** all where DinnerOS is sold.
+   - If asked how it combines with the introductory offer, pick the option
+     that lets new subscribers use the code (Apple's wording changes; the
+     free month replaces the 14-day trial for them).
+3. Create a batch of **one-time-use codes**: **Quantity** 500 to start (Apple
+   limits how many codes an app can make each quarter, so don't make more
+   than a quarter's need), **Expiration** the furthest date Apple allows (at
+   most 6 months out). Name the batch by month, like `2026-11-a`.
+4. When Apple says the codes are ready, **Download** the CSV.
+
+Only the monthly subscription is needed: after the free month it renews at
+$4.99 a month, the smaller charge, and the household can change plans in
+Apple's settings. One-time-use codes from App Store Connect work only for an
+app that is live on the App Store.
+
+**Import** (pick one):
+
+- Through the running API, which gives waiting months their codes at once:
+
+  ```bash
+  OPERATOR_TOKEN=<an operator's access token> scripts/offer-codes.sh \
+    import ~/Downloads/codes.csv "Invite free month" 2026-11-a 2027-05-15
+  OPERATOR_TOKEN=<token> scripts/offer-codes.sh stock
+  ```
+
+  The token is an access token of a user in `OPERATOR_USER_IDS`. Behind it is
+  `POST /api/v1/admin/plus/offer-codes?offer=&batch=&expiresAt=` with the CSV
+  as the body, and `GET /api/v1/admin/plus/offer-codes/stock`.
+- Straight into MongoDB, with no token (waiting months get codes at the API's
+  next hourly sweep):
+
+  ```bash
+  heroku run --no-tty -a dinneros-api -- /offercodes -offer "Invite free month" \
+    -batch 2026-11-a -expires 2027-05-15 < ~/Downloads/codes.csv
+  heroku run -a dinneros-api -- /offercodes -stock
+  ```
+
+Both read one code per line (the first column of a CSV row), skip a header
+and blank lines, and skip any code the pool has ever held, so importing the
+same file twice adds nothing. They print counts only.
+
+**Stock.** `available` is what can still be given, `owed` is months waiting,
+`expired` is unused codes past or within 14 days of their end. Import a new
+batch when `available` gets near a month's invites, and before a batch
+expires. A code given to a household that never opened it goes back to the
+pool when the household is deleted.
+
+**Making codes with the App Store Connect API** (researched, not set up).
+The API has `POST /v1/subscriptionOfferCodes` (an offer on a subscription:
+name, customer eligibilities `NEW`/`EXISTING`/`EXPIRED`, offer mode free,
+duration one month, with per-territory prices) and
+`POST /v1/subscriptionOfferCodeOneTimeUseCodes` (a batch: number of codes and
+expiration date, related to the offer). The batch's codes come back as CSV
+from `GET /v1/subscriptionOfferCodeOneTimeUseCodes/{id}/values`. Managing
+in-app purchases needs a key with the **Admin** or **App Manager** role; a
+Developer key can't. The fastlane key in CI (`APP_STORE_CONNECT_KEY_ID`,
+`APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_PRIVATE_KEY`) uploads builds,
+which App Manager covers, but its role isn't recorded here: check it in App
+Store Connect → Users and Access → Integrations before relying on it. A job
+could then:
+
+1. `workflow_dispatch` with inputs `quantity` and `expires`.
+2. Sign a JWT with the existing key, look up the `Invite free month` offer
+   (`GET /v1/subscriptions/{id}/offerCodes`), and `POST` a one-time-use batch.
+3. Poll the batch until Apple marks it active, then `GET .../values`.
+4. Pipe the CSV straight into `POST /api/v1/admin/plus/offer-codes` with an
+   operator token from a new GitHub secret. Nothing in the job may print the
+   CSV or write it to a file or an artifact: the repo and its Actions logs are
+   public.
+
+It would need one new secret (the operator token, which expires, so a
+long-lived operator credential would have to be designed first). Until then,
+the download and `scripts/offer-codes.sh` are the way.
+
 ### Removed: meal-kit recipe import
 
 The in-app HelloFresh import is gone (decision in
@@ -437,6 +539,7 @@ vars or GitHub Secrets.
 | `DEVICECHECK_KEY_ID`, `DEVICECHECK_TEAM_ID`, `DEVICECHECK_PRIVATE_KEY` | referrals | Optional; each defaults to its `APNS_*` value, so the APNs key is used. The key must have DeviceCheck enabled. The private key is a **secret** (the whole `.p8`). Set all three (after defaults) or none: a partial or unparseable set stops the API at startup. Read by the web dyno. Check with `/devicecheckprobe`. See [Referrals and DeviceCheck](#referrals-and-devicecheck). |
 | `AUTH_RATE_BURST` | optional | Sign-in requests one address may make at once, default 10 (refills one every 6 seconds). Raise only for local QA. Not a secret. |
 | `REFERRAL_QUALIFY_DAYS`, `REFERRAL_MIN_DINNERS`, `REFERRAL_MIN_RECIPES`, `REFERRAL_MAX_PER_30_DAYS` | optional | Referral thresholds, defaults 14, 1, 1, and 3. Not secrets. |
+| `APP_STORE_APP_ID` | optional (free month codes) | The app's numeric **Apple ID**: App Store Connect → the app → App Information → General Information → Apple ID. With it, a revealed free month code also carries Apple's redeem link that fills the code in. Not a secret. Digits only; a bundle ID is refused at boot. |
 | `STARTER_RECIPES_HOUSEHOLD_ID` | optional | The 24-character hex ID of the household whose recipes every new household receives as a starter library. Empty (the default) disables it; a malformed value stops the API at startup. Not a secret. See [Starter recipe library](#starter-recipe-library). |
 | `OPENAI_API_KEY` | future | platform.openai.com → API keys (backend only) |
 
