@@ -59,6 +59,10 @@ nonisolated struct RecipeEditDraft: Equatable, Sendable {
     /// Per serving. Like the times, only a recipe the household added can change it.
     var nutrition: NutritionValues
     private let originalNutrition: [RecipeNutrientEntry]
+    /// Cuisine values from the vocabulary ("mexican"); empty for none. Any recipe can change
+    /// them, a meal kit one too.
+    var cuisines: [String]
+    private let originalCuisines: [String]
     private let original: [Line]
     private let originalSteps: [String]
     /// A recipe read from a web page has no steps of its own: the page has them.
@@ -92,6 +96,8 @@ nonisolated struct RecipeEditDraft: Equatable, Sendable {
         originalName = recipe.name
         nutrition = NutritionValues(recipe.nutritionValues)
         originalNutrition = nutrition.entries
+        cuisines = recipe.cuisineValues
+        originalCuisines = recipe.cuisineValues
         original = lines
         originalSteps = steps
     }
@@ -99,7 +105,15 @@ nonisolated struct RecipeEditDraft: Equatable, Sendable {
     var hasChanges: Bool {
         lines.map(Snapshot.init) != original.map(Snapshot.init) || steps != originalSteps
             || imageURL != originalImageURL || [prepMinutes, totalMinutes] != originalTimes
-            || nutrition.entries != originalNutrition || name != originalName
+            || nutrition.entries != originalNutrition || name != originalName || cuisines != originalCuisines
+    }
+
+    /// Only the cuisine changed: the ingredients and steps aren't sent, so a meal kit recipe
+    /// isn't marked edited and still takes the kit's later fixes.
+    private var onlyCuisinesChanged: Bool {
+        cuisines != originalCuisines && lines.map(Snapshot.init) == original.map(Snapshot.init)
+            && steps == originalSteps && imageURL == originalImageURL && [prepMinutes, totalMinutes] == originalTimes
+            && nutrition.entries == originalNutrition && name == originalName
     }
 
     /// What can't be saved yet, in plain words; `nil` when it can.
@@ -204,7 +218,10 @@ nonisolated struct RecipeEditDraft: Equatable, Sendable {
     // MARK: Saving
 
     var request: RecipeEditRequest {
-        RecipeEditRequest(
+        if onlyCuisinesChanged {
+            return RecipeEditRequest(ingredients: [], steps: [], cuisines: cuisines, detailsOnly: true)
+        }
+        return RecipeEditRequest(
             ingredients: lines.map { line in
                 let name = line.name.trimmingCharacters(in: .whitespaces)
                 let kept = original.first { $0.originalID == line.originalID && $0.originalID != nil }
@@ -231,7 +248,8 @@ nonisolated struct RecipeEditDraft: Equatable, Sendable {
             prepMinutes: prepMinutes == originalTimes[0] ? nil : (prepMinutes ?? 0),
             totalMinutes: totalMinutes == originalTimes[1] ? nil : (totalMinutes ?? 0),
             nutritionPerServing: nutrition.entries == originalNutrition ? nil : nutrition.entries,
-            name: name == originalName ? nil : name.trimmingCharacters(in: .whitespaces))
+            name: name == originalName ? nil : name.trimmingCharacters(in: .whitespaces),
+            cuisines: cuisines == originalCuisines ? nil : cuisines)
     }
 
     // MARK: Numbers
@@ -320,6 +338,8 @@ nonisolated struct RecipeEditRequest: Encodable, Equatable, Sendable {
     var nutritionPerServing: [RecipeNutrientEntry]? = nil
     /// Left out when unchanged.
     var name: String? = nil
+    /// Left out when unchanged; empty means none.
+    var cuisines: [String]? = nil
 
     /// Only the photo, times or nutrition change: the ingredients and steps aren't sent, and
     /// the server keeps them.
@@ -338,7 +358,7 @@ nonisolated struct RecipeEditRequest: Encodable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case ingredients, steps
         case imageURL = "imageUrl"
-        case prepMinutes, totalMinutes, nutritionPerServing, name
+        case prepMinutes, totalMinutes, nutritionPerServing, name, cuisines
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -352,6 +372,7 @@ nonisolated struct RecipeEditRequest: Encodable, Equatable, Sendable {
         try container.encodeIfPresent(totalMinutes, forKey: .totalMinutes)
         try container.encodeIfPresent(nutritionPerServing, forKey: .nutritionPerServing)
         try container.encodeIfPresent(name, forKey: .name)
+        try container.encodeIfPresent(cuisines, forKey: .cuisines)
     }
 }
 

@@ -235,15 +235,22 @@ func (s *Service) buildInput(ctx context.Context, householdID string, w planning
 		case events.RecipeSkipped:
 			kind, date, reason = autopilot.KindSkipped, payload.Date, payload.Reason
 		}
+		day, err := time.Parse(time.DateOnly, date)
+		dated := err == nil
+		if !dated {
+			day = e.OccurredAt.In(loc)
+		}
 		week := e.Week
 		if week == "" {
-			day, err := time.Parse(time.DateOnly, date)
-			if err != nil {
-				day = e.OccurredAt.In(loc)
-			}
 			week = planning.WeekOfOn(day, first).String()
 		}
-		in.History = append(in.History, autopilot.Interaction{ItemID: e.RecipeID, Kind: kind, Week: week, Reason: reason, At: e.OccurredAt, Busy: busy[week], Implicit: implicit})
+		// A cooked meal's weekday teaches the day's habits (decision 724).
+		// An implicit cook is the week ending, not a night anyone cooked.
+		var weekday autopilot.Day
+		if kind == autopilot.KindCooked && !implicit && (dated || !e.OccurredAt.IsZero()) {
+			weekday = weekdayOf(day)
+		}
+		in.History = append(in.History, autopilot.Interaction{ItemID: e.RecipeID, Kind: kind, Week: week, Day: weekday, Reason: reason, At: e.OccurredAt, Busy: busy[week], Implicit: implicit})
 	}
 	s.addFeedback(&in, &data, feedback, loc, first)
 	for _, e := range plan.Entries {
@@ -416,4 +423,9 @@ func newID() string {
 	var b [12]byte
 	_, _ = rand.Read(b[:])
 	return hex.EncodeToString(b[:])
+}
+
+// weekdayOf is t's weekday as Autopilot names it.
+func weekdayOf(t time.Time) autopilot.Day {
+	return autopilot.Days[(int(t.Weekday())+6)%7]
 }

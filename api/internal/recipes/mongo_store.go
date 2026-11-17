@@ -165,6 +165,7 @@ type recipeDoc struct {
 	TotalMinutes    int                   `bson:"totalMinutes,omitempty"`
 	Difficulty      int                   `bson:"difficulty,omitempty"`
 	Cuisines        []string              `bson:"cuisines,omitempty"`
+	CuisinesChosen  bool                  `bson:"cuisinesChosen,omitempty"`
 	Tags            []string              `bson:"tags,omitempty"`
 	Utensils        []string              `bson:"utensils,omitempty"`
 	Allergens       []string              `bson:"allergens,omitempty"`
@@ -254,7 +255,7 @@ func newRecipeDoc(r Recipe, householdID, id bson.ObjectID) (recipeDoc, error) {
 		Source: r.Source, SourceRecipeID: r.SourceRecipeID, SourceAliases: r.SourceAliases, SourceURL: r.SourceURL,
 		Name: r.Name, Headline: r.Headline, Description: r.Description, ImageURL: r.ImageURL, IsAddon: r.IsAddon,
 		Servings: r.Servings, PrepMinutes: r.PrepMinutes, TotalMinutes: r.TotalMinutes, Difficulty: r.Difficulty,
-		Cuisines: r.Cuisines, Tags: r.Tags, Utensils: r.Utensils, Allergens: r.Allergens,
+		Cuisines: r.Cuisines, CuisinesChosen: r.CuisinesChosen, Tags: r.Tags, Utensils: r.Utensils, Allergens: r.Allergens,
 		OrderWeeks: r.OrderWeeks, TimesOrdered: r.TimesOrdered, LastOrderedWeek: r.LastOrderedWeek,
 		SharedToCatalog: r.SharedToCatalog, CatalogKey: CatalogKey(r),
 		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
@@ -301,7 +302,7 @@ func (d recipeDoc) toRecipe() Recipe {
 		Source: d.Source, SourceRecipeID: d.SourceRecipeID, SourceAliases: nilIfEmpty(d.SourceAliases), SourceURL: d.SourceURL,
 		Name: d.Name, Headline: d.Headline, Description: d.Description, ImageURL: d.ImageURL, IsAddon: d.IsAddon,
 		Servings: nilIfEmpty(d.Servings), PrepMinutes: d.PrepMinutes, TotalMinutes: d.TotalMinutes, Difficulty: d.Difficulty,
-		Cuisines: nilIfEmpty(d.Cuisines), Tags: nilIfEmpty(d.Tags), Utensils: nilIfEmpty(d.Utensils), Allergens: nilIfEmpty(d.Allergens),
+		Cuisines: nilIfEmpty(d.Cuisines), CuisinesChosen: d.CuisinesChosen, Tags: nilIfEmpty(d.Tags), Utensils: nilIfEmpty(d.Utensils), Allergens: nilIfEmpty(d.Allergens),
 		OrderWeeks: nilIfEmpty(d.OrderWeeks), TimesOrdered: d.TimesOrdered, LastOrderedWeek: d.LastOrderedWeek,
 		SharedToCatalog: d.SharedToCatalog, CatalogKey: d.CatalogKey,
 		CreatedAt: d.CreatedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
@@ -898,7 +899,7 @@ func (s *MongoStore) ListMenuCatalog(ctx context.Context, householdID string, li
 	}
 	fields := []string{
 		"householdId", "name", "headline", "imageUrl", "isAddon", "servings", "prepMinutes", "totalMinutes", "difficulty",
-		"cuisines", "tags", "utensils", "allergens", "nutritionPerServing", "ingredients.name", "orderWeeks", "timesOrdered", "lastOrderedWeek",
+		"cuisines", "cuisinesChosen", "tags", "utensils", "allergens", "nutritionPerServing", "ingredients.name", "orderWeeks", "timesOrdered", "lastOrderedWeek",
 	}
 	projection := make(bson.D, 0, len(fields))
 	for _, f := range fields {

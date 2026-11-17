@@ -129,6 +129,10 @@ nonisolated struct Recipe: Decodable, Equatable, Sendable, Identifiable {
     /// Who took a photo picked from photo search: "Photo by <name> on Unsplash". Nil for the
     /// household's own photo.
     var imageCredit: PhotoCredit? = nil
+    /// The cuisines as the server reads them: canonical values (a guess from the title when the
+    /// recipe has none), and the same as shown ("Mexican"). Empty from an older server.
+    var cuisineValues: [String] = []
+    var cuisineLabels: [String] = []
 
     var imageURL: URL? { imageURLString.flatMap { URL(string: $0) } }
     var sourceURL: URL? { sourceURLString.flatMap { URL(string: $0) } }
@@ -141,7 +145,8 @@ nonisolated struct Recipe: Decodable, Equatable, Sendable, Identifiable {
         case sourceURLString = "sourceUrl"
         case isAddon, servings, prepMinutes, totalMinutes, cookMinutes, difficulty, cuisines, tags, utensils,
             allergens, nutritionPerServing, nutrition, ingredients, steps, orderWeeks, timesOrdered, lastOrderedWeek,
-            createdAt, updatedAt, householdRating, myRating, sharedToCatalog, inCatalog, editedAt, imageCredit
+            createdAt, updatedAt, householdRating, myRating, sharedToCatalog, inCatalog, editedAt, imageCredit,
+            cuisineValues, cuisineLabels
     }
 
     /// The time to show: `cookMinutes`, else the larger of prep and total time.
@@ -194,7 +199,9 @@ nonisolated extension Recipe {
             sharedToCatalog: container.decodeLenientBool(forKey: .sharedToCatalog) ?? false,
             inCatalog: container.decodeLenientBool(forKey: .inCatalog) ?? false,
             editedAt: try? container.decodeIfPresent(Date.self, forKey: .editedAt),
-            imageCredit: try? container.decodeIfPresent(PhotoCredit.self, forKey: .imageCredit))
+            imageCredit: try? container.decodeIfPresent(PhotoCredit.self, forKey: .imageCredit),
+            cuisineValues: container.decodeLossyArray(String.self, forKey: .cuisineValues),
+            cuisineLabels: container.decodeLossyArray(String.self, forKey: .cuisineLabels))
     }
 }
 

@@ -331,8 +331,10 @@ func (p *Provider) prepare(in autopilot.Input, attempt int) (*model, error) {
 		if between, ok := autopilot.WeeksBetween(in.Week, h.Week); ok {
 			it.noteHad(h, between)
 		}
-		if h.Kind == autopilot.KindPlanned && day >= 0 {
-			themes.add(day, it)
+		// Cooked meals teach the day's habits too, so a household that
+		// cooks without planning still gets them (decision 724).
+		if day >= 0 && (h.Kind == autopilot.KindPlanned || h.Kind == autopilot.KindCooked && !h.Implicit) {
+			themes.addOnce(h.Week, day, it)
 		}
 		if h.Kind == autopilot.KindNearby {
 			// Another coming week holds it: only far enough apart counts,

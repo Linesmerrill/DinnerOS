@@ -53,6 +53,10 @@ type EditInput struct {
 	// clears it. Only a recipe the household added takes it, like times
 	// (decision 694).
 	Nutrition *[]Nutrient
+	// Cuisines, when set, are the household's pick for any recipe, meal kit
+	// ones included; an empty list means none (decision 720). A re-import
+	// keeps them.
+	Cuisines *[]string
 }
 
 // EditIngredient is one ingredient line. IngredientID, when it is the
@@ -131,9 +135,20 @@ func (s *Service) Edit(ctx context.Context, householdID, recipeID string, in Edi
 		}
 		r.Nutrition = nutrition
 	}
+	if in.Cuisines != nil {
+		picked, err := editedCuisines(*in.Cuisines)
+		if err != nil {
+			return Recipe{}, err
+		}
+		r.Cuisines, r.CuisinesChosen = picked, true
+	}
 	onlyDetails := in.Ingredients == nil && in.Steps == nil &&
 		(in.ImageURL != nil || in.PrepMinutes != nil || in.TotalMinutes != nil || in.Nutrition != nil ||
-			in.Name != nil)
+			in.Name != nil || in.Cuisines != nil)
+	// A new cuisine alone isn't an edit of the recipe: a meal kit recipe
+	// still takes the kit's fixes to its ingredients and steps.
+	onlyCuisines := onlyDetails && in.ImageURL == nil && in.PrepMinutes == nil && in.TotalMinutes == nil &&
+		in.Nutrition == nil && in.Name == nil
 	if !onlyDetails {
 		lines, err := s.editedIngredients(ctx, r, in.Ingredients)
 		if err != nil {
@@ -148,7 +163,10 @@ func (s *Service) Edit(ctx context.Context, householdID, recipeID string, in Edi
 		r.Ingredients, r.Steps = lines, steps
 	}
 	now := s.now().UTC()
-	r.EditedAt, r.UpdatedAt = now, now
+	r.UpdatedAt = now
+	if !onlyCuisines {
+		r.EditedAt = now
+	}
 	if err := s.store.SaveRecipes(ctx, householdID, []Recipe{r}); err != nil {
 		return Recipe{}, fmt.Errorf("save edited recipe: %w", err)
 	}

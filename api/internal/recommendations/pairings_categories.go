@@ -162,7 +162,7 @@ func heuristicMealCategory(r recipes.Recipe) (category, evidence string) {
 	if len(tagged) == 1 {
 		return tagged[0], evidence
 	}
-	for _, c := range canonicalCuisines(r.Cuisines) {
+	for _, c := range canonicalCuisines(r.ShownCuisines()) {
 		if value, ok := mealCategoryCuisines[c]; ok {
 			return value, cuisineLabel(c) + " cuisine"
 		}

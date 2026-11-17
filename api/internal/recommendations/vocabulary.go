@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Linesmerrill/DinnerOS/api/internal/cuisine"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
 )
 
@@ -91,16 +92,43 @@ var (
 		{Value: "sun", Label: "Sunday"},
 	}
 
-	// Starter cuisines and tags are offered before the catalog has any.
-	starterCuisines = []string{
-		"Chinese", "French", "Greek", "Indian", "Italian", "Japanese", "Korean",
-		"Mediterranean", "Mexican", "Middle Eastern", "North American", "Spanish", "Thai", "Vietnamese",
-	}
+	// Starter tags are offered before the catalog has any. Cuisines always
+	// offer the standard list instead (standardCuisines).
 	starterTags = []string{
 		"Comfort Food", "Curry", "Family Friendly", "Healthy", "High Protein", "Low Carb", "One Pot",
 		"Pasta", "Pizza", "Quick", "Rice Bowl", "Salad", "Sandwich", "Sheet Pan", "Soup", "Stir Fry", "Tacos",
 	}
 )
+
+// withStandardCuisines keeps counted cuisines first (most used first) and
+// adds every standard cuisine the catalog doesn't use, alphabetically, so a
+// recipe's cuisine picker always has the usual choices (decision 722). The
+// standard ones are never cut by the cap; other counted ones fill the rest.
+func withStandardCuisines(counted []Option) []Option {
+	standard := cuisine.Standard()
+	room := MaxVocabularyOptions - len(standard)
+	var out []Option
+	have := map[string]bool{}
+	for _, o := range counted {
+		isStandard := slices.Contains(standard, o.Value)
+		if !isStandard {
+			if room <= 0 {
+				continue
+			}
+			room--
+		}
+		out = append(out, o)
+		have[o.Value] = true
+	}
+	var missing []Option
+	for _, v := range standard {
+		if !have[v] {
+			missing = append(missing, Option{Value: v, Label: cuisine.Label(v)})
+		}
+	}
+	slices.SortFunc(missing, func(a, b Option) int { return cmp.Compare(a.Label, b.Label) })
+	return append(out, missing...)
+}
 
 func optionValues(options []Option) []string {
 	out := make([]string, 0, len(options))
@@ -136,13 +164,19 @@ func buildVocabulary(catalog []recipes.Recipe) Vocabulary {
 		for _, d := range recipeDishes(r, recipeMealCategories(r, nil)) {
 			dishCounts[d]++
 		}
-		cuisines.addAll(r.Cuisines)
+		// The source's own spellings name unknown cuisines best; a recipe
+		// with none counts for the cuisine its title names (decision 721).
+		if len(r.Cuisines) > 0 {
+			cuisines.addAll(r.Cuisines)
+		} else {
+			cuisines.addAll(r.ShownCuisines())
+		}
 		tags.addAll(r.Tags)
 		for _, p := range classifyProteins(ingredientTokens(r)) {
 			proteinCounts[p]++
 		}
 	}
-	v.Cuisines = cuisines.options(starterCuisines, v.CatalogRecipes)
+	v.Cuisines = withStandardCuisines(cuisines.options(nil, v.CatalogRecipes))
 	v.Tags = tags.options(starterTags, v.CatalogRecipes)
 	for _, o := range ProteinOptions {
 		o.RecipeCount = proteinCounts[o.Value]

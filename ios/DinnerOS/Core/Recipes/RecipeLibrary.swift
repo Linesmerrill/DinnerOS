@@ -37,6 +37,8 @@ final class RecipeLibrary {
     private(set) var recentlyDeleted: DeletedRecipe?
     /// Names offered while an ingredient is typed. Empty until `loadIngredientNames`.
     private(set) var ingredientNames = IngredientNameIndex.empty
+    /// The cuisines a recipe can have. The standard list until `loadCuisineOptions`.
+    private(set) var cuisineOptions = RecipeCuisines.standard
     /// Whether Choose Photo offers Search the Web. Off until the server says it's on, and kept
     /// from the last answer so it holds offline. Never on when a search would only fail.
     private(set) var photoSearchAvailable: Bool
@@ -307,6 +309,29 @@ final class RecipeLibrary {
         guard let api, let householdID else { throw AuthSessionError.notConfigured }
         return try await session.authorized { token in
             try await api.uploadPhoto(householdID: householdID, jpeg: jpeg, accessToken: token)
+        }
+    }
+
+    /// Loads the cuisines a recipe can have. Offline it uses the last saved answer, and without
+    /// one the bundled standard list stays.
+    func loadCuisineOptions() async {
+        guard let api, let householdID else { return }
+        do {
+            let options = try await session.authorized { token in
+                try await api.cuisineOptions(householdID: householdID, accessToken: token)
+            }
+            if !options.isEmpty { cuisineOptions = options }
+        } catch {
+            // Picking still works from the standard list.
+        }
+    }
+
+    /// The cuisine a title names, or none. Offline there's no guess and the server makes one
+    /// when the recipe is saved.
+    func guessCuisine(for name: String) async -> [String]? {
+        guard let api, let householdID else { return nil }
+        return try? await session.authorized { token in
+            try await api.guessCuisine(householdID: householdID, name: name, accessToken: token)
         }
     }
 

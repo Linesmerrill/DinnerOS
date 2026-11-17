@@ -2,153 +2,26 @@ package recommendations
 
 import (
 	"slices"
-	"strings"
+
+	"github.com/Linesmerrill/DinnerOS/api/internal/cuisine"
 )
 
 // Catalog sources label cuisines inconsistently: the same import can say
 // "North America" and "North American", or "East Asia" and "East Asian".
 // Autopilot reads every cuisine through canonicalCuisine, so vocabulary
 // counts, recipe attributes, taste matching, exclusions, and weekday rules
-// agree on one value (docs/autopilot.md#cuisines).
-//
-// The rules, in order:
-//
-//  1. Normalize: trimmed, lowercase, single-spaced (normalizeValue).
-//  2. A known value or alias maps to its canonical value ("latin" → "latin
-//     american", "middle east" → "middle eastern").
-//  3. Otherwise a trailing region noun becomes its adjective ("southern
-//     europe" → "southern european"), and step 2 is tried again.
-//  4. Anything else is kept as normalized, so unknown cuisines still work.
-//
-// Canonical values form a small hierarchy: a country cuisine has a region
-// parent ("italian" → "southern european" → "european"). A recipe matches its
-// own cuisines and every ancestor, so liking or excluding "european" covers
-// Italian recipes, while "italian" stays a distinct, more specific choice.
-// "asian" is a parent region rather than a synonym of "east asian": catalogs
-// use it for East and Southeast Asian dishes alike.
-
-type cuisineEntry struct {
-	value, label string
-	// parent is the broader region, or "".
-	parent string
-	// aliases are other normalized spellings of the value.
-	aliases []string
-}
-
-var cuisineTable = []cuisineEntry{
-	// Regions.
-	{"asian", "Asian", "", []string{"pan asian", "pan-asian"}},
-	{"east asian", "East Asian", "asian", nil},
-	{"southeast asian", "Southeast Asian", "asian", []string{"south east asian", "south-east asian"}},
-	{"south asian", "South Asian", "asian", nil},
-	{"european", "European", "", nil},
-	{"southern european", "Southern European", "european", nil},
-	{"western european", "Western European", "european", nil},
-	{"eastern european", "Eastern European", "european", nil},
-	{"northern european", "Northern European", "european", []string{"nordic", "scandinavian"}},
-	{"north american", "North American", "", []string{"american", "usa"}},
-	{"latin american", "Latin American", "", []string{"latin", "latino"}},
-	{"caribbean", "Caribbean", "latin american", nil},
-	{"central american", "Central American", "latin american", nil},
-	{"south american", "South American", "latin american", nil},
-	{"middle eastern", "Middle Eastern", "", []string{"middle east", "mideast"}},
-	{"african", "African", "", nil},
-	{"north african", "North African", "african", nil},
-	{"west african", "West African", "african", nil},
-	{"east african", "East African", "african", nil},
-	{"pacific islander", "Pacific Islander", "", []string{"pacific islands", "pacific island", "pacific"}},
-	// Cuisines that span regions or aren't regional.
-	{"mediterranean", "Mediterranean", "", nil},
-	{"fusion", "Fusion", "", nil},
-	// Countries and styles.
-	{"chinese", "Chinese", "east asian", nil},
-	{"japanese", "Japanese", "east asian", nil},
-	{"korean", "Korean", "east asian", nil},
-	{"thai", "Thai", "southeast asian", nil},
-	{"vietnamese", "Vietnamese", "southeast asian", nil},
-	{"filipino", "Filipino", "southeast asian", nil},
-	{"indonesian", "Indonesian", "southeast asian", nil},
-	{"indian", "Indian", "south asian", nil},
-	{"italian", "Italian", "southern european", nil},
-	{"greek", "Greek", "southern european", nil},
-	{"spanish", "Spanish", "southern european", nil},
-	{"portuguese", "Portuguese", "southern european", nil},
-	{"french", "French", "western european", nil},
-	{"german", "German", "western european", nil},
-	{"british", "British", "western european", []string{"english"}},
-	{"irish", "Irish", "western european", nil},
-	{"hungarian", "Hungarian", "eastern european", nil},
-	{"polish", "Polish", "eastern european", nil},
-	{"russian", "Russian", "eastern european", nil},
-	{"southern", "Southern", "north american", []string{"southern us", "soul food"}},
-	{"southwestern", "Southwestern", "north american", []string{"southwest"}},
-	{"tex-mex", "Tex-Mex", "north american", []string{"tex mex", "texmex"}},
-	{"cajun", "Cajun", "north american", []string{"creole"}},
-	{"hawaiian", "Hawaiian", "pacific islander", nil},
-	{"mexican", "Mexican", "latin american", nil},
-	{"cuban", "Cuban", "caribbean", nil},
-	{"jamaican", "Jamaican", "caribbean", nil},
-	{"brazilian", "Brazilian", "south american", nil},
-	{"peruvian", "Peruvian", "south american", nil},
-	{"lebanese", "Lebanese", "middle eastern", nil},
-	{"turkish", "Turkish", "middle eastern", nil},
-	{"persian", "Persian", "middle eastern", []string{"iranian"}},
-	{"moroccan", "Moroccan", "north african", nil},
-	{"ethiopian", "Ethiopian", "east african", nil},
-}
-
-// regionAdjectives turn a trailing region noun into its adjective.
-var regionAdjectives = map[string]string{"america": "american", "asia": "asian", "europe": "european", "africa": "african"}
-
-// cuisineByKey maps every canonical value and alias to its entry.
-var cuisineByKey = func() map[string]*cuisineEntry {
-	m := make(map[string]*cuisineEntry, 2*len(cuisineTable))
-	for i := range cuisineTable {
-		e := &cuisineTable[i]
-		m[e.value] = e
-		for _, a := range e.aliases {
-			m[a] = e
-		}
-	}
-	return m
-}()
+// agree on one value (docs/autopilot.md#cuisines). The table and its rules
+// live in package cuisine, so recipes can use them too (decision 720).
 
 // canonicalCuisine returns the canonical form of a cuisine label.
-func canonicalCuisine(s string) string {
-	v := normalizeValue(s)
-	if e, ok := cuisineByKey[v]; ok {
-		return e.value
-	}
-	if words := strings.Fields(v); len(words) > 0 {
-		if adj, ok := regionAdjectives[words[len(words)-1]]; ok {
-			words[len(words)-1] = adj
-			v = strings.Join(words, " ")
-			if e, ok := cuisineByKey[v]; ok {
-				return e.value
-			}
-		}
-	}
-	return v
-}
+func canonicalCuisine(s string) string { return cuisine.Canonical(s) }
 
 // cuisineLabel returns a known cuisine's display label, or "".
-func cuisineLabel(value string) string {
-	if e, ok := cuisineByKey[value]; ok && e.value == value {
-		return e.label
-	}
-	return ""
-}
+func cuisineLabel(value string) string { return cuisine.Label(value) }
 
 // cuisineAncestors returns a canonical cuisine's broader regions, nearest
 // first.
-func cuisineAncestors(value string) []string {
-	var out []string
-	for e := cuisineByKey[value]; e != nil && e.value == value && e.parent != "" && len(out) < len(cuisineTable); e = cuisineByKey[value] {
-		value = e.parent
-		out = append(out, value)
-	}
-	return out
-}
+func cuisineAncestors(value string) []string { return cuisine.Ancestors(value) }
 
 // withAncestors returns a canonical cuisine followed by its ancestors.
 func withAncestors(value string) []string {

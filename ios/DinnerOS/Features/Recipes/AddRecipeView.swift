@@ -293,8 +293,18 @@ struct RecipeDraftReviewForm: View {
                 RecipeTimeField(title: "Prep time", minutes: $store.draft.prepTime, isOpen: isOpen(.prep))
                 RecipeTimeField(title: "Cook time", minutes: $store.draft.cookTime, isOpen: isOpen(.cook))
             }
+            RecipeCuisineField(values: store.draft.cuisines, options: library.cuisineOptions) {
+                store.pickCuisines($0)
+            }
+            .task { await library.loadCuisineOptions() }
+            .task(id: store.draft.name) {
+                // Wait for a pause in typing before asking what the title names.
+                try? await Task.sleep(for: .milliseconds(600))
+                guard !Task.isCancelled else { return }
+                await store.guessCuisine(using: library.guessCuisine)
+            }
         } header: {
-            Text("Servings and Time")
+            Text("Details")
         } footer: {
             if !store.draft.fromURL, store.draft.totalTime > 0 {
                 Text("Total: \(RecipeFormat.minutes(store.draft.totalTime))")

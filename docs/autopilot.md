@@ -191,7 +191,7 @@ a recipe contains the allergen and doesn't satisfy the diet.
 
 Sources label cuisines inconsistently ("North America" next to "North
 American", "East Asia" next to "East Asian"), so Autopilot reads and stores
-every cuisine in one canonical form (`recommendations/canonical.go`):
+every cuisine in one canonical form (`internal/cuisine`, decision 720):
 vocabulary counts, recipe attributes, likes and dislikes, excluded cuisines,
 and weekday rules.
 
@@ -223,6 +223,13 @@ Canonical cuisines form a small hierarchy, so choices keep their specificity:
 | `pacific islander` | | `hawaiian` |
 | `mediterranean`, `fusion` | | |
 
+- A recipe with no cuisine that the household never set reads as the cuisine
+  its title or tags name (`cuisine.Guess`: "Carnitas Tacos" is Mexican,
+  "Chicken Curry" is nothing), worked out on each read (decision 721).
+- Weekday habits are learned from planned and cooked meals. Beside a day's
+  clear theme, each cuisine seen at least twice on a day with 4 or more meals
+  lifts that cuisine's meals by its share of the day (`dayTheme`, decision
+  724).
 - A recipe carries its canonical cuisines and their regions (`cuisineRegions`
   in the attributes). Likes, dislikes, exclusions, and weekday rules match
   either, so liking `european` or `southern european` covers Italian recipes,
@@ -477,7 +484,7 @@ couldn't be filled are listed as `unfilled` (`no_candidates`,
   household ID, week, attempt, model version, and item ID. Learning sorts
   the interactions it uses before summing, and a test shuffles history and
   catalog with learning and every context signal present.
-- `modelVersion` (`baseline-2026.10`) is stored on every proposal and event.
+- `modelVersion` (`baseline-2026.11`) is stored on every proposal and event.
   `inputsHash` fingerprints the provider request, so identical inputs can be
   recognized.
 - **Tuning:** change `baseline.DefaultWeights` (or pass `Options.Weights`) and
