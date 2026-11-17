@@ -87,6 +87,21 @@ struct FeedbackLink: View {
     }
 }
 
+/// "Contact Us" on the Household tab, in every build: the website's support page, which
+/// has our email. Apple asks apps where people share content to say how to reach us.
+struct ContactUsLink: View {
+    static let supportURL = URL(string: "https://dinneros.app/support/")
+
+    var body: some View {
+        if let url = Self.supportURL {
+            Link(destination: url) {
+                Label("Contact Us", systemImage: "envelope")
+            }
+            .accessibilityIdentifier("household.contactUs")
+        }
+    }
+}
+
 #Preview("Feedback") {
     NavigationStack { FeedbackView() }
 }

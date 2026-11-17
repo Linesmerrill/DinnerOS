@@ -89,7 +89,7 @@ func DefaultOffer() Offer {
 		TrialDays:   TrialDays,
 		TrialText:   "Try it free for 14 days",
 		BuyText:     "Get DinnerOS Plus",
-		Terms:       "Plus renews automatically until you cancel. Cancel anytime in your Apple account settings at least a day before it renews.",
+		Terms:       "Payment goes through your Apple account. Plus renews automatically until you cancel. Cancel in your Apple account settings at least 24 hours before the free trial or the current period ends.",
 		RestoreText: "Restore purchases",
 		FreeText:    "Sending your list to a store is always free.",
 		Links: []Link{

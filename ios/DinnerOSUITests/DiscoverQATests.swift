@@ -203,6 +203,27 @@ struct QAAPI {
         return list.items
     }
 
+    /// Types one recipe and shares it to Shared Recipes, as a cook in another household would.
+    /// Made-up text only.
+    func shareTypedRecipe(householdID: String, name: String) async throws {
+        struct Sharing: Decodable { let inCatalog: Bool }
+        struct Ignored: Decodable {}
+        let _: Ignored = try await Self.send(
+            base: base, token: token, method: "PATCH", path: "/api/v1/households/\(householdID)",
+            body: ["catalogSharing": "chosen"])
+        let created: Recipe = try await Self.send(
+            base: base, token: token, method: "POST", path: "/api/v1/households/\(householdID)/recipes",
+            body: [
+                "name": name, "servings": 2,
+                "ingredients": [["name": "rice"], ["name": "peas"]],
+                "steps": ["Cook the rice.", "Stir in the peas."],
+            ] as [String: Any])
+        let shared: Sharing = try await Self.send(
+            base: base, token: token, method: "PUT", path: "/api/v1/households/\(householdID)/recipes/\(created.id)/sharing",
+            body: ["sharedToCatalog": true])
+        XCTAssertTrue(shared.inCatalog, "\(name) didn't reach Shared Recipes")
+    }
+
     func deleteRecipe(householdID: String, id: String) async throws {
         var request = URLRequest(url: URL(string: base.absoluteString + "/api/v1/households/\(householdID)/recipes/\(id)")!)
         request.httpMethod = "DELETE"

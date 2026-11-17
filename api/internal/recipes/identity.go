@@ -182,7 +182,22 @@ func normalizeQuantityText(q string) string {
 // Publishable reports whether this recipe may be copied into the global
 // catalog: it comes from a known public source, or the household explicitly
 // shared it. Add-ons never are (decision 713): a side or a drink someone keeps
-// on their list is not a dinner to find in Shared Recipes.
+// on their list is not a dinner to find in Shared Recipes. Nor is a recipe
+// with blocked words (decision 744).
 func Publishable(r Recipe) bool {
-	return CatalogKey(r) != "" && !r.IsAddon && !CatalogWithheld(r.Source) && (PublicSource(r.Source) || r.SharedToCatalog)
+	return CatalogKey(r) != "" && !r.IsAddon && !CatalogWithheld(r.Source) && (PublicSource(r.Source) || r.SharedToCatalog) &&
+		!Objectionable(r)
+}
+
+// CatalogPublisherKey names the household a typed or pasted catalog entry
+// came from, so a member can hide every recipe from that cook (decision
+// 744): an opaque SHA-256 of the household, never its ID. It is "" whenever
+// CatalogOrigin is, since an importer's recipe is the importer's writing,
+// not the household's.
+func CatalogPublisherKey(r Recipe) string {
+	if CatalogOrigin(r) == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte("publisher\n" + strings.TrimSpace(r.HouseholdID)))
+	return hex.EncodeToString(sum[:])
 }

@@ -269,6 +269,9 @@ final class DiscoverStore {
     var reportMessage: String?
     /// The last report that failed, for an alert.
     var reportError: String?
+    /// The titles of those alerts: a report's, or hiding a cook's.
+    private(set) var reportTitle = String(localized: "Reported")
+    private(set) var reportErrorTitle = String(localized: "Couldn't Report That Recipe")
 
     /// Reports a shared recipe and takes it off the list. Returns whether it went through.
     @discardableResult
@@ -278,20 +281,55 @@ final class DiscoverStore {
             let result = try await session.authorized { token in
                 try await api.report(householdID: householdID, id: id, reason: reason, accessToken: token)
             }
-            items.removeAll { $0.id == id }
-            if var home {
-                for s in home.sections.indices { home.sections[s].items.removeAll { $0.id == id } }
-                home.sections.removeAll { $0.items.isEmpty }
-                self.home = home
-            }
+            remove(id: id)
+            reportTitle = String(localized: "Reported")
             reportMessage = result.message
             return true
         } catch is CancellationError {
             return false
         } catch {
             Self.logger.notice("Report failed: \(Self.describe(error), privacy: .public)")
+            reportErrorTitle = String(localized: "Couldn't Report That Recipe")
             reportError = HouseholdStore.message(for: error)
             return false
+        }
+    }
+
+    /// Hides every recipe from the cook who shared this one (decision 744), then reloads
+    /// the lists so the cook's other recipes go too. Returns whether it went through.
+    @discardableResult
+    func hideCook(id: String) async -> Bool {
+        guard let api, let householdID else { return false }
+        do {
+            let result = try await session.authorized { token in
+                try await api.hideCook(householdID: householdID, id: id, accessToken: token)
+            }
+            remove(id: id)
+            reportTitle = String(localized: "Hidden")
+            reportMessage = result.message
+            if phase != .idle {
+                async let rows: Void = loadHome(force: true)
+                async let list: Void = loadFirstPage(clearing: false)
+                _ = await (rows, list)
+            }
+            return true
+        } catch is CancellationError {
+            return false
+        } catch {
+            Self.logger.notice("Hide cook failed: \(Self.describe(error), privacy: .public)")
+            reportErrorTitle = String(localized: "Couldn't Hide That Cook")
+            reportError = HouseholdStore.message(for: error)
+            return false
+        }
+    }
+
+    /// Takes a recipe off Browse All and every row.
+    private func remove(id: String) {
+        items.removeAll { $0.id == id }
+        if var home {
+            for s in home.sections.indices { home.sections[s].items.removeAll { $0.id == id } }
+            home.sections.removeAll { $0.items.isEmpty }
+            self.home = home
         }
     }
 

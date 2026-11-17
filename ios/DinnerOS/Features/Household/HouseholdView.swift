@@ -461,6 +461,7 @@ struct HouseholdView: View {
         }
         Section {
             FeedbackLink()
+            ContactUsLink()
             PrivacyPolicyLink()
         }
     }

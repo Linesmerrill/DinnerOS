@@ -145,6 +145,8 @@ nonisolated final class FakeCatalogServer: Sendable {
                 return (200, state.discoverPages.indices.contains(index) ? state.discoverPages[index] : Data("{}".utf8))
             case components.path.hasSuffix("/add"):
                 return (201, state.addResult)
+            case components.path.hasSuffix("/hide-cook"):
+                return (200, Data(#"{"hidden":true,"message":"You won't see recipes from this cook again."}"#.utf8))
             case components.path.contains("/catalog/recipes/"):
                 return (200, state.detail)
             case components.path.hasSuffix("/catalog/recipes"):

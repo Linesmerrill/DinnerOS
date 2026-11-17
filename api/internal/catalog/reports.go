@@ -52,6 +52,8 @@ type ReportStore interface {
 	// Reporters maps each reported catalog ID to the households that
 	// reported it.
 	Reporters(ctx context.Context) (map[string][]string, error)
+	// All returns every report, oldest first, for the operator's list.
+	All(ctx context.Context) ([]Report, error)
 }
 
 // WithReports turns on reporting and returns s.
@@ -84,34 +86,69 @@ func (s *Service) Report(ctx context.Context, r Report) (bool, error) {
 // is kept against the entry the member saw, but it counts against the whole
 // group that entry belongs to (decision 689): the household's own report
 // hides every copy of the recipe from it, and PullAfter different households
-// reporting any copies hides the recipe for everyone. A failed read hides
-// nothing extra rather than failing the page.
+// reporting any copies hides the recipe for everyone, unless an operator
+// reviewed it and kept it. An operator's removal hides it for everyone at
+// once, and a household's hidden cooks (decision 744) hide every recipe they
+// shared. A failed read hides nothing extra rather than failing the page.
 //
-// Each reported entry's own ID group is hidden alongside its fingerprint
-// group, so an entry is still hidden if its group cannot be read.
+// Each entry's own ID group is hidden alongside its fingerprint group, so an
+// entry is still hidden if its group cannot be read.
 func (s *Service) hidden(ctx context.Context, householdID string) map[string]bool {
 	out := map[string]bool{}
-	if s.reports == nil {
-		return out
+	reporters := map[string][]string{}
+	if s.reports != nil {
+		if got, err := s.reports.Reporters(ctx); err == nil {
+			reporters = got
+		}
 	}
-	reporters, err := s.reports.Reporters(ctx)
-	if err != nil || len(reporters) == 0 {
-		return out
+	decisions := map[string]string{}
+	if s.reviews != nil {
+		if got, err := s.reviews.Decisions(ctx); err == nil {
+			decisions = got
+		}
 	}
-	ids := make([]string, 0, len(reporters))
+	blocked := s.blockedIDs(ctx, householdID)
+	ids := make([]string, 0, len(reporters)+len(decisions)+len(blocked))
 	for id := range reporters {
 		ids = append(ids, id)
+	}
+	for id := range decisions {
+		ids = append(ids, id)
+	}
+	ids = append(ids, blocked...)
+	if len(ids) == 0 {
+		return out
 	}
 	groups, err := s.store.Groups(ctx, ids)
 	if err != nil {
 		groups = map[string]string{}
 	}
+	both := func(id string) []string {
+		gs := []string{idGroup(id)}
+		if g := groups[id]; g != "" && g != gs[0] {
+			gs = append(gs, g)
+		}
+		return gs
+	}
+	kept := map[string]bool{}
+	for id, d := range decisions {
+		for _, g := range both(id) {
+			switch d {
+			case DecisionRemove:
+				out[g] = true
+			case DecisionKeep:
+				kept[g] = true
+			}
+		}
+	}
+	for _, id := range blocked {
+		for _, g := range both(id) {
+			out[g] = true
+		}
+	}
 	byGroup := map[string]map[string]bool{}
 	for id, households := range reporters {
-		for _, g := range []string{idGroup(id), groups[id]} {
-			if g == "" {
-				continue
-			}
+		for _, g := range both(id) {
 			if byGroup[g] == nil {
 				byGroup[g] = map[string]bool{}
 			}
@@ -121,7 +158,7 @@ func (s *Service) hidden(ctx context.Context, householdID string) map[string]boo
 		}
 	}
 	for g, households := range byGroup {
-		if households[householdID] || len(households) >= PullAfter {
+		if households[householdID] || (len(households) >= PullAfter && !kept[g]) {
 			out[g] = true
 		}
 	}
@@ -234,6 +271,26 @@ func (s *MongoReports) Reporters(ctx context.Context) (map[string][]string, erro
 		}
 		slices.Sort(households)
 		out[r.ID.Hex()] = households
+	}
+	return out, nil
+}
+
+// All implements ReportStore.
+func (s *MongoReports) All(ctx context.Context) ([]Report, error) {
+	cur, err := s.coll.Find(ctx, bson.D{}, options.Find().SetSort(bson.D{{Key: "at", Value: 1}, {Key: "_id", Value: 1}}))
+	if err != nil {
+		return nil, fmt.Errorf("list catalog reports: %w", err)
+	}
+	var docs []reportDoc
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, fmt.Errorf("decode catalog reports: %w", err)
+	}
+	out := make([]Report, 0, len(docs))
+	for _, d := range docs {
+		out = append(out, Report{
+			CatalogID: d.CatalogID.Hex(), HouseholdID: d.HouseholdID.Hex(), UserID: d.UserID, Reason: d.Reason, Note: d.Note,
+			At: d.At.UTC(),
+		})
 	}
 	return out, nil
 }

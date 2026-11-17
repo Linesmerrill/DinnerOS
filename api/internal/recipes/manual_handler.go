@@ -208,6 +208,9 @@ func (h *Handler) setSharing(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, ErrNotFound):
 		httpx.WriteError(w, r, http.StatusNotFound, "not_found", "recipe not found")
 		return
+	case errors.Is(err, ErrObjectionable):
+		httpx.WriteError(w, r, http.StatusUnprocessableEntity, "objectionable_words", ObjectionableMessage)
+		return
 	case err != nil:
 		h.internalError(w, r, "set recipe sharing failed", err)
 		return

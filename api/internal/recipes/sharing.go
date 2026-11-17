@@ -78,7 +78,7 @@ func (s *Service) sharingMode(ctx context.Context, householdID string) string {
 
 // sharedUnder reports whether r is shared under a household's mode.
 func sharedUnder(mode string, r Recipe) bool {
-	if CatalogKey(r) == "" {
+	if CatalogKey(r) == "" || Objectionable(r) {
 		return false
 	}
 	switch mode {
@@ -211,7 +211,7 @@ func (s *Service) Backfill(ctx context.Context, householdID string, apply bool) 
 }
 
 // Share sets a recipe's catalog opt-in. Sharing a recipe from a private
-// source publishes it; un-sharing stops it being re-published but does not
+// source publishes it, and sharing one with blocked words is ErrObjectionable; un-sharing stops it being re-published but does not
 // retract the catalog entry, because other households may already have copied
 // it into their own libraries.
 //
@@ -219,6 +219,17 @@ func (s *Service) Backfill(ctx context.Context, householdID string, apply bool) 
 func (s *Service) Share(ctx context.Context, householdID, recipeID string, shared bool) (Recipe, error) {
 	if householdID == "" {
 		return Recipe{}, errHouseholdRequired
+	}
+	if shared {
+		// Blocked words are refused up front (decision 744), so the
+		// household is told rather than left thinking it's shared.
+		current, err := s.store.GetRecipe(ctx, householdID, recipeID)
+		if err != nil {
+			return Recipe{}, err
+		}
+		if Objectionable(current) {
+			return Recipe{}, ErrObjectionable
+		}
 	}
 	r, err := s.store.SetRecipeShared(ctx, householdID, recipeID, shared, s.now().UTC())
 	if err != nil {

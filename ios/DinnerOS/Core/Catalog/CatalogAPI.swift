@@ -69,6 +69,15 @@ nonisolated struct CatalogAPI: Sendable {
         return try await client.send(request.authorized(with: accessToken))
     }
 
+    /// Hides every recipe from the cook who shared this one, or just this one when no
+    /// household shared it (decision 744).
+    func hideCook(householdID: String, id: String, accessToken: String) async throws -> CatalogReportResult {
+        let request = APIRequest(
+            method: .post, path: "/api/v1/households/\(householdID)/catalog/recipes/\(id)/hide-cook", body: nil,
+            bearerToken: nil)
+        return try await client.send(request.authorized(with: accessToken))
+    }
+
     /// Empty values are omitted rather than sent blank.
     static func queryItems(
         query: CatalogQuery, includeSearch: Bool, cursor: String?, limit: Int

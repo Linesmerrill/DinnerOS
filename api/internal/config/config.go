@@ -80,6 +80,10 @@ type Config struct {
 	ResendAPIKey string
 	// EmailFrom is the sender address, e.g. "DinnerOS <invites@example.com>".
 	EmailFrom string
+	// ReportAlertEmail gets an email for each new report of a shared recipe
+	// (REPORT_ALERT_EMAIL, decision 744). Empty sends none; reports are
+	// still logged and listed at GET /api/v1/admin/catalog/reports.
+	ReportAlertEmail string
 	// InviteURLBase is the invitation link in emails, before the token. The
 	// token is appended as a "#token=" fragment, or directly when the base ends
 	// in "=" (the legacy "dinneros://invite?token=" form).
@@ -272,6 +276,7 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("devLoginEnabled", c.DevLoginEnabled()),
 		slog.String("emailProvider", c.EmailProvider),
 		slog.String("emailFrom", c.EmailFrom),
+		slog.Bool("reportAlerts", c.ReportAlertEmail != ""),
 		slog.String("inviteURLBase", c.InviteURLBase),
 		slog.String("appName", c.AppName),
 		slog.String("env", string(c.Env)),
@@ -600,6 +605,13 @@ func loadEmail(cfg *Config, get func(key, fallback string) string) []error {
 	if cfg.EmailFrom != "" {
 		if _, err := mail.ParseAddress(cfg.EmailFrom); err != nil {
 			errs = append(errs, fmt.Errorf("EMAIL_FROM must be an address like %q, got %q", "DinnerOS <invites@example.com>", cfg.EmailFrom))
+		}
+	}
+
+	cfg.ReportAlertEmail = strings.TrimSpace(get("REPORT_ALERT_EMAIL", ""))
+	if cfg.ReportAlertEmail != "" {
+		if _, err := mail.ParseAddress(cfg.ReportAlertEmail); err != nil {
+			errs = append(errs, errors.New("REPORT_ALERT_EMAIL must be an email address"))
 		}
 	}
 

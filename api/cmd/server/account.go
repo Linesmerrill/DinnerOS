@@ -62,6 +62,7 @@ func newAccountService(db *mongo.Database, householdService *households.Service,
 			plus.NewMongoSetup(db),
 			plus.NewMongoDevices(db),
 			catalog.NewMongoReports(db),
+			catalog.NewMongoBlocks(db),
 			catalog.NewMongoSaves(db),
 		},
 		UserData: []account.UserPurger{

@@ -49,6 +49,12 @@ func Indexes() []mongodb.IndexSet {
 					SetPartialFilterExpression(bson.D{{Key: "entryKey", Value: bson.D{{Key: "$type", Value: "string"}}}}),
 			},
 			{
+				// Hiding a cook's recipes (decision 744).
+				Keys: bson.D{{Key: "publisher", Value: 1}},
+				Options: options.Index().SetName("publisher").
+					SetPartialFilterExpression(bson.D{{Key: "publisher", Value: bson.D{{Key: "$type", Value: "string"}}}}),
+			},
+			{
 				// Library marking and legacy adoption look entries up by key.
 				Keys:    bson.D{{Key: "catalogKey", Value: 1}},
 				Options: options.Index().SetName("catalogKey"),
@@ -133,8 +139,11 @@ type entryDoc struct {
 	// the catalogKey for an importer's. Origin is an opaque hash of the
 	// household recipe it was shared from (recipes.CatalogOrigin), never a
 	// household ID.
-	EntryKey    string          `bson:"entryKey,omitempty"`
-	Origin      string          `bson:"origin,omitempty"`
+	EntryKey string `bson:"entryKey,omitempty"`
+	Origin   string `bson:"origin,omitempty"`
+	// Publisher is an opaque hash of the household a typed or pasted entry
+	// came from (recipes.CatalogPublisherKey), never a household ID.
+	Publisher   string          `bson:"publisher,omitempty"`
 	ContentHash string          `bson:"contentHash"`
 	Source      string          `bson:"source"`
 	SourceID    string          `bson:"sourceRecipeId,omitempty"`
@@ -203,7 +212,7 @@ type amountDoc struct {
 func newEntryDoc(e Recipe) (entryDoc, error) {
 	c := Content(e.Content)
 	d := entryDoc{
-		CatalogKey: e.CatalogKey, EntryKey: e.entryKey(), Origin: e.Origin, ContentHash: contentHash(c),
+		CatalogKey: e.CatalogKey, EntryKey: e.entryKey(), Origin: e.Origin, Publisher: e.Publisher, ContentHash: contentHash(c),
 		Source: c.Source, SourceID: c.SourceRecipeID, SourceURL: c.SourceURL,
 		Name: c.Name, NameKey: fold(c.Name), Headline: c.Headline, Description: c.Description, ImageURL: c.ImageURL,
 		IsAddon: c.IsAddon, Servings: c.Servings, PrepMinutes: c.PrepMinutes, TotalMin: c.TotalMinutes,
@@ -262,7 +271,7 @@ func (d entryDoc) toRecipe() Recipe {
 		c.Ingredients = append(c.Ingredients, line)
 	}
 	return Recipe{
-		ID: d.ID.Hex(), CatalogKey: d.CatalogKey, Origin: d.Origin, Content: c, Fingerprint: d.Fingerprint,
+		ID: d.ID.Hex(), CatalogKey: d.CatalogKey, Origin: d.Origin, Publisher: d.Publisher, Content: c, Fingerprint: d.Fingerprint,
 		FirstPublishedAt: d.FirstPublishedAt.UTC(), UpdatedAt: d.UpdatedAt.UTC(),
 	}
 }
@@ -515,6 +524,29 @@ func (s *MongoStore) Groups(ctx context.Context, ids []string) (map[string]strin
 		if d.Fingerprint != "" {
 			out[d.ID.Hex()] = d.Fingerprint
 		}
+	}
+	return out, nil
+}
+
+// IDsByPublisher implements Store.
+func (s *MongoStore) IDsByPublisher(ctx context.Context, publishers []string) ([]string, error) {
+	if len(publishers) == 0 {
+		return nil, nil
+	}
+	cur, err := s.entries.Find(ctx, bson.D{{Key: "publisher", Value: bson.D{{Key: "$in", Value: publishers}}}},
+		options.Find().SetProjection(bson.D{{Key: "_id", Value: 1}}))
+	if err != nil {
+		return nil, translate(err)
+	}
+	var docs []struct {
+		ID bson.ObjectID `bson:"_id"`
+	}
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, translate(err)
+	}
+	var out []string
+	for _, d := range docs {
+		out = append(out, d.ID.Hex())
 	}
 	return out, nil
 }
