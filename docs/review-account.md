@@ -49,8 +49,8 @@ What the app saved was copied into `api/internal/reviewaccount/recipes.json`, th
 production API gives the review account. The production account is filled by the server from
 that seed, so nobody types its password anywhere but App Store Connect.
 
-The household made by build 116 had five earlier recipes without photos. Its next sign-in swaps
-them for these eight; recipes a reviewer added stay.
+The household made by build 116 had five earlier recipes without photos. The API swaps them for
+these eight when it starts (and at each sign-in); recipes a reviewer added stay.
 
 ## App Store screenshots
 

@@ -260,6 +260,7 @@ func run() error {
 	recipeService.WithPlans(planService)
 	if reviewSeeder != nil {
 		reviewSeeder.WithPlanner(planService)
+		go refreshReviewAccount(ctx, reviewSeeder, userService, cfg.ReviewAccount.Email, logger)
 	}
 	// A frozen item needed by one of today's meals is a reminder derived on
 	// read, like the pantry's low-stock check and the weekly order reminder.
@@ -689,6 +690,29 @@ func newAuthHandler(cfg config.Config, userService *users.Service, tokens *auth.
 		AppleCodes:      appleCodes,
 		Review:          review,
 	})
+}
+
+// refreshReviewAccount brings the App Review account's household up to date
+// when the API starts (decision 759): an earlier seed's recipes are swapped
+// for this one's and the current week is planned if it's empty, as at its
+// next sign-in. An account nobody has signed in with yet is left for its
+// first sign-in.
+func refreshReviewAccount(ctx context.Context, seeder *reviewaccount.Seeder, userService *users.Service, email string, logger *slog.Logger) {
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	userID, ok, err := userService.UserIDForIdentity(ctx, users.ProviderReview, auth.ReviewSubject(email))
+	switch {
+	case err != nil:
+		logger.WarnContext(ctx, "review account refresh: find the account failed", "error", err)
+		return
+	case !ok:
+		return
+	}
+	if err := seeder.ReviewAccountSignedIn(ctx, userID); err != nil {
+		logger.WarnContext(ctx, "review account refresh failed", "error", err)
+		return
+	}
+	logger.InfoContext(ctx, "review account refreshed", "userId", userID)
 }
 
 // newReviewSignIn turns on email sign-in for the App Review account when

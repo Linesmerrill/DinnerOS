@@ -124,3 +124,21 @@ func TestFindOrCreateByIdentity(t *testing.T) {
 		}
 	})
 }
+
+func TestUserIDForIdentity(t *testing.T) {
+	ctx := context.Background()
+	s := NewService(newMemoryStore())
+	if id, ok, err := s.UserIDForIdentity(ctx, ProviderReview, "review-abc"); err != nil || ok || id != "" {
+		t.Fatalf("before sign-in: %q, %v, %v; want nothing", id, ok, err)
+	}
+	u, _, err := s.FindOrCreateByIdentity(ctx, VerifiedIdentity{Provider: ProviderReview, Subject: "review-abc", Email: "r@example.test", EmailVerified: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id, ok, err := s.UserIDForIdentity(ctx, ProviderReview, "review-abc"); err != nil || !ok || id != u.ID {
+		t.Errorf("after sign-in: %q, %v, %v; want %q", id, ok, err, u.ID)
+	}
+	if _, ok, _ := s.UserIDForIdentity(ctx, ProviderApple, "review-abc"); ok {
+		t.Error("another provider's subject matched")
+	}
+}

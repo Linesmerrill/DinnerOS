@@ -19,6 +19,19 @@ func NewService(store Store) *Service {
 	return &Service{store: store, now: time.Now}
 }
 
+// UserIDForIdentity returns the ID of the user that owns (provider, subject),
+// or ok=false when nobody has signed in with it. It never creates anything.
+func (s *Service) UserIDForIdentity(ctx context.Context, provider Provider, subject string) (string, bool, error) {
+	identity, err := s.store.FindIdentity(ctx, provider, subject)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return "", false, nil
+	case err != nil:
+		return "", false, err
+	}
+	return identity.UserID, true, nil
+}
+
 // FindOrCreateByIdentity returns the user that owns the verified identity,
 // creating the user and identity on first sign-in. created reports whether a
 // new user was created.
