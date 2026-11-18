@@ -1,142 +1,846 @@
 {
-  "about": "The App Review account's recipes (decision 752). Written by DinnerOS for this account: our own words, plain names, no photos, nothing imported.",
+  "about": "The App Review account's recipes (decision 759). Written by DinnerOS and typed in through Add a Recipe on a local server (docs/review-account.md), then copied here. Photos are free Unsplash photos, credited to their photographers.",
   "household": "Our Kitchen",
   "timeZone": "America/Los_Angeles",
+  "plan": [
+    "Chicken Skewers with Garlic Sauce",
+    "Salmon with Asparagus and Rice",
+    "Chicken Tikka Masala",
+    "Spaghetti Pomodoro",
+    "Beef and Broccoli",
+    "Margherita Pizza",
+    "Shredded Beef Tacos"
+  ],
   "recipes": [
     {
-      "name": "Lemon Garlic Chicken with Green Beans",
-      "headline": "Golden chicken, a quick pan sauce, and crisp green beans",
-      "servings": 2,
+      "name": "Salmon with Asparagus and Rice",
+      "headline": "Serves 4\nPrep time: 10 minutes\nTotal time: 30 minutes",
+      "servings": 4,
       "prepMinutes": 10,
       "totalMinutes": 30,
-      "cuisines": ["american"],
+      "cuisines": [
+        "american"
+      ],
       "ingredients": [
-        {"name": "Chicken Breast", "quantity": "2", "note": "about 12 oz total"},
-        {"name": "Green Beans", "quantity": "8", "unit": "oz", "note": "trimmed"},
-        {"name": "Garlic", "quantity": "3", "unit": "clove", "note": "minced"},
-        {"name": "Lemon", "quantity": "1"},
-        {"name": "Chicken Stock Concentrate", "quantity": "1", "unit": "tsp"},
-        {"name": "Butter", "quantity": "1", "unit": "tbsp"},
-        {"name": "Olive Oil", "quantity": "1", "unit": "tbsp", "pantryStaple": true},
-        {"name": "Salt", "pantryStaple": true, "note": "to taste"},
-        {"name": "Black Pepper", "pantryStaple": true, "note": "to taste"}
+        {
+          "name": "jasmine rice",
+          "quantity": "1",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "salmon fillets",
+          "quantity": "4",
+          "unit": "",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "asparagus",
+          "quantity": "1",
+          "unit": "lb",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "olive oil",
+          "quantity": "2",
+          "unit": "tbsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "garlic",
+          "quantity": "2",
+          "unit": "clove",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "salt",
+          "quantity": "1",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "black pepper",
+          "quantity": "1/2",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "butter",
+          "quantity": "2",
+          "unit": "tbsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "lemon",
+          "quantity": "1",
+          "unit": "",
+          "note": "",
+          "pantryStaple": false
+        }
       ],
       "steps": [
-        "Pat the chicken dry and season both sides with salt and pepper. Zest the lemon, then cut it in half.",
-        "Heat the oil in a large pan over medium-high heat. Cook the chicken until golden and cooked through, 5 to 7 minutes per side (165°F inside). Move it to a plate.",
-        "Add the green beans to the same pan with a splash of water. Cook, stirring, until bright green and just tender, 4 to 5 minutes. Season with salt and move them to the plates.",
-        "Lower the heat to medium. Add the garlic and cook for 30 seconds. Stir in the stock concentrate, ¼ cup water, the lemon zest and the juice of half the lemon. Simmer until a little thicker, about 2 minutes.",
-        "Turn off the heat and stir in the butter. Slice the chicken, spoon the sauce over it, and serve with the green beans and the other lemon half cut into wedges."
-      ]
+        "Bring the rice and 2 cups water to a boil, then cover and simmer on low for 15 minutes.",
+        "Heat the oven to 425°F. Snap the woody ends off the asparagus.",
+        "Toss the asparagus with 1 Tbsp of the oil and a pinch of salt on a sheet pan.",
+        "Pat the salmon dry, rub it with the rest of the oil, the garlic, salt and pepper, and set it on the pan.",
+        "Roast for 12 to 15 minutes, until the salmon flakes easily.",
+        "Melt the butter with the juice of half the lemon and spoon it over the salmon. Serve with the rice and lemon wedges."
+      ],
+      "photo": {
+        "imageUrl": "https://images.unsplash.com/photo-1570645314284-8b28f8fac62e?w=1080",
+        "photographer": "Solstice Hannan",
+        "profileUrl": "https://unsplash.com/@darkersolstice",
+        "page": "https://unsplash.com/photos/salmon-over-rice-and-asparagus-q8NvIxPYvR8"
+      }
     },
     {
-      "name": "Black Bean Tacos with Lime Slaw",
-      "headline": "Smoky beans and a crunchy slaw in warm tortillas",
-      "servings": 2,
+      "name": "Beef and Broccoli",
+      "headline": "Serves 4\nPrep time: 15 minutes\nTotal time: 30 minutes",
+      "servings": 4,
+      "prepMinutes": 15,
+      "totalMinutes": 30,
+      "cuisines": [
+        "chinese"
+      ],
+      "ingredients": [
+        {
+          "name": "jasmine rice",
+          "quantity": "1",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "flank steak",
+          "quantity": "1",
+          "unit": "lb",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "cornstarch",
+          "quantity": "1",
+          "unit": "tbsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "low-sodium soy sauce",
+          "quantity": "1/3",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "brown sugar",
+          "quantity": "2",
+          "unit": "tbsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "oyster sauce",
+          "quantity": "1",
+          "unit": "tbsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "sesame oil",
+          "quantity": "1",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "vegetable oil",
+          "quantity": "1",
+          "unit": "tbsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "broccoli florets",
+          "quantity": "4",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "garlic",
+          "quantity": "3",
+          "unit": "clove",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "fresh ginger",
+          "quantity": "1",
+          "unit": "tbsp",
+          "note": "",
+          "pantryStaple": false
+        }
+      ],
+      "steps": [
+        "Bring the rice and 2 cups water to a boil, then cover and simmer on low for 15 minutes.",
+        "Slice the steak thin across the grain and toss it with the cornstarch.",
+        "Stir the soy sauce, brown sugar, oyster sauce, sesame oil and 1/4 cup water together.",
+        "Heat the oil in a large skillet over high heat. Sear the beef in one layer for 2 minutes a side, then take it out.",
+        "Add the broccoli and 2 Tbsp water, cover and steam for 3 minutes.",
+        "Add the garlic and ginger for 30 seconds, return the beef, pour in the sauce and simmer 2 minutes until glossy. Serve over the rice."
+      ],
+      "photo": {
+        "imageUrl": "https://images.unsplash.com/photo-1783375175952-705a0600e05c?w=1080",
+        "photographer": "sheri silver",
+        "profileUrl": "https://unsplash.com/@sheri_silver",
+        "page": "https://unsplash.com/photos/a-bowl-of-beef-and-broccoli-with-white-rice-BA2UZ6w8JfY"
+      }
+    },
+    {
+      "name": "Spaghetti Pomodoro",
+      "headline": "Serves 4\nPrep time: 10 minutes\nTotal time: 30 minutes",
+      "servings": 4,
       "prepMinutes": 10,
-      "totalMinutes": 20,
-      "cuisines": ["mexican"],
-      "ingredients": [
-        {"name": "Black Beans", "quantity": "1", "unit": "can", "note": "15 oz, drained and rinsed"},
-        {"name": "Flour Tortillas", "quantity": "6", "note": "small"},
-        {"name": "Green Cabbage", "quantity": "2", "unit": "cup", "note": "thinly sliced"},
-        {"name": "Lime", "quantity": "1"},
-        {"name": "Red Onion", "quantity": "0.5"},
-        {"name": "Cilantro", "quantity": "0.25", "unit": "cup", "note": "chopped"},
-        {"name": "Ground Cumin", "quantity": "1", "unit": "tsp"},
-        {"name": "Smoked Paprika", "quantity": "1", "unit": "tsp"},
-        {"name": "Sour Cream", "quantity": "0.25", "unit": "cup"},
-        {"name": "Olive Oil", "quantity": "1", "unit": "tbsp", "pantryStaple": true},
-        {"name": "Salt", "pantryStaple": true, "note": "to taste"}
+      "totalMinutes": 30,
+      "cuisines": [
+        "italian"
       ],
-      "steps": [
-        "Finely chop half the red onion. Toss the cabbage with the juice of half the lime, half the cilantro and a pinch of salt. Set the slaw aside.",
-        "Heat the oil in a pan over medium heat. Cook the onion until soft, about 3 minutes. Add the cumin and paprika and stir for 30 seconds.",
-        "Add the beans and ¼ cup water. Cook, mashing some of the beans with a fork, until thick and warm, about 5 minutes. Season with salt.",
-        "Warm the tortillas in a dry pan for about 30 seconds per side.",
-        "Fill the tortillas with the beans and the slaw. Top with sour cream and the rest of the cilantro, and serve with the other lime half cut into wedges."
-      ]
-    },
-    {
-      "name": "Spaghetti with Tomato and Basil",
-      "headline": "A simple tomato sauce that's ready when the pasta is",
-      "servings": 2,
-      "prepMinutes": 5,
-      "totalMinutes": 25,
-      "cuisines": ["italian"],
       "ingredients": [
-        {"name": "Spaghetti", "quantity": "6", "unit": "oz"},
-        {"name": "Crushed Tomatoes", "quantity": "1", "unit": "can", "note": "14.5 oz"},
-        {"name": "Tomato Paste", "quantity": "2", "unit": "tbsp"},
-        {"name": "Garlic", "quantity": "2", "unit": "clove", "note": "thinly sliced"},
-        {"name": "Fresh Basil", "quantity": "0.25", "unit": "cup", "note": "torn"},
-        {"name": "Parmesan Cheese", "quantity": "0.25", "unit": "cup", "note": "grated"},
-        {"name": "Red Pepper Flakes", "quantity": "0.25", "unit": "tsp"},
-        {"name": "Olive Oil", "quantity": "2", "unit": "tbsp", "pantryStaple": true},
-        {"name": "Salt", "pantryStaple": true, "note": "to taste"}
+        {
+          "name": "spaghetti",
+          "quantity": "12",
+          "unit": "oz",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "olive oil",
+          "quantity": "3",
+          "unit": "tbsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "garlic",
+          "quantity": "4",
+          "unit": "clove",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "red pepper flakes",
+          "quantity": "1/4",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "whole peeled tomatoes",
+          "quantity": "1",
+          "unit": "can",
+          "note": "28 oz",
+          "pantryStaple": false
+        },
+        {
+          "name": "cherry tomatoes",
+          "quantity": "1",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "salt",
+          "quantity": "1",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "fresh basil leaves",
+          "quantity": "1",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "grated Parmesan",
+          "quantity": "1/2",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        }
       ],
       "steps": [
         "Bring a large pot of salted water to a boil.",
-        "Heat the oil in a large pan over medium heat. Add the garlic and red pepper flakes and cook until the garlic is pale gold, about 1 minute.",
-        "Stir in the tomato paste and cook for 1 minute. Add the crushed tomatoes and a pinch of salt. Simmer, stirring now and then, while the pasta cooks.",
-        "Cook the spaghetti until al dente, about 10 minutes. Save ½ cup of the pasta water, then drain.",
-        "Add the spaghetti to the sauce with a splash of the pasta water and toss until glossy. Stir in most of the basil. Serve with the parmesan and the rest of the basil on top."
-      ]
+        "Warm the oil in a wide pan over medium heat. Add the sliced garlic and pepper flakes and cook for 1 minute.",
+        "Crush the canned tomatoes into the pan by hand, add the cherry tomatoes and salt, and simmer for 15 minutes.",
+        "Cook the spaghetti 1 minute less than the package says, and save 1/2 cup of the pasta water.",
+        "Toss the spaghetti in the sauce with a splash of pasta water for 1 minute.",
+        "Tear in the basil and top with the Parmesan."
+      ],
+      "photo": {
+        "imageUrl": "https://images.unsplash.com/photo-1626844131082-256783844137?w=1080",
+        "photographer": "Paish Zaini",
+        "profileUrl": "https://unsplash.com/@paishzaini",
+        "page": "https://unsplash.com/photos/a-white-plate-topped-with-spaghetti-and-tomatoes--9UJTnXpUXM"
+      }
     },
     {
-      "name": "Coconut Chickpea Curry",
-      "headline": "A mild, creamy curry with spinach, served over rice",
-      "servings": 2,
-      "prepMinutes": 10,
-      "totalMinutes": 35,
-      "cuisines": ["indian"],
+      "name": "Shredded Beef Tacos",
+      "headline": "Serves 4\nPrep time: 20 minutes\nTotal time: 210 minutes",
+      "servings": 4,
+      "prepMinutes": 20,
+      "totalMinutes": 210,
+      "cuisines": [
+        "mexican"
+      ],
       "ingredients": [
-        {"name": "Chickpeas", "quantity": "1", "unit": "can", "note": "15 oz, drained and rinsed"},
-        {"name": "Coconut Milk", "quantity": "2/3", "unit": "cup"},
-        {"name": "Tomato Paste", "quantity": "2", "unit": "tbsp"},
-        {"name": "Baby Spinach", "quantity": "2", "unit": "cup"},
-        {"name": "Yellow Onion", "quantity": "1"},
-        {"name": "Garlic", "quantity": "2", "unit": "clove", "note": "minced"},
-        {"name": "Fresh Ginger", "quantity": "1", "unit": "thumb", "note": "grated"},
-        {"name": "Curry Powder", "quantity": "1", "unit": "tbsp"},
-        {"name": "Vegetable Stock Concentrate", "quantity": "1", "unit": "tsp"},
-        {"name": "Jasmine Rice", "quantity": "0.75", "unit": "cup"},
-        {"name": "Olive Oil", "quantity": "1", "unit": "tbsp", "pantryStaple": true},
-        {"name": "Salt", "pantryStaple": true, "note": "to taste"}
+        {
+          "name": "beef chuck roast",
+          "quantity": "2",
+          "unit": "lb",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "salt",
+          "quantity": "1",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "chili powder",
+          "quantity": "2",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "ground cumin",
+          "quantity": "1",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "dried oregano",
+          "quantity": "1",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "vegetable oil",
+          "quantity": "1",
+          "unit": "tbsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "yellow onion",
+          "quantity": "1",
+          "unit": "",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "garlic",
+          "quantity": "3",
+          "unit": "clove",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "beef broth",
+          "quantity": "1",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "diced green chiles",
+          "quantity": "1",
+          "unit": "can",
+          "note": "4 oz",
+          "pantryStaple": false
+        },
+        {
+          "name": "corn tortillas",
+          "quantity": "12",
+          "unit": "",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "white onion",
+          "quantity": "1",
+          "unit": "",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "cilantro",
+          "quantity": "1",
+          "unit": "bunch",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "limes",
+          "quantity": "2",
+          "unit": "",
+          "note": "",
+          "pantryStaple": false
+        }
       ],
       "steps": [
-        "Rinse the rice. Bring it to a boil in a small pot with 1¼ cups water and a pinch of salt, then cover and cook on low for 15 minutes. Take it off the heat and keep it covered.",
-        "Dice the onion. Heat the oil in a large pan over medium heat and cook the onion until soft, about 5 minutes.",
-        "Add the garlic, ginger and curry powder and stir for 1 minute. Stir in the tomato paste and cook for 1 minute more.",
-        "Add the chickpeas, coconut milk, stock concentrate and ½ cup water. Simmer until slightly thick, about 8 minutes.",
-        "Stir in the spinach until it wilts, about 1 minute. Season with salt. Fluff the rice with a fork and serve the curry over it."
-      ]
+        "Heat the oven to 325°F. Cut the beef into 4 pieces and rub them with the salt, chili powder, cumin and oregano.",
+        "Brown the beef in the oil in a Dutch oven, about 3 minutes a side.",
+        "Add the sliced yellow onion, garlic, broth and green chiles. Cover and bake for 3 hours, until the beef pulls apart.",
+        "Shred the beef with two forks and stir it into the juices.",
+        "Warm the tortillas in a dry skillet.",
+        "Fill them with beef and top with chopped white onion, cilantro and a squeeze of lime."
+      ],
+      "photo": {
+        "imageUrl": "https://images.unsplash.com/photo-1599974579688-8dbdd335c77f?w=1080",
+        "photographer": "Jeswin Thomas",
+        "profileUrl": "https://unsplash.com/@jeswinthomas",
+        "page": "https://unsplash.com/photos/beef-tacos-with-onion-and-cilantro-z_PfaGzeN9E"
+      }
     },
     {
-      "name": "Beef and Broccoli Stir-Fry",
-      "headline": "Tender beef and broccoli in a savory ginger sauce",
-      "servings": 2,
+      "name": "Chicken Tikka Masala",
+      "headline": "Serves 4\nPrep time: 15 minutes\nTotal time: 45 minutes",
+      "servings": 4,
       "prepMinutes": 15,
-      "totalMinutes": 30,
-      "cuisines": ["chinese"],
+      "totalMinutes": 45,
+      "cuisines": [
+        "indian"
+      ],
       "ingredients": [
-        {"name": "Flank Steak", "quantity": "10", "unit": "oz", "note": "thinly sliced against the grain"},
-        {"name": "Broccoli Florets", "quantity": "3", "unit": "cup"},
-        {"name": "Soy Sauce", "quantity": "3", "unit": "tbsp"},
-        {"name": "Brown Sugar", "quantity": "1", "unit": "tbsp"},
-        {"name": "Cornstarch", "quantity": "2", "unit": "tsp"},
-        {"name": "Garlic", "quantity": "2", "unit": "clove", "note": "minced"},
-        {"name": "Fresh Ginger", "quantity": "1", "unit": "thumb", "note": "grated"},
-        {"name": "Jasmine Rice", "quantity": "0.75", "unit": "cup"},
-        {"name": "Vegetable Oil", "quantity": "1", "unit": "tbsp", "pantryStaple": true}
+        {
+          "name": "boneless chicken thighs",
+          "quantity": "3/2",
+          "unit": "lb",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "plain yogurt",
+          "quantity": "1/2",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "garam masala",
+          "quantity": "2",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "ground cumin",
+          "quantity": "1",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "ground turmeric",
+          "quantity": "1",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "salt",
+          "quantity": "1",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "butter",
+          "quantity": "2",
+          "unit": "tbsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "yellow onion",
+          "quantity": "1",
+          "unit": "",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "garlic",
+          "quantity": "3",
+          "unit": "clove",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "fresh ginger",
+          "quantity": "1",
+          "unit": "tbsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "tomato sauce",
+          "quantity": "1",
+          "unit": "can",
+          "note": "15 oz",
+          "pantryStaple": false
+        },
+        {
+          "name": "heavy cream",
+          "quantity": "3/4",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "fresh mint leaves",
+          "quantity": "1/4",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "naan",
+          "quantity": "4",
+          "unit": "",
+          "note": "",
+          "pantryStaple": false
+        }
       ],
       "steps": [
-        "Rinse the rice. Bring it to a boil in a small pot with 1¼ cups water, then cover and cook on low for 15 minutes. Take it off the heat and keep it covered.",
-        "Stir together the soy sauce, brown sugar, cornstarch and ¼ cup water in a small bowl.",
-        "Heat the oil in a large pan over high heat. Cook the beef in one layer until browned, about 2 minutes, then move it to a plate.",
-        "Add the broccoli and 2 Tbsp water to the pan. Cover and cook until bright green and crisp-tender, about 3 minutes. Add the garlic and ginger and stir for 30 seconds.",
-        "Return the beef to the pan, pour in the sauce and stir until it thickens and coats everything, about 1 minute. Serve over the rice."
-      ]
+        "Cut the chicken into bite-size pieces and stir in the yogurt, 1 tsp of the garam masala, the cumin, turmeric and salt.",
+        "Melt the butter in a large skillet over medium-high heat. Brown the chicken for 5 minutes, then take it out.",
+        "Cook the diced onion for 5 minutes, then add the garlic, ginger and the rest of the garam masala for 1 minute.",
+        "Add the tomato sauce and simmer for 10 minutes.",
+        "Stir in the cream and the chicken and simmer 10 minutes more, until the chicken is cooked through.",
+        "Top with mint and serve with warm naan."
+      ],
+      "photo": {
+        "imageUrl": "https://images.unsplash.com/photo-1772730064970-a7b2735c93b9?w=1080",
+        "photographer": "Mohammad Fahim",
+        "profileUrl": "https://unsplash.com/@dischef",
+        "page": "https://unsplash.com/photos/chicken-tikka-masala-with-naan-bread-on-a-wooden-board-ChM5be5nhis"
+      }
+    },
+    {
+      "name": "Margherita Pizza",
+      "headline": "Serves 4\nPrep time: 20 minutes\nTotal time: 35 minutes",
+      "servings": 4,
+      "prepMinutes": 20,
+      "totalMinutes": 35,
+      "cuisines": [
+        "italian"
+      ],
+      "ingredients": [
+        {
+          "name": "pizza dough",
+          "quantity": "1",
+          "unit": "lb",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "crushed tomatoes",
+          "quantity": "1",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "garlic",
+          "quantity": "1",
+          "unit": "clove",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "salt",
+          "quantity": "1/2",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "olive oil",
+          "quantity": "2",
+          "unit": "tbsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "fresh mozzarella",
+          "quantity": "8",
+          "unit": "oz",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "fresh basil leaves",
+          "quantity": "1",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        }
+      ],
+      "steps": [
+        "Heat the oven to 500°F with a baking sheet inside.",
+        "Stir the crushed tomatoes with the grated garlic, salt and 1 Tbsp of the oil.",
+        "Stretch the dough into a 12-inch round on a sheet of parchment.",
+        "Spread the sauce over the dough, leaving the edge bare, and tear the mozzarella over the top.",
+        "Slide the pizza on its parchment onto the hot sheet and bake for 10 to 12 minutes, until the crust is browned.",
+        "Top with the basil and the rest of the oil."
+      ],
+      "photo": {
+        "imageUrl": "https://images.unsplash.com/photo-1682264788192-9abdec90c425?w=1080",
+        "photographer": "Joanie Simon",
+        "profileUrl": "https://unsplash.com/@joaniesimon",
+        "page": "https://unsplash.com/photos/a-pizza-on-a-white-plate-on-a-table-T0q4_yyQ4Hg"
+      }
+    },
+    {
+      "name": "Chicken Skewers with Garlic Sauce",
+      "headline": "Serves 4\nPrep time: 25 minutes\nTotal time: 45 minutes",
+      "servings": 4,
+      "prepMinutes": 25,
+      "totalMinutes": 45,
+      "cuisines": [
+        "lebanese"
+      ],
+      "ingredients": [
+        {
+          "name": "boneless chicken breasts",
+          "quantity": "3/2",
+          "unit": "lb",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "olive oil",
+          "quantity": "3",
+          "unit": "tbsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "lemons",
+          "quantity": "2",
+          "unit": "",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "garlic",
+          "quantity": "4",
+          "unit": "clove",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "paprika",
+          "quantity": "1",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "ground cumin",
+          "quantity": "1",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "salt",
+          "quantity": "1",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "plain Greek yogurt",
+          "quantity": "1/2",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "flatbreads",
+          "quantity": "4",
+          "unit": "",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "dill pickles",
+          "quantity": "1",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "green olives",
+          "quantity": "1/2",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        }
+      ],
+      "steps": [
+        "Cut the chicken into 1 1/2-inch pieces and toss with 2 Tbsp of the oil, the juice of 1 lemon, 2 grated garlic cloves, the paprika, cumin and salt. Let it sit for 15 minutes.",
+        "For the garlic sauce, stir the yogurt with the rest of the garlic, a squeeze of lemon and a pinch of salt.",
+        "Thread the chicken onto skewers.",
+        "Grill or broil on high for 10 to 12 minutes, turning once, until cooked through.",
+        "Warm the flatbreads on the grill for 1 minute.",
+        "Serve the skewers with the flatbreads, garlic sauce, pickles, olives and lemon wedges."
+      ],
+      "photo": {
+        "imageUrl": "https://images.unsplash.com/photo-1777891257551-bd5ecdb71c7e?w=1080",
+        "photographer": "Husien Bisky",
+        "profileUrl": "https://unsplash.com/@husien_bisky1",
+        "page": "https://unsplash.com/photos/grilled-chicken-skewers-with-flatbread-and-pickles-RfpGZ2x6COA"
+      }
+    },
+    {
+      "name": "Turkey and Bean Chili",
+      "headline": "Serves 4\nPrep time: 15 minutes\nTotal time: 50 minutes",
+      "servings": 4,
+      "prepMinutes": 15,
+      "totalMinutes": 50,
+      "cuisines": [
+        "american"
+      ],
+      "ingredients": [
+        {
+          "name": "olive oil",
+          "quantity": "1",
+          "unit": "tbsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "ground turkey",
+          "quantity": "1",
+          "unit": "lb",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "yellow onion",
+          "quantity": "1",
+          "unit": "",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "red bell pepper",
+          "quantity": "1",
+          "unit": "",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "garlic",
+          "quantity": "3",
+          "unit": "clove",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "chili powder",
+          "quantity": "2",
+          "unit": "tbsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "ground cumin",
+          "quantity": "1",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "salt",
+          "quantity": "1",
+          "unit": "tsp",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "crushed tomatoes",
+          "quantity": "1",
+          "unit": "can",
+          "note": "28 oz",
+          "pantryStaple": false
+        },
+        {
+          "name": "kidney beans",
+          "quantity": "2",
+          "unit": "can",
+          "note": "15 oz",
+          "pantryStaple": false
+        },
+        {
+          "name": "chicken broth",
+          "quantity": "1",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "shredded cheddar",
+          "quantity": "1",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "sour cream",
+          "quantity": "1/2",
+          "unit": "cup",
+          "note": "",
+          "pantryStaple": false
+        },
+        {
+          "name": "green onions",
+          "quantity": "3",
+          "unit": "",
+          "note": "",
+          "pantryStaple": false
+        }
+      ],
+      "steps": [
+        "Warm the oil in a large pot over medium-high heat and brown the turkey for 6 minutes, breaking it up.",
+        "Add the chopped onion and bell pepper and cook for 5 minutes.",
+        "Stir in the garlic, chili powder, cumin and salt for 1 minute.",
+        "Add the tomatoes, the drained beans and the broth, and simmer for 25 minutes, stirring now and then.",
+        "Serve topped with the cheddar, sour cream and sliced green onions."
+      ],
+      "photo": {
+        "imageUrl": "https://images.unsplash.com/photo-1790701909034-6c7b45c7b58a?w=1080",
+        "photographer": "Chad Montano",
+        "profileUrl": "https://unsplash.com/@briewilly",
+        "page": "https://unsplash.com/photos/chili-bowl-with-cheese-and-cream-HNVi6m5KCr8"
+      }
     }
   ]
 }

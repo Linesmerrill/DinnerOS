@@ -2,7 +2,8 @@ import XCTest
 
 /// Takes the App Store screenshots from a prepared household on a local API (see
 /// docs/app-store.md, Screenshots). Each shot is the whole screen, status bar included, named for
-/// its file in store-screenshots/. Sign in as QA_SUBJECT (default "jordan"). Run on the device
+/// its file in store-screenshots/. Sign in as QA_SUBJECT (default "jordan"), or with
+/// QA_REVIEW_EMAIL and QA_REVIEW_PASSWORD as the App Review account. Run on the device
 /// size the files need, with `xcrun simctl status_bar <id> override --time 9:41 ...` first.
 final class StoreScreenshotsQATests: XCTestCase {
     override func setUp() {
@@ -68,6 +69,12 @@ final class StoreScreenshotsQATests: XCTestCase {
 
         }
 
+        // Cooking can stay open over the tabs; start again from the Menu.
+        if !app.buttons["Week Menu"].exists {
+            app.terminate()
+            app.launch()
+            XCTAssertTrue(app.buttons["Week Menu"].waitForExistence(timeout: 30))
+        }
         let household = app.buttons.matching(NSPredicate(format: "label == 'Household' AND identifier == 'person.2'"))
             .firstMatch
         (household.waitForExistence(timeout: 5) ? household : app.buttons["Household"].firstMatch).tap()
@@ -188,8 +195,23 @@ final class StoreScreenshotsQATests: XCTestCase {
     private func signIn() -> XCUIApplication {
         let app = XCUIApplication()
         app.launch()
+        // The App Review account (docs/review-account.md): sign in with its email and password.
+        let email = app.buttons["signIn.email.open"]
+        if let address = env["QA_REVIEW_EMAIL"], email.waitForExistence(timeout: 8) {
+            email.tap()
+            let field = app.textFields["signIn.email.address"]
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            field.tap()
+            field.typeText(address)
+            let secure = app.secureTextFields["signIn.email.password"]
+            secure.tap()
+            secure.typeText(env["QA_REVIEW_PASSWORD"] ?? "")
+            app.buttons["signIn.email.submit"].tap()
+            let start = app.buttons["Start Planning"].firstMatch
+            if start.waitForExistence(timeout: 15) { start.tap() }
+        }
         let subject = app.textFields["Subject"]
-        if subject.waitForExistence(timeout: 8) {
+        if env["QA_REVIEW_EMAIL"] == nil, subject.waitForExistence(timeout: 8) {
             subject.tap()
             // Clear what's there key by key: Select All didn't always show.
             let typed = (subject.value as? String) ?? ""

@@ -198,7 +198,7 @@ func run() error {
 		logger.Info("STARTER_RECIPES_HOUSEHOLD_ID is not set; new households start with no recipes")
 	}
 	householdService, householdHandler, invitationHandler := newHouseholdHandlers(cfg, db, userService, tokens, starter, logger)
-	review, err := newReviewSignIn(cfg, householdService, recipeService, userService, starter, logger)
+	review, reviewSeeder, err := newReviewSignIn(cfg, householdService, recipeService, userService, starter, logger)
 	if err != nil {
 		return err
 	}
@@ -258,6 +258,9 @@ func run() error {
 	// Deleting a recipe takes it off this week and later weeks, and Undo puts
 	// those meals back (decision 695).
 	recipeService.WithPlans(planService)
+	if reviewSeeder != nil {
+		reviewSeeder.WithPlanner(planService)
+	}
 	// A frozen item needed by one of today's meals is a reminder derived on
 	// read, like the pantry's low-stock check and the weekly order reminder.
 	notificationService.AddRefresher(planService)
@@ -691,23 +694,24 @@ func newAuthHandler(cfg config.Config, userService *users.Service, tokens *auth.
 // newReviewSignIn turns on email sign-in for the App Review account when
 // REVIEW_ACCOUNT_EMAIL and REVIEW_ACCOUNT_PASSWORD are both set (decision
 // 752). Its household is seeded with our own recipes and never gets the
-// starter library.
-func newReviewSignIn(cfg config.Config, householdService *households.Service, recipeService *recipes.Service, userService *users.Service, starter *recipes.Starter, logger *slog.Logger) (*auth.ReviewSignIn, error) {
+// starter library. It returns the sign-in and its seeder, or nils when the
+// account isn't set.
+func newReviewSignIn(cfg config.Config, householdService *households.Service, recipeService *recipes.Service, userService *users.Service, starter *recipes.Starter, logger *slog.Logger) (*auth.ReviewSignIn, *reviewaccount.Seeder, error) {
 	if p := cfg.ReviewAccount.Problem; p != "" {
 		logger.Warn(p)
 	}
 	if !cfg.ReviewAccount.Enabled() {
-		return nil, nil
+		return nil, nil, nil
 	}
 	seeder, err := reviewaccount.NewSeeder(householdService, recipeService, logger)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	starter.SkipWhen(reviewaccount.SkipStarter(householdService, userService))
 	logger.Info("review sign-in is on for the App Review account")
 	return auth.NewReviewSignIn(auth.ReviewOptions{
 		Email: cfg.ReviewAccount.Email, Password: cfg.ReviewAccount.Password, Seeder: seeder,
-	}), nil
+	}), seeder, nil
 }
 
 // newHouseholdHandlers wires the households and invitations modules. The

@@ -1,6 +1,6 @@
 import XCTest
 
-/// The App Review account (decision 752): sign in with email and password, find the five recipes
+/// The App Review account (decisions 752, 759): sign in with email and password, find the recipes
 /// we wrote for it and no starter library, open the purchase screen (no Plus on the house), then
 /// delete the account so the next run starts from a fresh household.
 ///
@@ -14,8 +14,8 @@ final class ReviewAccountQATests: XCTestCase {
 
     /// The recipes in api/internal/reviewaccount/recipes.json.
     private let seeded = [
-        "Lemon Garlic Chicken with Green Beans", "Black Bean Tacos with Lime Slaw",
-        "Spaghetti with Tomato and Basil", "Coconut Chickpea Curry", "Beef and Broccoli Stir-Fry",
+        "Salmon with Asparagus and Rice", "Beef and Broccoli", "Spaghetti Pomodoro", "Shredded Beef Tacos",
+        "Chicken Tikka Masala", "Margherita Pizza", "Chicken Skewers with Garlic Sauce", "Turkey and Bean Chili",
     ]
 
     override func setUp() {

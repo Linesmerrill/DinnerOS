@@ -15,6 +15,7 @@ import (
 
 	"github.com/Linesmerrill/DinnerOS/api/internal/auth"
 	"github.com/Linesmerrill/DinnerOS/api/internal/households"
+	"github.com/Linesmerrill/DinnerOS/api/internal/planning"
 	"github.com/Linesmerrill/DinnerOS/api/internal/platform/mongodb/mongotest"
 	"github.com/Linesmerrill/DinnerOS/api/internal/plus"
 	"github.com/Linesmerrill/DinnerOS/api/internal/recipes"
@@ -32,7 +33,7 @@ const (
 func TestReviewSignInWithMongo(t *testing.T) {
 	client := mongotest.Client(t)
 	ctx := context.Background()
-	if err := client.EnsureIndexes(ctx, slices.Concat(users.Indexes(), auth.Indexes(), households.Indexes(), recipes.Indexes(), plus.CompIndexes())...); err != nil {
+	if err := client.EnsureIndexes(ctx, slices.Concat(users.Indexes(), auth.Indexes(), households.Indexes(), recipes.Indexes(), planning.Indexes(), plus.CompIndexes())...); err != nil {
 		t.Fatal(err)
 	}
 	db := client.Database()
@@ -42,7 +43,8 @@ func TestReviewSignInWithMongo(t *testing.T) {
 		t.Fatal(err)
 	}
 	recipeStore := recipes.NewMongoStore(db)
-	recipeService := recipes.NewService(recipeStore)
+	recipeService := recipes.NewService(recipeStore).WithPhotoCredits(recipeStore)
+	planService := planning.NewService(planning.NewMongoStore(db), recipeService)
 
 	// A starter library every other new household gets.
 	const starterSource = "6aa940907895ff325b652912"
@@ -58,6 +60,7 @@ func TestReviewSignInWithMongo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	seeder.WithPlanner(planService)
 	review := auth.NewReviewSignIn(auth.ReviewOptions{Email: mongoReviewEmail, Password: mongoReviewPassword, Seeder: seeder})
 	r := chi.NewRouter()
 	r.Route("/api/v1", auth.NewHandler(auth.HandlerOptions{
@@ -110,6 +113,28 @@ func TestReviewSignInWithMongo(t *testing.T) {
 	seed, _ := LoadSeed()
 	if len(names) != len(seed.Recipes) || slices.Contains(names, "Starter Dish") {
 		t.Errorf("recipes = %v; want the %d seeded recipes and no starter library", names, len(seed.Recipes))
+	}
+
+	// Every recipe has its Unsplash photo, credited to its photographer.
+	for _, rc := range stored {
+		r, _ := seed.recipe(rc.Name)
+		if rc.ImageURL != r.Photo.ImageURL {
+			t.Errorf("%s: photo %q; want %q", rc.Name, rc.ImageURL, r.Photo.ImageURL)
+		}
+		if c := recipeService.PhotoCredit(ctx, rc.ImageURL); c == nil || c.Name != r.Photo.Photographer {
+			t.Errorf("%s: credit %+v; want %s", rc.Name, c, r.Photo.Photographer)
+		}
+	}
+
+	// This week is planned, once, however many times the reviewer signs in.
+	ours, err := householdService.GetHousehold(ctx, hid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loc, _ := time.LoadLocation(ours.TimeZone)
+	week := planning.WeekOfOn(time.Now().In(loc), planning.Day(ours.FirstDay())).String()
+	if plan, err := planService.Get(ctx, hid, week); err != nil || len(plan.Entries) != len(seed.Plan) {
+		t.Errorf("week %s: %d dinners, %v; want the %d planned", week, len(plan.Entries), err, len(seed.Plan))
 	}
 
 	// No Plus on the house: the reviewer sees the normal paywall.

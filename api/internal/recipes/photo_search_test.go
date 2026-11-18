@@ -269,3 +269,29 @@ func TestPhotoSearchStatus(t *testing.T) {
 		t.Errorf("signed out = %d", rec.Code)
 	}
 }
+
+// The App Review account's photos are chosen by the server and credited the
+// same way as one a member picked (decision 759).
+func TestKeepPhotoCredit(t *testing.T) {
+	ctx := context.Background()
+	img := "https://images.unsplash.com/photo-1570645314284-8b28f8fac62e?w=1080"
+	credit := photosearch.Credit{Name: "Solstice Hannan", ProfileURL: "https://unsplash.com/@darkersolstice"}
+	if err := NewService(nil).KeepPhotoCredit(ctx, img, credit); err == nil {
+		t.Error("want an error without a credit store")
+	}
+	s := NewService(nil).WithPhotoCredits(newMemoryCredits())
+	if err := s.KeepPhotoCredit(ctx, img, credit); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.PhotoCredit(ctx, img); got == nil || got.Name != credit.Name {
+		t.Errorf("credit = %+v; want %s", got, credit.Name)
+	}
+	for _, bad := range []struct {
+		url  string
+		name string
+	}{{"https://example.com/photo.jpg", "Someone"}, {img, " "}} {
+		if err := s.KeepPhotoCredit(ctx, bad.url, photosearch.Credit{Name: bad.name}); err == nil {
+			t.Errorf("%q by %q: want an error", bad.url, bad.name)
+		}
+	}
+}

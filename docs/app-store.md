@@ -137,7 +137,7 @@ neither value is ever in git. To set it up for a submission:
    `demo_password.txt` on the release Mac (both are in `.gitignore`). `submit_review` sends them
    as the Sign-In Information and marks a demo account as required; without both files it sends
    none, as before.
-3. Sign in once on a phone to check: the household "Our Kitchen" with five recipes we wrote
+3. Sign in once on a phone to check: the household "Our Kitchen" with eight recipes we wrote, each with a photo, and this week planned
    (`api/internal/reviewaccount/recipes.json`), no starter library, and the normal Plus purchase
    screen (no Plus on the house).
 
@@ -151,7 +151,7 @@ The notes:
 
 > DinnerOS plans a household's dinners for the week, makes one grocery list, and walks you through cooking.
 >
-> Demo account: on the sign-in screen, tap Sign in with email (under Continue with Apple), then enter the email and password in the Sign-In Information fields. It opens a household that already has five recipes, so you can plan right away. You can also sign in with your own Apple ID, then Create a Household and give it any name. A new household comes with a small library of recipes.
+> Demo account: on the sign-in screen, tap Sign in with email (under Continue with Apple), then enter the email and password in the Sign-In Information fields. It opens a household with eight recipes and this week's dinners already planned, so every screen has something in it. You can also sign in with your own Apple ID, then Create a Household and give it any name. A new household comes with a small library of recipes.
 >
 > Things to try:
 > 1. Menu tab: tap a recipe to open it, then Start Cooking for the steps and timers.
@@ -185,17 +185,22 @@ pass its ID with `-exclude`.
 Taken in the simulator with sample data (status bar 9:41, full battery), at sizes App Store
 Connect takes for the largest iPhone and iPad. Upload in this order.
 
-To retake them: run a local API with development sign-in, `PLUS_ENABLED=true` and a starter
-library of hand-written recipes with plain names and DinnerOS's own photos (never imported ones),
-make a household for the sign-in subject `jordan` with a Plus trial (a local RevenueCat webhook
-event) and two dinners planned this week, set Autopilot up and choose Walmart. Then run
-`StoreScreenshotsQATests` (`testPhoneScreenshots` on an iPhone 16 Plus, `testPadScreenshots` on
-an iPad Pro 12.9-inch) after `xcrun simctl status_bar <id> override --time 9:41 --batteryState
-charged --batteryLevel 100 --wifiBars 3 --cellularBars 4`. Each shot is a named attachment in the
-result bundle. `QA_ONLY=household` on an iPhone 17 Pro Max retakes the Household screens in
-`store-screenshots/household/`.
+They come from the App Review account's content (docs/review-account.md): our own eight recipes
+with credited Unsplash photos, this week planned, Walmart chosen, Autopilot set up and a local
+Plus trial. Nothing imported and no HelloFresh content. To retake them: start a local API on its
+own database with `REVIEW_ACCOUNT_*` set and a fake Unsplash run with
+`-photos docs/review-account/photos.json`, run `ReviewAccountRecipesQATests` to type the recipes
+in, plan five dinners, set Autopilot up, choose Walmart and send a local RevenueCat trial event.
+Then run `StoreScreenshotsQATests` with `TEST_RUNNER_QA_REVIEW_EMAIL`,
+`TEST_RUNNER_QA_REVIEW_PASSWORD` and `TEST_RUNNER_QA_PLANNED_RECIPE="Chicken Tikka Masala"`
+(`testPhoneScreenshots` on an iPhone 17 Pro Max, `testPadScreenshots` on an iPad Pro 13-inch)
+after `xcrun simctl ui <id> appearance light` and `xcrun simctl status_bar <id> override --time
+9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4`. Each shot is a
+named attachment in the result bundle; the iPad ones come out portrait and are turned to
+landscape. `06-cook-steps.png` is the `06-cook-steps-timer` shot. Leave out the Members and
+Account shots: they show the review account's name and email.
 
-6.7" iPhone, 1290 x 2796 (`store-screenshots/iphone/`, not in git: they show recipe photos):
+6.9" iPhone, 1320 x 2868 (`store-screenshots/iphone/`, not in git):
 
 1. `01-menu.png` This week's dinners
 2. `02-week.png` The week by day
@@ -206,7 +211,7 @@ result bundle. `QA_ONLY=household` on an iPhone 17 Pro Max retakes the Household
 7. `07-timer.png` Setting a timer
 8. `08-your-plus.png` Your Plus
 
-13" iPad, 2732 x 2048 landscape (`store-screenshots/ipad/`):
+13" iPad, 2752 x 2064 landscape (`store-screenshots/ipad/`):
 
 1. `01-menu.png` This week's dinners
 2. `02-recipe.png` A recipe

@@ -3,8 +3,10 @@ package recipes
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -72,6 +74,19 @@ func (s *Service) PickPhoto(ctx context.Context, resultID string) (photosearch.P
 		return photosearch.Picked{}, err
 	}
 	return picked, nil
+}
+
+// KeepPhotoCredit keeps who took a photo hotlinked from Unsplash that the
+// server chose itself (the App Review account's recipes), as PickPhoto does
+// for one a member picked.
+func (s *Service) KeepPhotoCredit(ctx context.Context, imageURL string, c photosearch.Credit) error {
+	if s.photoCredits == nil {
+		return errors.New("recipes: photo credits are not wired")
+	}
+	if !photosearch.IsUnsplashImageURL(imageURL) || strings.TrimSpace(c.Name) == "" {
+		return fmt.Errorf("recipes: %q is not an Unsplash photo with a photographer", imageURL)
+	}
+	return s.photoCredits.SavePhotoCredit(ctx, imageURL, c)
 }
 
 // PhotoCredit is who to credit for a recipe's photo, or nil when it is the
