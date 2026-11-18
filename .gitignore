@@ -76,8 +76,9 @@ node_modules/
 vendor/bundle/
 .bundle/
 
-# App Store screenshots show imported recipe photos: kept on this Mac, never pushed.
-/store-screenshots/
+# The App Store screenshots are in git (our own recipes, credited Unsplash photos). The invite
+# page shot shows a real invite code, so it stays on this Mac.
+/store-screenshots/household/5-invite-page.jpg
 
 # App Review contact: real name, email and phone stay on the release Mac.
 /ios/fastlane/metadata/review_information/first_name.txt

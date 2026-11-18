@@ -200,7 +200,7 @@ named attachment in the result bundle; the iPad ones come out portrait and are t
 landscape. `06-cook-steps.png` is the `06-cook-steps-timer` shot. Leave out the Members and
 Account shots: they show the review account's name and email.
 
-6.9" iPhone, 1320 x 2868 (`store-screenshots/iphone/`, not in git):
+6.9" iPhone, 1320 x 2868 (`store-screenshots/iphone/`):
 
 1. `01-menu.png` This week's dinners
 2. `02-week.png` The week by day

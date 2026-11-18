@@ -13,6 +13,28 @@ The recommendation technology behind it is being designed to become
 personalized *week* of meals for any food-commerce platform. DinnerOS will be
 Autopilot's first customer.
 
+## Screenshots
+
+The App Store screenshots, taken from the App Review account's household ("Our Kitchen"): eight
+recipes we wrote, this week planned, Walmart chosen. Full-size originals for App Store Connect are
+in [store-screenshots/](store-screenshots/).
+
+iPhone (6.9 inch):
+
+<table>
+<tr><td align="center" valign="top"><img src="store-screenshots/iphone/01-menu.png" width="180" alt="This week's dinners"><br><sub>This week's dinners</sub></td><td align="center" valign="top"><img src="store-screenshots/iphone/02-week.png" width="180" alt="The week by day"><br><sub>The week by day</sub></td><td align="center" valign="top"><img src="store-screenshots/iphone/03-autopilot.png" width="180" alt="Autopilot's picks"><br><sub>Autopilot's picks</sub></td><td align="center" valign="top"><img src="store-screenshots/iphone/04-shop.png" width="180" alt="One list, sent to Walmart"><br><sub>One list, sent to Walmart</sub></td></tr>
+<tr><td align="center" valign="top"><img src="store-screenshots/iphone/05-recipe.png" width="180" alt="A recipe"><br><sub>A recipe</sub></td><td align="center" valign="top"><img src="store-screenshots/iphone/06-cook-steps.png" width="180" alt="Cooking with a timer running"><br><sub>Cooking with a timer running</sub></td><td align="center" valign="top"><img src="store-screenshots/iphone/07-timer.png" width="180" alt="Setting a timer"><br><sub>Setting a timer</sub></td><td align="center" valign="top"><img src="store-screenshots/iphone/08-your-plus.png" width="180" alt="Your Plus"><br><sub>Your Plus</sub></td></tr>
+</table>
+
+iPad (13 inch, landscape):
+
+<table>
+<tr><td align="center" valign="top"><img src="store-screenshots/ipad/01-menu.png" width="280" alt="This week's dinners"><br><sub>This week's dinners</sub></td><td align="center" valign="top"><img src="store-screenshots/ipad/02-recipe.png" width="280" alt="A recipe"><br><sub>A recipe</sub></td><td align="center" valign="top"><img src="store-screenshots/ipad/03-cook.png" width="280" alt="Ingredients and steps side by side"><br><sub>Ingredients and steps side by side</sub></td></tr>
+</table>
+
+Recipe photos are free [Unsplash](https://unsplash.com/license) photos. Each photographer is
+credited in the app and listed in [docs/review-account.md](docs/review-account.md#recipes-and-photos).
+
 ## Status
 
 | Phase | Scope | State |
