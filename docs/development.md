@@ -274,24 +274,19 @@ build 118 (Xcode 27.2) the iPhones and the Duo run iOS 27.2 and the iPads iOS 26
 the screen tests only. The whole matrix must finish in
 under 30 minutes. The standard:
 
-1. **Parallel.** Two simulators per config: "QA matrix <config>" runs the sweeps and screen tests,
-   and "QA matrix <config> 2" runs the long flows (`FLOWS` in the script: referral, invite link,
-   AnyList, companions, cuisine, review path, account deletion, denied permissions, fake Face ID),
-   all at once, up to 17 simulators. Build 118 split them: on iOS 27 every test ran 10 to 15%
-   slower, and with one simulator per config the first full run hit 30 minutes before any config
-   finished. The app is built once per API port (`build-for-testing`), then every simulator runs
-   `test-without-building`. `PLAN_ONLY=1 scripts/qa-matrix.sh` prints which simulator runs which
-   test and runs nothing.
-2. **Coverage split.** Screen tests and sweeps run on all 8 configs. The long flow tests
-   (referral, invite link, AnyList) run on one appearance per device, 4 configs each, and the
-   one-off add tests (by hand, companions, cuisine, next-step dots) go to the configs without
-   referral and invite runs, so every simulator finishes in about the same time. Build 114's first full run, with
-   every test on every config, took 38 minutes: referral (7 min), invite link (5 min) and AnyList
-   (4 min) on all 8 configs, with 8 simulators slowing each other down.
-   Build 116's referral test grew to about 10 minutes (Redeem and the step-done cards), and its
-   first full run took 33.5 minutes with invite link on the same 4 configs. Invite link now runs
-   on large-dark, small-dark and both upright iPads, and AnyList on large-light, small-light and
-   both iPads on their side. The script's comments list where each test runs.
+1. **Parallel.** One simulator per config ("QA matrix <config>"), all 9 at once. The app is built
+   once per API port (`build-for-testing`), then every config runs `test-without-building`.
+   `PLAN_ONLY=1 scripts/qa-matrix.sh` prints which simulator runs which test and runs nothing.
+   A second simulator per config (`FLOWS`) is off: on this Mac, 17 simulators ran every test 40
+   to 70% slower and filled the disk, which crashed local Mongo once (build 118). The script stops
+   every test when free space drops under 5 GB, and needs 25 GB to start (`ERASE=1` erases the
+   QA simulators first).
+2. **Coverage split.** Sweeps and both screen tests run on every config: they are how each screen
+   looks. Since build 118, when iOS 27 made every test 10 to 15% slower, the short tests that ran
+   on all 8 run on 3 or 4 (at least one iPhone and one iPad each), and the long flows (referral,
+   invite link, AnyList) run on one iPhone and one iPad, since they check what a person does. Each
+   device's tests are split between light and dark so every config finishes in about 28 minutes.
+   `runs_on` in the script says where each test runs.
 3. **Timeouts.** Each test has a 10-minute limit. A run with no output for 10 minutes is killed,
    its simulator restarted, and only that test retried once.
 4. **Targeted reruns.** After a fix, rerun only what failed, never the whole matrix:

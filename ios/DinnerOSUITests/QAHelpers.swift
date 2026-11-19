@@ -38,9 +38,11 @@ extension XCTestCase {
     /// instead of in the bar.
     @MainActor
     func backButton(_ app: XCUIApplication) -> XCUIElement {
-        let inBar = app.navigationBars.buttons.firstMatch
-        if inBar.exists { return inBar }
-        return app.buttons["BackButton"].firstMatch
+        // The system back button first, wherever it sits: on the Duo the bar's first button is
+        // the page's own (Join, Start Cooking).
+        let system = app.buttons["BackButton"].firstMatch
+        if system.exists { return system }
+        return app.navigationBars.buttons.firstMatch
     }
 
     /// Keeps a screenshot in the test results, named for the checklist.

@@ -2,9 +2,7 @@
 # The 9-config UI QA matrix, in parallel: one simulator per config (iPhone 17 Pro Max, iPhone SE,
 # iPad landscape, iPad portrait; each light and dark; plus iPhone Duo in light). Target: under 30
 # minutes. Build 118 (Xcode 27): the iPhones and the Duo run iOS 27.2, the iPads stay on iOS 26.4,
-# so both the new and the previous iOS are covered. iOS 27 runs each test 10 to 15% slower, so
-# the long flow tests (FLOWS) run on a second simulator per config, "QA matrix <config> 2", at
-# the same time as the first one's sweeps and screens: up to 17 simulators, same coverage.
+# so both the new and the previous iOS are covered. runs_on below says where each test runs.
 #
 #   scripts/qa-matrix.sh                      # every config, every test
 #   CONFIGS="ipadL-light" TESTS="UnsplashPhotoQATests" scripts/qa-matrix.sh   # a targeted rerun
@@ -31,8 +29,10 @@ ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-
 CONFIGS=${CONFIGS:-$ALL}
 TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests BiometricSignInQATests/testFakeFaceID BiometricSignInQATests/testSimulatorFaceID"}
 STALL=${STALL:-600}
-# The long flows, each several minutes: they run on each config's second simulator.
-FLOWS=" ReferralQATests InviteLinkQATests AnyListGuideQATests CompanionQATests CuisineQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests BiometricSignInQATests/testFakeFaceID "
+# Tests to run on a second simulator per config, "QA matrix <config> 2", at the same time as the
+# first. Off by default: on this Mac (build 118) 17 simulators ran 40 to 70% slower each and
+# filled the disk. Set it (space-separated, with a space at each end) on a bigger machine.
+FLOWS=${FLOWS:-" "}
 # RERUN: a summary.txt from an earlier run. Only its FAILED config and test pairs run again.
 RERUN=${RERUN:-}
 PAIRS=""
@@ -49,6 +49,7 @@ RUNTIME_IPAD=${RUNTIME_IPAD:-com.apple.CoreSimulator.SimRuntime.iOS-26-4}
 RUNTIME_DUO=${RUNTIME_DUO:-com.apple.CoreSimulator.SimRuntime.iOS-27-2-iPhone19-4}
 mkdir -p "$OUT"
 : >"$OUT/summary.txt"
+rm -f "$OUT/STOP"
 
 device_type() {
     case $1 in
@@ -144,64 +145,61 @@ run_test() {
     [ "$failed" -gt 0 ] || [ "$passed" -eq 0 ] && verdict=FAILED
     echo "$config $test: $verdict ($passed passed, $failed failed)" >>"$OUT/summary.txt"
     grep -E " error:" "$OUT/$name.log" | sed "s|$ROOT/||" | cut -c1-300 | head -3 >>"$OUT/summary.txt"
+    # Disk: a passing flow test's result bundle (a screen recording) isn't needed. The sweeps and
+    # screens keep theirs for screenshot QA, and every failure keeps its own.
+    case "$verdict $test" in "ok AppSweepQATests/"* | "ok ScreensQATests/"*) ;; "ok "*) rm -rf "$OUT/$name.xcresult" ;; esac
 }
 
 # Whether a test runs on a config: the placement rules for every test.
 runs_on() {
     local config=$1 test=$2
-        # The end-to-end add tests run once each, on configs without the referral and invite
-        # tests: adding by hand on the large iPhone, companions and cuisine on the small iPhone and
-        # on the iPad on its side (where their forms are a sheet), and the next-step dots (about a
-        # minute) on the large iPhone and the upright iPad, the two lightest configs.
-        # ReferralQATests also covers the free month moments ("Step 2 done" after its recipe, then
-        # "Your free month is ready" with Redeem), so they run on the same 4 configs at no extra cost.
-        # The long flow tests (referral, invite link, AnyList) check what a person does, not how a
-        # screen looks, so each runs on one appearance per device: 4 configs, not 8. Screens and
-        # sweeps still run on all 8. The two groups are split so every config finishes in about the
-        # same time. The failed-import test (about a minute, nothing saved) checks how a screen
-        # looks, so it runs on all 8. Reporting a shared recipe and hiding its cook (about a minute)
-        # checks what a person does, so it runs on the small iPhone and the iPad on its side, the
-        # configs without the next-step dots.
-        # The Duo (build 118) checks how screens look on its size, not the long flows.
-        if [ "${config%%-*}" = duo ]; then
-            case $test in AppSweepQATests/SWEEP | ScreensQATests/* | ImportFailureQATests | DiscoverQATests) ;; *) return 1 ;; esac
-        fi
-        case $test in
-        # Build 116: the referral test grew to about 10 minutes (Redeem and the step-done cards), so
-        # the invite link test moved off its configs and AnyList took its place. Each config then
-        # finishes in about 26 to 30 minutes.
-        ReferralQATests)
-            case $config in large-light | small-dark | ipadL-light | ipadP-dark) ;; *) return 1 ;; esac ;;
-        InviteLinkQATests)
-            case $config in large-dark | small-dark | ipadP-light | ipadP-dark) ;; *) return 1 ;; esac ;;
-        # Build 117: three configs ran a minute or two past 30, so AnyList left the iPad on its side
-        # in light (it still runs in dark), the iPad review path moved there, and account deletion
-        # moved to the upright iPad in light, which finished at 24 minutes.
-        AnyListGuideQATests)
-            case $config in large-light | small-light | ipadL-dark) ;; *) return 1 ;; esac ;;
-        AddRecipeQATests | SaveThenOpenQATests) [ "$config" = large-dark ] || return 1 ;;
-        CompanionQATests | CuisineQATests) case $config in small-light | ipadL-dark) ;; *) return 1 ;; esac ;;
-        NextStepDotQATests) case $config in large-dark | ipadP-light) ;; *) return 1 ;; esac ;;
-        ReportRecipeQATests) case $config in small-light | ipadL-dark) ;; *) return 1 ;; esac ;;
-        # Pre-submission checks (decisions 741, 749): the review path on one iPhone and one iPad,
-        # account deletion and denied permissions once each, on configs with time to spare.
-        ReviewPathQATests) case $config in small-light | ipadL-light) ;; *) return 1 ;; esac ;;
-        AccountDeletionQATests) [ "$config" = ipadP-light ] || return 1 ;;
-        # Face ID sign-in (decision 760, build 117): the long fake-biometrics flow (about 5 minutes)
-        # on the upright iPad, the one config with time to spare, and the simulator's own Face ID
-        # (about 1.5 minutes) on the small iPhone. Every config stays at about 27 minutes or less.
-        BiometricSignInQATests/testFakeFaceID) [ "$config" = ipadP-light ] || return 1 ;;
-        BiometricSignInQATests/testSimulatorFaceID) [ "$config" = small-light ] || return 1 ;;
-        PermissionsDeniedQATests) [ "$config" = small-light ] || return 1 ;;
-        # The App Review account (decision 752) is one account, so its test runs once, and only
-        # when the review account's email and password are exported for it.
-        ReviewAccountQATests)
-            [ "$config" = ipadL-dark ] || return 1
-            if [ -z "${REVIEW_ACCOUNT_EMAIL:-}" ] || [ -z "${REVIEW_ACCOUNT_PASSWORD:-}" ]; then
-                echo "$config $test: skipped (export REVIEW_ACCOUNT_EMAIL and REVIEW_ACCOUNT_PASSWORD)" >>"$OUT/summary.txt"
-                return 1
-            fi ;;
-        esac
+    # The Duo (build 118) checks how screens look on its size, not the long flows.
+    if [ "${config%%-*}" = duo ]; then
+        case $test in AppSweepQATests/SWEEP | ScreensQATests/* | ImportFailureQATests | DiscoverQATests) return 0 ;; *) return 1 ;; esac
+    fi
+    # Build 118 (Xcode 27, iOS 27.2): every test ran 10 to 15% slower, and the first full run hit
+    # 30 minutes before any config finished. A second simulator per config ran everything 40 to 70%
+    # slower again and filled the disk, so the work itself shrank instead:
+    # - Sweeps and both screen tests still run on every config: they are how each screen looks.
+    # - The short tests that ran on all 8 run on 3 or 4, at least one iPhone and one iPad each.
+    # - The long flows (referral, invite link, AnyList) check what a person does, so each runs on
+    #   one iPhone and one iPad.
+    # Then each device's tests are split between light and dark so every config finishes in about
+    # 28 minutes. PLAN_ONLY=1 prints the result.
+    case $test in
+    AppSweepQATests/SWEEP | ScreensQATests/*) return 0 ;;
+    ReferralQATests) case $config in large-light | ipadL-light) ;; *) return 1 ;; esac ;;
+    InviteLinkQATests) case $config in small-light | ipadP-dark) ;; *) return 1 ;; esac ;;
+    AnyListGuideQATests) case $config in large-dark | ipadL-dark) ;; *) return 1 ;; esac ;;
+    UnsplashPhotoQATests) case $config in large-light | small-dark | ipadL-dark) ;; *) return 1 ;; esac ;;
+    AddRecipeChooserQATests) case $config in large-light | small-dark | ipadL-light) ;; *) return 1 ;; esac ;;
+    ImportFailureQATests) case $config in large-dark | small-light | ipadL-light) ;; *) return 1 ;; esac ;;
+    DiscoverQATests) case $config in large-light | small-dark | ipadP-light | ipadP-dark) ;; *) return 1 ;; esac ;;
+    # The end-to-end add tests run once each: adding by hand on the large iPhone, companions and
+    # cuisine on a small iPhone and on the iPad on its side (where their forms are a sheet).
+    AddRecipeQATests | SaveThenOpenQATests) [ "$config" = large-dark ] || return 1 ;;
+    CompanionQATests) case $config in small-light | ipadL-dark) ;; *) return 1 ;; esac ;;
+    CuisineQATests) case $config in small-dark | ipadL-dark) ;; *) return 1 ;; esac ;;
+    NextStepDotQATests) case $config in large-dark | ipadP-light) ;; *) return 1 ;; esac ;;
+    ReportRecipeQATests) case $config in small-dark | ipadL-light) ;; *) return 1 ;; esac ;;
+    # Pre-submission checks (decisions 741, 749): the review path on one iPhone and one iPad,
+    # account deletion and denied permissions once each.
+    ReviewPathQATests) case $config in small-dark | ipadP-dark) ;; *) return 1 ;; esac ;;
+    AccountDeletionQATests) [ "$config" = ipadP-light ] || return 1 ;;
+    PermissionsDeniedQATests) [ "$config" = small-dark ] || return 1 ;;
+    # Face ID sign-in (decision 760): the long fake-biometrics flow (about 5 minutes) on the upright
+    # iPad, and the simulator's own Face ID (about 1.5 minutes) on the small iPhone.
+    BiometricSignInQATests/testFakeFaceID) [ "$config" = ipadP-light ] || return 1 ;;
+    BiometricSignInQATests/testSimulatorFaceID) [ "$config" = small-light ] || return 1 ;;
+    # The App Review account (decision 752) is one account, so its test runs once, and only
+    # when the review account's email and password are exported for it.
+    ReviewAccountQATests)
+        [ "$config" = ipadL-dark ] || return 1
+        if [ -z "${REVIEW_ACCOUNT_EMAIL:-}" ] || [ -z "${REVIEW_ACCOUNT_PASSWORD:-}" ]; then
+            echo "$config $test: skipped (export REVIEW_ACCOUNT_EMAIL and REVIEW_ACCOUNT_PASSWORD)" >>"$OUT/summary.txt"
+            return 1
+        fi ;;
+    esac
     return 0
 }
 
@@ -212,6 +210,7 @@ run_config() {
     xcrun simctl bootstatus "$id" -b >/dev/null 2>&1
     xcrun simctl ui "$id" appearance "${config#*-}"
     for test in $TESTS; do
+        [ -f "$OUT/STOP" ] && break
         if [ -n "$PAIRS" ]; then echo "$PAIRS" | grep -qxF "$config|$test" || continue; fi
         # Shard 2 runs the long flows, shard 1 everything else.
         case "$FLOWS" in *" $test "*) [ "$shard" = 2 ] || continue ;; *) [ "$shard" = 1 ] || continue ;; esac
@@ -269,6 +268,18 @@ build 8082 &
 [ $need8083 = yes ] && build 8083 &
 wait
 echo "built in $(($(date +%s) - start))s" >>"$OUT/summary.txt"
+# A full disk crashed local Mongo once (build 118). Below 5 GB free, stop every test and say so.
+(
+    while sleep 10; do
+        if [ "$(df -g "$OUT" | awk 'NR==2 {print $4}')" -lt 5 ]; then
+            echo "STOPPED: under 5 GB free; tests killed" >>"$OUT/summary.txt"
+            touch "$OUT/STOP"
+            pkill -f "test-without-building.*$OUT" 2>/dev/null
+            exit 0
+        fi
+    done
+) &
+disk_watch=$!
 # Staggered a little, so the simulators don't boot and install at the same instant. A second
 # simulator only starts for a config that has a flow test to run.
 has_flow() {
@@ -288,8 +299,9 @@ for config in $CONFIGS; do
         sleep 5
     fi
 done
-wait
+wait $(jobs -p | grep -vx "$disk_watch")
+kill "$disk_watch" 2>/dev/null
 echo "done in $(($(date +%s) - start))s" >>"$OUT/summary.txt"
 cat "$OUT/summary.txt"
-grep -q "FAILED" "$OUT/summary.txt" && exit 1
+grep -qE "FAILED|STOPPED" "$OUT/summary.txt" && exit 1
 exit 0
