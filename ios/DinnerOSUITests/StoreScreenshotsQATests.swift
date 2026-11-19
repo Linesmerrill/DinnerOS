@@ -27,6 +27,10 @@ final class StoreScreenshotsQATests: XCTestCase {
             ).firstMatch
             if autopilot.waitForExistence(timeout: 8) {
                 autopilot.tap()
+                // The first time, Autopilot asks about the calendar and forecast: plan without.
+                if app.staticTexts["Plan Around Your Week"].waitForExistence(timeout: 4) {
+                    app.buttons["Not Now"].firstMatch.tap()
+                }
                 let add = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Add ' AND label CONTAINS 'Week'"))
                     .firstMatch
                 if add.waitForExistence(timeout: 30) {
