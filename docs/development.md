@@ -274,8 +274,14 @@ build 118 (Xcode 27.2) the iPhones and the Duo run iOS 27.2 and the iPads iOS 26
 the screen tests only. The whole matrix must finish in
 under 30 minutes. The standard:
 
-1. **Parallel.** One simulator per config ("QA matrix <config>"), all 8 at once. The app is built
-   once per API port (`build-for-testing`), then every config runs `test-without-building`.
+1. **Parallel.** Two simulators per config: "QA matrix <config>" runs the sweeps and screen tests,
+   and "QA matrix <config> 2" runs the long flows (`FLOWS` in the script: referral, invite link,
+   AnyList, companions, cuisine, review path, account deletion, denied permissions, fake Face ID),
+   all at once, up to 17 simulators. Build 118 split them: on iOS 27 every test ran 10 to 15%
+   slower, and with one simulator per config the first full run hit 30 minutes before any config
+   finished. The app is built once per API port (`build-for-testing`), then every simulator runs
+   `test-without-building`. `PLAN_ONLY=1 scripts/qa-matrix.sh` prints which simulator runs which
+   test and runs nothing.
 2. **Coverage split.** Screen tests and sweeps run on all 8 configs. The long flow tests
    (referral, invite link, AnyList) run on one appearance per device, 4 configs each, and the
    one-off add tests (by hand, companions, cuisine, next-step dots) go to the configs without

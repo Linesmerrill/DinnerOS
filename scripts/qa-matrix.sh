@@ -238,9 +238,17 @@ fi
 start=$(date +%s)
 # Simulators, installs and result bundles need room; a full disk shows up as failed installs and
 # a crashed local Mongo, not as a clear error.
+# Up to 17 simulators grow by about 1 GB each during a run, and a full disk crashed local Mongo
+# in build 118's first two-simulator run. Erasing the simulators first (ERASE=1) frees most of it.
+if [ "${ERASE:-}" = 1 ]; then
+    xcrun simctl list devices | grep -E "QA matrix " | grep -oE "[0-9A-F-]{36}" | while read -r sid; do
+        xcrun simctl shutdown "$sid" 2>/dev/null
+        xcrun simctl erase "$sid"
+    done
+fi
 free_gb=$(df -g "$OUT" | awk 'NR==2 {print $4}')
-if [ "$free_gb" -lt 10 ]; then
-    echo "Only ${free_gb} GB free; the matrix needs 10. Clear old result bundles first."
+if [ "$free_gb" -lt 25 ]; then
+    echo "Only ${free_gb} GB free; the matrix needs 25. Clear old result bundles, or run with ERASE=1."
     exit 1
 fi
 need8083=no
