@@ -27,7 +27,10 @@ final class AccountDeletionQATests: XCTestCase {
             sleep(1)
         }
         // A tap while the recipe screen is still closing can be lost; try again until it opens.
-        let householdTab = app.tabBars.buttons["Household"].firstMatch
+        // An iPhone's tab bar, or the iPad's tabs at the top.
+        let phoneTab = app.tabBars.buttons["Household"].firstMatch
+        let householdTab =
+            phoneTab.exists ? phoneTab : app.buttons.matching(NSPredicate(format: "label == 'Household'")).firstMatch
         for _ in 0..<3 where !app.navigationBars["Household"].exists {
             householdTab.tap()
             _ = app.navigationBars["Household"].waitForExistence(timeout: 3)

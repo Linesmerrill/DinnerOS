@@ -102,6 +102,8 @@ final class DiscoverQATests: XCTestCase {
 
         // 5. See All opens the whole row, still with no add-on.
         let seeAll = app.buttons["DiscoverSeeAll-chefs-picks"].firstMatch
+        // Chef's Picks is the first row; the search can leave the list scrolled below it.
+        for _ in 0..<4 where !seeAll.exists { scrollBack(app) }
         reveal(seeAll, in: app, maxSwipes: 12)
         seeAll.tap()
         XCTAssertTrue(app.navigationBars["Chef's Picks This Week"].waitForExistence(timeout: 10), "See All went elsewhere")

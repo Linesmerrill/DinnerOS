@@ -163,16 +163,19 @@ run_config() {
             case $config in large-light | small-dark | ipadL-light | ipadP-dark) ;; *) continue ;; esac ;;
         InviteLinkQATests)
             case $config in large-dark | small-dark | ipadP-light | ipadP-dark) ;; *) continue ;; esac ;;
+        # Build 117: three configs ran a minute or two past 30, so AnyList left the iPad on its side
+        # in light (it still runs in dark), the iPad review path moved there, and account deletion
+        # moved to the upright iPad in light, which finished at 24 minutes.
         AnyListGuideQATests)
-            case $config in large-light | small-light | ipadL-dark | ipadL-light) ;; *) continue ;; esac ;;
+            case $config in large-light | small-light | ipadL-dark) ;; *) continue ;; esac ;;
         AddRecipeQATests | SaveThenOpenQATests) [ "$config" = large-dark ] || continue ;;
         CompanionQATests | CuisineQATests) case $config in small-light | ipadL-dark) ;; *) continue ;; esac ;;
         NextStepDotQATests) case $config in large-dark | ipadP-light) ;; *) continue ;; esac ;;
         ReportRecipeQATests) case $config in small-light | ipadL-dark) ;; *) continue ;; esac ;;
         # Pre-submission checks (decisions 741, 749): the review path on one iPhone and one iPad,
         # account deletion and denied permissions once each, on configs with time to spare.
-        ReviewPathQATests) case $config in small-light | ipadP-dark) ;; *) continue ;; esac ;;
-        AccountDeletionQATests) [ "$config" = large-dark ] || continue ;;
+        ReviewPathQATests) case $config in small-light | ipadL-light) ;; *) continue ;; esac ;;
+        AccountDeletionQATests) [ "$config" = ipadP-light ] || continue ;;
         # Face ID sign-in (decision 760, build 117): the long fake-biometrics flow (about 5 minutes)
         # on the upright iPad, the one config with time to spare, and the simulator's own Face ID
         # (about 1.5 minutes) on the small iPhone. Every config stays at about 27 minutes or less.
