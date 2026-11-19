@@ -13,10 +13,17 @@ struct ProductLinkTests {
         ("https://www.walmart.com/ip/100000002", "https://www.walmart.com/ip/100000002"),
         ("first https://walmart.com/ip/100000003 then https://example.com/other", "https://walmart.com/ip/100000003"),
         ("Saw this:\nhttps://walmrt.us/3AbCdEf", "https://walmrt.us/3AbCdEf"),
-        ("www.walmart.com/ip/100000004", "http://www.walmart.com/ip/100000004"),
     ])
     func theFirstLinkIsPickedOutOfSharedText(text: String, expected: String) {
         #expect(ProductLink.firstURL(in: text) == expected)
+    }
+
+    /// A link with no scheme gets one from the system's link finder: http before iOS 27, https
+    /// from iOS 27 on. Either opens the product.
+    @Test func aLinkWithoutASchemeIsStillFound() {
+        let found = ProductLink.firstURL(in: "www.walmart.com/ip/100000004")
+        #expect(
+            found == "http://www.walmart.com/ip/100000004" || found == "https://www.walmart.com/ip/100000004")
     }
 
     @Test(arguments: ["ground beef", "", "email ada@example.com about it"])

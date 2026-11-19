@@ -157,7 +157,11 @@ final class ScreensQATests: XCTestCase {
             }
             app.swipeUp()
             shot(app, "Recipe page › \(kind) › scrolled")
-            app.buttons["Start Cooking"].firstMatch.tap()
+            // iPhone Duo's cover screen (iOS 27) shows Start Cooking only at the top of the page:
+            // the rest of the bar moves to the column beside it. Back to the top there.
+            let startCooking = app.buttons["Start Cooking"].firstMatch
+            for _ in 0..<3 where !startCooking.exists { app.swipeDown() }
+            startCooking.tap()
             sleep(2)
             shot(app, "Cooking › \(kind)")
             if app.buttons["Done"].firstMatch.waitForExistence(timeout: 3) { app.buttons["Done"].firstMatch.tap() }
@@ -246,16 +250,28 @@ final class ScreensQATests: XCTestCase {
     @MainActor
     private func shot(_ app: XCUIApplication, _ name: String) {
         snap(app, "\(name) (\(mode))")
-        let screen = app.frame
-        for bar in app.navigationBars.allElementsBoundByIndex {
-            for button in bar.buttons.allElementsBoundByIndex {
+        // One snapshot of the whole screen: on iOS 27 the bar's buttons can change while they are
+        // read one query at a time, and a button that left mid-read failed the test.
+        guard let root = try? app.snapshot() else { return }
+        let screen = root.frame
+        for bar in Self.all(in: root, of: .navigationBar) {
+            for button in Self.all(in: bar, of: .button) {
                 let frame = button.frame
                 guard !frame.isEmpty, screen.intersects(frame) else { continue }
                 let named =
                     !button.label.trimmingCharacters(in: .whitespaces).isEmpty
-                    || button.descendants(matching: .any).allElementsBoundByIndex.contains { !$0.label.isEmpty }
+                    || Self.all(in: button, of: .any).contains { !$0.label.isEmpty }
                 if !named { problems.append("\(name): a toolbar button has no name (blank slot?)") }
             }
+        }
+    }
+
+    /// Every element of a type under a snapshot (`.any`: every element), not counting the root.
+    private static func all(in root: any XCUIElementSnapshot, of type: XCUIElement.ElementType)
+        -> [any XCUIElementSnapshot]
+    {
+        root.children.flatMap { child in
+            (type == .any || child.elementType == type ? [child] : []) + all(in: child, of: type)
         }
     }
 
@@ -270,7 +286,7 @@ final class ScreensQATests: XCTestCase {
                 return
             }
         }
-        let back = app.navigationBars.buttons.element(boundBy: 0)
+        let back = backButton(app)
         if back.exists, back.isHittable {
             back.tap()
         } else {

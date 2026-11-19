@@ -33,6 +33,16 @@ extension XCTestCase {
         XCUIDevice.shared.orientation = landscape ? .landscapeLeft : .portrait
     }
 
+    /// The way back from a pushed page: the navigation bar's first button, or, on iPhone Duo's
+    /// cover screen (iOS 27), the system back button, which sits in the column beside the page
+    /// instead of in the bar.
+    @MainActor
+    func backButton(_ app: XCUIApplication) -> XCUIElement {
+        let inBar = app.navigationBars.buttons.firstMatch
+        if inBar.exists { return inBar }
+        return app.buttons["BackButton"].firstMatch
+    }
+
     /// Keeps a screenshot in the test results, named for the checklist.
     @MainActor
     func snap(_ app: XCUIApplication, _ name: String) {

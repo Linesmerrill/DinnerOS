@@ -149,6 +149,8 @@ struct WeekStrip: View {
     /// (the keyboard closing after a search) could land on its first pill by itself and load a
     /// page of older weeks, and it opened on October.
     @State private var hasDragged = false
+    /// The loading spinner at the start of the row is on screen, so earlier weeks are wanted.
+    @State private var isEarlierVisible = false
     /// Whether this week's pill is on screen, for the way back to it.
     @State private var isCurrentWeekVisible = true
     /// Whether the selected week's pill is on screen. The position binding can name a week the
@@ -243,13 +245,20 @@ struct WeekStrip: View {
     private var pills: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal) {
-                LazyHStack(spacing: 8) {
+                // A plain row, not a lazy one: a lazy row guesses where pills it hasn't laid out
+                // are, and on iOS 27 (Xcode 27, build 118) that guess left the week you're on off
+                // to the side, or the strip back at its first pills after a search, while it
+                // reported the week as on screen. A strip is a few dozen small pills.
+                HStack(spacing: 8) {
                     pastButton
                     if menu.canLoadEarlierWeeks {
                         ProgressView()
                             .frame(width: 44)
-                            .task(id: "\(menu.oldestWeek)-\(canLoadEarlier)-\(hasDragged)") {
-                                guard canLoadEarlier, hasDragged else { return }
+                            // Every pill is laid out now, so "on screen" is what asks for more,
+                            // the way appearing in the lazy row did.
+                            .onScrollVisibilityChange(threshold: 0.1) { isEarlierVisible = $0 }
+                            .task(id: "\(menu.oldestWeek)-\(canLoadEarlier)-\(hasDragged)-\(isEarlierVisible)") {
+                                guard canLoadEarlier, hasDragged, isEarlierVisible else { return }
                                 await menu.loadEarlierWeeks()
                             }
                             .accessibilityLabel("Loading earlier weeks")

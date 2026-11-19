@@ -110,7 +110,7 @@ final class DiscoverQATests: XCTestCase {
         XCTAssertTrue(app.buttons["DiscoverCard"].firstMatch.waitForExistence(timeout: 10))
         assertNoAddOn(app, addonName, "See All")
         snap(app, "Discover 07 see all")
-        app.navigationBars.buttons.firstMatch.tap()
+        backButton(app).tap()
 
         // The recipe saved here goes away again; the add-on stays exactly as it was.
         if let saved { try await api.deleteRecipe(householdID: householdID, id: saved.id) }
