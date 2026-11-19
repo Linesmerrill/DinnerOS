@@ -29,7 +29,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IOS_DESTINATION: platform=iOS Simulator,name=iPhone 17 Pro,OS=latest
+  IOS_DESTINATION: platform=iOS Simulator,name=iPhone 18 Pro,OS=latest
 
 jobs:
   test:

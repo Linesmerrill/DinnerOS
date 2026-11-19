@@ -4,7 +4,7 @@ SHELL := /bin/bash
 API_DIR := api
 IOS_DIR := ios
 IOS_SCHEME := DinnerOS
-IOS_DESTINATION ?= platform=iOS Simulator,name=iPhone 17 Pro,OS=latest
+IOS_DESTINATION ?= platform=iOS Simulator,name=iPhone 18 Pro,OS=latest
 STATICCHECK_VERSION := 2025.1.1
 
 .DEFAULT_GOAL := help

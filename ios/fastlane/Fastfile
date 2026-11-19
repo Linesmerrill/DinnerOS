@@ -31,7 +31,7 @@ LIVE_ACTIVITIES_SUFFIX = ".LiveActivities"
 # The Safari share sheet extension that saves recipe links. Must match
 # SHARE_BUNDLE_ID in ios/Config/Shared.xcconfig.
 SHARE_SUFFIX = ".ShareExtension"
-TEST_DEVICE = "iPhone 17 Pro"
+TEST_DEVICE = "iPhone 18 Pro"
 
 def app_bundle_id
   ENV.fetch("APP_BUNDLE_ID", DEFAULT_BUNDLE_ID)

@@ -268,8 +268,10 @@ project edits.
 
 ## UI QA matrix (under 30 minutes)
 
-Every build's UI QA runs the 8 configs (iPhone 17 Pro Max, iPhone SE, iPad landscape, iPad
-portrait; each in light and dark) with `scripts/qa-matrix.sh`. The whole matrix must finish in
+Every build's UI QA runs the 9 configs (iPhone 17 Pro Max, iPhone SE, iPad landscape, iPad
+portrait; each in light and dark; plus iPhone Duo in light) with `scripts/qa-matrix.sh`. Since
+build 118 (Xcode 27.2) the iPhones and the Duo run iOS 27.2 and the iPads iOS 26.4; the Duo runs
+the screen tests only. The whole matrix must finish in
 under 30 minutes. The standard:
 
 1. **Parallel.** One simulator per config ("QA matrix <config>"), all 8 at once. The app is built
