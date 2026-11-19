@@ -75,7 +75,8 @@ final class LiveDinnerIntentServices: DinnerIntentServices {
             return .unavailable(String(localized: "Try again in a moment."))
         }
         switch session.state {
-        case .signedOut, .restoring: return .signedOut
+        // Behind Face ID, the app has to be opened first.
+        case .signedOut, .restoring, .locked: return .signedOut
         case .configurationError(let message): return .unavailable(message)
         case .signedIn: break
         }

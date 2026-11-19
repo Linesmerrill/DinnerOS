@@ -100,6 +100,9 @@ struct RootView: View {
         case .signedOut:
             SignInView()
                 .transition(.opacity)
+        case .locked:
+            LockScreenView()
+                .transition(.opacity)
         case .signedIn:
             SignedInRootView()
                 .transition(.opacity)

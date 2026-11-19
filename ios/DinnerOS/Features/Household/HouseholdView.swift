@@ -21,6 +21,7 @@ struct HouseholdView: View {
     @Environment(PlusStore.self) private var plus: PlusStore?
     /// Optional so previews needn't supply one.
     @Environment(NextStepsStore.self) private var nextSteps: NextStepsStore?
+    @Environment(BiometricLock.self) private var biometricLock: BiometricLock?
 
     @State private var me: MeResponse?
     /// Every household's store requests; `nil` for anyone who doesn't run DinnerOS.
@@ -232,6 +233,25 @@ struct HouseholdView: View {
         }
     }
 
+    /// Off by default. Turning it on asks for a face first.
+    private func biometricRow(_ lock: BiometricLock, kind: BiometryKind) -> some View {
+        Toggle(
+            isOn: Binding(
+                get: { session.isBiometricSignInOn },
+                set: { on in
+                    if on {
+                        Task { await lock.turnOn() }
+                    } else {
+                        lock.turnOff()
+                    }
+                })
+        ) {
+            Label(kind.toggleTitle, systemImage: kind.systemImage)
+        }
+        .disabled(lock.isTurningOn)
+        .accessibilityIdentifier("account.biometricSignIn")
+    }
+
     private var signOutSection: some View {
         Section {
             Button("Sign Out", role: .destructive) {
@@ -435,6 +455,9 @@ struct HouseholdView: View {
             }
             if let push {
                 notificationsRow(push)
+            }
+            if let biometricLock, let kind = biometricLock.kind {
+                biometricRow(biometricLock, kind: kind)
             }
             if let me, !me.identities.isEmpty {
                 LabeledContent("Signed in with") {

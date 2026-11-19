@@ -24,7 +24,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-${TMPDIR:-/tmp}/dinneros-qa}
 ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-light ipadP-dark"
 CONFIGS=${CONFIGS:-$ALL}
-TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests"}
+TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests BiometricSignInQATests/testFakeFaceID BiometricSignInQATests/testSimulatorFaceID"}
 STALL=${STALL:-600}
 # RERUN: a summary.txt from an earlier run. Only its FAILED config and test pairs run again.
 RERUN=${RERUN:-}
@@ -69,7 +69,7 @@ build() {
     local port=$1
     xcodebuild build-for-testing -project "$ROOT/ios/DinnerOS.xcodeproj" -scheme "DinnerOS QA" \
         -destination "generic/platform=iOS Simulator" -derivedDataPath "$OUT/dd-$port" \
-        "API_BASE_URL=http:/\$()/localhost:$port" ARCHS=arm64 CODE_SIGNING_ALLOWED=NO >"$OUT/build-$port.log" 2>&1 ||
+        "API_BASE_URL=http:/\$()/localhost:$port" ARCHS=arm64 CODE_SIGN_IDENTITY=- >"$OUT/build-$port.log" 2>&1 ||
         { echo "build for $port failed: $OUT/build-$port.log"; exit 1; }
 }
 
@@ -86,6 +86,9 @@ run_test() {
     local xctestrun
     xctestrun=$(ls "$OUT/dd-$port"/Build/Products/*.xctestrun | head -1)
     xcrun simctl uninstall "$id" com.linesmerrill.dinneros 2>/dev/null
+    # The build is signed (so the Keychain works, which Face ID sign-in needs), and a simulator's
+    # Keychain outlives an uninstall: clear it so every test starts signed out.
+    xcrun simctl keychain "$id" reset 2>/dev/null
     rm -rf "$OUT/$name.xcresult"
     TEST_RUNNER_QA_API_BASE=http://localhost:$port TEST_RUNNER_QA_PHOTO_SEARCH=$search TEST_RUNNER_QA_MODE=$mode TEST_RUNNER_QA_ORIENTATION=$orientation \
         TEST_RUNNER_QA_APP_QA_HUD_SECONDS=3 TEST_RUNNER_QA_APP_QA_MOMENT_SECONDS=12 TEST_RUNNER_QA_MANUAL_NAME="Sip Fudge" \
@@ -170,6 +173,11 @@ run_config() {
         # account deletion and denied permissions once each, on configs with time to spare.
         ReviewPathQATests) case $config in small-light | ipadP-dark) ;; *) continue ;; esac ;;
         AccountDeletionQATests) [ "$config" = large-dark ] || continue ;;
+        # Face ID sign-in (decision 760, build 117): the long fake-biometrics flow (about 5 minutes)
+        # on the upright iPad, the one config with time to spare, and the simulator's own Face ID
+        # (about 1.5 minutes) on the small iPhone. Every config stays at about 27 minutes or less.
+        BiometricSignInQATests/testFakeFaceID) [ "$config" = ipadP-light ] || continue ;;
+        BiometricSignInQATests/testSimulatorFaceID) [ "$config" = small-light ] || continue ;;
         PermissionsDeniedQATests) [ "$config" = small-light ] || continue ;;
         # The App Review account (decision 752) is one account, so its test runs once, and only
         # when the review account's email and password are exported for it.

@@ -17,6 +17,8 @@ struct DinnerOSApp: App {
                 .environment(\.appConfiguration, dependencies.configuration)
                 .environment(\.googleSignIn, dependencies.googleSignIn)
                 .environment(dependencies.session)
+                .environment(dependencies.biometricLock)
+                .biometricSignIn(dependencies.biometricLock, configuration: dependencies.configuration)
                 .environment(dependencies.households)
                 .environment(dependencies.recipes)
                 .environment(dependencies.importReviews)
@@ -65,6 +67,12 @@ struct DinnerOSApp: App {
                     dependencies.offline.start()
                 }
                 .onChange(of: scenePhase, initial: true) { _, phase in
+                    switch phase {
+                    case .active: dependencies.biometricLock.sceneChanged(to: .active)
+                    case .inactive: dependencies.biometricLock.sceneChanged(to: .inactive)
+                    case .background: dependencies.biometricLock.sceneChanged(to: .background)
+                    @unknown default: break
+                    }
                     let events = dependencies.events
                     switch phase {
                     case .active:

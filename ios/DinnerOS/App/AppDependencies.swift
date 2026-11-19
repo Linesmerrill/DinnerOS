@@ -17,6 +17,8 @@ final class AppDependencies {
     /// Saves the week ahead for use offline.
     let prefetch: OfflinePrefetch
     let session: AuthSession
+    /// Face ID (or Touch ID, Optic ID) sign-in: the offer, the toggle, and the lock.
+    let biometricLock: BiometricLock
     let households: HouseholdStore
     let recipes: RecipeLibrary
     /// Import bookkeeping: what the importer couldn't map. Read only by the Household tab.
@@ -71,7 +73,25 @@ final class AppDependencies {
         let client = configuration.apiBaseURL.map {
             APIClient(baseURL: $0, transport: transport, cache: responseCache)
         }
-        session = AuthSession(api: client.map { AuthAPI(client: $0) }, store: KeychainTokenStore())
+        let authenticator: any BiometricAuthenticating
+        var requiresBiometrics = true
+        #if DEBUG
+            // UI tests can stand in for Face ID with DINNEROS_FAKE_BIOMETRICS.
+            if let fake = FakeBiometricAuthenticator.fromEnvironment(ProcessInfo.processInfo.environment) {
+                authenticator = fake
+                requiresBiometrics = false
+            } else {
+                authenticator = LocalBiometricAuthenticator()
+            }
+        #else
+            authenticator = LocalBiometricAuthenticator()
+        #endif
+        session = AuthSession(
+            api: client.map { AuthAPI(client: $0) }, store: KeychainTokenStore(),
+            protectedStore: KeychainProtectedSessionStore(requiresBiometrics: requiresBiometrics),
+            biometricSetting: BiometricSetting())
+        biometricLock = BiometricLock(session: session, authenticator: authenticator)
+        biometricLock.isAppActive = { UIApplication.shared.applicationState == .active }
         households = HouseholdStore(
             session: session,
             api: client.map { HouseholdsAPI(client: $0) },

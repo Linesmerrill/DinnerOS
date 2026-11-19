@@ -54,7 +54,7 @@ struct InviteCodeScreen: View {
 
     private var viewer: Viewer {
         switch session.state {
-        case .restoring: return .waiting
+        case .restoring, .locked: return .waiting
         case .signedOut, .configurationError: return .newHousehold
         case .signedIn:
             switch households.phase {

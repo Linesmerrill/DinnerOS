@@ -27,10 +27,15 @@ final class AuthSession {
         case restoring
         case signedOut
         case signedIn(UserSummary)
+        /// Sign-in is behind Face ID (or Touch ID, Optic ID) and no check has passed yet.
+        case locked
         case configurationError(String)
     }
 
     private(set) var state: State = .restoring
+
+    /// Whether this device keeps the session behind Face ID (decision 760). Off by default.
+    private(set) var isBiometricSignInOn: Bool
 
     var currentUser: UserSummary? {
         if case .signedIn(let user) = state { return user }
@@ -39,6 +44,13 @@ final class AuthSession {
 
     @ObservationIgnored private let api: AuthAPI?
     @ObservationIgnored private let store: any TokenStore
+    @ObservationIgnored private let protectedStore: (any ProtectedSessionStore)?
+    @ObservationIgnored let biometricSetting: BiometricSetting
+    /// A session that couldn't be written behind Face ID (the device was locked); retried when
+    /// the app is next active.
+    @ObservationIgnored private var unsavedProtectedSession: StoredSession?
+    /// Runs after every successful sign-in, for the Face ID offer.
+    @ObservationIgnored var didSignIn: (@MainActor () -> Void)?
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private var tokens: AuthTokens?
     @ObservationIgnored private var refreshTask: Task<AuthTokens, any Error>?
@@ -54,9 +66,18 @@ final class AuthSession {
 
     /// - Parameter api: `nil` when the build has no valid API URL; the session then
     ///   reports `configurationError` instead of crashing.
-    init(api: AuthAPI?, store: any TokenStore, now: @escaping () -> Date = Date.init) {
+    init(
+        api: AuthAPI?, store: any TokenStore, protectedStore: (any ProtectedSessionStore)? = nil,
+        biometricSetting: BiometricSetting? = nil, now: @escaping () -> Date = Date.init
+    ) {
         self.api = api
         self.store = store
+        self.protectedStore = protectedStore
+        // Without a protected store there's nowhere to keep it, so it's off.
+        let setting = biometricSetting ?? BiometricSetting(defaults: UserDefaults(suiteName: "auth.none") ?? .standard)
+        if protectedStore == nil, setting.isOn { setting.turnOff(offerAgain: false) }
+        self.biometricSetting = setting
+        self.isBiometricSignInOn = protectedStore != nil && setting.isOn
         self.now = now
     }
 
@@ -85,6 +106,18 @@ final class AuthSession {
             return
         }
 
+        if isBiometricSignInOn {
+            // Behind Face ID: nothing is read until a check passes. A missing item (faces
+            // changed, or the Keychain was reset) means normal sign-in.
+            if protectedStore?.hasItem() == true {
+                state = .locked
+            } else {
+                Self.logger.notice("Face ID sign-in item missing; signing out")
+                clearLocalSession()
+            }
+            return
+        }
+
         let stored: StoredSession?
         do {
             stored = try store.load()
@@ -92,6 +125,25 @@ final class AuthSession {
             Self.logger.error("Keychain read failed: \(String(describing: error), privacy: .public)")
             stored = nil
         }
+        await adopt(stored)
+    }
+
+    /// Reads the session behind Face ID after a check passed. `false` when it's gone or expired,
+    /// and the session is then signed out.
+    func unlock(with proof: BiometricProof) async -> Bool {
+        guard state == .locked, let protectedStore else { return currentUser != nil }
+        let stored: StoredSession?
+        do {
+            stored = try protectedStore.load(proof: proof)
+        } catch {
+            Self.logger.error("Face ID item read failed: \(String(describing: error), privacy: .public)")
+            stored = nil
+        }
+        await adopt(stored)
+        return currentUser != nil
+    }
+
+    private func adopt(_ stored: StoredSession?) async {
         guard let stored, !stored.tokens.isRefreshTokenExpired(at: now()) else {
             clearLocalSession()
             return
@@ -128,6 +180,45 @@ final class AuthSession {
         persist(StoredSession(tokens: response.tokens, user: response.user))
         state = .signedIn(response.user)
         Self.logger.info("Signed in (new user: \(response.isNewUser, privacy: .public))")
+        didSignIn?()
+    }
+
+    // MARK: - Face ID
+
+    /// Moves the session behind Face ID. Call after a check passed, with the enrollment state
+    /// then, so a later change of faces is noticed.
+    func turnOnBiometricSignIn(enrollmentState: Data?) throws {
+        guard let protectedStore else { throw AuthSessionError.notConfigured }
+        guard let tokens, let user = currentUser else { throw AuthSessionError.signedOut }
+        try protectedStore.save(StoredSession(tokens: tokens, user: user))
+        biometricSetting.turnOn(enrollmentState: enrollmentState)
+        isBiometricSignInOn = true
+        do {
+            try store.clear()
+        } catch {
+            Self.logger.error("Keychain clear failed: \(String(describing: error), privacy: .public)")
+        }
+        Self.logger.info("Face ID sign-in on")
+    }
+
+    /// Moves the session back to the normal Keychain item.
+    func turnOffBiometricSignIn() {
+        guard isBiometricSignInOn else { return }
+        isBiometricSignInOn = false
+        biometricSetting.turnOff(offerAgain: false)
+        unsavedProtectedSession = nil
+        if let tokens, let user = currentUser {
+            persist(StoredSession(tokens: tokens, user: user))
+        }
+        protectedStore?.clear()
+        Self.logger.info("Face ID sign-in off")
+    }
+
+    /// Writes a session that couldn't be saved behind Face ID while the device was locked.
+    func saveUnsavedSession() {
+        guard let session = unsavedProtectedSession else { return }
+        unsavedProtectedSession = nil
+        persist(session)
     }
 
     /// What the sign-in screen offers besides Apple and Google. Offline, or with no server,
@@ -278,10 +369,28 @@ final class AuthSession {
         } catch {
             Self.logger.error("Keychain clear failed: \(String(describing: error), privacy: .public)")
         }
+        // Signing out turns Face ID sign-in off; it's offered again at the next sign-in.
+        protectedStore?.clear()
+        unsavedProtectedSession = nil
+        if isBiometricSignInOn || biometricSetting.isOn {
+            biometricSetting.turnOff(offerAgain: true)
+            isBiometricSignInOn = false
+        }
         state = .signedOut
     }
 
     private func persist(_ session: StoredSession) {
+        if isBiometricSignInOn, let protectedStore {
+            do {
+                try protectedStore.save(session)
+                unsavedProtectedSession = nil
+            } catch {
+                // Kept in memory and written when the app is next active and unlocked.
+                unsavedProtectedSession = session
+                Self.logger.error("Face ID item write failed: \(String(describing: error), privacy: .public)")
+            }
+            return
+        }
         do {
             try store.save(session)
         } catch {

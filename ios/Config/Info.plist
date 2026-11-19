@@ -42,6 +42,8 @@
 	<string>Autopilot checks how busy your evenings are to suggest quicker dinners on busy nights. Only "free", "some", or "busy" leaves your iPhone, never your events.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Take a photo of a dish to add it to one of your recipes.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>DinnerOS uses Face ID to sign you in quickly.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Your location helps suggest dinners that suit the weather and fills in your ZIP code when you look for a store. DinnerOS only gets your ZIP code and a rough forecast, like cold or rainy, never your exact location.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
