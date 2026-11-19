@@ -14,49 +14,106 @@ struct BiometricLockMachineTests {
         #expect(!machine.isLocked)
         machine.lock()
         #expect(machine.phase == .locked)
-        do { let result = machine.sceneChanged(to: .active, at: start, isOn: true); #expect(result == .ask) }
-        do { let result = machine.beginAsking(); #expect(result) }
+        do {
+            let result = machine.sceneChanged(to: .active, at: start, isOn: true)
+            #expect(result == .ask)
+        }
+        do {
+            let result = machine.beginAsking()
+            #expect(result)
+        }
         // A second ask while one shows does nothing.
-        do { let result = machine.beginAsking(); #expect(!result) }
-        do { let result = machine.sceneChanged(to: .active, at: start, isOn: true); #expect(result == .none) }
+        do {
+            let result = machine.beginAsking()
+            #expect(!result)
+        }
+        do {
+            let result = machine.sceneChanged(to: .active, at: start, isOn: true)
+            #expect(result == .none)
+        }
     }
 
     @Test func matchUnlocks() {
         var machine = locked()
-        do { let result = machine.beginAsking(); #expect(result) }
-        do { let result = machine.finish(.matched); #expect(result == .unlock) }
+        do {
+            let result = machine.beginAsking()
+            #expect(result)
+        }
+        do {
+            let result = machine.finish(.matched)
+            #expect(result == .unlock)
+        }
         #expect(machine.phase == .open)
     }
 
     @Test(arguments: [BiometricOutcome.canceled, .failed, .unavailable, .changed, .missing])
     func everythingElseFallsBackToSignInWithoutAskingAgain(_ outcome: BiometricOutcome) {
         var machine = locked()
-        do { let result = machine.beginAsking(); #expect(result) }
-        do { let result = machine.finish(outcome); #expect(result == .signInAnotherWay) }
+        do {
+            let result = machine.beginAsking()
+            #expect(result)
+        }
+        do {
+            let result = machine.finish(outcome)
+            #expect(result == .signInAnotherWay)
+        }
         #expect(machine.phase == .open)
         // No loop: coming back active doesn't ask.
-        do { let result = machine.sceneChanged(to: .active, at: start, isOn: true); #expect(result == .none) }
+        do {
+            let result = machine.sceneChanged(to: .active, at: start, isOn: true)
+            #expect(result == .none)
+        }
     }
 
     @Test func aSystemInterruptionAsksAgainOnlyWhenBackActive() {
         var machine = locked()
-        do { let result = machine.beginAsking(); #expect(result) }
-        do { let result = machine.finish(.interrupted); #expect(result == .none) }
+        do {
+            let result = machine.beginAsking()
+            #expect(result)
+        }
+        do {
+            let result = machine.finish(.interrupted)
+            #expect(result == .none)
+        }
         #expect(machine.phase == .locked)
-        do { let result = machine.sceneChanged(to: .inactive, at: start, isOn: true); #expect(result == .none) }
-        do { let result = machine.sceneChanged(to: .active, at: start, isOn: true); #expect(result == .ask) }
-        do { let result = machine.beginAsking(); #expect(result) }
+        do {
+            let result = machine.sceneChanged(to: .inactive, at: start, isOn: true)
+            #expect(result == .none)
+        }
+        do {
+            let result = machine.sceneChanged(to: .active, at: start, isOn: true)
+            #expect(result == .ask)
+        }
+        do {
+            let result = machine.beginAsking()
+            #expect(result)
+        }
         // Interrupted again: still one ask per activation.
-        do { let result = machine.finish(.interrupted); #expect(result == .none) }
-        do { let result = machine.sceneChanged(to: .active, at: start, isOn: true); #expect(result == .ask) }
+        do {
+            let result = machine.finish(.interrupted)
+            #expect(result == .none)
+        }
+        do {
+            let result = machine.sceneChanged(to: .active, at: start, isOn: true)
+            #expect(result == .ask)
+        }
     }
 
     @Test func finishingWithoutAnAskIsIgnored() {
         var machine = BiometricLockMachine()
-        do { let result = machine.finish(.matched); #expect(result == .none) }
-        do { let result = machine.finish(.canceled); #expect(result == .none) }
+        do {
+            let result = machine.finish(.matched)
+            #expect(result == .none)
+        }
+        do {
+            let result = machine.finish(.canceled)
+            #expect(result == .none)
+        }
         var lockedOnly = locked()
-        do { let result = lockedOnly.finish(.canceled); #expect(result == .none) }
+        do {
+            let result = lockedOnly.finish(.canceled)
+            #expect(result == .none)
+        }
         #expect(lockedOnly.phase == .locked)
     }
 
@@ -65,44 +122,77 @@ struct BiometricLockMachineTests {
         _ = machine.sceneChanged(to: .background, at: start, isOn: true)
         let back = start.addingTimeInterval(15 * 60 + 1)
         // Locked already on the way in, so nothing shows before the lock.
-        do { let result = machine.sceneChanged(to: .inactive, at: back, isOn: true); #expect(result == .none) }
+        do {
+            let result = machine.sceneChanged(to: .inactive, at: back, isOn: true)
+            #expect(result == .none)
+        }
         #expect(machine.phase == .locked)
-        do { let result = machine.sceneChanged(to: .active, at: back, isOn: true); #expect(result == .ask) }
+        do {
+            let result = machine.sceneChanged(to: .active, at: back, isOn: true)
+            #expect(result == .ask)
+        }
     }
 
     @Test func fifteenMinutesOrLessStaysOpen() {
         var machine = BiometricLockMachine()
         _ = machine.sceneChanged(to: .background, at: start, isOn: true)
-        do { let result = machine.sceneChanged(to: .active, at: start.addingTimeInterval(15 * 60), isOn: true); #expect(result == .none) }
+        do {
+            let result = machine.sceneChanged(to: .active, at: start.addingTimeInterval(15 * 60), isOn: true)
+            #expect(result == .none)
+        }
         #expect(machine.phase == .open)
         // The time away starts again each time it leaves.
         _ = machine.sceneChanged(to: .background, at: start.addingTimeInterval(20 * 60), isOn: true)
-        do { let result = machine.sceneChanged(to: .active, at: start.addingTimeInterval(30 * 60), isOn: true); #expect(result == .none) }
+        do {
+            let result = machine.sceneChanged(to: .active, at: start.addingTimeInterval(30 * 60), isOn: true)
+            #expect(result == .none)
+        }
         #expect(machine.phase == .open)
     }
 
     @Test func offNeverLocks() {
         var machine = BiometricLockMachine()
         _ = machine.sceneChanged(to: .background, at: start, isOn: false)
-        do { let result = machine.sceneChanged(to: .active, at: start.addingTimeInterval(3600), isOn: false); #expect(result == .none) }
+        do {
+            let result = machine.sceneChanged(to: .active, at: start.addingTimeInterval(3600), isOn: false)
+            #expect(result == .none)
+        }
         #expect(machine.phase == .open)
         // Turned off while away: no lock either.
         _ = machine.sceneChanged(to: .background, at: start, isOn: true)
-        do { let result = machine.sceneChanged(to: .active, at: start.addingTimeInterval(3600), isOn: false); #expect(result == .none) }
+        do {
+            let result = machine.sceneChanged(to: .active, at: start.addingTimeInterval(3600), isOn: false)
+            #expect(result == .none)
+        }
         #expect(machine.phase == .open)
     }
 
     @Test func signInAnotherWayOnlyFromTheLockScreen() {
         var machine = BiometricLockMachine()
-        do { let result = machine.chooseAnotherWay(); #expect(result == .none) }
+        do {
+            let result = machine.chooseAnotherWay()
+            #expect(result == .none)
+        }
         machine = locked()
-        do { let result = machine.chooseAnotherWay(); #expect(result == .signInAnotherWay) }
+        do {
+            let result = machine.chooseAnotherWay()
+            #expect(result == .signInAnotherWay)
+        }
         #expect(machine.phase == .open)
-        do { let result = machine.sceneChanged(to: .active, at: start, isOn: true); #expect(result == .none) }
+        do {
+            let result = machine.sceneChanged(to: .active, at: start, isOn: true)
+            #expect(result == .none)
+        }
         // Not while the check is showing: its result decides.
         machine = locked()
-        do { let result = machine.beginAsking(); #expect(result) }
-        do { let result = machine.chooseAnotherWay(); #expect(result == .none) }
+        do {
+            let result = machine.beginAsking()
+            #expect(result)
+        }
+        do {
+            let result = machine.chooseAnotherWay()
+            #expect(result == .none)
+        }
     }
 
     @Test func laErrorsMapToOutcomes() {
