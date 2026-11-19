@@ -20,6 +20,8 @@ require "tempfile"
 
 default_platform(:ios)
 
+require_relative "sdk_check"
+
 PROJECT = "DinnerOS.xcodeproj"
 SCHEME = "DinnerOS"
 DEFAULT_BUNDLE_ID = "com.linesmerrill.dinneros"
@@ -416,6 +418,7 @@ platform :ios do
         }
       }
     )
+    require_ios_sdk(lane_context[SharedValues::IPA_OUTPUT_PATH], MINIMUM_SDK_MAJOR)
 
     # Internal testers receive builds through an internal group with automatic
     # distribution enabled in App Store Connect (see docs/deployment.md).

@@ -153,7 +153,7 @@ final class WebPageReader: NSObject, WKNavigationDelegate {
     /// recipe on it, for up to `renderWait`, then sends what's there either way. A bot check
     /// that reloads the page finishes again; the same wait carries on.
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        Task { @MainActor in
+        Task { @MainActor [self] in
             guard polling == nil else { return }
             polling = Task { @MainActor [weak self] in
                 let clock = ContinuousClock()

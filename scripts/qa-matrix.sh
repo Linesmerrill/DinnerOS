@@ -1,6 +1,8 @@
 #!/bin/bash
-# The 8-config UI QA matrix, in parallel: one simulator per config (iPhone 17 Pro Max, iPhone SE,
-# iPad landscape, iPad portrait; each light and dark). Target: under 30 minutes.
+# The 9-config UI QA matrix, in parallel: one simulator per config (iPhone 17 Pro Max, iPhone SE,
+# iPad landscape, iPad portrait; each light and dark; plus iPhone Duo in light). Target: under 30
+# minutes. Build 118 (Xcode 27): the iPhones and the Duo run iOS 27.2, the iPads stay on iOS 26.4,
+# so both the new and the previous iOS are covered.
 #
 #   scripts/qa-matrix.sh                      # every config, every test
 #   CONFIGS="ipadL-light" TESTS="UnsplashPhotoQATests" scripts/qa-matrix.sh   # a targeted rerun
@@ -22,7 +24,7 @@
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-${TMPDIR:-/tmp}/dinneros-qa}
-ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-light ipadP-dark"
+ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-light ipadP-dark duo-light"
 CONFIGS=${CONFIGS:-$ALL}
 TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests BiometricSignInQATests/testFakeFaceID BiometricSignInQATests/testSimulatorFaceID"}
 STALL=${STALL:-600}
@@ -36,8 +38,10 @@ if [ -n "$RERUN" ]; then
     CONFIGS=$(echo "$PAIRS" | cut -d'|' -f1 | sort -u | tr '\n' ' ')
     TESTS=$(echo "$PAIRS" | cut -d'|' -f2 | sort -u | tr '\n' ' ')
 fi
-RUNTIME_PHONE=${RUNTIME_PHONE:-com.apple.CoreSimulator.SimRuntime.iOS-26-2}
+RUNTIME_PHONE=${RUNTIME_PHONE:-com.apple.CoreSimulator.SimRuntime.iOS-27-2}
 RUNTIME_IPAD=${RUNTIME_IPAD:-com.apple.CoreSimulator.SimRuntime.iOS-26-4}
+# iPhone Duo only runs on its own iOS 27.2 runtime.
+RUNTIME_DUO=${RUNTIME_DUO:-com.apple.CoreSimulator.SimRuntime.iOS-27-2-iPhone19-4}
 mkdir -p "$OUT"
 : >"$OUT/summary.txt"
 
@@ -46,6 +50,7 @@ device_type() {
     large-*) echo com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max ;;
     small-*) echo com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation ;;
     ipad*) echo com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M5-12GB ;;
+    duo-*) echo com.apple.CoreSimulator.SimDeviceType.iPhone-Duo ;;
     esac
 }
 
@@ -59,7 +64,7 @@ for devs in json.load(sys.stdin)['devices'].values():
         if d['name']=='$name' and d['isAvailable']: print(d['udid']); raise SystemExit")
     if [ -z "$id" ]; then
         local rt=$RUNTIME_PHONE
-        case $1 in ipad*) rt=$RUNTIME_IPAD ;; esac
+        case $1 in ipad*) rt=$RUNTIME_IPAD ;; duo-*) rt=$RUNTIME_DUO ;; esac
         id=$(xcrun simctl create "$name" "$(device_type "$1")" "$rt")
     fi
     echo "$id"
@@ -155,6 +160,10 @@ run_config() {
         # looks, so it runs on all 8. Reporting a shared recipe and hiding its cook (about a minute)
         # checks what a person does, so it runs on the small iPhone and the iPad on its side, the
         # configs without the next-step dots.
+        # The Duo (build 118) checks how screens look on its size, not the long flows.
+        if [ "${config%%-*}" = duo ]; then
+            case $test in AppSweepQATests/SWEEP | ScreensQATests/* | ImportFailureQATests | DiscoverQATests) ;; *) continue ;; esac
+        fi
         case $test in
         # Build 116: the referral test grew to about 10 minutes (Redeem and the step-done cards), so
         # the invite link test moved off its configs and AnyList took its place. Each config then

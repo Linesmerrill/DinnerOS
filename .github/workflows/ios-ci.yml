@@ -34,21 +34,27 @@ env:
 jobs:
   test:
     name: Lint and test
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v5
 
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: "27.2"
 
+      # App Store Connect needs the iOS 27 SDK (ITMS-90725), so every job pins Xcode 27.2 on
+      # GitHub's Xcode 27 image; setup-xcode fails if that version isn't there.
       - name: Toolchain
         run: |
           xcodebuild -version
+          xcodebuild -showsdks | grep iphoneos27
           xcrun simctl list runtimes
 
       - name: swift-format lint
         run: make ios-lint
+
+      - name: Upload SDK check tests
+        run: ruby ios/fastlane/test/sdk_check_test.rb
 
       - name: Unit tests
         run: |
@@ -74,7 +80,7 @@ jobs:
     # Enable by setting the repository variable TESTFLIGHT_ENABLED=true.
     # Manual dispatch from main allows re-running an upload without a new commit.
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.TESTFLIGHT_ENABLED == 'true'
-    runs-on: macos-26
+    runs-on: xcode-27
     # A signing prompt or a stuck archive should fail fast, not idle for hours. The
     # extra time covers waiting for build processing when external groups are set.
     timeout-minutes: 75
@@ -87,7 +93,7 @@ jobs:
 
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: "27.2"
 
       - uses: ruby/setup-ruby@v1
         with:
@@ -134,7 +140,7 @@ jobs:
     name: Sync signing certificate
     # Manual only: creating or renewing a certificate is never part of a build.
     if: github.event_name == 'workflow_dispatch' && inputs.sync_signing
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 20
     environment: testflight
     concurrency:
@@ -145,7 +151,7 @@ jobs:
 
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: "27.2"
 
       - uses: ruby/setup-ruby@v1
         with:
