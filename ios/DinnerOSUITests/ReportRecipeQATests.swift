@@ -38,7 +38,13 @@ final class ReportRecipeQATests: XCTestCase {
         XCTAssertTrue(app.buttons["Menu"].firstMatch.waitForExistence(timeout: 20), "No Menu after sign-in")
         let entry = app.staticTexts["Shared Recipes"].firstMatch
         reveal(entry, in: app, maxSwipes: 10)
-        entry.tap()
+        // The Menu has several ways to Shared Recipes, and on an SE (iOS 27) the first can sit under
+        // the pinned week strip, where a tap lands on the strip: use the first one below it.
+        let strip = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'This Week'")).firstMatch
+        let stripBottom = strip.exists ? strip.frame.maxY : 0
+        let links = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Shared Recipes'"))
+        let link = links.allElementsBoundByIndex.first { $0.frame.minY > stripBottom && $0.isHittable } ?? entry
+        link.tap()
         XCTAssertTrue(app.navigationBars["Shared Recipes"].waitForExistence(timeout: 10), "Shared Recipes didn't open")
 
         // 1. Report one recipe: it says thanks, and the recipe is gone from search.
