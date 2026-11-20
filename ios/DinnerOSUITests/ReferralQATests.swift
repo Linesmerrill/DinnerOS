@@ -230,6 +230,24 @@ final class ReferralQATests: XCTestCase {
         let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1))
         top.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
         sleep(2)
+        // On iOS 27.2 the sheet loads with a close (X) button at its top right, drawn by the App
+        // Store in another process, and a pull doesn't always close it. The tabs underneath can
+        // still read as tappable, so check that a tap on Household gets through, and tap the X
+        // until it does.
+        let household = app.buttons["Household"].firstMatch
+        var closed = false
+        for _ in 0..<4 where !closed {
+            if household.exists { household.tap() }
+            // The Household tab opens where it was left: its list or Give a Free Month.
+            closed = app.navigationBars.matching(
+                NSPredicate(format: "identifier == 'Household' OR identifier == 'Give a Free Month'")
+            ).firstMatch.waitForExistence(timeout: 3)
+            if !closed {
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.11)).tap()
+                sleep(2)
+            }
+        }
+        XCTAssertTrue(closed, "Apple's redeem screen didn't close")
         snap(app, "Apple's redeem screen closed (\(mode))")
     }
 

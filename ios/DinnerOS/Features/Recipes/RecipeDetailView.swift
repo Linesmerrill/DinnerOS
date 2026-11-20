@@ -211,7 +211,8 @@ struct RecipeDetailView: View {
                 summary: summary, recipe: recipe, entries: plannedEntries, servings: $servings,
                 selections: customizationSelections,
                 startCooking: recipe?.steps.isEmpty == false ? { showsCooking = true } : nil,
-                showsStartCooking: startCookingPlacement == .bottomBar)
+                showsStartCooking: startCookingPlacement != .topBar,
+                stacksStartCooking: startCookingPlacement == .bottomRow)
         }
         .onGeometryChange(for: EdgeInsets.self) {
             $0.safeAreaInsets

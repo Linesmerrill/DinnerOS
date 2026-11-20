@@ -72,12 +72,14 @@ final class BiometricSignInQATests: XCTestCase {
         XCTAssertTrue(app.alerts["Use Face ID to sign in next time?"].waitForExistence(timeout: 15), "No offer")
         answerOffer(app, use: true)
         XCTAssertTrue(waitForToggle(app, true, opening: true), "Use Face ID in the offer didn't turn it on")
+        // Turned on while this launch's fake faces were "changed": off again, so the next
+        // launch's faces count as the enrolled ones.
+        setToggle(app, on: false)
 
         // Away longer than the relock time (2 seconds here, 15 minutes for real): locked over
         // the app, then a match opens it where it was.
-        // It's on, so the launch lock asks first and the match opens the app.
         app = relaunch(app, fake: "match", relockSeconds: 2)
-        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "A match didn't open the app")
+        XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "The app didn't open")
         setToggle(app, on: true)
         away(app)
         XCTAssertTrue(waitGone(app.buttons["lock.anotherWay"], timeout: 10), "The lock stayed after a match")

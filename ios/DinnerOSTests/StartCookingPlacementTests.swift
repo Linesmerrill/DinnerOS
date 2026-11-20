@@ -28,9 +28,9 @@ struct StartCookingPlacementTests {
         #expect(place(.regular, .regular, EdgeInsets(top: 24, leading: 0, bottom: 20, trailing: 0)) == .bottomBar)
     }
 
-    @Test func theDuoCoverScreenUsesTheBottomBar() {
+    @Test func theDuoCoverScreenGivesItARowOfItsOwn() {
         // As the iOS 27.2 simulator reports it: the button column on the right.
-        #expect(place(.compact, .regular, EdgeInsets(top: 0, leading: 0, bottom: 34, trailing: 84)) == .bottomBar)
+        #expect(place(.compact, .regular, EdgeInsets(top: 0, leading: 0, bottom: 34, trailing: 84)) == .bottomRow)
     }
 
     @Test func unknownSizeClassesKeepTheTopBar() {

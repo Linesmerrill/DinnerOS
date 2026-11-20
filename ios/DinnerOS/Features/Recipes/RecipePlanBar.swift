@@ -17,6 +17,9 @@ struct RecipePlanBar: View {
     /// Shows Start Cooking in this bar even while planning. On iPad the top bar shares its
     /// space with the tab bar, and iOS folded Start Cooking into an overflow menu there.
     var showsStartCooking = false
+    /// Puts Start Cooking in its own row above the planning controls rather than beside them:
+    /// iPhone Duo's cover screen is too narrow for both in one row.
+    var stacksStartCooking = false
 
     @Environment(PlanStore.self) private var plans
     @Environment(MenuStore.self) private var menu
@@ -58,20 +61,25 @@ struct RecipePlanBar: View {
             .background(.bar)
             .overlay(alignment: .top) { Divider() }
         } else if canEdit {
-            HStack(alignment: .center, spacing: 12) {
-                if showsStartCooking, let startCooking {
-                    cookButton(startCooking)
+            VStack(alignment: .leading, spacing: 10) {
+                if showsStartCooking, stacksStartCooking, let startCooking {
+                    cookRow(startCooking)
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    if let entry {
-                        plannedBar(entry)
-                    } else {
-                        addBar
+                HStack(alignment: .center, spacing: 12) {
+                    if showsStartCooking, !stacksStartCooking, let startCooking {
+                        cookButton(startCooking)
                     }
-                    if !plans.isDraft, !isPastWeek {
-                        Text("This week is finalized. Reopen it to change the meals.")
-                            .font(.caption)
-                            .foregroundStyle(Color.secondary)
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let entry {
+                            plannedBar(entry)
+                        } else {
+                            addBar
+                        }
+                        if !plans.isDraft, !isPastWeek {
+                            Text("This week is finalized. Reopen it to change the meals.")
+                                .font(.caption)
+                                .foregroundStyle(Color.secondary)
+                        }
                     }
                 }
             }
@@ -84,12 +92,14 @@ struct RecipePlanBar: View {
                 AddEntrySheet(recipeID: summary.id, recipeName: summary.name, fixedWeek: nil)
             }
         } else if showsStartCooking, let startCooking {
-            cookButton(startCooking)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(.bar)
-                .overlay(alignment: .top) { Divider() }
+            Group {
+                if stacksStartCooking { cookRow(startCooking) } else { cookButton(startCooking) }
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.bar)
+            .overlay(alignment: .top) { Divider() }
         }
     }
 
@@ -98,6 +108,18 @@ struct RecipePlanBar: View {
         Button(action: action) {
             Label("Start Cooking", systemImage: "frying.pan")
                 .fontWeight(.semibold)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+    }
+
+    /// Start Cooking in a row of its own above the planning controls, for iPhone Duo's narrow
+    /// cover screen, where beside them both buttons wrapped (build 119).
+    private func cookRow(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label("Start Cooking", systemImage: "frying.pan")
+                .fontWeight(.semibold)
+                .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
         .controlSize(.large)

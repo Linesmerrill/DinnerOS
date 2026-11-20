@@ -165,6 +165,7 @@ runs_on() {
         case $test in
         AppSweepQATests/SWEEP | ScreensQATests/* | ImportFailureQATests | DiscoverQATests) return 0 ;;
         StartCookingQATests | BiometricSignInQATests/testSignInScreenWithFaceID) return 0 ;;
+        BiometricSignInQATests/testFaceIDSignInLoop) return 0 ;;
         *) return 1 ;;
         esac
     fi
@@ -207,8 +208,10 @@ runs_on() {
     # iPad, and the simulator's own Face ID (about 1.5 minutes) on the small iPhone.
     BiometricSignInQATests/testFakeFaceID) [ "$config" = ipadP-light ] || return 1 ;;
     BiometricSignInQATests/testSimulatorFaceID) [ "$config" = small-light ] || return 1 ;;
-    # The whole Face ID sign-in loop (build 119) on one iPhone and one iPad.
-    BiometricSignInQATests/testFaceIDSignInLoop) case $config in large-light | ipadL-dark) ;; *) return 1 ;; esac ;;
+    # The whole Face ID sign-in loop (build 119, about 5 minutes) on one iPhone and one iPad: the
+    # Duo and the upright iPad in light had the most time left (on large-light and ipadL-dark the
+    # first full run took 31.7 and 31.5 minutes).
+    BiometricSignInQATests/testFaceIDSignInLoop) case $config in duo-light | ipadP-light) ;; *) return 1 ;; esac ;;
     # The App Review account (decision 752) is one account, so its test runs once, and only
     # when the review account's email and password are exported for it.
     ReviewAccountQATests)
