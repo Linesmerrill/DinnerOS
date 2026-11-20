@@ -34,7 +34,7 @@ struct InstacartButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: DS.Space.s) {
                 if isWorking {
                     ProgressView()
                         .tint(Self.foreground)
@@ -53,7 +53,7 @@ struct InstacartButton: View {
             .foregroundStyle(Self.foreground)
             .padding(.horizontal, 18)
             // 46 points tall at the default text size, taller with larger text.
-            .padding(.vertical, 4)
+            .padding(.vertical, DS.Space.xxs)
             .frame(minHeight: height)
             .frame(maxWidth: .infinity)
             .background(Self.background, in: .capsule)
@@ -65,10 +65,10 @@ struct InstacartButton: View {
 }
 
 #Preview {
-    VStack(spacing: 16) {
+    VStack(spacing: DS.Space.l) {
         InstacartButton {}
         InstacartButton(title: .shopIngredients) {}
         InstacartButton(isWorking: true) {}
     }
-    .padding()
+    .padding(DS.Space.l)
 }

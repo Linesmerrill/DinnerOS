@@ -136,7 +136,7 @@ struct RecipePhotoSection: View {
                     model.showsCamera = true
                 } label: {
                     Label("Take Photo", systemImage: "camera")
-                        .frame(minHeight: 44)
+                        .frame(minHeight: DS.Size.tapTarget)
                 }
                 .disabled(model.isUploading)
             }
@@ -147,7 +147,7 @@ struct RecipePhotoSection: View {
                 Label(
                     model.hasPhoto(imageURL) ? "Change Photo" : "Choose Photo", systemImage: "photo.on.rectangle"
                 )
-                .frame(minHeight: 44)
+                .frame(minHeight: DS.Size.tapTarget)
             }
             .disabled(model.isUploading)
             if model.hasPhoto(imageURL) {
@@ -155,7 +155,7 @@ struct RecipePhotoSection: View {
                     model.remove($imageURL)
                 } label: {
                     Label("Remove Photo", systemImage: "trash")
-                        .frame(minHeight: 44)
+                        .frame(minHeight: DS.Size.tapTarget)
                 }
                 .disabled(model.isUploading)
             }
@@ -189,7 +189,7 @@ struct RecipePhotoSection: View {
             .overlay {
                 if model.isUploading {
                     ProgressView()
-                        .padding(12)
+                        .padding(DS.Space.m)
                         .background(.regularMaterial, in: .circle)
                 }
             }

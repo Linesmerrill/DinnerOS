@@ -6,7 +6,7 @@ struct RestoringView: View {
     @ScaledMetric(relativeTo: .largeTitle) private var markSize: CGFloat = 72
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: DS.Space.l) {
             Image(systemName: "fork.knife.circle.fill")
                 .font(.system(size: markSize))
                 .foregroundStyle(.tint)

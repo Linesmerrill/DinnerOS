@@ -70,7 +70,7 @@ struct ProductDecisionSheet: View {
         if !unavailable.isEmpty {
             Section {
                 ForEach(unavailable) { line in
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: DS.Space.hairline) {
                         Text(line.name)
                         Text(line.productName)
                             .font(.subheadline)
@@ -87,7 +87,7 @@ struct ProductDecisionSheet: View {
     }
 
     private var openBar: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: DS.Space.s) {
             let remaining = review?.needsDecision.count ?? 0
             Button(action: open) {
                 Group {
@@ -97,10 +97,8 @@ struct ProductDecisionSheet: View {
                         Label("Open Walmart", systemImage: "cart")
                     }
                 }
-                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.dsPrimary(fullWidth: true))
             .disabled(remaining > 0 || shopping.isCheckingProducts || shopping.isCreatingHandoff)
             if remaining > 0 {
                 Text(
@@ -112,7 +110,7 @@ struct ProductDecisionSheet: View {
                 .foregroundStyle(.secondary)
             }
         }
-        .padding()
+        .padding(DS.Space.l)
         .frame(maxWidth: .infinity)
         .background(.bar)
     }
@@ -158,8 +156,8 @@ private struct ProductDecisionRow: View {
     private var isGone: Bool { line.result.status == .gone }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(line.name)
                     .font(.headline)
                 Text(line.productName)
@@ -186,25 +184,25 @@ private struct ProductDecisionRow: View {
                 }
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DS.Space.hairline)
     }
 
     private var buttons: some View {
         let layout =
             dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-            : AnyLayout(HStackLayout(spacing: 12))
-        return VStack(alignment: .leading, spacing: 8) {
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.s))
+            : AnyLayout(HStackLayout(spacing: DS.Space.m))
+        return VStack(alignment: .leading, spacing: DS.Space.s) {
             layout {
                 Button("Choose Another", action: rechoose)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.dsSecondary(.small))
                     .accessibilityLabel("Choose a different product for \(line.name)")
                 Button("Skip") { decide(.leaveOut) }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.dsSecondary(.small))
                     .accessibilityLabel("Skip \(line.name) this time")
                 if !isGone {
                     Button("Send Anyway") { decide(.sendAnyway) }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.dsSecondary(.small))
                         .accessibilityLabel("Send \(line.name) anyway")
                 }
             }

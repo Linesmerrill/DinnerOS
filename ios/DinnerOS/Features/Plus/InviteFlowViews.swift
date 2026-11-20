@@ -96,12 +96,12 @@ struct InviteCodeScreen: View {
 
     private func welcome(_ preview: InvitePreview) -> some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: DS.Space.xl) {
                 Image(systemName: "gift.fill")
                     .font(.system(size: markSize))
                     .foregroundStyle(.tint)
                     .accessibilityHidden(true)
-                VStack(spacing: 8) {
+                VStack(spacing: DS.Space.s) {
                     Text(preview.title)
                         .font(.title.bold())
                         .accessibilityAddTraits(.isHeader)
@@ -113,30 +113,27 @@ struct InviteCodeScreen: View {
                 codeBox
                 steps(preview.steps)
             }
-            .padding(24)
+            .padding(DS.Space.xxl)
             .frame(maxWidth: 560)
             .frame(maxWidth: .infinity)
         }
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 4) {
+            VStack(spacing: DS.Space.xxs) {
                 Button {
                     plus.acceptInvite(code: invite.code, title: preview.title)
                     dismiss()
                 } label: {
                     Text("Accept")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, minHeight: 32)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(.dsPrimary(fullWidth: true))
                 Button("Not Now") {
                     plus.declineInvite()
                     dismiss()
                 }
-                .frame(minHeight: 44)
+                .buttonStyle(.dsTextLink)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 8)
+            .padding(.horizontal, DS.Space.xxl)
+            .padding(.top, DS.Space.s)
             .frame(maxWidth: 560)
             .frame(maxWidth: .infinity)
             .background(.bar)
@@ -144,7 +141,7 @@ struct InviteCodeScreen: View {
     }
 
     private var codeBox: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: DS.Space.xxs) {
             Text("Your Invite Code")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -154,17 +151,17 @@ struct InviteCodeScreen: View {
                 .accessibilityIdentifier("InviteCodeValue")
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
-        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 14))
+        .padding(.vertical, DS.Space.ml)
+        .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
         .accessibilityElement(children: .combine)
     }
 
     private func steps(_ steps: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
             Text("Then do these to get your free month")
                 .font(.subheadline.weight(.semibold))
             ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
                     Text("\(index + 1)")
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(Color("OnAccent"))
@@ -184,13 +181,13 @@ struct InviteCodeScreen: View {
     // MARK: Set up already, your own code, or a code that didn't work
 
     private func notice(title: String, message: String, systemImage: String, seeYourCode: Bool) -> some View {
-        VStack(spacing: 20) {
+        VStack(spacing: DS.Space.xl) {
             Spacer(minLength: 0)
             Image(systemName: systemImage)
                 .font(.system(size: markSize))
                 .foregroundStyle(.tint)
                 .accessibilityHidden(true)
-            VStack(spacing: 8) {
+            VStack(spacing: DS.Space.s) {
                 Text(title)
                     .font(.title2.bold())
                     .accessibilityAddTraits(.isHeader)
@@ -202,20 +199,17 @@ struct InviteCodeScreen: View {
             if seeYourCode {
                 NavigationLink(value: PlusInvitesRoute()) {
                     Text("See Your Code")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, minHeight: 32)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(.dsPrimary(fullWidth: true))
             }
             Button("Close") {
                 plus.declineInvite()
                 dismiss()
             }
-            .frame(minHeight: 44)
+            .buttonStyle(.dsTextLink)
             Spacer(minLength: 0)
         }
-        .padding(24)
+        .padding(DS.Space.xxl)
         .frame(maxWidth: 560)
         .frame(maxWidth: .infinity)
     }
@@ -260,7 +254,7 @@ struct InviteCodeSetupSection: View {
         Section {
             if let saved = plus.savedInvite, saved.accepted {
                 Label {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: DS.Space.hairline) {
                         Text(saved.title ?? String(localized: "Your invite code is saved"))
                             .font(.headline)
                         Text(
@@ -342,12 +336,12 @@ struct ReferralChecklist: View {
 
     var body: some View {
         ForEach(progress.steps) { step in
-            HStack(spacing: 12) {
+            HStack(spacing: DS.Space.m) {
                 Image(systemName: step.done ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(step.done ? Color.accentColor : Color.secondary)
                     .imageScale(.large)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     Text(step.title)
                         .foregroundStyle(step.done ? Color.secondary : Color.primary)
                     if let count = step.count, let target = step.target, target > 1, !step.done {
@@ -356,15 +350,14 @@ struct ReferralChecklist: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                Spacer(minLength: 8)
+                Spacer(minLength: DS.Space.s)
                 if canGo(step), let tabs, let label = Self.goLabel(step.id) {
                     Button(label) { go(step.id, tabs: tabs) }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                        .buttonStyle(.dsSecondary(.small))
                         .accessibilityIdentifier("ChecklistGo-\(step.id)")
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, DS.Space.hairline)
             .contentShape(.rect)
             .onTapGesture {
                 guard canGo(step), let tabs else { return }
@@ -412,7 +405,7 @@ struct ReferralChecklistHeader: View {
     let progress: ReferralProgress
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
             Text(progress.summaryText)
                 .font(.headline)
             Text(progress.message)
@@ -426,7 +419,7 @@ struct ReferralChecklistHeader: View {
                     .accessibilityIdentifier("ChecklistTimeLeft")
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
         .accessibilityElement(children: .combine)
     }
 }
@@ -523,10 +516,10 @@ struct ReferralMenuCard: View {
         Group {
             if plus.showsReferralCard, let progress = plus.pendingReferral {
                 card(progress)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, DS.Space.l)
             } else if let month = plus.menuFreeMonth {
                 readyCard(month)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, DS.Space.l)
             }
         }
         // Saving recipes and planning a dinner change the count; check again when they might
@@ -546,11 +539,11 @@ struct ReferralMenuCard: View {
 
     /// "Your free month is ready": opens the free month with Redeem.
     private func readyCard(_ month: FreeMonth) -> some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: DS.Space.m) {
             Button {
                 plus.showsChecklist = true
             } label: {
-                HStack(spacing: 12) {
+                HStack(spacing: DS.Space.m) {
                     Image(systemName: "gift.fill")
                         .font(.title2)
                         .foregroundStyle(.tint)
@@ -558,7 +551,7 @@ struct ReferralMenuCard: View {
                     Text(month.title)
                         .font(.headline)
                         .foregroundStyle(Color.primary)
-                    Spacer(minLength: 4)
+                    Spacer(minLength: DS.Space.xxs)
                     Text(month.buttonTitle)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.tint)
@@ -577,21 +570,21 @@ struct ReferralMenuCard: View {
                 .buttonStyle(.borderless)
                 .accessibilityHint("You can still find it in Give a Free Month")
         }
-        .padding(14)
-        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16))
+        .padding(DS.Space.ml)
+        .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
     }
 
     private func card(_ progress: ReferralProgress) -> some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: DS.Space.m) {
             Button {
                 plus.showsChecklist = true
             } label: {
-                HStack(spacing: 12) {
+                HStack(spacing: DS.Space.m) {
                     Image(systemName: "gift.fill")
                         .font(.title2)
                         .foregroundStyle(.tint)
                         .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: DS.Space.hairline) {
                         Text(progress.summaryText)
                             .font(.headline)
                             .foregroundStyle(Color.primary)
@@ -601,7 +594,7 @@ struct ReferralMenuCard: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    Spacer(minLength: 4)
+                    Spacer(minLength: DS.Space.xxs)
                     Image(systemName: "chevron.forward")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.tertiary)
@@ -617,7 +610,7 @@ struct ReferralMenuCard: View {
                 .buttonStyle(.borderless)
                 .accessibilityHint("You can still find it in Give a Free Month")
         }
-        .padding(14)
-        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16))
+        .padding(DS.Space.ml)
+        .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
     }
 }

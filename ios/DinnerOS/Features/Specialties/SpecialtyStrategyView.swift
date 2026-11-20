@@ -63,7 +63,7 @@ struct SpecialtyStrategyView: View {
             }
         } else {
             Section {
-                HStack(spacing: 8) {
+                HStack(spacing: DS.Space.s) {
                     ProgressView()
                     Text("Loading…")
                         .foregroundStyle(.secondary)
@@ -90,7 +90,7 @@ struct SpecialtyStrategyView: View {
 
     @ViewBuilder
     private func footer(_ settings: SpecialtySettings) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
             if let attribution = SpecialtyFormat.strategyAttribution(
                 settings, members: households.current?.members, currentUserID: session.currentUser?.id)
             {
@@ -150,13 +150,13 @@ struct SpecialtyStrategyRow: View {
     let isSaving: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: DS.Space.m) {
             Image(systemName: option.value.systemImage)
                 .font(.title3)
                 .foregroundStyle(.tint)
                 .frame(minWidth: 28)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(option.label)
                     .font(.headline)
                 Text(option.description)
@@ -173,7 +173,7 @@ struct SpecialtyStrategyRow: View {
                     .accessibilityHidden(true)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
         // Inside a list Button, hierarchical styles resolve against the tint.
         .foregroundStyle(Color.primary)
         .contentShape(.rect)
@@ -191,7 +191,7 @@ struct SpecialtyStrategySummaryRow: View {
 
     var body: some View {
         Label {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text("When Nobody Has Chosen")
                     .foregroundStyle(Color.primary)
                 Text(detail)

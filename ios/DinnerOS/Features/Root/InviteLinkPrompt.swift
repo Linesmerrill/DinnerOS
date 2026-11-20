@@ -19,8 +19,8 @@ private struct InviteLinkPrompt: ViewModifier {
             .overlay {
                 if let progressMessage {
                     ProgressView(progressMessage)
-                        .padding(24)
-                        .background(.regularMaterial, in: .rect(cornerRadius: 16, style: .continuous))
+                        .padding(DS.Space.xxl)
+                        .background(.regularMaterial, in: .rect(cornerRadius: DS.Radius.large, style: .continuous))
                 }
             }
             .alert(title, isPresented: isPresented) {

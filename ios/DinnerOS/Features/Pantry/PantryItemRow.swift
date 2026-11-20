@@ -5,9 +5,9 @@ struct PantryItemRow: View {
     let item: PantryItem
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: DS.Space.m) {
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
+                HStack(spacing: DS.Space.xs) {
                     // A concrete color: `.primary` inside a list Button resolves to the tint.
                     Text(item.displayName)
                         .foregroundStyle(Color.primary)
@@ -42,7 +42,7 @@ struct PantryItemRow: View {
                     .foregroundStyle(expiryColor(expiry))
                 }
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: DS.Space.s)
             PantryStatusPill(status: item.status, isEstimated: item.isEstimatedLow)
         }
         // Inside a list Button, hierarchical styles like `.secondary` resolve against the tint;
@@ -74,7 +74,7 @@ struct PantryStatusPill: View {
             }
         }
         .font(.caption.weight(.semibold))
-        .padding(.horizontal, 8)
+        .padding(.horizontal, DS.Space.s)
         .padding(.vertical, 3)
         .foregroundStyle(color)
         .background {
@@ -101,8 +101,8 @@ private struct StapleBadge: View {
     var body: some View {
         Text("Staple")
             .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
+            .padding(.horizontal, DS.Space.xs)
+            .padding(.vertical, DS.Space.hairline)
             .foregroundStyle(.secondary)
             .background(.fill.tertiary, in: .capsule)
     }
@@ -119,8 +119,8 @@ struct FrozenBadge: View {
     var body: some View {
         Label("Freezer", systemImage: "snowflake")
             .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
+            .padding(.horizontal, DS.Space.xs)
+            .padding(.vertical, DS.Space.hairline)
             // Ice blue, not the app's green: at a glance it reads as cold, not as a status.
             .foregroundStyle(Color(.systemBlue))
             .background(Capsule().fill(Color(.systemBlue).opacity(0.15)))

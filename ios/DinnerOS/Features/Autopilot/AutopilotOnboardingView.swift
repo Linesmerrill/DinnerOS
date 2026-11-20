@@ -70,7 +70,7 @@ struct AutopilotOnboardingView: View {
                 Button("Try Again") {
                     Task { await autopilot.reloadProfile() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
         } else {
             ProgressView("Getting Autopilot ready…")
@@ -112,13 +112,15 @@ struct AutopilotOnboardingView: View {
                     FormErrorLabel(message: errorMessage)
                         .font(.footnote)
                 }
-                HStack(spacing: 12) {
+                HStack(spacing: DS.Space.m) {
                     if step.index > 0 {
                         Button("Back") { move(to: step.index - 1) }
+                            .buttonStyle(.dsTextLink)
                             .disabled(isSaving)
                     } else {
                         // Setup opens here, so leaving it entirely belongs on this step.
                         Button("Set Up Later") { dismiss() }
+                            .buttonStyle(.dsTextLink)
                             .disabled(isSaving)
                     }
                     Spacer()
@@ -127,7 +129,7 @@ struct AutopilotOnboardingView: View {
                             .padding(.horizontal)
                     } else {
                         Button(step.index == Self.steps.count - 1 ? "Finish" : "Next") { move(to: step.index + 1) }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.dsPrimary(.small))
                     }
                 }
             }
@@ -140,7 +142,7 @@ struct AutopilotOnboardingView: View {
 
     /// The step count, a slim progress bar, the question, and at most one line under it.
     private func header(_ step: AutopilotOnboardingStep) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
             ProgressView(value: Double(step.index + 1), total: Double(Self.steps.count))
                 .accessibilityLabel("Step \(step.positionText)")
             HStack(alignment: .firstTextBaseline) {
@@ -149,7 +151,7 @@ struct AutopilotOnboardingView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
             }
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.xs) {
                 Text(step.question)
                     .font(.title2.bold())
                 Button {
@@ -166,12 +168,12 @@ struct AutopilotOnboardingView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal)
-        .padding(.bottom, 12)
+        .padding(.bottom, DS.Space.m)
         .accessibilityElement(children: .contain)
     }
 
     private var finished: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: DS.Space.xl) {
             Spacer()
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 56))
@@ -190,7 +192,7 @@ struct AutopilotOnboardingView: View {
             fineTuneRow
             Spacer()
         }
-        .padding()
+        .padding(DS.Space.l)
         .frame(maxWidth: .infinity)
         .safeAreaInset(edge: .bottom) {
             bottomBar {
@@ -199,18 +201,16 @@ struct AutopilotOnboardingView: View {
                         dismiss()
                         onPlanWeek()
                     } label: {
-                        Label("Plan My Week", systemImage: "sparkles").frame(maxWidth: .infinity)
+                        Label("Plan My Week", systemImage: "sparkles")
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.dsPrimary(fullWidth: true))
                 }
                 Button {
                     dismiss()
                 } label: {
-                    Text(onPlanWeek == nil ? "Done" : "Not Now").frame(maxWidth: .infinity)
+                    Text(onPlanWeek == nil ? "Done" : "Not Now")
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+                .buttonStyle(.dsSecondary(fullWidth: true))
             }
         }
     }
@@ -224,14 +224,14 @@ struct AutopilotOnboardingView: View {
             Label("Fine-tune Autopilot", systemImage: "slider.horizontal.3")
                 .font(.subheadline)
         }
-        .padding(.top, 4)
+        .padding(.top, DS.Space.xxs)
     }
 
     private func bottomBar(@ViewBuilder content: () -> some View) -> some View {
-        VStack(spacing: 10) {
+        VStack(spacing: DS.Space.sm) {
             content()
         }
-        .padding()
+        .padding(DS.Space.l)
         .background(.bar)
     }
 

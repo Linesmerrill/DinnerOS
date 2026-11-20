@@ -19,16 +19,16 @@ struct SuggestedPhotoBanner: View {
     var body: some View {
         Group {
             if let found, !dismissed {
-                HStack(spacing: 12) {
+                HStack(spacing: DS.Space.m) {
                     AsyncImage(url: URL(string: found.thumbnailURL)) { image in
                         image.resizable().scaledToFill()
                     } placeholder: {
-                        Color(.secondarySystemFill)
+                        DS.Colors.fill
                     }
                     .frame(width: 72, height: 72)
-                    .clipShape(.rect(cornerRadius: 10))
+                    .clipShape(.rect(cornerRadius: DS.Radius.medium))
                     .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: DS.Space.xs) {
                         Text("Add this photo?")
                             .font(.subheadline.weight(.semibold))
                         if let credit = found.photoCredit(source: sourceName, sourceURL: sourceURL) {
@@ -39,24 +39,23 @@ struct SuggestedPhotoBanner: View {
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
-                        HStack(spacing: 8) {
+                        HStack(spacing: DS.Space.s) {
                             Button {
                                 use(found)
                             } label: {
                                 if isSaving { ProgressView() } else { Text("Use Photo") }
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.dsPrimary(.small))
                             .disabled(isSaving)
                             Button("Not Now") { dismiss() }
-                                .buttonStyle(.bordered)
+                                .buttonStyle(.dsSecondary(.small))
                                 .disabled(isSaving)
                         }
-                        .font(.subheadline)
                     }
                     Spacer(minLength: 0)
                 }
-                .padding(12)
-                .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 14))
+                .padding(DS.Space.m)
+                .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
             }
         }
         .task(id: recipe.id) { await load() }

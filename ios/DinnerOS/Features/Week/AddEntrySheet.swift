@@ -105,7 +105,7 @@ struct AddEntrySheet: View {
     @ViewBuilder
     private var servingsPicker: some View {
         if let loadError {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
                 FormErrorLabel(message: loadError)
                 Button("Try Again") {
                     Task { await loadRecipe() }

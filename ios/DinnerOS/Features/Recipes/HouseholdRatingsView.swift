@@ -40,7 +40,7 @@ struct HouseholdRatingsView: View {
                 Button("Try Again") {
                     Task { await load() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
         } else {
             ProgressView("Loading ratings…")
@@ -72,7 +72,7 @@ struct HouseholdRatingsList: View {
                 FormErrorLabel(message: refreshError)
             }
             Section {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DS.Space.xxs) {
                     Text(recipeName)
                         .font(.headline)
                     Text(RatingFormat.summary(response.householdRating) ?? String(localized: "No ratings yet"))
@@ -121,7 +121,7 @@ private struct MemberRatingRow: View {
     }
 
     private var content: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
             HStack(alignment: .firstTextBaseline) {
                 Text(isCurrentUser ? String(localized: "\(item.name) (You)") : item.name)
                     .font(.headline)
@@ -143,15 +143,15 @@ private struct MemberRatingRow: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
 
     private var feedback: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
             if !item.rating.tags.isEmpty {
-                FlowLayout(spacing: 6) {
+                FlowLayout(spacing: DS.Space.xs) {
                     ForEach(item.rating.tags) { tag in
                         TagChip(title: tag.title)
                             .font(.caption)
@@ -170,7 +170,7 @@ private struct MemberRatingRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.top, 2)
+        .padding(.top, DS.Space.hairline)
     }
 }
 

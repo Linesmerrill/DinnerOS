@@ -11,13 +11,13 @@ nonisolated enum SharedRecipes {
 struct SharedRecipesEntry: View {
     var body: some View {
         NavigationLink(value: DiscoverRoute()) {
-            HStack(spacing: 12) {
+            HStack(spacing: DS.Space.m) {
                 Image(systemName: SharedRecipes.systemImage)
                     .font(.title3)
                     .foregroundStyle(.tint)
                     .frame(minWidth: 28)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     Text(SharedRecipes.title)
                         .font(.headline)
                         .foregroundStyle(Color.primary)
@@ -32,13 +32,13 @@ struct SharedRecipesEntry: View {
                     .foregroundStyle(Color.secondary)
                     .accessibilityHidden(true)
             }
-            .padding(16)
-            .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 18))
+            .padding(DS.Space.l)
+            .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, DS.Space.l)
     }
 }

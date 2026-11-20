@@ -191,12 +191,12 @@ struct WeekAutopilotSection: View {
                 // The week's suggestions and context failed to load. Without this the rows below
                 // simply read as "nothing suggested", which is a different thing entirely.
                 if let weekError = autopilot.weekError {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: DS.Space.s) {
                         FormErrorLabel(message: weekError)
                         Button("Try Again") {
                             Task { await autopilot.reloadWeek() }
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.dsSecondary(.small))
                     }
                 }
                 if let proposal {
@@ -259,13 +259,13 @@ struct WeekAutopilotSection: View {
     private func row(
         systemImage: String, title: String, subtitle: String, trailing: String? = nil, isWorking: Bool = false
     ) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Space.m) {
             Image(systemName: systemImage)
                 .font(.title3)
                 .foregroundStyle(.tint)
                 .frame(minWidth: 28)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(title)
                     .font(.headline)
                 Text(subtitle)

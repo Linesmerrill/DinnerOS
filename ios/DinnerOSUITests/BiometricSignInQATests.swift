@@ -171,6 +171,7 @@ final class BiometricSignInQATests: XCTestCase {
         XCTAssertTrue(faceIDButton(app).isHittable, "Sign In with Face ID is off the screen")
         sleep(1)
         snap(app, "Sign-in › Face ID (\(mode))")
+        assertSignInButtonsMatch(app)
         faceIDButton(app).tap()
         XCTAssertTrue(householdTab(app).waitForExistence(timeout: 20), "Sign In with Face ID didn't sign in")
         setToggle(app, on: false)
@@ -284,6 +285,29 @@ final class BiometricSignInQATests: XCTestCase {
         XCUIDevice.shared.press(.home)
         sleep(5)
         app.activate()
+    }
+
+    /// The sign-in buttons share one size (build 120): Face ID, Apple and Google are the same
+    /// height and width, and line up.
+    @MainActor
+    private func assertSignInButtonsMatch(_ app: XCUIApplication) {
+        let apple = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Apple'")).firstMatch
+        let google = app.buttons["signIn.google"].firstMatch
+        var buttons = [("Face ID", faceIDButton(app)), ("Apple", apple)]
+        if google.exists { buttons.append(("Google", google)) }
+        XCTAssertTrue(apple.exists, "No Apple button")
+        let reference = faceIDButton(app).frame
+        XCTAssertEqual(reference.height, 50, accuracy: 6, "Sign In with Face ID is \(reference.height) pt tall")
+        for (name, button) in buttons {
+            let frame = button.frame
+            XCTAssertEqual(
+                frame.height, reference.height, accuracy: 1,
+                "\(name) is \(frame.height) pt tall, Face ID \(reference.height)")
+            XCTAssertEqual(
+                frame.width, reference.width, accuracy: 1,
+                "\(name) is \(frame.width) pt wide, Face ID \(reference.width)")
+            XCTAssertEqual(frame.minX, reference.minX, accuracy: 1, "\(name) doesn't line up with Face ID")
+        }
     }
 
     private var mode: String { ProcessInfo.processInfo.environment["QA_MODE"] ?? "light" }

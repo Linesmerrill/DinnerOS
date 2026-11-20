@@ -130,7 +130,7 @@ struct InviteCreatedView: View {
     var body: some View {
         Form {
             Section {
-                VStack(spacing: 8) {
+                VStack(spacing: DS.Space.s) {
                     Image(systemName: result.emailDelivered ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                         .font(.largeTitle)
                         .foregroundStyle(result.emailDelivered ? Color.accentColor : Color.orange)

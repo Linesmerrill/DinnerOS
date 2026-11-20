@@ -8,15 +8,15 @@ struct OfflineBanner: View {
 
     var body: some View {
         if let offline, offline.isShowingSaved {
-            HStack(spacing: 6) {
+            HStack(spacing: DS.Space.xs) {
                 Image(systemName: "wifi.slash")
                     .font(.caption.weight(.bold))
                     .accessibilityHidden(true)
                 Text(text(offline))
                     .font(.caption.weight(.semibold))
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.horizontal, DS.Space.m)
+            .padding(.vertical, DS.Space.xs)
             .background(.regularMaterial, in: Capsule())
             .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
             .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
@@ -42,7 +42,7 @@ extension View {
     func offlineBanner() -> some View {
         safeAreaInset(edge: .top, spacing: 0) {
             OfflineBanner()
-                .padding(.bottom, 4)
+                .padding(.bottom, DS.Space.xxs)
         }
     }
 }

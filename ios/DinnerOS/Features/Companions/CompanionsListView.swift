@@ -83,7 +83,7 @@ struct CompanionsListView: View {
         Button {
             if canEdit { editing = companion }
         } label: {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(companion.name)
                     .foregroundStyle(Color.primary)
                 if !companion.summary.isEmpty {

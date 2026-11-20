@@ -31,7 +31,7 @@ struct RecipePhotoChooser: View {
                     }
                     .pickerStyle(.segmented)
                     .padding(.horizontal)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, DS.Space.s)
                 }
                 switch shownPlace {
                 case .web:
@@ -59,7 +59,7 @@ struct RecipePhotoChooser: View {
                 Label(libraryError, systemImage: "exclamationmark.triangle")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .padding(8)
+                    .padding(DS.Space.s)
             }
             PhotosPicker(selection: $libraryItem, matching: .images, photoLibrary: .shared()) {
                 Text("Photo Library")
@@ -110,11 +110,11 @@ struct RecipePhotoSearchView: View {
         _query = State(initialValue: initialQuery.trimmingCharacters(in: .whitespaces))
     }
 
-    private let columns = [GridItem(.adaptive(minimum: 104), spacing: 4)]
+    private let columns = [GridItem(.adaptive(minimum: 104), spacing: DS.Space.xxs)]
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(spacing: DS.Space.s) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
@@ -135,11 +135,11 @@ struct RecipePhotoSearchView: View {
                     .accessibilityLabel("Clear search")
                 }
             }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 44)
-            .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: 10))
+            .padding(.horizontal, DS.Space.m)
+            .frame(minHeight: DS.Size.tapTarget)
+            .background(DS.Colors.subtleFill, in: .rect(cornerRadius: DS.Radius.medium))
             .padding(.horizontal)
-            .padding(.bottom, 8)
+            .padding(.bottom, DS.Space.s)
             ScrollView {
                 if let errorMessage, photos.isEmpty {
                     message(errorMessage, systemImage: "wifi.exclamationmark", retry: true)
@@ -152,12 +152,12 @@ struct RecipePhotoSearchView: View {
                         String(localized: "Type what's in the dish, like brownies or chicken tacos."),
                         systemImage: "magnifyingglass", retry: false)
                 }
-                LazyVGrid(columns: columns, spacing: 4) {
+                LazyVGrid(columns: columns, spacing: DS.Space.xxs) {
                     ForEach(photos) { photo in
                         Button {
                             onFound(photo)
                         } label: {
-                            Color(.secondarySystemFill)
+                            DS.Colors.fill
                                 .aspectRatio(1, contentMode: .fit)
                                 .overlay {
                                     AsyncImage(url: URL(string: photo.thumbnailURL)) { image in
@@ -173,8 +173,8 @@ struct RecipePhotoSearchView: View {
                                             .font(.caption2)
                                             .lineLimit(1)
                                             .foregroundStyle(.white)
-                                            .padding(.horizontal, 4)
-                                            .padding(.vertical, 2)
+                                            .padding(.horizontal, DS.Space.xxs)
+                                            .padding(.vertical, DS.Space.hairline)
                                             .frame(maxWidth: .infinity, alignment: .leading)
                                             .background(.black.opacity(0.45))
                                     }
@@ -193,10 +193,10 @@ struct RecipePhotoSearchView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 4)
+                .padding(.horizontal, DS.Space.xxs)
                 if isLoading {
                     ProgressView()
-                        .padding()
+                        .padding(DS.Space.l)
                 }
                 if !photos.isEmpty, let sourceName {
                     Group {
@@ -208,7 +208,7 @@ struct RecipePhotoSearchView: View {
                         }
                     }
                     .font(.footnote)
-                    .padding()
+                    .padding(DS.Space.l)
                     .accessibilityIdentifier("PhotoSource")
                 }
             }
@@ -220,7 +220,7 @@ struct RecipePhotoSearchView: View {
     }
 
     private func message(_ text: String, systemImage: String, retry: Bool) -> some View {
-        VStack(spacing: 12) {
+        VStack(spacing: DS.Space.m) {
             Image(systemName: systemImage)
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
@@ -230,10 +230,10 @@ struct RecipePhotoSearchView: View {
                 .foregroundStyle(.secondary)
             if retry {
                 Button("Try Again") { Task { await start() } }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.dsSecondary(.small))
             }
         }
-        .padding(32)
+        .padding(DS.Space.xxxl)
         .frame(maxWidth: .infinity)
     }
 

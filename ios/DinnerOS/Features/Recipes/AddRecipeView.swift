@@ -178,8 +178,8 @@ struct AddRecipeForm: View {
         .overlay {
             if store.step == .parsing {
                 ProgressView("Reading…")
-                    .padding()
-                    .background(.regularMaterial, in: .rect(cornerRadius: 12))
+                    .padding(DS.Space.l)
+                    .background(.regularMaterial, in: .rect(cornerRadius: DS.Radius.medium))
             }
         }
     }
@@ -333,7 +333,7 @@ struct RecipeDraftReviewForm: View {
                     .submitLabel(store.draft.fromURL ? .done : .next)
                     .focused($focus, equals: .name)
                     .onSubmit { if !store.draft.fromURL { focus = .headline } }
-                    .frame(minHeight: 44)
+                    .frame(minHeight: DS.Size.tapTarget)
                 if !store.draft.fromURL {
                     TextField(
                         "Short description (optional)", text: Binding($store.draft.headline, replacingNilWith: ""),
@@ -341,7 +341,7 @@ struct RecipeDraftReviewForm: View {
                     )
                     .lineLimit(1...4)
                     .focused($focus, equals: .headline)
-                    .frame(minHeight: 44)
+                    .frame(minHeight: DS.Size.tapTarget)
                 }
             }
             detailsSection
@@ -397,12 +397,12 @@ struct RecipeDraftReviewForm: View {
         Section {
             let lines = store.draft.ingredients
             ForEach(Array(lines.enumerated()), id: \.element.id) { index, line in
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     if let group = line.group, !group.isEmpty, startsGroup(at: index) {
                         Text(group)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
-                            .padding(.top, 4)
+                            .padding(.top, DS.Space.xxs)
                     }
                     RecipeListRow(
                         title: line.name,
@@ -420,7 +420,7 @@ struct RecipeDraftReviewForm: View {
                 ingredientSheet = .new
             } label: {
                 Label("Add Ingredient", systemImage: "plus")
-                    .frame(minHeight: 44)
+                    .frame(minHeight: DS.Size.tapTarget)
             }
         } header: {
             SectionHeaderWithMenu(title: "Ingredients") {
@@ -476,7 +476,7 @@ struct RecipeDraftReviewForm: View {
                 DispatchQueue.main.async { focus = .step(index) }
             } label: {
                 Label("Add Step", systemImage: "plus")
-                    .frame(minHeight: 44)
+                    .frame(minHeight: DS.Size.tapTarget)
             }
         } header: {
             SectionHeaderWithMenu(title: "Steps") {
@@ -599,7 +599,7 @@ struct StepEntryRow<Field: Hashable>: View {
     let onDelete: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: DS.Space.sm) {
             Text("\(index + 1)")
                 .font(.headline.monospacedDigit())
                 .foregroundStyle(.secondary)
@@ -608,7 +608,7 @@ struct StepEntryRow<Field: Hashable>: View {
             TextField("What to do", text: $text, axis: .vertical)
                 .lineLimit(2...12)
                 .focused(focus, equals: field)
-                .padding(.vertical, 6)
+                .padding(.vertical, DS.Space.xs)
                 .accessibilityLabel("Step \(index + 1)")
             Menu {
                 Button("Edit", systemImage: "pencil") { focus.wrappedValue = field }

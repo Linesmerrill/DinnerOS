@@ -8,7 +8,7 @@ struct RecipeTimeField: View {
     @Binding var isOpen: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
             Button {
                 withAnimation(.snappy) { isOpen.toggle() }
             } label: {
@@ -20,7 +20,7 @@ struct RecipeTimeField: View {
                         .foregroundStyle(isOpen ? Color.accentColor : .secondary)
                         .monospacedDigit()
                 }
-                .frame(minHeight: 44)
+                .frame(minHeight: DS.Size.tapTarget)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -39,8 +39,8 @@ struct RecipeTimePicker: View {
     @Binding var minutes: Int
 
     var body: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
+        VStack(spacing: DS.Space.s) {
+            HStack(spacing: DS.Space.s) {
                 ForEach(RecipeTimes.presets, id: \.self) { preset in
                     Button {
                         minutes = preset
@@ -74,7 +74,7 @@ struct RecipeTimePicker: View {
                     .frame(maxWidth: .infinity, minHeight: 36)
             }
         }
-        .padding(.bottom, 4)
+        .padding(.bottom, DS.Space.xxs)
     }
 
     private var hours: Binding<Int> {

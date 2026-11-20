@@ -41,7 +41,7 @@ struct ShopSetupView: View {
     var body: some View {
         Form {
             Section {
-                VStack(spacing: 12) {
+                VStack(spacing: DS.Space.m) {
                     Image(systemName: "cart.badge.plus")
                         .font(.largeTitle)
                         .imageScale(.large)
@@ -54,7 +54,7 @@ struct ShopSetupView: View {
                 }
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+                .padding(.vertical, DS.Space.s)
                 .accessibilityElement(children: .combine)
             }
             if let errorMessage {
@@ -73,10 +73,8 @@ struct ShopSetupView: View {
                                 Text("Use \(storeName)")
                             }
                         }
-                        .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.dsPrimary(fullWidth: true))
                     .disabled(!canSave)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
@@ -156,7 +154,7 @@ struct ShopStoreFields: View {
                     choice = ShopStoreChoice(provider: provider.key)
                 } label: {
                     HStack {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: DS.Space.hairline) {
                             Text(provider.name)
                                 .foregroundStyle(Color.primary)
                             if let summary = provider.bannerSummary {
@@ -274,7 +272,7 @@ struct ShopStoreSettingsSheet: View {
                             NavigationLink {
                                 ShopStoreEditForm(provider: provider.key, isNew: true)
                             } label: {
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                                     Label("Add \(provider.name)", systemImage: "plus")
                                     if let summary = provider.bannerSummary {
                                         Text(summary)
@@ -311,7 +309,7 @@ struct ShopStoreSettingsSheet: View {
 
     private func storeRow(_ store: ShoppingStoreChoice) -> some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(shopping.name(of: store.provider))
                 if let detail = detail(store) {
                     Text(detail)
@@ -489,7 +487,7 @@ struct InstacartStoreSection: View {
         Section {
             Label("You pick the store on Instacart each time you shop.", systemImage: "storefront")
         } footer: {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
                 Text("Instacart finds a product for each item on your list. You can change any of them there.")
                 if shopping.instacart?.affiliateTracked == true {
                     Text(
@@ -572,12 +570,11 @@ struct KrogerStoreFields: View {
                 if pickedNew, let confirm {
                     Button(action: confirm.action) {
                         Text(confirm.title)
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.dsPrimary(fullWidth: true))
                     .disabled(!confirm.isEnabled)
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    .listRowInsets(
+                        EdgeInsets(top: DS.Space.s, leading: DS.Space.l, bottom: DS.Space.s, trailing: DS.Space.l))
                 }
             } else {
                 StoreFinderZIPRow(finder: finder, isEditable: isEditable, find: find, locate: locate)
@@ -668,7 +665,7 @@ struct StoreLocationRow: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(location.name)
                     .foregroundStyle(Color.primary)
                 if !location.address.isEmpty {
@@ -722,7 +719,7 @@ struct StoreFinderZIPRow: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Space.m) {
             TextField("ZIP Code", text: $finder.zip, prompt: Text("ZIP code"))
                 .keyboardType(.numberPad)
                 .textContentType(.postalCode)
@@ -796,7 +793,7 @@ struct WalmartStoreNumberSection: View {
         } header: {
             Text("Store Number")
         } footer: {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
                 Text(
                     "Optional. Your cart uses this store for pickup and delivery. Leave it empty to let Walmart choose."
                 )

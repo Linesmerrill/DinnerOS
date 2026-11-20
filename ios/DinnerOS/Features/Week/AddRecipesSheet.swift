@@ -45,7 +45,7 @@ struct AddRecipesSheet: View {
                         Button("Try Again") {
                             Task { await start() }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.dsPrimary(.small))
                     }
                 } else {
                     ProgressView()
@@ -121,7 +121,7 @@ struct AddRecipesSheet: View {
                 Button("Try Again") {
                     Task { await picker.retry() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
         case .loaded:
             List {
@@ -150,7 +150,7 @@ struct AddRecipesSheet: View {
     }
 
     private func row(_ summary: RecipeSummary) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DS.Space.s) {
             Button {
                 configuring = summary
             } label: {
@@ -181,12 +181,12 @@ struct AddRecipesSheet: View {
     @ViewBuilder
     private func footer(_ picker: RecipeLibrary) -> some View {
         if let loadMoreError = picker.loadMoreError {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
                 FormErrorLabel(message: loadMoreError)
                 Button("Try Again") {
                     Task { await picker.retry() }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.dsSecondary(.small))
             }
         } else if picker.hasMore {
             ProgressView()

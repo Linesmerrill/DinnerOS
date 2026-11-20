@@ -20,7 +20,7 @@ struct InstructionStepText: View {
     var body: some View {
         // A step that is really several ("Heat the oil. • Stir in the garlic.") reads as separate
         // paragraphs, and a sentence that adds several things at once as a list under its verb.
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
             ForEach(Array(runs.enumerated()), id: \.offset) { _, run in
                 switch run.block {
                 case .prose(let segments):
@@ -139,11 +139,11 @@ struct StepIngredientGroup: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
             lead
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: DS.Space.m) {
                 Capsule()
                     .fill(Color.accentColor.opacity(0.5))
                     .frame(width: 2)
@@ -159,7 +159,7 @@ struct StepIngredientGroup: View {
                     }
                 }
             }
-            .padding(.leading, 4)
+            .padding(.leading, DS.Space.xxs)
         }
     }
 }
@@ -169,13 +169,13 @@ struct InstructionStepRow: View {
     let step: InstructionStep
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
             Text(step.index.formatted())
                 .font(.headline)
                 .foregroundStyle(.tint)
                 .frame(minWidth: 20, alignment: .trailing)
                 .accessibilityLabel("Step \(step.index)")
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: DS.Space.sm) {
                 InstructionStepText(step: step)
                     .opacity(step.leftOut ? 0.6 : 1)
                 if step.leftOut {
@@ -187,7 +187,7 @@ struct InstructionStepRow: View {
                     InstructionNoteLabel(note: note)
                 }
                 if let url = step.imageURL {
-                    RecipePhoto(url: url, aspectRatio: 16.0 / 9.0, pointWidth: 340, cornerRadius: 12)
+                    RecipePhoto(url: url, aspectRatio: 16.0 / 9.0, pointWidth: 340, cornerRadius: DS.Radius.medium)
                 }
             }
         }
@@ -200,7 +200,7 @@ struct SafeTemperaturesFooter: View {
 
     var body: some View {
         if !instructions.safeTemperatures.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
                 Label("Cook To", systemImage: "thermometer.medium")
                     .font(.subheadline.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
@@ -217,8 +217,8 @@ struct SafeTemperaturesFooter: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 12))
+            .padding(DS.Space.m)
+            .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: DS.Radius.medium))
             .accessibilityElement(children: .combine)
         }
     }
@@ -233,8 +233,8 @@ struct InstructionNoteLabel: View {
     var body: some View {
         let layout =
             dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 6))
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.xxs))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: DS.Space.xs))
         layout {
             Image(systemName: note.isLeftOut ? "minus.circle" : "arrow.triangle.swap")
                 .foregroundStyle(.tint)
@@ -244,9 +244,9 @@ struct InstructionNoteLabel: View {
         }
         .font(.subheadline)
         .foregroundStyle(Color.secondary)
-        .padding(10)
+        .padding(DS.Space.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 10))
+        .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: DS.Radius.medium))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(note.isLeftOut ? "Skipped. \(note.text)" : "Substitution. \(note.text)")
     }
@@ -260,7 +260,7 @@ struct InstructionSubstitutionsFooter: View {
 
     var body: some View {
         if !instructions.substitutions.isEmpty || !instructions.unchosenSpecialties.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: DS.Space.sm) {
                 Text("Your Substitutes")
                     .font(.subheadline.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
@@ -274,7 +274,7 @@ struct InstructionSubstitutionsFooter: View {
                     unchosenRow(specialty)
                 }
             }
-            .padding(.top, 4)
+            .padding(.top, DS.Space.xxs)
         }
     }
 
@@ -285,7 +285,7 @@ struct InstructionSubstitutionsFooter: View {
             .foregroundStyle(Color.secondary)
             .fixedSize(horizontal: false, vertical: true)
         if let chooseSpecialty {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
                 text
                 Button("Choose") { chooseSpecialty(specialty) }
                     .font(.footnote.weight(.semibold))
@@ -320,6 +320,6 @@ struct InstructionSubstitutionsFooter: View {
                 originalText: "Whisk the gochujang into the Tex-Mex Paste, then simmer.",
                 segments: segments, notes: [note])
         )
-        .padding()
+        .padding(DS.Space.l)
     }
 }

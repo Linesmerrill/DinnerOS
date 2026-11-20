@@ -17,9 +17,9 @@ struct SuggestedMealsRow: View {
     private var included: Int { slots.filter { !autopilot.excludedSlotIDs.contains($0.id) }.count }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
             HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     Label("Suggested for You", systemImage: "sparkles")
                         .font(.headline)
                     Text(
@@ -40,20 +40,19 @@ struct SuggestedMealsRow: View {
                             ProgressView()
                         } else {
                             Text(included == 1 ? "Add 1" : "Add \(included)")
-                                .font(.subheadline.weight(.semibold))
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.dsPrimary(.small))
                     .disabled(included == 0 || isAdding)
                     .accessibilityLabel(Text("Add \(included) suggested meals to the week"))
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, DS.Space.l)
             cards
             if isEditable, slots.contains(where: { !$0.pairings.isEmpty }) {
                 Button("Review Sides and Extras", action: review)
                     .font(.subheadline)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, DS.Space.l)
             }
         }
         .alert(
@@ -69,13 +68,13 @@ struct SuggestedMealsRow: View {
     @ViewBuilder
     private var cards: some View {
         if dynamicTypeSize.isAccessibilitySize {
-            VStack(spacing: 16) {
+            VStack(spacing: DS.Space.l) {
                 ForEach(slots) { slot in card(slot) }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, DS.Space.l)
         } else {
             ScrollView(.horizontal) {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: DS.Space.m) {
                     ForEach(slots) { slot in
                         card(slot)
                             .frame(maxHeight: .infinity)
@@ -88,7 +87,7 @@ struct SuggestedMealsRow: View {
                 // recipe name or reason takes an extra line.
                 .fixedSize(horizontal: false, vertical: true)
                 .scrollTargetLayout()
-                .padding(.horizontal, 16)
+                .padding(.horizontal, DS.Space.l)
             }
             .scrollIndicators(.hidden)
             .scrollTargetBehavior(.viewAligned)
@@ -104,8 +103,8 @@ struct SuggestedMealsRow: View {
             // 16 is the card's padding plus the photo's inset.
             .overlay(alignment: .top) {
                 SuggestedCardLabels(slot: slot, showsBadge: !skipped)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
+                    .padding(.horizontal, DS.Space.l)
+                    .padding(.top, DS.Space.l)
             }
             .contextMenu {
                 if isEditable {
@@ -175,7 +174,7 @@ struct SuggestedCardLabels: View {
     }
 
     private func row(shortDay: Bool, compactBadge: Bool) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: DS.Space.xs) {
             dayLabel(short: shortDay)
             Spacer(minLength: 0)
             if let badge {
@@ -189,8 +188,8 @@ struct SuggestedCardLabels: View {
             .font(.caption.weight(.semibold))
             .lineLimit(1)
             .fixedSize()
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, DS.Space.s)
+            .padding(.vertical, DS.Space.xxs)
             .background(.regularMaterial, in: Capsule())
             .accessibilityLabel(slot.day.name())
             // Part of the card's own label; only the badge is its own element.
@@ -213,14 +212,14 @@ struct SuggestedMealCard: View {
 
     var body: some View {
         NavigationLink(value: summary) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
                 RecipePhoto(
-                    url: slot.recipe.imageURL, aspectRatio: 4.0 / 3.0, pointWidth: 280, cornerRadius: 14,
+                    url: slot.recipe.imageURL, aspectRatio: 4.0 / 3.0, pointWidth: 280, cornerRadius: DS.Radius.large,
                     title: slot.recipe.name
                 )
                 .overlay {
                     if isShuffling {
-                        RoundedRectangle(cornerRadius: 14).fill(.black.opacity(0.35))
+                        RoundedRectangle(cornerRadius: DS.Radius.large).fill(.black.opacity(0.35))
                         ProgressView().tint(.white)
                     }
                 }
@@ -242,13 +241,13 @@ struct SuggestedMealCard: View {
                 }
             }
             .frame(maxHeight: .infinity, alignment: .top)
-            .padding(8)
+            .padding(DS.Space.s)
             .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color(.systemBackground))
+                RoundedRectangle(cornerRadius: DS.Radius.xLarge, style: .continuous)
+                    .fill(DS.Colors.background)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                RoundedRectangle(cornerRadius: DS.Radius.xLarge, style: .continuous)
                     .strokeBorder(
                         Color.accentColor.opacity(isSkipped ? 0.3 : 0.8),
                         style: StrokeStyle(lineWidth: 2, dash: [7, 5]))
@@ -285,10 +284,10 @@ struct SuggestedMealPreview: View {
             )
             .overlay(alignment: .top) {
                 SuggestedCardLabels(slot: slot)
-                    .padding(12)
+                    .padding(DS.Space.m)
             }
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
                     Text(slot.recipe.name)
                         .font(.title3.weight(.semibold))
                         .fixedSize(horizontal: false, vertical: true)
@@ -296,7 +295,7 @@ struct SuggestedMealPreview: View {
                 }
                 if !reasons.isEmpty {
                     Divider()
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: DS.Space.s) {
                         ForEach(Array(reasons.enumerated()), id: \.offset) { _, reason in
                             ReasonLine(reason: reason, badge: slot.badges.first)
                         }
@@ -311,15 +310,15 @@ struct SuggestedMealPreview: View {
                             .symbolRenderingMode(.multicolor)
                     }
                     .font(.subheadline)
-                    .padding(10)
+                    .padding(DS.Space.sm)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.accentColor.opacity(0.1), in: .rect(cornerRadius: 12))
+                    .background(Color.accentColor.opacity(0.1), in: .rect(cornerRadius: DS.Radius.medium))
                 }
             }
-            .padding(16)
+            .padding(DS.Space.l)
         }
         .frame(width: dynamicTypeSize.isAccessibilitySize ? 360 : 330)
-        .background(Color(.systemBackground))
+        .background(DS.Colors.background)
         .accessibilityElement(children: .combine)
     }
 
@@ -330,7 +329,7 @@ struct SuggestedMealPreview: View {
     }
 
     private var facts: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DS.Space.s) {
             Label(AutopilotFormat.cookTime(slot.cookMinutes), systemImage: "clock")
                 .labelStyle(.titleAndIcon)
             TimeBandBadge(band: slot.timeBand)

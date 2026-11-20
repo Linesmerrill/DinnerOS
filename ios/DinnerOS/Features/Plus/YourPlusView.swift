@@ -197,15 +197,15 @@ private struct PlusHeaderCard: View {
             Label(badge, systemImage: "star.fill")
                 .labelStyle(.titleAndIcon)
                 .font(.caption.bold())
-                .padding(.horizontal, 10)
+                .padding(.horizontal, DS.Space.sm)
                 .padding(.vertical, 5)
                 .background(.white.opacity(0.25), in: .capsule)
         }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.ml) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
                 title
                 badge
             }
@@ -215,7 +215,7 @@ private struct PlusHeaderCard: View {
                 Text([plan.name, price].compactMap { $0 }.joined(separator: ", "))
                     .font(.title3)
             }
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
                 if let label = details.dateLabel, let date = details.date {
                     Text("\(label) \(PlusText.day(date))")
                 }
@@ -230,16 +230,16 @@ private struct PlusHeaderCard: View {
             .opacity(0.9)
         }
         .foregroundStyle(.white)
-        .padding(20)
+        .padding(DS.Space.xl)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             LinearGradient(
                 colors: [Color.accentColor, Color.accentColor.mix(with: .teal, by: 0.45)],
                 startPoint: .topLeading, endPoint: .bottomTrailing),
-            in: .rect(cornerRadius: 22)
+            in: .rect(cornerRadius: DS.Radius.xLarge)
         )
         .shadow(color: Color.accentColor.opacity(glow ? 0.45 : 0.2), radius: glow ? 18 : 8, y: 4)
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
         .accessibilityElement(children: .combine)
         .onAppear {
             guard !reduceMotion else { return }
@@ -254,10 +254,10 @@ private struct PlusStatsGrid: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        let columns = [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 260 : 150), spacing: 12)]
-        LazyVGrid(columns: columns, spacing: 12) {
+        let columns = [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 260 : 150), spacing: DS.Space.m)]
+        LazyVGrid(columns: columns, spacing: DS.Space.m) {
             ForEach(Array(stats.enumerated()), id: \.offset) { _, stat in
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
                     Image(systemName: stat.symbol)
                         .font(.title3)
                         .foregroundStyle(.tint)
@@ -270,8 +270,8 @@ private struct PlusStatsGrid: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, minHeight: typeSize.isAccessibilitySize ? nil : 118, alignment: .topLeading)
-                .padding(14)
-                .background(.background, in: .rect(cornerRadius: 16))
+                .padding(DS.Space.ml)
+                .background(.background, in: .rect(cornerRadius: DS.Radius.large))
                 .accessibilityElement(children: .combine)
             }
         }
@@ -284,8 +284,10 @@ struct GiftBoxes: View {
     let cap: Int
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: DS.Space.xs), count: 6), spacing: DS.Space.s
+            ) {
                 ForEach(0..<max(cap, 1), id: \.self) { i in
                     Image(systemName: i < earned ? "gift.fill" : "gift")
                         .font(.title3)
@@ -298,7 +300,7 @@ struct GiftBoxes: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(earned) of \(cap) free months earned")
         .accessibilityHint("Shows your invites.")
@@ -310,13 +312,13 @@ private struct HistoryRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(item.title)
                 Text(PlusText.day(item.at))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: DS.Space.s)
             if let amount = item.amountText {
                 Text(amount)
                     .monospacedDigit()

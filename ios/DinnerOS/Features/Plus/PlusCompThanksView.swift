@@ -11,7 +11,7 @@ struct PlusCompThanksView: View {
     var body: some View {
         ZStack {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: DS.Space.xl) {
                     Image(systemName: "gift.fill")
                         .font(.system(size: 56))
                         .foregroundStyle(.tint)
@@ -26,7 +26,7 @@ struct PlusCompThanksView: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                     if let benefits = comp.benefits, !benefits.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: DS.Space.m) {
                             if let title = comp.benefitsTitle {
                                 Text(title)
                                     .font(.headline)
@@ -43,22 +43,21 @@ struct PlusCompThanksView: View {
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                        .background(.background.secondary, in: .rect(cornerRadius: 16))
+                        .padding(DS.Space.l)
+                        .background(.background.secondary, in: .rect(cornerRadius: DS.Radius.large))
                     }
                     Label("Founding member", systemImage: "star.fill")
                         .font(.subheadline.bold())
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, DS.Space.m)
+                        .padding(.vertical, DS.Space.xs)
                         .background(.tint.opacity(0.15), in: .capsule)
                     Button {
                         dismiss()
                     } label: {
                         Text("Thanks")
-                            .frame(maxWidth: 420)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.dsPrimary(fullWidth: true))
+                    .frame(maxWidth: 420)
                 }
                 .padding(28)
                 .frame(maxWidth: 520)

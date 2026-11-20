@@ -139,7 +139,7 @@ struct IngredientEditorSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    HStack(spacing: 10) {
+                    HStack(spacing: DS.Space.sm) {
                         AmountKeypadField(
                             text: $fields.quantity, unit: $fields.unit, units: units,
                             isFocused: $amountFocused,
@@ -148,7 +148,7 @@ struct IngredientEditorSheet: View {
                                 return true
                             }
                         )
-                        .frame(minHeight: 44)
+                        .frame(minHeight: DS.Size.tapTarget)
                         .accessibilityLabel("Quantity")
                         UnitMenu(unit: $fields.unit, units: units)
                     }
@@ -162,7 +162,7 @@ struct IngredientEditorSheet: View {
                         .autocorrectionDisabled()
                         .submitLabel(mode == .new ? .next : .done)
                         .focused($focus, equals: .item)
-                        .frame(minHeight: 44)
+                        .frame(minHeight: DS.Size.tapTarget)
                         .onSubmit { mode == .new ? addAnother() : done() }
                     ForEach(suggestions, id: \.self) { name in
                         Button {
@@ -184,7 +184,7 @@ struct IngredientEditorSheet: View {
                     TextField("Minced, diced, softened", text: $fields.note)
                         .focused($focus, equals: .note)
                         .submitLabel(mode == .new ? .next : .done)
-                        .frame(minHeight: 44)
+                        .frame(minHeight: DS.Size.tapTarget)
                         .onSubmit { mode == .new ? addAnother() : done() }
                 } header: {
                     Text("Note")
@@ -257,9 +257,9 @@ struct RecipeListRow: View {
     let onDelete: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DS.Space.s) {
             Button(action: onEdit) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     Group {
                         if title.isEmpty {
                             Text(placeholder).foregroundStyle(.secondary)
@@ -279,7 +279,7 @@ struct RecipeListRow: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: DS.Size.tapTarget, alignment: .leading)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -337,7 +337,7 @@ struct ReorderDeleteSheet: View {
         NavigationStack {
             List(selection: $selection) {
                 ForEach(items) { item in
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: DS.Space.hairline) {
                         Text(item.title.isEmpty ? String(localized: "No name") : item.title)
                         if !item.detail.isEmpty {
                             Text(item.detail)

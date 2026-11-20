@@ -251,6 +251,25 @@ working link needs a real invitation email, or the code with **Join with a
 Code**. To test a link that arrives while signed out, sign out, run the command,
 then sign in: the prompt appears once the household loads.
 
+### Design system
+
+Every screen takes its look from `ios/DinnerOS/App/DesignSystem.swift` (build 120): colors
+(`DS.Colors`), spacing (`DS.Space`), corner radii (`DS.Radius`), type (`DS.Typography`) and the
+shared button styles. Use a token instead of a number; if no token fits, add one there rather
+than a one-off.
+
+- `.buttonStyle(.dsPrimary)`: the main action (filled). `.dsSecondary`: tinted. `.dsOutline`:
+  an outline. `.dsTextLink`: accent text with a 44 pt tap target.
+- Each has one fixed height per size: `.large` 50 pt (default) and `.small` 34 pt, both growing
+  with Dynamic Type. `fullWidth: true` fills the row.
+- Primary and secondary wrap the system prominent and bordered styles, so they keep the system
+  look (Liquid Glass on iOS 26+). Never add a `.frame(minHeight:)` to a styled button's label:
+  the system adds 30 pt around a large label, which is how the Face ID button came out 80 pt
+  tall in build 119.
+- The sign-in buttons (Face ID, Apple, Google) share `SignInButtonLabel`: Apple's own button
+  sets the size, its title is 43% of its height (`DS.Typography.signInButton`), and each icon
+  sits in a 20 pt slot. Google's "G" is the vector asset `GoogleG`.
+
 ### Adding files
 
 `ios/DinnerOS/` and `ios/DinnerOSTests/` are synchronized folders. Create Swift

@@ -122,7 +122,7 @@ struct PantryView: View {
                 Button("Try Again") {
                     Task { await pantry.retry() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
         case .loaded:
             list
@@ -192,7 +192,7 @@ struct PantryView: View {
             }
         }
         .pickerStyle(.segmented)
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
     }
 
     @ViewBuilder
@@ -248,7 +248,7 @@ struct PantryView: View {
             } actions: {
                 if canEdit {
                     Button("Add Common Staples") { addStaples() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.dsPrimary(.small))
                     Button("Add an Item") { sheet = .add }
                 }
             }

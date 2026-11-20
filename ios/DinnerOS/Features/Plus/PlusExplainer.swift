@@ -6,7 +6,7 @@ struct PlusExplainer: View {
     let progress: ReferralProgress
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
             Label {
                 Text(progress.explainerTitle)
                     .font(.headline)
@@ -22,7 +22,7 @@ struct PlusExplainer: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("PlusExplainer")
     }

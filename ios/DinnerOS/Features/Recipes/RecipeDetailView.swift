@@ -105,50 +105,50 @@ struct RecipeDetailView: View {
                 hero
                 if let recipe, recipe.imageURL != nil, let credit = recipe.imageCredit {
                     PhotoCreditLine(credit: credit)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 6)
+                        .padding(.horizontal, DS.Space.l)
+                        .padding(.top, DS.Space.xs)
                 }
                 // A plain stack, not a lazy one: the page has a handful of sections, and on iOS 26
                 // a LazyVStack here kept re-placing its items and never settled when a recipe
                 // with steps was opened right after it was saved (100% CPU, no state changing).
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: DS.Space.xl) {
                     titleBlock
-                        .padding(.horizontal, 16)
-                        .padding(.top, 16)
+                        .padding(.horizontal, DS.Space.l)
+                        .padding(.top, DS.Space.l)
                     if recipe?.editedAt != nil {
                         Label("You edited this recipe", systemImage: "pencil")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, DS.Space.l)
                     }
                     if let recipe, let url = recipe.sourceURL,
                         recipe.source == RecipeSourceKey.fromPage || recipe.steps.isEmpty
                     {
                         ImportedRecipeBanner(url: url, showsNote: recipe.source == RecipeSourceKey.fromPage)
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, DS.Space.l)
                     }
                     if let recipe, recipe.imageURLString == nil, canEditRecipe,
                         recipe.source == RecipeSourceKey.typed || recipe.source == RecipeSourceKey.fromPage
                     {
                         SuggestedPhotoBanner(recipe: recipe) { saved in show(saved) }
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, DS.Space.l)
                     }
                     if let notes = recipe?.myRating?.notesForNextTime, !notes.isEmpty {
                         RecipeNotesForNextTime(notes: notes)
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, DS.Space.l)
                     }
                     RecipeDetailTabPicker(tabs: availableTabs, selection: tabSelection)
                         .stickyBelowTop(pinTop)
                         .zIndex(1)
                     sectionContent
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, DS.Space.l)
                         .padding(.top, -16)
                     if let recipe, !recipe.steps.isEmpty {
                         CookingStepsSection(
                             steps: recipe.steps, instructions: instructions,
                             chooseSpecialty: { _ in showsSpecialtySetup = true }, isExpanded: $stepsExpanded
                         )
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, DS.Space.l)
                     }
                     // Picking recipes to share one by one happens here, on the recipe.
                     // Any recipe the household has, imports included, can be shared (decision 685).
@@ -156,16 +156,16 @@ struct RecipeDetailView: View {
                         households.access?.can(.recipesEdit) == true
                     {
                         RecipeSharingRow(recipe: recipe)
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, DS.Space.l)
                     }
                 }
-                .padding(.bottom, 24)
+                .padding(.bottom, DS.Space.xxl)
             }
         }
         .ignoresSafeArea(edges: .top)
         // The page has nothing to type in.
         .ignoresSafeArea(.keyboard)
-        .background(Color(.systemBackground))
+        .background(DS.Colors.background)
         .scrollIndicators(.hidden)
         .onScrollGeometryChange(for: RecipeDetailHeader.Scroll.self) { geometry in
             RecipeDetailHeader.Scroll(offset: geometry.contentOffset.y, top: geometry.contentInsets.top)
@@ -191,12 +191,12 @@ struct RecipeDetailView: View {
                         showsCooking = true
                     } label: {
                         // An HStack, not a Label: a toolbar shows a Label's icon alone.
-                        HStack(spacing: 6) {
+                        HStack(spacing: DS.Space.xs) {
                             Image(systemName: "frying.pan")
                             Text("Start Cooking")
                         }
                         .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 4)
+                        .padding(.horizontal, DS.Space.xxs)
                     }
                     .buttonStyle(.borderedProminent)
                     .accessibilityLabel("Start Cooking")
@@ -317,7 +317,7 @@ struct RecipeDetailView: View {
                 if let badge {
                     MenuChip(text: badge.text, systemImage: badge.code.systemImage, isProminent: true)
                         .background(.regularMaterial, in: .capsule)
-                        .padding(16)
+                        .padding(DS.Space.l)
                 }
             }
             .offset(y: -stretch)
@@ -374,7 +374,7 @@ struct RecipeDetailView: View {
     // MARK: Title and stats
 
     private var titleBlock: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
             Text(name)
                 .font(.largeTitle.bold())
                 .foregroundStyle(Color.primary)
@@ -384,7 +384,7 @@ struct RecipeDetailView: View {
                     .foregroundStyle(Color.secondary)
             }
             RecipeStatsRow(stats: stats)
-                .padding(.top, 4)
+                .padding(.top, DS.Space.xxs)
             if let cuisine = cuisineText {
                 Label(cuisine, systemImage: "globe")
                     .font(.subheadline)
@@ -393,7 +393,7 @@ struct RecipeDetailView: View {
                     .accessibilityIdentifier("RecipeCuisineShown")
             }
             if !tags.isEmpty {
-                ChipFlowLayout(spacing: 6) {
+                ChipFlowLayout(spacing: DS.Space.xs) {
                     ForEach(tags, id: \.self) { tag in
                         MenuChip(text: tag)
                     }
@@ -446,12 +446,12 @@ struct RecipeDetailView: View {
     @ViewBuilder
     private var sectionContent: some View {
         if let loadError {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
                 FormErrorLabel(message: loadError)
                 Button("Try Again") {
                     Task { await load(reload: true) }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.dsSecondary(.small))
             }
         } else if let recipe {
             switch shownTab {
@@ -472,7 +472,7 @@ struct RecipeDetailView: View {
         } else {
             ProgressView()
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 40)
+                .padding(.vertical, DS.Space.huge)
         }
     }
 
@@ -687,8 +687,8 @@ struct RecipeDetailTabPicker: View {
             }
         }
         .pickerStyle(.segmented)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, DS.Space.l)
+        .padding(.vertical, DS.Space.sm)
         .background(.bar)
         .overlay(alignment: .bottom) { Divider() }
     }
@@ -705,9 +705,9 @@ struct RecipeStatsRow: View {
             let columns = Array(
                 repeating: GridItem(.flexible(), alignment: .topLeading),
                 count: dynamicTypeSize.isAccessibilitySize ? 2 : min(stats.count, 4))
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+            LazyVGrid(columns: columns, alignment: .leading, spacing: DS.Space.m) {
                 ForEach(stats) { stat in
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: DS.Space.xxs) {
                         Text(stat.title)
                             .font(.caption2)
                             .foregroundStyle(Color.secondary)
@@ -720,7 +720,7 @@ struct RecipeStatsRow: View {
                     .accessibilityValue(stat.accessibilityValue)
                 }
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, DS.Space.s)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

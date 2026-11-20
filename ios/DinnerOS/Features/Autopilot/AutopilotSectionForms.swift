@@ -79,7 +79,7 @@ private struct TasteChipGroup: View {
     var body: some View {
         let all = values
         let shown = showsAll ? all : Array(all.prefix(Self.initialCount))
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
             ChipFlowLayout {
                 ForEach(shown) { option in
                     let preference = settings.preference(for: option.value, kind: kind)
@@ -114,7 +114,7 @@ private struct TasteChipGroup: View {
                     .foregroundStyle(.red)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
     }
 
     private func chipState(_ preference: AutopilotTastePreference) -> ChoiceChip.State {
@@ -367,7 +367,7 @@ private struct EquipmentSectionForm: View {
                                 option.value, owned: owned, order: vocabulary.equipment.map(\.value))
                         })
                 ) {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: DS.Space.hairline) {
                         Text(option.label)
                         if let description = option.description {
                             Text(description)
@@ -397,7 +397,7 @@ private struct WeekdayRulesSectionForm: View {
                 NavigationLink {
                     WeekdayRuleEditor(day: day, settings: $settings, vocabulary: vocabulary)
                 } label: {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: DS.Space.hairline) {
                         if let rule = settings.rule(for: day) {
                             Text(AutopilotFormat.ruleTitle(rule))
                             Text(AutopilotFormat.ruleSummary(rule, vocabulary: vocabulary))
@@ -545,7 +545,7 @@ struct WeekdayRuleEditor: View {
         Button {
             rule = template
         } label: {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(template.label)
                     .foregroundStyle(Color.primary)
                 Text(AutopilotFormat.ruleSummary(template, vocabulary: vocabulary))
@@ -570,7 +570,7 @@ private struct NoveltySectionForm: View {
                     settings.novelty = AutopilotNovelty(rawValue: option.value)
                 } label: {
                     HStack {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: DS.Space.hairline) {
                             Text(option.label)
                             if let description = option.description {
                                 Text(description)

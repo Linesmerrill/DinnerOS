@@ -117,7 +117,7 @@ struct OrderConfirmationSheet: View {
     }
 
     private var actions: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: DS.Space.xxs) {
             Button {
                 if let request = draft.confirmRequest {
                     confirm(request)
@@ -130,10 +130,8 @@ struct OrderConfirmationSheet: View {
                         Text(draft.confirmTitle)
                     }
                 }
-                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.dsPrimary(fullWidth: true))
             .disabled(draft.confirmRequest == nil)
             .accessibilityHint(
                 draft.isAllSelected
@@ -143,12 +141,12 @@ struct OrderConfirmationSheet: View {
             Button("Not Yet") {
                 shopping.dismissConfirmation()
             }
-            .controlSize(.large)
+            .buttonStyle(.dsTextLink)
             .disabled(isSaving)
         }
         .padding(.horizontal)
-        .padding(.top, 12)
-        .padding(.bottom, 4)
+        .padding(.top, DS.Space.m)
+        .padding(.bottom, DS.Space.xxs)
         .background(.bar)
     }
 
@@ -177,11 +175,11 @@ private struct MealHeader: View {
     let isOpen: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
-            RecipePhoto(url: meal.imageURL, aspectRatio: 1, pointWidth: 48, cornerRadius: 10)
+        HStack(spacing: DS.Space.m) {
+            RecipePhoto(url: meal.imageURL, aspectRatio: 1, pointWidth: 48, cornerRadius: DS.Radius.medium)
                 .frame(width: 48, height: 48)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(meal.name)
                     .font(.headline)
                 if let day = meal.day {
@@ -190,7 +188,7 @@ private struct MealHeader: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: DS.Space.s)
             if isComplete {
                 Label("\(checked) of \(meal.lines.count) ordered", systemImage: "checkmark.circle.fill")
                     .labelStyle(.titleAndIcon)
@@ -224,13 +222,13 @@ private struct OrderLineRow: View {
     let toggle: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
             Button(action: toggle) {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
                     Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                         .font(.title3)
                         .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: DS.Space.hairline) {
                         Text(line.name)
                         Text(line.product.displayName)
                             .font(.subheadline)

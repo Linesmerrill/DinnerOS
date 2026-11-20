@@ -29,7 +29,7 @@ struct RatingFeedbackSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: DS.Space.xl) {
                     header
                     if let questions, let feedback {
                         content(questions, feedback)
@@ -43,7 +43,7 @@ struct RatingFeedbackSheet: View {
                         FormErrorLabel(message: saveError)
                     }
                 }
-                .padding(20)
+                .padding(DS.Space.xl)
             }
             .scrollDismissesKeyboard(.interactively)
             .navigationBarTitleDisplayMode(.inline)
@@ -62,7 +62,7 @@ struct RatingFeedbackSheet: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
             Text(
                 score == 5
                     ? String(localized: "Anything you'd change?")
@@ -80,7 +80,7 @@ struct RatingFeedbackSheet: View {
 
     @ViewBuilder
     private func content(_ questions: RatingQuestions, _ feedback: RatingFeedback) -> some View {
-        FlowLayout(spacing: 8) {
+        FlowLayout(spacing: DS.Space.s) {
             ForEach(questions.categories) { category in
                 let count = feedback.count(in: category, ingredients: questions.ingredients)
                 Button {
@@ -91,8 +91,8 @@ struct RatingFeedbackSheet: View {
                 } label: {
                     Label(count > 0 ? "\(category.title) (\(count))" : category.title, systemImage: category.symbol)
                         .font(.subheadline.weight(.medium))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, DS.Space.m)
+                        .padding(.vertical, DS.Space.s)
                         .background(
                             openCategory == category.code || count > 0
                                 ? AnyShapeStyle(.tint.opacity(0.15)) : AnyShapeStyle(.quaternary), in: .capsule
@@ -104,11 +104,11 @@ struct RatingFeedbackSheet: View {
             }
         }
         if let category = questions.categories.first(where: { $0.code == openCategory }) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
                 if category.isIngredients {
                     ingredients(questions)
                 } else {
-                    FlowLayout(spacing: 8) {
+                    FlowLayout(spacing: DS.Space.s) {
                         ForEach(category.options) { option in
                             let picked = feedback.isPicked(option.tag)
                             Button {
@@ -122,7 +122,7 @@ struct RatingFeedbackSheet: View {
                     }
                 }
             }
-            .padding(.leading, 12)
+            .padding(.leading, DS.Space.m)
             .overlay(alignment: .leading) {
                 Capsule().fill(.tint.opacity(0.5)).frame(width: 2)
             }
@@ -141,7 +141,7 @@ struct RatingFeedbackSheet: View {
         Text("Which one?")
             .font(.subheadline)
             .foregroundStyle(.secondary)
-        FlowLayout(spacing: 8) {
+        FlowLayout(spacing: DS.Space.s) {
             ForEach(questions.ingredients) { ingredient in
                 let answered = feedback?.misses(for: ingredient).isEmpty == false
                 Button {
@@ -164,7 +164,7 @@ struct RatingFeedbackSheet: View {
         Text("What was wrong with the \(ingredient.name)? Pick all that fit.")
             .font(.subheadline)
             .foregroundStyle(.secondary)
-        FlowLayout(spacing: 8) {
+        FlowLayout(spacing: DS.Space.s) {
             ForEach(questions.reasons) { reason in
                 Button {
                     feedback?.toggleReason(reason.reason, for: ingredient)
@@ -184,7 +184,7 @@ struct RatingFeedbackSheet: View {
             Text("Was it one part?")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: DS.Space.s) {
                 ForEach(ingredient.parts, id: \.self) { item in
                     Button {
                         feedback?.setPart(item, for: ingredient)
@@ -224,7 +224,7 @@ struct RatingFeedbackSheet: View {
             let reasonTitles = Dictionary(
                 questions.reasons.map { ($0.reason, $0.title) }, uniquingKeysWith: { a, _ in a })
             let answered = questions.ingredients.filter { !feedback.misses(for: $0).isEmpty }
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
                 Text("You said")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -248,8 +248,8 @@ struct RatingFeedbackSheet: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 12))
+            .padding(DS.Space.m)
+            .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: DS.Radius.medium))
         }
     }
 

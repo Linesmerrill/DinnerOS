@@ -66,7 +66,7 @@ struct ProposalReviewView: View {
                 }
             } actions: {
                 Button("Done") { dismiss() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.dsPrimary(.small))
             }
         }
     }
@@ -142,7 +142,7 @@ struct ProposalReviewView: View {
 
     private var acceptBar: some View {
         let count = autopilot.includedSlots.count
-        return VStack(spacing: 6) {
+        return VStack(spacing: DS.Space.xs) {
             Button(action: accept) {
                 Group {
                     if autopilot.isSaving && autopilot.swappingSlotIDs.isEmpty {
@@ -153,13 +153,11 @@ struct ProposalReviewView: View {
                         Text(count == 1 ? "Add 1 Meal to Week" : "Add \(count) Meals to Week")
                     }
                 }
-                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.dsPrimary(fullWidth: true))
             .disabled(count == 0 || autopilot.isSaving)
         }
-        .padding()
+        .padding(DS.Space.l)
         .background(.bar)
     }
 
@@ -223,7 +221,7 @@ struct ProposalSlotRow: View {
     @ScaledMetric(relativeTo: .body) private var thumbnailWidth = 64.0
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: DS.Space.m) {
             if canEdit {
                 Button {
                     setIncluded(!isIncluded)
@@ -238,17 +236,17 @@ struct ProposalSlotRow: View {
             if !dynamicTypeSize.isAccessibilitySize {
                 RecipeImage(url: slot.recipe.imageURL, title: slot.recipe.name)
                     .frame(width: min(thumbnailWidth, 96))
-                    .clipShape(.rect(cornerRadius: 6))
+                    .clipShape(.rect(cornerRadius: DS.Radius.small))
             }
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
                 Text(AutopilotFormat.dayTitle(date: slot.date, day: slot.day))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.secondary)
                 Text(slot.recipe.name)
                     .font(.headline)
                 ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 6) { facts }
-                    VStack(alignment: .leading, spacing: 4) { facts }
+                    HStack(spacing: DS.Space.xs) { facts }
+                    VStack(alignment: .leading, spacing: DS.Space.xxs) { facts }
                 }
                 if !slot.reasonText.isEmpty {
                     Text(slot.reasonText)
@@ -261,12 +259,12 @@ struct ProposalSlotRow: View {
                 }
                 // Add-ons are secondary to the meal: small toggles under it, never a row.
                 if canEdit, !slot.pairings.isEmpty {
-                    ChipFlowLayout(spacing: 6) {
+                    ChipFlowLayout(spacing: DS.Space.xs) {
                         ForEach(slot.pairings) { pairing in
                             pairingToggle(pairing)
                         }
                     }
-                    .padding(.top, 2)
+                    .padding(.top, DS.Space.hairline)
                     .accessibilityHidden(true)
                 }
                 if canEdit {
@@ -278,16 +276,15 @@ struct ProposalSlotRow: View {
                             Label("Swap", systemImage: "arrow.triangle.2.circlepath")
                         }
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .buttonStyle(.dsSecondary(.small))
                     .disabled(isBusy)
-                    .padding(.top, 2)
+                    .padding(.top, DS.Space.hairline)
                     .accessibilityHidden(true)
                 }
             }
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
         .opacity(isIncluded ? 1 : 0.55)
         // A concrete color: hierarchical styles inside list rows with buttons resolve to the tint.
         .foregroundStyle(Color.primary)
@@ -352,14 +349,14 @@ private struct UnfilledDayRow: View {
     let unfilled: AutopilotUnfilled
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
             Text(AutopilotFormat.dayTitle(date: unfilled.date, day: unfilled.day))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
             Label(unfilled.text, systemImage: "moon.zzz")
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
         .accessibilityElement(children: .combine)
     }
 }

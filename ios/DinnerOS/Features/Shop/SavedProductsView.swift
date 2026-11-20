@@ -49,7 +49,7 @@ struct SavedProductsView: View {
                 Button("Try Again") {
                     Task { await shopping.loadPreferences() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
         case .loaded:
             if shopping.preferences.isEmpty {
@@ -110,7 +110,7 @@ struct SavedProductsView: View {
                         Text("Ready")
                     }
                 } footer: {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: DS.Space.xxs) {
                         if shopping.canEdit {
                             Text("Tap a product to change it, or swipe to remove it.")
                         }
@@ -169,7 +169,7 @@ private struct SavedProductRow: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(preference.ingredientName)
                 Text(preference.displayName)
                     .font(.subheadline)

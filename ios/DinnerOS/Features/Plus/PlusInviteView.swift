@@ -52,9 +52,9 @@ struct PlusInviteView: View {
             }
             Section {
                 if let referral = plus.referral {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: DS.Space.m) {
                         Text(referral.explainer)
-                        HStack(spacing: 12) {
+                        HStack(spacing: DS.Space.m) {
                             Text(Self.spaced(referral.code))
                                 .font(.title.monospaced().bold())
                                 .textSelection(.enabled)
@@ -63,7 +63,7 @@ struct PlusInviteView: View {
                             CopyCodeButton(code: referral.code)
                         }
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, DS.Space.xxs)
                     if let url = referral.shareURL, let message = referral.shareMessage {
                         // The link goes as a link, so the share sheet and Messages show its card.
                         ShareLink(
@@ -209,7 +209,7 @@ struct CopyCodeButton: View {
                 }
             }
             .font(.title2)
-            .frame(minWidth: 44, minHeight: 44)
+            .frame(minWidth: DS.Size.tapTarget, minHeight: DS.Size.tapTarget)
             .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)

@@ -40,7 +40,7 @@ struct PrepSessionSheet: View {
         if let card {
             let presentation = PrepCardPresentation(card: card, chosenBags: bags)
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: DS.Space.l) {
                     if let errorMessage {
                         FormErrorLabel(message: errorMessage)
                     }
@@ -49,9 +49,9 @@ struct PrepSessionSheet: View {
                         setBags: { bags = $0 },
                         plan: { suggestion in Task { await plan(suggestion, on: card) } })
                 }
-                .padding()
+                .padding(DS.Space.l)
             }
-            .background(Color(.systemGroupedBackground))
+            .background(DS.Colors.groupedBackground)
             .safeAreaInset(edge: .top, spacing: 0) { progress }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if canEdit {
@@ -67,7 +67,7 @@ struct PrepSessionSheet: View {
     }
 
     private var progress: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: DS.Space.xxs) {
             Text("Item \(index + 1) of \(cards.count)")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
@@ -75,7 +75,7 @@ struct PrepSessionSheet: View {
                 .progressViewStyle(.linear)
         }
         .padding(.horizontal)
-        .padding(.bottom, 8)
+        .padding(.bottom, DS.Space.s)
         .background(.bar)
         .accessibilityElement(children: .combine)
     }
@@ -94,10 +94,10 @@ struct PrepSessionSheet: View {
         } actions: {
             if let session, session.skipped > 0 {
                 Button("Go Back to the Skipped Ones") { index = firstSkipped(in: session) ?? 0 }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.dsSecondary(.small))
             }
             Button("Close") { dismiss() }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
         }
     }
 
@@ -173,7 +173,7 @@ struct PrepCardContent: View {
     private var card: PrepCard { presentation.card }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: DS.Space.l) {
             header
             PrepThisWeekCard(presentation: presentation)
             if presentation.hasBags {
@@ -206,7 +206,7 @@ struct PrepCardContent: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DS.Space.hairline) {
             Text(card.name)
                 .font(.title2.weight(.semibold))
             if let pack = presentation.packText {
@@ -218,7 +218,7 @@ struct PrepCardContent: View {
                 Label("Already in the freezer", systemImage: "snowflake")
                     .font(.footnote)
                     .foregroundStyle(PrepStyle.ice)
-                    .padding(.top, 4)
+                    .padding(.top, DS.Space.xxs)
             }
         }
         .accessibilityElement(children: .combine)
@@ -236,13 +236,13 @@ private struct PrepThisWeekCard: View {
     var body: some View {
         let layout =
             dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: 16))
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.m))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: DS.Space.l))
         layout {
             PrepIngredientTile(
                 url: presentation.card.imageURL, category: presentation.card.category,
                 size: min(photoSize, 140))
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text("This week")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(PrepStyle.week)
@@ -258,9 +258,9 @@ private struct PrepThisWeekCard: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(DS.Space.l)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground), in: PrepStyle.cardShape)
+        .background(DS.Colors.groupedSurface, in: PrepStyle.cardShape)
         .overlay(PrepStyle.cardShape.strokeBorder(PrepStyle.week.opacity(0.55), lineWidth: 1.5))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(presentation.keepAccessibilityLabel))
@@ -278,16 +278,16 @@ private struct PrepFreezerBags: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
             controls
             if dynamicTypeSize.isAccessibilitySize {
                 // Large text: one bag per line, full width, so the readout never truncates.
-                VStack(alignment: .leading, spacing: 10) { bagCards }
+                VStack(alignment: .leading, spacing: DS.Space.sm) { bagCards }
             } else {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal) {
-                        HStack(spacing: 10) { bagCards }
-                            .padding(.vertical, 2)
+                        HStack(spacing: DS.Space.sm) { bagCards }
+                            .padding(.vertical, DS.Space.hairline)
                     }
                     .scrollIndicators(.hidden)
                     .onChange(of: presentation.bags) { _, newValue in
@@ -314,11 +314,11 @@ private struct PrepFreezerBags: View {
     }
 
     private var controls: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Space.m) {
             Label("Freezer bags", systemImage: "snowflake")
                 .font(.headline)
                 .foregroundStyle(PrepStyle.ice)
-            Spacer(minLength: 8)
+            Spacer(minLength: DS.Space.s)
             if canEdit, presentation.bagRange.upperBound > 1 {
                 Button {
                     change(to: presentation.bags - 1)
@@ -370,7 +370,7 @@ private struct PrepBagCard: View {
         let layout =
             wide
             ? AnyLayout(HStackLayout(alignment: .center, spacing: 18))
-            : AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.s))
         layout {
             PrepIngredientTile(
                 url: presentation.card.imageURL, category: presentation.card.category, size: min(photoSize, 96)
@@ -379,11 +379,11 @@ private struct PrepBagCard: View {
                 Image(systemName: "snowflake")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(.white)
-                    .padding(4)
+                    .padding(DS.Space.xxs)
                     .background(PrepStyle.ice, in: .circle)
                     .offset(x: 4, y: -4)
             }
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(presentation.bagText)
                     .font(PrepStyle.readout(.title))
                     .foregroundStyle(.primary)
@@ -395,11 +395,11 @@ private struct PrepBagCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(12)
+        .padding(DS.Space.m)
         .frame(width: wide ? nil : 136, alignment: .leading)
         .frame(maxWidth: wide ? .infinity : nil, alignment: .leading)
         .background {
-            PrepStyle.cardShape.fill(Color(.secondarySystemGroupedBackground))
+            PrepStyle.cardShape.fill(DS.Colors.groupedSurface)
             PrepStyle.cardShape.fill(frost)
         }
         .overlay(PrepStyle.cardShape.strokeBorder(PrepStyle.ice.opacity(0.35), lineWidth: 1))
@@ -422,21 +422,20 @@ private struct PrepActionBar: View {
     let skip: () -> Void
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: DS.Space.xs) {
             Button(action: finish) {
                 Label(presentation.buttonTitle, systemImage: presentation.hasBags ? "snowflake" : "checkmark")
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.dsPrimary(fullWidth: true))
             // The freezer's color when the button freezes something; the app's otherwise.
             .tint(presentation.hasBags ? PrepStyle.ice : PrepStyle.week)
             .disabled(isBusy)
             Button("Skip This One", action: skip)
+                .buttonStyle(.dsTextLink)
                 .disabled(isBusy)
         }
         .padding(.horizontal)
-        .padding(.vertical, 10)
+        .padding(.vertical, DS.Space.sm)
         .background(.bar)
     }
 }
@@ -447,7 +446,7 @@ private struct PrepSuggestions: View {
     let plan: (PrepSuggestion) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
             Text("Or cook it again this week")
                 .font(.headline)
             VStack(spacing: 0) {
@@ -456,16 +455,16 @@ private struct PrepSuggestions: View {
                         plan(suggestion)
                     } label: {
                         PrepSuggestionLabel(suggestion: suggestion)
-                            .padding(.vertical, 10)
-                            .padding(.horizontal, 14)
+                            .padding(.vertical, DS.Space.sm)
+                            .padding(.horizontal, DS.Space.ml)
                     }
                     .disabled(isDisabled)
                     if suggestion.id != suggestions.last?.id {
-                        Divider().padding(.leading, 14)
+                        Divider().padding(.leading, DS.Space.ml)
                     }
                 }
             }
-            .background(Color(.secondarySystemGroupedBackground), in: PrepStyle.cardShape)
+            .background(DS.Colors.groupedSurface, in: PrepStyle.cardShape)
         }
     }
 }
@@ -475,7 +474,7 @@ private struct PrepSuggestionLabel: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(suggestion.recipeName)
                     .foregroundStyle(.tint)
                 if let detail {
@@ -515,7 +514,7 @@ enum PrepStyle {
     /// The app's green, named explicitly: `Color.accentColor` follows whatever tint a host
     /// view sets, and "this week" must never drift toward the freezer's blue.
     static let week = Color("AccentColor")
-    static let cardShape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+    static let cardShape = RoundedRectangle(cornerRadius: DS.Radius.large, style: .continuous)
 
     /// A kitchen-scale readout: rounded, heavy, digits that don't shift as the count changes.
     static func readout(_ style: Font.TextStyle) -> Font {
@@ -534,7 +533,7 @@ struct PrepIngredientTile: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: size * 0.2, style: .continuous)
-            .fill(Color(.tertiarySystemFill))
+            .fill(DS.Colors.subtleFill)
             .frame(width: size, height: size)
             .overlay {
                 CachedImage(key: ImageKey(url: url, pointWidth: size, scale: displayScale)) {
@@ -575,22 +574,22 @@ struct PrepBagLabel: View {
     let lines: [String]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
             Label("Write on each bag", systemImage: "pencil.and.scribble")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
                     Text(line)
                         .font(index == 0 ? .body.weight(.semibold) : .subheadline)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, DS.Space.ml)
+            .padding(.vertical, DS.Space.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(PrepStyle.ice.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+            .background(PrepStyle.ice.opacity(0.08), in: RoundedRectangle(cornerRadius: DS.Radius.small))
             .overlay(
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: DS.Radius.small)
                     .strokeBorder(PrepStyle.ice.opacity(0.55), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
             )
         }
@@ -625,15 +624,15 @@ struct PrepSessionBanner: View {
     /// Several things to put away: a row for each, so the member sees which at a glance.
     private var itemList: some View {
         Section {
-            HStack(spacing: 12) {
+            HStack(spacing: DS.Space.m) {
                 Text(presentation.countTitle)
                     .font(.headline)
                 Spacer(minLength: 0)
                 Button("Start", action: open)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.dsPrimary(.small))
                     .accessibilityHint(Text("Opens the checklist for putting the groceries away"))
             }
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: DS.Space.sm) {
                 ForEach(presentation.rows, id: \.card.id) { row in
                     itemRow(row, trailing: row.glanceText, isFreezer: row.hasBags)
                 }
@@ -652,7 +651,7 @@ struct PrepSessionBanner: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, DS.Space.xxs)
             .contentShape(Rectangle())
             .onTapGesture(perform: open)
             .accessibilityElement(children: .ignore)
@@ -663,12 +662,12 @@ struct PrepSessionBanner: View {
     }
 
     private func itemRow(_ row: PrepCardPresentation, trailing: String, isFreezer: Bool) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DS.Space.sm) {
             PrepIngredientTile(url: row.card.imageURL, category: row.card.category, size: min(rowPhotoSize, 52))
             Text(row.card.name)
                 .font(.subheadline)
                 .lineLimit(2)
-            Spacer(minLength: 8)
+            Spacer(minLength: DS.Space.s)
             Text(trailing)
                 .font(PrepStyle.readout(.subheadline))
                 .foregroundStyle(isFreezer ? PrepStyle.ice : .secondary)
@@ -680,10 +679,10 @@ struct PrepSessionBanner: View {
         Section {
             let layout =
                 dynamicTypeSize.isAccessibilitySize
-                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
-                : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.sm))
+                : AnyLayout(HStackLayout(alignment: .center, spacing: DS.Space.m))
             layout {
-                HStack(spacing: 12) {
+                HStack(spacing: DS.Space.m) {
                     PrepIngredientTile(
                         url: presentation.card?.imageURL, category: presentation.card?.category ?? "",
                         size: min(photoSize, 72))
@@ -693,10 +692,10 @@ struct PrepSessionBanner: View {
                 .accessibilityLabel(Text(presentation.accessibilityLabel))
                 Spacer(minLength: 0)
                 Button("Start", action: open)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.dsPrimary(.small))
                     .accessibilityHint(Text("Opens the checklist for putting the groceries away"))
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, DS.Space.hairline)
         }
     }
 
@@ -787,9 +786,9 @@ private struct PrepCardPreview: View {
                 PrepCardContent(
                     presentation: presentation, canEdit: true, isBusy: false, setBags: { bags = $0 }, plan: { _ in }
                 )
-                .padding()
+                .padding(DS.Space.l)
             }
-            .background(Color(.systemGroupedBackground))
+            .background(DS.Colors.groupedBackground)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 PrepActionBar(presentation: presentation, isBusy: false, finish: {}, skip: {})
             }

@@ -137,6 +137,7 @@ struct CookingView: View {
                 Text(loadError)
             } actions: {
                 Button("Try Again") { Task { await load() } }
+                    .buttonStyle(.dsTextLink)
             }
         } else {
             ProgressView()
@@ -151,19 +152,19 @@ struct CookingView: View {
         GeometryReader { geometry in
             HStack(spacing: 0) {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: DS.Space.xxl) {
                         CookHeader(dish: dish)
                         CookIngredientList(dish: dish, session: session, layout: layout)
                         CookNotesEditor(recipeID: dish.recipe.id)
                     }
-                    .padding(24)
+                    .padding(DS.Space.xxl)
                 }
                 .frame(width: max(320, geometry.size.width * 0.38))
-                .background(Color(.secondarySystemBackground))
+                .background(DS.Colors.surface)
                 Divider()
                 ScrollView {
                     stepList(dish)
-                        .padding(24)
+                        .padding(DS.Space.xxl)
                 }
                 .contentMargins(.bottom, CGFloat(timers.timers.count) * 72, for: .scrollContent)
                 .overlay(alignment: .bottomTrailing) {
@@ -197,13 +198,13 @@ struct CookingView: View {
                 }
             }
             .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.horizontal, DS.Space.l)
+            .padding(.vertical, DS.Space.s)
             ScrollView {
                 Group {
                     switch tab {
                     case .ingredients:
-                        VStack(alignment: .leading, spacing: 20) {
+                        VStack(alignment: .leading, spacing: DS.Space.xl) {
                             CookHeader(dish: dish)
                             CookIngredientList(dish: dish, session: session, layout: layout)
                         }
@@ -213,7 +214,7 @@ struct CookingView: View {
                         CookNotesEditor(recipeID: dish.recipe.id)
                     }
                 }
-                .padding(16)
+                .padding(DS.Space.l)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 CookTimerDock(timers: timers, stacked: false)
@@ -319,12 +320,13 @@ private struct CookHeader: View {
     let dish: CookDish
 
     var body: some View {
-        HStack(alignment: .center, spacing: 14) {
+        HStack(alignment: .center, spacing: DS.Space.ml) {
             RecipePhoto(
-                url: dish.recipe.imageURL, aspectRatio: 1, pointWidth: 88, cornerRadius: 14, title: dish.recipe.name
+                url: dish.recipe.imageURL, aspectRatio: 1, pointWidth: 88, cornerRadius: DS.Radius.large,
+                title: dish.recipe.name
             )
             .frame(width: 88, height: 88)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
                 if let servings = dish.servings {
                     Text("Serves \(servings)")
                         .font(.headline)
@@ -350,15 +352,15 @@ struct CookIngredientList: View {
     var layout: CookIngredientLayout = .all
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
             Text("Ingredients")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(Color.accentColor)
                 .accessibilityAddTraits(.isHeader)
-                .padding(.bottom, 8)
+                .padding(.bottom, DS.Space.s)
             if let notes = dish.instructions?.saveForLater, !notes.isEmpty {
                 CookSaveForLaterCard(notes: notes)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, DS.Space.s)
             }
             switch layout {
             case .all:
@@ -390,12 +392,12 @@ struct CookIngredientList: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(group.index == 0 ? String(localized: "Have Ready") : String(localized: "Step \(group.index)"))
                 .font(.title3.weight(.bold))
-                .padding(.bottom, 4)
+                .padding(.bottom, DS.Space.xxs)
                 .overlay(alignment: .bottom) {
                     Capsule().fill(Color.accentColor).frame(height: 3).offset(y: 2)
                 }
-                .padding(.top, 16)
-                .padding(.bottom, 6)
+                .padding(.top, DS.Space.l)
+                .padding(.bottom, DS.Space.xs)
                 .accessibilityAddTraits(.isHeader)
             ForEach(group.items) { item in
                 stepItemRow(item)
@@ -405,10 +407,10 @@ struct CookIngredientList: View {
                 Divider().padding(.leading, 52)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.bottom, 4)
+        .padding(.horizontal, DS.Space.s)
+        .padding(.bottom, DS.Space.xxs)
         .background(
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: DS.Radius.large)
                 .fill(isCurrent ? Color.accentColor.opacity(0.10) : Color.clear)
         )
     }
@@ -422,7 +424,7 @@ struct CookIngredientList: View {
         return Button {
             session.toggle(item, recipe: dish.recipe.id)
         } label: {
-            HStack(alignment: .center, spacing: 12) {
+            HStack(alignment: .center, spacing: DS.Space.m) {
                 CookCircle(isChecked: isChecked)
                 Text(item.amountText ?? "")
                     .font(.subheadline)
@@ -430,7 +432,7 @@ struct CookIngredientList: View {
                     .frame(width: amountWidth, alignment: .center)
                     .strikethrough(quiet)
                 VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: DS.Space.xs) {
                         Text(item.name)
                             .font(.body.weight(.semibold))
                             .strikethrough(quiet)
@@ -449,7 +451,7 @@ struct CookIngredientList: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, DS.Space.s)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -469,7 +471,7 @@ struct CookIngredientList: View {
         return Button {
             session.togglePart(index, of: item, recipe: dish.recipe.id)
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: DS.Space.sm) {
                 CookBranch(isLast: isLast)
                     .frame(width: 18)
                 CookCircle(isChecked: isChecked, small: true)
@@ -500,9 +502,9 @@ struct CookIngredientList: View {
         return Button {
             session.toggle(ingredient, recipe: dish.recipe.id)
         } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
                 CookCheckbox(isChecked: isChecked)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     amountAndName(amount: ingredient.amountText, name: ingredient.name)
                         .strikethrough(isChecked || ingredient.isLeftOut)
                         .foregroundStyle(isChecked || ingredient.isLeftOut ? Color.secondary : Color.primary)
@@ -516,7 +518,7 @@ struct CookIngredientList: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, DS.Space.s)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -530,7 +532,7 @@ struct CookIngredientList: View {
         return Button {
             session.toggle(part, of: ingredient, recipe: dish.recipe.id)
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: DS.Space.sm) {
                 CookBranch(isLast: isLast)
                     .frame(width: 18)
                 CookCheckbox(isChecked: isChecked, small: true)
@@ -540,7 +542,7 @@ struct CookIngredientList: View {
                     .foregroundStyle(isChecked ? Color.secondary : Color.primary)
                 Spacer(minLength: 0)
             }
-            .padding(.leading, 12)
+            .padding(.leading, DS.Space.m)
             .frame(minHeight: 34)
             .contentShape(Rectangle())
         }
@@ -555,7 +557,7 @@ struct CookIngredientList: View {
         return Button {
             session.toggle(id: id, recipe: dish.recipe.id)
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: DS.Space.sm) {
                 CookBranch(isLast: isLast)
                     .frame(width: 18)
                 CookCheckbox(isChecked: isChecked, small: true)
@@ -565,7 +567,7 @@ struct CookIngredientList: View {
                     .foregroundStyle(isChecked ? Color.secondary : Color.primary)
                 Spacer(minLength: 0)
             }
-            .padding(.leading, 12)
+            .padding(.leading, DS.Space.m)
             .frame(minHeight: 34)
             .contentShape(Rectangle())
         }
@@ -585,7 +587,7 @@ struct CookSaveForLaterCard: View {
     let notes: [InstructionSaveForLater]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
             Label("Save Some for Later", systemImage: "refrigerator")
                 .font(.headline)
                 .foregroundStyle(Color.orange)
@@ -596,10 +598,10 @@ struct CookSaveForLaterCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(12)
+        .padding(DS.Space.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.orange.opacity(0.12)))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.orange.opacity(0.35)))
+        .background(RoundedRectangle(cornerRadius: DS.Radius.medium).fill(Color.orange.opacity(0.12)))
+        .overlay(RoundedRectangle(cornerRadius: DS.Radius.medium).strokeBorder(Color.orange.opacity(0.35)))
         .accessibilityElement(children: .combine)
     }
 }
@@ -736,7 +738,7 @@ struct CookStepList: View {
 
     var body: some View {
         let current = session.current(recipe: dish.recipe.id)
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
             Text("Steps")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(Color.accentColor)
@@ -744,7 +746,7 @@ struct CookStepList: View {
             if let steps = dish.instructions?.steps, !steps.isEmpty {
                 ForEach(steps) { step in
                     stepCard(index: step.index, imageURL: step.imageURL, current: current) {
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: DS.Space.sm) {
                             InstructionStepText(step: step, showsTimers: true)
                                 .font(.title3)
                             // How to make a specialty, or what to use instead.
@@ -773,24 +775,24 @@ struct CookStepList: View {
         index: Int, imageURL: URL?, current: Int?, @ViewBuilder text: () -> some View
     ) -> some View {
         let isCurrent = current == index
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: DS.Space.s) {
             Text("Step \(index)")
                 .font(.headline)
                 .foregroundStyle(isCurrent ? Color.accentColor : Color.secondary)
             text()
             if let imageURL {
-                RecipePhoto(url: imageURL, aspectRatio: 16.0 / 9.0, pointWidth: 520, cornerRadius: 12)
+                RecipePhoto(url: imageURL, aspectRatio: 16.0 / 9.0, pointWidth: 520, cornerRadius: DS.Radius.medium)
                     .frame(maxWidth: 520)
             }
         }
-        .padding(14)
+        .padding(DS.Space.ml)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: DS.Radius.large)
                 .fill(isCurrent ? Color.accentColor.opacity(0.12) : Color.clear)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: DS.Radius.large)
                 .strokeBorder(isCurrent ? Color.accentColor : Color.clear, lineWidth: 2)
         )
         .opacity(current == nil || isCurrent ? 1 : 0.45)
@@ -832,7 +834,7 @@ struct CookNotesEditor: View {
     @State private var failed = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
             Text("My Notes")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(Color.accentColor)
@@ -842,7 +844,7 @@ struct CookNotesEditor: View {
                     Text("What you changed, or what to try next time")
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 5)
-                        .padding(.vertical, 8)
+                        .padding(.vertical, DS.Space.s)
                         .accessibilityHidden(true)
                 }
                 TextEditor(text: $text)
@@ -851,8 +853,8 @@ struct CookNotesEditor: View {
                     .disabled(!loaded)
                     .accessibilityLabel("My notes")
             }
-            .padding(8)
-            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+            .padding(DS.Space.s)
+            .background(DS.Colors.subtleFill, in: RoundedRectangle(cornerRadius: DS.Radius.medium))
             Text(failed ? "Couldn't save your note. It'll try again as you type." : "Only you see this.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -895,10 +897,12 @@ private struct CookSwitcher: View {
                     Button {
                         pick(meal)
                     } label: {
-                        HStack(spacing: 12) {
-                            RecipePhoto(url: meal.imageURL, aspectRatio: 1, pointWidth: 52, cornerRadius: 8)
-                                .frame(width: 52, height: 52)
-                            VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: DS.Space.m) {
+                            RecipePhoto(
+                                url: meal.imageURL, aspectRatio: 1, pointWidth: 52, cornerRadius: DS.Radius.small
+                            )
+                            .frame(width: 52, height: 52)
+                            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                                 Text(meal.name)
                                     .foregroundStyle(Color.primary)
                                     .lineLimit(2)

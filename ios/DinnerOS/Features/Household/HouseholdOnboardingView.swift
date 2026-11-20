@@ -71,7 +71,7 @@ struct HouseholdOnboardingView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: DS.Space.m) {
             Image(systemName: "person.2.circle.fill")
                 .font(.system(size: markSize))
                 .foregroundStyle(.tint)
@@ -87,12 +87,12 @@ struct HouseholdOnboardingView: View {
         }
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+        .padding(.vertical, DS.Space.s)
     }
 
     private func option(_ title: LocalizedStringKey, detail: LocalizedStringKey, systemImage: String) -> some View {
         Label {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(title)
                     .font(.headline)
                 Text(detail)
@@ -103,7 +103,7 @@ struct HouseholdOnboardingView: View {
             Image(systemName: systemImage)
                 .foregroundStyle(.tint)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, DS.Space.xs)
     }
 }
 

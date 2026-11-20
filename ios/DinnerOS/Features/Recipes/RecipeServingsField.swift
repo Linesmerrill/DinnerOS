@@ -6,7 +6,7 @@ struct RecipeServingsField: View {
     @Binding var servings: Int
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Space.m) {
             Text("Serves")
             Spacer(minLength: 8)
             TextField("Not set", text: text)
@@ -14,7 +14,7 @@ struct RecipeServingsField: View {
                 .multilineTextAlignment(.center)
                 .font(.body.monospacedDigit())
                 .frame(width: 72, height: 40)
-                .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: 8))
+                .background(DS.Colors.subtleFill, in: .rect(cornerRadius: DS.Radius.small))
                 .accessibilityLabel("Servings")
             Stepper("Servings", value: $servings, in: RecipeServings.range)
                 .labelsHidden()

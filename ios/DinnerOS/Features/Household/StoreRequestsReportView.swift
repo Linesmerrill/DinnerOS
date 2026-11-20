@@ -49,7 +49,7 @@ private struct StoreTallyRow: View {
     let tally: StoreRequestTally
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
             HStack(alignment: .firstTextBaseline) {
                 Text(tally.name)
                     .font(.headline)
@@ -59,7 +59,7 @@ private struct StoreTallyRow: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            HStack(spacing: 6) {
+            HStack(spacing: DS.Space.xs) {
                 if tally.custom {
                     tag("Typed, not matched", color: .orange)
                 } else if tally.status == .researched {
@@ -91,14 +91,14 @@ private struct StoreTallyRow: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DS.Space.hairline)
         .accessibilityElement(children: .combine)
     }
 
     private func tag(_ text: LocalizedStringKey, color: Color) -> some View {
         Text(text)
             .font(.caption.weight(.semibold))
-            .padding(.horizontal, 8)
+            .padding(.horizontal, DS.Space.s)
             .padding(.vertical, 3)
             .foregroundStyle(color)
             .background(color.opacity(0.15), in: .capsule)

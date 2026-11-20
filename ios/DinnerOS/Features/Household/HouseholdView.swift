@@ -306,7 +306,7 @@ struct HouseholdView: View {
                     Task { await households.selectHousehold(id: item.id) }
                 } label: {
                     HStack {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: DS.Space.hairline) {
                             Text(item.household.name)
                                 .foregroundStyle(.primary)
                             Text(item.role.displayName)
@@ -353,7 +353,7 @@ struct HouseholdView: View {
             }
             ForEach(households.invitations) { invitation in
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: DS.Space.hairline) {
                         Text(invitation.email)
                         Text(
                             "\(invitation.role.displayName) · Expires \(invitation.expiresAt.formatted(date: .abbreviated, time: .omitted))"
@@ -473,7 +473,7 @@ struct HouseholdView: View {
                 .accessibilityElement(children: .combine)
             }
             if let accountError {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: DS.Space.s) {
                     Label(accountError, systemImage: "exclamationmark.triangle.fill")
                         .symbolRenderingMode(.multicolor)
                     Button("Try Again") {
@@ -582,12 +582,12 @@ private struct HouseholdMemberRow: View {
     let onRemove: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Space.m) {
             Image(systemName: member.role == .admin ? "person.crop.circle.badge.checkmark" : "person.crop.circle")
                 .font(.title2)
                 .foregroundStyle(.tint)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(isCurrentUser ? "\(member.name) (You)" : member.name)
                 Text(member.role.displayName)
                     .font(.subheadline)
@@ -689,7 +689,7 @@ private struct HouseholdHeaderCard: View {
     let plusLine: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
             Text(detail.household.name)
                 .font(.title.bold())
             if let members = detail.members, !members.isEmpty {
@@ -700,12 +700,12 @@ private struct HouseholdHeaderCard: View {
                             .foregroundStyle(.white)
                             .frame(width: 36, height: 36)
                             .background(Color.accentColor, in: .circle)
-                            .overlay(Circle().stroke(Color(.systemGroupedBackground), lineWidth: 2))
+                            .overlay(Circle().stroke(DS.Colors.groupedBackground, lineWidth: 2))
                     }
                     if members.count > 6 {
                         Text("+\(members.count - 6)")
                             .font(.footnote.bold())
-                            .padding(.leading, 14)
+                            .padding(.leading, DS.Space.ml)
                     }
                 }
                 .accessibilityElement(children: .ignore)
@@ -718,7 +718,7 @@ private struct HouseholdHeaderCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 8)
+        .padding(.vertical, DS.Space.s)
     }
 
     static func initials(_ name: String) -> String {

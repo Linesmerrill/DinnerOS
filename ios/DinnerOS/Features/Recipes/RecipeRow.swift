@@ -10,13 +10,13 @@ struct RecipeRow: View {
     var body: some View {
         let layout =
             dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-            : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.s))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: DS.Space.m))
         layout {
             RecipeImage(url: summary.imageURL, title: summary.name)
                 .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : min(thumbnailWidth, 140))
-                .clipShape(.rect(cornerRadius: 8))
-            VStack(alignment: .leading, spacing: 4) {
+                .clipShape(.rect(cornerRadius: DS.Radius.small))
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
                 Text(summary.name)
                     .font(.headline)
                 if let headline = summary.headline, !headline.isEmpty {
@@ -25,7 +25,7 @@ struct RecipeRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: DS.Space.xs) {
                     if let average = summary.householdRating.average, summary.householdRating.count > 0 {
                         Text("\(Image(systemName: "star.fill")) \(RatingFormat.average(average))")
                             .font(.caption.weight(.semibold))
@@ -38,7 +38,7 @@ struct RecipeRow: View {
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
         .accessibilityElement(children: .combine)
     }
 

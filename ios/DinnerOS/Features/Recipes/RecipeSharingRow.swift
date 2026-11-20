@@ -16,7 +16,7 @@ struct RecipeSharingRow: View {
     private var shown: Bool { isShared ?? recipe.sharedToCatalog }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
             Toggle(isOn: Binding(get: { shown }, set: { save($0) })) {
                 Label("Share With Other Households", systemImage: "person.2")
             }
@@ -34,8 +34,8 @@ struct RecipeSharingRow: View {
                     .foregroundStyle(.red)
             }
         }
-        .padding(14)
-        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 14))
+        .padding(DS.Space.ml)
+        .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
     }
 
     private func save(_ value: Bool) {

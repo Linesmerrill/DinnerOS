@@ -28,22 +28,22 @@ struct AllMealsSection: View {
     private var canEditRecipes: Bool { households.access?.can(.recipesEdit) == true }
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
+        LazyVStack(alignment: .leading, spacing: DS.Space.xl, pinnedViews: [.sectionHeaders]) {
             Section {
                 content
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, DS.Space.l)
             } header: {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: DS.Space.s) {
                     if let title {
                         Text(title)
                             .font(.title3.bold())
                             .accessibilityAddTraits(.isHeader)
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, DS.Space.l)
                     }
                     MenuChipBar(
                         list: list, options: options, isSearching: $isSearching, searchText: $searchText)
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, DS.Space.s)
                 .background(.bar)
                 .overlay(alignment: .bottom) { Divider() }
             }
@@ -69,11 +69,11 @@ struct AllMealsSection: View {
     private var content: some View {
         switch list.phase {
         case .idle, .loading:
-            VStack(spacing: 20) {
+            VStack(spacing: DS.Space.xl) {
                 ForEach(0..<3, id: \.self) { _ in
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: DS.Space.s) {
                         RecipePhoto(url: nil, aspectRatio: 16.0 / 10.0, pointWidth: 400)
-                        RoundedRectangle(cornerRadius: 4).fill(.quaternary).frame(height: 14)
+                        RoundedRectangle(cornerRadius: DS.Radius.small).fill(.quaternary).frame(height: 14)
                     }
                 }
             }
@@ -93,7 +93,7 @@ struct AllMealsSection: View {
                 let urls = photoURLs
                 let canAdd = canAdd
                 let width = MenuRecipeCard.fullWidthEstimate
-                LazyVStack(alignment: .leading, spacing: 24) {
+                LazyVStack(alignment: .leading, spacing: DS.Space.xxl) {
                     if let refreshError = list.refreshError {
                         FormErrorLabel(message: refreshError)
                     }
@@ -149,7 +149,7 @@ struct AllMealsSection: View {
                     NavigationLink(value: DiscoverRoute()) {
                         Label(SharedRecipes.title, systemImage: SharedRecipes.systemImage)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.dsPrimary(.small))
                     if let onAddOwnRecipe {
                         Button("Add a Recipe", systemImage: "square.and.pencil", action: onAddOwnRecipe)
                     }
@@ -170,9 +170,9 @@ struct MenuChipBar: View {
     @FocusState private var isSearchFocused: Bool
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: DS.Space.s) {
             ScrollView(.horizontal) {
-                HStack(spacing: 8) {
+                HStack(spacing: DS.Space.s) {
                     searchChip
                     filterChip
                     sortMenu
@@ -189,11 +189,11 @@ struct MenuChipBar: View {
                         apply { $0.cuisine = value }
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, DS.Space.l)
             }
             .scrollIndicators(.hidden)
             if isSearching {
-                HStack(spacing: 8) {
+                HStack(spacing: DS.Space.s) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(Color.secondary)
                     TextField("Search meals", text: $searchText)
@@ -209,10 +209,10 @@ struct MenuChipBar: View {
                         .foregroundStyle(Color.secondary)
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color(.secondarySystemBackground), in: .capsule)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, DS.Space.m)
+                .padding(.vertical, DS.Space.s)
+                .background(DS.Colors.surface, in: .capsule)
+                .padding(.horizontal, DS.Space.l)
             }
         }
         .sheet(isPresented: $isShowingFilters) {
@@ -331,7 +331,7 @@ struct MenuChipBar: View {
     private func chipLabel(
         title: String?, systemImage: String, isSelected: Bool, isTrailingImage: Bool = false
     ) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: DS.Space.xxs) {
             if !isTrailingImage {
                 Image(systemName: systemImage)
             }
@@ -346,10 +346,10 @@ struct MenuChipBar: View {
         }
         .font(.subheadline.weight(.medium))
         .foregroundStyle(isSelected ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.primary))
-        .padding(.horizontal, 12)
+        .padding(.horizontal, DS.Space.m)
         .frame(minHeight: 34)
         .background(
-            isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color(.secondarySystemBackground)), in: .capsule)
+            isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(DS.Colors.surface), in: .capsule)
     }
 }
 
@@ -440,11 +440,11 @@ struct AllMealsView: View {
         ScrollView {
             if let list {
                 AllMealsSection(list: list, title: nil, canAdd: menu.selectedTiming != .past)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, DS.Space.s)
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 40)
+                    .padding(.top, DS.Space.huge)
             }
         }
         .navigationTitle(route.title)

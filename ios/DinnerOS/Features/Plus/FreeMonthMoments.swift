@@ -147,23 +147,23 @@ struct StepDoneCard: View {
         }
         // On a phone the tab bar is at the bottom: stay above it. On an iPad it's at the top.
         .padding(.bottom, sizeClass == .compact ? 72 : 28)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, DS.Space.l)
         .task { await run() }
         .onDisappear { hitArea.frame = .null }
     }
 
     private var card: some View {
-        HStack(alignment: .center, spacing: 14) {
+        HStack(alignment: .center, spacing: DS.Space.ml) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: markSize))
                 .symbolRenderingMode(.palette)
                 .foregroundStyle(.white, .green)
                 .symbolEffect(.bounce, value: shown && !reduceMotion)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
                 Text(moment.title)
                     .font(.headline)
-                HStack(spacing: 8) {
+                HStack(spacing: DS.Space.s) {
                     StepDots(done: moment.done, total: moment.total)
                     Text(moment.countText)
                         .font(.subheadline.weight(.semibold))
@@ -176,11 +176,11 @@ struct StepDoneCard: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(DS.Space.l)
         .frame(maxWidth: 520)
-        .background(Color(.tertiarySystemBackground), in: .rect(cornerRadius: 20))
+        .background(DS.Colors.raisedSurface, in: .rect(cornerRadius: DS.Radius.xLarge))
         .overlay {
-            RoundedRectangle(cornerRadius: 20).strokeBorder(Color.green.opacity(0.35), lineWidth: 1)
+            RoundedRectangle(cornerRadius: DS.Radius.xLarge).strokeBorder(Color.green.opacity(0.35), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.18), radius: 16, y: 6)
         .overlay {
@@ -224,7 +224,7 @@ private struct StepDots: View {
     @ScaledMetric(relativeTo: .subheadline) private var size: CGFloat = 8
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: DS.Space.xxs) {
             ForEach(0..<max(total, 0), id: \.self) { index in
                 Circle()
                     .fill(index < done ? Color.green : Color.secondary.opacity(0.3))
@@ -277,7 +277,7 @@ struct FreeMonthUnlockedCard: View {
                 }
                 .opacity(shown ? 1 : 0)
                 .scaleEffect(shown || reduceMotion ? 1 : 0.85)
-                .padding(24)
+                .padding(DS.Space.xxl)
         }
         .task { await run() }
         .onDisappear { hitArea.frame = .null }
@@ -292,7 +292,7 @@ struct FreeMonthUnlockedCard: View {
     }
 
     private var card: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: DS.Space.ml) {
             Image(systemName: "gift.fill")
                 .font(.system(size: markSize))
                 .foregroundStyle(.tint)
@@ -304,7 +304,7 @@ struct FreeMonthUnlockedCard: View {
                         .offset(x: markSize * 0.18, y: markSize * 0.12)
                 }
                 .symbolEffect(.bounce, value: shown && !reduceMotion)
-                .padding(.bottom, 4)
+                .padding(.bottom, DS.Space.xxs)
                 .accessibilityHidden(true)
             Text(title)
                 .font(.title2.bold())
@@ -318,9 +318,9 @@ struct FreeMonthUnlockedCard: View {
                 if month.isReady {
                     FreeMonthRedeemControls(month: month)
                         .multilineTextAlignment(.leading)
-                        .padding(.top, 4)
+                        .padding(.top, DS.Space.xxs)
                     Button("Not Now", action: dismiss)
-                        .frame(minHeight: 44)
+                        .buttonStyle(.dsTextLink)
                 } else {
                     doneButton
                 }
@@ -336,7 +336,7 @@ struct FreeMonthUnlockedCard: View {
         .padding(28)
         .frame(maxWidth: 420)
         // White in light; a raised gray in dark, so it stands off the app behind it.
-        .background(Color(.tertiarySystemBackground), in: .rect(cornerRadius: 28))
+        .background(DS.Colors.raisedSurface, in: .rect(cornerRadius: 28))
         .shadow(color: .black.opacity(0.25), radius: 28, y: 10)
         .contentShape(.rect)
         .onTapGesture {
@@ -350,12 +350,9 @@ struct FreeMonthUnlockedCard: View {
     private var doneButton: some View {
         Button(action: dismiss) {
             Text("Done")
-                .font(.headline)
-                .frame(maxWidth: .infinity, minHeight: 32)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .padding(.top, 4)
+        .buttonStyle(.dsPrimary(fullWidth: true))
+        .padding(.top, DS.Space.xxs)
     }
 
     private func run() async {

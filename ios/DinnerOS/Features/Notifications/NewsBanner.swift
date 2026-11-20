@@ -9,14 +9,14 @@ struct NewsBanner: View {
     let close: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: DS.Space.m) {
             Button(action: open) {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: DS.Space.m) {
                     Image(systemName: icon)
                         .font(.title3)
                         .foregroundStyle(.tint)
                         .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: DS.Space.hairline) {
                         Text(notification.title)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
@@ -39,9 +39,9 @@ struct NewsBanner: View {
                 .frame(minWidth: 44, minHeight: 44)
                 .contentShape(.rect)
         }
-        .padding(.leading, 14)
-        .padding(.vertical, 6)
-        .background(.regularMaterial, in: .rect(cornerRadius: 18))
+        .padding(.leading, DS.Space.ml)
+        .padding(.vertical, DS.Space.xs)
+        .background(.regularMaterial, in: .rect(cornerRadius: DS.Radius.large))
         .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
         .frame(maxWidth: 560)
         .accessibilityElement(children: .contain)

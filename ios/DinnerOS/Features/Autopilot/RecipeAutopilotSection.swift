@@ -27,7 +27,7 @@ struct RecipeAutopilotSection: View {
     var body: some View {
         DetailSection("Autopilot") {
             if let attributes {
-                HStack(spacing: 8) {
+                HStack(spacing: DS.Space.s) {
                     Label(AutopilotFormat.cookTime(attributes.cookMinutes), systemImage: "clock")
                     TimeBandBadge(band: attributes.timeBand)
                 }
@@ -45,12 +45,12 @@ struct RecipeAutopilotSection: View {
                     FormErrorLabel(message: saveError)
                 }
             } else if let loadError {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: DS.Space.s) {
                     FormErrorLabel(message: loadError)
                     Button("Try Again") {
                         Task { await load() }
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.dsSecondary(.small))
                 }
             } else {
                 ProgressView()
@@ -66,7 +66,7 @@ struct RecipeAutopilotSection: View {
     }
 
     private func methodRow(_ method: AutopilotMethod) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
             HStack {
                 Text("Good for \(method.label)")
                 Spacer()

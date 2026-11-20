@@ -224,14 +224,15 @@ struct DSOutlineButtonStyle: ButtonStyle {
             ?? Palette(fill: .clear, stroke: Color(.separator), text: DS.Colors.accent)
         DSButtonLabel(
             label: configuration.label, size: size, fullWidth: fullWidth, font: font,
-            contentHeight: (size.height * scale).rounded() - 2)
-            .padding(.horizontal, size == .large ? DS.Space.xl : DS.Space.ml)
-            .padding(.vertical, 1)
-            .foregroundStyle(colors.text)
-            .background(colors.fill, in: Capsule())
-            .overlay(Capsule().strokeBorder(colors.stroke, lineWidth: 1))
-            .contentShape(Capsule())
-            .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
+            contentHeight: (size.height * scale).rounded() - 2
+        )
+        .padding(.horizontal, size == .large ? DS.Space.xl : DS.Space.ml)
+        .padding(.vertical, 1)
+        .foregroundStyle(colors.text)
+        .background(colors.fill, in: Capsule())
+        .overlay(Capsule().strokeBorder(colors.stroke, lineWidth: 1))
+        .contentShape(Capsule())
+        .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
     }
 }
 

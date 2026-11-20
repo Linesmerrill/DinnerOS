@@ -61,7 +61,7 @@ struct WeekView: View {
                 Button("Try Again") {
                     Task { await plans.reload() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
         case .loaded:
             if let plan = plans.plan {
@@ -141,7 +141,7 @@ struct WeekView: View {
                     Button("Change This Week") {
                         flow.sheet = .context
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.dsPrimary(.small))
                 }
             }
         } else {
@@ -158,7 +158,7 @@ struct WeekView: View {
                     Button("Add Recipes") {
                         isAddingRecipes = true
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.dsPrimary(.small))
                 }
             }
         }
@@ -292,8 +292,8 @@ struct PlanStatusBadge: View {
     var body: some View {
         Label(status.title, systemImage: status == .draft ? "pencil" : "lock.fill")
             .font(.caption.weight(.semibold))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
+            .padding(.horizontal, DS.Space.s)
+            .padding(.vertical, DS.Space.hairline)
             .foregroundStyle(status == .draft ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
             .background(background, in: .capsule)
             .accessibilityLabel("Status: \(status.title)")
@@ -309,7 +309,7 @@ private struct DayHeader: View {
     let isToday: Bool
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: DS.Space.xs) {
             Text(title)
             if isToday {
                 Text("Today")
@@ -325,7 +325,7 @@ private struct FinalizedNotice: View {
     let reopen: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
             Label("This week is finalized", systemImage: "lock.fill")
                 .font(.headline)
             Text(
@@ -337,10 +337,10 @@ private struct FinalizedNotice: View {
             .foregroundStyle(.secondary)
             if canReopen {
                 Button("Reopen Week", action: reopen)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.dsSecondary(.small))
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
     }
 }
 

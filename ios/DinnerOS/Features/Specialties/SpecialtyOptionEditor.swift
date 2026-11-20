@@ -109,11 +109,11 @@ struct SpecialtyOptionEditor: View {
     private var ingredientsSection: some View {
         Section {
             ForEach($draft.ingredients) { $ingredient in
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: DS.Space.xs) {
                     TextField("Ingredient", text: $ingredient.name, prompt: Text("Ingredient name"))
                     amountFields(label: "Amount", quantity: $ingredient.quantityText, unit: $ingredient.unit)
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, DS.Space.hairline)
             }
             .onDelete { offsets in
                 draft.ingredients.remove(atOffsets: offsets)
@@ -157,7 +157,8 @@ struct SpecialtyOptionEditor: View {
     ) -> some View {
         let layout =
             dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6)) : AnyLayout(HStackLayout(spacing: 8))
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.xs))
+            : AnyLayout(HStackLayout(spacing: DS.Space.s))
         return layout {
             TextField(label, text: quantity, prompt: Text("Amount"))
                 .keyboardType(.numbersAndPunctuation)

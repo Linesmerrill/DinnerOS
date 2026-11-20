@@ -88,8 +88,8 @@ struct MainTabView: View {
                 } close: {
                     Task { await notifications.closeBanner() }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.horizontal, DS.Space.l)
+                .padding(.top, DS.Space.s)
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }

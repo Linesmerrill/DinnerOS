@@ -26,8 +26,8 @@ struct MealRatingRow: View {
     private var score: Int { recipe.myRating?.score ?? 0 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.hairline) {
+            HStack(spacing: DS.Space.s) {
                 Text(score == 0 ? "How was it?" : "Your rating")
                     .font(.subheadline)
                     .foregroundStyle(Color.secondary)
@@ -47,7 +47,7 @@ struct MealRatingRow: View {
                 .font(.footnote.weight(.semibold))
                 .buttonStyle(.plain)
                 .foregroundStyle(.tint)
-                .padding(.top, 2)
+                .padding(.top, DS.Space.hairline)
             }
             if failed {
                 Text("Couldn't save that rating. Tap a star to try again.")
@@ -116,12 +116,12 @@ struct MealRatingRow: View {
 
 #Preview("Unrated") {
     MealRatingRow(recipe: MenuPreviewData.cards[1].recipe)
-        .padding()
+        .padding(DS.Space.l)
         .menuPreviewEnvironment()
 }
 
 #Preview("Rated") {
     MealRatingRow(recipe: RecipePreviewData.summaries[0])
-        .padding()
+        .padding(DS.Space.l)
         .menuPreviewEnvironment()
 }

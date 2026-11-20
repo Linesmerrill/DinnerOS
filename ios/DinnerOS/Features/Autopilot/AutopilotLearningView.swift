@@ -29,7 +29,7 @@ struct AutopilotLearningView: View {
                     Button("Try Again") {
                         Task { await load() }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.dsPrimary(.small))
                 }
             } else {
                 ProgressView("Loading…")
@@ -120,7 +120,7 @@ private struct LearnedAdjustmentRow: View {
 
     var body: some View {
         Label {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(adjustment.label)
                 Text(adjustment.text)
                     .font(.subheadline)

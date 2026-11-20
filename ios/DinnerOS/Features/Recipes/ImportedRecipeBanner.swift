@@ -8,7 +8,7 @@ struct ImportedRecipeBanner: View {
     var showsNote = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
             if showsNote {
                 Label(ImportedRecipeText.note, systemImage: "checklist")
                     .font(.subheadline)
@@ -16,10 +16,8 @@ struct ImportedRecipeBanner: View {
             }
             Link(destination: url) {
                 Label("View Recipe", systemImage: "safari")
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .buttonStyle(.dsSecondary(fullWidth: true))
             .accessibilityHint("Opens the original recipe page for the steps and photos.")
         }
     }
@@ -27,5 +25,5 @@ struct ImportedRecipeBanner: View {
 
 #Preview {
     ImportedRecipeBanner(url: URL(string: "https://example.com/recipe").unsafelyUnwrapped)
-        .padding()
+        .padding(DS.Space.l)
 }

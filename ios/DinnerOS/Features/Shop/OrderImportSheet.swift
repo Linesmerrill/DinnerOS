@@ -46,7 +46,7 @@ struct OrderImportSheet: View {
                 if draft != nil, let errorMessage {
                     FormErrorLabel(message: errorMessage)
                         .font(.footnote)
-                        .padding()
+                        .padding(DS.Space.l)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(.bar)
                 }
@@ -67,7 +67,7 @@ struct OrderImportSheet: View {
                     "In the Walmart app, open the order details or your cart, then take screenshots from the first item to the total."
                 )
                 if isReading {
-                    HStack(spacing: 8) {
+                    HStack(spacing: DS.Space.s) {
                         ProgressView()
                         Text("Reading screenshots…")
                             .foregroundStyle(.secondary)
@@ -199,7 +199,7 @@ private struct OrderImportReview: View {
             if !unpriced.isEmpty {
                 Section {
                     ForEach(unpriced) { priced in
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: DS.Space.hairline) {
                             Text(priced.line.name)
                             Text(priced.line.product.displayName)
                                 .font(.subheadline)
@@ -213,7 +213,7 @@ private struct OrderImportReview: View {
             }
             Section {
             } footer: {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DS.Space.xxs) {
                     if usedModel {
                         Text("Apple Intelligence helped read these screenshots on this iPhone.")
                     }
@@ -252,14 +252,14 @@ private struct OrderItemSourceView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: DS.Space.l) {
                     if let crop {
                         Image(uiImage: crop)
                             .resizable()
                             .scaledToFit()
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.medium))
                             .overlay {
-                                RoundedRectangle(cornerRadius: 10).strokeBorder(.separator)
+                                RoundedRectangle(cornerRadius: DS.Radius.medium).strokeBorder(.separator)
                             }
                             .accessibilityLabel(Text("Your screenshot of \(item.name)"))
                     } else if isLoading {
@@ -269,7 +269,7 @@ private struct OrderItemSourceView: View {
                         Text("This part of the screenshot couldn't be shown.")
                             .foregroundStyle(.secondary)
                     }
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: DS.Space.xxs) {
                         Text("Read as")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -285,7 +285,7 @@ private struct OrderItemSourceView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-                .padding()
+                .padding(DS.Space.l)
             }
             .navigationTitle("From Your Screenshot")
             .navigationBarTitleDisplayMode(.inline)
@@ -339,9 +339,9 @@ private struct ImportRow: View {
     let onView: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     // Kept short; the full text is what VoiceOver reads, and View shows the card.
                     Text(row.item.name)
                         .lineLimit(2)
@@ -362,8 +362,8 @@ private struct ImportRow: View {
                         .accessibilityHint("Shows the part of your screenshot \(row.item.name) was read from.")
                     }
                 }
-                Spacer(minLength: 8)
-                HStack(spacing: 2) {
+                Spacer(minLength: DS.Space.s)
+                HStack(spacing: DS.Space.hairline) {
                     Text(verbatim: "$")
                         .foregroundStyle(.secondary)
                         .accessibilityHidden(true)

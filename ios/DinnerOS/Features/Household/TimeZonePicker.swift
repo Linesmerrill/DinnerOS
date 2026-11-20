@@ -25,7 +25,7 @@ struct TimeZonePicker: View {
                 dismiss()
             } label: {
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: DS.Space.hairline) {
                         Text(Self.cityName(for: identifier))
                             .foregroundStyle(.primary)
                         Text("\(Self.localizedName(for: identifier)) · \(identifier)")

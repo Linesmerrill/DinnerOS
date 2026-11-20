@@ -15,10 +15,10 @@ struct CookLayoutPicker: View {
     @Binding var layout: CookIngredientLayout
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
             Text("Show ingredients")
                 .font(.headline)
-            HStack(spacing: 12) {
+            HStack(spacing: DS.Space.m) {
                 option(.byStep, title: "By Step") { miniByStep }
                 option(.all, title: "All Together") { miniAll }
             }
@@ -33,13 +33,13 @@ struct CookLayoutPicker: View {
         return Button {
             withAnimation(.snappy(duration: 0.2)) { layout = value }
         } label: {
-            VStack(spacing: 8) {
+            VStack(spacing: DS.Space.s) {
                 drawing()
-                    .padding(12)
+                    .padding(DS.Space.m)
                     .frame(width: 128, height: 128, alignment: .topLeading)
-                    .background(RoundedRectangle(cornerRadius: 14).fill(Color(.secondarySystemBackground)))
+                    .background(RoundedRectangle(cornerRadius: DS.Radius.large).fill(DS.Colors.surface))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 14)
+                        RoundedRectangle(cornerRadius: DS.Radius.large)
                             .strokeBorder(selected ? Color.accentColor : Color.clear, lineWidth: 2.5))
                 Label(title, systemImage: selected ? "checkmark.circle.fill" : "circle")
                     .font(.subheadline.weight(selected ? .semibold : .regular))

@@ -36,12 +36,12 @@ struct RecipePairingsSection: View {
 
     var body: some View {
         if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
                 Text("Tastes even better with")
                     .font(.title3.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
                 ScrollView(.horizontal) {
-                    LazyHStack(alignment: .top, spacing: 12) {
+                    LazyHStack(alignment: .top, spacing: DS.Space.m) {
                         ForEach(items) { pairing in
                             card(pairing)
                         }
@@ -87,12 +87,12 @@ struct RecipePairingsSection: View {
     // MARK: Cards
 
     private func card(_ pairing: Pairing) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
             photo(pairing)
                 .overlay(alignment: .topTrailing) {
                     if canEdit {
                         checkbox(pairing)
-                            .padding(4)
+                            .padding(DS.Space.xxs)
                     }
                 }
             Text(pairing.name)
@@ -130,8 +130,8 @@ struct RecipePairingsSection: View {
         case .recipe(let addon):
             RecipePhoto(url: addon.imageURL, pointWidth: cardWidth, title: addon.name)
         case .groceryItem:
-            RoundedRectangle(cornerRadius: 18)
-                .fill(Color(.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: DS.Radius.large)
+                .fill(DS.Colors.surface)
                 .aspectRatio(4.0 / 3.0, contentMode: .fit)
                 .overlay {
                     Image(systemName: "basket")
@@ -169,8 +169,8 @@ struct RecipePairingsSection: View {
                             isChecked ? Color.white : Color.primary, isChecked ? Color.accentColor : Color.clear)
                 }
             }
-            .padding(6)
-            .background(.regularMaterial, in: .rect(cornerRadius: 8))
+            .padding(DS.Space.xs)
+            .background(.regularMaterial, in: .rect(cornerRadius: DS.Radius.small))
             .frame(width: 44, height: 44)
             .contentShape(.rect)
         }
@@ -239,7 +239,7 @@ struct RecipePairingsSection: View {
         RecipePairingsSection(
             pairings: MenuPreviewData.recipePairings, recipe: MenuPreviewData.cards[1].recipe, reload: {}
         )
-        .padding()
+        .padding(DS.Space.l)
     }
     .menuPreviewEnvironment()
 }
@@ -257,7 +257,7 @@ struct RecipePairingsSection: View {
                 }),
             recipe: MenuPreviewData.cards[1].recipe, reload: {}
         )
-        .padding()
+        .padding(DS.Space.l)
     }
     .menuPreviewEnvironment(plan: PlanPreviewData.emptyPlan)
 }
@@ -267,7 +267,7 @@ struct RecipePairingsSection: View {
         RecipePairingsSection(
             pairings: MenuPreviewData.recipePairings, recipe: MenuPreviewData.cards[1].recipe, reload: {}
         )
-        .padding()
+        .padding(DS.Space.l)
     }
     .menuPreviewEnvironment()
     .environment(\.dynamicTypeSize, .accessibility2)

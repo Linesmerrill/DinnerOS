@@ -76,7 +76,7 @@ struct RecipeEditView: View {
                                 .font(.title3.weight(.semibold))
                                 .textInputAutocapitalization(.words)
                                 .submitLabel(.done)
-                                .frame(minHeight: 44)
+                                .frame(minHeight: DS.Size.tapTarget)
                         }
                         RecipePhotoSection(model: photo, imageURL: $draft.imageURL)
                         timesSection
@@ -188,7 +188,7 @@ struct RecipeEditView: View {
                 ingredientSheet = .new
             } label: {
                 Label("Add Ingredient", systemImage: "plus")
-                    .frame(minHeight: 44)
+                    .frame(minHeight: DS.Size.tapTarget)
             }
         } header: {
             SectionHeaderWithMenu(title: "Ingredients") {
@@ -245,7 +245,7 @@ struct RecipeEditView: View {
                 DispatchQueue.main.async { focusedStep = index }
             } label: {
                 Label("Add Step", systemImage: "plus")
-                    .frame(minHeight: 44)
+                    .frame(minHeight: DS.Size.tapTarget)
             }
         } header: {
             SectionHeaderWithMenu(title: "Steps") {

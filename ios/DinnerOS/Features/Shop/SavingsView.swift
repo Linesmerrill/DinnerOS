@@ -94,14 +94,14 @@ private struct WeekCostItemRow: View {
     let item: WeekCostItem
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(item.name)
                 Text(detail)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: DS.Space.s)
             Text(item.priceCents.map { MoneyText.format($0) } ?? String(localized: "No price"))
                 .monospacedDigit()
                 .foregroundStyle(item.priceCents == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.primary))
@@ -131,10 +131,10 @@ private struct SavingsWeekRow: View {
     let weekStartsOn: PlanDay
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
             HStack {
                 Text(ISOWeek(week.week)?.rangeLabel(weekStartsOn: weekStartsOn) ?? week.week)
-                Spacer(minLength: 8)
+                Spacer(minLength: DS.Space.s)
                 Text(WeekCostText.amount(week.spentCents))
                     .monospacedDigit()
             }

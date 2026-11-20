@@ -59,8 +59,8 @@ struct PastWeeksView: View {
     }
 
     private func row(_ item: WeekStripItem) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: DS.Space.m) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(item.week.rangeLabel(weekStartsOn: menu.weekStartsOn))
                     .font(.headline)
                 Text(MenuFormat.weekHistoryDetail(item.summary))

@@ -115,7 +115,7 @@ struct WeekCostSummary: View {
     let cost: WeekCost
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
             row("Spent", cost.spentCents)
             row("Used this week", cost.usedCents)
             row("Stocked for later", cost.stockedCents)
@@ -131,7 +131,7 @@ struct WeekCostSummary: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DS.Space.hairline)
         .accessibilityElement(children: .combine)
     }
 
@@ -325,9 +325,9 @@ private struct LinePriceRow: View {
     @Binding var text: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     Text(line.name)
                     Text(
                         "\(line.product.displayName) · \(ShoppingText.packages(line.confirmation?.packages ?? line.packages))"
@@ -340,7 +340,7 @@ private struct LinePriceRow: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                Spacer(minLength: 8)
+                Spacer(minLength: DS.Space.s)
                 TextField("Price", text: $text, prompt: Text("Price"))
                     .keyboardType(.decimalPad)
                     .keyboardDoneButton()

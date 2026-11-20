@@ -15,7 +15,7 @@ struct GroceryPurchaseBanner: View {
                 failureCard(failure)
             } else if model.purchasesInFlight > 0 {
                 BannerCard {
-                    HStack(spacing: 8) {
+                    HStack(spacing: DS.Space.s) {
                         ProgressView()
                         Text("Adding to pantry…")
                             .font(.subheadline)
@@ -39,9 +39,9 @@ struct GroceryPurchaseBanner: View {
 
     private func failureCard(_ failure: GroceryListModel.PurchaseFailure) -> some View {
         BannerCard {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
                 Label {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: DS.Space.hairline) {
                         Text("Couldn't add \(failure.prompt.item.name) to the pantry")
                             .font(.subheadline.weight(.semibold))
                         Text(failure.message)
@@ -55,12 +55,12 @@ struct GroceryPurchaseBanner: View {
                 HStack {
                     Spacer()
                     Button("Dismiss") { model.dismissPurchaseFailure() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.dsSecondary(.small))
                     if !failure.isForbidden {
                         Button("Try Again") {
                             Task { await model.retryPurchase() }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.dsPrimary(.small))
                     }
                 }
             }
@@ -109,7 +109,7 @@ private struct GroceryPurchasePromptCard: View {
 
     var body: some View {
         BannerCard {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: DS.Space.sm) {
                 HStack(alignment: .center) {
                     Label {
                         Text("Add \(prompt.item.name) to pantry?")
@@ -123,9 +123,10 @@ private struct GroceryPurchasePromptCard: View {
                 }
                 let layout =
                     isLarge
-                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.s))
+                    : AnyLayout(HStackLayout(spacing: DS.Space.s))
                 layout {
-                    HStack(spacing: 8) {
+                    HStack(spacing: DS.Space.s) {
                         TextField("Amount", text: $model.purchaseDraft.quantityText, prompt: Text("Amount"))
                             .keyboardType(.numbersAndPunctuation)
                             .autocorrectionDisabled()
@@ -143,18 +144,18 @@ private struct GroceryPurchasePromptCard: View {
                     if !isLarge {
                         Spacer(minLength: 0)
                     }
-                    HStack(spacing: 8) {
+                    HStack(spacing: DS.Space.s) {
                         Button("Skip") {
                             isAmountFocused = false
                             model.skipPurchase()
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.dsSecondary(.small))
                         .accessibilityHint("Doesn't add it to the pantry.")
                         Button("Add") {
                             isAmountFocused = false
                             Task { await model.confirmPurchase() }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.dsPrimary(.small))
                         .disabled(!model.purchaseDraft.isValid)
                         .accessibilityHint("Adds this amount to the pantry.")
                     }
@@ -199,11 +200,11 @@ private struct BannerCard<Content: View>: View {
 
     var body: some View {
         content
-            .padding(14)
+            .padding(DS.Space.ml)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.regularMaterial, in: .rect(cornerRadius: 16))
+            .background(.regularMaterial, in: .rect(cornerRadius: DS.Radius.large))
             .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
             .padding(.horizontal)
-            .padding(.bottom, 8)
+            .padding(.bottom, DS.Space.s)
     }
 }

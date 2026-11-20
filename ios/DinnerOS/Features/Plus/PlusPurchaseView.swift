@@ -34,19 +34,19 @@ struct PlusPurchaseView: View {
 
     private func content(_ offer: PlusOffer) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: DS.Space.xxl) {
                 // A household that entered an invite code sees what's left before its free month.
                 if let progress = plus.status?.referralProgress, progress.isPending {
                     ReferralProgressContent(progress: progress)
-                        .padding(14)
-                        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 14))
+                        .padding(DS.Space.ml)
+                        .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
                 } else if let month = plus.openFreeMonth, !(plus.status?.active ?? false) {
                     // An earned free month: redeeming it is how it starts (decision 755).
                     FreeMonthCard(month: month)
-                        .padding(14)
-                        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 14))
+                        .padding(DS.Space.ml)
+                        .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
                 }
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: DS.Space.s) {
                     Image(systemName: "sparkles")
                         .font(.largeTitle)
                         .foregroundStyle(.tint)
@@ -57,7 +57,7 @@ struct PlusPurchaseView: View {
                         .font(.title3)
                         .foregroundStyle(.secondary)
                 }
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: DS.Space.m) {
                     ForEach(offer.benefits, id: \.self) { benefit in
                         Label {
                             Text(benefit)
@@ -67,7 +67,7 @@ struct PlusPurchaseView: View {
                         }
                     }
                 }
-                VStack(spacing: 12) {
+                VStack(spacing: DS.Space.m) {
                     ForEach(offer.plans) { plan in
                         PlanRow(
                             plan: plan, price: PlusText.price(plan, product: plus.products[plan.productID]),
@@ -79,16 +79,15 @@ struct PlusPurchaseView: View {
                 }
                 if let status = plus.status, status.active {
                     // Plus came on while this screen was open: an invite code, or a purchase.
-                    VStack(spacing: 12) {
+                    VStack(spacing: DS.Space.m) {
                         Label(PlusText.status(status), systemImage: "checkmark.seal.fill")
                             .font(.headline)
                         Button("Done") { dismiss() }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.large)
+                            .buttonStyle(.dsPrimary)
                     }
                     .frame(maxWidth: .infinity)
                 } else {
-                    VStack(spacing: 12) {
+                    VStack(spacing: DS.Space.m) {
                         Button {
                             buy(selectedID(offer))
                         } label: {
@@ -99,10 +98,8 @@ struct PlusPurchaseView: View {
                                     Text(buttonTitle(offer))
                                 }
                             }
-                            .frame(maxWidth: .infinity, minHeight: 32)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
+                        .buttonStyle(.dsPrimary(fullWidth: true))
                         .disabled(!plus.canPurchase || plus.isPurchasing)
                         // Apple wants what's charged after the trial right by the button.
                         Text(chargeLine(offer))
@@ -127,18 +124,18 @@ struct PlusPurchaseView: View {
                     .frame(maxWidth: .infinity)
                     .multilineTextAlignment(.center)
                 }
-                VStack(spacing: 8) {
+                VStack(spacing: DS.Space.s) {
                     Text(offer.terms)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
-                    HStack(spacing: 24) {
+                    HStack(spacing: DS.Space.xxl) {
                         Button(offer.restoreText) { restore() }
                             .disabled(!plus.canPurchase || plus.isPurchasing)
                         Button("Have an invite code?") { showsInvite = true }
                     }
                     .font(.footnote)
-                    HStack(spacing: 24) {
+                    HStack(spacing: DS.Space.xxl) {
                         ForEach(offer.shownLinks, id: \.self) { link in
                             Link(link.title, destination: link.url)
                         }
@@ -147,7 +144,7 @@ struct PlusPurchaseView: View {
                 }
                 .frame(maxWidth: .infinity)
             }
-            .padding()
+            .padding(DS.Space.l)
             // Readable on iPad instead of stretching across the screen.
             .frame(maxWidth: 560)
             .frame(maxWidth: .infinity)
@@ -216,7 +213,7 @@ private struct PlanRow: View {
     var body: some View {
         Button(action: select) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     Text(plan.name)
                         .font(.headline)
                     Text(price)
@@ -226,8 +223,8 @@ private struct PlanRow: View {
                 if let note = plan.note {
                     Text(note)
                         .font(.caption.bold())
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, DS.Space.s)
+                        .padding(.vertical, DS.Space.xxs)
                         .background(.tint.opacity(0.15), in: .capsule)
                 }
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
@@ -235,11 +232,11 @@ private struct PlanRow: View {
                     .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                     .accessibilityHidden(true)
             }
-            .padding()
+            .padding(DS.Space.l)
             .contentShape(.rect)
-            .background(.background.secondary, in: .rect(cornerRadius: 12))
+            .background(.background.secondary, in: .rect(cornerRadius: DS.Radius.medium))
             .overlay {
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: DS.Radius.medium)
                     .strokeBorder(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear), lineWidth: 2)
             }
         }

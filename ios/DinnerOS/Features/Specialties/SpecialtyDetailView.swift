@@ -119,7 +119,7 @@ struct SpecialtyDetailView: View {
                     await load()
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.dsPrimary(.small))
         }
     }
 
@@ -331,8 +331,8 @@ struct SpecialtyOptionCard: View {
     var isStrategyPick = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
                 Text(option.name)
                     .font(.headline)
                 Spacer(minLength: 4)
@@ -360,7 +360,7 @@ struct SpecialtyOptionCard: View {
                 batchDetails
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
     }
 
     private var tags: [String] {
@@ -375,7 +375,7 @@ struct SpecialtyOptionCard: View {
     @ViewBuilder
     private var ingredientList: some View {
         if !option.ingredients.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
                 if let replaces = SpecialtyFormat.replaces(option, specialtyName: specialtyName) {
                     Text(replaces)
                         .font(.subheadline.weight(.semibold))
@@ -384,7 +384,7 @@ struct SpecialtyOptionCard: View {
                         .font(.subheadline.weight(.semibold))
                 }
                 ForEach(Array(option.ingredients.enumerated()), id: \.offset) { _, ingredient in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: DS.Space.xs) {
                         Text(verbatim: "•")
                             .accessibilityHidden(true)
                         Text(ingredient.text)
@@ -396,12 +396,12 @@ struct SpecialtyOptionCard: View {
     }
 
     private var batchDetails: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
             if !option.steps.isEmpty {
                 Text("Steps")
                     .font(.subheadline.weight(.semibold))
                 ForEach(Array(option.steps.enumerated()), id: \.offset) { index, step in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: DS.Space.xs) {
                         Text(verbatim: "\(index + 1).")
                             .monospacedDigit()
                         Text(step)

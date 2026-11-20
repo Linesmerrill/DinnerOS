@@ -68,9 +68,9 @@ struct YourMealsSection: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
             MenuSectionHeader(title: String(localized: "Your Meals"), subtitle: subtitle)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, DS.Space.l)
             content
         }
         .sheet(item: $editingEntry) { entry in
@@ -119,21 +119,21 @@ struct YourMealsSection: View {
         switch plans.phase {
         case .idle, .loading:
             MenuCardPlaceholders(count: 2, width: 260)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, DS.Space.l)
         case .failed(let message):
             MenuSectionError(message: message) {
                 Task { await plans.reload() }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, DS.Space.l)
         case .loaded:
             if inlineProposal == nil, let meals = pendingProposalMeals {
                 ReviewPicksCard(meals: meals, review: { flow.sheet = .review }, dismiss: picksDismiss)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, DS.Space.l)
                     .transition(.move(edge: .leading).combined(with: .opacity))
             }
             if entries.isEmpty {
                 emptyState(suggestionsPending: pendingProposalMeals != nil || autopilot.isGenerating)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, DS.Space.l)
             } else {
                 mealCards
             }
@@ -144,7 +144,7 @@ struct YourMealsSection: View {
                 Label("Autopilot is picking meals for the open nights…", systemImage: "sparkles")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, DS.Space.l)
             }
         }
     }
@@ -153,18 +153,18 @@ struct YourMealsSection: View {
     private var mealCards: some View {
         if dynamicTypeSize.isAccessibilitySize {
             // Paging cards get unreadable at accessibility sizes; they stack instead.
-            VStack(spacing: 20) {
+            VStack(spacing: DS.Space.xl) {
                 ForEach(entries) { entry in
                     card(entry)
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, DS.Space.l)
         } else {
             ScrollView(.horizontal) {
                 // Not lazy: a week has a handful of meals, and a lazy row takes its height from
                 // the cards it has laid out so far, so a later card's Cooked/Skip and rating rows
                 // spilled under the next section.
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: DS.Space.m) {
                     ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                         card(entry)
                             .containerRelativeFrame(.horizontal) { width, _ in
@@ -176,7 +176,7 @@ struct YourMealsSection: View {
                     }
                 }
                 .scrollTargetLayout()
-                .padding(.horizontal, 16)
+                .padding(.horizontal, DS.Space.l)
             }
             .scrollIndicators(.hidden)
             .scrollTargetBehavior(.viewAligned)
@@ -210,7 +210,7 @@ struct YourMealsSection: View {
 
     @ViewBuilder
     private var fullEmptyState: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
             Label(
                 menu.selectedTiming == .past
                     ? String(localized: "Nothing was planned this week")
@@ -226,7 +226,7 @@ struct YourMealsSection: View {
                 } label: {
                     Label("Plan with Autopilot", systemImage: "sparkles")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
                 .disabled(autopilot.isGenerating)
                 Text("or add meals below")
                     .font(.footnote)
@@ -238,8 +238,8 @@ struct YourMealsSection: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 18))
+        .padding(DS.Space.l)
+        .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
     }
 }
 
@@ -253,7 +253,7 @@ struct ReviewPicksCard: View {
     @State private var dragX: CGFloat = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
             Label(
                 meals == 1
                     ? String(localized: "Autopilot suggested 1 meal")
@@ -265,11 +265,11 @@ struct ReviewPicksCard: View {
                 .font(.subheadline)
                 .foregroundStyle(Color.secondary)
             Button("Review Autopilot's Picks", action: review)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(.tint.opacity(0.12), in: .rect(cornerRadius: 18))
+        .padding(DS.Space.l)
+        .background(.tint.opacity(0.12), in: .rect(cornerRadius: DS.Radius.large))
         .overlay(alignment: .topTrailing) {
             if let dismiss {
                 Button("Dismiss", systemImage: "xmark", action: dismiss)
@@ -329,9 +329,9 @@ struct MealCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
             NavigationLink(value: summary) {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: DS.Space.s) {
                     photo
                     text
                 }
@@ -362,7 +362,7 @@ struct MealCard: View {
     private var photo: some View {
         RecipePhoto(url: summary.imageURL, pointWidth: MealCard.photoWidth, title: summary.name)
             .overlay(alignment: .topLeading) {
-                HStack(spacing: 6) {
+                HStack(spacing: DS.Space.xs) {
                     if entry.day == nil && !isAddOn {
                         pickADay
                     } else {
@@ -376,27 +376,27 @@ struct MealCard: View {
                             .accessibilityHidden(true)
                     }
                 }
-                .padding(8)
+                .padding(DS.Space.s)
             }
             .overlay(alignment: .topTrailing) {
                 if entry.isFromAutopilot {
                     Image(systemName: "sparkles")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.tint)
-                        .padding(6)
+                        .padding(DS.Space.xs)
                         .background(.regularMaterial, in: .circle)
-                        .padding(8)
+                        .padding(DS.Space.s)
                         .accessibilityLabel("Added by Autopilot")
                 }
             }
             .overlay(alignment: .bottomLeading) {
-                HStack(spacing: 6) {
+                HStack(spacing: DS.Space.xs) {
                     if let minutes = summary.displayMinutes, minutes > 0 {
                         TimeBadge(minutes: minutes, isQuick: summary.timeBand == .quick)
                     }
                     outcomeBadge
                 }
-                .padding(8)
+                .padding(DS.Space.s)
                 .accessibilityHidden(true)
             }
     }
@@ -443,8 +443,8 @@ struct MealCard: View {
         let chip = Label("Pick a Day", systemImage: "exclamationmark.circle.fill")
             .labelStyle(.titleAndIcon)
             .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, DS.Space.s)
+            .padding(.vertical, DS.Space.xxs)
             .foregroundStyle(.black)
             .background(Color.orange, in: .capsule)
         if isEditable {

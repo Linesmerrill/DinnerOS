@@ -67,12 +67,10 @@ struct CookWelcome: View {
                     }
                 } label: {
                     Text(page < pages.count - 1 ? "Next" : "Start Cooking")
-                        .font(.headline)
-                        .padding(.horizontal, 12)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
-            .padding(20)
+            .padding(DS.Space.xl)
         }
         .frame(idealWidth: 560, idealHeight: 640)
     }
@@ -88,7 +86,7 @@ struct CookWelcome: View {
                 Text(page.title)
                     .font(.title2.weight(.bold))
                     .multilineTextAlignment(.center)
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: DS.Space.sm) {
                     ForEach(Array(page.lines.enumerated()), id: \.offset) { _, line in
                         Text(line)
                             .font(.body)
@@ -97,8 +95,8 @@ struct CookWelcome: View {
                 }
                 .frame(maxWidth: 420, alignment: .leading)
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 40)
+            .padding(.horizontal, DS.Space.xxl)
+            .padding(.bottom, DS.Space.huge)
         }
     }
 }
@@ -116,8 +114,8 @@ private struct CookWelcomeDrawing: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
+            RoundedRectangle(cornerRadius: DS.Radius.xLarge, style: .continuous)
+                .fill(DS.Colors.surface)
             content
                 .padding(22)
         }
@@ -134,7 +132,7 @@ private struct CookWelcomeDrawing: View {
     }
 
     private var ingredients: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
             heading("Step 1")
             row(checked: true, amount: "2", name: "Scallions", prep: "sliced")
             row(checked: false, amount: "1", name: "Lime", prep: "quartered")
@@ -144,7 +142,7 @@ private struct CookWelcomeDrawing: View {
     }
 
     private var steps: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
             Text("Step 3")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Color.accentColor)
@@ -153,24 +151,24 @@ private struct CookWelcomeDrawing: View {
                 + Text(" 2–3 minutes").bold().foregroundStyle(Color.accentColor) + Text("."))
                 .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 14) {
+            HStack(spacing: DS.Space.ml) {
                 circleButton("minus")
                 Text("3:00")
                     .font(.system(size: 34, weight: .heavy, design: .rounded).monospacedDigit())
                 circleButton("plus")
             }
             .frame(maxWidth: .infinity)
-            .padding(.top, 4)
+            .padding(.top, DS.Space.xxs)
         }
-        .padding(14)
+        .padding(DS.Space.ml)
         .background(
-            RoundedRectangle(cornerRadius: 14).fill(Color.accentColor.opacity(0.12))
+            RoundedRectangle(cornerRadius: DS.Radius.large).fill(Color.accentColor.opacity(0.12))
         )
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.accentColor, lineWidth: 2))
+        .overlay(RoundedRectangle(cornerRadius: DS.Radius.large).strokeBorder(Color.accentColor, lineWidth: 2))
     }
 
     private var timers: some View {
-        VStack(alignment: .trailing, spacing: 10) {
+        VStack(alignment: .trailing, spacing: DS.Space.sm) {
             timerPill("5:30", name: "Zucchini", total: "6 min", progress: 0.1, tint: .accentColor)
             timerPill("0:42", name: "Pasta", total: "10 min", progress: 0.93, tint: .orange)
             timerPill("Done", name: "Tortillas", total: "4 min", progress: 1, tint: .white, finished: true)
@@ -185,7 +183,7 @@ private struct CookWelcomeDrawing: View {
                 toolbarIcon("list.bullet.indent", label: "Ingredient layout")
                 toolbarIcon("questionmark.circle", label: "This guide")
             }
-            HStack(spacing: 12) {
+            HStack(spacing: DS.Space.m) {
                 miniLayout(byStep: true)
                 miniLayout(byStep: false)
             }
@@ -202,7 +200,7 @@ private struct CookWelcomeDrawing: View {
     }
 
     private func row(checked: Bool, amount: String, name: String, prep: String?, flagged: Bool = false) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Space.m) {
             RoundedRectangle(cornerRadius: 5)
                 .strokeBorder(checked ? Color.accentColor : Color.secondary.opacity(0.6), lineWidth: 1.5)
                 .background(RoundedRectangle(cornerRadius: 5).fill(checked ? Color.accentColor : .clear))
@@ -214,7 +212,7 @@ private struct CookWelcomeDrawing: View {
                 .frame(width: 22, height: 22)
             Text(amount).foregroundStyle(.secondary).frame(width: 22)
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 6) {
+                HStack(spacing: DS.Space.xs) {
                     Text(name).fontWeight(.semibold).strikethrough(checked)
                     if flagged {
                         Image(systemName: "flag.fill").font(.caption).foregroundStyle(.orange)
@@ -239,7 +237,7 @@ private struct CookWelcomeDrawing: View {
     private func timerPill(
         _ time: String, name: String, total: String, progress: Double, tint: Color, finished: Bool = false
     ) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DS.Space.sm) {
             ZStack {
                 Circle().stroke(tint.opacity(0.25), lineWidth: 3.5)
                 Circle().trim(from: 0, to: finished ? 1 : 1 - progress)
@@ -257,32 +255,32 @@ private struct CookWelcomeDrawing: View {
                     .foregroundStyle(finished ? Color.white.opacity(0.9) : Color.secondary)
             }
         }
-        .padding(.leading, 6)
-        .padding(.trailing, 14)
-        .padding(.vertical, 6)
+        .padding(.leading, DS.Space.xs)
+        .padding(.trailing, DS.Space.ml)
+        .padding(.vertical, DS.Space.xs)
         .background(
-            Capsule().fill(finished ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color(.systemBackground))))
+            Capsule().fill(finished ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(DS.Colors.background)))
     }
 
     private func toolbarIcon(_ symbol: String, label: String) -> some View {
-        VStack(spacing: 6) {
+        VStack(spacing: DS.Space.xs) {
             Image(systemName: symbol)
                 .font(.title3)
                 .frame(width: 48, height: 48)
-                .background(Circle().fill(Color(.systemBackground)))
+                .background(Circle().fill(DS.Colors.background))
                 .foregroundStyle(Color.accentColor)
             Text(label).font(.caption2).foregroundStyle(.secondary)
         }
     }
 
     private func miniLayout(byStep: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
             ForEach(0..<(byStep ? 2 : 1), id: \.self) { group in
                 if byStep {
                     Text("Step \(group + 1)").font(.system(size: 8, weight: .bold)).foregroundStyle(Color.accentColor)
                 }
                 ForEach(0..<(byStep ? 2 : 5), id: \.self) { _ in
-                    HStack(spacing: 4) {
+                    HStack(spacing: DS.Space.xxs) {
                         RoundedRectangle(cornerRadius: 2).stroke(Color.secondary, lineWidth: 1).frame(
                             width: 7, height: 7)
                         Capsule().fill(Color.secondary.opacity(0.45)).frame(width: 48, height: 4)
@@ -290,9 +288,9 @@ private struct CookWelcomeDrawing: View {
                 }
             }
         }
-        .padding(10)
+        .padding(DS.Space.sm)
         .frame(width: 96, height: 84, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color(.systemBackground)))
+        .background(RoundedRectangle(cornerRadius: DS.Radius.medium).fill(DS.Colors.background))
     }
 }
 

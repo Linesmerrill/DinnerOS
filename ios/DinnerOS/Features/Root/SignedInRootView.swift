@@ -44,7 +44,7 @@ private struct HouseholdLoadFailedView: View {
             Button("Try Again") {
                 Task { await households.load() }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.dsPrimary(.small))
             Button("Sign Out", role: .destructive) {
                 Task { await session.signOut() }
             }

@@ -14,16 +14,16 @@ struct UnitMenu: View {
                 }
             }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: DS.Space.xs) {
                 Text(RecipeUnit.label(unit))
                     .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.caption.weight(.semibold))
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, DS.Space.ml)
             .frame(minWidth: 96, minHeight: 48)
-            .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: 10))
+            .background(DS.Colors.subtleFill, in: .rect(cornerRadius: DS.Radius.medium))
             .contentShape(.rect)
         }
         .accessibilityLabel("Unit")
@@ -168,9 +168,9 @@ struct AmountKeypad: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: DS.Space.s) {
             units
-            HStack(spacing: 6) {
+            HStack(spacing: DS.Space.xs) {
                 ForEach(Array(AmountEntry.fractions.enumerated()), id: \.offset) { _, fraction in
                     key(
                         AmountEntry.symbol(fraction.0, fraction.1),
@@ -179,12 +179,12 @@ struct AmountKeypad: View {
                 }
             }
             .frame(height: 44)
-            HStack(spacing: 6) {
-                VStack(spacing: 6) {
+            HStack(spacing: DS.Space.xs) {
+                VStack(spacing: DS.Space.xs) {
                     digitRow([1, 2, 3])
                     digitRow([4, 5, 6])
                     digitRow([7, 8, 9])
-                    HStack(spacing: 6) {
+                    HStack(spacing: DS.Space.xs) {
                         key(".", spoken: String(localized: "Point")) { model.press(.decimal) }
                         key("0", spoken: "0") { model.press(.digit(0)) }
                         key(systemImage: "delete.left", spoken: String(localized: "Delete")) {
@@ -192,14 +192,14 @@ struct AmountKeypad: View {
                         }
                     }
                 }
-                VStack(spacing: 6) {
+                VStack(spacing: DS.Space.xs) {
                     key(systemImage: "keyboard.chevron.compact.down", spoken: String(localized: "Hide keypad")) {
                         model.close()
                     }
                     Button {
                         model.next()
                     } label: {
-                        VStack(spacing: 4) {
+                        VStack(spacing: DS.Space.xxs) {
                             Image(systemName: "return")
                                 .accessibilityHidden(true)
                             Text("Next")
@@ -207,7 +207,7 @@ struct AmountKeypad: View {
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .foregroundStyle(.white)
-                        .background(Color.accentColor, in: .rect(cornerRadius: 8))
+                        .background(Color.accentColor, in: .rect(cornerRadius: DS.Radius.small))
                         .contentShape(.rect)
                     }
                     .buttonStyle(KeypadButtonStyle())
@@ -219,16 +219,16 @@ struct AmountKeypad: View {
             }
         }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .padding(.horizontal, 8)
-        .padding(.top, 8)
-        .padding(.bottom, 4)
+        .padding(.horizontal, DS.Space.s)
+        .padding(.top, DS.Space.s)
+        .padding(.bottom, DS.Space.xxs)
         .frame(maxWidth: sizeClass == .regular ? 560 : .infinity)
         .frame(maxWidth: .infinity)
     }
 
     private var units: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+            HStack(spacing: DS.Space.xs) {
                 ForEach(RecipeUnit.quick.filter(model.units.contains), id: \.self) { code in
                     chip(code)
                 }
@@ -245,13 +245,13 @@ struct AmountKeypad: View {
                     Label("More", systemImage: "ellipsis")
                         .labelStyle(.titleAndIcon)
                         .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 14)
+                        .padding(.horizontal, DS.Space.ml)
                         .frame(minHeight: 40)
-                        .background(Color(.systemBackground), in: .capsule)
+                        .background(DS.Colors.background, in: .capsule)
                 }
                 .accessibilityLabel("More units")
             }
-            .padding(.horizontal, 2)
+            .padding(.horizontal, DS.Space.hairline)
         }
         .frame(height: 44)
     }
@@ -263,10 +263,10 @@ struct AmountKeypad: View {
         } label: {
             Text(RecipeUnit.label(code))
                 .font(.subheadline.weight(.semibold))
-                .padding(.horizontal, 14)
+                .padding(.horizontal, DS.Space.ml)
                 .frame(minHeight: 40)
                 .foregroundStyle(selected ? Color.white : Color.primary)
-                .background(selected ? Color.accentColor : Color(.systemBackground), in: .capsule)
+                .background(selected ? Color.accentColor : DS.Colors.background, in: .capsule)
                 .contentShape(.capsule)
         }
         .buttonStyle(KeypadButtonStyle())
@@ -275,7 +275,7 @@ struct AmountKeypad: View {
     }
 
     private func digitRow(_ digits: [Int]) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: DS.Space.xs) {
             ForEach(digits, id: \.self) { digit in
                 key("\(digit)", spoken: "\(digit)") { model.press(.digit(digit)) }
             }
@@ -288,12 +288,12 @@ struct AmountKeypad: View {
                 .font(.title2)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .foregroundStyle(Color.primary)
-                .background(Color(.systemBackground), in: .rect(cornerRadius: 8))
+                .background(DS.Colors.background, in: .rect(cornerRadius: DS.Radius.small))
                 .contentShape(.rect)
         }
         .buttonStyle(KeypadButtonStyle())
         .accessibilityLabel(spoken)
-        .frame(minHeight: 44)
+        .frame(minHeight: DS.Size.tapTarget)
     }
 
     private func key(systemImage: String, spoken: String, action: @escaping () -> Void) -> some View {
@@ -302,12 +302,12 @@ struct AmountKeypad: View {
                 .font(.title3)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .foregroundStyle(Color.primary)
-                .background(Color(.systemBackground).opacity(0.6), in: .rect(cornerRadius: 8))
+                .background(DS.Colors.background.opacity(0.6), in: .rect(cornerRadius: DS.Radius.small))
                 .contentShape(.rect)
         }
         .buttonStyle(KeypadButtonStyle())
         .accessibilityLabel(spoken)
-        .frame(minHeight: 44)
+        .frame(minHeight: DS.Size.tapTarget)
     }
 
     private func spokenFraction(_ n: Int, _ d: Int) -> String {

@@ -29,7 +29,7 @@ struct CatalogRecipeDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: DS.Space.l) {
                 if let recipe {
                     header(recipe)
                     ingredients(recipe)
@@ -41,10 +41,10 @@ struct CatalogRecipeDetailView: View {
                 } else {
                     ProgressView()
                         .frame(maxWidth: .infinity)
-                        .padding(.top, 40)
+                        .padding(.top, DS.Space.huge)
                 }
             }
-            .padding()
+            .padding(DS.Space.l)
         }
         .navigationTitle(recipe?.name ?? route.name)
         .navigationBarTitleDisplayMode(.inline)
@@ -98,7 +98,7 @@ struct CatalogRecipeDetailView: View {
     @ViewBuilder
     private func header(_ recipe: CatalogRecipe) -> some View {
         RecipeImage(url: recipe.imageURL, title: recipe.name)
-            .clipShape(.rect(cornerRadius: 12))
+            .clipShape(.rect(cornerRadius: DS.Radius.medium))
         if recipe.imageURL != nil, let credit = recipe.imageCredit {
             PhotoCreditLine(credit: credit)
         }
@@ -128,13 +128,11 @@ struct CatalogRecipeDetailView: View {
             } label: {
                 if isAdding {
                     ProgressView()
-                        .frame(maxWidth: .infinity)
                 } else {
                     Label("Add to Library", systemImage: "plus.circle")
-                        .frame(maxWidth: .infinity)
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.dsPrimary(fullWidth: true))
             .disabled(isAdding)
         }
     }
@@ -146,7 +144,7 @@ struct CatalogRecipeDetailView: View {
                 .font(.title3.bold())
                 .accessibilityAddTraits(.isHeader)
             ForEach(recipe.ingredients) { line in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
                     Text(line.name)
                     Spacer(minLength: 8)
                     if let amount = line.amounts.first, let text = RecipeFormat.amount(amount) {
@@ -166,7 +164,7 @@ struct CatalogRecipeDetailView: View {
                 .font(.title3.bold())
                 .accessibilityAddTraits(.isHeader)
             ForEach(recipe.steps) { step in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
                     Text("\(step.index).")
                         .font(.body.weight(.semibold))
                         .foregroundStyle(.secondary)

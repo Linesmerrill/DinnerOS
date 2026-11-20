@@ -64,7 +64,7 @@ struct ChooseInWalmartView: View {
         case .loading:
             ProgressView("Opening Walmart…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(.systemBackground))
+                .background(DS.Colors.background)
         case .failed:
             ContentUnavailableView {
                 Label("Walmart Didn't Load", systemImage: "wifi.exclamationmark")
@@ -74,9 +74,9 @@ struct ChooseInWalmartView: View {
                 Button("Try Again") {
                     if let url = chooser.searchURL { page.load(url) }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
-            .background(Color(.systemBackground))
+            .background(DS.Colors.background)
         case .shown:
             EmptyView()
         }
@@ -95,19 +95,19 @@ struct ChooseInWalmartView: View {
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, DS.Space.l)
+        .padding(.vertical, DS.Space.sm)
     }
 
     /// The list item, with Back and Skip, and the one button that matters: Use This Product, live
     /// only on a product page.
     private func itemBar(_ item: WalmartChooser.Item) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Space.m) {
             Button("Back", systemImage: "chevron.left") { chooser.back() }
                 .labelStyle(.iconOnly)
                 .disabled(!chooser.canGoBack || isSaving)
                 .frame(minWidth: 44, minHeight: 44)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(item.name)
                     .font(.headline)
                     .lineLimit(2)
@@ -138,12 +138,12 @@ struct ChooseInWalmartView: View {
                     Label("Use This", systemImage: "checkmark")
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.dsPrimary(.small))
             .disabled(productID == nil || isSaving)
             .accessibilityLabel("Use This Product for \(item.name)")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, DS.Space.m)
+        .padding(.vertical, DS.Space.s)
         .background(.bar)
     }
 
@@ -165,7 +165,7 @@ struct ChooseInWalmartView: View {
             )
         } actions: {
             Button("Done") { dismiss() }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
         }
     }
 

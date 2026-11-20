@@ -104,13 +104,13 @@ struct MealSwapRow: View {
     var body: some View {
         let layout =
             dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-            : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.s))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: DS.Space.m))
         layout {
             RecipeImage(url: alternative.recipe.imageURL, title: alternative.recipe.name)
                 .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : min(thumbnailWidth, 140))
-                .clipShape(.rect(cornerRadius: 8))
-            VStack(alignment: .leading, spacing: 4) {
+                .clipShape(.rect(cornerRadius: DS.Radius.small))
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
                 Text(alternative.recipe.name)
                     .font(.headline)
                 Text(details)
@@ -130,14 +130,12 @@ struct MealSwapRow: View {
                         Label("Cook This Instead", systemImage: "arrow.triangle.2.circlepath")
                     }
                 }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
-                .controlSize(.small)
+                .buttonStyle(.dsSecondary(.small))
                 .disabled(isDisabled)
                 .accessibilityLabel("Cook \(alternative.recipe.name) instead")
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
     }
 
     /// For example "30 min · Serves 2".

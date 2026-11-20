@@ -62,7 +62,7 @@ struct CopiedHUDView: View {
     var body: some View {
         ZStack {
             if visible {
-                VStack(spacing: 10) {
+                VStack(spacing: DS.Space.sm) {
                     Image(systemName: "checkmark")
                         .font(.system(size: 44, weight: .semibold))
                     Text("Copied")
@@ -70,7 +70,7 @@ struct CopiedHUDView: View {
                 }
                 .foregroundStyle(.primary)
                 .frame(width: 150, height: 150)
-                .background(.regularMaterial, in: .rect(cornerRadius: 22))
+                .background(.regularMaterial, in: .rect(cornerRadius: DS.Radius.xLarge))
                 .transition(.opacity)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Copied")

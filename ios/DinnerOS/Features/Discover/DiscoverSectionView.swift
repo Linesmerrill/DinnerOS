@@ -17,7 +17,7 @@ struct DiscoverSectionView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: DS.Space.l) {
                 if let section {
                     if let subtitle = section.subtitle, !subtitle.isEmpty {
                         Text(subtitle)
@@ -30,7 +30,7 @@ struct DiscoverSectionView: View {
                             .foregroundStyle(.secondary)
                             .accessibilityIdentifier("DiscoverSponsor")
                     }
-                    LazyVGrid(columns: DiscoverCard.gridColumns, alignment: .leading, spacing: 20) {
+                    LazyVGrid(columns: DiscoverCard.gridColumns, alignment: .leading, spacing: DS.Space.xl) {
                         ForEach(Array(section.items.enumerated()), id: \.offset) { _, item in
                             DiscoverCard(summary: item, width: nil, canAdd: canAdd, report: { _ in })
                         }
@@ -47,11 +47,11 @@ struct DiscoverSectionView: View {
                 } else {
                     ProgressView()
                         .frame(maxWidth: .infinity)
-                        .padding(.top, 40)
+                        .padding(.top, DS.Space.huge)
                 }
             }
             .padding(.horizontal, sizeClass == .regular ? 28 : 16)
-            .padding(.vertical, 16)
+            .padding(.vertical, DS.Space.l)
         }
         .navigationTitle(section?.title ?? route.title)
         .navigationBarTitleDisplayMode(.inline)

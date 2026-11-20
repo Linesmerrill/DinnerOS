@@ -10,8 +10,8 @@ struct WelcomeView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DS.Space.xxl) {
+                VStack(alignment: .leading, spacing: DS.Space.s) {
                     Image(systemName: "fork.knife.circle.fill")
                         .font(.system(size: 52))
                         .foregroundStyle(.tint)
@@ -27,12 +27,12 @@ struct WelcomeView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 }
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: DS.Space.ml) {
                     point("calendar", "Pick dinners for the week.")
                     point("cart", "Get one grocery list for all of them.")
                     point("frying.pan", "Cook step by step, with timers.")
                 }
-                VStack(spacing: 10) {
+                VStack(spacing: DS.Space.sm) {
                     option(
                         LocalizedStringKey(SharedRecipes.title), systemImage: SharedRecipes.systemImage,
                         detail: "Add recipes other households share.", choice: .browseShared)
@@ -43,19 +43,17 @@ struct WelcomeView: View {
                     }
                 }
             }
-            .padding(24)
+            .padding(DS.Space.xxl)
         }
         .safeAreaInset(edge: .bottom) {
             Button {
                 choose(.startPlanning)
             } label: {
                 Text("Start Planning")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: 44)
             }
-            .buttonStyle(.borderedProminent)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 12)
+            .buttonStyle(.dsPrimary(fullWidth: true))
+            .padding(.horizontal, DS.Space.xxl)
+            .padding(.bottom, DS.Space.m)
             .background(.bar)
         }
         .interactiveDismissDisabled(false)
@@ -76,13 +74,13 @@ struct WelcomeView: View {
         Button {
             choose(choice)
         } label: {
-            HStack(spacing: 14) {
+            HStack(spacing: DS.Space.ml) {
                 Image(systemName: systemImage)
                     .font(.title3)
                     .foregroundStyle(.tint)
                     .frame(width: 32)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     Text(title).font(.headline).foregroundStyle(Color.primary)
                     Text(detail).font(.subheadline).foregroundStyle(.secondary)
                 }
@@ -93,9 +91,9 @@ struct WelcomeView: View {
                     .foregroundStyle(.tertiary)
                     .accessibilityHidden(true)
             }
-            .padding(14)
+            .padding(DS.Space.ml)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 14))
+            .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

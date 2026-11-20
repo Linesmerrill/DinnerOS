@@ -141,7 +141,7 @@ struct ShopView: View {
                 Button("Try Again") {
                     Task { await shopping.load() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
         case .loaded:
             if shopping.isConfigured {
@@ -252,7 +252,7 @@ private struct ShopWeekList: View {
             WeekCostSection(open: openWeekCost)
             switch shopping.proposalPhase {
             case .idle, .loading:
-                HStack(spacing: 8) {
+                HStack(spacing: DS.Space.s) {
                     ProgressView()
                     Text("Matching this week's list…")
                         .foregroundStyle(.secondary)
@@ -425,7 +425,7 @@ private struct ShopWeekList: View {
                     showsLeftOut = true
                 } label: {
                     Label {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: DS.Space.hairline) {
                             Text("Skipped Items")
                             Text("Things you already have or chose not to buy")
                                 .font(.footnote)
@@ -462,7 +462,7 @@ private struct ShopWeekList: View {
 
     @ViewBuilder
     private func mealsFooter(needsProduct: Bool, hasMeals: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
             // Only items added by hand: there's no meal to explain.
             if hasMeals {
                 Text(
@@ -713,9 +713,10 @@ private struct NeedsProductRow: View {
     var body: some View {
         let layout =
             dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 12))
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.s))
+            : AnyLayout(HStackLayout(spacing: DS.Space.m))
         layout {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(line.name)
                 if !line.quantityText.isEmpty {
                     Text(line.quantityText)
@@ -735,11 +736,11 @@ private struct NeedsProductRow: View {
             }
             .accessibilityElement(children: .combine)
             if !dynamicTypeSize.isAccessibilitySize {
-                Spacer(minLength: 8)
+                Spacer(minLength: DS.Space.s)
             }
             if canChoose {
                 Button("Choose Product", action: choose)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.dsSecondary(.small))
                     .accessibilityLabel("Choose Product for \(line.name)")
             }
             if let remove {
@@ -762,8 +763,8 @@ private struct NeedsDecisionRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(line.name)
                     .font(.headline)
                 if let product = line.product {
@@ -793,11 +794,11 @@ private struct NeedsDecisionRow: View {
             if canChoose {
                 let layout =
                     dynamicTypeSize.isAccessibilitySize
-                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-                    : AnyLayout(HStackLayout(spacing: 12))
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.s))
+                    : AnyLayout(HStackLayout(spacing: DS.Space.m))
                 layout {
                     Button("Choose Another", action: rechoose)
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.dsSecondary(.small))
                         .accessibilityLabel("Choose a different product for \(line.name)")
                     Button("Skip", action: leaveOut)
                         .buttonStyle(.borderless)
@@ -809,7 +810,7 @@ private struct NeedsDecisionRow: View {
                 }
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DS.Space.hairline)
     }
 }
 
@@ -850,8 +851,8 @@ private struct ReadyLineRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
                 details
                 Spacer(minLength: 0)
                 if (canEdit && !listPage) || remove != nil {
@@ -891,7 +892,7 @@ private struct ReadyLineRow: View {
                 Button {
                     if canEdit { changeProduct() }
                 } label: {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: DS.Space.hairline) {
                         Label("You wanted a different one. Tap to change it.", systemImage: "flag.fill")
                             .font(.footnote.weight(.medium))
                             .foregroundStyle(.orange)
@@ -930,7 +931,7 @@ private struct ReadyLineRow: View {
                     .font(.subheadline)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DS.Space.hairline)
     }
 
     /// The name, product and count. With a fixable warning, tapping them fixes it too.
@@ -952,7 +953,7 @@ private struct ReadyLineRow: View {
     }
 
     private var detailsText: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DS.Space.hairline) {
             Text(line.name)
                 .font(.headline)
             if !productText.isEmpty {
@@ -994,8 +995,8 @@ private struct SharedLineRow: View {
     let remove: ShopRemoveOptions?
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(row.name)
                 if !row.quantityText.isEmpty {
                     Text(row.quantityText)
@@ -1028,8 +1029,8 @@ private struct LeftOutShopRow: View {
     let putBack: () -> Void
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(row.name)
                     .strikethrough()
                     .foregroundStyle(.secondary)
@@ -1056,8 +1057,7 @@ private struct LeftOutShopRow: View {
             } else {
                 if canPutBack {
                     Button("Put Back", action: putBack)
-                        .buttonStyle(.bordered)
-                        .font(.subheadline)
+                        .buttonStyle(.dsSecondary(.small))
                         .accessibilityLabel("Put \(row.name) Back")
                 }
                 if let notTheSame, !row.alsoCalled.isEmpty {
@@ -1089,8 +1089,8 @@ private struct ShopComponentHeader: View {
     let putBack: () -> Void
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Label(component.name, systemImage: "square.stack.3d.up")
                     .font(.subheadline.weight(.semibold))
                     .strikethrough(component.isLeftOut)
@@ -1105,8 +1105,7 @@ private struct ShopComponentHeader: View {
                 ProgressView()
             } else if canEdit, component.isLeftOut {
                 Button("Put Back", action: putBack)
-                    .buttonStyle(.bordered)
-                    .font(.subheadline)
+                    .buttonStyle(.dsSecondary(.small))
                     .accessibilityLabel("Make \(component.name) Again")
             } else if canEdit {
                 Menu {
@@ -1133,9 +1132,9 @@ private struct ShopMealHeader: View {
     let group: ShopMealLayout.Group
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DS.Space.sm) {
             if let image = group.meal?.imageURL.flatMap(URL.init(string:)) {
-                RecipePhoto(url: image, aspectRatio: 1, pointWidth: 32, cornerRadius: 6)
+                RecipePhoto(url: image, aspectRatio: 1, pointWidth: 32, cornerRadius: DS.Radius.small)
                     .frame(width: 32, height: 32)
                     .accessibilityHidden(true)
             }
@@ -1315,9 +1314,9 @@ private struct InCartLineRow: View {
     let changeProduct: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     Text(line.name)
                         .font(.headline)
                     Text(listPage ? line.quantityText : line.product.displayName)
@@ -1361,7 +1360,7 @@ private struct InCartLineRow: View {
                 .accessibilityValue(ShoppingText.packages(packages))
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DS.Space.hairline)
     }
 }
 
@@ -1369,7 +1368,7 @@ private struct OtherInCartRow: View {
     let line: ShoppingSentLine
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DS.Space.hairline) {
             Text(line.name.isEmpty ? line.product.displayName : line.name)
             Text(line.product.displayName)
                 .font(.subheadline)
@@ -1388,10 +1387,10 @@ private struct CheckAmountBadge: View {
     let action: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
             Label("Check Amount", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption.weight(.semibold))
-                .padding(.horizontal, 8)
+                .padding(.horizontal, DS.Space.s)
                 .padding(.vertical, 3)
                 .foregroundStyle(Color.orange)
                 .background(Color.orange.opacity(0.15), in: .capsule)
@@ -1415,7 +1414,7 @@ private struct CheckAmountBadge: View {
 /// A label with its icon after the title, like a disclosure: "Add Package Size ›".
 private struct TrailingIconLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: DS.Space.xxs) {
             configuration.title
             configuration.icon
                 .imageScale(.small)
@@ -1428,7 +1427,7 @@ private struct ExcludedLineRow: View {
     let line: ShoppingExcludedLine
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DS.Space.hairline) {
             Text(line.name.isEmpty ? line.ingredientKey : line.name)
             Text(line.text)
                 .font(.subheadline)
@@ -1458,7 +1457,7 @@ private struct OrderReminderBanner: View {
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
                 Label(title, systemImage: reminder.ordered ? "checkmark.circle.fill" : "calendar.badge.clock")
                     .font(.headline)
                     .foregroundStyle(reminder.ordered ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.primary))
@@ -1483,7 +1482,7 @@ private struct OrderReminderBanner: View {
                     .accessibilityHint("Asks to send a notification when it's time to order.")
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, DS.Space.xxs)
         }
     }
 
@@ -1491,12 +1490,12 @@ private struct OrderReminderBanner: View {
     private var action: some View {
         if reminder.ordered {
             Button("Not Ordered Yet") { setOrdered(false) }
-                .buttonStyle(.bordered)
+                .buttonStyle(.dsSecondary(.small))
                 .disabled(shopping.isSettingOrdered)
                 .accessibilityHint("Brings this week's reminder back.")
         } else {
             Button("Mark as Ordered") { setOrdered(true) }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
                 .disabled(shopping.isSettingOrdered)
                 .accessibilityHint("Stops reminding you about this week.")
         }
@@ -1547,16 +1546,16 @@ private struct OpenHandoffBanner: View {
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
                 Label("Did you order these?", systemImage: "shippingbox")
                     .font(.headline)
                 Text(summary)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Button("Review Order", action: review)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.dsPrimary(.small))
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, DS.Space.xxs)
         }
     }
 
@@ -1588,7 +1587,7 @@ private struct ShopHandoffBar: View {
     private var store: String { shopping.providerName }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: DS.Space.s) {
             if let message = errorMessage ?? shopping.linkError {
                 FormErrorLabel(message: message)
                     .font(.footnote)
@@ -1608,10 +1607,8 @@ private struct ShopHandoffBar: View {
                             Label("Sign In to \(store)", systemImage: "person.crop.circle")
                         }
                     }
-                    .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(.dsPrimary(fullWidth: true))
                 .disabled(shopping.isConnecting)
                 Text(
                     shopping.needsSignIn
@@ -1627,10 +1624,8 @@ private struct ShopHandoffBar: View {
                     Task { await shopping.openNextCartLink() }
                 } label: {
                     Text("Next Cart Link (\(next + 1) of \(progress.total))")
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(.dsPrimary(fullWidth: true))
                 Text("Each link adds more items to the same \(store) cart.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -1641,10 +1636,8 @@ private struct ShopHandoffBar: View {
                     shopping.reviewOpenHandoff()
                 } label: {
                     Text("Did You Order These?")
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(.dsPrimary(fullWidth: true))
                 if shopping.isEverythingInCart {
                     everythingInCart
                 } else {
@@ -1655,7 +1648,7 @@ private struct ShopHandoffBar: View {
                             title: shopping.writesCart
                                 ? "Add New Items to \(store) Cart" : "Add New Items in \(store)"
                         )
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.dsSecondary(fullWidth: true))
                     }
                     Text(summary)
                         .font(.footnote)
@@ -1672,7 +1665,7 @@ private struct ShopHandoffBar: View {
                     instacartButton
                 } else {
                     openButton(title: shopping.writesCart ? "Add to \(store) Cart" : "Open in \(store)")
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.dsPrimary(fullWidth: true))
                 }
                 Text(summary)
                     .font(.footnote)
@@ -1693,7 +1686,7 @@ private struct ShopHandoffBar: View {
             }
         }
         .multilineTextAlignment(.center)
-        .padding()
+        .padding(DS.Space.l)
         .frame(maxWidth: .infinity)
         .background(.bar)
         .onChange(of: usuals?.prompt == nil) { _, closed in
@@ -1753,7 +1746,7 @@ private struct ShopHandoffBar: View {
         Button(action: open) {
             Group {
                 if let progress = shopping.checkProgress {
-                    HStack(spacing: 8) {
+                    HStack(spacing: DS.Space.s) {
                         ProgressView()
                         Text(ShoppingText.checking(progress.done, of: progress.total))
                     }
@@ -1763,9 +1756,7 @@ private struct ShopHandoffBar: View {
                     Label(title, systemImage: "cart")
                 }
             }
-            .frame(maxWidth: .infinity)
         }
-        .controlSize(.large)
         .disabled(shopping.isCreatingHandoff || shopping.isCheckingProducts)
     }
 
@@ -1809,13 +1800,13 @@ private struct ShopWeekSwitcher: View {
 
     var body: some View {
         let week = shopping.week
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Space.m) {
             Button("Previous Week", systemImage: "chevron.left") {
                 Task { await shopping.show(week: week.previous) }
             }
             .labelStyle(.iconOnly)
             Spacer(minLength: 0)
-            VStack(spacing: 4) {
+            VStack(spacing: DS.Space.xxs) {
                 Text(week.rangeLabel(weekStartsOn: shopping.weekStartsOn))
                     .font(.headline)
                 if let relative = relativeName(week) {
@@ -1837,7 +1828,7 @@ private struct ShopWeekSwitcher: View {
         }
         .font(.title3)
         .padding(.horizontal)
-        .padding(.vertical, 8)
+        .padding(.vertical, DS.Space.s)
     }
 
     private func relativeName(_ week: ISOWeek) -> LocalizedStringKey? {
@@ -1861,7 +1852,7 @@ private struct ShopTripStorePicker: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: DS.Space.xxs) {
             Menu {
                 Picker("Store", selection: selection) {
                     ForEach(shopping.setUpStores) { store in
@@ -1873,7 +1864,7 @@ private struct ShopTripStorePicker: View {
                     }
                 }
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: DS.Space.xs) {
                     Image(systemName: "storefront")
                         .accessibilityHidden(true)
                     Text("Shopping at \(shopping.providerName)")
@@ -1904,7 +1895,7 @@ private struct ShopTripStorePicker: View {
             }
         }
         .padding(.horizontal)
-        .padding(.bottom, 8)
+        .padding(.bottom, DS.Space.s)
     }
 
     private var selection: Binding<String> {
@@ -1984,7 +1975,7 @@ private struct SameItemSheet: View {
                             pick(choice)
                             dismiss()
                         } label: {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                                 Text(choice.name)
                                     .foregroundStyle(Color.primary)
                                 Text(choice.detail)

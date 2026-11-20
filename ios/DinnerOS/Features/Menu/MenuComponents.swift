@@ -65,7 +65,7 @@ struct RecipePhoto: View {
 
     private var filled: some View {
         Rectangle()
-            .fill(Color(.secondarySystemBackground))
+            .fill(DS.Colors.surface)
             .overlay {
                 CachedImage(key: key) {
                     ShimmerView()
@@ -120,7 +120,7 @@ struct IngredientPhoto: View {
 
     var body: some View {
         Circle()
-            .fill(Color(.secondarySystemBackground))
+            .fill(DS.Colors.surface)
             .frame(width: size, height: size)
             .overlay {
                 CachedImage(key: ImageKey(url: url, pointWidth: size, scale: displayScale)) {
@@ -182,8 +182,8 @@ struct PhotoBadge: View {
         .labelStyle(.titleAndIcon)
         .font(.caption.weight(.semibold))
         .foregroundStyle(isProminent ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.primary))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, DS.Space.s)
+        .padding(.vertical, DS.Space.xxs)
         .background(
             isProminent ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.thickMaterial), in: .capsule)
     }
@@ -207,8 +207,8 @@ struct AddOnLabel: View {
         Text("Add-on")
             .font(.caption2.weight(.semibold))
             .foregroundStyle(Color.secondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
+            .padding(.horizontal, DS.Space.xs)
+            .padding(.vertical, DS.Space.hairline)
             .background(.quaternary, in: .capsule)
     }
 }
@@ -304,8 +304,8 @@ struct MenuChip: View {
         }
         .labelStyle(.titleAndIcon)
         .font(.caption2.weight(.semibold))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, DS.Space.s)
+        .padding(.vertical, DS.Space.xxs)
         .foregroundStyle(isProminent ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.secondary))
         .background(
             isProminent ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary), in: .capsule)
@@ -449,7 +449,7 @@ struct PlannerToastView: View {
     private static let duration = Duration.seconds(5)
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Space.m) {
             Text(toast.message)
                 .font(.subheadline)
                 .foregroundStyle(Color.primary)
@@ -458,12 +458,12 @@ struct PlannerToastView: View {
                     .font(.subheadline.weight(.semibold))
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, DS.Space.l)
+        .padding(.vertical, DS.Space.sm)
         .background(.regularMaterial, in: .capsule)
         .overlay(Capsule().strokeBorder(.quaternary))
         .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
-        .padding(.bottom, 8)
+        .padding(.bottom, DS.Space.s)
         .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isSummaryElement)
@@ -485,7 +485,7 @@ struct MenuSectionHeader<Trailing: View>: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(title)
                     .font(.title3.bold())
                     .accessibilityAddTraits(.isHeader)
@@ -513,10 +513,10 @@ struct MenuSectionError: View {
     let retry: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
             FormErrorLabel(message: message)
             Button("Try Again", action: retry)
-                .buttonStyle(.bordered)
+                .buttonStyle(.dsSecondary(.small))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -528,13 +528,15 @@ struct MenuCardPlaceholders: View {
     var width: CGFloat = 220
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Space.m) {
             ForEach(0..<count, id: \.self) { _ in
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: DS.Space.s) {
                     RecipePhoto(url: nil, pointWidth: width)
                         .frame(width: width)
-                    RoundedRectangle(cornerRadius: 4).fill(.quaternary).frame(width: width * 0.8, height: 12)
-                    RoundedRectangle(cornerRadius: 4).fill(.quaternary).frame(width: width * 0.5, height: 10)
+                    RoundedRectangle(cornerRadius: DS.Radius.small).fill(.quaternary).frame(
+                        width: width * 0.8, height: 12)
+                    RoundedRectangle(cornerRadius: DS.Radius.small).fill(.quaternary).frame(
+                        width: width * 0.5, height: 10)
                 }
             }
         }
@@ -545,7 +547,7 @@ struct MenuCardPlaceholders: View {
 
 #Preview("Components, accessibility size") {
     ScrollView {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: DS.Space.xl) {
             CardTitle(name: "One-Pan Sample Santa Fe Pork Tacos with Charred Corn Salsa")
                 .frame(width: 300)
                 .border(.red.opacity(0.4))
@@ -554,14 +556,14 @@ struct MenuCardPlaceholders: View {
             ServingsStepper(label: "4 servings", decrease: {}, increase: {})
             AddToWeekButton(isInPlan: true, isBusy: false, recipeName: "Tacos") {}
         }
-        .padding()
+        .padding(DS.Space.l)
     }
     .environment(\.dynamicTypeSize, .accessibility3)
 }
 
 #Preview("Components") {
     ScrollView {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: DS.Space.xl) {
             RecipePhoto(url: nil, pointWidth: 300)
                 .frame(width: 300)
             MenuChip(text: "Autopilot Pick", systemImage: "sparkles", isProminent: true)
@@ -572,7 +574,7 @@ struct MenuCardPlaceholders: View {
             AddToWeekButton(isInPlan: true, isBusy: false, recipeName: "Tacos") {}
             MenuCardPlaceholders()
         }
-        .padding()
+        .padding(DS.Space.l)
     }
 }
 
@@ -583,14 +585,14 @@ struct MenuCardPlaceholders: View {
         MenuPreviewData.cards.map(\.recipe.imageURL) + [nil, URL(string: "https://invalid.example/x.jpg")]
     ScrollView {
         ScrollView(.horizontal) {
-            LazyHStack(alignment: .top, spacing: 12) {
+            LazyHStack(alignment: .top, spacing: DS.Space.m) {
                 ForEach(Array(urls.enumerated()), id: \.offset) { index, url in
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: DS.Space.s) {
                         RecipePhoto(url: url, pointWidth: 300)
                             .overlay(alignment: .bottomLeading) {
                                 if index.isMultiple(of: 2) {
                                     TimeBadge(minutes: 25, isQuick: true)
-                                        .padding(8)
+                                        .padding(DS.Space.s)
                                 }
                             }
                             .border(.red.opacity(0.5))
@@ -605,7 +607,7 @@ struct MenuCardPlaceholders: View {
                     .containerRelativeFrame(.horizontal) { width, _ in width * 0.84 }
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, DS.Space.l)
         }
     }
 }

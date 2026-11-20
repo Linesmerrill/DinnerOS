@@ -13,7 +13,7 @@ struct MenuSectionView: View {
     private var photoURLs: [URL?] { section.items.map(\.recipe.imageURL) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
             MenuSectionHeader(title: section.title, subtitle: section.subtitle) {
                 if let query = section.moreQuery {
                     NavigationLink(value: AllMealsRoute(title: section.title, query: query)) {
@@ -23,13 +23,13 @@ struct MenuSectionView: View {
                     .accessibilityLabel("Show more \(section.title)")
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, DS.Space.l)
 
             if section.items.isEmpty {
                 Text("Nothing here yet.")
                     .font(.subheadline)
                     .foregroundStyle(Color.secondary)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, DS.Space.l)
             } else {
                 // Read outside the row builder, which can run on SwiftUI's render thread
                 // (decision 701).
@@ -37,7 +37,7 @@ struct MenuSectionView: View {
                 let canAdd = canAdd
                 let width = MenuRecipeCard.carouselWidth(for: dynamicTypeSize)
                 ScrollView(.horizontal) {
-                    LazyHStack(alignment: .top, spacing: 12) {
+                    LazyHStack(alignment: .top, spacing: DS.Space.m) {
                         ForEach(Array(section.items.enumerated()), id: \.element.id) { @Sendable index, card in
                             MenuCardRow(
                                 index: index, card: card, size: .carousel, canAdd: canAdd, photoURLs: urls,
@@ -45,7 +45,7 @@ struct MenuSectionView: View {
                         }
                     }
                     .scrollTargetLayout()
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, DS.Space.l)
                 }
                 .scrollIndicators(.hidden)
                 .scrollTargetBehavior(.viewAligned)

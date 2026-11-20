@@ -98,7 +98,7 @@ struct WeekContextSheet: View {
                 Button("Try Again") {
                     Task { await load() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
         } else {
             ProgressView()
@@ -275,9 +275,9 @@ private struct WeekPresetTiles: View {
         }
         Group {
             if dynamicTypeSize.isAccessibilitySize {
-                VStack(spacing: 10) { tiles }
+                VStack(spacing: DS.Space.sm) { tiles }
             } else {
-                HStack(spacing: 10) { tiles }
+                HStack(spacing: DS.Space.sm) { tiles }
             }
         }
         .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
@@ -290,11 +290,11 @@ private struct WeekPresetTile: View {
     let isOn: Bool
     let toggle: () -> Void
 
-    private static let cornerRadius: CGFloat = 18
+    private static let cornerRadius: CGFloat = DS.Radius.large
 
     var body: some View {
         Button(action: toggle) {
-            VStack(spacing: 6) {
+            VStack(spacing: DS.Space.xs) {
                 Image(systemName: preset.systemImage)
                     .font(.title3)
                     .foregroundStyle(isOn ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.accentColor))
@@ -308,11 +308,11 @@ private struct WeekPresetTile: View {
             }
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .padding(.horizontal, 6)
+            .padding(.vertical, DS.Space.ml)
+            .padding(.horizontal, DS.Space.xs)
             .background {
                 RoundedRectangle(cornerRadius: Self.cornerRadius)
-                    .fill(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color(.secondarySystemBackground)))
+                    .fill(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(DS.Colors.surface))
             }
             .contentShape(.rect(cornerRadius: Self.cornerRadius))
         }

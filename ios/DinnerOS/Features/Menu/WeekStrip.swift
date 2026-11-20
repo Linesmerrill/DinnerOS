@@ -198,7 +198,7 @@ struct WeekStrip: View {
     /// The strip in one line: the week you are on, and a way back to the rest of them.
     private var collapsedBar: some View {
         Button(action: onExpand) {
-            HStack(spacing: 6) {
+            HStack(spacing: DS.Space.xs) {
                 Text(collapsedTitle)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
@@ -207,7 +207,7 @@ struct WeekStrip: View {
                     .foregroundStyle(Color.secondary)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, DS.Space.l)
             // Derived from the line it draws, for the same reason the pills' height is (#455).
             .frame(height: WeekStripMetrics.collapsedHeight(for: dynamicTypeSize))
             .contentShape(.rect)
@@ -249,7 +249,7 @@ struct WeekStrip: View {
                 // are, and on iOS 27 (Xcode 27, build 118) that guess left the week you're on off
                 // to the side, or the strip back at its first pills after a search, while it
                 // reported the week as on screen. A strip is a few dozen small pills.
-                HStack(spacing: 8) {
+                HStack(spacing: DS.Space.s) {
                     pastButton
                     if menu.canLoadEarlierWeeks {
                         ProgressView()
@@ -332,7 +332,7 @@ struct WeekStrip: View {
         .overlay(alignment: isThisWeekBehind ? .leading : .trailing) {
             if showsThisWeekButton {
                 thisWeekButton
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, DS.Space.m)
                     .transition(.scale(scale: 0.7).combined(with: .opacity))
             }
         }
@@ -351,7 +351,7 @@ struct WeekStrip: View {
                 .font(.body.weight(.semibold))
                 .frame(width: 44)
                 .frame(maxHeight: .infinity)
-                .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 14))
+                .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
                 .contentShape(.rect)
         }
         .buttonStyle(WeekPillButtonStyle())
@@ -366,14 +366,14 @@ struct WeekStrip: View {
             select(menu.currentWeek)
             scrollTo(menu.currentWeek)
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: DS.Space.xxs) {
                 if isThisWeekBehind { Image(systemName: "chevron.backward") }
                 Text("This Week")
                 if !isThisWeekBehind { Image(systemName: "chevron.forward") }
             }
             .font(.footnote.weight(.semibold))
             .foregroundStyle(Color.onAccent)
-            .padding(.horizontal, 14)
+            .padding(.horizontal, DS.Space.ml)
             .frame(minHeight: 44)
             .background(.tint, in: .capsule)
             .shadow(color: .black.opacity(0.2), radius: 8, y: 2)
@@ -419,9 +419,9 @@ struct WeekPill: View {
     var isWide = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DS.Space.hairline) {
             if isWide {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: DS.Space.xs) {
                     dates
                     name
                 }
@@ -434,15 +434,15 @@ struct WeekPill: View {
         .lineLimit(1)
         .minimumScaleFactor(0.85)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, DS.Space.m)
+        .padding(.vertical, DS.Space.s)
         .background(
-            isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color(.secondarySystemBackground)),
-            in: .rect(cornerRadius: 14)
+            isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(DS.Colors.surface),
+            in: .rect(cornerRadius: DS.Radius.large)
         )
         .overlay {
             if item.timing == .current, !isSelected {
-                RoundedRectangle(cornerRadius: 14).strokeBorder(.tint, lineWidth: 1.5)
+                RoundedRectangle(cornerRadius: DS.Radius.large).strokeBorder(.tint, lineWidth: 1.5)
             }
         }
         .contentShape(.rect)
@@ -470,7 +470,7 @@ struct WeekPill: View {
 
     /// Seven nights, one mark each: how full the week is at a glance, then the count in words.
     private var detail: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: DS.Space.xs) {
             WeekNightsMeter(
                 planned: item.summary?.plannedCount ?? 0, cooked: item.summary?.cookedCount ?? 0,
                 isPast: item.timing == .past, isSelected: isSelected)
@@ -503,7 +503,7 @@ struct WeekNightsMeter: View {
     let isSelected: Bool
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: DS.Space.hairline) {
             ForEach(0..<7, id: \.self) { night in
                 Capsule()
                     .fill(color(for: night))
@@ -536,7 +536,7 @@ struct WeekPillButtonStyle: ButtonStyle {
 
 #Preview("Week strip") {
     NavigationStack {
-        Color(.systemGroupedBackground)
+        DS.Colors.groupedBackground
             .safeAreaInset(edge: .top, spacing: 0) { WeekStrip() }
     }
     .menuPreviewEnvironment()
@@ -544,7 +544,7 @@ struct WeekPillButtonStyle: ButtonStyle {
 
 #Preview("Week strip, accessibility size") {
     NavigationStack {
-        Color(.systemGroupedBackground)
+        DS.Colors.groupedBackground
             .safeAreaInset(edge: .top, spacing: 0) { WeekStrip() }
     }
     .menuPreviewEnvironment()
@@ -553,7 +553,7 @@ struct WeekPillButtonStyle: ButtonStyle {
 
 #Preview("Week strip, dark") {
     NavigationStack {
-        Color(.systemGroupedBackground)
+        DS.Colors.groupedBackground
             .safeAreaInset(edge: .top, spacing: 0) { WeekStrip() }
     }
     .menuPreviewEnvironment()
@@ -562,7 +562,7 @@ struct WeekPillButtonStyle: ButtonStyle {
 
 #Preview("Week strip, collapsed") {
     NavigationStack {
-        Color(.systemGroupedBackground)
+        DS.Colors.groupedBackground
             .safeAreaInset(edge: .top, spacing: 0) { WeekStrip(isExpanded: false) }
     }
     .menuPreviewEnvironment()
@@ -570,7 +570,7 @@ struct WeekPillButtonStyle: ButtonStyle {
 
 #Preview("Week strip, collapsed, accessibility size") {
     NavigationStack {
-        Color(.systemGroupedBackground)
+        DS.Colors.groupedBackground
             .safeAreaInset(edge: .top, spacing: 0) { WeekStrip(isExpanded: false) }
     }
     .menuPreviewEnvironment()
@@ -579,7 +579,7 @@ struct WeekPillButtonStyle: ButtonStyle {
 
 #Preview("Week strip, collapsed, largest accessibility size") {
     NavigationStack {
-        Color(.systemGroupedBackground)
+        DS.Colors.groupedBackground
             .safeAreaInset(edge: .top, spacing: 0) { WeekStrip(isExpanded: false) }
     }
     .menuPreviewEnvironment()

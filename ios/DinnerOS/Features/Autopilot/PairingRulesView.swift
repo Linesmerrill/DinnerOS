@@ -80,7 +80,7 @@ struct PairingRulesView: View {
                         FormErrorLabel(message: errorMessage)
                     }
                 } footer: {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: DS.Space.xxs) {
                         SectionAttributionText(change: autopilot.profile?.sections[.pairings])
                         if !canEdit {
                             Text("Your role can see pairing rules but not change them.")
@@ -127,7 +127,7 @@ struct PairingRulesView: View {
             guard canEdit else { return }
             editing = rule
         } label: {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(PairingFormat.ruleTitle(rule, vocabulary: autopilot.vocabulary))
                     .foregroundStyle(Color.primary)
                 Text(PairingFormat.ruleSummary(rule, vocabulary: autopilot.vocabulary))
@@ -272,7 +272,7 @@ struct PairingRuleEditor: View {
                         }
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, DS.Space.xxs)
             } header: {
                 Text("When You Plan")
             } footer: {

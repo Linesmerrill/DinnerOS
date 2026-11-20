@@ -45,7 +45,7 @@ struct GetStartedSection: View {
         Group {
             if isShown {
                 card
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, DS.Space.l)
             }
         }
         // Whether this member already waved it away, re-read whenever the household changes.
@@ -56,19 +56,19 @@ struct GetStartedSection: View {
     }
 
     private var card: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: DS.Space.ml) {
             header
             actions
         }
-        .padding(16)
-        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 18))
+        .padding(DS.Space.l)
+        .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("Get started"))
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
                 Text("Let's Fill Your Library")
                     .font(.title3.bold())
                     .accessibilityAddTraits(.isHeader)
@@ -83,7 +83,7 @@ struct GetStartedSection: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.footnote.weight(.semibold))
-                    .padding(6)
+                    .padding(DS.Space.xs)
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("Dismiss")
@@ -92,7 +92,7 @@ struct GetStartedSection: View {
     }
 
     private var actions: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
             NavigationLink(value: DiscoverRoute()) {
                 Label(SharedRecipes.title, systemImage: SharedRecipes.systemImage)
             }
@@ -134,7 +134,7 @@ private func getStartedPreview(canEdit: Bool = true) -> some View {
     return NavigationStack {
         ScrollView {
             GetStartedSection(dismissals: InMemoryFirstRunDismissals(), onAddOwnRecipe: {})
-                .padding(.horizontal, 16)
+                .padding(.horizontal, DS.Space.l)
         }
     }
     .environment(session)

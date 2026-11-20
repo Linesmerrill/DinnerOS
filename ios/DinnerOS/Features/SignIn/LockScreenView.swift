@@ -8,15 +8,16 @@ struct LockScreenView: View {
     @Environment(\.appConfiguration) private var configuration
     @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .largeTitle) private var markSize: CGFloat = 72
+    @ScaledMetric(relativeTo: .body) private var buttonHeight: CGFloat = DS.ButtonSize.large.height
 
     var body: some View {
         let kind = lock.kind ?? .faceID
         let isAsking = lock.machine.phase == .asking
         GeometryReader { proxy in
             ScrollView {
-                VStack(spacing: 32) {
-                    Spacer(minLength: 16)
-                    VStack(spacing: 16) {
+                VStack(spacing: DS.Space.xxxl) {
+                    Spacer(minLength: DS.Space.l)
+                    VStack(spacing: DS.Space.l) {
                         Image(systemName: "fork.knife.circle.fill")
                             .font(.system(size: markSize))
                             .foregroundStyle(.tint)
@@ -28,28 +29,32 @@ struct LockScreenView: View {
                             .font(.title3)
                             .foregroundStyle(.secondary)
                     }
-                    Spacer(minLength: 16)
-                    VStack(spacing: 12) {
+                    Spacer(minLength: DS.Space.l)
+                    VStack(spacing: DS.Space.m) {
                         Button {
                             Task { await lock.ask() }
                         } label: {
-                            Label(kind.toggleTitle, systemImage: kind.systemImage)
-                                .font(.headline)
-                                .frame(maxWidth: .infinity, minHeight: 34)
+                            SignInButtonLabel(title: Text(kind.toggleTitle), height: buttonHeight) {
+                                Image(systemName: kind.systemImage)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .fontWeight(.medium)
+                            }
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
+                        .buttonStyle(
+                            .dsPrimary(fullWidth: true, font: DS.Typography.signInButton(height: buttonHeight))
+                        )
                         .accessibilityIdentifier("lock.unlock")
                         Button("Sign in another way") {
                             Task { await lock.signInAnotherWay() }
                         }
-                        .controlSize(.large)
+                        .buttonStyle(.dsTextLink)
                         .accessibilityIdentifier("lock.anotherWay")
                     }
                     .disabled(isAsking)
                 }
-                .padding(.horizontal, 24)
-                .padding(.vertical, 16)
+                .padding(.horizontal, DS.Space.xxl)
+                .padding(.vertical, DS.Space.l)
                 .frame(maxWidth: 480)
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
@@ -57,10 +62,10 @@ struct LockScreenView: View {
         }
         .background {
             LinearGradient(
-                colors: [Color.accentColor.opacity(colorScheme == .dark ? 0.25 : 0.15), Color(.systemBackground)],
+                colors: [Color.accentColor.opacity(colorScheme == .dark ? 0.25 : 0.15), DS.Colors.background],
                 startPoint: .top, endPoint: .center
             )
-            .background(Color(.systemBackground))
+            .background(DS.Colors.background)
             .ignoresSafeArea()
         }
         .task { await lock.askIfReady() }

@@ -160,7 +160,7 @@ struct NutritionSection: View {
                     withAnimation { showsMore = true }
                 } label: {
                     Label("More Nutrition", systemImage: "plus")
-                        .frame(minHeight: 44)
+                        .frame(minHeight: DS.Size.tapTarget)
                 }
             }
             if let problem = values.problem {
@@ -181,7 +181,7 @@ private struct NutritionRow: View {
     @Binding var text: String
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DS.Space.s) {
             Text(field.label)
             Spacer(minLength: 8)
             TextField("Not set", text: $text)

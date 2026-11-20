@@ -24,7 +24,7 @@ struct DiscoverView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 32) {
+                LazyVStack(alignment: .leading, spacing: DS.Space.xxxl) {
                     if let message = discover.refreshError {
                         DiscoverNotice(message: message)
                             .padding(.horizontal, margin)
@@ -33,7 +33,7 @@ struct DiscoverView: View {
                     browseAll
                         .id(Self.browseAnchor)
                 }
-                .padding(.vertical, 16)
+                .padding(.vertical, DS.Space.l)
             }
             .onChange(of: searchFocused) { _, focused in
                 guard focused else { return }
@@ -125,7 +125,7 @@ struct DiscoverView: View {
     // MARK: - Browse All
 
     private var browseAll: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: DS.Space.ml) {
             Text(discover.home?.browseTitle ?? String(localized: "Browse All"))
                 .font(.title2.bold())
                 .accessibilityAddTraits(.isHeader)
@@ -141,7 +141,7 @@ struct DiscoverView: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DS.Space.s) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
@@ -163,21 +163,21 @@ struct DiscoverView: View {
                 .accessibilityLabel("Clear search")
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 12))
+        .padding(.horizontal, DS.Space.m)
+        .padding(.vertical, DS.Space.sm)
+        .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.medium))
     }
 
     private var filterChips: some View {
         ScrollView(.horizontal) {
-            HStack(spacing: 8) {
+            HStack(spacing: DS.Space.s) {
                 // Clear comes first, so a small phone never has it scrolled out of sight.
                 if discover.query.hasFilters {
                     Button("Clear") {
                         Task { await discover.clearFilters() }
                     }
                     .font(.subheadline)
-                    .padding(.horizontal, 4)
+                    .padding(.horizontal, DS.Space.xxs)
                     .accessibilityIdentifier("DiscoverFilterClear")
                 }
                 ForEach(discover.filterGroups) { group in
@@ -211,7 +211,7 @@ struct DiscoverView: View {
     }
 
     private func grid(_ items: [CatalogSummary], placeholder: Bool) -> some View {
-        LazyVGrid(columns: DiscoverCard.gridColumns, alignment: .leading, spacing: 20) {
+        LazyVGrid(columns: DiscoverCard.gridColumns, alignment: .leading, spacing: DS.Space.xl) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                 DiscoverCard(summary: item, width: nil, canAdd: canAdd && !placeholder, report: { reporting = $0 })
             }
@@ -285,9 +285,9 @@ struct DiscoverSectionRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     Text(section.title)
                         .font(featured ? .title2.bold() : .title3.bold())
                         .accessibilityAddTraits(.isHeader)
@@ -301,10 +301,10 @@ struct DiscoverSectionRow: View {
                         Text(sponsor)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
-                            .padding(.horizontal, 8)
+                            .padding(.horizontal, DS.Space.s)
                             .padding(.vertical, 3)
-                            .background(Color(.tertiarySystemFill), in: .capsule)
-                            .padding(.top, 4)
+                            .background(DS.Colors.subtleFill, in: .capsule)
+                            .padding(.top, DS.Space.xxs)
                             .accessibilityIdentifier("DiscoverSponsor")
                     }
                 }
@@ -319,7 +319,7 @@ struct DiscoverSectionRow: View {
             .padding(.horizontal, margin)
 
             ScrollView(.horizontal) {
-                LazyHStack(alignment: .top, spacing: 14) {
+                LazyHStack(alignment: .top, spacing: DS.Space.ml) {
                     ForEach(Array(section.items.enumerated()), id: \.offset) { _, item in
                         DiscoverCard(summary: item, width: cardWidth, canAdd: canAdd, report: report)
                     }
@@ -346,18 +346,18 @@ struct DiscoverCard: View {
 
     @Environment(DiscoverStore.self) private var discover
 
-    static let gridColumns = [GridItem(.adaptive(minimum: 150, maximum: 260), spacing: 16, alignment: .top)]
+    static let gridColumns = [GridItem(.adaptive(minimum: 150, maximum: 260), spacing: DS.Space.l, alignment: .top)]
 
     private var isSaved: Bool { discover.isSaved(summary) }
 
     var body: some View {
         NavigationLink(value: CatalogRecipeRoute(id: summary.id, name: summary.name)) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
                 RecipeImage(url: summary.imageURL, pointWidth: width ?? 240, title: summary.name)
-                    .clipShape(.rect(cornerRadius: 14))
+                    .clipShape(.rect(cornerRadius: DS.Radius.large))
                 // The time and cuisine sit right under the name, one line or two; cards in a
                 // row line up at the top, and the space a short name leaves goes below.
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DS.Space.xxs) {
                     Text(summary.name)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
@@ -378,7 +378,7 @@ struct DiscoverCard: View {
         // On top of the card, not inside its link, so a tap saves rather than opens.
         .overlay(alignment: .topTrailing) {
             saveButton
-                .padding(8)
+                .padding(DS.Space.s)
         }
         .contextMenu {
             Button("Report Recipe", systemImage: "flag") { report(summary) }
@@ -386,7 +386,7 @@ struct DiscoverCard: View {
     }
 
     private var facts: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DS.Space.sm) {
             if let minutes = summary.displayMinutes {
                 Label(RecipeFormat.minutes(minutes), systemImage: "clock")
                     .labelStyle(.titleAndIcon)
@@ -484,17 +484,17 @@ struct DiscoverFilterChip: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: DS.Space.xxs) {
                 Text(selectedLabel ?? group.title)
                 Image(systemName: "chevron.down")
                     .font(.caption2.weight(.bold))
             }
             .font(.subheadline.weight(.medium))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.horizontal, DS.Space.ml)
+            .padding(.vertical, DS.Space.s)
             .foregroundStyle(selected == nil ? Color.primary : Color.white)
             .background(
-                selected == nil ? AnyShapeStyle(Color(.secondarySystemBackground)) : AnyShapeStyle(.tint), in: .capsule)
+                selected == nil ? AnyShapeStyle(DS.Colors.surface) : AnyShapeStyle(.tint), in: .capsule)
         }
         .accessibilityLabel(selectedLabel.map { "\(group.title): \($0)" } ?? group.title)
         .accessibilityIdentifier("DiscoverFilter-\(group.id)")
@@ -519,16 +519,16 @@ struct DiscoverErrorRow: View {
     let retry: () -> Void
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: DS.Space.s) {
             Text(message)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button("Try Again", action: retry)
-                .buttonStyle(.bordered)
+                .buttonStyle(.dsSecondary(.small))
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
+        .padding(.vertical, DS.Space.m)
         .listRowSeparator(.hidden)
     }
 }

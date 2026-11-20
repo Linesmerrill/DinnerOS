@@ -28,23 +28,23 @@ struct PairingSuggestionsSection: View {
 
     var body: some View {
         if canEdit, !suggestions.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
                 MenuSectionHeader(
                     title: String(localized: "Goes well with your meals"),
                     subtitle: String(localized: "Sides and extras for this week's dinners")
                 )
-                .padding(.horizontal, 16)
+                .padding(.horizontal, DS.Space.l)
                 VStack(spacing: 0) {
                     ForEach(Array(suggestions.enumerated()), id: \.offset) { index, item in
                         row(meal: item.meal, pairing: item.pairing)
                         if index < suggestions.count - 1 {
                             Divider()
-                                .padding(.leading, 16)
+                                .padding(.leading, DS.Space.l)
                         }
                     }
                 }
-                .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 18))
-                .padding(.horizontal, 16)
+                .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
+                .padding(.horizontal, DS.Space.l)
             }
             .alert("Couldn't Change Your Week", isPresented: Binding(presenting: $actionError)) {
                 Button("OK", role: .cancel) {}
@@ -57,8 +57,8 @@ struct PairingSuggestionsSection: View {
 
     private func row(meal: MealPairings, pairing: Pairing) -> some View {
         let isBusy = pairings.isBusy(entryID: meal.entryID, key: pairing.key)
-        return VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
+        return VStack(alignment: .leading, spacing: DS.Space.s) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(PairingFormat.addPrompt(pairing))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.primary)
@@ -72,17 +72,15 @@ struct PairingSuggestionsSection: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            HStack(spacing: 12) {
+            HStack(spacing: DS.Space.m) {
                 Button("Add") {
                     perform { try await pairings.accept(entryID: meal.entryID, key: pairing.key) }
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
+                .buttonStyle(.dsPrimary(.small))
                 Button("Not This Week") {
                     perform { try await pairings.dismiss(entryID: meal.entryID, key: pairing.key) }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(.dsSecondary(.small))
                 if isBusy {
                     ProgressView()
                         .controlSize(.small)
@@ -91,7 +89,7 @@ struct PairingSuggestionsSection: View {
             }
             .disabled(isBusy)
         }
-        .padding(16)
+        .padding(DS.Space.l)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(PairingFormat.addPrompt(pairing)) \(withMeal(meal))")

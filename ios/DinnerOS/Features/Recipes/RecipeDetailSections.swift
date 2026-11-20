@@ -31,7 +31,7 @@ struct RecipeNotesForNextTime: View {
     let notes: [RatingMiss]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
             Label("Your Notes for Next Time", systemImage: "note.text")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.orange)
@@ -42,9 +42,9 @@ struct RecipeNotesForNextTime: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(12)
+        .padding(DS.Space.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.12), in: .rect(cornerRadius: 12))
+        .background(Color.orange.opacity(0.12), in: .rect(cornerRadius: DS.Radius.medium))
         .accessibilityElement(children: .combine)
     }
 }
@@ -113,9 +113,9 @@ struct RecipeIngredientsSection: View {
     private var options: [Int] { recipe.servingOptions }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: DS.Space.xl) {
             if !recipe.allergens.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DS.Space.xxs) {
                     Text("Allergens")
                         .font(.subheadline.weight(.semibold))
                     Text(recipe.allergens.joined(separator: " · "))
@@ -125,7 +125,7 @@ struct RecipeIngredientsSection: View {
                 .accessibilityElement(children: .combine)
             }
             servingPicker
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: DS.Space.ml) {
                 let lines = recipe.ingredientLines(servings: servings ?? options.first ?? 0)
                 ForEach(RecipeIngredientStates.make(lines: lines, instructions: instructions)) { state in
                     IngredientRow(
@@ -140,7 +140,7 @@ struct RecipeIngredientsSection: View {
     @ViewBuilder
     private var servingPicker: some View {
         if options.count > 1, let selected = servings {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
                 Text("Serving \(selected) people")
                     .font(.headline)
                 let selection = Binding(get: { selected }, set: { servings = $0 })
@@ -187,8 +187,8 @@ struct IngredientRow: View {
     var body: some View {
         let layout =
             dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.xs))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: DS.Space.m))
         layout {
             details
             if !dynamicTypeSize.isAccessibilitySize {
@@ -204,8 +204,7 @@ struct IngredientRow: View {
             ProgressView()
         } else if canEdit, isLeftOut {
             Button("Put Back", action: putBack)
-                .buttonStyle(.bordered)
-                .font(.subheadline)
+                .buttonStyle(.dsSecondary(.small))
                 .accessibilityLabel("Put \(line.name) Back")
         } else if canEdit {
             Menu {
@@ -227,22 +226,22 @@ struct IngredientRow: View {
                 Image(systemName: "minus.circle")
                     .imageScale(.large)
                     .foregroundStyle(.secondary)
-                    .frame(minWidth: 44, minHeight: 44)
+                    .frame(minWidth: DS.Size.tapTarget, minHeight: DS.Size.tapTarget)
             }
             .accessibilityLabel(state?.isComponent == true ? "Don't Make \(line.name)" : "Skip \(line.name)")
         }
     }
 
     private var details: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: DS.Space.m) {
             IngredientPhoto(url: line.imageURL)
                 .opacity(isLeftOut ? 0.4 : 1)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(line.nameWithNote)
                     .font(.headline)
                     .strikethrough(isLeftOut)
                     .foregroundStyle(isLeftOut ? Color.secondary : Color.primary)
-                HStack(spacing: 6) {
+                HStack(spacing: DS.Space.xs) {
                     if let amount = line.amount {
                         Text(amount)
                             .font(.subheadline)
@@ -253,7 +252,7 @@ struct IngredientRow: View {
                         Text("pantry")
                             .font(.caption2)
                             .foregroundStyle(Color.secondary)
-                            .padding(.horizontal, 6)
+                            .padding(.horizontal, DS.Space.xs)
                             .padding(.vertical, 1)
                             .background(.quaternary, in: .capsule)
                             .accessibilityLabel("pantry staple")
@@ -293,7 +292,7 @@ struct RecipeNutritionSection: View {
 
     var body: some View {
         let nutrients = MenuFormat.orderedNutrition(recipe.nutritionValues)
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: DS.Space.l) {
             if nutrients.isEmpty {
                 ContentUnavailableView {
                     Label("No Nutrition Values", systemImage: "chart.pie")
@@ -305,7 +304,7 @@ struct RecipeNutritionSection: View {
                 } actions: {
                     if let onAdd {
                         Button("Add Nutrition", systemImage: "plus", action: onAdd)
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.dsPrimary(.small))
                     }
                 }
             } else {
@@ -322,7 +321,7 @@ struct RecipeNutritionSection: View {
                                 .monospacedDigit()
                                 .foregroundStyle(Color.secondary)
                         }
-                        .padding(.vertical, 10)
+                        .padding(.vertical, DS.Space.sm)
                         .accessibilityElement(children: .combine)
                         if index < nutrients.count - 1 {
                             Divider()
@@ -373,7 +372,7 @@ struct CookingStepsSection: View {
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         .accessibilityHidden(true)
                 }
-                .frame(minHeight: 44)
+                .frame(minHeight: DS.Size.tapTarget)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -381,7 +380,7 @@ struct CookingStepsSection: View {
             .accessibilityValue(isExpanded ? "Shown" : "Hidden")
             .accessibilityHint(isExpanded ? "Hides the steps" : "Shows the steps")
             if isExpanded {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: DS.Space.xl) {
                     if let instructions, !instructions.steps.isEmpty {
                         ForEach(instructions.steps) { step in
                             InstructionStepRow(step: step)
@@ -394,7 +393,7 @@ struct CookingStepsSection: View {
                         }
                     }
                 }
-                .padding(.top, 12)
+                .padding(.top, DS.Space.m)
             }
         }
     }
@@ -404,17 +403,17 @@ struct RecipeStepRow: View {
     let step: RecipeStep
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
             Text(step.index.formatted())
                 .font(.headline)
                 .foregroundStyle(.tint)
                 .frame(minWidth: 20, alignment: .trailing)
                 .accessibilityLabel("Step \(step.index)")
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: DS.Space.sm) {
                 Text(step.text)
                     .fixedSize(horizontal: false, vertical: true)
                 if let url = step.imageURL {
-                    RecipePhoto(url: url, aspectRatio: 16.0 / 9.0, pointWidth: 340, cornerRadius: 12)
+                    RecipePhoto(url: url, aspectRatio: 16.0 / 9.0, pointWidth: 340, cornerRadius: DS.Radius.medium)
                 }
             }
         }
@@ -432,7 +431,7 @@ struct DetailSection<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
             Text(title)
                 .font(.title3.weight(.semibold))
                 .accessibilityAddTraits(.isHeader)
@@ -444,7 +443,7 @@ struct DetailSection<Content: View>: View {
 #Preview("Ingredients") {
     ScrollView {
         RecipeIngredientsSection(recipe: RecipePreviewData.recipe, servings: .constant(2))
-            .padding()
+            .padding(DS.Space.l)
     }
     .menuPreviewEnvironment()
 }
@@ -452,6 +451,6 @@ struct DetailSection<Content: View>: View {
 #Preview("Nutrition") {
     ScrollView {
         RecipeNutritionSection(recipe: RecipePreviewData.recipe)
-            .padding()
+            .padding(DS.Space.l)
     }
 }

@@ -8,7 +8,7 @@ struct HowItWorksSection: View {
     var body: some View {
         Section {
             ForEach(Array(howItWorks.steps.enumerated()), id: \.offset) { index, step in
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
                     Text("\(index + 1)")
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(Color("OnAccent"))
@@ -18,7 +18,7 @@ struct HowItWorksSection: View {
                     Text(step)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, DS.Space.hairline)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(Text("Step \(index + 1). ") + Text(step))
             }
@@ -47,7 +47,7 @@ struct ReferralProgressContent: View {
     let progress: ReferralProgress
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
             Label {
                 Text(progress.message)
                     .fixedSize(horizontal: false, vertical: true)
@@ -58,7 +58,7 @@ struct ReferralProgressContent: View {
             .font(.subheadline.weight(.semibold))
             if progress.isPending {
                 ForEach(progress.steps) { step in
-                    HStack(spacing: 10) {
+                    HStack(spacing: DS.Space.sm) {
                         Image(systemName: step.done ? "checkmark.circle.fill" : "circle")
                             .foregroundStyle(step.done ? Color.accentColor : Color.secondary)
                             .imageScale(.large)
@@ -66,7 +66,7 @@ struct ReferralProgressContent: View {
                         Text(step.title)
                             .strikethrough(step.done, color: .secondary)
                             .foregroundStyle(step.done ? Color.secondary : Color.primary)
-                        Spacer(minLength: 8)
+                        Spacer(minLength: DS.Space.s)
                         if let count = step.count, let target = step.target, target > 1, !step.done {
                             Text("\(count) of \(target)")
                                 .font(.subheadline)
@@ -78,7 +78,7 @@ struct ReferralProgressContent: View {
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
         .accessibilityIdentifier("ReferralProgress")
     }
 
@@ -144,8 +144,8 @@ private struct InviteRow: View {
     let item: PlusInviteItem
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(item.householdName)
                 if let detail = item.detailLine {
                     Text(detail)
@@ -153,7 +153,7 @@ private struct InviteRow: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: DS.Space.s)
             Text(item.stateTitle)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(stateColor)

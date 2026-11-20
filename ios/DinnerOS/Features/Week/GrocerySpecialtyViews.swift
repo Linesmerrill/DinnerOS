@@ -8,13 +8,13 @@ struct GroceryBatchRow: View {
     let madeIt: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
                 Image(systemName: "house")
                     .font(.title3)
                     .foregroundStyle(.tint)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     Text(batch.specialtyName)
                         .font(.headline)
                     Text(batch.text)
@@ -34,24 +34,23 @@ struct GroceryBatchRow: View {
                 .accessibilityElement(children: .combine)
             }
             if canMake {
-                HStack(spacing: 8) {
+                HStack(spacing: DS.Space.s) {
                     Spacer(minLength: 0)
                     if isWorking {
                         ProgressView()
                     }
                     Button("Made It", systemImage: "checkmark.seal", action: madeIt)
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.dsPrimary(.small))
                         // In a list row the symbol otherwise takes the tint and vanishes on the
                         // tinted fill.
                         .foregroundStyle(Color.onAccent)
-                        .controlSize(.small)
                         .disabled(isWorking)
                         .accessibilityLabel("Made \(batch.specialtyName)")
                         .accessibilityHint("Records the batch in the pantry.")
                 }
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DS.Space.hairline)
     }
 }
 
@@ -61,7 +60,7 @@ struct GroceryMadeBatchRow: View {
 
     var body: some View {
         Label {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(batch.specialtyName)
                 Group {
                     if let remaining = batch.remaining {
@@ -87,7 +86,7 @@ struct SpecialtyChoiceNotice: View {
     let setUp: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
             Label(
                 count == 1
                     ? String(localized: "1 specialty ingredient needs a choice")
@@ -99,8 +98,7 @@ struct SpecialtyChoiceNotice: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Button("Set Up Specialty Ingredients", action: setUp)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(.dsSecondary(.small))
         }
     }
 }
@@ -176,12 +174,12 @@ private struct SuggestedOptionRow: View {
     let option: GrocerySpecialtyOption
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Space.m) {
             Image(systemName: option.type.systemImage)
                 .foregroundStyle(.tint)
                 .frame(minWidth: 28)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(option.name)
                 Group {
                     if option.isDefault {

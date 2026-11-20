@@ -101,7 +101,7 @@ struct SpecialtyIngredientsView: View {
                 Button("Try Again") {
                     Task { await specialties.retry() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
         case .loaded:
             list
@@ -203,8 +203,8 @@ struct SpecialtyIngredientRow: View {
         let isLarge = dynamicTypeSize.isAccessibilitySize
         let layout =
             isLarge
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.xs))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: DS.Space.m))
         layout {
             VStack(alignment: .leading, spacing: 3) {
                 Text(ingredient.name)
@@ -251,7 +251,7 @@ struct SpecialtyChoiceBadge: View {
     var body: some View {
         Text(SpecialtyFormat.choiceBadge(ingredient))
             .font(.caption.weight(.semibold))
-            .padding(.horizontal, 8)
+            .padding(.horizontal, DS.Space.s)
             .padding(.vertical, 3)
             .foregroundStyle(color)
             .background(color.opacity(0.15), in: .capsule)

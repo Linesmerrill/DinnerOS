@@ -17,7 +17,7 @@ struct AutopilotBadgeButton: View {
         Button {
             isShowingDetail = true
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: DS.Space.xxs) {
                 if hasSymbol {
                     Image(systemName: badge.symbol)
                         .symbolRenderingMode(.multicolor)
@@ -28,8 +28,8 @@ struct AutopilotBadgeButton: View {
             }
             .font(.caption.weight(.semibold))
             .lineLimit(1)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, DS.Space.s)
+            .padding(.vertical, DS.Space.xxs)
             .background {
                 if onPhoto {
                     Capsule().fill(.regularMaterial)
@@ -40,7 +40,7 @@ struct AutopilotBadgeButton: View {
             .foregroundStyle(onPhoto ? AnyShapeStyle(Color.primary) : AnyShapeStyle(.tint))
             // The capsule is small; the tap area isn't. Over a photo it grows its tap area
             // without growing its frame, so it lines up with the day label beside it.
-            .frame(minHeight: onPhoto ? nil : 44)
+            .frame(minHeight: onPhoto ? nil : DS.Size.tapTarget)
             .contentShape(.rect.inset(by: onPhoto ? -10 : 0))
         }
         .buttonStyle(.plain)
@@ -62,7 +62,7 @@ struct AutopilotBadgeDetail: View {
     let badge: AutopilotBadge
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
             Label {
                 Text(badge.label).font(.headline)
             } icon: {
@@ -77,13 +77,13 @@ struct AutopilotBadgeDetail: View {
                 WeatherAttributionView()
             }
         }
-        .padding()
+        .padding(DS.Space.l)
         .frame(idealWidth: 300, maxWidth: 320, alignment: .leading)
     }
 }
 
 #Preview("Weather badge") {
-    VStack(spacing: 20) {
+    VStack(spacing: DS.Space.xl) {
         AutopilotBadgeButton(
             badge: AutopilotBadge(
                 code: "weather", label: "Cold and rainy", symbol: "cloud.rain",

@@ -95,13 +95,13 @@ struct AddRecipeChooser: View {
     }
 
     private func row(_ choice: AddRecipeChoice) -> some View {
-        HStack(spacing: 14) {
+        HStack(spacing: DS.Space.ml) {
             Image(systemName: choice.systemImage)
                 .font(.title3)
                 .foregroundStyle(.tint)
                 .frame(width: 32)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(choice.title)
                     .font(.body.weight(.semibold))
                 Text(choice.subtitle)
@@ -115,7 +115,7 @@ struct AddRecipeChooser: View {
                 .foregroundStyle(.tertiary)
                 .accessibilityHidden(true)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, DS.Space.xs)
         .contentShape(.rect)
     }
 

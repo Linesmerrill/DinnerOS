@@ -48,7 +48,7 @@ struct GroceryListView: View {
                     Button("Try Again") {
                         Task { await start() }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.dsPrimary(.small))
                 }
             } else {
                 ProgressView()
@@ -285,7 +285,7 @@ struct GroceryListContent: View {
                 Button("Try Again") {
                     Task { await model.load() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
         case .loaded:
             if let list = model.list {
@@ -301,7 +301,7 @@ struct GroceryListContent: View {
                 FormErrorLabel(message: refreshError)
             }
             Section {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DS.Space.xxs) {
                     Text(model.week.rangeLabel(weekStartsOn: model.weekStartsOn))
                         .font(.headline)
                     if !list.isEmpty {
@@ -402,7 +402,7 @@ struct GroceryListContent: View {
                     } label: {
                         HStack {
                             Label {
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                                     Text("Skipped Items")
                                     Text("Things you already have or chose not to buy")
                                         .font(.footnote)
@@ -555,14 +555,14 @@ private struct GroceryItemRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
                 Button(action: toggle) {
-                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
                         Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
                             .foregroundStyle(isChecked ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                             .font(.title3)
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: DS.Space.hairline) {
                             Text(item.name)
                                 .strikethrough(isChecked)
                                 .foregroundStyle(isChecked || item.status != .toBuy ? .secondary : .primary)
@@ -624,7 +624,7 @@ private struct GroceryItemRow: View {
                 specialtyPrompt(specialty)
             }
             if isExpanded {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     ForEach(item.recipes) { recipe in
                         Label(recipe.name, systemImage: "fork.knife")
                     }
@@ -639,13 +639,13 @@ private struct GroceryItemRow: View {
     }
 
     private func specialtyPrompt(_ specialty: GrocerySpecialty) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
             Label(specialty.text, systemImage: "sparkles")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             if canChooseSpecialty {
                 if isChangingSpecialty {
-                    HStack(spacing: 6) {
+                    HStack(spacing: DS.Space.xs) {
                         ProgressView()
                         Text("Saving your choice…")
                             .font(.footnote)
@@ -654,8 +654,7 @@ private struct GroceryItemRow: View {
                     .accessibilityElement(children: .combine)
                 } else {
                     Button("Choose", action: choose)
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                        .buttonStyle(.dsSecondary(.small))
                         .accessibilityLabel("Choose an Option for \(specialty.name)")
                 }
             }
@@ -722,12 +721,12 @@ struct LeftOutItemRow: View {
     let putBack: () -> Void
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
             Image(systemName: "minus.circle")
                 .foregroundStyle(.secondary)
                 .font(.title3)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(item.name)
                     .strikethrough()
                     .foregroundStyle(.secondary)
@@ -757,8 +756,7 @@ struct LeftOutItemRow: View {
                 ProgressView()
             } else if canPutBack {
                 Button("Put Back", action: putBack)
-                    .buttonStyle(.bordered)
-                    .font(.subheadline)
+                    .buttonStyle(.dsSecondary(.small))
                     .accessibilityLabel("Put \(item.name) Back")
             }
         }
@@ -769,7 +767,7 @@ private struct SkippedEntriesNotice: View {
     let skipped: [GrocerySkippedEntry]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
             Label(
                 skipped.count == 1
                     ? String(localized: "1 recipe isn't included")

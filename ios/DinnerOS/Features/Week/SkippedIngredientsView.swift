@@ -63,7 +63,7 @@ struct SkippedIngredientsView: View {
                 Button("Try Again") {
                     Task { await skips.retry() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
         case .loaded:
             list
@@ -116,7 +116,7 @@ struct SkippedIngredientsView: View {
 
     private func row(_ skip: GrocerySkip) -> some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(skip.name)
                 if skip.scope == .recipe, let recipe = skip.recipeName, !recipe.isEmpty {
                     Text("in \(recipe)")
@@ -130,7 +130,7 @@ struct SkippedIngredientsView: View {
                 ProgressView()
             } else if canEdit, skip.scope == .recipe {
                 Button("Put Back") { resume(skip) }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.dsSecondary(.small))
                     .accessibilityLabel("Put \(skip.name) Back in \(skip.recipeName ?? "the Recipe")")
             } else if canEdit {
                 Menu {

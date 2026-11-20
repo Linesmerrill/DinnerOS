@@ -10,8 +10,8 @@ struct AutopilotContextExplainerView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: DS.Space.xxl) {
+                    VStack(alignment: .leading, spacing: DS.Space.s) {
                         Image(systemName: "sparkles")
                             .font(.largeTitle)
                             .foregroundStyle(.tint)
@@ -42,20 +42,18 @@ struct AutopilotContextExplainerView: View {
                                 "Both are optional. Autopilot plans without them, and you can turn either off in Autopilot Preferences."
                         ))
                 }
-                .padding()
+                .padding(DS.Space.l)
             }
             .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 8) {
+                VStack(spacing: DS.Space.s) {
                     Button(action: onContinue) {
                         Text("Continue")
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.dsPrimary(fullWidth: true))
                     Button("Not Now", action: onNotNow)
-                        .controlSize(.large)
+                        .buttonStyle(.dsTextLink)
                 }
-                .padding()
+                .padding(DS.Space.l)
                 .background(.bar)
             }
         }
@@ -63,13 +61,13 @@ struct AutopilotContextExplainerView: View {
     }
 
     private func point(systemImage: String, title: String, detail: String) -> some View {
-        HStack(alignment: .top, spacing: 14) {
+        HStack(alignment: .top, spacing: DS.Space.ml) {
             Image(systemName: systemImage)
                 .font(.title2)
                 .foregroundStyle(.tint)
                 .frame(minWidth: 32)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
                 Text(title)
                     .font(.headline)
                 Text(detail)
@@ -125,7 +123,7 @@ struct AutopilotDeviceContextSection: View {
 
     private func label(title: String, systemImage: String, status: String) -> some View {
         Label {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(title)
                 Text(status)
                     .font(.caption)
@@ -154,11 +152,11 @@ struct WeatherAttributionView: View {
 
     var body: some View {
         let attribution = context?.weatherAttribution ?? .fallback
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
             Text("Suggestions use the forecast for your area.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            HStack(spacing: 8) {
+            HStack(spacing: DS.Space.s) {
                 if let url = colorScheme == .dark ? attribution.darkMarkURL : attribution.lightMarkURL {
                     AsyncImage(url: url) { image in
                         image.resizable().scaledToFit()

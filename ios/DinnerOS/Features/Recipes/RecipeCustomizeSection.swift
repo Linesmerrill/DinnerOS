@@ -8,8 +8,8 @@ struct RecipeCustomizeSection: View {
     let choose: (CustomizationGroup, CustomizationChoice) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DS.Space.l) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Label("Customize your meal", systemImage: "arrow.triangle.swap")
                     .font(.title3.weight(.semibold))
                     .accessibilityAddTraits(.isHeader)
@@ -32,8 +32,8 @@ struct RecipeCustomizeSection: View {
                         }
                     }
                 }
-                .padding(.vertical, 4)
-                .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 18))
+                .padding(.vertical, DS.Space.xxs)
+                .background(DS.Colors.surface, in: .rect(cornerRadius: DS.Radius.large))
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("Choices for \(group.ingredientName)")
             }
@@ -42,16 +42,16 @@ struct RecipeCustomizeSection: View {
 
     private func row(group: CustomizationGroup, choice: CustomizationChoice) -> some View {
         let isSelected = selections[group.ingredientKey] == choice.id
-        return HStack(spacing: 12) {
+        return HStack(spacing: DS.Space.m) {
             Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                 .font(.title3)
                 .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary))
             IngredientPhoto(url: choice.imageURL ?? group.imageURL, size: 40)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(choice.label)
                     .font(.headline)
                     .foregroundStyle(Color.primary)
-                HStack(spacing: 6) {
+                HStack(spacing: DS.Space.xs) {
                     if !choice.amountText.isEmpty {
                         Text(choice.amountText)
                             .font(.subheadline)
@@ -64,8 +64,8 @@ struct RecipeCustomizeSection: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, DS.Space.m)
+        .padding(.vertical, DS.Space.sm)
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
@@ -77,6 +77,6 @@ struct RecipeCustomizeSection: View {
         RecipeCustomizeSection(
             groups: MenuPreviewData.customizations, selections: .constant(["i-pork": "beef"])
         ) { _, _ in }
-        .padding()
+        .padding(DS.Space.l)
     }
 }

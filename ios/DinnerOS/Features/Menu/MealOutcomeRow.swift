@@ -64,7 +64,7 @@ struct MealOutcomeRow: View {
     /// `EventReporter.undoWindow` before it is sent, so taking it back costs the API nothing and
     /// the pantry never changes for a tap made by mistake.
     private func undoRow(_ outcome: EventReporter.EntryOutcome) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DS.Space.s) {
             Label(title, systemImage: outcome == .cooked ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .foregroundStyle(Color.secondary)
             Spacer(minLength: 0)
@@ -74,7 +74,7 @@ struct MealOutcomeRow: View {
                 events.undoOutcome(entryID: entry.id)
                 undoable = nil
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.dsSecondary(.small))
         }
     }
 
@@ -151,6 +151,6 @@ struct DidntMakeItMenu<MenuLabel: View>: View {
 
 #Preview("Night passed") {
     MealOutcomeRow(entry: PlanPreviewData.plan.entries[0])
-        .padding()
+        .padding(DS.Space.l)
         .menuPreviewEnvironment()
 }

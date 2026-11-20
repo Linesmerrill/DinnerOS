@@ -73,7 +73,7 @@ struct StoreProductSearchView: View {
     private func list(for item: WalmartChooser.Item) -> some View {
         List {
             Section {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     Text(item.name)
                         .font(.headline)
                     if !item.amountText.isEmpty {
@@ -88,7 +88,7 @@ struct StoreProductSearchView: View {
                     }
                 }
                 .accessibilityElement(children: .combine)
-                HStack(spacing: 12) {
+                HStack(spacing: DS.Space.m) {
                     Button("Back", systemImage: "chevron.left") { chooser.back() }
                         .disabled(!chooser.canGoBack || savingID != nil)
                     Spacer()
@@ -100,7 +100,7 @@ struct StoreProductSearchView: View {
             Section {
                 switch phase {
                 case .idle, .searching:
-                    HStack(spacing: 8) {
+                    HStack(spacing: DS.Space.s) {
                         ProgressView()
                         Text("Searching \(shopping.providerName)…")
                             .foregroundStyle(.secondary)
@@ -148,7 +148,7 @@ struct StoreProductSearchView: View {
             )
         } actions: {
             Button("Done") { dismiss() }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
         }
     }
 
@@ -196,7 +196,7 @@ struct StoreProductRow: View {
     var hint: LocalizedStringKey = "Saves it for this item."
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Space.m) {
             AsyncImage(url: product.imageURL) { image in
                 image.resizable().scaledToFit()
             } placeholder: {
@@ -204,10 +204,10 @@ struct StoreProductRow: View {
                     .foregroundStyle(.tertiary)
             }
             .frame(width: 56, height: 56)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 8))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .background(Color.white, in: RoundedRectangle(cornerRadius: DS.Radius.small))
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.small))
             .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(product.name)
                     .font(.subheadline)
                     .foregroundStyle(Color.primary)
@@ -230,7 +230,7 @@ struct StoreProductRow: View {
                 ProgressView()
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DS.Space.hairline)
         .accessibilityElement(children: .combine)
         .accessibilityHint(hint)
     }

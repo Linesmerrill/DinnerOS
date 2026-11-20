@@ -57,7 +57,7 @@ struct ChoiceChip: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
+            HStack(spacing: DS.Space.xxs) {
                 if let icon {
                     Image(systemName: icon)
                         .imageScale(.small)
@@ -70,8 +70,8 @@ struct ChoiceChip: View {
                 }
             }
             .font(.subheadline)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, DS.Space.sm)
+            .padding(.vertical, DS.Space.xs)
             // A concrete color: `.primary` inside a list Button resolves to the tint.
             .foregroundStyle(foreground)
             .background(background, in: .capsule)
@@ -138,7 +138,7 @@ struct ValueChipGroup: View {
     var body: some View {
         let all = values
         let shown = showsAll ? all : Array(all.prefix(max(initialCount, selection.count)))
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
             ChipFlowLayout {
                 ForEach(shown, id: \.value) { item in
                     let isSelected = selection.contains(item.value)
@@ -169,7 +169,7 @@ struct ValueChipGroup: View {
                     .foregroundStyle(.red)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
     }
 
     private func toggle(_ value: String) {
@@ -208,14 +208,14 @@ struct DayChipRow: View {
     let toggle: (PlanDay) -> Void
 
     var body: some View {
-        ChipFlowLayout(spacing: 6) {
+        ChipFlowLayout(spacing: DS.Space.xs) {
             ForEach(PlanDay.allCases) { day in
                 let isSelected = selection.contains(day)
                 ChoiceChip(title: Self.shortName(day), state: isSelected ? .on : .off) { toggle(day) }
                     .accessibilityLabel(day.name())
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
     }
 
     static func shortName(_ day: PlanDay, locale: Locale = .autoupdatingCurrent) -> String {
@@ -261,8 +261,8 @@ struct TimeBandBadge: View {
     var body: some View {
         Text(band.title)
             .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
+            .padding(.horizontal, DS.Space.xs)
+            .padding(.vertical, DS.Space.hairline)
             .foregroundStyle(color)
             .background(color.opacity(0.15), in: .capsule)
             .accessibilityLabel(Text("\(band.title) cook"))

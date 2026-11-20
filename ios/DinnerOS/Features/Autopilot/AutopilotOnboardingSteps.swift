@@ -14,12 +14,12 @@ struct AutopilotTasteStep: View {
     private var columns: [GridItem] {
         // One column at accessibility sizes, so the name always fits on its photo.
         let minimum: CGFloat = dynamicTypeSize.isAccessibilitySize ? 260 : 150
-        return [GridItem(.adaptive(minimum: minimum), spacing: 12)]
+        return [GridItem(.adaptive(minimum: minimum), spacing: DS.Space.m)]
     }
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 12) {
+            LazyVGrid(columns: columns, spacing: DS.Space.m) {
                 ForEach(tiles) { tile in
                     CuisineTileView(
                         tile: tile, preference: settings.preference(for: tile.value, kind: .cuisine),
@@ -27,7 +27,7 @@ struct AutopilotTasteStep: View {
                 }
             }
             .padding(.horizontal)
-            .padding(.bottom, 8)
+            .padding(.bottom, DS.Space.s)
         }
         .scrollBounceBehavior(.basedOnSize)
     }
@@ -48,7 +48,7 @@ private struct CuisineTileView: View {
     let cycle: () -> Void
     let set: (AutopilotTastePreference) -> Void
 
-    private static let cornerRadius: CGFloat = 18
+    private static let cornerRadius: CGFloat = DS.Radius.large
 
     var body: some View {
         Button(action: cycle) {
@@ -111,7 +111,7 @@ private struct CuisineTileView: View {
             .lineLimit(2)
             .minimumScaleFactor(0.8)
             .shadow(color: .black.opacity(tile.imageURL == nil ? 0 : 0.6), radius: 3)
-            .padding(10)
+            .padding(DS.Space.sm)
     }
 
     /// The same filled mark the Menu's cards use once a recipe is in the week.
@@ -125,7 +125,7 @@ private struct CuisineTileView: View {
                 .background {
                     Circle().fill(preference == .liked ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary))
                 }
-                .padding(8)
+                .padding(DS.Space.s)
                 .accessibilityHidden(true)
         }
     }
@@ -148,12 +148,12 @@ struct AutopilotAvoidStep: View {
     private var columns: [GridItem] {
         // One per row at accessibility sizes, where a label needs the whole width.
         let minimum: CGFloat = dynamicTypeSize.isAccessibilitySize ? 260 : 104
-        return [GridItem(.adaptive(minimum: minimum), spacing: 10)]
+        return [GridItem(.adaptive(minimum: minimum), spacing: DS.Space.sm)]
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: DS.Space.xl) {
                 group(
                     title: String(localized: "Allergens"), options: vocabulary.allergens,
                     selection: $settings.restrictions.allergens, symbol: AutopilotAvoidSymbol.allergen)
@@ -163,7 +163,7 @@ struct AutopilotAvoidStep: View {
                 ingredients
             }
             .padding(.horizontal)
-            .padding(.bottom, 8)
+            .padding(.bottom, DS.Space.s)
         }
         .scrollBounceBehavior(.basedOnSize)
     }
@@ -174,11 +174,11 @@ struct AutopilotAvoidStep: View {
         symbol: @escaping (String) -> String
     ) -> some View {
         if !options.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: DS.Space.sm) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
-                LazyVGrid(columns: columns, spacing: 10) {
+                LazyVGrid(columns: columns, spacing: DS.Space.sm) {
                     ForEach(options, id: \.value) { option in
                         AvoidTile(
                             label: option.label, systemImage: symbol(option.value),
@@ -194,7 +194,7 @@ struct AutopilotAvoidStep: View {
 
     /// Free text, so it keeps the chips-and-a-field control the preference screens use.
     private var ingredients: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
             Text("Never Include")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
@@ -220,11 +220,11 @@ private struct AvoidTile: View {
     let isOn: Bool
     let toggle: () -> Void
 
-    private static let cornerRadius: CGFloat = 18
+    private static let cornerRadius: CGFloat = DS.Radius.large
 
     var body: some View {
         Button(action: toggle) {
-            VStack(spacing: 8) {
+            VStack(spacing: DS.Space.s) {
                 Image(systemName: systemImage)
                     .font(.title2)
                     .symbolVariant(.none)
@@ -237,11 +237,11 @@ private struct AvoidTile: View {
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .padding(.horizontal, 8)
+            .padding(.vertical, DS.Space.ml)
+            .padding(.horizontal, DS.Space.s)
             .background {
                 RoundedRectangle(cornerRadius: Self.cornerRadius)
-                    .fill(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color(.secondarySystemBackground)))
+                    .fill(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(DS.Colors.surface))
             }
             .overlay {
                 RoundedRectangle(cornerRadius: Self.cornerRadius)
@@ -269,15 +269,15 @@ struct AutopilotWeekStep: View {
 
     private var columns: [GridItem] {
         let minimum: CGFloat = dynamicTypeSize.isAccessibilitySize ? 260 : 96
-        return [GridItem(.adaptive(minimum: minimum), spacing: 10)]
+        return [GridItem(.adaptive(minimum: minimum), spacing: DS.Space.sm)]
     }
 
     private var nights: Int { settings.schedule.planDays.count }
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
-                LazyVGrid(columns: columns, spacing: 10) {
+            VStack(spacing: DS.Space.l) {
+                LazyVGrid(columns: columns, spacing: DS.Space.sm) {
                     ForEach(PlanDay.allCases) { day in
                         NightTile(day: day, isOn: settings.schedule.planDays.contains(day)) {
                             settings.setPlanNight(day, included: !settings.schedule.planDays.contains(day))
@@ -290,7 +290,7 @@ struct AutopilotWeekStep: View {
                     .accessibilityLabel(Text("Autopilot plans ^[\(nights) dinner](inflect: true) a week"))
             }
             .padding(.horizontal)
-            .padding(.bottom, 8)
+            .padding(.bottom, DS.Space.s)
         }
         .scrollBounceBehavior(.basedOnSize)
     }
@@ -302,11 +302,11 @@ private struct NightTile: View {
     let isOn: Bool
     let toggle: () -> Void
 
-    private static let cornerRadius: CGFloat = 18
+    private static let cornerRadius: CGFloat = DS.Radius.large
 
     var body: some View {
         Button(action: toggle) {
-            VStack(spacing: 6) {
+            VStack(spacing: DS.Space.xs) {
                 Text(DayChipRow.shortName(day))
                     .font(.headline)
                     .foregroundStyle(isOn ? AnyShapeStyle(Color.onAccent) : AnyShapeStyle(Color.primary))
@@ -318,11 +318,11 @@ private struct NightTile: View {
                         isOn ? AnyShapeStyle(Color.onAccent.opacity(0.9)) : AnyShapeStyle(Color.secondary))
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .padding(.horizontal, 6)
+            .padding(.vertical, DS.Space.l)
+            .padding(.horizontal, DS.Space.xs)
             .background {
                 RoundedRectangle(cornerRadius: Self.cornerRadius)
-                    .fill(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color(.secondarySystemBackground)))
+                    .fill(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(DS.Colors.surface))
             }
             .contentShape(.rect(cornerRadius: Self.cornerRadius))
         }

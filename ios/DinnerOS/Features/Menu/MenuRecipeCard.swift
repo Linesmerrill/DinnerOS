@@ -27,7 +27,7 @@ struct MenuRecipeCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             NavigationLink(value: card.recipe) {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: DS.Space.s) {
                     photo
                     title
                 }
@@ -41,7 +41,7 @@ struct MenuRecipeCard: View {
             }
             if size == .fullWidth, canAdd {
                 addButton
-                    .padding(.top, 10)
+                    .padding(.top, DS.Space.sm)
             }
         }
         .frame(width: size == .carousel ? carouselWidth : nil, alignment: .leading)
@@ -75,7 +75,7 @@ struct MenuRecipeCard: View {
                     isInPlan: card.inPlan, isBusy: isBusy, recipeName: card.recipe.name, action: toggle
                 )
                 .contextMenu { dayMenuItems }
-                .padding(4)
+                .padding(DS.Space.xxs)
             }
         }
         .overlay(alignment: .topLeading) {
@@ -84,7 +84,7 @@ struct MenuRecipeCard: View {
                     text: contextBadge.text, systemImage: contextBadge.code.systemImage,
                     isProminent: contextBadge.code == .autopilotPick
                 )
-                .padding(8)
+                .padding(DS.Space.s)
                 // Spoken as part of the card's label instead.
                 .accessibilityHidden(true)
             }
@@ -92,7 +92,7 @@ struct MenuRecipeCard: View {
         .overlay(alignment: .bottomLeading) {
             if let minutes = card.recipe.displayMinutes, minutes > 0 {
                 TimeBadge(minutes: minutes, isQuick: isQuick)
-                    .padding(8)
+                    .padding(DS.Space.s)
                     .accessibilityHidden(true)
             }
         }
@@ -114,20 +114,18 @@ struct MenuRecipeCard: View {
     private var isQuick: Bool { card.recipe.timeBand == .quick }
 
     private var addButton: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Space.m) {
             Button(action: toggle) {
                 if isBusy {
                     ProgressView()
-                        .frame(maxWidth: .infinity)
                 } else {
                     Label(
                         card.inPlan ? String(localized: "In Your Week") : String(localized: "Add"),
                         systemImage: card.inPlan ? "checkmark" : "plus"
                     )
-                    .frame(maxWidth: .infinity)
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.dsSecondary(.small, fullWidth: true))
             .tint(card.inPlan ? Color.accentColor : Color.accentColor)
             .disabled(isBusy)
             .accessibilityLabel(
@@ -175,12 +173,12 @@ struct MenuRecipeCard: View {
 #Preview("Carousel") {
     NavigationStack {
         ScrollView(.horizontal) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: DS.Space.m) {
                 ForEach(MenuPreviewData.cards) { card in
                     MenuRecipeCard(card: card)
                 }
             }
-            .padding()
+            .padding(DS.Space.l)
         }
     }
     .menuPreviewEnvironment()
@@ -189,12 +187,12 @@ struct MenuRecipeCard: View {
 #Preview("Full width, dark") {
     NavigationStack {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: DS.Space.xxl) {
                 ForEach(MenuPreviewData.cards) { card in
                     MenuRecipeCard(card: card, size: .fullWidth)
                 }
             }
-            .padding()
+            .padding(DS.Space.l)
         }
     }
     .menuPreviewEnvironment()
@@ -206,13 +204,13 @@ struct MenuRecipeCard: View {
 #Preview("Equal heights") {
     NavigationStack {
         ScrollView(.horizontal) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: DS.Space.m) {
                 ForEach(MenuPreviewData.cards) { card in
                     MenuRecipeCard(card: card)
                         .border(.red.opacity(0.4))
                 }
             }
-            .padding()
+            .padding(DS.Space.l)
         }
     }
     .menuPreviewEnvironment()
@@ -221,13 +219,13 @@ struct MenuRecipeCard: View {
 #Preview("Accessibility size") {
     NavigationStack {
         ScrollView(.horizontal) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: DS.Space.m) {
                 ForEach(MenuPreviewData.cards) { card in
                     MenuRecipeCard(card: card)
                         .border(.red.opacity(0.4))
                 }
             }
-            .padding()
+            .padding(DS.Space.l)
         }
     }
     .menuPreviewEnvironment()

@@ -77,7 +77,7 @@ struct RecipeUndoToast: View {
 
     var body: some View {
         if let deleted = library.recentlyDeleted {
-            HStack(spacing: 12) {
+            HStack(spacing: DS.Space.m) {
                 Text(errorMessage ?? String(localized: "\(deleted.summary.name) deleted."))
                     .font(.subheadline)
                     .lineLimit(2)
@@ -89,11 +89,11 @@ struct RecipeUndoToast: View {
                 }
                 .disabled(isRestoring)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, DS.Space.l)
             .frame(minHeight: 52)
             .background(.regularMaterial, in: .capsule)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
+            .padding(.horizontal, DS.Space.l)
+            .padding(.bottom, DS.Space.m)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .task(id: deleted.id) {
                 try? await Task.sleep(for: .seconds(8))

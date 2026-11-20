@@ -51,25 +51,22 @@ struct RecipePlanBar: View {
             // The week is set: nothing to plan here, so the bar is for cooking.
             Button(action: startCooking) {
                 Label("Start Cooking", systemImage: "frying.pan")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
             }
-            .buttonStyle(.borderedProminent)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .buttonStyle(.dsPrimary(fullWidth: true))
+            .padding(.horizontal, DS.Space.l)
+            .padding(.vertical, DS.Space.sm)
             .background(.bar)
             .overlay(alignment: .top) { Divider() }
         } else if canEdit {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: DS.Space.sm) {
                 if showsStartCooking, stacksStartCooking, let startCooking {
                     cookRow(startCooking)
                 }
-                HStack(alignment: .center, spacing: 12) {
+                HStack(alignment: .center, spacing: DS.Space.m) {
                     if showsStartCooking, !stacksStartCooking, let startCooking {
                         cookButton(startCooking)
                     }
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: DS.Space.s) {
                         if let entry {
                             plannedBar(entry)
                         } else {
@@ -83,8 +80,8 @@ struct RecipePlanBar: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.horizontal, DS.Space.l)
+            .padding(.vertical, DS.Space.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.bar)
             .overlay(alignment: .top) { Divider() }
@@ -96,8 +93,8 @@ struct RecipePlanBar: View {
                 if stacksStartCooking { cookRow(startCooking) } else { cookButton(startCooking) }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.horizontal, DS.Space.l)
+            .padding(.vertical, DS.Space.sm)
             .background(.bar)
             .overlay(alignment: .top) { Divider() }
         }
@@ -107,10 +104,8 @@ struct RecipePlanBar: View {
     private func cookButton(_ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label("Start Cooking", systemImage: "frying.pan")
-                .fontWeight(.semibold)
         }
-        .buttonStyle(.bordered)
-        .controlSize(.large)
+        .buttonStyle(.dsSecondary)
     }
 
     /// Start Cooking in a row of its own above the planning controls, for iPhone Duo's narrow
@@ -118,11 +113,8 @@ struct RecipePlanBar: View {
     private func cookRow(_ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label("Start Cooking", systemImage: "frying.pan")
-                .fontWeight(.semibold)
-                .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
-        .controlSize(.large)
+        .buttonStyle(.dsSecondary(fullWidth: true))
     }
 
     // MARK: Not planned
@@ -130,8 +122,8 @@ struct RecipePlanBar: View {
     private var addBar: some View {
         let layout =
             dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.s))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: DS.Space.m))
         return layout {
             if options.count > 1, let selected = servings {
                 Menu {
@@ -141,7 +133,7 @@ struct RecipePlanBar: View {
                         }
                     }
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: DS.Space.xxs) {
                         Text(MenuFormat.servings(selected))
                         Image(systemName: "chevron.up.chevron.down")
                             .font(.caption2)
@@ -162,12 +154,10 @@ struct RecipePlanBar: View {
                         .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : 160)
                 } else {
                     Text(isPastWeek ? "Add to Week…" : "Add to Week")
-                        .fontWeight(.semibold)
                         .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : 160)
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.dsPrimary)
             .disabled(isBusy || (!plans.isDraft && !isPastWeek) || options.isEmpty)
             .contextMenu {
                 Button("Add to Another Week…", systemImage: "calendar") {
@@ -182,8 +172,8 @@ struct RecipePlanBar: View {
     private func plannedBar(_ entry: PlanEntry) -> some View {
         let layout =
             dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.sm))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: DS.Space.m))
         return layout {
             Menu {
                 Section(
@@ -205,7 +195,7 @@ struct RecipePlanBar: View {
                     Task { await planner.remove(entry) }
                 }
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: DS.Space.xxs) {
                     Image(systemName: "calendar")
                     Text(entry.day?.name() ?? String(localized: "Unscheduled"))
                     Image(systemName: "chevron.up.chevron.down")
@@ -253,7 +243,7 @@ struct RecipePlanBar: View {
 
 #Preview("Not in the week") {
     NavigationStack {
-        Color(.systemBackground)
+        DS.Colors.background
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 RecipePlanBar(
                     summary: MenuPreviewData.cards[1].recipe, recipe: RecipePreviewData.recipe, entries: [],
@@ -265,7 +255,7 @@ struct RecipePlanBar: View {
 
 #Preview("In the week") {
     NavigationStack {
-        Color(.systemBackground)
+        DS.Colors.background
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 RecipePlanBar(
                     summary: MenuPreviewData.cards[0].recipe, recipe: RecipePreviewData.recipe,

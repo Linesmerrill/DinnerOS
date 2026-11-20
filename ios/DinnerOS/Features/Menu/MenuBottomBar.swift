@@ -20,10 +20,10 @@ struct MenuBottomBar: View {
     var body: some View {
         let layout =
             dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: DS.Space.sm))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: DS.Space.m))
         layout {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(MenuFormat.bottomBarTitle(counts: counts, timing: menu.selectedTiming))
                     .font(.headline)
                 Text(plans.week.rangeLabel(weekStartsOn: plans.weekStartsOn))
@@ -34,15 +34,14 @@ struct MenuBottomBar: View {
             if !dynamicTypeSize.isAccessibilitySize {
                 Spacer(minLength: 8)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: DS.Space.s) {
                 if canShop {
                     Button {
                         tabs?.openShop(plans.week)
                     } label: {
                         Image(systemName: "cart")
-                            .frame(minWidth: 30, minHeight: 30)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.dsSecondary(.small))
                     .accessibilityLabel("Shop this week")
                 }
                 NavigationLink(value: GroceryListRoute(week: plans.week)) {
@@ -57,12 +56,12 @@ struct MenuBottomBar: View {
                     .lineLimit(1)
                 }
                 .accessibilityLabel("Grocery List")
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
                 .disabled(plans.plan == nil)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, DS.Space.l)
+        .padding(.vertical, DS.Space.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.bar)
         .overlay(alignment: .top) { Divider() }
@@ -71,7 +70,7 @@ struct MenuBottomBar: View {
 
 #Preview("Bottom bar") {
     NavigationStack {
-        Color(.systemGroupedBackground)
+        DS.Colors.groupedBackground
             .safeAreaInset(edge: .bottom, spacing: 0) { MenuBottomBar() }
     }
     .menuPreviewEnvironment()

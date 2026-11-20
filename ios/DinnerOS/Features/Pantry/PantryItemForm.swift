@@ -99,7 +99,7 @@ struct PantryItemFields: View {
             Text("Note")
         } footer: {
             PantryBestByDisclaimer()
-                .padding(.top, 12)
+                .padding(.top, DS.Space.m)
         }
     }
 
@@ -424,7 +424,7 @@ struct PantryAddSheet: View {
                     Button {
                         choose(ingredient)
                     } label: {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: DS.Space.hairline) {
                             Text(ingredient.name)
                                 .foregroundStyle(.primary)
                             Text(PantryCategory.title(ingredient.category))

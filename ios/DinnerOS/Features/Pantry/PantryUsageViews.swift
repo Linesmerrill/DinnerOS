@@ -97,9 +97,9 @@ struct PantryUsageSections: View {
     private var estimateSection: some View {
         if let estimate = item.estimate {
             Section {
-                HStack(spacing: 14) {
+                HStack(spacing: DS.Space.ml) {
                     PantryEstimateRing(estimate: estimate, diameter: ringSize)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: DS.Space.hairline) {
                         Text(PantryUsageFormat.remainingSpoken(estimate))
                             .font(.headline)
                         Text(PantryUsageFormat.remainingAmount(estimate))
@@ -112,7 +112,7 @@ struct PantryUsageSections: View {
                     .font(.subheadline)
                 LabeledContent("Recipes", value: PantryUsageFormat.recipeUse(estimate))
                 LabeledContent {
-                    VStack(alignment: .trailing, spacing: 2) {
+                    VStack(alignment: .trailing, spacing: DS.Space.hairline) {
                         Text(PantryUsageFormat.otherUse(estimate))
                         Text(PantryUsageFormat.dailyRate(estimate))
                             .font(.caption)
@@ -121,7 +121,7 @@ struct PantryUsageSections: View {
                     Text("Other Use")
                 }
                 LabeledContent {
-                    VStack(alignment: .trailing, spacing: 2) {
+                    VStack(alignment: .trailing, spacing: DS.Space.hairline) {
                         Text(PantryUsageFormat.threshold(estimate.lowThresholdPercent))
                         Text(PantryUsageFormat.thresholdSource(estimate.thresholdSource))
                             .font(.caption)
@@ -171,14 +171,14 @@ struct PantryUsageSections: View {
         Section("Recent Purchases") {
             switch purchasesPhase {
             case .loading:
-                HStack(spacing: 8) {
+                HStack(spacing: DS.Space.s) {
                     ProgressView()
                     Text("Loading purchases…")
                         .foregroundStyle(.secondary)
                 }
                 .accessibilityElement(children: .combine)
             case .failed(let message):
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: DS.Space.s) {
                     FormErrorLabel(message: message)
                     Button("Try Again") {
                         Task { await loadPurchases() }
@@ -190,7 +190,7 @@ struct PantryUsageSections: View {
                         .foregroundStyle(.secondary)
                 }
                 ForEach(purchases) { purchase in
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: DS.Space.hairline) {
                         Text(PantryUsageFormat.purchaseAmount(purchase))
                         Text(
                             "\(PantryUsageFormat.purchaseSource(purchase.source)), \(purchase.purchasedAt.formatted(date: .abbreviated, time: .omitted))"
@@ -296,7 +296,7 @@ struct PantryItemDetailView: View {
                 Button("Try Again") {
                     Task { await pantry.retry() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
         case .loaded:
             if let item {
@@ -558,7 +558,7 @@ struct PantryThresholdSheet: View {
             }
         } else {
             Section {
-                HStack(spacing: 8) {
+                HStack(spacing: DS.Space.s) {
                     ProgressView()
                     Text("Loading…")
                         .foregroundStyle(.secondary)

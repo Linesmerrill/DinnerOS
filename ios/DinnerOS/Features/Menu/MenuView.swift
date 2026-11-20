@@ -269,7 +269,7 @@ struct MenuView: View {
                 LazyVStack(alignment: .leading, spacing: 28) {
                     if let refreshError = menu.refreshError {
                         FormErrorLabel(message: refreshError)
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, DS.Space.l)
                     }
                     // Above the week, not under All Meals: a household with nothing in its
                     // library has nothing to plan, so getting recipes in comes first (#530).
@@ -296,8 +296,8 @@ struct MenuView: View {
                         .id(Self.allMealsAnchor)
                     }
                 }
-                .padding(.top, 12)
-                .padding(.bottom, 24)
+                .padding(.top, DS.Space.m)
+                .padding(.bottom, DS.Space.xxl)
             }
             // A drag on the list puts the meal search's keyboard away, and Done above it does
             // when the results are too short to drag. The keyboard covers the tab bar.
@@ -373,17 +373,17 @@ struct MenuView: View {
     private var sections: some View {
         switch menu.phase {
         case .idle, .loading:
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DS.Space.m) {
                 MenuSectionHeader(title: String(localized: "Loading meals…"))
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, DS.Space.l)
                 MenuCardPlaceholders()
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, DS.Space.l)
             }
         case .failed(let message):
             MenuSectionError(message: message) {
                 Task { await menu.retry() }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, DS.Space.l)
         case .loaded:
             // The server chooses the sections and their order; new ones need no change here.
             ForEach(menu.menu?.sections ?? []) { section in

@@ -42,7 +42,7 @@ struct AutopilotPreferencesView: View {
                 Button("Try Again") {
                     Task { await autopilot.reloadProfile() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
         case .loaded:
             if let profile = autopilot.profile {
@@ -60,17 +60,17 @@ struct AutopilotPreferencesView: View {
             }
             if !profile.configured {
                 Section {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: DS.Space.sm) {
                         Label("Autopilot isn't set up yet", systemImage: "sparkles")
                             .font(.headline)
                         Text("Until it is, Autopilot uses the usual settings below.")
                             .foregroundStyle(.secondary)
                         if canEdit {
                             Button("Set Up Autopilot") { isOnboarding = true }
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(.dsPrimary(.small))
                         }
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, DS.Space.xxs)
                 }
             }
             // Setup's three questions first, then everything it no longer asks — which is
@@ -141,7 +141,7 @@ private struct SectionRow: View {
 
     var body: some View {
         Label {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(section.title)
                 Text(section.detail)
                     .font(.subheadline)
@@ -195,7 +195,7 @@ struct AutopilotSectionEditor: View {
                     FormErrorLabel(message: errorMessage)
                 }
             } footer: {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DS.Space.xxs) {
                     SectionAttributionText(change: autopilot.profile?.sections[section])
                     if !canEdit {
                         Text("Your role can see Autopilot preferences but not change them.")
@@ -278,7 +278,7 @@ struct AutopilotHistoryView: View {
                     Button("Try Again") {
                         Task { await load() }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.dsPrimary(.small))
                 }
             } else {
                 ProgressView("Loading history…")
@@ -297,7 +297,7 @@ struct AutopilotHistoryView: View {
         }
         let who = AutopilotFormat.memberName(
             item.userID, members: households.current?.members, currentUserID: session.currentUser?.id)
-        return VStack(alignment: .leading, spacing: 4) {
+        return VStack(alignment: .leading, spacing: DS.Space.xxs) {
             Text(
                 AutopilotFormat.historyTitle(
                     item, vocabulary: autopilot.vocabulary, recipeName: recipeName,
@@ -312,7 +312,7 @@ struct AutopilotHistoryView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DS.Space.hairline)
         .accessibilityElement(children: .combine)
     }
 

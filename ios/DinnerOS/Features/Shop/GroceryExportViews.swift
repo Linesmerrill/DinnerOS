@@ -388,12 +388,12 @@ private struct RemindersExplainerSheet: View {
                     Text(
                         "Creates a new list in Reminders called “\(explainer.name)”. Each grocery item becomes a reminder you can tick off while you shop."
                     )
-                    .padding(.vertical, 2)
+                    .padding(.vertical, DS.Space.hairline)
                 }
                 Section {
                     ForEach(Array(explainer.preview.enumerated()), id: \.offset) { _, draft in
                         Label {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                                 Text(draft.title)
                                 if let notes = draft.notes {
                                     Text(notes)
@@ -429,11 +429,9 @@ private struct RemindersExplainerSheet: View {
                     confirm()
                 } label: {
                     Text("Add to Reminders")
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .padding()
+                .buttonStyle(.dsPrimary(fullWidth: true))
+                .padding(DS.Space.l)
             }
         }
         .presentationDetents([.medium, .large])
@@ -470,8 +468,8 @@ struct ListAppGuideSheet: View {
                         ListAppGuideStepView(number: index + 1, step: step)
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
+                .padding(.horizontal, DS.Space.xl)
+                .padding(.vertical, DS.Space.l)
                 .frame(maxWidth: 560)
                 .frame(maxWidth: .infinity)
             }
@@ -483,7 +481,7 @@ struct ListAppGuideSheet: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 8) {
+                VStack(spacing: DS.Space.s) {
                     if handoff.drafts.isEmpty {
                         Text("Nothing to copy yet. Add recipes to this week, or uncheck items you still need.")
                             .font(.footnote)
@@ -494,13 +492,11 @@ struct ListAppGuideSheet: View {
                         copyAndOpen()
                     } label: {
                         Text("Copy List and Open \(app.name)")
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.dsPrimary(fullWidth: true))
                     .disabled(copied || handoff.drafts.isEmpty)
                 }
-                .padding()
+                .padding(DS.Space.l)
                 .background(.bar)
             }
         }
@@ -534,8 +530,8 @@ private struct ListAppGuideStepView: View {
     let step: GroceryListAppGuideStep
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
                 Text("\(number)")
                     .font(.headline)
                     .foregroundStyle(Color("OnAccent"))
@@ -552,8 +548,8 @@ private struct ListAppGuideStepView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(maxWidth: .infinity)
-                .clipShape(.rect(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(.separator)))
+                .clipShape(.rect(cornerRadius: DS.Radius.medium))
+                .overlay(RoundedRectangle(cornerRadius: DS.Radius.medium).strokeBorder(Color(.separator)))
                 .accessibilityLabel(Text(step.imageDescription))
         }
     }

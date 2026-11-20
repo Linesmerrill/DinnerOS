@@ -21,7 +21,8 @@ struct GoogleSignInButton: View {
         .buttonStyle(
             DSOutlineButtonStyle(
                 size: .large, fullWidth: true, font: DS.Typography.signInButton(height: height),
-                palette: { $0 == .dark ? Self.dark : Self.light }))
+                palette: { $0 == .dark ? Self.dark : Self.light })
+        )
         .accessibilityIdentifier("signIn.google")
     }
 

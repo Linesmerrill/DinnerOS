@@ -42,7 +42,7 @@ struct RecipeRatingSection: View {
     }
 
     private var commentField: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
             TextField("Add a comment (optional)", text: $draft.comment, axis: .vertical)
                 .lineLimit(2...6)
                 .textFieldStyle(.roundedBorder)
@@ -58,17 +58,17 @@ struct RecipeRatingSection: View {
     }
 
     private var actions: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Space.m) {
             Button(recipe.myRating == nil ? "Save Rating" : "Update Rating") {
                 Task { await save() }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.dsPrimary(.small))
             .disabled(!draft.canSave || !draft.differs(from: recipe.myRating))
             if recipe.myRating != nil {
                 Button("Remove", role: .destructive) {
                     Task { await remove() }
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.dsSecondary(.small))
             }
             if isSaving {
                 ProgressView()
@@ -119,7 +119,7 @@ struct HouseholdRatingSummary: View {
         let rating = recipe.householdRating
         if let summary = RatingFormat.summary(rating) {
             NavigationLink(value: HouseholdRatingsRoute(recipeID: recipe.id, recipeName: recipe.name)) {
-                HStack(spacing: 6) {
+                HStack(spacing: DS.Space.xs) {
                     Text(summary)
                         .foregroundStyle(.primary)
                     Text("See household ratings")
@@ -146,7 +146,7 @@ struct StarRatingControl: View {
     @Binding var score: Int
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: DS.Space.hairline) {
             ForEach(RatingLimits.scores, id: \.self) { value in
                 Button {
                     score = value
@@ -154,7 +154,7 @@ struct StarRatingControl: View {
                     Image(systemName: value <= score ? "star.fill" : "star")
                         .font(.title2)
                         .foregroundStyle(value <= score ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
-                        .frame(minWidth: 44, minHeight: 44)
+                        .frame(minWidth: DS.Size.tapTarget, minHeight: DS.Size.tapTarget)
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
@@ -196,7 +196,7 @@ private struct TagChips: View {
     @Binding var draft: RatingDraft
 
     var body: some View {
-        FlowLayout(spacing: 8) {
+        FlowLayout(spacing: DS.Space.s) {
             ForEach(RatingTag.known) { tag in
                 let isSelected = draft.contains(tag)
                 Button {
@@ -224,8 +224,8 @@ struct TagChip: View {
     var body: some View {
         Text(title)
             .font(.subheadline)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.horizontal, DS.Space.m)
+            .padding(.vertical, DS.Space.xs)
             .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
             .background(isSelected ? AnyShapeStyle(.tint.opacity(0.15)) : AnyShapeStyle(.quaternary), in: .capsule)
             .overlay {
@@ -291,11 +291,11 @@ struct FlowLayout: Layout {
     let session = HouseholdPreviewData.session()
     NavigationStack {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: DS.Space.xl) {
                 HouseholdRatingSummary(recipe: RecipePreviewData.recipe)
                 RecipeRatingSection(recipe: RecipePreviewData.recipe) { _ in }
             }
-            .padding()
+            .padding(DS.Space.l)
         }
     }
     .environment(RecipePreviewData.library(session: session))

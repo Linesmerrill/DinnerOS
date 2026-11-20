@@ -9,9 +9,9 @@ struct FreeMonthCard: View {
     var onRedeem: (() -> Void)? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
             Label {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DS.Space.xxs) {
                     Text(month.title)
                         .font(.headline)
                     Text(month.message)
@@ -27,7 +27,7 @@ struct FreeMonthCard: View {
                 FreeMonthRedeemControls(month: month, onRedeem: onRedeem)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("FreeMonthCard")
     }
@@ -41,7 +41,7 @@ struct FreeMonthRedeemControls: View {
     @Environment(PlusStore.self) private var plus
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
             Text(month.termsText)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -58,11 +58,8 @@ struct FreeMonthRedeemControls: View {
                         Text(month.buttonTitle)
                     }
                 }
-                .font(.headline)
-                .frame(maxWidth: .infinity, minHeight: 32)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.dsPrimary(fullWidth: true))
             .disabled(plus.redeemingMonthID != nil)
             .accessibilityIdentifier("RedeemFreeMonth")
             if let notice = plus.freeMonthNotice, notice.monthID == month.id {

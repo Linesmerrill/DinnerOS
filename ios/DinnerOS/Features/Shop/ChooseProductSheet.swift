@@ -205,12 +205,12 @@ struct ChooseProductSheet: View {
 
     private var instructions: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
                 StepLabel(number: 1, text: "Open Walmart and find the product you buy.")
                 StepLabel(number: 2, text: "Tap Share, then Copy Link.")
                 StepLabel(number: 3, text: "Come back here and paste the link.")
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, DS.Space.xxs)
             if let url = ProductLink.walmartSearchURL(for: choice.searchTerms.query) {
                 Link(destination: url) {
                     Label("Search on Walmart for “\(choice.searchTerms.query)”", systemImage: "magnifyingglass")
@@ -231,7 +231,7 @@ struct ChooseProductSheet: View {
         } header: {
             Text(choice.amountText.map { "\(choice.ingredientName), \($0)" } ?? choice.ingredientName)
         } footer: {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DS.Space.xxs) {
                 Text("Opens the Walmart app or Safari.")
                 Text("\(configuration.displayName) checks your saved products on Walmart before you shop.")
             }
@@ -395,7 +395,7 @@ private struct StepLabel: View {
     let text: LocalizedStringKey
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.sm) {
             Text("\(number).")
                 .font(.body.monospacedDigit().weight(.semibold))
                 .foregroundStyle(.tint)

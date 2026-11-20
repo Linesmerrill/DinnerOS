@@ -27,7 +27,7 @@ struct RecipeCuisineField: View {
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
-            .frame(minHeight: 44)
+            .frame(minHeight: DS.Size.tapTarget)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -124,7 +124,7 @@ struct RecipeCuisinePicker: View {
                         .fontWeight(.semibold)
                 }
             }
-            .frame(minHeight: 44)
+            .frame(minHeight: DS.Size.tapTarget)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

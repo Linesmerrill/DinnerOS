@@ -30,7 +30,7 @@ struct MatchProductsSheet: View {
                     }
                 }
                 if model.isLoadingMore {
-                    HStack(spacing: 8) {
+                    HStack(spacing: DS.Space.s) {
                         ProgressView()
                         Text("Finding more… \(model.items.count) of \(model.total)")
                             .foregroundStyle(.secondary)
@@ -63,13 +63,13 @@ struct MatchProductsSheet: View {
     private var emptyState: some View {
         switch model.phase {
         case .loading:
-            HStack(spacing: 8) {
+            HStack(spacing: DS.Space.s) {
                 ProgressView()
                 Text("Finding \(storeName) products…")
                     .foregroundStyle(.secondary)
             }
         case .failed(let message):
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
                 FormErrorLabel(message: message)
                 Button("Try Again") { Task { await load() } }
             }
@@ -81,14 +81,14 @@ struct MatchProductsSheet: View {
     }
 
     private var saveBar: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: DS.Space.xs) {
             if let error = model.saveError {
                 FormErrorLabel(message: error)
             }
             Button(action: save) {
                 Group {
                     if model.isSaving {
-                        HStack(spacing: 8) {
+                        HStack(spacing: DS.Space.s) {
                             ProgressView()
                             Text("Saving… \(model.savedCount)")
                         }
@@ -98,13 +98,11 @@ struct MatchProductsSheet: View {
                                 ? "Save 1 Product" : "Save \(model.selectedCount) Products")
                     }
                 }
-                .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.dsPrimary(fullWidth: true))
             .disabled(model.selectedCount == 0 || model.isSaving)
         }
-        .padding()
+        .padding(DS.Space.l)
         .background(.bar)
     }
 
@@ -138,9 +136,9 @@ private struct MatchSuggestionRow: View {
 
     var body: some View {
         let chosen = model.product(for: item)
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
             HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     Text(item.ingredientName)
                         .font(.headline)
                     Text("Walmart: \(item.from.displayName)")
@@ -194,7 +192,7 @@ private struct MatchSuggestionRow: View {
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
     }
 
     private func optionTitle(_ product: ShoppingSearchProduct) -> String {

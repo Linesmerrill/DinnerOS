@@ -59,7 +59,7 @@ struct AddItemSheet: View {
                                 HStack {
                                     Text(UsualsText.nameAndCount(usual.name, count: usual.count))
                                         .foregroundStyle(Color.primary)
-                                    Spacer(minLength: 8)
+                                    Spacer(minLength: DS.Space.s)
                                     Image(systemName: "plus.circle")
                                         .foregroundStyle(.tint)
                                         .accessibilityHidden(true)
@@ -145,12 +145,12 @@ struct UsualsPromptSheet: View {
                                 unchecked.insert(usual.id)
                             }
                         } label: {
-                            HStack(spacing: 12) {
+                            HStack(spacing: DS.Space.m) {
                                 Image(systemName: unchecked.contains(usual.id) ? "circle" : "checkmark.circle.fill")
                                     .font(.title3)
                                     .foregroundStyle(unchecked.contains(usual.id) ? Color.secondary : Color.accentColor)
                                     .accessibilityHidden(true)
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                                     Text(UsualsText.nameAndCount(usual.name, count: usual.count))
                                         .foregroundStyle(Color.primary)
                                     Text(UsualsText.why(usual, window: weekUsuals?.countedWeeks ?? 6))
@@ -271,7 +271,7 @@ struct YourUsualsView: View {
                         ForEach(weekUsuals.notUsual) { pref in
                             HStack {
                                 Text(pref.name)
-                                Spacer(minLength: 8)
+                                Spacer(minLength: DS.Space.s)
                                 if canEdit {
                                     Button("Put Back") {
                                         change(
@@ -302,14 +302,14 @@ struct YourUsualsView: View {
     }
 
     private func row(_ usual: UsualItem, window: Int) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: DS.Space.m) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(UsualsText.nameAndCount(usual.name, count: usual.count))
                 Text(UsualsText.why(usual, window: window))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: DS.Space.s)
             if usual.onList {
                 Text("On List")
                     .font(.footnote)

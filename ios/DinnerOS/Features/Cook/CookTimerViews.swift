@@ -10,23 +10,23 @@ struct CookTimerDock: View {
     var body: some View {
         if !timers.timers.isEmpty {
             if stacked {
-                VStack(alignment: .trailing, spacing: 10) {
+                VStack(alignment: .trailing, spacing: DS.Space.sm) {
                     ForEach(timers.timers) { timer in
                         CookTimerChip(timer: timer, timers: timers)
                             .reorderable(timer, in: timers)
                     }
                 }
-                .padding(20)
+                .padding(DS.Space.xl)
             } else {
                 ScrollView(.horizontal) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: DS.Space.sm) {
                         ForEach(timers.timers) { timer in
                             CookTimerChip(timer: timer, timers: timers)
                                 .reorderable(timer, in: timers)
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, DS.Space.l)
+                    .padding(.vertical, DS.Space.sm)
                 }
                 .scrollIndicators(.hidden)
             }
@@ -51,13 +51,13 @@ struct CookTimerChip: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let remaining = timer.remaining(at: context.date)
             let urgent = !isFinished && !isPaused && remaining <= 60
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: DS.Space.sm) {
                 Button {
                     withAnimation(.snappy(duration: 0.25)) {
                         if isFinished { timers.remove(timer.id) } else { isOpen.toggle() }
                     }
                 } label: {
-                    HStack(spacing: 10) {
+                    HStack(spacing: DS.Space.sm) {
                         ring(progress: timer.progress(at: context.date), urgent: urgent)
                         VStack(alignment: .leading, spacing: 0) {
                             Text(isFinished ? String(localized: "Done") : CookTimer.clock(remaining))
@@ -86,9 +86,9 @@ struct CookTimerChip: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .padding(.leading, 8)
-            .padding(.trailing, 16)
-            .padding(.vertical, 8)
+            .padding(.leading, DS.Space.s)
+            .padding(.trailing, DS.Space.l)
+            .padding(.vertical, DS.Space.s)
             .background(background)
             .overlay(
                 RoundedRectangle(cornerRadius: 30, style: .continuous)
@@ -140,7 +140,7 @@ struct CookTimerChip: View {
     }
 
     private var controls: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DS.Space.s) {
             if !isFinished {
                 // Pause and Cancel go to icons on a running timer so the minute buttons fit.
                 controlButton(
@@ -165,13 +165,13 @@ struct CookTimerChip: View {
                 withAnimation(.snappy(duration: 0.25)) { timers.remove(timer.id) }
             }
         }
-        .padding(.leading, 8)
+        .padding(.leading, DS.Space.s)
     }
 
     /// A ringing timer gets two big buttons, a third for another minute and two thirds for Stop:
     /// reached across a counter at a landscape iPad, the small capsules were missed most times.
     private var finishedControls: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DS.Space.s) {
             bigButton("1 Min", systemImage: "plus", width: CookTimerStyle.ringingAddWidth) {
                 timers.addMinute(timer.id)
             }
@@ -180,7 +180,7 @@ struct CookTimerChip: View {
                 withAnimation(.snappy(duration: 0.25)) { timers.remove(timer.id) }
             }
         }
-        .padding(.leading, 8)
+        .padding(.leading, DS.Space.s)
     }
 
     private func bigButton(
@@ -206,7 +206,7 @@ struct CookTimerChip: View {
             Label(title, systemImage: systemImage)
                 .labelStyle(CookTimerLabelStyle(iconOnly: iconOnly))
                 .font(.subheadline.weight(.semibold))
-                .padding(.horizontal, 12)
+                .padding(.horizontal, DS.Space.m)
                 .padding(.vertical, 7)
                 .background(
                     Capsule().fill(isFinished ? Color.white.opacity(0.22) : Color.primary.opacity(0.07))
@@ -277,7 +277,7 @@ struct CookTimerSetup: View {
     }
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: DS.Space.ml) {
             Text(label)
                 .font(.headline)
                 .foregroundStyle(.secondary)
@@ -299,13 +299,10 @@ struct CookTimerSetup: View {
                 start(seconds)
             } label: {
                 Label("Start Timer", systemImage: "timer")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.dsPrimary(fullWidth: true))
         }
-        .padding(20)
+        .padding(DS.Space.xl)
         .frame(minWidth: 300)
     }
 
@@ -330,7 +327,7 @@ extension View {
         draggable(timer.id.uuidString) {
             Text(timer.label)
                 .font(.headline)
-                .padding(10)
+                .padding(DS.Space.sm)
                 .background(.regularMaterial, in: Capsule())
         }
         .dropDestination(for: String.self) { items, _ in

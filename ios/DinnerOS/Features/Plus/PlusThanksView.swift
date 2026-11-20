@@ -22,7 +22,7 @@ struct PlusThanksView: View {
                             .foregroundStyle(.tint)
                             .scaleEffect(appeared || reduceMotion ? 1 : 0.6)
                             .accessibilityHidden(true)
-                        VStack(spacing: 10) {
+                        VStack(spacing: DS.Space.sm) {
                             Text("Thank you for supporting DinnerOS")
                                 .font(.largeTitle.bold())
                                 .multilineTextAlignment(.center)
@@ -31,7 +31,7 @@ struct PlusThanksView: View {
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
                         }
-                        VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: DS.Space.l) {
                             Text("What you just unlocked")
                                 .font(.headline)
                             ForEach(Array(celebration.benefits.prefix(4).enumerated()), id: \.offset) {
@@ -46,10 +46,10 @@ struct PlusThanksView: View {
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                        .background(.background.secondary, in: .rect(cornerRadius: 16))
+                        .padding(DS.Space.l)
+                        .background(.background.secondary, in: .rect(cornerRadius: DS.Radius.large))
                     }
-                    .padding(24)
+                    .padding(DS.Space.xxl)
                     .frame(maxWidth: 560)
                     .frame(maxWidth: .infinity)
                 }
@@ -58,11 +58,10 @@ struct PlusThanksView: View {
                         showsYourPlus = true
                     } label: {
                         Text("Let's go")
-                            .frame(maxWidth: 520)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .padding()
+                    .buttonStyle(.dsPrimary(fullWidth: true))
+                    .frame(maxWidth: 520)
+                    .padding(DS.Space.l)
                 }
                 if !reduceMotion {
                     ConfettiView()

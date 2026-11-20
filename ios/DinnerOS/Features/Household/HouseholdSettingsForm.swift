@@ -355,7 +355,7 @@ private struct AutosaveStatusLabel: View {
         Group {
             switch settings.status {
             case .saving:
-                HStack(spacing: 4) {
+                HStack(spacing: DS.Space.xxs) {
                     ProgressView()
                         .controlSize(.mini)
                     Text("Saving…")

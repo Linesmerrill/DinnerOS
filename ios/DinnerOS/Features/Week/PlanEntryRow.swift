@@ -11,16 +11,16 @@ struct PlanEntryRow: View {
     @ScaledMetric(relativeTo: .body) private var thumbnailWidth = 64.0
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: DS.Space.m) {
             if !dynamicTypeSize.isAccessibilitySize {
                 RecipeImage(url: entry.recipe.imageURL, title: entry.recipe.name)
                     .frame(width: min(thumbnailWidth, 96))
-                    .clipShape(.rect(cornerRadius: 6))
+                    .clipShape(.rect(cornerRadius: DS.Radius.small))
             }
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(entry.recipe.name)
                     .font(.headline)
-                HStack(spacing: 6) {
+                HStack(spacing: DS.Space.xs) {
                     Text("\(entry.servings) servings")
                     if menu.isAddOn(entry) {
                         AddOnLabel()
@@ -43,7 +43,7 @@ struct PlanEntryRow: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DS.Space.hairline)
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
     }

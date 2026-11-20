@@ -62,7 +62,7 @@ struct ImportReviewView: View {
                 Button("Try Again") {
                     Task { await reviews.load() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
         case .loaded:
             loaded(reviews.digest)
@@ -231,7 +231,7 @@ private struct ImportReviewCounts: View {
     let digest: ImportReviewDigest
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: DS.Space.m) {
             tile(value: digest.differences.count, label: "Look Again", tint: .orange)
             tile(value: digest.spellingOnly.count, label: "Spelling", tint: .secondary)
             tile(value: digest.otherItems.count, label: "Other", tint: .secondary)
@@ -241,7 +241,7 @@ private struct ImportReviewCounts: View {
     }
 
     private func tile(value: Int, label: LocalizedStringKey, tint: some ShapeStyle) -> some View {
-        VStack(spacing: 2) {
+        VStack(spacing: DS.Space.hairline) {
             Text(value.formatted())
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(tint)
@@ -261,7 +261,7 @@ private struct ImportVariantRow: View {
     let group: ImportVariantGroup
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DS.Space.s) {
             ImportVariantChip(role: .stored, text: group.storedName)
             ForEach(group.deliveredNames, id: \.self) { delivered in
                 ImportVariantChip(role: .delivered, text: delivered)
@@ -272,7 +272,7 @@ private struct ImportVariantRow: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, DS.Space.xxs)
     }
 }
 
@@ -301,7 +301,7 @@ private struct ImportVariantChip: View {
     let text: String
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.s) {
             Label(role.title, systemImage: role.systemImage)
                 .font(.caption2.weight(.bold))
                 .labelStyle(.titleAndIcon)
@@ -310,10 +310,10 @@ private struct ImportVariantChip: View {
                 .font(.subheadline)
                 .foregroundStyle(.primary)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, DS.Space.sm)
+        .padding(.vertical, DS.Space.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(background, in: .rect(cornerRadius: 10))
+        .background(background, in: .rect(cornerRadius: DS.Radius.medium))
         .accessibilityElement(children: .combine)
     }
 
@@ -331,7 +331,7 @@ private struct ImportReviewGapRow: View {
 
     var body: some View {
         Label {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Space.hairline) {
                 Text(item.recipeName)
                     .font(.subheadline.weight(.semibold))
                 Text(ImportReviewCopy.summary(for: item))
@@ -342,7 +342,7 @@ private struct ImportReviewGapRow: View {
             Image(systemName: item.kind.systemImage)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DS.Space.hairline)
     }
 }
 
@@ -528,12 +528,12 @@ private struct ImportReviewLines: View {
     let lines: [String]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DS.Space.xxs) {
             ForEach(lines, id: \.self) { line in
                 Text(line)
             }
         }
-        .padding(.top, 4)
+        .padding(.top, DS.Space.xxs)
     }
 }
 
@@ -547,7 +547,7 @@ private struct ImportReviewActionButton: View {
     var body: some View {
         Button(action: action) {
             Label {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DS.Space.hairline) {
                     Text(title).font(.body.weight(.semibold))
                     Text(detail)
                         .font(.footnote)

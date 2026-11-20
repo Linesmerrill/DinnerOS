@@ -57,7 +57,7 @@ struct NotificationsView: View {
                 Button("Try Again") {
                     Task { await notifications.load() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
         case .loaded:
             list
@@ -113,7 +113,7 @@ struct NotificationsView: View {
     @ViewBuilder
     private var nextPageRow: some View {
         if let loadMoreError = notifications.loadMoreError {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: DS.Space.s) {
                 FormErrorLabel(message: loadMoreError)
                 Button("Try Again") {
                     Task { await notifications.loadMore() }
@@ -197,7 +197,7 @@ struct NotificationRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: DS.Space.m) {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(iconStyle)
@@ -220,7 +220,7 @@ struct NotificationRow: View {
                 Circle()
                     .fill(.tint)
                     .frame(width: 10, height: 10)
-                    .padding(.top, 6)
+                    .padding(.top, DS.Space.xs)
                     .accessibilityHidden(true)
             }
         }
@@ -252,7 +252,7 @@ struct NotificationBell: View {
                             .font(.caption2.weight(.bold))
                             .monospacedDigit()
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 4)
+                            .padding(.horizontal, DS.Space.xxs)
                             .frame(minWidth: badgeSize, minHeight: badgeSize)
                             .background(.red, in: .capsule)
                             .fixedSize()

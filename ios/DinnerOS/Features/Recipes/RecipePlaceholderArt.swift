@@ -33,7 +33,7 @@ struct RecipePlaceholderArt: View {
                             .multilineTextAlignment(.center)
                             .lineLimit(2)
                             .minimumScaleFactor(0.8)
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, DS.Space.m)
                             .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
                     }
                 }

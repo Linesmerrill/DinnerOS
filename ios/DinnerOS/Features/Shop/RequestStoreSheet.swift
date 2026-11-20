@@ -88,7 +88,7 @@ struct RequestStoreSheet: View {
                 Button("Try Again") {
                     Task { await shopping.loadCatalog() }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.dsPrimary(.small))
             }
         case .loaded:
             list
@@ -263,7 +263,7 @@ struct RequestStoreSheet: View {
             Button {
                 request(.name(typedName, note: note), key: typedName)
             } label: {
-                HStack(spacing: 12) {
+                HStack(spacing: DS.Space.m) {
                     Image(systemName: "plus.circle.fill")
                         .foregroundStyle(.tint)
                         .accessibilityHidden(true)
@@ -365,9 +365,9 @@ private struct NearbyStoreRow: View {
     let undo: () -> Void
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
             Button(action: choose) {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(store.name)
                         if !store.address.isEmpty {
@@ -399,7 +399,7 @@ private struct NearbyStoreRow: View {
             if isWorking {
                 ProgressView()
             } else if isRequested {
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: DS.Space.hairline) {
                     Label("Requested", systemImage: "checkmark.circle.fill")
                         .font(.subheadline)
                         .foregroundStyle(.tint)
@@ -431,7 +431,7 @@ private struct StatusChip: View {
     var body: some View {
         Text(text)
             .font(.caption.weight(.semibold))
-            .padding(.horizontal, 8)
+            .padding(.horizontal, DS.Space.s)
             .padding(.vertical, 3)
             .foregroundStyle(color)
             .background(color.opacity(0.15), in: .capsule)
@@ -465,9 +465,9 @@ private struct CatalogRow: View {
     let undo: () -> Void
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
             Button(action: choose) {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: DS.Space.m) {
                     Image(systemName: item.kind.systemImage)
                         .foregroundStyle(.secondary)
                         .frame(width: 22)
@@ -504,7 +504,7 @@ private struct CatalogRow: View {
         if isWorking {
             ProgressView()
         } else if item.requestedByHousehold {
-            VStack(alignment: .trailing, spacing: 2) {
+            VStack(alignment: .trailing, spacing: DS.Space.hairline) {
                 Label("Requested", systemImage: "checkmark.circle.fill")
                     .font(.subheadline)
                     .foregroundStyle(.tint)
@@ -540,7 +540,7 @@ private struct CatalogRow: View {
     private func chip(text: LocalizedStringKey, color: Color) -> some View {
         Text(text)
             .font(.caption.weight(.semibold))
-            .padding(.horizontal, 8)
+            .padding(.horizontal, DS.Space.s)
             .padding(.vertical, 3)
             .foregroundStyle(color)
             .background(color.opacity(0.15), in: .capsule)
