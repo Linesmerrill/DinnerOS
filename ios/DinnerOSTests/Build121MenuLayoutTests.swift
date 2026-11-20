@@ -1,5 +1,6 @@
 import SwiftUI
 import Testing
+import UIKit
 
 @testable import DinnerOS
 
@@ -104,6 +105,19 @@ struct Build121MenuLayoutTests {
         #expect(WeekStripMetrics.scrollTarget(selected: selected, isWide: false, available: weeks) == selected)
         // The household's first week has nothing before it.
         #expect(WeekStripMetrics.scrollTarget(selected: selected, isWide: true, available: [selected]) == selected)
+    }
+
+    // MARK: - The bell (QA: iPhone Duo)
+
+    /// A badge must not make the bell wider: on the iPhone Duo's cover screen a wider bell no
+    /// longer fit the side column and the toolbar moved it to the bottom of the screen.
+    @Test func theBellIsTheSameSizeWithABadge() {
+        let bounds = CGSize(width: 500, height: 500)
+        let plain = UIHostingController(rootView: NotificationBell(count: 0) {}).sizeThatFits(in: bounds)
+        for count in [1, 12, 120] {
+            let badged = UIHostingController(rootView: NotificationBell(count: count) {}).sizeThatFits(in: bounds)
+            #expect(badged == plain, "\(count) unread")
+        }
     }
 
     // MARK: - Notifications (#34)

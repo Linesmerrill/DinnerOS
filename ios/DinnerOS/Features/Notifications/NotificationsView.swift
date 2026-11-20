@@ -271,13 +271,17 @@ struct NotificationBell: View {
 
     @ScaledMetric(relativeTo: .caption2) private var badgeSize = 16.0
 
+    /// How far the badge's center sits past the icon's corner, as a share of its size: inside
+    /// the button's own margin, so the toolbar doesn't clip it.
+    static let badgeOffset: CGFloat = 0.4
+
     var body: some View {
         Button(action: action) {
             Image(systemName: "bell")
-                // Room for the badge inside the button: a toolbar clips anything drawn past
-                // the item's frame (the iPad toolbar cut it in half).
-                .padding(.top, count > 0 ? badgeSize * 0.4 : 0)
-                .padding(.trailing, count > 0 ? badgeSize * 0.5 : 0)
+                // The badge sits in the margin the toolbar already gives the icon, so the bell
+                // is the same size as every other toolbar button. Padding it out for the badge
+                // made it wider than the iPhone Duo's side column, which then moved the bell out
+                // of the column to the bottom of the screen (build 121).
                 .overlay(alignment: .topTrailing) {
                     if count > 0 {
                         Text(count > 99 ? "99+" : count.formatted())
@@ -288,7 +292,9 @@ struct NotificationBell: View {
                             .frame(minWidth: badgeSize, minHeight: badgeSize)
                             .background(.red, in: .capsule)
                             .fixedSize()
-                            .offset(x: badgeSize * 0.15, y: -badgeSize * 0.1)
+                            .offset(
+                                x: badgeSize * NotificationBell.badgeOffset,
+                                y: -badgeSize * NotificationBell.badgeOffset)
                     }
                 }
         }

@@ -219,8 +219,19 @@ final class ReferralQATests: XCTestCase {
         XCTAssertTrue(found, "Apple’s redeem screen didn’t open")
         // Cancel, Close or OK: whichever Apple's screen has.
         for label in ["Cancel", "Close", "OK", "Not Now"] {
-            for root in [app, springboard] where root.buttons[label].firstMatch.exists {
-                root.buttons[label].firstMatch.tap()
+            for root in [app, springboard] {
+                // By its position, not tap(): Apple's sheet can report a button XCTest won't call
+                // hittable (an iPad on its side, build 121), and tap() then fails the test.
+                let button = root.buttons[label].firstMatch
+                guard button.exists, !button.frame.isEmpty,
+                    root.frame.contains(
+                        CGPoint(x: button.frame.midX, y: button.frame.midY))
+                else { continue }
+                root.coordinate(withNormalizedOffset: .zero)
+                    .withOffset(
+                        CGVector(dx: button.frame.midX - root.frame.minX, dy: button.frame.midY - root.frame.minY)
+                    )
+                    .tap()
                 sleep(1)
             }
         }

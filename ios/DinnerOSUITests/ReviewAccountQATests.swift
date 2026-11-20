@@ -83,8 +83,16 @@ final class ReviewAccountQATests: XCTestCase {
         XCTAssertEqual(Set(names), Set(seeded), "The review household’s recipes")
 
         // No Plus on the house: Autopilot leads to the purchase screen.
-        let autopilot = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Plan with Autopilot'")).firstMatch
+        // The review week is planned at sign-in (5823e52), so the Menu's own button, which
+        // only shows on an empty week, isn't there: Autopilot is in the Week Menu (⋯).
+        var autopilot = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Plan with Autopilot'")).firstMatch
         reveal(autopilot, in: app, maxSwipes: 6)
+        if !autopilot.exists {
+            scrollBack(app)
+            app.buttons["Week Menu"].tap()
+            autopilot = app.buttons["Plan with Autopilot"].firstMatch
+            _ = autopilot.waitForExistence(timeout: 5)
+        }
         if autopilot.exists {
             autopilot.tap()
             XCTAssertTrue(

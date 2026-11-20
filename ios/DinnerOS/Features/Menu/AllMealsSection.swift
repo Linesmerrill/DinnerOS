@@ -88,16 +88,24 @@ struct AllMealsSection: View {
                 let urls = photoURLs
                 let canAdd = canAdd
                 let width = MenuRecipeCard.fullWidthEstimate
-                VStack(alignment: .leading, spacing: DS.Space.xxl) {
+                // Lazy all the way down: All Meals can hold hundreds of cards. One column on a
+                // phone; on an iPad a lazy grid of cards, so one search result stays card-sized
+                // instead of filling the screen.
+                LazyVStack(alignment: .leading, spacing: DS.Space.xxl) {
                     if let refreshError = list.refreshError {
                         FormErrorLabel(message: refreshError)
                     }
-                    // One column on a phone; on an iPad a grid of cards, so one search result
-                    // stays card-sized instead of filling the screen.
-                    LazyVGrid(
-                        columns: AllMealsLayout.columns(isWide: sizeClass == .regular), alignment: .leading,
-                        spacing: DS.Space.xxl
-                    ) {
+                    if sizeClass == .regular {
+                        LazyVGrid(
+                            columns: AllMealsLayout.columns(isWide: true), alignment: .leading, spacing: DS.Space.xxl
+                        ) {
+                            ForEach(Array(list.items.enumerated()), id: \.element.id) { @Sendable index, card in
+                                MenuCardRow(
+                                    index: index, card: card, size: .fullWidth, canAdd: canAdd, photoURLs: urls,
+                                    photoWidth: width)
+                            }
+                        }
+                    } else {
                         ForEach(Array(list.items.enumerated()), id: \.element.id) { @Sendable index, card in
                             MenuCardRow(
                                 index: index, card: card, size: .fullWidth, canAdd: canAdd, photoURLs: urls,

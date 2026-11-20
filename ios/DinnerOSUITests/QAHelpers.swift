@@ -1,6 +1,11 @@
 import UIKit
 import XCTest
 
+/// When the screenshot settle step last asked SpringBoard about banners.
+@MainActor enum QASettle {
+    static var lastBannerCheck = Date.distantPast
+}
+
 /// Shared steps for the QA runs: sign in on the development server, wait for things, and keep a
 /// named screenshot of every screen for the checklist.
 extension XCTestCase {
@@ -53,8 +58,13 @@ extension XCTestCase {
     @MainActor
     func snap(_ app: XCUIApplication, _ name: String, settle: Bool = true) {
         if settle { settleForScreenshot(app) }
-        let attachment = XCTAttachment(
-            data: Self.uprightPNG(XCUIScreen.main.screenshot().image), uniformTypeIdentifier: "public.png")
+        let screenshot = XCUIScreen.main.screenshot()
+        let orientation = XCUIDevice.shared.orientation
+        // Only a device on its side needs the pixels redrawn; upright ones are kept as taken.
+        let attachment =
+            orientation == .landscapeLeft || orientation == .landscapeRight
+            ? XCTAttachment(data: Self.uprightPNG(screenshot.image), uniformTypeIdentifier: "public.png")
+            : XCTAttachment(screenshot: screenshot, quality: .original)
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
@@ -90,28 +100,23 @@ extension XCTestCase {
     /// over (a keyboard tip, "Ready for Apple Intelligence"). Spinners aren't waited on here: the
     /// week strip keeps one ("Loading earlier weeks") off screen; tests wait for their content.
     @MainActor
-    func settleForScreenshot(_ app: XCUIApplication, timeout: TimeInterval = 3) {
-        let deadline = Date().addingTimeInterval(timeout)
-        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        repeat {
-            var busy = false
-            // The keyboard's "Slide to type" tip has a Continue button.
+    func settleForScreenshot(_ app: XCUIApplication) {
+        // The keyboard's "Slide to type" tip has a Continue button (the matrix also turns the
+        // tip off on every simulator).
+        if app.keyboards.firstMatch.exists {
             let tip = app.buttons["Continue"].firstMatch
-            if app.keyboards.firstMatch.exists, tip.exists, tip.isHittable {
-                tip.tap()
-                busy = true
-            }
-            // System banners ("Ready for Apple Intelligence") sit in SpringBoard: swipe them up.
-            let banner = springboard.otherElements["NotificationShortLookView"].firstMatch
-            if banner.exists {
-                banner.swipeUp()
-                busy = true
-            }
-            if !busy { break }
-            usleep(400_000)
-        } while Date() < deadline
+            if tip.exists, tip.isHittable { tip.tap() }
+        }
+        // System banners ("Ready for Apple Intelligence") sit in SpringBoard: swipe them up.
+        // Asking SpringBoard is slow, so at most every 20 seconds.
+        if Date().timeIntervalSince(QASettle.lastBannerCheck) > 20 {
+            QASettle.lastBannerCheck = Date()
+            let banner = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+                .otherElements["NotificationShortLookView"].firstMatch
+            if banner.exists { banner.swipeUp() }
+        }
         // Transitions and image fades finish.
-        usleep(600_000)
+        usleep(300_000)
     }
 
     @MainActor
