@@ -157,8 +157,8 @@ final class ScreensQATests: XCTestCase {
             }
             app.swipeUp()
             shot(app, "Recipe page › \(kind) › scrolled")
-            // iPhone Duo's cover screen (iOS 27) shows Start Cooking only at the top of the page:
-            // the rest of the bar moves to the column beside it. Back to the top there.
+            // Start Cooking stays on screen everywhere since build 119 (StartCookingQATests); back
+            // to the top in case it ever scrolls away again.
             let startCooking = app.buttons["Start Cooking"].firstMatch
             for _ in 0..<3 where !startCooking.exists { app.swipeDown() }
             startCooking.tap()

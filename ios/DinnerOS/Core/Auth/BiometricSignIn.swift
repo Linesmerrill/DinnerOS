@@ -161,6 +161,7 @@ final class BiometricSetting {
     private let onKey = "biometricSignIn.on"
     private let offeredKey = "biometricSignIn.offered"
     private let stateKey = "biometricSignIn.enrollment"
+    private let signedOutKey = "biometricSignIn.signedOut"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -177,6 +178,13 @@ final class BiometricSetting {
     /// The enrollment state when it was turned on, to notice new faces or fingers.
     var enrollmentState: Data? { defaults.data(forKey: stateKey) }
 
+    /// Signed out with the sign-in kept behind Face ID: launch shows the sign-in screen and its
+    /// Face ID button rather than the lock (build 119).
+    var isSignedOut: Bool {
+        get { defaults.bool(forKey: signedOutKey) }
+        set { defaults.set(newValue, forKey: signedOutKey) }
+    }
+
     func turnOn(enrollmentState: Data?) {
         defaults.set(true, forKey: onKey)
         defaults.set(enrollmentState, forKey: stateKey)
@@ -186,6 +194,7 @@ final class BiometricSetting {
     func turnOff(offerAgain: Bool) {
         defaults.removeObject(forKey: onKey)
         defaults.removeObject(forKey: stateKey)
+        defaults.removeObject(forKey: signedOutKey)
         if offerAgain { wasOffered = false }
     }
 }

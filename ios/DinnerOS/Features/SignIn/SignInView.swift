@@ -13,9 +13,13 @@ struct SignInView: View {
 
 private struct SignInScreen: View {
     @State private var model: SignInModel
+    @Environment(AuthSession.self) private var session
+    /// `nil` in previews.
+    @Environment(BiometricLock.self) private var lock: BiometricLock?
 
     @Environment(\.appConfiguration) private var configuration
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
     @ScaledMetric(relativeTo: .body) private var buttonHeight: CGFloat = 50
     @ScaledMetric(relativeTo: .largeTitle) private var markSize: CGFloat = 72
 
@@ -41,6 +45,12 @@ private struct SignInScreen: View {
         }
         .background(backdrop)
         .task { await model.loadOptions() }
+        // Signed out with Face ID sign-in kept: ask once by itself (build 119), once the app is
+        // in front (at launch the screen appears before it is).
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            await lock?.signInIfReady()
+        }
         .onChange(of: model.errorMessage) { _, message in
             if let message {
                 AccessibilityNotification.Announcement(message).post()
@@ -68,6 +78,14 @@ private struct SignInScreen: View {
         VStack(spacing: 12) {
             if let message = model.errorMessage {
                 errorBanner(message)
+            }
+
+            if let notice = session.biometricNotice {
+                noticeBanner(notice)
+            }
+
+            if let lock, session.canSignInWithBiometrics {
+                biometricButton(lock)
             }
 
             if model.isWorking {
@@ -153,6 +171,32 @@ private struct SignInScreen: View {
             }
         }
     #endif
+
+    /// The first way to sign in when Face ID sign-in is kept on this device.
+    private func biometricButton(_ lock: BiometricLock) -> some View {
+        let kind = lock.kind ?? .faceID
+        return Button {
+            Task { await lock.signIn() }
+        } label: {
+            Label(kind.toggleTitle, systemImage: kind.systemImage)
+                .font(.headline)
+                .frame(maxWidth: .infinity, minHeight: buttonHeight)
+        }
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.roundedRectangle(radius: 12))
+        .disabled(lock.isSigningIn)
+        .accessibilityIdentifier("signIn.biometric")
+    }
+
+    /// Why Face ID sign-in stopped.
+    private func noticeBanner(_ message: String) -> some View {
+        Label(message, systemImage: "faceid")
+            .font(.callout)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+            .background(Color.secondary.opacity(0.12), in: .rect(cornerRadius: 12, style: .continuous))
+            .accessibilityIdentifier("signIn.biometricNotice")
+    }
 
     private func errorBanner(_ message: String) -> some View {
         VStack(spacing: 12) {

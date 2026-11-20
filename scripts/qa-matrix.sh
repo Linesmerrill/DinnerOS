@@ -27,7 +27,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-${TMPDIR:-/tmp}/dinneros-qa}
 ALL="large-light large-dark small-light small-dark ipadL-light ipadL-dark ipadP-light ipadP-dark duo-light"
 CONFIGS=${CONFIGS:-$ALL}
-TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests BiometricSignInQATests/testFakeFaceID BiometricSignInQATests/testSimulatorFaceID"}
+TESTS=${TESTS:-"AppSweepQATests/SWEEP ScreensQATests/testDeeperScreens ScreensQATests/testNewPersonFirstRun AnyListGuideQATests ReferralQATests InviteLinkQATests UnsplashPhotoQATests AddRecipeChooserQATests ImportFailureQATests DiscoverQATests AddRecipeQATests SaveThenOpenQATests CompanionQATests CuisineQATests NextStepDotQATests ReportRecipeQATests ReviewPathQATests AccountDeletionQATests PermissionsDeniedQATests ReviewAccountQATests BiometricSignInQATests/testFakeFaceID BiometricSignInQATests/testSimulatorFaceID BiometricSignInQATests/testFaceIDSignInLoop BiometricSignInQATests/testSignInScreenWithFaceID StartCookingQATests"}
 STALL=${STALL:-600}
 # Tests to run on a second simulator per config, "QA matrix <config> 2", at the same time as the
 # first. Off by default: on this Mac (build 118) 17 simulators ran 40 to 70% slower each and
@@ -91,6 +91,9 @@ run_test() {
     local config=$1 id=$2 test=$3 attempt=$4
     local mode=${config#*-} orientation=portrait port=8082 search=off
     case $config in ipadL-*) orientation=landscape ;; esac
+    # Where Start Cooking belongs: the bottom bar on iPad and the Duo's cover screen (build 119).
+    local cook=top
+    case $config in ipad* | duo*) cook=bottom ;; esac
     test=${test/SWEEP/$([ "$mode" = dark ] && echo testSweepDark || echo testSweepLight)}
     [ "$test" = UnsplashPhotoQATests ] && { port=8083; search=on; }
     # The review path needs a starter library, which only 8083 copies into new households.
@@ -105,7 +108,7 @@ run_test() {
     rm -rf "$OUT/$name.xcresult"
     TEST_RUNNER_QA_API_BASE=http://localhost:$port TEST_RUNNER_QA_PHOTO_SEARCH=$search TEST_RUNNER_QA_MODE=$mode TEST_RUNNER_QA_ORIENTATION=$orientation \
         TEST_RUNNER_QA_APP_QA_HUD_SECONDS=3 TEST_RUNNER_QA_APP_QA_MOMENT_SECONDS=12 TEST_RUNNER_QA_MANUAL_NAME="Sip Fudge" \
-        TEST_RUNNER_QA_IMPORTED_NAME="Street Cart-Style Chicken Bowls" \
+        TEST_RUNNER_QA_IMPORTED_NAME="Street Cart-Style Chicken Bowls" TEST_RUNNER_QA_EXPECT_START_COOKING=$cook \
         TEST_RUNNER_QA_REVIEW_EMAIL="${REVIEW_ACCOUNT_EMAIL:-}" TEST_RUNNER_QA_REVIEW_PASSWORD="${REVIEW_ACCOUNT_PASSWORD:-}" \
         xcodebuild test-without-building -xctestrun "$xctestrun" -destination "id=$id" \
         -test-timeouts-enabled YES -maximum-test-execution-time-allowance 600 \
@@ -147,7 +150,11 @@ run_test() {
     grep -E " error:" "$OUT/$name.log" | sed "s|$ROOT/||" | cut -c1-300 | head -3 >>"$OUT/summary.txt"
     # Disk: a passing flow test's result bundle (a screen recording) isn't needed. The sweeps and
     # screens keep theirs for screenshot QA, and every failure keeps its own.
-    case "$verdict $test" in "ok AppSweepQATests/"* | "ok ScreensQATests/"*) ;; "ok "*) rm -rf "$OUT/$name.xcresult" ;; esac
+    # Screenshot tests keep their results; other passing tests don't, to save disk.
+    case "$verdict $test" in
+    "ok AppSweepQATests/"* | "ok ScreensQATests/"* | "ok StartCookingQATests" | "ok BiometricSignInQATests/testSignInScreenWithFaceID") ;;
+    "ok "*) rm -rf "$OUT/$name.xcresult" ;;
+    esac
 }
 
 # Whether a test runs on a config: the placement rules for every test.
@@ -155,7 +162,11 @@ runs_on() {
     local config=$1 test=$2
     # The Duo (build 118) checks how screens look on its size, not the long flows.
     if [ "${config%%-*}" = duo ]; then
-        case $test in AppSweepQATests/SWEEP | ScreensQATests/* | ImportFailureQATests | DiscoverQATests) return 0 ;; *) return 1 ;; esac
+        case $test in
+        AppSweepQATests/SWEEP | ScreensQATests/* | ImportFailureQATests | DiscoverQATests) return 0 ;;
+        StartCookingQATests | BiometricSignInQATests/testSignInScreenWithFaceID) return 0 ;;
+        *) return 1 ;;
+        esac
     fi
     # Build 118 (Xcode 27, iOS 27.2): every test ran 10 to 15% slower, and the first full run hit
     # 30 minutes before any config finished. A second simulator per config ran everything 40 to 70%
@@ -168,6 +179,11 @@ runs_on() {
     # 28 minutes. PLAN_ONLY=1 prints the result.
     case $test in
     AppSweepQATests/SWEEP | ScreensQATests/*) return 0 ;;
+    # Build 119: the sign-in screen with Face ID kept is a screen to check everywhere. Start
+    # Cooking pinned to the bottom (the Duo's cover screen) is checked on the Duo and, where it
+    # must not move, on an iPhone of each size and both iPads.
+    BiometricSignInQATests/testSignInScreenWithFaceID) return 0 ;;
+    StartCookingQATests) case $config in large-light | small-dark | ipadL-light | ipadP-dark) ;; *) return 1 ;; esac ;;
     ReferralQATests) case $config in large-light | ipadL-light) ;; *) return 1 ;; esac ;;
     InviteLinkQATests) case $config in small-light | ipadP-dark) ;; *) return 1 ;; esac ;;
     AnyListGuideQATests) case $config in large-dark | ipadL-dark) ;; *) return 1 ;; esac ;;
@@ -191,6 +207,8 @@ runs_on() {
     # iPad, and the simulator's own Face ID (about 1.5 minutes) on the small iPhone.
     BiometricSignInQATests/testFakeFaceID) [ "$config" = ipadP-light ] || return 1 ;;
     BiometricSignInQATests/testSimulatorFaceID) [ "$config" = small-light ] || return 1 ;;
+    # The whole Face ID sign-in loop (build 119) on one iPhone and one iPad.
+    BiometricSignInQATests/testFaceIDSignInLoop) case $config in large-light | ipadL-dark) ;; *) return 1 ;; esac ;;
     # The App Review account (decision 752) is one account, so its test runs once, and only
     # when the review account's email and password are exported for it.
     ReviewAccountQATests)

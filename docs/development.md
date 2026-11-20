@@ -286,7 +286,9 @@ under 30 minutes. The standard:
    on all 8 run on 3 or 4 (at least one iPhone and one iPad each), and the long flows (referral,
    invite link, AnyList) run on one iPhone and one iPad, since they check what a person does. Each
    device's tests are split between light and dark so every config finishes in about 28 minutes.
-   `runs_on` in the script says where each test runs.
+   Build 119 added the sign-in screen with Face ID on every config, the whole Face ID sign-in
+   loop on one iPhone and one iPad, and `StartCookingQATests` on the Duo, both iPhone sizes and
+   both iPads. `runs_on` in the script says where each test runs.
 3. **Timeouts.** Each test has a 10-minute limit. A run with no output for 10 minutes is killed,
    its simulator restarted, and only that test retried once.
 4. **Targeted reruns.** After a fix, rerun only what failed, never the whole matrix:

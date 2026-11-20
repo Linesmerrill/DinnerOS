@@ -38,6 +38,9 @@ struct RecipeDetailView: View {
     @State private var heroHeight: CGFloat = 320
     @State private var showsNavigationBar = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    /// The page's safe area, which shows iPhone Duo's cover-screen button column.
+    @State private var safeArea = EdgeInsets()
     /// Where the tab picker stops as the page scrolls: just under the bar.
     @State private var pinTop: CGFloat = 0
     /// Ingredients being left out or put back, by line ID.
@@ -90,6 +93,10 @@ struct RecipeDetailView: View {
                 tab = newValue
                 hasPickedTab = true
             })
+    }
+
+    private var startCookingPlacement: StartCookingPlacement {
+        StartCookingPlacement.resolve(horizontal: horizontalSizeClass, vertical: verticalSizeClass, safeArea: safeArea)
     }
 
     var body: some View {
@@ -177,8 +184,9 @@ struct RecipeDetailView: View {
             // One group, so Start Cooking and the ⋯ menu share a pill.
             ToolbarItemGroup(placement: .topBarTrailing) {
                 // On iPad, Start Cooking sits in the bottom bar instead: the tab bar shares the
-                // top bar there, and iOS folded these buttons into an overflow menu.
-                if recipe?.steps.isEmpty == false, horizontalSizeClass != .regular {
+                // top bar there, and iOS folded these buttons into an overflow menu. On iPhone
+                // Duo's cover screen too, where it scrolled away (StartCookingPlacement).
+                if recipe?.steps.isEmpty == false, startCookingPlacement == .topBar {
                     Button {
                         showsCooking = true
                     } label: {
@@ -203,7 +211,12 @@ struct RecipeDetailView: View {
                 summary: summary, recipe: recipe, entries: plannedEntries, servings: $servings,
                 selections: customizationSelections,
                 startCooking: recipe?.steps.isEmpty == false ? { showsCooking = true } : nil,
-                showsStartCooking: horizontalSizeClass == .regular)
+                showsStartCooking: startCookingPlacement == .bottomBar)
+        }
+        .onGeometryChange(for: EdgeInsets.self) {
+            $0.safeAreaInsets
+        } action: {
+            safeArea = $0
         }
         .overlay(alignment: .bottom) { toast }
         .recipeDeletion($deleting, isPlanned: { _ in !plannedEntries.isEmpty }) { dismiss() }

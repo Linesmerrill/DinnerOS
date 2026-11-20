@@ -60,7 +60,9 @@ final class BiometricLock {
         syncWithSession()
         if scene == .active { session.saveUnsavedSession() }
         let wasLocked = machine.isLocked
-        let effect = machine.sceneChanged(to: scene, at: now(), isOn: session.isBiometricSignInOn)
+        // Signed out with Face ID kept, there's nothing to lock: the sign-in screen shows.
+        let effect = machine.sceneChanged(
+            to: scene, at: now(), isOn: session.isBiometricSignInOn && session.state != .signedOut)
         if !wasLocked, machine.isLocked { lockedOverApp = session.currentUser != nil }
         if effect == .ask {
             Task { await ask() }
@@ -88,12 +90,72 @@ final class BiometricLock {
             }
         }
         Self.logger.info("Face ID check: \(String(describing: outcome), privacy: .public)")
+        // Faces changed or Face ID is gone: the kept sign-in can't be read again, so it goes.
+        // A cancel or a failed match keeps it for the sign-in screen's button.
+        if outcome == .changed {
+            session.forgetBiometricSignIn(
+                notice: String(
+                    localized:
+                        "\((kind ?? .faceID).name) changed on this device. Sign in another way, then turn it on again in Account."
+                ))
+        } else if outcome == .unavailable {
+            session.forgetBiometricSignIn(
+                notice: String(localized: "\((kind ?? .faceID).name) isn't set up on this device. Sign in another way.")
+            )
+        }
+        // Whatever happens next, the sign-in screen doesn't ask again by itself.
+        hasAutoAsked = true
         await run(machine.finish(outcome))
     }
 
     func signInAnotherWay() async {
         syncWithSession()
         await run(machine.chooseAnotherWay())
+    }
+
+    // MARK: Sign-in screen
+
+    /// A Face ID check from the sign-in screen is showing.
+    private(set) var isSigningIn = false
+    /// The sign-in screen asks by itself once per launch, and not after the person signed out,
+    /// chose another way, or canceled: those mean they want the other options.
+    @ObservationIgnored private(set) var hasAutoAsked = false
+
+    /// The sign-in screen appeared: ask once by itself, when it can.
+    func signInIfReady() async {
+        guard !hasAutoAsked, !session.wasSignedInThisLaunch, isAppActive(), session.canSignInWithBiometrics
+        else { return }
+        hasAutoAsked = true
+        await signIn()
+    }
+
+    /// The sign-in screen's "Sign in with Face ID". A cancel or a failed match leaves the
+    /// sign-in screen as it was, with every other way to sign in.
+    func signIn() async {
+        guard !isSigningIn, session.canSignInWithBiometrics else { return }
+        hasAutoAsked = true
+        isSigningIn = true
+        defer { isSigningIn = false }
+        let (outcome, proof) = await authenticator.authenticate(reason: String(localized: "Sign in to DinnerOS"))
+        Self.logger.info("Face ID sign-in check: \(String(describing: outcome), privacy: .public)")
+        switch outcome {
+        case .matched:
+            if let saved = session.biometricSetting.enrollmentState, authenticator.enrollmentState() != saved {
+                let name = (kind ?? .faceID).name
+                session.forgetBiometricSignIn(
+                    notice: String(
+                        localized:
+                            "\(name) changed on this device. Sign in another way, then turn it on again in Account."))
+                return
+            }
+            _ = await session.signInWithBiometrics(proof: proof ?? BiometricProof(context: nil))
+        case .unavailable:
+            session.forgetBiometricSignIn(
+                notice: String(localized: "\((kind ?? .faceID).name) isn't set up on this device. Sign in another way.")
+            )
+        case .canceled, .interrupted, .failed, .changed, .missing:
+            break
+        }
     }
 
     private func run(_ effect: BiometricLockMachine.Effect) async {

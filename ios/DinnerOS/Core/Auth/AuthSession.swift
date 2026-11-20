@@ -37,6 +37,10 @@ final class AuthSession {
     /// Whether this device keeps the session behind Face ID (decision 760). Off by default.
     private(set) var isBiometricSignInOn: Bool
 
+    /// Why Face ID sign-in stopped, for the sign-in screen: the server turned the saved sign-in
+    /// down, or faces changed. Cleared by the next sign-in.
+    var biometricNotice: String?
+
     var currentUser: UserSummary? {
         if case .signedIn(let user) = state { return user }
         return nil
@@ -58,6 +62,9 @@ final class AuthSession {
     /// can't resurrect or overwrite a different session.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var hasRestored = false
+    /// Someone was signed in since launch, so the sign-in screen is there because they signed
+    /// out: it doesn't ask for Face ID by itself then.
+    @ObservationIgnored private(set) var wasSignedInThisLaunch = false
     /// Runs at the start of `signOut()`, while requests are still authorized. A sign-out
     /// forced by a rejected refresh token can't make requests, so it doesn't run then.
     @ObservationIgnored var willSignOut: (@MainActor () async -> Void)?
@@ -110,7 +117,8 @@ final class AuthSession {
             // Behind Face ID: nothing is read until a check passes. A missing item (faces
             // changed, or the Keychain was reset) means normal sign-in.
             if protectedStore?.hasItem() == true {
-                state = .locked
+                // Signed out on purpose: the sign-in screen, with its Face ID button.
+                state = biometricSetting.isSignedOut ? .signedOut : .locked
             } else {
                 Self.logger.notice("Face ID sign-in item missing; signing out")
                 clearLocalSession()
@@ -143,6 +151,67 @@ final class AuthSession {
         return currentUser != nil
     }
 
+    /// Whether the sign-in screen can offer Face ID: signed out with the sign-in kept behind it.
+    var canSignInWithBiometrics: Bool {
+        state == .signedOut && isBiometricSignInOn && protectedStore?.hasItem() == true
+    }
+
+    enum BiometricSignInResult: Equatable {
+        case signedIn
+        /// Gone, expired or turned down by the server: Face ID sign-in is off now.
+        case rejected
+    }
+
+    /// Signs in from the sign-in screen with the session kept behind Face ID, after a check
+    /// passed. Asks the server for new tokens right away, so a sign-in it turned down is caught
+    /// here, with a message. Offline, the saved session is used and checked later.
+    func signInWithBiometrics(proof: BiometricProof) async -> BiometricSignInResult {
+        guard state == .signedOut, isBiometricSignInOn, let protectedStore else { return .rejected }
+        let stored: StoredSession?
+        do {
+            stored = try protectedStore.load(proof: proof)
+        } catch {
+            Self.logger.error("Face ID item read failed: \(String(describing: error), privacy: .public)")
+            stored = nil
+        }
+        guard let stored, !stored.tokens.isRefreshTokenExpired(at: now()) else {
+            forgetBiometricSignIn(notice: Self.biometricExpiredNotice)
+            return .rejected
+        }
+        generation += 1
+        tokens = stored.tokens
+        biometricSetting.isSignedOut = false
+        biometricNotice = nil
+        state = .signedIn(stored.user)
+        wasSignedInThisLaunch = true
+        do {
+            _ = try await refreshTokens(replacing: stored.tokens.accessToken)
+        } catch {
+            // A turned-down refresh signed out and cleared everything inside refreshTokens.
+            if currentUser == nil {
+                biometricNotice = Self.biometricExpiredNotice
+                return .rejected
+            }
+            Self.logger.notice("Face ID sign-in refresh deferred: \(Self.describe(error), privacy: .public)")
+        }
+        Self.logger.info("Signed in with Face ID")
+        return .signedIn
+    }
+
+    static let biometricExpiredNotice = String(
+        localized: "Face ID sign-in no longer works. Sign in another way, then turn it on again in Account.")
+
+    /// Removes the sign-in kept behind Face ID and turns Face ID sign-in off, with a reason
+    /// for the sign-in screen.
+    func forgetBiometricSignIn(notice: String?) {
+        protectedStore?.clear()
+        unsavedProtectedSession = nil
+        biometricSetting.turnOff(offerAgain: true)
+        isBiometricSignInOn = false
+        biometricNotice = notice
+        if state == .locked { state = .signedOut }
+    }
+
     private func adopt(_ stored: StoredSession?) async {
         guard let stored, !stored.tokens.isRefreshTokenExpired(at: now()) else {
             clearLocalSession()
@@ -151,6 +220,7 @@ final class AuthSession {
 
         tokens = stored.tokens
         state = .signedIn(stored.user)
+        wasSignedInThisLaunch = true
         let restoredGeneration = generation
 
         if stored.tokens.isAccessTokenExpired(at: now()) {
@@ -177,8 +247,11 @@ final class AuthSession {
         refreshTask?.cancel()
         refreshTask = nil
         tokens = response.tokens
+        biometricNotice = nil
+        if biometricSetting.isSignedOut { biometricSetting.isSignedOut = false }
         persist(StoredSession(tokens: response.tokens, user: response.user))
         state = .signedIn(response.user)
+        wasSignedInThisLaunch = true
         Self.logger.info("Signed in (new user: \(response.isNewUser, privacy: .public))")
         didSignIn?()
     }
@@ -230,11 +303,32 @@ final class AuthSession {
 
     /// Runs `willSignOut`, clears local credentials, then revokes the sign-in on the server
     /// on a best-effort basis. The Keychain is cleared even if the server call fails.
+    ///
+    /// With Face ID sign-in on, the session stays behind Face ID and isn't revoked, so the
+    /// sign-in screen can offer "Sign in with Face ID" (build 119). Only turning Face ID off,
+    /// deleting the account, or the server turning the sign-in down removes it.
     func signOut() async {
         // Still signed in here, so the hook can make authorized calls (the push store
         // deletes this device's token). It bounds its own wait.
         if currentUser != nil, let willSignOut {
             await willSignOut()
+        }
+        if isBiometricSignInOn, let protectedStore, protectedStore.hasItem() || unsavedProtectedSession != nil {
+            if let unsaved = unsavedProtectedSession { try? protectedStore.save(unsaved) }
+            generation += 1
+            refreshTask?.cancel()
+            refreshTask = nil
+            tokens = nil
+            unsavedProtectedSession = nil
+            do {
+                try store.clear()
+            } catch {
+                Self.logger.error("Keychain clear failed: \(String(describing: error), privacy: .public)")
+            }
+            biometricSetting.isSignedOut = true
+            state = .signedOut
+            Self.logger.info("Signed out; Face ID sign-in kept")
+            return
         }
         let refreshToken = tokens?.refreshToken
         clearLocalSession()
